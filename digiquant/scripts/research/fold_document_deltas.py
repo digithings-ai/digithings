@@ -23,6 +23,7 @@ import os
 import re
 import subprocess
 import sys
+import warnings
 from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -33,8 +34,15 @@ try:
 
     load_dotenv(Path(__file__).resolve().parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 try:
     from supabase import create_client  # type: ignore
@@ -43,8 +51,8 @@ try:
 except ImportError:
     _HAS_SB = False
 
-ROOT = Path(__file__).resolve().parent.parent
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+from lib.roots import REPO_ROOT, research_script  # noqa: E402
 ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
@@ -69,7 +77,7 @@ def _sb():
 
 
 def _load_apply_ops():
-    path = ROOT / "scripts" / "materialize_snapshot.py"
+    path = research_script("materialize_snapshot.py")
     spec = importlib.util.spec_from_file_location("_mat_snap_fold", path)
     mod = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -131,10 +139,10 @@ def fetch_all_document_deltas(sb, d: str) -> List[Tuple[str, Dict[str, Any]]]:
 
 def _validate_payload_json(payload: Dict[str, Any]) -> bool:
     proc = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "validate_artifact.py"), "-"],
+        [sys.executable, str(research_script("validate_artifact.py")), "-"],
         input=json.dumps(payload),
         text=True,
-        cwd=str(ROOT),
+        cwd=str(REPO_ROOT),
         capture_output=True,
     )
     if proc.returncode != 0:
@@ -158,7 +166,7 @@ def _publish(
     proc = subprocess.run(
         [
             sys.executable,
-            str(ROOT / "scripts" / "publish_document.py"),
+            str(research_script("publish_document.py")),
             "--payload",
             "-",
             "--document-key",
@@ -174,13 +182,13 @@ def _publish(
         ],
         input=json.dumps(payload),
         text=True,
-        cwd=str(ROOT),
+        cwd=str(REPO_ROOT),
     )
     return int(proc.returncode)
 
 
 def _human_doc_type_label(payload: Dict[str, Any]) -> str:
-    """Labels must match documents.chk_documents_doc_type (see supabase/migrations/019)."""
+    """Labels must match documents.chk_documents_doc_type (see supabase/migrations/engine/019)."""
     dt = str(payload.get("doc_type") or "")
     mapping = {
         "sector_report": "Sector Report",

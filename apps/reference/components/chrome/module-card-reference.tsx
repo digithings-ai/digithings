@@ -12,7 +12,7 @@ import { ModuleCard, moduleById, type ModuleNode } from "@digithings/ui";
  * .dg-tier variants (core → accent, support → ink-mute, roadmap → warn) all
  * show. Fed straight from the shared module registry.
  */
-const TIER_SPECIMENS: ModuleNode[] = ["digigraph", "digismith", "digistore"]
+const TIER_SPECIMENS: ModuleNode[] = ["digigraph", "digitrace", "digistore"]
   .map((id) => moduleById(id))
   .filter((m): m is ModuleNode => Boolean(m));
 

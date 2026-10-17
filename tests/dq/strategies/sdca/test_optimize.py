@@ -108,6 +108,7 @@ def _evaluator(
         vs_flat_dca_pct=vs_flat,
         vs_lump_pct=-1.0,
         capital_deployed_pct=40.0,
+        capital_deployed_peak_pct=40.0,
         max_drawdown_pct=12.0,
     )
 
@@ -171,6 +172,7 @@ class TestWalkForwardSearch:
         assert result.is_oos_gap_pct != 0.0
         assert result.holdout_metrics is not None
         assert result.sensitivity.neighbor_count > 0
+        assert result.sensitivity.worst_neighbor_key == "buy_max_rate:+5%"
 
     def test_optimize_result_message_states_oos(self) -> None:
         dates = _dates()
@@ -224,7 +226,10 @@ class TestPersistAndDispatch:
         assert len(preset.curve_nodes) == 21
         prov = load_btc_optimized_provenance()
         assert prov.beats_flat_dca_oos is False
-        assert "nautilus" in prov.notes.lower() or "SIGABRT" in prov.notes
+        # Promotion record (owner accept 2026-09-29): the notes must point at
+        # the cycle-4 gate record, not the prior fit's boilerplate.
+        assert "cycle-4" in prov.notes
+        assert "SUPERSEDED" in prov.notes
 
     def test_run_optimize_sdca_dispatches_to_walk_forward(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

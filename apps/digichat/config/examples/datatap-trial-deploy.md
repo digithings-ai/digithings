@@ -118,7 +118,11 @@ az containerapp create \
 
 ## Verify
 
-1. `GET /api/health` → `{"ok":true,…,"version":"2.0.0"}`.
+1. `GET /api/health` → `{"ok":true,…,"version":"<DIGICHAT_VERSION>"}`.
+   `version` is `DIGICHAT_VERSION` when that env is set and non-empty, otherwise
+   `apps/digichat/package.json` `version` (`resolveDigichatVersion()`). The image
+   bakes the package version into `DIGICHAT_VERSION` and `/etc/digichat-version`;
+   `version` only differs if `DIGICHAT_VERSION` is overridden at build or run time.
 2. Chat "List my DataTap connections" → a `datatap__list_connections` tool
    row appears, completes while the answer streams, and expands to the
    connections JSON (args pane + Result pane).

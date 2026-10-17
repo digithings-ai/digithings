@@ -16,7 +16,7 @@
  * `public_accounting_nav_history`, closes via `GET /v1/market/closes`,
  * R2-API-only). Small envelope/param helpers below mirror CONTRACT.md
  * §1/§2 so this file is self-contained; the merge step swaps them for
- * `errorResponse` / `buildProvenance` / `parseCommonParams` from `./index`.
+ * `errorResponse` / `buildProvenance` / `parseCommonParams` from `./responses`.
  *
  * Pure builders live in `./portfolio`, `./allocations`, `./nav-series`,
  * `./invested`, `./book`, `./committed-book` (vitest parity targets).
@@ -34,11 +34,13 @@ import {
   forwardFillCalendarGaps,
   isNavSeriesSeam,
   navRowContractLabel,
+  navSeriesPlotReadiness,
   type NavContract,
 } from './nav-series';
 import { buildPortfolioData, type PortfolioNavTipInput } from './portfolio';
 import { resolveInvestedPct } from './invested';
 import { committedBookDate as committedBookDatePure } from './committed-book';
+import { replayLedgerWeights, type LedgerWeightEvent } from './ledger-weights';
 
 export interface CommittedBookSnapshot {
   snapshotDate: string;
@@ -63,6 +65,18 @@ export interface EnvelopeSource {
     tickers: readonly string[],
     retrievalPin: string | null,
   ): Promise<ReadonlyMap<string, MarketCloseFill>>;
+  /**
+   * `position_events` rows up to and including `bookDate`, oldest first.
+   *
+   * OPTIONAL: when it is absent (or the read fails) `/allocations` falls back
+   * to the committed-book weights unchanged and reports
+   * `weight_source: 'positions_no_ledger'`. The book is never rejected because
+   * the ledger could not be read — fail closed, degrade loudly.
+   */
+  loadLedgerEvents?(
+    bookDate: string | null,
+    retrievalPin: string | null,
+  ): Promise<ReadonlyArray<LedgerWeightEvent>>;
 }
 
 export type RouteHandler = (req: Request) => Promise<Response>;
@@ -297,10 +311,22 @@ export async function handleAllocations(
         }
       }
     }
+    let ledgerState: ReturnType<typeof replayLedgerWeights> | null = null;
+    if (typeof source.loadLedgerEvents === 'function') {
+      try {
+        const events = await source.loadLedgerEvents(book.bookAsOf, retrievalPin);
+        ledgerState = replayLedgerWeights(events, book.bookAsOf);
+      } catch {
+        // Fail closed: an unreadable ledger leaves the committed book in charge
+        // and every row reports `weight_source: 'positions_no_ledger'`.
+        ledgerState = null;
+      }
+    }
     const data = buildAllocationsData({
       positions: book.positions,
       resolvedInvestedPct: resolved.investedPct,
       marketCloses: closes,
+      ledgerState,
     });
     const provenanceMarks =
       data.rows.length === 0 || data.rows.every((r) => r.marks === 'unavailable')
@@ -318,6 +344,10 @@ export async function handleAllocations(
           ticker: r.ticker,
           weight_pct: r.weightPct,
           scaled_weight_pct: r.scaledWeightPct,
+          positions_weight_pct: r.positionsWeightPct,
+          weight_source: r.weightSource,
+          ledger_weight_pct: r.ledgerWeightPct,
+          weight_drift_pp: r.weightDriftPp,
           entry_price: r.entryPrice,
           current_price: r.currentPrice,
           unrealized_pct: r.unrealizedPct,
@@ -325,6 +355,10 @@ export async function handleAllocations(
           marks_as_of: r.marksAsOf,
         })),
         marks_unstamped: data.marksUnstamped,
+        ledger_as_of: data.ledgerAsOf,
+        weights_reconciled: data.weightsReconciled,
+        weights_drifted: data.weightsDrifted,
+        ledger_conflicts: data.ledgerConflicts,
       },
       book.bookAsOf,
       retrievalPin,
@@ -380,8 +414,10 @@ export async function handleNavSeries(
     const hasSeam = sorted.some((r, i) =>
       i === 0 ? false : isNavSeriesSeam(r, sorted[i - 1].source ?? null),
     );
+    const plot = navSeriesPlotReadiness(points);
     return sliceOk(
       {
+        plot: { series: plot.series, accounting_nav: plot.accountingNav },
         tip: tip ? { date: tip.date, contract: navRowContractLabel(tip) } : null,
         points: points.map((p) => ({
           date: p.date,

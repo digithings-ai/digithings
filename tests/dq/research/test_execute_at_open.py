@@ -405,6 +405,32 @@ class TestBuildEventsFromPositionsBook:
     def test_no_book_on_execution_date_returns_none(self) -> None:
         assert build_events_from_positions_book(_gap_day_client(), "2026-08-03") is None
 
+    def test_an_attested_zero_prior_weight_is_written_as_zero_not_none(self) -> None:
+        """DIG-2809 (prev_weight_pct null vs 0).
+
+        The prior book HAS a row for the ticker and its weight is zero. That is a
+        different fact from "the book has no row for the ticker", and the column
+        conflated them: ``prev if prev > eps else None`` wrote the attested 0.0 as
+        null, so a reader could not tell an exited position from an unheld one.
+        """
+        prior_date, exec_date = "2026-07-29", "2026-07-30"
+        book = [
+            {"date": prior_date, "ticker": "uup", "weight_pct": "0"},
+            {"date": prior_date, "ticker": "spy", "weight_pct": "39.9226"},
+            {"date": exec_date, "ticker": "uup", "weight_pct": "12.5"},
+            {"date": exec_date, "ticker": "spy", "weight_pct": "39.9226"},
+        ]
+        events = build_events_from_positions_book(
+            _FakeClient(tables={"positions": book}), exec_date
+        )
+        assert events is not None
+        by_ticker = _events_by_ticker(events)
+        assert by_ticker["UUP"]["event"] == "OPEN"  # not held at a positive weight
+        assert by_ticker["UUP"]["prev_weight_pct"] is not None
+        assert by_ticker["UUP"]["prev_weight_pct"] == pytest.approx(0.0)
+        # Control on the same fixture: a name the book does carry keeps its weight.
+        assert by_ticker["SPY"]["prev_weight_pct"] == pytest.approx(39.9226)
+
 
 # ─── build_events_from_digest_snapshot (tier 2, same prior-book seam) ────────
 
@@ -1545,3 +1571,177 @@ class TestMainRejectsMalformedDates:
         """
         with pytest.raises(AssertionError, match="before rejecting the date"):
             self._rc(monkeypatch, "--date", _EXEC_D, "--rebalance-date", _RUN_D)
+
+
+# ---------------------------------------------------------------------------
+# DIG-2809: ledger semantics — OPEN vs ADD, avg entry at event, intraday
+# ordering, prev_weight_pct null vs 0.
+# ---------------------------------------------------------------------------
+
+
+class TestProseRowAgainstCommittedBook:
+    """The label and the prior weight come from the committed book, not the doc.
+
+    The 28 Sep UUP event said OPEN although the name had been held since 25 Sep:
+    the label was copied out of a replayed ``rebalance_decision`` document. These
+    cases pin that the book governs the OPEN-vs-held distinction and the prior
+    weight, and that nothing else about the prose row is rewritten.
+    """
+
+    # The replayed 25 Sep prose row, re-executed on 28 Sep.
+    _UUP_ROW = {"ticker": "UUP", "action": "NEW", "current_pct": 0, "recommended_pct": 15}
+
+    def _reconcile(self, **over):
+        """Call the reconciler with the 28 Sep live shape unless overridden."""
+        kw = dict(
+            ticker=self._UUP_ROW["ticker"],
+            event="OPEN",
+            weight_pct=float(self._UUP_ROW["recommended_pct"]),
+            doc_prev_weight_pct=float(self._UUP_ROW["current_pct"]),
+            prose_prior_d="2026-09-25",
+            prose_prior_w={"UUP": 15.0},
+        )
+        kw.update(over)
+        return _mod._reconcile_against_committed_book(**kw)
+
+    def test_the_28_sep_replay_is_not_labelled_open_against_a_held_position(self):
+        # The defect: book holds UUP 15, document says NEW, target equals the
+        # held weight, so nothing changed and the event is a HOLD.
+        event, prev, note = self._reconcile()
+        assert event == "HOLD"
+        assert prev == 15.0
+        assert note is not None and "HOLD" in note
+
+    def test_the_prior_weight_is_the_book_not_the_document(self):
+        # The document's current_pct is 0 (it described 25 Sep); the book's 15
+        # is what actually happened before the execution.
+        _, prev, _ = self._reconcile()
+        assert prev == 15.0
+        assert prev != float(self._UUP_ROW["current_pct"])
+
+    def test_an_increase_on_a_held_name_becomes_add_not_open(self):
+        event, prev, _ = self._reconcile(weight_pct=20.0)
+        assert event == "ADD"
+        assert prev == 15.0
+
+    def test_a_decrease_on_a_held_name_becomes_trim_not_open(self):
+        event, prev, _ = self._reconcile(weight_pct=10.0)
+        assert event == "TRIM"
+        assert prev == 15.0
+
+    def test_an_attested_zero_prior_weight_is_written_as_zero_not_none(self):
+        # The book HAS a row for the ticker and says its weight is zero. That is
+        # a different fact from "the ticker is not in the book" (None).
+        event, prev, _ = self._reconcile(prose_prior_w={"UUP": 0.0})
+        assert prev == 0.0
+        assert prev is not None
+        assert event == "OPEN"  # zero prior is not "held at a positive weight"
+
+    def test_a_ticker_absent_from_the_book_is_none_when_a_book_exists(self):
+        _, prev, _ = self._reconcile(ticker="XLV", prose_prior_w={"UUP": 15.0})
+        assert prev is None
+
+    def test_the_document_supplies_the_prior_only_when_no_book_exists_at_all(self):
+        _, prev, note = self._reconcile(prose_prior_d=None, prose_prior_w={})
+        assert prev == float(self._UUP_ROW["current_pct"])
+        assert note is None
+
+    def test_a_document_add_with_no_book_row_becomes_open(self):
+        event, prev, note = self._reconcile(
+            ticker="XLV", event="ADD", weight_pct=10.0, prose_prior_w={"UUP": 15.0}
+        )
+        assert event == "OPEN"
+        assert prev is None
+        assert note is not None and "XLV" in note
+
+    def test_book_lookup_is_case_insensitive_like_book_weights(self):
+        event, prev, _ = self._reconcile(ticker="uup")
+        assert event == "HOLD"
+        assert prev == 15.0
+
+    def test_only_the_open_vs_held_label_is_book_governed(self):
+        # A document TRIM on a held name stays TRIM: DIG-2809 asks for OPEN vs
+        # ADD, not a rewrite of the permanently-legacy prose path (#2422).
+        event, prev, note = self._reconcile(event="TRIM", weight_pct=10.0)
+        assert event == "TRIM"
+        assert prev == 15.0
+        assert note is None
+
+
+class TestLedgerSemanticsContract:
+    """The claims DIG-2809 makes about the schema, re-checked against the tree.
+
+    Three of the four questions have no behavioural surface in this writer
+    (the projection cannot order intraday events; no average-entry column
+    exists to stamp), so the contract is pinned against the migrations and the
+    two module docstrings instead.
+    """
+
+    _ROOT = Path(__file__).resolve().parents[3]
+    _MIGRATIONS = _ROOT / "digiquant" / "supabase" / "migrations"
+    _INTRADAY_CANDIDATES = (
+        "occurred_at",
+        "event_time",
+        "at_time",
+        "sequence",
+        "seq_no",
+        "order_index",
+        "sort_index",
+        "priority",
+    )
+
+    def _position_events_ddl(self):
+        src = (self._MIGRATIONS / "001_initial_schema.sql").read_text()
+        i = src.index("CREATE TABLE IF NOT EXISTS position_events")
+        return src[i : src.index(";", i) + 1]
+
+    def test_position_events_has_no_intraday_ordering_column(self):
+        ddl = self._position_events_ddl().lower()
+        # Control: the detector fires on a DDL that does carry one.
+        probe = "executed_at timestamp not null, sequence integer"
+        assert any(c in probe for c in self._INTRADAY_CANDIDATES)
+        assert not [c for c in self._INTRADAY_CANDIDATES if c in ddl]
+
+    def test_position_events_is_a_date_ticker_daily_projection(self):
+        ddl = self._position_events_ddl().lower()
+        cols = {}
+        for line in ddl.split("\n"):
+            parts = line.split()
+            if len(parts) >= 2 and parts[0] not in ("create", "unique", ")"):
+                cols.setdefault(parts[0], parts[1])
+        assert cols.get("date") == "date", cols.get("date")
+        assert cols.get("event") == "text"
+        assert "unique(date, ticker)" in ddl
+        # 097 re-scopes the uniqueness per workspace; 113 drops the legacy key.
+        ws_unique = (self._MIGRATIONS / "097_workspaces_tenant_columns.sql").read_text()
+        assert "uq_position_events_workspace_date_ticker" in ws_unique
+        cutover = (self._MIGRATIONS / "cutover" / "113_drop_legacy_book_uniques.sql").read_text()
+        assert "position_events_date_ticker_key" in cutover
+
+    def test_no_average_entry_column_exists_on_any_table(self):
+        # Control: the same sweep finds the columns that DO exist.
+        blob = "\n".join(p.read_text() for p in sorted(self._MIGRATIONS.glob("*.sql"))).lower()
+        assert "weight_pct" in blob
+        assert "prev_weight_pct" in blob
+        for candidate in ("avg_entry", "avg_cost", "cost_basis", "average_entry"):
+            assert candidate not in blob, f"{candidate} now exists - re-read the consumers"
+
+    def test_the_writer_docstring_states_the_four_ledger_rules(self):
+        doc = (_mod.__doc__ or "").lower()
+        for phrase in (
+            "prior committed book",
+            "not held",
+            "last write win",
+            "rebalance",
+        ):
+            assert phrase in doc, f"module docstring lost {phrase!r}"
+
+    def test_the_entry_price_rule_is_documented_as_first_mark_not_average(self):
+        src = (
+            self._ROOT / "digiquant" / "scripts" / "research" / "position_entry_from_events.py"
+        ).read_text()
+        doc = src.lower()
+        # Control: the same docstring does carry the rule it is asserting.
+        assert "earliest open or add" in doc
+        assert "not a weighted average" in doc
+        assert "replayed" in doc

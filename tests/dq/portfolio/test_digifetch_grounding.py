@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 import pytest
 from digiquant.data.gloomberb import (
+    GLOOMBERB_ENABLED_ENV,
     GLOOMBERB_SESSION_COOKIE_ENV,
     PM_TOOLS,
     TOOL_ENTITLEMENTS,
@@ -95,14 +96,24 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
 
 
 @pytest.fixture(autouse=True)
-def _grounding_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def _grounding_env(monkeypatch: pytest.MonkeyPatch):
+    """Opt the Gloomberb family back in.
+
+    GLOOMBERB_ENABLED now defaults ON (DIG-2752 rescope, decision
+    d4922299, superseding the DIG-1233 opt-in), so the explicit opt-in below
+    is belt-and-braces rather than load-bearing.
+    DIG-3907 retired the session-cookie path, so there is no gate to stub:
+    session/preview/pro tools never advertise.
+    """
     monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
     monkeypatch.setattr(_node_factory, "_research_data_client", lambda: object())
     monkeypatch.setattr(
         "digiquant.research.data.web_grounding.fetch_web_grounding",
         lambda **_kwargs: {"summary": "canned", "sources": [], "as_of": "2026-09-15"},
     )
+    yield
 
 
 @pytest.mark.unit
@@ -117,7 +128,7 @@ def test_portfolio_grounding_equips_the_free_pm_subset(
     free_pm = {n for n in PM_TOOLS if TOOL_ENTITLEMENTS[n] == "free"}
     gated_pm = {n for n in PM_TOOLS if TOOL_ENTITLEMENTS[n] != "free"}
     assert free_pm.issubset(names)
-    # Session-gated names are absent without a cookie.
+    # Retired session-gated names are always absent (DIG-3907), cookie or not.
     assert names.isdisjoint(gated_pm)
 
     payload = json.loads(_content(execute_tool("digifetch_quote", {"symbol": "AAPL"})))

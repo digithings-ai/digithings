@@ -63,6 +63,21 @@ describe("ChatEmbedShell contracts", () => {
     expect(readParentDocumentTheme({ getAttribute: () => null })).toBe("dark");
   });
 
+  it("posts digichat:theme on a live toggle instead of rebuilding iframe src", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+    const start = src.indexOf("const onThemeAttr");
+    const end = src.indexOf("const observer", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const handler = src.slice(start, end);
+    expect(handler).not.toContain("setSrc");
+    expect(handler).toContain("postMessage");
+    expect(handler).toContain("buildEmbedThemeMessage");
+  });
+
   it("covers the cold Container with the shared tool-chain boot until digichat:ready", async () => {
     // Source contract: avoid a white flash on the dark digithings theme (#2093)
     // and keep the cold-start window animated. The shell mounts the shared
@@ -76,16 +91,29 @@ describe("ChatEmbedShell contracts", () => {
     const src = readFileSync(path, "utf8");
     expect(src).toContain("BootLabOverlay");
     expect(src).toContain('variant="tooltask"');
-    expect(src).toContain("readyEdge={embedReady}");
+    // Reveal waits on the iframe handshake AND the shared service warm-up.
+    // Same gate for the landing pop-up, /chat, and /chat/occ.
+    expect(src).toContain("readyEdge={revealed}");
+    expect(src).toContain("waitForServices");
+    expect(src).toContain("const revealed = (embedReady && servicesReady) || forceReveal");
+    expect(src).toContain(`signalDigichatBootStep("services")`);
     expect(src).toContain("WARMUP_DELAY_MS");
     expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
-    expect(src).toContain("opacity: embedReady ? 1 : 0");
-    // Curated per-host copy rides into the iframe URL.
-    expect(src).toContain("Ask about digithings");
-    expect(src).toContain("Ask about Online Compliance Center");
+    expect(src).toContain("opacity: revealed ? 1 : 0");
+    // Curated per-host copy rides into the iframe URL. The strings themselves
+    // live in lib/embedCopy.ts now, so the landing page's FAQ band can mount the
+    // same conversation with the same welcome — assert both halves: the URL
+    // wiring here, and that the shell still reads its copy from the shared
+    // record rather than keeping a private copy that could drift.
     expect(src).toContain('url.searchParams.set("welcome"');
     expect(src).toContain('url.searchParams.set("suggestions"');
+    expect(src).toContain('from "@/lib/embedCopy"');
+
+    const copyPath = fileURLToPath(new URL("../lib/embedCopy.ts", import.meta.url));
+    const copy = readFileSync(copyPath, "utf8");
+    expect(copy).toContain("Ask about digithings");
+    expect(copy).toContain("Ask about Online Compliance Center");
   });
 
   it("forwards the OCC invite key from the parent URL to the embed", async () => {
@@ -151,5 +179,42 @@ describe("ChatEmbedShell contracts", () => {
     expect(css).toContain(".dc-chat-frame");
     expect(css).toContain("--chat-frame-canvas");
     expect(css).toContain("@digithings/ui/styles/digichat-boot-loader.css");
+  });
+
+  it("strips the invite key from the address bar right after reading it (DIG-1437)", async () => {
+    // The key must not survive in browser history or in the visible address
+    // bar. It is read client-side inside the mount effect, so that is the only
+    // place the rewrite can happen; doing it during render would put the key
+    // back into the exported HTML this app ships as one shared artifact.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+
+    expect(src).toContain("stripInviteTokenFromUrl");
+
+    // One call site, and it is the rewrite. A second would mean the key is
+    // being scrubbed twice, which is churn, not defence.
+    expect(src.split("window.history.replaceState").length - 1).toBe(1);
+
+    // Gated on the route opt-in and on a non-empty key, so an ordinary /chat
+    // visit never touches history.
+    const readIndex = src.indexOf("readInviteToken(window.location.search)");
+    const stripIndex = src.indexOf("stripInviteTokenFromUrl(window.location.href)");
+    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(stripIndex).toBeGreaterThan(readIndex);
+    expect(stripIndex).toBeGreaterThan(-1);
+    expect(src).toContain("token ? stripInviteTokenFromUrl");
+
+    // The token stays in the effect's local state for the session and nowhere
+    // else — no store, no cookie, no sessionStorage. These match a USE
+    // (sessionStorage.setItem, document.cookie =), not the bare word: a
+    // guard on the bare name fires on this comment and on any prose that
+    // documents the rule, which is a test that cannot fail for its reason.
+    expect(src).not.toMatch(/sessionStorage\s*\.\s*(set|get|remove|clear)Item\s*\(/);
+    expect(src).not.toMatch(/localStorage\s*\.\s*(set|get|remove|clear)Item\s*\(/);
+    expect(src).not.toContain("setItem(");
+    expect(src).not.toMatch(/document\s*\.\s*cookie\s*=[^=]/);
   });
 });

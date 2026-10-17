@@ -19,7 +19,7 @@ import {
   ReasoningTrigger,
 } from "./reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
-import { ToolFallback } from "./tool-fallback.aui";
+import { ToolFallback } from "../stock/tool-fallback.aui";
 import {
   ToolGroupContent,
   ToolGroupRoot,
@@ -52,7 +52,6 @@ import {
   type ToolCallMessagePartComponent,
   useAui,
   useAuiState,
-  useThreadViewport,
 } from "@assistant-ui/react";
 import {
   createContext,
@@ -72,6 +71,7 @@ import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
 import { ThreadSource } from "./source";
 import { TypedWelcomeCopy } from "./typed-welcome-copy";
+import { useDigichatWarmupPhase } from "../use-warmup-phase";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -229,6 +229,9 @@ const DEFAULT_CHROME: ThreadChrome = {
 
 const ThreadChromeContext = createContext<ThreadChrome>(DEFAULT_CHROME);
 
+/** The scroll viewport element, for the footer that lives outside it. */
+const ThreadViewportElContext = createContext<HTMLElement | null>(null);
+
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // Welcome docks in the footer above the composer. Loads after startup keep
 // the docked layout.
@@ -335,6 +338,7 @@ const ThreadRoot: FC<{
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
+  const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
 
   return (
     <ThreadPrimitive.Root
@@ -360,7 +364,13 @@ const ThreadRoot: FC<{
         ["--composer-padding" as string]: "8px",
       }}
     >
+      {/* The footer (composer + credit) sits outside the scroll viewport so
+          messages end above the text box. ViewportProvider keeps the
+          scroll-to-bottom control wired to the viewport store. */}
+      <ThreadPrimitive.ViewportProvider>
+      <ThreadViewportElContext.Provider value={viewportEl}>
       <ThreadPrimitive.Viewport
+        ref={setViewportEl}
         turnAnchor="top"
         // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
         // so it does not sit flush against the viewport top. `tallerThan` scores
@@ -369,7 +379,7 @@ const ThreadRoot: FC<{
         // unchanged from before the padding was added.
         topAnchorMessageClamp={{ tallerThan: "11.5em", visibleHeight: "6em" }}
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
+        className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
         <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
           <AuiIf condition={isHistoryLoadingView}>
@@ -378,14 +388,16 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="mb-14 flex flex-col gap-y-6 empty:hidden"
+            className="mb-4 flex flex-col gap-y-6 empty:hidden"
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
           </div>
-
-          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer digichat-thread__footer bg-background sticky bottom-0 mt-auto flex flex-col gap-4 overflow-visible pb-2 md:pb-3">
+        </div>
+      </ThreadPrimitive.Viewport>
+        <div className="mx-auto flex w-full max-w-(--thread-max-width) shrink-0 flex-col px-4">
+          <div className="aui-thread-viewport-footer digichat-thread__footer bg-background relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
             <AuiIf condition={isNewChatView}>
@@ -403,9 +415,10 @@ const ThreadRoot: FC<{
               layout={composerLayout}
             />
             {Footer ? <Footer /> : null}
-          </ThreadPrimitive.ViewportFooter>
+          </div>
         </div>
-      </ThreadPrimitive.Viewport>
+      </ThreadViewportElContext.Provider>
+      </ThreadPrimitive.ViewportProvider>
     </ThreadPrimitive.Root>
   );
 };
@@ -422,7 +435,7 @@ const ThreadMessage: FC = () => {
 };
 
 const ThreadScrollToBottom: FC = () => {
-  const viewportEl = useThreadViewport((s) => s.element.viewport);
+  const viewportEl = useContext(ThreadViewportElContext);
   const [revealSettled, setRevealSettled] = useState(false);
   const [scrolledAway, setScrolledAway] = useState(false);
 
@@ -466,9 +479,10 @@ const ThreadScrollToBottom: FC = () => {
       const group = viewportEl.querySelector<HTMLElement>(
         '[data-slot="aui_message-group"]',
       );
-      const composer = viewportEl.querySelector<HTMLElement>(
-        '[data-slot="aui_composer-shell"]',
-      );
+      // The composer sits below the scroll viewport, on the thread root.
+      const composer = (
+        viewportEl.closest(".aui-thread-root") ?? viewportEl
+      ).querySelector<HTMLElement>('[data-slot="aui_composer-shell"]');
       if (!group || !composer) {
         setScrolledAway(false);
         return;
@@ -872,6 +886,7 @@ const AssistantWorkingIndicator: FC = () => {
     }
     return state;
   });
+  const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
   return (
     <span
@@ -883,7 +898,9 @@ const AssistantWorkingIndicator: FC = () => {
         label="Assistant is working"
         className="size-3.5"
       />
-      {connectionState === "warming_up" ? (
+      {wakePhase === "waking" ? (
+        <span className="text-sm text-muted-foreground">Waking up services…</span>
+      ) : connectionState === "warming_up" ? (
         <span className="text-sm text-muted-foreground">Warming up…</span>
       ) : connectionState === "connecting" ? (
         <span className="text-sm text-muted-foreground">Connecting…</span>

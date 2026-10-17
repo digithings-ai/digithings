@@ -40,6 +40,17 @@ describe("CopyCommand", () => {
     expect(odd).toContain('<span class="font-medium">make up</span>');
   });
 
+  it("shrinks the inline command to its text", () => {
+    const inline = renderToStaticMarkup(<CopyCommand samples={SAMPLES} inline />);
+    expect(inline).toContain("w-fit");
+    expect(inline).toContain("w-auto");
+    expect(inline).toContain("copy-cmd");
+    expect(inline).toContain("group-data-[copied=true]:blur-[3px]");
+    expect(inline).toContain("copied");
+    expect(inline).not.toMatch(/[^-\w]w-full[^-\w]/);
+    expect(inline).not.toContain('role="tab"');
+  });
+
   it("renders nothing for an empty sample set", () => {
     expect(renderToStaticMarkup(<CopyCommand samples={[]} />)).toBe("");
   });

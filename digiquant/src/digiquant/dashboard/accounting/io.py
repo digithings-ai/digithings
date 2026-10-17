@@ -27,7 +27,7 @@ from digiquant.dashboard.accounting.models import (
     PeriodStatus,
     TickerPeriodResult,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import eq_house_workspace, house_workspace_id
 from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,11 @@ def _decimal(raw: Any) -> Decimal | None:
 
 
 def _period_rows(*, client: SupabaseClient, period_date: date) -> list[dict[str, Any]]:
-    resp = client.table(PERIODS).select("*").eq("period_date", period_date.isoformat()).execute()
+    resp = (
+        eq_house_workspace(client.table(PERIODS).select("*"))
+        .eq("period_date", period_date.isoformat())
+        .execute()
+    )
     return list(getattr(resp, "data", None) or [])
 
 

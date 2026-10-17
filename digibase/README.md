@@ -9,6 +9,8 @@ Shared **digithings** building blocks for HTTP services:
 - **Audit** — shared redaction keys for audit payloads.
 - **OpenTelemetry** (optional extra `digibase[otel]`) — wire FastAPI + httpx when
   `DIGI_OTEL_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` is set. No-op otherwise.
+  OTLP auth headers via `DIGI_OTEL_HEADERS` or `OTEL_EXPORTER_OTLP_HEADERS`
+  (comma-separated `key=value`, see `resolve_otel_headers`).
 
 Install (monorepo):
 

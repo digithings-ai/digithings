@@ -15,3 +15,8 @@ This directory holds the **June 2026 full-stack audit** artifacts. They are plan
 | [`REM-578-security-signoff.md`](./REM-578-security-signoff.md) | REM-131 auth delta sign-off (#578) |
 
 **Remediation tracking:** Phase 1 landed in [PR #578](https://github.com/digithings-ai/digithings/pull/578) (Fixes [#577](https://github.com/digithings-ai/digithings/issues/577)). Phase 2 work is tracked in epic [#579](https://github.com/digithings-ai/digithings/issues/579) and its child issues (#580–#585).
+
+## Other review records
+
+- Per-PR review files — RETIRED 2026-10 (DIG-3393): they live on the Paperclip ticket, never in the repo; the former `pr/` directory was removed. Do not add new files here.
+- [`archive/`](./archive/) — superseded baselines and audits kept for provenance (2026-03 code review baseline and improvement plan, dashboard architecture/frontend audits).

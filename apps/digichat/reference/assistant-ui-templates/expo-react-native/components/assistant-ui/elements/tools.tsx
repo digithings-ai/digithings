@@ -1,3 +1,6 @@
+// Intentional assistant-ui generative-UI pragma in this vendored reference
+// template: 'use generative' is not a JS directive (CodeQL #2493, dismissal
+// requested in GitHub UI). Left as-is.
 "use generative";
 
 import type { ReactNode } from "react";

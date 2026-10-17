@@ -2,8 +2,8 @@
 
 `make readiness` prints this table. Advisory only: it measures the repo for
 housekeeping shifts. It never gates, never fails (exit 0 always), never
-auto-merges, and is never a PR pre-flight. If you want the 4-dimension PR
-rubric, that is `make score` — a different tool measuring diffs, not the repo.
+auto-merges, and is never a PR pre-flight. The 4-dimension PR self-score
+rubric was removed in #4868 — review skills are the sole quality gate.
 
 ## Bands
 

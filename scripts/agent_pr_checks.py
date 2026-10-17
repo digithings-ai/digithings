@@ -15,10 +15,9 @@ AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/", "task/", "claude/")
 # volume in this repo (38 + 19 of the last 100 PRs) and previously had zero
 # automerge-eligibility coverage at all — the allowlist here only ever tracked
 # cursor/bot, which covered a smaller slice than it excluded.
-# Optional rubric job (reusable workflow → ``score / score``). AGENTS.md: not a
-# merge gate. Keep out of hard-fail lists so score-only red does not block
-# automerge / merge-when-ready (#3528).
-IGNORED_CHECK_NAMES: frozenset[str] = frozenset({"score / score"})
+# (The ``score / score`` advisory ignore left with the score tooling in
+# #4868: that check run can never be posted again, so there is nothing to ignore.)
+IGNORED_CHECK_NAMES: frozenset[str] = frozenset()
 
 
 def _gh_json(*args: str) -> object:

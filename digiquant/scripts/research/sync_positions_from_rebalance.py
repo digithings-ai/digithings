@@ -23,12 +23,14 @@ Environment: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (see config/supabase.env)
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.portfolio.ledger_replay import fetch_ledger_state, reconcile_book
 
 try:
     from supabase import create_client  # type: ignore
@@ -37,13 +39,15 @@ try:
 except ImportError:
     _HAS_SB = False
 
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv  # type: ignore
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+    logger.debug("python-dotenv is not installed; continuing without it")
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
@@ -200,6 +204,28 @@ def sync_positions_for_date(sb: Any, d: str, *, dry_run: bool = False) -> int:
         return len(pos_rows)
 
     CHUNK = 500
+    # DIG-2816, STRICT: this script's whole job is to persist the book the rebalance
+    # proposed, so the ledger must never silently overwrite those weights — a rewrite
+    # here would defeat the script. Instead the book is CHECKED against
+    # ``position_events`` and the run stops if the two disagree beyond tolerance, or if
+    # the book holds a ticker the ledger EXITed. Anchoring belongs in the writers that
+    # compute a book (``commit_io``, ``portfolio_materialize``); here the ledger is the
+    # check, not the source.
+    ledger_report = reconcile_book(
+        pos_rows,
+        fetch_ledger_state(sb, _house_id(), d),
+        writer="sync_positions_from_rebalance",
+        mode="strict",
+    )
+    print(f"🔎 {ledger_report.summary()}")
+    if ledger_report.covered and ledger_report.drifted():
+        print(
+            f"❌ refusing to sync {d}: the proposed book disagrees with position_events on "
+            f"{ledger_report.drifted()} ticker(s) (drift_pp={ledger_report.drift_pp}). "
+            f"Either the rebalance or the ledger needs correcting first."
+        )
+        return 1
+
     for i in range(0, len(pos_rows), CHUNK):
         sb.table("positions").upsert(
             pos_rows[i : i + CHUNK], on_conflict="workspace_id,date,ticker"

@@ -29,19 +29,19 @@ colors:
   diff-del: "#E2929E"
 typography:
   display:
-    fontFamily: '"Geist Mono", "JetBrains Mono", ui-monospace, monospace'
+    fontFamily: '"Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace'
     fontSize: "clamp(2rem, 5vw, 3.4rem)"
     fontWeight: 500
     lineHeight: 1.1
     letterSpacing: "-0.04em"
   body:
-    fontFamily: '"Geist Mono", "JetBrains Mono", ui-monospace, monospace'
+    fontFamily: '"Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace'
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "-0.015em"
   mono:
-    fontFamily: '"Geist Mono", "JetBrains Mono", ui-monospace, monospace'
+    fontFamily: '"Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace'
     fontSize: "0.8rem"
     fontWeight: 400
     lineHeight: normal
@@ -104,7 +104,7 @@ digiweb reads as a cockpit, not a brochure. Monochrome is the resting state — 
 
 ### Active blend — utilitarian terminal (v0.1 promoted)
 
-As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicity — inspired by [herdr.dev](design/references/herdr.dev.md), [agentmail.to](design/references/agentmail.to.md), and [omarchy.org](design/references/omarchy.org.md), alongside Cursor / Graphite / xAI. Ledger: [`design/BLEND.md`](design/BLEND.md). Product rollout plan: [`design/ROLLOUT.md`](design/ROLLOUT.md).
+As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicity — inspired by herdr.dev, agentmail.to, and omarchy.org, alongside Cursor / Graphite / xAI. Those site scans were removed with the old design reference. Ledger: [`BLEND.md`](../design/BLEND.md). Product rollout plan: [`ROLLOUT.md`](../design/ROLLOUT.md).
 
 **Shipping in `tokens.css` + design-reference (Phase 0):**
 
@@ -174,9 +174,9 @@ The palette is intentionally narrow: three neutrals for text, three surfaces for
 
 ## Typography
 
-**Display Font:** Geist Mono (with JetBrains Mono, ui-monospace, monospace fallback)
+**Display Font:** Geist Mono (with ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace fallback)
 **Body Font:** Geist Mono (same stack — utilitarian v0.1 mono everything)
-**Label/Mono Font:** Geist Mono (with JetBrains Mono, ui-monospace, monospace fallback)
+**Label/Mono Font:** Geist Mono (same fallback chain — see Display Font)
 
 **Character:** One mono voice carries claim, body, and chrome. Hierarchy is size and tracking, not a second face. Serif (`serif-legacy` / Instrument Serif or Fraunces) is an escape hatch for rare editorial moments — quotes, legal names — never the default marketing H1.
 

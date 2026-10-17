@@ -35,11 +35,11 @@ export function byokModelPlaceholder(provider: BYOKProvider): string {
     case "openrouter":
       return "openai/gpt-4o-mini";
     case "anthropic":
-      return "claude-sonnet-4-20250514";
+      return "claude-sonnet-4-6";
     case "gemini":
-      return "gemini/gemini-2.0-flash";
+      return "gemini/gemini-3.5-flash-lite";
     case "xai":
-      return "grok-4-3";
+      return "grok-4.3";
     case "openai":
       return "gpt-4o-mini";
     default: {
@@ -57,24 +57,24 @@ export function byokModelPresets(provider: BYOKProvider): readonly string[] {
         "openai/gpt-4o-mini",
         "openai/gpt-4o",
         "anthropic/claude-sonnet-4",
-        "google/gemini-2.0-flash",
+        "google/gemini-2.5-flash",
       ];
     case "openai":
       return ["gpt-4o-mini", "gpt-4o", "o4-mini"];
     case "anthropic":
       return [
-        "claude-sonnet-4-20250514",
-        "claude-haiku-4-20250514",
-        "claude-opus-4-20250514",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
+        "claude-opus-4-5",
       ];
     case "gemini":
       return [
-        "gemini/gemini-2.0-flash",
-        "gemini/gemini-2.5-flash",
-        "gemini/gemini-2.5-pro",
+        "gemini/gemini-3.5-flash-lite",
+        "gemini/gemini-3.5-flash",
+        "gemini/gemini-3.7-flash",
       ];
     case "xai":
-      return ["grok-4-3", "grok-4.5"];
+      return ["grok-4.3", "grok-4.5"];
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;

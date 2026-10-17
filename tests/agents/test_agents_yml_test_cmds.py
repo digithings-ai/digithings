@@ -22,11 +22,12 @@ WORKFLOW_BY_COMPONENT = {
     "digigraph": "test-digigraph.yml",
     "digiquant": "test-digiquant.yml",
     "digisearch": "test-digisearch.yml",
-    "digismith": "test-digismith.yml",
+    "digitrace": "test-digitrace.yml",
     "digiclaw": "test-digiclaw.yml",
     "digibase": "test-digibase.yml",
     "digikey": "test-digikey.yml",
     "digichat": "test-digichat.yml",
+    "digivoice": "test-digivoice.yml",
 }
 
 # Flags / tokens that are not path selectors (CI may add cov; agents.yml may omit).

@@ -17,7 +17,7 @@ _DIGI_PRODUCT_CAMEL: tuple[tuple[str, str], ...] = (
     ("DigiSearch", "digisearch"),
     ("DigiKey", "digikey"),
     ("DigiQuant", "digiquant"),
-    ("DigiSmith", "digismith"),
+    ("DigiTrace", "digitrace"),
     ("DigiClaw", "digiclaw"),
     ("DigiBase", "digibase"),
     ("DigiSkills", "digiskills"),

@@ -11,8 +11,10 @@ Exit code 1 = at least one configured provider failed (key missing or API error)
 
 from __future__ import annotations
 
+import json
 import os
 import sys
+from pathlib import Path
 
 try:
     from openai import OpenAI
@@ -20,31 +22,56 @@ except ImportError:
     print("ERROR: openai package not installed. Run: pip install openai")
     sys.exit(1)
 
-PROVIDERS = {
-    "ollama": {
-        "label": "Ollama Cloud",
-        "base_url": os.environ.get("OPENAI_API_BASE", "https://ollama.com/v1"),
-        # CI maps secrets.OLLAMA_API_KEY → OPENAI_API_KEY; locally prefer OLLAMA_API_KEY
-        "api_key_env": "OLLAMA_API_KEY" if os.environ.get("OLLAMA_API_KEY") else "OPENAI_API_KEY",
-        "model_env": "OLLAMA_MODEL",
-        "model_default": "qwen3.5:cloud",
-        "required": False,  # optional locally — CI validates via the workflow run
-    },
-    "gemini": {
-        "label": "Gemini",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "api_key_env": "GEMINI_API_KEY",
-        "model_default": "gemini-2.5-flash",
-        "required": False,
-    },
-    "openrouter": {
-        "label": "OpenRouter",
-        "base_url": "https://openrouter.ai/api/v1",
-        "api_key_env": "OPENROUTER_API_KEY",
-        "model_default": "openrouter/auto",
-        "required": False,
-    },
-}
+# The provider table is config, not code (#5029): which providers to smoke-test
+# and which model each sends are facts about the providers. Only the
+# env-conditional wiring stays here, because env state is not config.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CHECK_CONFIG_PATH = Path(os.environ.get("DIGI_CONFIG_PATH") or REPO_ROOT / "config") / (
+    "provider-key-checks.json"
+)
+
+
+def _load_providers() -> dict[str, dict]:
+    """Read config/provider-key-checks.json into the shape test_provider() expects.
+
+    Fail-loud: an empty provider set would print "all configured providers OK",
+    which is the most dangerous possible output from a validation script.
+    """
+    try:
+        raw = json.loads(CHECK_CONFIG_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"provider check table missing: {CHECK_CONFIG_PATH}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"provider check table is not valid JSON: {CHECK_CONFIG_PATH}") from exc
+    providers = raw.get("providers") if isinstance(raw, dict) else None
+    if not isinstance(providers, dict) or not providers:
+        raise RuntimeError(
+            f"provider check table has no non-empty 'providers' object: {CHECK_CONFIG_PATH}"
+        )
+    required = {"label", "base_url", "api_key_env", "model_default"}
+    missing = sorted(n for n, c in providers.items() if not required <= set(c))
+    if missing:
+        raise RuntimeError(f"provider check entries missing {sorted(required)}: {missing}")
+    return providers
+
+
+def _apply_env_overrides(providers: dict[str, dict]) -> dict[str, dict]:
+    """Overlay the environment-dependent wiring that config deliberately omits.
+
+    ollama is the only one: the house proxy is reached by pointing
+    ``OPENAI_API_BASE`` at it, and CI maps ``secrets.OLLAMA_API_KEY`` onto
+    ``OPENAI_API_KEY``, so a local shell with only OPENAI_API_KEY set must still
+    find a key. Both are properties of the environment, not of the provider.
+    """
+    out = {name: dict(cfg) for name, cfg in providers.items()}
+    if "ollama" in out:
+        out["ollama"]["base_url"] = os.environ.get("OPENAI_API_BASE", out["ollama"]["base_url"])
+        if not os.environ.get("OLLAMA_API_KEY") and os.environ.get("OPENAI_API_KEY"):
+            out["ollama"]["api_key_env"] = "OPENAI_API_KEY"
+    return out
+
+
+PROVIDERS = _apply_env_overrides(_load_providers())
 
 TEST_MESSAGES = [{"role": "user", "content": "Reply with exactly: OK"}]
 

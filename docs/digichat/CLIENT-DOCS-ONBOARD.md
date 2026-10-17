@@ -104,14 +104,14 @@ brain from the D1 corpus digivault actually serves in production.
 
 ### digithings.ai CI (`main`)
 
-Corpus refresh for client #0 is automated by
-[`.github/workflows/docs-onboard-digithings.yml`](../../.github/workflows/docs-onboard-digithings.yml)
-on relevant pushes to `main` (and `workflow_dispatch`). The Action dry-runs
-classification, then on apply writes a filesystem vault (`--sinks vault`) and runs
+Corpus refresh for client #0 uses the operator path below; the former
+`docs-onboard-digithings.yml` Action was removed in the strict-essentials cut.
+The local path dry-runs classification, then on apply writes a filesystem vault
+(`--sinks vault`) and runs
 `scripts/d1_sync.py` to publish that vault into Cloudflare D1 (`clients/digithings`)
-under the `production` environment — the same dry-run/apply CI shape as
-[`sync-architecture-vault.yml`](../../.github/workflows/sync-architecture-vault.yml),
-though that pipeline is a separate, still-Supabase-backed corpus
+under the `production` environment — the same dry-run/apply shape as the former
+`sync-architecture-vault.yml` pipeline, which was also removed in the
+strict-essentials cut. That was a separate, still-Supabase-backed corpus
 (`architecture_notes`) unrelated to this D1 publish.
 
 digisearch dual-sink remains an **operator / local** step (or legacy
@@ -180,7 +180,6 @@ pytest tests/dv/test_local_search.py tests/scripts/docs_onboard -m unit -v
 - Ops index: [`docs/ops/CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md)
 - Plan: [`docs/superpowers/plans/2026-08-10-digithings-dogfood-cutover.md`](../superpowers/plans/2026-08-10-digithings-dogfood-cutover.md)
 - Client #0: [`docs/projects/digithings/`](../projects/digithings/)
-- Client #1 (OCC): [`docs/projects/online-compliance-center/`](../projects/online-compliance-center/)
 - OCC chat: [`docs/superpowers/plans/2026-08-10-occ-client-chat.md`](../superpowers/plans/2026-08-10-occ-client-chat.md)
 - Fit (picks 1–3): [`docs/architecture/digichat-self-host-picks-fit.md`](../architecture/digichat-self-host-picks-fit.md)
 - Install: [`docs/digichat/INSTALL.md`](INSTALL.md)

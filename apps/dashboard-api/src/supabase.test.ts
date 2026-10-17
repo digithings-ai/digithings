@@ -5,13 +5,15 @@
  * assembly, and fail-closed behavior (non-OK upstream → `UpstreamError`).
  */
 
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   UpstreamError,
   committedDate,
   createSupabaseSource,
   hasSupabaseEnv,
   loadMarketClosesMap,
+  loadNavRowsCached,
+  __resetNavRowsCacheForTests,
   supaGet,
   type SupabaseEnv,
 } from './supabase';
@@ -224,6 +226,93 @@ describe('market closes', () => {
   });
 });
 
+/** Production shape: the published book carries no `current_price` marks. */
+const POSITIONS_NO_MARK = POSITIONS.map((p) =>
+  p.ticker === 'CASH' ? p : { ...p, current_price: null, metrics_as_of: null },
+);
+
+/**
+ * Routes the committed-book reads plus the two market-API reads. `closes: null`
+ * stands for a market API that answers non-OK (the honest-empty arm).
+ */
+function mockLiveFetch(
+  closes: { date: string; ticker: string; close: number }[] | null,
+  positions: readonly unknown[] = POSITIONS_NO_MARK,
+): void {
+  (globalThis as Record<string, unknown>).fetch = vi.fn(async (input: unknown) => {
+    const url = String(input);
+    if (url.includes('/v1/market/closes')) {
+      if (closes === null) return new Response('nope', { status: 500 });
+      return Response.json({ rows: closes });
+    }
+    if (url.includes('/v1/market/tickers')) return Response.json({ tickers: ['XLV'] });
+    if (url.includes('/daily_snapshots')) return Response.json([{ date: '2026-09-24' }]);
+    if (url.includes('/positions?')) return Response.json(positions);
+    if (url.includes('/public_accounting_nav_history')) return Response.json(NAV_ROWS);
+    if (url.includes('/portfolio_metrics')) {
+      return Response.json([{ date: '2026-09-23', as_of_date: '2026-09-23', invested_pct: 35.13 }]);
+    }
+    if (url.includes('/position_events')) return Response.json([]);
+    throw new Error(`unexpected fetch ${url}`);
+  });
+}
+
+describe('live source', () => {
+  it('fills the live lane from the market API when the book carries no marks', async () => {
+    mockLiveFetch([{ date: '2026-10-10', ticker: 'XLV', close: 110 }]);
+    const withMarket: SupabaseEnv = { ...ENV, MARKET_DATA_URL: 'https://m.test' };
+    const book = await createSupabaseSource(withMarket).live.loadLiveBook();
+    expect(book?.positions).toHaveLength(1);
+    expect(book?.positions[0]).toMatchObject({
+      ticker: 'XLV',
+      markPrice: null,
+      effectivePrice: 110,
+      isLive: true,
+      livePriceDate: '2026-10-10',
+    });
+  });
+
+  it('keeps the published mark when the close is not fresher than it', async () => {
+    mockLiveFetch([{ date: '2026-09-01', ticker: 'XLV', close: 90 }], POSITIONS);
+    const withMarket: SupabaseEnv = { ...ENV, MARKET_DATA_URL: 'https://m.test' };
+    const book = await createSupabaseSource(withMarket).live.loadLiveBook();
+    expect(book?.positions[0]).toMatchObject({
+      markPrice: 105,
+      effectivePrice: 105,
+      isLive: false,
+      livePriceDate: null,
+    });
+  });
+
+  it('honest-empty on market failure — the mark still stands, no live date', async () => {
+    mockLiveFetch(null, POSITIONS);
+    const withMarket: SupabaseEnv = { ...ENV, MARKET_DATA_URL: 'https://m.test' };
+    const book = await createSupabaseSource(withMarket).live.loadLiveBook();
+    expect(book?.positions[0]).toMatchObject({
+      markPrice: 105,
+      effectivePrice: 105,
+      isLive: false,
+      livePriceDate: null,
+    });
+  });
+
+  it('never calls the market API when it is unset', async () => {
+    mockFetch((url: string) => {
+      if (url.includes('/daily_snapshots')) return [{ date: '2026-09-24' }];
+      if (url.includes('/positions?')) return POSITIONS;
+      if (url.includes('/public_accounting_nav_history')) return NAV_ROWS;
+      if (url.includes('/portfolio_metrics')) {
+        return [{ date: '2026-09-23', as_of_date: '2026-09-23', invested_pct: 35.13 }];
+      }
+      if (url.includes('/position_events')) return [];
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const book = await createSupabaseSource(ENV).live.loadLiveBook();
+    expect(book?.positions[0]).toMatchObject({ effectivePrice: 105, isLive: false });
+    expect(FETCHED.some((u) => u.includes('/v1/market/'))).toBe(false);
+  });
+});
+
 describe('ledger book', () => {
   it('reads PostgREST paths with the service key', async () => {
     mockFetch(() => [{ date: '2026-09-24', ticker: 'XLV', event: 'HOLD' }]);
@@ -250,5 +339,167 @@ describe('fail-closed routing (slice 0008)', () => {
     const { default: app } = await import('./index');
     const res = await app.fetch(new Request('https://x/portfolio'), {});
     expect(res.status).toBe(200);
+  });
+});
+
+// ─── nav read cache (DIG-1835) ───────────────────────────────────────────────
+//
+// public_accounting_nav_history took 4,027 requests on 2026-10-03 against a
+// table holding 0 rows / 0 bytes. `loadCommittedBook` is invoked at four call
+// sites and is itself one of the two loadNavRows callers, so one page load can
+// fan out to several identical full-table reads.
+//
+// These count fetches, so a cache that returns the right rows while still
+// hitting the network every call fails them.
+
+describe('loadNavRowsCached', () => {
+  const NAV_ENV: SupabaseEnv = {
+    SUPABASE_URL: 'https://test.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
+  };
+
+  const NAV_ROW = {
+    date: '2026-10-01',
+    nav: 108.4,
+    cash_pct: 64.87,
+    invested_pct: 35.13,
+    day_return_pct: 0.1,
+    source: 'finalized_accounting',
+    contract: 'finalized_accounting',
+    series_seam: false,
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    __resetNavRowsCacheForTests();
+    FETCHED.length = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function navFetch(): void {
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async (url: string) => {
+      FETCHED.push(url);
+      return Response.json([NAV_ROW]);
+    });
+  }
+
+  function navRequests(): number {
+    return FETCHED.filter((u) => u.includes('/public_accounting_nav_history')).length;
+  }
+
+  it('fetches the nav history on the first call', async () => {
+    navFetch();
+    const rows = await loadNavRowsCached(NAV_ENV);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.date).toBe('2026-10-01');
+    expect(navRequests()).toBe(1);
+  });
+
+  it('serves a second call inside the TTL without another fetch', async () => {
+    navFetch();
+    await loadNavRowsCached(NAV_ENV);
+    const second = await loadNavRowsCached(NAV_ENV);
+    expect(second).toHaveLength(1);
+    expect(navRequests()).toBe(1);
+  });
+
+  it('fetches again once the TTL has expired', async () => {
+    navFetch();
+    await loadNavRowsCached(NAV_ENV);
+    vi.advanceTimersByTime(10 * 60 * 1000);
+    await loadNavRowsCached(NAV_ENV);
+    expect(navRequests()).toBe(2);
+  });
+
+  it('coalesces concurrent callers into a single fetch', async () => {
+    // loadCommittedBook runs loadNavRows inside a Promise.all, so two callers
+    // can be in flight at once against a cold cache.
+    navFetch();
+    const [a, b] = await Promise.all([loadNavRowsCached(NAV_ENV), loadNavRowsCached(NAV_ENV)]);
+    expect(a).toHaveLength(1);
+    expect(b).toHaveLength(1);
+    expect(navRequests()).toBe(1);
+  });
+
+  it('does not cache a failed read', async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn(
+      async () => new Response('quota exceeded', { status: 402 }),
+    );
+    await expect(loadNavRowsCached(NAV_ENV)).rejects.toBeInstanceOf(UpstreamError);
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async () => Response.json([NAV_ROW]));
+    await expect(loadNavRowsCached(NAV_ENV)).resolves.toHaveLength(1);
+  });
+
+  it('requests the same explicit column set, not select=*', async () => {
+    navFetch();
+    await loadNavRowsCached(NAV_ENV);
+    const url = FETCHED.find((u) => u.includes('/public_accounting_nav_history'))!;
+    expect(url).not.toContain('select=*');
+    expect(url).toContain('select=date,nav,cash_pct,invested_pct,day_return_pct');
+  });
+});
+
+
+describe('loadBenchmarksBook names why the market closes are empty', () => {
+  it('names market_url_unset when MARKET_DATA_URL is absent from the worker env', async () => {
+    mockLiveFetch([{ date: '2026-10-10', ticker: 'XLV', close: 110 }]);
+    const book = await createSupabaseSource(ENV).benchmarks.loadBenchmarksBook(null, null);
+    expect(book?.marketIssue).toBe('market_url_unset');
+    expect(book?.marketCloses).toEqual({});
+  });
+  it('names market_universe_unavailable when /v1/market/tickers answers non-OK', async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/v1/market/tickers')) return new Response('nope', { status: 502 });
+      if (url.includes('/public_accounting_nav_history')) return Response.json(NAV_ROWS);
+      if (url.includes('/daily_snapshots')) return Response.json([{ date: '2026-09-24' }]);
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const book = await createSupabaseSource({
+      ...ENV,
+      MARKET_DATA_URL: 'https://m.test',
+    }).benchmarks.loadBenchmarksBook(null, null);
+    expect(book?.marketIssue).toBe('market_universe_unavailable');
+  });
+  it('carries the http status when a closes batch fails', async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/v1/market/closes')) return new Response('nope', { status: 503 });
+      if (url.includes('/v1/market/tickers')) return Response.json({ tickers: ['XLV'] });
+      if (url.includes('/public_accounting_nav_history')) return Response.json(NAV_ROWS);
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const book = await createSupabaseSource({
+      ...ENV,
+      MARKET_DATA_URL: 'https://m.test',
+    }).benchmarks.loadBenchmarksBook(null, null);
+    expect(book?.marketIssue).toBe('market_closes_http_503');
+  });
+  it('names market_closes_unreachable when a closes batch throws', async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/v1/market/tickers')) return Response.json({ tickers: ['XLV'] });
+      if (url.includes('/public_accounting_nav_history')) return Response.json(NAV_ROWS);
+      if (url.includes('/v1/market/closes')) throw new TypeError('fetch failed');
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const book = await createSupabaseSource({
+      ...ENV,
+      MARKET_DATA_URL: 'https://m.test',
+    }).benchmarks.loadBenchmarksBook(null, null);
+    expect(book?.marketIssue).toBe('market_closes_unreachable');
+    expect(book?.marketCloses).toEqual({});
+  });
+  it('is null when the market API answered with rows', async () => {
+    mockLiveFetch([{ date: '2026-09-24', ticker: 'XLV', close: 110 }]);
+    const book = await createSupabaseSource({
+      ...ENV,
+      MARKET_DATA_URL: 'https://m.test',
+    }).benchmarks.loadBenchmarksBook(null, null);
+    expect(book?.marketIssue).toBeNull();
+    expect(book?.marketCloses.XLV).toHaveLength(1);
   });
 });

@@ -12,7 +12,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fetchBenchmarkHistory, seedFromWorker, seedWindowStart } from "./market-data";
+import {
+  fetchBenchmarkHistory,
+  fetchCloseSeries,
+  fetchMarketCandleRows,
+  seedFromWorker,
+  seedWindowStart,
+} from "./market-data";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MARKET_URL = "https://graph.digithings.ai";
@@ -219,6 +225,74 @@ describe("seedFromWorker", () => {
     );
     expect(await seedFromWorker(["AAA"], "2026-09-01")).toEqual([]);
     expect(errorSpy).toHaveBeenCalledWith("seedFromWorker:", expect.any(Error));
+  });
+});
+
+describe("fetchCloseSeries", () => {
+  it("batches at 25 and omits symbols the worker did not return", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MARKET_DATA_URL", MARKET_URL);
+    const tickers = Array.from({ length: 26 }, (_, i) => `T${i}`);
+    const fetchMock = vi.fn(async (url: string) => {
+      const asked = new URL(String(url)).searchParams.get("tickers")?.split(",") ?? [];
+      return jsonResponse({
+        rows: asked
+          .filter((ticker) => ticker !== "T0")
+          .map((ticker) => ({ date: "2026-09-11", ticker, close: 10 })),
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const series = await fetchCloseSeries(tickers, "2026-09-01");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(series.has("T0")).toBe(false);
+    expect(series.get("T1")).toEqual([{ date: "2026-09-11", price: 10 }]);
+    expect(series.size).toBe(25);
+  });
+
+  it("returns an empty map when unconfigured and never touches the network", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MARKET_DATA_URL", "");
+    const networkBlocked = vi.fn(async () => {
+      throw new Error("network disabled in tests");
+    });
+    vi.stubGlobal("fetch", networkBlocked);
+    expect(await fetchCloseSeries(["SPY"], "2026-09-01")).toEqual(new Map());
+    expect(networkBlocked).not.toHaveBeenCalled();
+  });
+
+  it("skips a rejected batch without inventing rows for it", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MARKET_DATA_URL", MARKET_URL);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "bad" }, false, 400)));
+    expect(await fetchCloseSeries(["SPY"], "2026-09-01")).toEqual(new Map());
+    expect(errorSpy).toHaveBeenCalledWith("fetchCloseSeries:", 400);
+  });
+});
+
+describe("fetchMarketCandleRows", () => {
+  it("returns the worker rows, including a close that has no open", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MARKET_DATA_URL", MARKET_URL);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          rows: [
+            { date: "2026-09-10", ticker: "SPY", close: 660 },
+            { date: "2026-09-11", ticker: "GLD", open: 240, high: 244, low: 238, close: 242, volume: 8 },
+          ],
+        }),
+      ),
+    );
+    expect(await fetchMarketCandleRows("SPY", "2026-09-01")).toEqual([
+      { date: "2026-09-10", ticker: "SPY", close: 660 },
+      { date: "2026-09-11", ticker: "GLD", open: 240, high: 244, low: 238, close: 242, volume: 8 },
+    ]);
+  });
+
+  it("returns nothing when the market URL is unset", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MARKET_DATA_URL", "");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await fetchMarketCandleRows("SPY", "2026-09-01")).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

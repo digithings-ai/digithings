@@ -20,6 +20,7 @@ from pathlib import Path
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.paths import canonicalize_path
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.valuation import valuation_z_score
@@ -81,10 +82,12 @@ def build_risk_index(
         )
 
     valuation_z = valuation_z_score(price, rails["low"], rails["median"], rails["high"])
-    indicators = [
-        IndicatorWeight(name="valuation", z=valuation_z, weight=valuation_weight),
-        *(extra_indicators or []),
-    ]
+    # Omit unused members. A weight-0 power-law column still nulls the day
+    # via ``0 × null`` if it stays in the blend (Stage 0 solo extras).
+    indicators: list[IndicatorWeight] = []
+    if valuation_weight != 0.0:
+        indicators.append(IndicatorWeight(name="valuation", z=valuation_z, weight=valuation_weight))
+    indicators.extend(extra_indicators or [])
     composite = compute_composite_risk(indicators)
     payload: dict[str, pl.Series] = {
         "date": dates,
@@ -113,7 +116,7 @@ def write_risk_index(df: pl.DataFrame, path: Path | str) -> Path:
     risk values. Null risk is kept as an explicit no-data day.
     """
     validated = _validate_risk_index_frame(df)
-    dest = Path(path)
+    dest = canonicalize_path(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     validated.write_parquet(dest)
     return dest

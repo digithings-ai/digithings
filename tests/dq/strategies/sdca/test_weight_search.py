@@ -11,6 +11,7 @@ import pytest
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.indicator_catalog import (
     EXTRA_INDICATOR_NAMES,
+    GOLD_MACRO_NAMES,
     ExtraIndicatorSources,
     SdcaCompositeWeights,
 )
@@ -89,6 +90,7 @@ def test_backtest_search_keeps_helpful_extra_and_drops_harmful() -> None:
             vs_flat_dca_pct=vs_flat - 0.001 * len(window_dates),
             vs_lump_pct=-1.0,
             capital_deployed_pct=40.0,
+            capital_deployed_peak_pct=40.0,
             max_drawdown_pct=12.0,
         )
 
@@ -133,6 +135,7 @@ def test_backtest_search_does_not_drop_all_on_high_drawdown() -> None:
             vs_flat_dca_pct=4.0 + 3.0 * rsi_w,
             vs_lump_pct=-1.0,
             capital_deployed_pct=40.0,
+            capital_deployed_peak_pct=40.0,
             max_drawdown_pct=61.0,
         )
 
@@ -174,11 +177,14 @@ def test_backtest_search_keeps_extra_when_early_fold_is_all_cash() -> None:
             if getattr(ind, "name", "") == "weekly_rsi":
                 rsi_w = float(ind.weight)
         # Short early windows: all-cash (0% deployed). Longer windows trade.
+        # Peak mirrors net here: all-cash windows carry peak 0.0 and stay
+        # infeasible while trading windows clear the floor (#4804).
         deployed = 0.0 if len(window_dates) < 40 else 40.0
         return SdcaTrialMetrics(
             vs_flat_dca_pct=4.0 + 3.0 * rsi_w,
             vs_lump_pct=-1.0,
             capital_deployed_pct=deployed,
+            capital_deployed_peak_pct=deployed,
             max_drawdown_pct=12.0,
         )
 
@@ -214,6 +220,7 @@ def test_backtest_search_skips_enabled_extra_without_z() -> None:
             vs_flat_dca_pct=float(valuation_weight),
             vs_lump_pct=0.0,
             capital_deployed_pct=40.0,
+            capital_deployed_peak_pct=40.0,
             max_drawdown_pct=10.0,
         )
 
@@ -247,7 +254,10 @@ def test_checked_in_weights_sidecar_searched_full_catalog() -> None:
             / "digiquant/src/digiquant/strategies/sdca/btc_composite_weights.json"
         ).read_text()
     )
-    assert set(payload["search_names"]) == set(EXTRA_INDICATOR_NAMES)
+    # Gold legs added in #4804 postdate the BTC published search; they are
+    # excluded from the published BTC path by zero defaults. A BTC re-search
+    # covering them is future work, not this assertion's job.
+    assert set(payload["search_names"]) == set(EXTRA_INDICATOR_NAMES) - set(GOLD_MACRO_NAMES)
     assert payload["num_evaluations"] >= 128
     kept = {k: v for k, v in payload["weights"].items() if k != "valuation" and v > 0}
     assert kept == {}

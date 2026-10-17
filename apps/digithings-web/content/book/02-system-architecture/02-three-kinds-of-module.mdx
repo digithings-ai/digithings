@@ -1,0 +1,42 @@
+---
+title: Three kinds of module
+order: 2
+summary: >-
+  Services run, libraries are imported, surfaces face people. Telling them
+  apart is the key to reading the rest of the architecture.
+---
+
+The most common misreading of digithings is to treat every module name as the
+same kind of thing. They are not, and the difference matters for how you deploy,
+scale and replace them.
+
+**Services** are long-running processes with a network interface. They have
+an address, a health check and their own lifecycle: digigraph, digisearch,
+digiquant, digikey, digivault, digitrace and the digichat back end. You deploy
+a service, you scale a service, and you can put another implementation behind
+the same interface.
+
+**Libraries** have no address at all. digillm, digibase, digifetch and digiclaw
+are packages that services import. They never listen for traffic, so there is
+nothing to deploy and nothing to secure at the network level; they travel
+inside the services that use them. When a library improves, every service that
+imports it improves on its next release.
+
+**Surfaces** are what people see: the digichat interface, the dashboards, the
+terminal apps and the marketing sites. They hold no business logic of their
+own. A surface asks the hub, and the hub decides.
+
+| Kind | Has a network address | You deploy it | Examples |
+| --- | --- | --- | --- |
+| Service | yes | yes | digigraph, digisearch, digiquant, digikey, digivault |
+| Library | no | inside a service | digillm, digibase, digifetch, digiclaw |
+| Surface | yes, for people | yes | digichat, the dashboards, the terminal apps |
+
+This split is what makes the stack modular in practice rather than in name. A
+team that only needs model access can import digillm and stop there. A team
+that already has a retrieval system can leave digisearch out and point the hub
+at its own tool server instead.
+
+<Reference kind="architecture" href="repo:digigraph/ARCHITECTURE.md" title="Module architecture documents">
+  Every module keeps its own ARCHITECTURE.md next to its code; digigraph's is the place to start.
+</Reference>

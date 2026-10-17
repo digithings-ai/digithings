@@ -21,7 +21,7 @@ Install unit: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (not npm, not `:latest`).
 | digichat | **GHCR** `ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` |
 | digichat-db | Public `postgres:16-alpine` |
 | digikey-blocklist-redis | Public `redis:7-alpine` |
-| litellm | Public `docker.litellm.ai/berriai/litellm:main-stable` |
+| digillm (alias `litellm`) | `ghcr.io/digithings-ai/digillm:0.1.0` — LiteLLM from the pinned PyPI wheel (`Dockerfile.digillm`, DIG-1780) |
 | digikey / digigraph / digivault | **GHCR** `ghcr.io/digithings-ai/<svc>:${DIGI_IMAGE_TAG}` |
 
 Pin stack and digichat tags separately (`DIGI_IMAGE_TAG` ≠ `DIGICHAT_VERSION`). Prefer
@@ -116,7 +116,7 @@ docker compose -f infra/digichat-release/compose.profile-a.yml \
   --env-file infra/digichat-release/.env.profile-a up -d
 ```
 
-Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
+Does **not** start digiquant / digisearch / digitrace / heartbeat / observability.
 
 Full monorepo stack (all Python services) alternative: [`docs/templates/self-host/README.md`](../../docs/templates/self-host/README.md)
 (`make up-ghcr` + `--profile digichat --profile digivault`).

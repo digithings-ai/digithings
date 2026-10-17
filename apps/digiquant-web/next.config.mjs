@@ -1,13 +1,41 @@
+import { legacyDashboardRedirects } from "./lib/legacy-dashboard.mjs";
+
+/** Dev `/official-api` rewrite. Unset stays the local dashboard API on 8788. */
+const DEFAULT_OFFICIAL_API_ORIGIN = "http://127.0.0.1:8788";
+
+function officialApiRewriteOrigin() {
+  const configured = (process.env.DIGIQUANT_WEB_OFFICIAL_API_ORIGIN ?? "")
+    .trim()
+    .replace(/\/+$/, "");
+  return configured.length > 0 ? configured : DEFAULT_OFFICIAL_API_ORIGIN;
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "export",
   images: { unoptimized: true },
   trailingSlash: true,
-  transpilePackages: ["@digithings/ui"],
+  transpilePackages: ["@digithings/ui", "@digithings/design"],
   eslint: { ignoreDuringBuilds: true },
   // Dev preview is often opened at 127.0.0.1 while `next dev` advertises localhost.
   // Next.js 16 blocks cross-origin HMR (and client hydration) unless allowlisted.
   allowedDevOrigins: ["127.0.0.1", "localhost"],
+  // Dev-only same-origin proxy. Static export ignores rewrites.
+  // /official-api → the dashboard API. Production calls NEXT_PUBLIC_DASHBOARD_API_URL.
+  // DIGIQUANT_WEB_OFFICIAL_API_ORIGIN overrides the rewrite host. Unset stays
+  // http://127.0.0.1:8788. /app is this site's terminal (the brief desk).
+  // It is not a proxy. /dashboard is not proxied. redirects() sends retired
+  // non-FX dashboard paths to the desk. FX Hub and /dashboard?invite= stay
+  // on apps/dashboard (ROUTE_DASHBOARD_FX_HUB_TO_APP). Static export ignores
+  // redirects(); public/_redirects carries the same map on Pages.
+  async rewrites() {
+    return [
+      { source: "/official-api/:path*", destination: `${officialApiRewriteOrigin()}/:path*` },
+    ];
+  },
+  async redirects() {
+    return legacyDashboardRedirects();
+  },
 };
 
 export default nextConfig;

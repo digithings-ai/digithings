@@ -8,8 +8,24 @@ export type VaultHitSummary = {
   body?: string;
 };
 
+/**
+ * Why a `status` row exists, when it is about a tool. Absent means a quiet note
+ * about the turn — "results exist but this detail level withholds them" — and it
+ * is the only reading a status without an outcome may have.
+ *
+ * `query` is absent when the turn never knew one, never `""`. `state`:
+ *   - `failed`     the tool was asked and did not answer
+ *   - `unreadable` the tool answered and this layer cannot read the answer; an
+ *                  honest unknown, and never an empty result
+ */
+export type DigiChatStatusOutcome = {
+  name: string;
+  query?: string;
+  state: "failed" | "unreadable";
+};
+
 export type DigiChatActivity =
-  | { kind: "status"; message: string }
+  | { kind: "status"; message: string; outcome?: DigiChatStatusOutcome }
   | { kind: "tool_call"; name: string; query: string }
   | {
       kind: "tool_result";

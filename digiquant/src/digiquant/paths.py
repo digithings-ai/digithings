@@ -34,3 +34,19 @@ def validate_data_paths(
         resolve_under_data_root(Path(data_path), label="data_path")
     if data_dir is not None and str(data_dir).strip():
         resolve_under_data_root(Path(data_dir), label="data_dir")
+
+
+def canonicalize_path(path: str | Path) -> Path:
+    """Canonicalize *path* (symlinks, ``.``/``..``) without confining it.
+
+    Use for caller-chosen input/output files that legitimately live anywhere
+    (tmp dirs, user-specified outputs, installed-layout coefficient files):
+    the canonical form is what every later filesystem call acts on, so
+    ``..``/symlink ambiguity cannot redirect the operation away from the
+    named file. Where the file must additionally stay inside a trusted
+    directory, resolve it against that root and require the real path to
+    start with the root (the ``_resolve_tearsheet_output`` shape); that
+    check is inline at the sink, never only in a helper.
+    """
+    real = os.path.realpath(os.path.normpath(os.fspath(path)))
+    return Path(real)

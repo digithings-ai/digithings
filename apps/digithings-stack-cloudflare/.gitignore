@@ -2,3 +2,7 @@
 node_modules
 dist
 .dev.vars
+
+# Orphaned build stamp from pre-SEED_VER tooling; the live marker is
+# .stack_chroma_seeded_* under $DATA_CHROMA (see container/seed_chroma.sh).
+container/seed/.seed_build_id

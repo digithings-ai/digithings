@@ -49,6 +49,14 @@ const TABLE_ALLOWLIST = new Set([
   // Slice 0008 rewire: dossier + observability reads (main-project tables, no house pin).
   'thesis_vehicles',
   'analyst_coverage',
+  // digiquant.io tearsheets (DIG-2857). A public reference surface, not a house
+  // book: migration 046 creates `strategy_tearsheets_anon_select`, 051
+  // deliberately keeps it, and 129 lists it under "Deliberately KEPT (do not
+  // revoke here)" alongside the other browser-read surfaces. No house pin — the
+  // table carries no `workspace_id` column. While it was missing here every
+  // tearsheet read 404'd `not_found` and the site rendered honest-empty in
+  // place of its statistics.
+  'strategy_tearsheets',
 ]);
 
 /** Tables that must always be scoped to the house workspace. */

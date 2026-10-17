@@ -21,13 +21,18 @@ def test_digikey_imports() -> None:
 
 
 @pytest.mark.baseline
-def test_digismith_imports() -> None:
-    import digismith  # noqa: F401
+def test_digitrace_imports() -> None:
+    import digitrace  # noqa: F401
 
 
 @pytest.mark.baseline
 def test_digiclaw_imports() -> None:
     import digiclaw  # noqa: F401
+
+
+@pytest.mark.baseline
+def test_digivoice_imports() -> None:
+    import digivoice  # noqa: F401
 
 
 @pytest.mark.baseline

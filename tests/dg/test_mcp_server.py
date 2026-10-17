@@ -391,6 +391,43 @@ class TestMcpToolEnforcement:
         assert out["success"] is True
         assert called.get("ran") is True
 
+    def test_workflow_forwards_verified_bearer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The workflow tool puts the caller's verified JWT on WorkflowRequest.
+
+        chat and thread_state forward that bearer into the in-process HTTP
+        call. workflow does the same for the graph: digi_bearer is the token
+        so downstream digisearch and digiquant calls stay authenticated.
+        """
+        monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
+        token = _mint(scopes=["digigraph:workflow"])
+        seen: dict[str, str | None] = {}
+
+        def _fake_workflow(req: object) -> _FakeWorkflowResult:
+            seen["bearer"] = getattr(req, "digi_bearer", None)
+            return _fake_workflow_result()
+
+        monkeypatch.setattr("digigraph.workflow.run_digigraph_workflow", _fake_workflow)
+        out = json.loads(_call_tool("workflow", _bearer(token), prompt="hi"))
+        assert out["success"] is True
+        assert seen["bearer"] == token
+
+    def test_workflow_forwards_presented_bearer_when_auth_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Auth-off still returns a presented token from the gate; workflow must keep it."""
+        monkeypatch.delenv("DIGI_MCP_REQUIRE_AUTH", raising=False)
+        token = _mint(scopes=["digigraph:workflow"])
+        seen: dict[str, str | None] = {}
+
+        def _fake_workflow(req: object) -> _FakeWorkflowResult:
+            seen["bearer"] = getattr(req, "digi_bearer", None)
+            return _fake_workflow_result()
+
+        monkeypatch.setattr("digigraph.workflow.run_digigraph_workflow", _fake_workflow)
+        out = json.loads(_call_tool("workflow", _bearer(token), prompt="hi"))
+        assert out["success"] is True
+        assert seen["bearer"] == token
+
     def test_workflow_rejects_wrong_scope(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
         called: dict[str, bool] = {}

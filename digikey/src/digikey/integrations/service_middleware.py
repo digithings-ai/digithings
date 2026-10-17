@@ -179,6 +179,10 @@ def digigraph_path_scopes(method: str, path: str) -> list[str] | None:
 def digiquant_path_scopes(method: str, path: str) -> list[str] | None:
     if path in _PUBLIC_PATHS:
         return None
+    if method == "GET" and path == "/bars":
+        # #4880: keyless dashboard chart reads (anonymous upstream, read-only).
+        # Human-gate note: this exemption ships unmerged until reviewed.
+        return None
     if path == "/run_optimize":
         return ["digiquant:optimize"]
     if path in ("/run_pipeline", "/v1/workflow", "/v1/orchestrator_invoke"):
@@ -208,4 +212,9 @@ def digisearch_path_scopes(method: str, path: str) -> list[str] | None:
         return ["digisearch:query"]
     if path == "/azure_status":
         return ["digisearch:query"]
+    # DIG-1177: the screening path gets its own scope. It must not ride the
+    # digisearch:query fallthrough below, and it is not auth-exempt: the caller
+    # has to hold digisearch:screen explicitly.
+    if path == "/internal/art9/screen":
+        return ["digisearch:screen"]
     return ["digisearch:query"]

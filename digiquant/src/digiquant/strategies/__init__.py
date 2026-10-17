@@ -29,4 +29,15 @@ from digiquant.strategies.registry import (
     resolve_strategy_name,
 )
 
+# Repo-split 1.2 (DIG-3691): private strategies (incl. SDCA today, R1 after the
+# split) register through the ``digiquant.strategies`` entry-point group
+# instead of side-effect imports here. Reference strategies above stay
+# direct-imported. Discovery is fail-closed (warn-and-skip).
+try:
+    from digiquant import plugin as _plugin
+
+    _plugin.register_plugin_strategies(register)
+except Exception:  # pragma: no cover — discovery never raises; belt and braces
+    pass
+
 __all__ = ["get_strategy", "list_strategies", "register", "resolve_strategy_name"]

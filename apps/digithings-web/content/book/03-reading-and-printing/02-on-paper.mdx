@@ -1,0 +1,30 @@
+---
+title: "On paper"
+order: 2
+summary: >-
+  Printing a chapter uses a stylesheet that the print engine honours rather than fights:
+---
+
+Printing a chapter uses a stylesheet that the print engine honours rather than
+fights:
+
+- running headers carry the chapter title and the book title;
+- page numbers sit in the outer margin, which alternates by page parity;
+- the table of contents on the printed front matter carries page references,
+  resolved after the document is paginated.
+
+The last point is the one worth explaining. A page number is not knowable until
+the engine has decided where the pages break, so it is not written into the
+source. The engine fills it in, after pagination, by looking up the anchor each
+entry points at. A number written by hand would be wrong the moment a paragraph
+grew a line.
+
+## Why the print step is a build step
+
+The printed book is produced by a headless browser in CI, and the resulting file
+is uploaded as an artifact. It is not produced by a person pressing print.
+
+That decision costs a browser in the pipeline and buys three things: the file is
+reproducible from a commit, the same input always yields the same output, and
+nobody's machine settings — paper size, margins, "fit to page", a stray header
+and footer — end up in the printed book.

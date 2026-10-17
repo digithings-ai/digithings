@@ -14,7 +14,7 @@ Pull prebuilt service images instead of `docker compose build`.
 cp .env.example .env
 # Edit .env: provider keys, DIGIKEY_*, optional AUTH_* for digichat
 
-# Core stack (digikey, digigraph, digiquant, digisearch, digismith, LiteLLM, Ollama)
+# Core stack (digikey, digigraph, digiquant, digisearch, digitrace, LiteLLM, Ollama)
 docker compose \
   -f docker-compose.yml \
   -f infra/self-host/compose.ghcr.yml \
@@ -51,7 +51,7 @@ docker compose \
 
 | Variable | Default | Notes |
 |----------|---------|--------|
-| `DIGI_IMAGE_TAG` | `latest` | digikey, digigraph, digiquant, digisearch, digismith, digivault, digiclaw |
+| `DIGI_IMAGE_TAG` | `latest` | digikey, digigraph, digiquant, digisearch, digitrace, digivault, digiclaw |
 | `DIGICHAT_IMAGE_TAG` | `latest` | digichat only (prefer `vX.Y.Z` from release-please) |
 
 Production: pin `DIGI_IMAGE_TAG=sha-<12-char-git-sha>` so every service matches one monorepo commit. See [RELEASES.md](../../../RELEASES.md).
@@ -65,7 +65,7 @@ With the stack up, each FastAPI service exposes:
 | digigraph | http://127.0.0.1:8000/docs | `/openapi.json` |
 | digiquant | http://127.0.0.1:8001/docs | `/openapi.json` |
 | digisearch | http://127.0.0.1:8002/docs | `/openapi.json` |
-| digismith | http://127.0.0.1:8003/docs | `/openapi.json` |
+| digitrace | http://127.0.0.1:8003/docs | `/openapi.json` |
 | digivault | http://127.0.0.1:8004/docs | `/openapi.json` |
 | digikey | http://127.0.0.1:8005/docs | `/openapi.json` |
 
@@ -83,4 +83,4 @@ Committed OpenAPI snapshots live under [`docs/openapi/`](../../openapi/) (when e
 Clients who only need digichat + digikey + digigraph + LiteLLM + digivault should use
 [`infra/digichat-release/`](../../../infra/digichat-release/) and
 [`docs/digichat/INSTALL.md`](../../digichat/INSTALL.md) — not the full-stack
-`make up-ghcr` path (which also starts digiquant / digisearch / digismith by default).
+`make up-ghcr` path (which also starts digiquant / digisearch / digitrace by default).

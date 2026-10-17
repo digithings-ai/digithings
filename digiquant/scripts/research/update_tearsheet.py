@@ -34,15 +34,16 @@ try:
 except ImportError:
     _HAS_SUPABASE = False
 
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()  # also loads .env from cwd (lower priority)
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+    logger.debug("python-dotenv is not installed; continuing without it")
 
-logger = logging.getLogger(__name__)
 
 from digiquant.research import dashboard_digest as _digest  # noqa: E402
 from digiquant.dashboard.performance_returns import calculate_performance_returns  # noqa: E402
@@ -52,15 +53,21 @@ _JSON_IO_ERRORS = _digest.JSON_IO_ERRORS
 _PRICE_CELL_ERRORS = (KeyError, TypeError, ValueError, IndexError)
 _REMOTE_UPSERT_ERRORS = _digest.REMOTE_UPSERT_ERRORS
 
-ROOT = Path(__file__).parent.parent
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
-from lib.scratch_paths import AGENT_CACHE_ROOT  # noqa: E402
+from lib.roots import (  # noqa: E402
+    AGENT_CACHE_ROOT,
+    DASHBOARD_DATA_JSON,
+    DIGIQUANT_ROOT,
+    RESEARCH_CONFIG,
+)
 
-OUTPUT_JSON = ROOT / "apps" / "dashboard" / "public" / "dashboard-data.json"
+OUTPUT_JSON = DASHBOARD_DATA_JSON
 DAILY_DIR = AGENT_CACHE_ROOT / "daily"
-PORTFOLIO_JSON = ROOT / "config" / "portfolio.json"
+PORTFOLIO_JSON = RESEARCH_CONFIG / "portfolio.json"
+# backfill-supabase.py calls load_all_markdowns(mod.ROOT). Keep the name.
+ROOT = DIGIQUANT_ROOT
 
 # Benchmarks for comparison
 BENCHMARKS = ["SPY", "QQQ", "IWM", "EEM", "TLT", "GLD", "IBIT"]
@@ -338,7 +345,7 @@ def simulate_portfolio(digests):
                         ret = (p1 - p0) / p0
                         daily_return += weight * ret
                 except KeyError:
-                    pass
+                    logger.debug("no price for %s on %s", ticker, prev_date)
             nav = nav * (1.0 + daily_return)
 
         # Apply any digest published on or prior to this trading date
@@ -500,7 +507,7 @@ def compute_fx_impact(pj_positions, investor_currency):
                             f"yfinance close {prices.index[idx].strftime('%Y-%m-%d')}"
                         )
             except _PRICE_CELL_ERRORS:
-                pass
+                logger.debug("entry price unreadable for %s", ticker, exc_info=True)
 
         # --- Current price (USD) ---
         current_price = None
@@ -510,7 +517,7 @@ def compute_fx_impact(pj_positions, investor_currency):
                 if pd.notna(v):
                     current_price = float(v)
             except _PRICE_CELL_ERRORS:
-                pass
+                logger.debug("current price unreadable for %s", ticker, exc_info=True)
 
         usd_return_pct = None
         if entry_price and current_price and entry_price > 0:
@@ -527,7 +534,7 @@ def compute_fx_impact(pj_positions, investor_currency):
                     if pd.notna(v):
                         entry_usdx = float(v)
             except _PRICE_CELL_ERRORS:
-                pass
+                logger.debug("entry FX unreadable: %s / %s", ticker, fx_ticker, exc_info=True)
 
         fx_return_pct = None
         adj_return_pct = None
@@ -746,6 +753,15 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
                 )
 
     if position_rows:
+        # DIG-2816: DELIBERATELY NOT GATED AGAINST ``position_events``.
+        # This script is UPSTREAM of the ledger — it derives ``position_events`` from
+        # day-over-day book digests further down this file — so reconciling this write
+        # against the ledger would be circular: the book would be checked against the
+        # rows this same run is about to derive from it. The four DOWNSTREAM writers
+        # (``portfolio_materialize``, ``writers/commit_io``,
+        # ``sync_positions_from_rebalance``, ``refresh_performance_metrics.carry_forward``)
+        # are the ones that must reconcile. Do not wire this call site to
+        # ``ledger_replay.reconcile_book``.
         # Batch upsert in chunks (Supabase limit ~1000 rows per request)
         for i in range(0, len(position_rows), 500):
             chunk = position_rows[i : i + 500]
@@ -1003,7 +1019,7 @@ def main():
     )
     alpha = performance_returns.relative_return_pct
 
-    docs = load_all_markdowns(ROOT)
+    docs = load_all_markdowns(DIGIQUANT_ROOT)
     print(f"   Research docs: {len(docs)} found")
 
     # --- Push to Supabase (primary data store) ---
@@ -1045,7 +1061,7 @@ def main():
         all_tickers_pj = [p["ticker"] for p in pj_positions if p["ticker"] != "CASH"]
 
         # Try pre-fetched data first, then yfinance as fallback
-        prefetched = _load_prefetched_prices(ROOT)
+        prefetched = _load_prefetched_prices(DIGIQUANT_ROOT)
         pj_prices = None
         if _HAS_YFINANCE and all_tickers_pj and not prefetched:
             pj_prices = fetch_prices(all_tickers_pj, datetime.now().strftime("%Y-%m-%d"))

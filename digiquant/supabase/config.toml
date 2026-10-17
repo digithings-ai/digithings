@@ -59,10 +59,13 @@ schema_paths = []
 
 [db.seed]
 # If enabled, seeds the database after migrations during a db reset.
-enabled = false
+# DIG-2774: enabled so `supabase db reset` applies the synthetic local-stack
+# seed after the production migrations. The seed is synthetic and idempotent
+# (every statement is an upsert on a natural key), so a reset is safe.
+enabled = true
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-sql_paths = []
+sql_paths = ["./seed.sql"]
 
 [db.network_restrictions]
 # Enable management of network restrictions.

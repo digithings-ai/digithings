@@ -1,0 +1,42 @@
+---
+title: Data, memory and observability
+order: 8
+summary: >-
+  Each store has one job: relational data, a read-only market archive, a
+  knowledge vault and traces. You can always see what the system did.
+---
+
+digithings keeps its data in a few places, each chosen for one kind of work.
+**Postgres** holds the relational state services need. A **read-only market
+archive** in object storage serves historical prices directly from the edge,
+because a hot, read-only dataset gains nothing from passing through an
+application server. **digivault** is the long-term memory: a vault of plain
+markdown notes with links between them, which people can read and edit with
+ordinary tools and which agents can search and cite.
+
+Choosing plain markdown for memory is a statement about ownership. Your
+knowledge base is a folder of text files, not rows in a format only digithings
+can read. If you stop using digithings, the vault is still yours and still
+useful.
+
+The production chat interface goes further and keeps no database of its own at
+all. Fewer moving parts in the path of every message means fewer ways for a
+message to fail.
+
+Observability is part of the design rather than an add-on. **digitrace**
+records what the agents did, step by step, on a self-hosted trace store, and
+the self-hosted stack ships with metrics, dashboards and an OpenTelemetry
+collector, so traces and metrics flow into tools you may already run.
+
+> **Why digithings.** Your data stays in open formats and in stores you
+> control: Postgres, object storage and markdown files. Telemetry speaks
+> OpenTelemetry, so it plugs into your existing monitoring instead of a
+> proprietary console.
+
+<Reference kind="architecture" href="repo:digivault/ARCHITECTURE.md" title="digivault architecture">
+  How the knowledge vault is stored, linked and searched.
+</Reference>
+
+<Reference kind="architecture" href="repo:digitrace/ARCHITECTURE.md" title="digitrace architecture">
+  What is traced and where traces are kept.
+</Reference>

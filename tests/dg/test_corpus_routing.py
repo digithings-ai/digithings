@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from digigraph.corpus_routing import (
     TenantCorpusMapError,
@@ -310,7 +312,8 @@ def test_load_tenant_corpus_map_skips_invalid_slug_and_non_object_entry() -> Non
         '"also-ok":"not-an-object"}'
     )
     table = load_tenant_corpus_map(raw)
-    assert "OCC" not in table  # uppercase fails _SLUG
+    assert "OCC" not in table  # lowercased to occ; occ_help is kept
+    assert table["occ"].digisearch_index == "occ_help"
     assert "also-ok" not in table
     assert table["ok-tenant"].digisearch_index == "ok_docs"
     assert table["ok-tenant"].vault_path_prefix == "clients/ok"
@@ -363,6 +366,39 @@ def test_merge_server_prompt_wins_when_mapped_with_prompt(
     req = WorkflowRequest(prompt="hi", research_system_prompt_override="client value")
     out = _with_digi_request_context(_merge_http("occ"), req)
     assert out.research_system_prompt_override == "OCC prompt"
+
+
+# DIG-509 leaf 1a. The grounding rule reaches the research node as the occ
+# tenant's corpus-map `research_system_prompt`. The short "OCC prompt" case above
+# proves the map beats a client body value; this one proves the real instruction
+# - which an operator pastes as multi-line text with apostrophes and quotes -
+# survives JSON parsing and the HTTP merge layer byte-for-byte, rather than
+# being mangled or truncated on the way to research_system_prompt_override.
+GROUNDING_PROMPT = """You are a support assistant.
+
+Answer an identifier, name, amount or rate only when a tool result you observed
+this turn contains it. If no such result was observed, say "no record was found"
+and don't guess. Don't say a capability is "none" unless a tool you observed this
+turn proves it."""
+
+DIGI_TENANT_CORPUS_MAP_WITH_GROUNDING = (
+    '{"occ": {"digisearch_index": "occ_help", "research_system_prompt": '
+    + json.dumps(GROUNDING_PROMPT)
+    + "}}"
+)
+
+
+def test_merge_preserves_grounding_prompt_from_corpus_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A mapped tenant's grounding instruction reaches the node verbatim."""
+    from digigraph.models import WorkflowRequest
+    from digigraph.server import _with_digi_request_context
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", DIGI_TENANT_CORPUS_MAP_WITH_GROUNDING)
+    req = WorkflowRequest(prompt="hi", research_system_prompt_override="client value")
+    out = _with_digi_request_context(_merge_http("occ"), req)
+    assert out.research_system_prompt_override == GROUNDING_PROMPT
 
 
 def test_merge_clears_client_override_when_map_unset(monkeypatch: pytest.MonkeyPatch) -> None:

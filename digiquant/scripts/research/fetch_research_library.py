@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import warnings
 from pathlib import Path
 
 try:
@@ -40,8 +41,15 @@ try:
     from dotenv import load_dotenv
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -75,8 +83,7 @@ def _query(sb, args: argparse.Namespace, select: str = "date,document_key,title,
     if args.type:
         q = q.eq("segment", args.type)
     if args.ticker:
-        # ticker stored in payload.ticker — use ilike on title as fallback
-        q = q.ilike("title", f"%{args.ticker}%")
+        q = q.eq("payload->>ticker", args.ticker)
     if args.since:
         q = q.gte("date", args.since)
     return q.limit(args.limit).execute()

@@ -1,0 +1,33 @@
+---
+title: "Open protocols: MCP"
+order: 9
+summary: >-
+  Every digithings capability is a Model Context Protocol tool, so any MCP
+  client can use digithings and digithings can use any MCP server.
+---
+
+The Model Context Protocol (MCP) is an open standard for describing tools that
+an AI agent can call. digithings is built **MCP-first**: each vertical exposes
+its capabilities as MCP tools, and the hub is designed to discover and call
+tools the same way whether they come from a digithings module or from somewhere
+else.
+
+That has consequences in both directions. Outward, an agent you already use,
+whether a desktop assistant, an IDE agent or your own code, can connect to
+digithings over MCP and use its search, research and memory tools directly.
+Inward, digithings can use any tool server that speaks MCP, so extending it
+rarely means writing digithings-specific glue.
+
+Direct tool access is powerful, so it is guarded separately. Reaching the tool
+servers from outside requires its own credential, distinct from the identity a
+chat user holds, and the edge refuses requests when that credential is missing.
+The hub's own tool permissions cannot be bypassed by going around it.
+
+> **Why digithings.** Standard protocols at every boundary: MCP for tools, the
+> chat-completions interface for models, signed tokens with published keys for
+> identity and OpenTelemetry for telemetry. Each boundary is a place you can
+> plug in something else.
+
+<Reference kind="architecture" href="repo:digigraph/ARCHITECTURE.md" title="digigraph architecture">
+  How the hub discovers, permits and calls tools.
+</Reference>

@@ -530,12 +530,15 @@ Tier 1 (preferred): Local Python scripts
   
 Tier 2 (fallback): MCP tool servers
   FRED → yield curve, rates, economic indicators
-  Alpha Vantage → stock prices (limited tickers)
-  CoinGecko → crypto prices
   Frankfurter → FX rates
   
 Both tiers → same JSON output schema
 ```
+
+> **Amended 2026-10-04 (DIG-337)**: the two key-backed vendor servers that earlier revisions
+> of this block listed under Tier 2 were removed from `config/mcp.claude-desktop.fragment.json`.
+> Equity prices stay on Tier 1 (yfinance); crypto prices come from the ingested layer or from
+> web search - no key required.
 
 `SKILL-mcp-data-fetch.md` documents the MCP fallback path. The output format matches `quotes.json` and `macro.json` schemas so downstream skills don't need to know which tier was used.
 

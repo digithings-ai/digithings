@@ -8,10 +8,10 @@
   display: grid;
   grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
   min-height: 100vh;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--font-family);
-  transition: grid-template-columns 0.25s var(--transition-ease);
+  transition: grid-template-columns 0.25s var(--ease);
 }
 .app-shell.app-shell-sidebar-collapsed {
   grid-template-columns: 0 minmax(0, 1fr);
@@ -22,12 +22,12 @@
 
 /* --- Sidebar ----------------------------------------------------------- */
 .app-sidebar {
-  border-right: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  border-right: 1px solid var(--hair);
+  background: var(--surface);
   overflow: hidden auto;
   font-family: var(--font-family-mono);
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--ink-soft);
 }
 .app-shell-sidebar-collapsed .app-sidebar {
   border-right: none;
@@ -42,7 +42,7 @@
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--ink-soft);
   font-weight: 600;
 }
 .app-sidebar-section ul {
@@ -52,7 +52,7 @@
 }
 .app-sidebar-section li {
   padding: 4px 0;
-  color: var(--text-primary);
+  color: var(--ink);
 }
 
 /* --- Main column ------------------------------------------------------- */
@@ -69,14 +69,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--hair);
   background: rgba(10, 10, 10, 0.7);
   font-family: var(--font-family-mono);
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--ink-soft);
 }
-.app-topbar-title { color: var(--text-primary); letter-spacing: 0.02em; }
-.app-topbar-meta { color: var(--text-secondary); }
+.app-topbar-title { color: var(--ink); letter-spacing: 0.02em; }
+.app-topbar-meta { color: var(--ink-soft); }
 
 /* --- Main slot --------------------------------------------------------- */
 .app-main {
@@ -91,12 +91,12 @@
   align-items: center;
   gap: 10px;
   padding: 10px 16px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  border-top: 1px solid var(--hair);
+  background: var(--surface);
   font-family: var(--font-family-mono);
 }
 .app-input-marker {
-  color: var(--accent, var(--text-secondary));
+  color: var(--accent, var(--ink-soft));
   user-select: none;
 }
 .app-input-field {
@@ -107,7 +107,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  color: var(--text-primary);
+  color: var(--ink);
   font-family: var(--font-family-mono);
   font-size: 14px;
   line-height: 1.5;
@@ -115,11 +115,11 @@
   outline: none;
 }
 .app-input-field:focus {
-  border-color: var(--accent, var(--border-color));
+  border-color: var(--accent, var(--hair));
 }
 .slash-hint {
   font-size: 11px;
-  color: var(--text-secondary);
+  color: var(--ink-soft);
 }
 .slash-hint kbd,
 .shell-cmd-ref {
@@ -129,7 +129,7 @@
   border-radius: 0;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
+  color: var(--ink);
 }
 
 /* --- Command palette --------------------------------------------------- */
@@ -147,8 +147,8 @@
 
 .app-shell-palette-inner {
   width: min(560px, 92vw);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  background: var(--surface);
+  border: 1px solid var(--hair);
   border-radius: var(--radius-lg);
   box-shadow: 0 40px 120px rgba(0, 0, 0, 0.55);
   overflow: hidden;
@@ -157,9 +157,9 @@
   width: 100%;
   padding: 14px 16px;
   border: none;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--hair);
   background: transparent;
-  color: var(--text-primary);
+  color: var(--ink);
   font-family: var(--font-family-mono);
   font-size: 14px;
   outline: none;
@@ -180,16 +180,16 @@
   cursor: pointer;
   font-family: var(--font-family-mono);
   font-size: 13px;
-  color: var(--text-primary);
+  color: var(--ink);
   outline: none;
 }
 .app-shell-palette-item.is-active,
 .app-shell-palette-item:hover,
 .app-shell-palette-item:focus-visible {
-  background: color-mix(in srgb, var(--accent, var(--fg)) 14%, transparent);
+  background: color-mix(in srgb, var(--accent, var(--ink)) 14%, transparent);
 }
 .app-shell-palette-desc {
-  color: var(--text-secondary);
+  color: var(--ink-soft);
 }
 
 /* --- Reduced motion ---------------------------------------------------- */

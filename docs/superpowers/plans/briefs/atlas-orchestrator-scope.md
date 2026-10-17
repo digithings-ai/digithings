@@ -2,7 +2,7 @@
 
 **Scope:** Scoping only (no production code). Tracking: [#930](https://github.com/digithings-ai/digithings/issues/930).  
 **Canonical spec:** [`2026-06-20-olympus-daily-thesis-design.md`](../../specs/2026-06-20-olympus-daily-thesis-design.md) §5–6, §13.1, §14, §16, §17.  
-**Plan:** [`2026-06-20-olympus-daily-thesis.md`](../2026-06-20-olympus-daily-thesis.md).
+**Plan:** `2026-06-20-olympus-daily-thesis.md` (removed DIG-3399; git history keeps it).
 
 **Execution order:** `foundation/edit-mode` → **`atlas/research/edit-mode`** → **`orchestrator/daily-cadence`** → `tools/research-retrieval` → Hermes steps.
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.data.prices.history_cache import DEFAULT_CACHE_DIR, load_cached
+from digiquant.paths import canonicalize_path
 from digiquant.strategies.sdca.asset_profile import (
     SdcaAssetProfile,
     daily_closes_from_cache,
@@ -149,7 +150,7 @@ def fit_sdca_weights_from_cache(
         path=None,
     )
     if output_path is not None:
-        dest = Path(output_path)
+        dest = canonicalize_path(output_path)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(result.model_dump_json(indent=2) + "\n")
         result = result.model_copy(update={"path": str(dest)})

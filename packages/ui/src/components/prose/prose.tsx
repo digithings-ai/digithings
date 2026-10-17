@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /**
  * Prose atoms — the shared grammar for the long-form company / legal pages
- * (`/about`, `/team`, `/security`, `/quality`, `/services`, `/legal/*`).
+ * (`/about`, `/team`, `/security`, `/services`, `/legal/*`).
  * Promoted verbatim from `apps/digithings-web/app/_company/prose.tsx` (D1,
  * #4429) so the shape is authored once and assembled by every site instead of
  * living app-locally.

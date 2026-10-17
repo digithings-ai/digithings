@@ -119,6 +119,14 @@ function buildMatrixRows(
   );
   if (!Number.isFinite(minYear)) return [];
 
+  const pointsByYear = new Map<number, TearsheetSeriesPoint[]>();
+  for (const p of equity) {
+    const y = new Date(p.t).getUTCFullYear();
+    const bucket = pointsByYear.get(y) ?? [];
+    bucket.push(p);
+    pointsByYear.set(y, bucket);
+  }
+
   if (metric === "volatility") {
     const rows: MatrixRow[] = [];
     for (let year = minYear; year <= maxYear; year++) {
@@ -129,7 +137,7 @@ function buildMatrixRows(
           pts && pts.length >= 2 ? annualizedVolPct(dailyReturnsFromEquity(pts)) : null;
         cells.push({ value: vol });
       }
-      const yearPts = equity.filter((p) => new Date(p.t).getUTCFullYear() === year);
+      const yearPts = pointsByYear.get(year) ?? [];
       const yearVol =
         yearPts.length >= 2 ? annualizedVolPct(dailyReturnsFromEquity(yearPts)) : null;
       rows.push({ year, cells, yearValue: yearVol });
@@ -154,10 +162,9 @@ function buildMatrixRows(
       }
     }
     const last = yearLast.get(year);
+    const yearStart = prevCloseAtYearStart(year, minYear, opening, yearLast);
     const yearValue =
-      last !== undefined && prevCloseAtYearStart(year, minYear, opening, yearLast) > 0
-        ? (last / prevCloseAtYearStart(year, minYear, opening, yearLast) - 1) * 100
-        : null;
+      last !== undefined && yearStart > 0 ? (last / yearStart - 1) * 100 : null;
     rows.push({ year, cells, yearValue: yearValue });
   }
   return rows;

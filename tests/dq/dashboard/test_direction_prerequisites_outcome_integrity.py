@@ -91,6 +91,23 @@ _ACCOUNTING_ROW = {
 }
 
 
+def test_accounting_period_pin_ignores_a_later_overlay_period() -> None:
+    overlay_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    later_overlay = {
+        **_ACCOUNTING_ROW,
+        "id": overlay_id,
+        "period_date": "2026-08-24",
+        "workspace_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    }
+    house = {**_ACCOUNTING_ROW, "period_date": "2026-08-20"}
+    client = FakeSupabaseClient(canned_reads={"accounting_periods": [later_overlay, house]})
+
+    snapshot = _snapshot(client)
+
+    assert snapshot is not None
+    assert str(snapshot.accounting_period_id) == _ACCOUNTING_ROW["id"]
+
+
 def test_accounting_period_pin_materialises_without_a_stored_content_hash() -> None:
     client = FakeSupabaseClient(canned_reads={"accounting_periods": [_ACCOUNTING_ROW]})
 

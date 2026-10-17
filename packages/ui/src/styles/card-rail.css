@@ -1,0 +1,111 @@
+/* card-rail.css — the horizontal card rail (components/data-layout/CardRail.tsx).
+ *
+ * Ported from the design reference's changelog rail (the data page's "Content
+ * that scrolls sideways"), which is the treatment the owner asked for. Only
+ * what utilities can't express lives here: the edge-fade mask, the hidden
+ * scrollbar, the snap track, and the paging arrow. Card sizing and the list
+ * grammar are call-site utilities.
+ *
+ * Import once in an app's globals.css:
+ *   @import "@digithings/ui/styles/card-rail.css";
+ */
+
+.cr-nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.cr-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 0.2s var(--ease),
+    border-color 0.2s var(--ease);
+}
+
+.cr-arrow:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.cr-arrow:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cr-arrow:disabled:hover {
+  color: var(--ink-soft);
+  border-color: var(--hair);
+}
+
+/* The fades: the rail reads as a strip that continues past both sides rather
+   than a grid that got cut off. */
+.cr-mask {
+  margin-top: 0.7rem;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 2.2rem,
+    #000 calc(100% - 2.2rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 2.2rem,
+    #000 calc(100% - 2.2rem),
+    transparent 100%
+  );
+}
+
+.cr-track {
+  display: flex;
+  gap: 0.9rem;
+  overflow-x: auto;
+  padding: 0.2rem 2.2rem;
+  scroll-snap-type: x mandatory;
+  /* The track is padded so the first card clears the edge fade. Without matching
+     the snapport to that padding, mandatory snap aligns the first card's start
+     edge to the unpadded start and rests the rail at ~2.2rem instead of zero —
+     which reads as "scrolled slightly right" and fades the first card. */
+  scroll-padding-inline: 2.2rem;
+  scrollbar-width: none;
+}
+
+.cr-track::-webkit-scrollbar {
+  display: none;
+}
+
+.cr-track:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The card the arrows have selected — the one sitting at the rail's leading
+   edge. `CardRail` marks it `data-active`; only the tearsheet cards dress it, so
+   the releases rail keeps its plain strip. The owner asked for exactly this
+   reading: "the arrows ... should cycle between one at a time ... Initially we
+   should have the first strategy selected". The selected card shows the accent
+   BORDER only, no fill — the owner: "the startegy card that is selected should
+   only have the collered border not the bbackground". */
+.cr-track > [data-active="true"] .ts-card {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cr-arrow {
+    transition: none;
+  }
+}

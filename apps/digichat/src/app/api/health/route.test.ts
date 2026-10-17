@@ -18,7 +18,7 @@ describe("GET /api/health", () => {
     vi.mocked(getEcosystemEndpoints).mockResolvedValue({
       digigraphUrl: "http://127.0.0.1:8000",
       digiquantUrl: "http://127.0.0.1:8001",
-      digismithUrl: "http://127.0.0.1:8003",
+      digitraceUrl: "http://127.0.0.1:8003",
       digisearchUrl: "",
     });
     vi.mocked(getDb).mockReturnValue(null);
@@ -54,7 +54,7 @@ describe("GET /api/health", () => {
     expect(body.ok).toBe(false);
   });
 
-  it("skips digraph/digiquant/digismith checks and stays healthy when they're not in DIGICHAT_ENABLED_SERVICES (foundry-only / services-disabled deploy)", async () => {
+  it("skips digraph/digiquant/digitrace checks and stays healthy when they're not in DIGICHAT_ENABLED_SERVICES (foundry-only / services-disabled deploy)", async () => {
     // "" falls back to the all-enabled default in capabilities.ts (raw || fallback),
     // so a non-matching placeholder is what actually disables every service.
     vi.stubEnv("DIGICHAT_ENABLED_SERVICES", "none");
@@ -68,11 +68,11 @@ describe("GET /api/health", () => {
     expect(body.ok).toBe(true);
     expect(body.checks.digraph).toBeUndefined();
     expect(body.checks.digiquant).toBeUndefined();
-    expect(body.checks.digismith).toBeUndefined();
+    expect(body.checks.digitrace).toBeUndefined();
   });
 
-  it("still requires digraph/digiquant/digismith when they are in DIGICHAT_ENABLED_SERVICES", async () => {
-    vi.stubEnv("DIGICHAT_ENABLED_SERVICES", "digigraph,digiquant,digismith");
+  it("still requires digraph/digiquant/digitrace when they are in DIGICHAT_ENABLED_SERVICES", async () => {
+    vi.stubEnv("DIGICHAT_ENABLED_SERVICES", "digigraph,digiquant,digitrace");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockRejectedValue(new Error("connection refused"))
@@ -119,6 +119,56 @@ describe("GET /api/health", () => {
       expect(revokedRes.status).toBe(200);
     } finally {
       resetLicenseStateForTests();
+    }
+  });
+
+  // "unreachable" is a bare catch, so before DIG-3076 the cause was discarded
+  // and the 503 was undiagnosable after the fact. These two cases pin the
+  // distinction the run-watch ticket actually needed.
+  it("logs which dependency and how it failed when the fetch throws", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("fetch failed"))
+      );
+      const res = await GET();
+      expect(res.status).toBe(503);
+
+      const lines = spy.mock.calls.map((c) => String(c[0]));
+      const digraphLines = lines.filter((l) => l.includes("[health] digraph"));
+      expect(digraphLines.length).toBeGreaterThanOrEqual(1);
+      // Names the dependency AND the host, so the failure is attributable.
+      expect(digraphLines[0]).toContain("127.0.0.1:8000");
+      // Distinguishes a connect/DNS failure from a timeout.
+      expect(digraphLines[0]).toContain("TypeError");
+      expect(digraphLines[0]).toContain("fetch failed");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("reports an aborted ping as a timeout, distinct from a connect failure", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(
+          Object.assign(new Error("The operation was aborted."), {
+            name: "AbortError",
+          })
+        )
+      );
+      await GET();
+
+      const lines = spy.mock.calls.map((c) => String(c[0]));
+      const digraphLines = lines.filter((l) => l.includes("[health] digraph"));
+      expect(digraphLines.length).toBeGreaterThanOrEqual(1);
+      expect(digraphLines[0]).toContain("aborted after 4000ms");
+      // The timeout must NOT be reported as a connect error.
+      expect(digraphLines[0]).not.toContain("fetch failed");
+    } finally {
+      spy.mockRestore();
     }
   });
 });

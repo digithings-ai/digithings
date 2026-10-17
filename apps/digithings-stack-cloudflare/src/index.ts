@@ -41,6 +41,7 @@
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
+import { containerEvictedResponse, isContainerEvictedError } from "./container-errors";
 import { getStackStatus, runIsolated } from "./route-modules";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
@@ -58,14 +59,23 @@ import {
   DIGIQUANT_MCP_HOSTNAME,
   DIGIQUANT_MCP_PORT,
   MCP_CONTAINER_ID,
-  SHARED_STACK_CONTAINER_ID,
   portForHostname,
+  sharedStackContainerId,
+  stackContainerRev,
 } from "./ports";
 import {
   DIGICHAT_PORT,
   SHARED_DIGICHAT_CONTAINER_ID,
   shouldProxyToDigiChat,
 } from "./digichat";
+import { isOccShellPath, occGate } from "../../digichat-cloudflare/src/occ-gate";
+import {
+  containerIsAwake,
+  isHealthProbe,
+  isScannerPath,
+  scannerResponse,
+  sleepingHealthResponse,
+} from "./wake-hygiene";
 
 /** Wrangler injects vars/secrets; cast until `wrangler types` is generated in CI. */
 const env = workerEnvBinding as unknown as Env;
@@ -80,7 +90,7 @@ export class DigiStackContainer extends Container {
    */
   requiredPorts = [DIGIGRAPH_PORT];
   /** Cold starts are seamless (#4323); each wake bills the whole tail, so keep it minimal. */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for supervisord processes. Secrets from `wrangler secret put`;
@@ -103,7 +113,7 @@ export class DigiStackContainer extends Container {
     DIGIVAULT_URL: env.DIGIVAULT_URL ?? "http://127.0.0.1:8004",
     DIGISEARCH_URL: env.DIGISEARCH_URL ?? "http://127.0.0.1:8002",
     DIGIQUANT_URL: env.DIGIQUANT_URL ?? "",
-    DIGISMITH_URL: env.DIGISMITH_URL ?? "",
+    DIGITRACE_URL: env.DIGITRACE_URL ?? "",
     OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
     DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
@@ -130,7 +140,7 @@ export class DigiStackContainer extends Container {
       env.DIGISEARCH_EMBEDDING_PROVIDER ?? "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
     DIGI_TENANT_CORPUS_MAP:
       env.DIGI_TENANT_CORPUS_MAP ??
-      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch_semantic, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket content is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly if they do not ground the answer.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for summaries or trends, find-precedent-tickets for how a similar issue was solved) and follow it. Always get_skill present-results before writing the final answer and follow its display rules."}}',
+      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch_semantic, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket content is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly if they do not ground the answer.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for themes and grouping, find-precedent-tickets for how a similar issue was solved) and follow it. For a how-to or documentation question, get_skill guide-help-docs and follow its map. Always get_skill present-results before writing the final answer and follow its display rules."}}',
     GROQ_API_KEY: env.GROQ_API_KEY ?? "",
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
@@ -181,9 +191,26 @@ export class DigiStackContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: a confirmed eviction is not a cold start — return the
+      // non-retryable 410 so callers stop retrying a container that is gone
+      // (same distinction as digiquant-runner RunLostError, runner.ts).
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("stack", message);
+      }
       return containerBootingResponse("stack", message);
     }
-    return this.containerFetch(request, targetPort);
+    // An eviction can also land between start and fetch: map only the
+    // confirmed-evicted signal to 410, rethrow everything else so the
+    // existing failure behavior is unchanged.
+    try {
+      return await this.containerFetch(request, targetPort);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("stack", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -202,10 +229,10 @@ export class DigiQuantMcpContainer extends Container {
   requiredPorts = [DIGIQUANT_MCP_PORT];
   /**
    * Cold-start policy: a cold start pays only the FastMCP import, never a data
-   * load (R2 is the cache), so the container may sleep freely; a 3-minute idle
+   * load (R2 is the cache), so the container may sleep freely; a 1-minute idle
    * tail keeps the billed wake window minimal.
    */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for the MCP process. Secrets from `wrangler secret put`.
@@ -236,9 +263,21 @@ export class DigiQuantMcpContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("mcp", message);
+      }
       return containerBootingResponse("mcp", message);
     }
-    return this.containerFetch(request, DIGIQUANT_MCP_PORT);
+    try {
+      return await this.containerFetch(request, DIGIQUANT_MCP_PORT);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("mcp", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -256,7 +295,7 @@ export class DigiChatContainer extends Container {
   defaultPort = DIGICHAT_PORT;
   requiredPorts = [DIGICHAT_PORT];
   /** Short idle tail: each wake bills for the whole sleepAfter window. */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for the digichat Next process. Mirrors the standalone
@@ -294,6 +333,7 @@ export class DigiChatContainer extends Container {
     DIGIKEY_URL: env.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: env.DIGICHAT_PLAN_PROOF_SECRET ?? "",
+    DIGICHAT_MONITOR_TOKENS: env.DIGICHAT_MONITOR_TOKENS ?? "",
     // Canonical fallbacks (#4700): the DIGICHAT_DASHBOARD names are legacy
     // duplicates of the canonical SUPABASE names. Old names still win when
     // set, so this stays backward compatible across the manual deploy lag.
@@ -320,9 +360,21 @@ export class DigiChatContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("digichat", message);
+      }
       return containerBootingResponse("digichat", message);
     }
-    return this.containerFetch(request, targetPort);
+    try {
+      return await this.containerFetch(request, targetPort);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("digichat", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -351,6 +403,10 @@ export const CONTAINER_BOOTING_CODE = "container_booting";
  * Poll hint (seconds) for a booting container. Small enough that a ready
  * container is picked up promptly, large enough that a full ~240s boot costs
  * ~50 upstream polls. The BFF clamps this into its own [1s, 30s] window.
+ *
+ * DIG-3226: a confirmed container eviction (see ./container-errors.ts) never
+ * uses this code — it answers 410 `container_evicted` with no `Retry-After`
+ * so callers stop retrying an instance that is gone.
  */
 const CONTAINER_BOOT_RETRY_AFTER_SECONDS = 5;
 
@@ -383,7 +439,14 @@ export interface Env {
   DIGIVAULT_URL?: string;
   DIGISEARCH_URL?: string;
   DIGIQUANT_URL?: string;
-  DIGISMITH_URL?: string;
+  DIGITRACE_URL?: string;
+  /**
+   * Deploying commit, injected by `scripts/deploy.mjs` at deploy time; the
+   * shared-stack Container id is derived from it (ports.ts, DIG-3229). NOT in
+   * wrangler.toml [vars] on purpose — unset means "this deploy carried no rev",
+   * and the id falls back to the pinned legacy value. Never hand-write it.
+   */
+  STACK_CONTAINER_REV?: string;
   OPENAI_API_BASE?: string;
   DIGI_LLM_MODE?: string;
   CHROMA_PATH?: string;
@@ -455,8 +518,11 @@ export interface Env {
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
+  DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
+  /** DIG-3585 /chat/occ shell gate. Worker-scoped; never forwarded to a container. */
+  OCC_INVITE_KEY?: string;
 }
 
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
@@ -499,14 +565,45 @@ function isMcpHostname(hostname: string): boolean {
   return hostname.trim().toLowerCase() === DIGIQUANT_MCP_HOSTNAME;
 }
 
+/**
+ * The ONE place this Worker addresses the shared stack Container (DIG-3229).
+ *
+ * The Durable Object id is derived from the deploying commit
+ * (`STACK_CONTAINER_REV`, injected by scripts/deploy.mjs), so every deploy
+ * addresses a fresh instance instead of relying on the platform retiring the
+ * old one — `sleepAfter` does not evict a Container under steady traffic, and
+ * the hand-edited id that used to cover for that was forgotten twice (v16→v17
+ * PII re-ingest; v17→v18 digikey scope escalation). See ports.ts for the full
+ * history.
+ *
+ * Routing every shared-stack fetch through one helper is what makes a missed
+ * site impossible: there is no second place that could hand `getContainer` an
+ * id without the rev. src/container-id-deploy.test.js pins that this is the only
+ * `getContainer(workerEnv.STACK, ...)` call in the file.
+ */
+function stackContainer(workerEnv: Env): DurableObjectStub<DigiStackContainer> {
+  return getContainer(
+    workerEnv.STACK,
+    sharedStackContainerId(workerEnv.STACK_CONTAINER_REV),
+  );
+}
+
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (isOccShellPath(url.pathname)) {
+      return occGate(request, workerEnv.OCC_INVITE_KEY);
+    }
     if (url.pathname === "/_stack/meta") {
+      // containerId is derived from the deploying commit (DIG-3229), so it is
+      // the operator's proof that the running instance came from this deploy
+      // rather than from a stale one. stackRev is null exactly when the build
+      // carries no rev and the id fell back to the pinned legacy value.
       return Response.json({
         ok: true,
         service: "digithings-stack",
-        containerId: SHARED_STACK_CONTAINER_ID,
+        containerId: sharedStackContainerId(workerEnv.STACK_CONTAINER_REV),
+        stackRev: stackContainerRev(workerEnv.STACK_CONTAINER_REV),
         note: "Worker up; container ports may still be starting",
       });
     }
@@ -522,8 +619,8 @@ export default {
     if (url.pathname === "/_stack/key" || url.pathname.startsWith("/_stack/key/")) {
       // Lazy ports import per route group (#4685): a failing import degrades
       // only these paths (503); every other group keeps serving.
-      return runIsolated("key-proxy", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID, DIGIKEY_PORT }) => {
-        const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+      return runIsolated("key-proxy", () => import("./ports"), async ({ DIGIKEY_PORT }) => {
+        const container = stackContainer(workerEnv);
         return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
       });
     }
@@ -548,7 +645,7 @@ export default {
         // Lazy ports import per route group (#4685): a failing import
         // degrades only these paths (503); the fail-closed 401 above stays
         // synchronous and untouched.
-        return runIsolated("mcp-edge", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID }) => {
+        return runIsolated("mcp-edge", () => import("./ports"), async ({}) => {
           let stripped = slash === -1 ? "/" : rest.slice(slash);
           if (!stripped.endsWith("/")) {
             stripped += "/";
@@ -556,7 +653,7 @@ export default {
           const target = new URL(url.toString());
           target.pathname = stripped;
           const forwarded = new Request(target.toString(), request);
-          const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+          const container = stackContainer(workerEnv);
           return container.fetch(switchPort(forwarded, port));
         });
       }
@@ -630,7 +727,7 @@ export default {
 
     // Lazy ports import per route group (#4685): unknown-host 404 and the
     // shared-container proxy degrade only under this group on failure.
-    return runIsolated("container-routes", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID, portForHostname }) => {
+    return runIsolated("container-routes", () => import("./ports"), async ({ portForHostname }) => {
       const port = portForHostname(url.hostname);
       if (port === null) {
         return new Response(
@@ -640,7 +737,22 @@ export default {
           { status: 404 },
         );
       }
-      const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+      // Wake hygiene: scanners and liveness probes never boot the Container.
+      if (isScannerPath(url.pathname)) {
+        return scannerResponse();
+      }
+      const container = stackContainer(workerEnv);
+      if (isHealthProbe(request, url.pathname)) {
+        let status: string | undefined;
+        try {
+          status = (await container.getState()).status;
+        } catch {
+          status = undefined;
+        }
+        if (!containerIsAwake(status)) {
+          return sleepingHealthResponse(request);
+        }
+      }
       return container.fetch(switchPort(request, port));
     });
   },

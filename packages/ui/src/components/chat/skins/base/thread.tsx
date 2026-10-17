@@ -7,6 +7,7 @@ import {
 } from "../../stock/attachment.aui";
 import { MarkdownText } from "../../stock/markdown-text";
 import { DotMatrix } from "./ui/dot-matrix";
+import { useDigichatWarmupPhase } from "../../use-warmup-phase";
 import { MessageTiming } from "./elements/message-timing.aui";
 import { ToolFallback } from "../../stock/tool-fallback.aui";
 import { MessageError } from "../../stock/message-error.aui";
@@ -446,25 +447,29 @@ const slashCommands: readonly Unstable_SlashCommand[] = [
     id: "summarize",
     description: "Summarize the conversation",
     icon: "FileText",
-    execute: () => console.log("[base example] /summarize invoked"),
+    // Example only — no-op.
+    execute: () => undefined,
   },
   {
     id: "translate",
     description: "Translate text to another language",
     icon: "Languages",
-    execute: () => console.log("[base example] /translate invoked"),
+    // Example only — no-op.
+    execute: () => undefined,
   },
   {
     id: "search",
     description: "Search the web for information",
     icon: "Globe",
-    execute: () => console.log("[base example] /search invoked"),
+    // Example only — no-op.
+    execute: () => undefined,
   },
   {
     id: "help",
     description: "List available commands",
     icon: "HelpCircle",
-    execute: () => console.log("[base example] /help invoked"),
+    // Example only — no-op.
+    execute: () => undefined,
   },
 ];
 
@@ -622,6 +627,7 @@ const AssistantWorkingIndicator: FC = () => {
         (part.data as { state?: string } | undefined)?.state === "warming_up",
     ),
   );
+  const wakePhase = useDigichatWarmupPhase();
   if (isEmpty) {
     return (
       <span
@@ -629,7 +635,9 @@ const AssistantWorkingIndicator: FC = () => {
         className="text-muted-foreground inline-flex items-center gap-2 align-middle"
       >
         <DotMatrix state="connecting" aria-hidden />
-        <span className="text-sm">{warmingUp ? "Warming up…" : "Connecting"}</span>
+        <span className="text-sm">
+          {wakePhase === "waking" ? "Waking up services…" : warmingUp ? "Warming up…" : "Connecting"}
+        </span>
       </span>
     );
   }

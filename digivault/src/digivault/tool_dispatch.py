@@ -30,10 +30,15 @@ An absent or blank prefix keeps the historical whole-vault behaviour.
 from collections.abc import Callable, Mapping
 from typing import Any  # score:allow untyped any — tool argument maps are arbitrary JSON
 
+from digibase import art9
 from pydantic import BaseModel, ConfigDict, Field
 
 from digivault.models import Note
 from digivault.vault import Vault, VaultError
+
+#: Refusal marker both digivault seams return. It carries L1's reason
+#: (``art9:<category>:<signal>``) and never the matched value.
+ART9_REFUSED = "art9:refused"
 
 # ── canonical tool names ─────────────────────────────────────────────────────
 TOOL_VAULT_SEARCH_TAG = "digivault_search_tag"
@@ -258,6 +263,16 @@ def dispatch_vault_tool(
     handle runtime-only tools should check :data:`VAULT_HANDLERS` first).
     """
     handler = VAULT_HANDLERS[name]
+    # Art. 9 seam 2 of 2 (DIG-1081). This is the ONLY route the MCP application
+    # has to a vault tool: mcp_server.py owns no handler and mounts no
+    # middleware, so a screen living only in server.py would leave MCP
+    # unprotected while every test stayed green (reviewer correction A2 on
+    # DIG-912). Screened before the handler runs, so a refused call never
+    # reaches the vault. Every tool's arguments go through it, which is also
+    # what makes a tool added later covered without a second edit.
+    screen = art9.screen_request(args or {})
+    if screen.decision != "allow":
+        return ToolDispatchResult(ok=False, error=f"{ART9_REFUSED}: {screen.reason}")
     try:
         return handler(vault, args or {})
     except VaultError as exc:

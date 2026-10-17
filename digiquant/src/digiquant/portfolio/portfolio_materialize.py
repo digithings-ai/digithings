@@ -45,6 +45,7 @@ from digiquant.dashboard.envcompat import POSITION_RISK_FIELDS, env_lookup
 from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 from digiquant.dashboard.performance_returns import calculate_performance_returns
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.portfolio.ledger_replay import fetch_ledger_state, reconcile_book
 from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries, sized_book
 from digiquant.portfolio.risk_envelope import risk_horizon_days
 from digiquant.portfolio.sector_map import sector_bucket
@@ -727,6 +728,20 @@ def build_materialize_node(deps: MaterializeDeps):
                 _non_cash_missing_thesis,
             )
         house_id = str(house_workspace_id())
+        # DIG-2816: reconcile the book against ``position_events`` BEFORE it is
+        # persisted. ``positions.weight_pct`` is a drift-carrying actual written by
+        # several writers; the ledger holds the operator's intended target. Anchoring
+        # here is what stops this writer from persisting a book the ledger cannot
+        # explain, and a book holding a ticker the ledger EXITed is refused outright.
+        # A ledger read that fails leaves the book untouched and says so in the log —
+        # "we could not read the ledger" is never reported as "the ledger agrees".
+        ledger_report = reconcile_book(
+            pos_rows,
+            fetch_ledger_state(client, house_id, date_str),
+            writer="portfolio_materialize",
+            mode="anchor",
+        )
+        logger.info("phase9d: %s", ledger_report.summary())
         for row in pos_rows:
             row["workspace_id"] = house_id
             client.table("positions").upsert(row, on_conflict="workspace_id,date,ticker").execute()

@@ -2,7 +2,7 @@
 # Proves the OCC rollout's allowed-diff guard can actually fail, and that it
 # fails for the right reason (DIG-2779).
 #
-# The guard lives inside scripts/occ_invite_key_rollout.sh step 2/7, behind a
+# The guard lives inside scripts/occ_invite_key_write.sh step 2/7, behind a
 # wrangler preflight and a `Type ROLLOUT` confirmation. Running the real script
 # to exercise it would mean a Cloudflare identity check and a live prompt, so
 # this suite lifts the step-2 block out of the file and drives it on its own.
@@ -31,7 +31,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/.."
 
-SCRIPT="scripts/occ_invite_key_rollout.sh"
+SCRIPT="scripts/occ_invite_key_write.sh"
 # The rollout key is generated per run (DIG-2779) with the same command the
 # rollout script tells operators to use, so no key-shaped literal is committed
 # and secret scanners have nothing to flag.

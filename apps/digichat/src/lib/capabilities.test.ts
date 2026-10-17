@@ -13,7 +13,7 @@ describe("getEnabledServiceIds", () => {
       "digigraph",
       "digisearch",
       "digiquant",
-      "digismith",
+      "digitrace",
     ]);
   });
 
@@ -28,8 +28,8 @@ describe("getEnabledServiceIds", () => {
   });
 
   it("parses an explicit comma-separated list", () => {
-    process.env.DIGICHAT_ENABLED_SERVICES = "digigraph, digismith";
-    expect(getEnabledServiceIds()).toEqual(["digigraph", "digismith"]);
+    process.env.DIGICHAT_ENABLED_SERVICES = "digigraph, digitrace";
+    expect(getEnabledServiceIds()).toEqual(["digigraph", "digitrace"]);
   });
 });
 
@@ -43,6 +43,6 @@ describe("isServiceCapabilityEnabled", () => {
     expect(isServiceCapabilityEnabled("digigraph")).toBe(false);
     expect(isServiceCapabilityEnabled("digisearch")).toBe(false);
     expect(isServiceCapabilityEnabled("digiquant")).toBe(false);
-    expect(isServiceCapabilityEnabled("digismith")).toBe(false);
+    expect(isServiceCapabilityEnabled("digitrace")).toBe(false);
   });
 });

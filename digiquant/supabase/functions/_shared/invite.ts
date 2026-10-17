@@ -74,7 +74,12 @@ export type InviteStore = {
     source: "env" | "table";
     redeemed_at: string;
   }): Promise<void>;
-  incrementRedemptionCount(id: string): Promise<void>;
+  /**
+   * Consume one redemption slot. Must be atomic: a code with
+   * max_redemptions = 1 can be claimed only once, including under concurrent
+   * redeems. Returns false when the code is missing, revoked, or exhausted.
+   */
+  claimRedemption(id: string): Promise<boolean>;
   recordAdminAudit?(row: {
     workspace_id: string | null;
     event_key: string;
@@ -255,14 +260,39 @@ export async function redeemProductInvite(args: {
     }
   }
 
+  if (!matched) {
+    await args.store.recordAttempt({
+      user_id: args.userId,
+      product_key: productKey,
+      ok: false,
+      attempted_at: now.toISOString(),
+    });
+    return invalid();
+  }
+
+  // Cap check above is a snapshot. Two callers can both see count 0. Claim
+  // the slot before inserting a grant, and skip the claim when this email
+  // already holds the product so a retry does not burn another seat.
+  const already = await args.store.hasGrant(email, productKey);
+  if (!already && matched.id) {
+    const claimed = await args.store.claimRedemption(matched.id);
+    if (!claimed) {
+      await args.store.recordAttempt({
+        user_id: args.userId,
+        product_key: productKey,
+        ok: false,
+        attempted_at: now.toISOString(),
+      });
+      return invalid();
+    }
+  }
+
   await args.store.recordAttempt({
     user_id: args.userId,
     product_key: productKey,
-    ok: matched != null,
+    ok: true,
     attempted_at: now.toISOString(),
   });
-
-  if (!matched) return invalid();
 
   // A plan_floor bump applies whether or not the product grant is new — a
   // repeat redemption of a higher-tier code should still raise the tier.
@@ -278,7 +308,6 @@ export async function redeemProductInvite(args: {
     }
   }
 
-  const already = await args.store.hasGrant(email, productKey);
   if (already) {
     return { ok: true, alreadyGranted: true, productKey, planFloor: matched.planFloor };
   }
@@ -296,9 +325,6 @@ export async function redeemProductInvite(args: {
     source: matched.source,
     redeemed_at: now.toISOString(),
   });
-  if (matched.id) {
-    await args.store.incrementRedemptionCount(matched.id);
-  }
 
   if (productKey === FX_HUB_PRODUCT) {
     try {

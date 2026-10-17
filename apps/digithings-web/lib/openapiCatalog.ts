@@ -18,7 +18,7 @@ export const OPENAPI_SERVICES: OpenApiService[] = [
   { id: "digisearch", port: 8002, role: "RAG ingest · query · research" },
   { id: "digivault", port: 8004, role: "Markdown vault · wikilinks · lint" },
   { id: "digiquant", port: 8001, role: "NautilusTrader backtest · optimize" },
-  { id: "digismith", port: 8003, role: "Observability · health · status" },
+  { id: "digitrace", port: 8003, role: "Observability · health · status" },
   {
     id: "digichat",
     port: 3005,

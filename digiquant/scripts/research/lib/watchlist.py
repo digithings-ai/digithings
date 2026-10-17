@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-WATCHLIST_PATH = ROOT / "config" / "watchlist.md"
+from lib.roots import RESEARCH_CONFIG
+
+WATCHLIST_PATH = RESEARCH_CONFIG / "watchlist.md"
 
 EXCLUDE = frozenset({"ETF", "DXY", "VIX"})
 

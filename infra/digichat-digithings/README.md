@@ -118,7 +118,7 @@ digichat forwards `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`; digigraph
 `corpus_routing` applies them to digisearch / digivault tools.
 
 The OCC tenant also gets the read-only Zammad ticket MCP (`search_tickets` /
-`list_tickets` / `get_ticket` / `ticket_report`) via the `mcp.servers` entry in the live tenant
+`list_tickets` / `get_ticket` / `ticket_report` / `aggregate_tickets`) via the `mcp.servers` entry in the live tenant
 JSON below. `zammad-mcp` is not a separate Cloudflare container — it runs as a
 program inside the `digithings-stack` container (see
 [`scripts/zammad_mcp/README.md`](../../scripts/zammad_mcp/README.md), §
@@ -129,8 +129,9 @@ Stack oneshot seeds **`digithings_docs` + `occ_help`** FAQ/showcase notes into C
 (and refreshes vault `seed-*.md` under both client prefixes) so digithings.ai/chat
 and `/chat/occ` have grounded retrieval before a full docs_onboard apply.
 **before** supervisord starts digisearch (avoids multi-process SQLite locks).
-Full crawl of help.online-compliance-center.com remains **HOLD** until approval
-([GAPLOG](../../docs/projects/online-compliance-center/GAPLOG.md)).
+Full crawl of help.online-compliance-center.com remains **HOLD** until approval.
+The GAPLOG entry that recorded that approval was removed with the client docs
+project directory (DIG-3394), so this paragraph is the hold of record.
 
 **CF secret retarget:** only after `graph.digithings.ai` / `key.digithings.ai`
 healthz succeed — never Mac `*.trycloudflare.com` tunnels.
@@ -155,7 +156,7 @@ make digichat-profile-a-bundle-up
 ```
 
 Details: [`apps/digithings-stack-cloudflare/README.md`](../../apps/digithings-stack-cloudflare/README.md)
-(local `docker run` / compose). digiquant, digismith HTTP, and Ollama stay off.
+(local `docker run` / compose). digiquant, digitrace HTTP, and Ollama stay off.
 
 ### Monorepo build (full N-container stack)
 
@@ -204,8 +205,7 @@ export DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai,occ.digithings.ai
 export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":true,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<unused-for-first-party>","mcp":{"servers":[{"id":"zammad","url":"http://zammad-mcp:8770/mcp","label":"Zammad tickets","default":true}]},"backend":{"type":"digigraph","digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}}'
 ```
 
-OCC uses virtual host `occ.digithings.ai` (no DNS) for `/chat/occ` — see
-[`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md).
+OCC uses virtual host `occ.digithings.ai` (no DNS) for `/chat/occ`.
 
 ## digithings.ai `/chat` and `/chat/occ`
 
@@ -226,7 +226,7 @@ The Pages Function OpenRouter digivault loop is **retired**.
 1. `curl -sf https://graph.digithings.ai/healthz` and `https://key.digithings.ai/healthz`
 2. Open https://digithings.ai/chat — no `/login` wall
 3. Ask a vault-grounded question; expect digigraph tool activity
-4. OCC: https://digithings.ai/chat/occ — activity should show digisearch against `occ_help`
+4. OCC: https://digithings.ai/chat/occ — activity should show digisearch against the `occ_help` index
 
 ## Onboard corpus
 

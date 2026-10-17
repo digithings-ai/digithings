@@ -171,7 +171,7 @@ def _sigmoid_positive_prob(forecast_mean: Decimal) -> Decimal:
     scale = float(POSITIVE_PROB_SIGMOID_SCALE)
     if scale <= 0:
         raise ValueError("POSITIVE_PROB_SIGMOID_SCALE must be positive")
-    # 1 / (1 + exp(-mean/scale))
+    # Logistic sigmoid of mean over scale.
     x = float(forecast_mean) / scale
     # Stable logistic
     if x >= 0:

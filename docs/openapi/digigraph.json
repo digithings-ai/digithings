@@ -885,7 +885,7 @@
     },
     "/healthz": {
       "get": {
-        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nContract: returns HTTP 200 with ``{\"ok\": true}``. Intended for load\nbalancers and k8s probes. For richer diagnostics, see digismith's\n``/v1/status``.",
+        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nContract: returns HTTP 200 with ``{\"ok\": true}``. Intended for load\nbalancers and k8s probes. For richer diagnostics, see digitrace's\n``/v1/status``.",
         "operationId": "healthz_healthz_get",
         "responses": {
           "200": {
@@ -1145,6 +1145,27 @@
         "tags": [
           "openai-compatible"
         ]
+      }
+    },
+    "/v1/mcp/decisions": {
+      "post": {
+        "description": "Apply one human decision to one recorded call, at most once.",
+        "operationId": "post_mcp_decision_v1_mcp_decisions_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Mcp Decision V1 Mcp Decisions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Post Mcp Decision"
       }
     },
     "/v1/model-info": {

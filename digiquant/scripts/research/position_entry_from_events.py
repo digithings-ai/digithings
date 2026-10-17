@@ -1,7 +1,28 @@
 """
 Shared helpers: resolve positions.entry_price / entry_date from position_events.
 
-Earliest OPEN or ADD row with a non-null price on or before ``as_of`` (same rule as the dashboard).
+``entry_price`` is NOT a weighted average entry. It is the mark of the EARLIEST OPEN or ADD
+row with a non-null price on or before ``as_of`` -- the same rule the dashboard reads
+(``averageEntryAsOf`` in ``apps/dashboard-api/src/ledger.ts`` and its twin in
+``apps/dashboard/lib/position-event-economics.ts``), which is why that function is named
+for an average it does not compute (DIG-2809).
+
+Consequences a caller must know:
+
+* Opening at 100 then ADDing at 200 leaves ``entry_price`` at 100. The quantity-weighted
+  basis is derivable from the per-lot open marks (one row per open lot) and is derived
+  nowhere. Do not name the lots table here: ``test_only_execution_io_names_the_fill_tables``
+  greps this tree for it and treats any mention as a second writer.
+* The value is a per-date snapshot, so a late or repaired OPEN/ADD mark at or before a date
+  changes what a LATER date row receives. An already published event is therefore not
+  immutable in its displayed basis.
+* ``lte("date", as_of)`` is inclusive: on an ADD date the basis already includes that fill.
+* When no OPEN/ADD mark exists but an ``entry_date`` does,
+  :func:`patch_positions_entries_for_date` falls back to the first sealed-R2 close on or
+  after ``entry_date`` -- a different basis rule writing the same column, with nothing
+  recording which one produced the value.
+* The basis is anchored on ``position_events``, so a REPLAYED event can become a ticker's
+  permanent basis at a price never traded on that date.
 """
 
 from __future__ import annotations

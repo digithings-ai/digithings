@@ -82,7 +82,7 @@ class ProjectLimits(BaseModel):
         """Build limits from ``limits:`` YAML block, then apply env-var overrides."""
         limits_yaml: dict[str, Any] = data.get("limits") or {}
         kwargs: dict[str, Any] = {}
-        # Table: (field_name, yaml_key, env_var, cast)
+        # Each row below maps a field name to its YAML key, env var and cast.
         _FIELDS: list[tuple[str, str, str, type]] = [
             ("max_rows_per_fetch", "max_rows_per_fetch", "DIGI_MAX_ROWS_PER_FETCH", int),
             ("dataset_size_cap_mb", "dataset_size_cap_mb", "DIGI_DATASET_SIZE_CAP_MB", float),
@@ -238,8 +238,8 @@ class DigiProjectConfig:
                 cached = _config_cache.get(cache_key)
                 if cached is not None:
                     return cached
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("config cache stat failed for %s (%s); reloading", resolved, exc)
 
         data = load_project_config(path)
         obj = cls(data, config_path=resolved)
@@ -248,8 +248,8 @@ class DigiProjectConfig:
             try:
                 mtime = resolved.stat().st_mtime
                 _config_cache[(str(resolved.resolve()), mtime)] = obj
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("config cache write skipped for %s (%s)", resolved, exc)
         return obj
 
     def get_enabled_agents(self) -> list[str]:

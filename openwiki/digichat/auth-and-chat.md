@@ -44,7 +44,7 @@ sources:
   - id: openwiki-source-fcae9903633520c119ff31d6
     resource: repo://apps/digichat/src/lib/turn-mode.ts
   - id: openwiki-source-38e983c30539f11e9fd6b2a7
-    resource: repo://packages/digichat-ui/src/transcript-markdown.ts
+    resource: repo://packages/ui/src/components/chat/transcript/transcript-markdown.ts
 generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
 ---
 
@@ -425,9 +425,11 @@ localStorage-only mode.
 
 ## Markdown export
 
-Turn and thread markdown export lives in the shared `@digithings/digichat-ui`
-package (`serializeAssistantMarkdown`, `serializeThreadMarkdown`,
-`copyMarkdownWithFallback`). Both `ChatPanel` and embed sessions use it
+Turn and thread markdown export is implemented in
+`packages/ui/src/components/chat/transcript/transcript-markdown.ts`
+(`serializeAssistantMarkdown`, `serializeThreadMarkdown`,
+`copyMarkdownWithFallback`) and re-exported by `@digithings/digichat-ui`.
+Both `ChatPanel` and embed sessions use it
 with the fallback chain:
 
 1. **Clipboard** — `navigator.clipboard.writeText()`. Works in standard

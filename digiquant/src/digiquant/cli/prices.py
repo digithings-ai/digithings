@@ -26,6 +26,13 @@ _logger = logging.getLogger(__name__)
 # constant, so it's inlined here rather than re-introducing the dropped manifest field.
 _YAHOO_FX_BACKFILL_START = "1999-01-04"
 
+# Rows per upsert POST for `prices fetch-fx-intraday`. The writer's DEFAULT_CHUNK is 500,
+# which on core (measured 2026-10-06) produced ~2,209 POSTs to fx_intraday_observations in
+# 12 hours. Request COUNT is the lever here — a wider chunk is strictly fewer round trips
+# for the same rows — so the CLI default is 4x the writer's (DIG-1835). Full-history
+# re-upserts are unchanged: this cuts requests per run, not rows per run.
+_FX_UPSERT_CHUNK = 2_000
+
 
 @click.group()
 def prices() -> None:
@@ -90,11 +97,13 @@ def _resolve_universe(tickers: str, watchlist: Path | None, include_sectors: boo
     """Shared universe resolution for the Supabase-sourced commands."""
     from digiquant.data.prices.fetchers import parse_watchlist
 
-    if tickers:
-        universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
-    elif watchlist:
+    raw = tickers or ""
+    universe = [t.strip().upper() for t in raw.split(",") if t.strip()]
+    if raw.strip() and not universe:
+        raise click.UsageError("--tickers did not contain any symbols.")
+    if not universe and watchlist:
         universe = parse_watchlist(watchlist)
-    else:
+    elif not universe:
         raise click.UsageError("Provide --watchlist or --tickers.")
     if include_sectors:
         from digiquant.research.sectors_config import sector_universe
@@ -241,8 +250,12 @@ def compute_technicals_cmd(
     from digiquant.data.prices.technicals import MIN_BARS, compute_indicators
     from digiquant.data.prices.ticker_venues import venue_for
 
-    if tickers:
+    if tickers.strip():
         universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+        if not universe:
+            raise click.UsageError("--tickers did not contain any symbols.")
+    elif tickers:
+        raise click.UsageError("--tickers did not contain any symbols.")
     else:
         # Scan cache_dir for <TICKER>.csv files.
         d = Path(cache_dir)
@@ -615,9 +628,24 @@ def fetch_macro_cmd(
     show_default=True,
     help="yfinance lookback window for the candle download.",
 )
+@click.option(
+    "--chunk",
+    # IntRange (not plain int) so a non-positive value is refused as a bad VALUE: _chunks()
+    # steps by chunk, so a zero or negative chunk never terminates the writer loop.
+    type=click.IntRange(min=1),
+    default=_FX_UPSERT_CHUNK,
+    show_default=True,
+    help=(
+        "Rows per upsert POST. Fewer, larger requests mean fewer round trips for the "
+        "same rows — the measured lever is request count, not bytes. The writer's own "
+        "default is 500."
+    ),
+)
 @click.option("--dry-run", is_flag=True)
 @click.option("--supabase", is_flag=True)
-def fetch_fx_intraday_cmd(interval: str, period: str, dry_run: bool, supabase: bool) -> None:
+def fetch_fx_intraday_cmd(
+    interval: str, period: str, chunk: int, dry_run: bool, supabase: bool
+) -> None:
     """Ingest intraday FX candles (Yahoo) into fx_intraday_observations.
 
     The twelve-x trade grader reads this table with the core service key to
@@ -664,7 +692,7 @@ def fetch_fx_intraday_cmd(interval: str, period: str, dry_run: bool, supabase: b
     )
     if client is None:
         raise click.ClickException("Supabase credentials not set.")
-    res = upsert_fx_intraday_observations(client, rows)
+    res = upsert_fx_intraday_observations(client, rows, chunk=chunk)
     click.echo(f"  upserted {res.rows} rows into fx_intraday_observations")
 
 

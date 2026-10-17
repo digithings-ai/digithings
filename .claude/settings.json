@@ -5,8 +5,7 @@
     "allow": [
       "Bash(git fetch *)",
       "Bash(make doc-check)",
-      "Bash(make test-unit)",
-      "Bash(make score)"
+      "Bash(make test-unit)"
     ]
   },
   "autoCompactEnabled": true,

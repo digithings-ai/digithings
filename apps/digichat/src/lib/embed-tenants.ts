@@ -14,6 +14,7 @@
 
 import type { ActivityDetail } from "@/lib/chat-activity";
 import type { PageContextMode } from "@/lib/deploy-config/schema";
+import { HEX_COLOR } from "@/lib/hex-color";
 import { LANGUAGES } from "@/lib/languages";
 import {
   THINKING_MODES,
@@ -260,7 +261,6 @@ export type EmbedTenantConfig = {
   requiredPlanTier?: "desk" | "studio" | "enterprise";
 };
 
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 
 export function normalizeEmbedHost(input: string | null | undefined): string | null {

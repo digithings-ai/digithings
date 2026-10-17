@@ -25,6 +25,7 @@ import {
   isRecord,
   iterateSse,
   parseSseJson,
+  protocolJsonHeaders,
   stringField,
   writeFailureStatus,
   writeGatedSpan,
@@ -131,11 +132,10 @@ export async function createA2aStreamResponse(opts: {
   apiKey: string | null;
   signal?: AbortSignal;
 }): Promise<Response> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "text/event-stream, application/json",
-  };
-  if (opts.apiKey) headers.Authorization = `Bearer ${opts.apiKey}`;
+  const headers = protocolJsonHeaders({
+    apiKey: opts.apiKey,
+    accept: "text/event-stream, application/json",
+  });
   const body = JSON.stringify({
     jsonrpc: "2.0",
     id: crypto.randomUUID(),
@@ -168,8 +168,11 @@ export async function createA2aStreamResponse(opts: {
         });
         if (!res.ok) {
           await res.body?.cancel().catch(() => {});
-          writeFailureStatus(writer, ctx, `A2A ${res.status}`, opts.activityDetail);
-          return;
+          const label = `A2A ${res.status}`;
+          writeFailureStatus(writer, ctx, label, opts.activityDetail);
+          // activityDetail "off" drops the status row. Throw so the UI stream
+          // still ends on an error part instead of a successful empty turn.
+          throw new Error(label);
         }
         const contentType = res.headers.get("content-type") ?? "";
         if (contentType.includes("application/json")) {
@@ -188,7 +191,10 @@ export async function createA2aStreamResponse(opts: {
           }
           return;
         }
-        if (!res.body) return;
+        if (!res.body) {
+          writeFailureStatus(writer, ctx, "A2A empty body", opts.activityDetail);
+          throw new Error("A2A empty body");
+        }
         for await (const evt of iterateSse(res.body, opts.signal)) {
           const envelope = parseSseJson(evt.data);
           if (!envelope) continue;

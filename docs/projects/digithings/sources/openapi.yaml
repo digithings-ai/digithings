@@ -4,7 +4,7 @@ files:
   - docs/openapi/digigraph.json
   - docs/openapi/digivault.json
   - docs/openapi/digisearch.json
-  - docs/openapi/digismith.json
+  - docs/openapi/digitrace.json
   - docs/openapi/digiquant.json
   - docs/openapi/digichat.json
 kinds: [openapi, swagger]

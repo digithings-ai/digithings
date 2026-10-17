@@ -1,80 +1,83 @@
+"use client";
 /**
  * DtNav — digithings.ai's composition of the shared <NavShell/> primitive
  * (@digithings/ui). Supersedes the app-local DigiNav copy: the scroll grammar
  * (settle after 8px, yield past 180px, return on scroll-up), the hamburger
- * portal sheet, body scroll lock and Escape/scrim dismissal are owned by
- * NavShell; everything digithings-specific arrives here as props — the QR
- * brand mark, the wayfinding links, the GitHub icon in the tail, and the
- * "Ask digichat" CTA — in the narrow-viewport sheet, and as a compact tail
- * button right of the GitHub glyph on wide viewports (#1450 round 3).
+ * portal sheet, body scroll lock, Escape/scrim dismissal and focus return are
+ * owned by NavShell; everything digithings-specific arrives here as props — the
+ * brand mark, the wayfinding links, the skip-link target, the GitHub icon in
+ * the tail, and the chat entry (an icon link plus the sheet CTA). The chat
+ * entry is a theme-aware icon, never a canvas wordmark, so it stays legible in
+ * both themes at every scroll position.
+ *
+ * The bar is pinned: it settles after 8px but never yields on scroll-down
+ * (owner: the top bar should stay fixed to the top). Pass
+ * `autoHide="hover"` explicitly for the non-scrolling chat shells.
  */
-import Link from "next/link";
-import { NavShell, GitHubGlyph } from "@digithings/ui";
-import { buttonVariants } from "@digithings/ui/ui";
-import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
+import { usePathname } from "next/navigation";
+import { NavShell, GitHubGlyph, CtaLink, IconLink } from "@digithings/ui";
 import { DigiChatMark } from "@digithings/digichat-ui";
+import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
 
-export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
+const NAV_HREFS = DT_NAV_PRIMARY.flatMap((item) =>
+  "items" in item ? item.items.map((i) => i.href) : [item.href],
+).filter((href) => href.startsWith("/"));
+
+/** Chat entry: an icon-only link in the tail (same ghost icon-button dress
+ *  and size as the theme toggle and GitHub icons) plus a labelled CTA in the
+ *  narrow sheet. The icon is currentColor stroke, so it stays legible in both
+ *  themes — the fixed-palette canvas wordmark it replaces washed out on light
+ *  backgrounds. */
+function ChatTailIcon() {
   return (
-    <>
-      {/* Skip-to-content (full-UI-suite critique, digithings-web target, P2):
-          every page mounts DtNav first, so it is the one place that reaches
-          every page's persistent nav ahead of #main. Visually hidden until
-          keyboard focus (translate off-screen, restored on :focus-visible) --
-          same pattern as the design reference's own .skip-link. Plain Tailwind
-          utilities rather than a new CSS class: the frontend canon guard's
-          family census (#1421) would reject an app-local class here. */}
-      <a
-        href="#main"
-        className="fixed top-2 left-2 z-30 -translate-y-[200%] rounded-none bg-[var(--accent)] px-[0.9rem] py-2 font-mono text-[0.72rem] text-[var(--on-accent)] no-underline focus-visible:translate-y-0"
-      >
-        Skip to content
-      </a>
-      <NavShell
-        brand={<Brand />}
-        links={DT_NAV_PRIMARY}
-        homeLabel="digithings home"
-        autoHide={autoHide}
-        actions={
-          <>
-            <a
-              className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-              href="https://github.com/digithings-ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="digithings on GitHub"
-            >
-              <GitHubGlyph />
-            </a>
-            {/* Desktop twin of the sheet CTA below — same destination, plain
-                wordmark-style link rather than a solid kit primary-button pill: next
-                to the quiet GitHub glyph and inline links, a filled button read
-                as a bright, standoffish box. `.dc-nav-cta` (globals.css) is
-                just icon + label in the theme's own ink tone, no button chrome.
-                Hides at the same 880px breakpoint where the inline links yield
-                to the hamburger, so narrow viewports keep the sheet button as
-                the only digichat entry. */}
-            <Link
-              className="dc-nav-cta max-[880px]:hidden!"
-              href="/chat"
-              aria-label="Ask digichat"
-            >
-              <DigiChatMark size={16} />
-              ask digichat
-            </Link>
-          </>
-        }
-        cta={
-          <Link
-            className={buttonVariants({ variant: "default" })}
-            href="/chat"
-            aria-label="Ask digichat"
+    <IconLink href="/chat" label="Ask digichat">
+      <DigiChatMark size={18} />
+    </IconLink>
+  );
+}
+
+/** The nav entry whose section holds `pathname`: the longest nav href that is
+ *  the path or one of its parents, so /docs/api/digiquant/ lights "API" and
+ *  not "Docs". NavShell itself marks exact routes only. */
+function navSection(pathname: string | null): string | undefined {
+  if (!pathname) return undefined;
+  const path = pathname.replace(/\/+$/, "") || "/";
+  let best: string | undefined;
+  for (const href of NAV_HREFS) {
+    const within = href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`);
+    if (within && (best === undefined || href.length > best.length)) best = href;
+  }
+  return best ?? pathname;
+}
+
+export function DtNav({ autoHide = "pinned" }: { autoHide?: "scroll" | "hover" | "pinned" }) {
+  const pathname = usePathname();
+  return (
+    <NavShell
+      brand={<Brand />}
+      links={DT_NAV_PRIMARY}
+      currentPath={navSection(pathname)}
+      skipTo="#main"
+      homeLabel="digithings home"
+      autoHide={autoHide}
+      clipToFrame
+      actions={
+        <>
+          <IconLink
+            href="https://github.com/digithings-ai"
+            label="digithings on GitHub"
+            external
           >
-            <DigiChatMark size={18} />
-            Ask digichat
-          </Link>
-        }
-      />
-    </>
+            <GitHubGlyph />
+          </IconLink>
+          <ChatTailIcon />
+        </>
+      }
+      cta={
+        <CtaLink href="/chat" aria-label="Ask digichat" icon={<DigiChatMark size={18} />}>
+          Ask digichat
+        </CtaLink>
+      }
+    />
   );
 }

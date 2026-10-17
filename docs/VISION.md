@@ -15,7 +15,7 @@ AI-solutions work today is either:
 - **Too shallow** — thin wrappers over a single model, no retrieval, no execution, no audit.
 - **Too bespoke** — every engagement rebuilds orchestration, search, auth, and deployment from scratch.
 
-digithings is the middle path: a set of **composable, open-core components** (`digigraph`, `digisearch`, `digiquant`, `digichat`, `digikey`, `digiclaw`, `digismith`, `digibase`, `digillm`, `digifetch`, `digidev`) that snap together into a running stack for any given client, product, or research project. Each engagement becomes a thin **configuration layer** over the shared platform — not a rewrite.
+digithings is the middle path: a set of **composable, open-core components** (`digigraph`, `digisearch`, `digiquant`, `digichat`, `digikey`, `digiclaw`, `digitrace`, `digibase`, `digillm`, `digifetch`, `digidev`) that snap together into a running stack for any given client, product, or research project. Each engagement becomes a thin **configuration layer** over the shared platform — not a rewrite.
 
 ## Product surfaces
 
@@ -97,7 +97,7 @@ See **ADR-0001: digithings Project Spec** for the formal definition and **ADR-00
 
 Cross-cutting:
 - **digikey** — auth for every service-to-service and user-to-service call.
-- **digismith** — tracing/observability across all components.
+- **digitrace** — tracing/observability across all components.
 - **digiclaw** — heartbeat, audit, deployment gateway for 24/7 agent work.
 - **digibase** — shared HTTP/audit library; future credential broker for multi-tenant deployments.
 - **digillm** — provider-agnostic LLM client/routing library; the single home for LLM code, superseding the in-tree `digigraph.llm` module.
@@ -137,7 +137,7 @@ The BYOK requirement from ADR-0002 stands: zero server-side persistence of user 
 
 ### Open-source vs. managed — core open, some premium closed
 
-- **Open core** (MIT/Apache): `digigraph`, `digisearch`, `digiquant` (backtest/optimize only), `digichat`, `digikey`, `digiclaw`, `digismith`, `digibase` (single-tenant library), `digillm`, `digifetch`, `digidev` (kit core; premium agents/skills closed).
+- **Open core** (MIT/Apache): `digigraph`, `digisearch`, `digiquant` (backtest/optimize only), `digichat`, `digikey`, `digiclaw`, `digitrace`, `digibase` (single-tenant library), `digillm`, `digifetch`, `digidev` (kit core; premium agents/skills closed).
 - **Closed / commercial:** the finance sub-graph *implementations* — research cycles, portfolio deliberation, execution strategy execution (research → live orders); multi-tenant digibase credential broker; managed hosting of digithings Projects; premium digidev agents/skills; any client-specific IP developed under `projects/`.
 - **Consultancy** stays its own revenue line, independent of the open/closed split.
 

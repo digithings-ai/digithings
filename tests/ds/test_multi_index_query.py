@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import logging
-
 import pytest
-from digisearch.core.models import Chunk, Query, Result, SearchResponse
-from digisearch.indexes.backends.backend_errors import SearchBackendError
-from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
+from digisearch.core.models import Chunk, Query
 
 pytestmark = pytest.mark.unit
 
@@ -65,6 +61,96 @@ def test_single_index_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     assert [r.chunk.id for r in resp.results] == ["1"]
 
 
+def test_fan_out_applies_skip_after_rrf_merge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """skip slices the fused list. Per-leg skip would drop b1 and return a2.
+
+    a1 and b1 share rank 1, so the merged order is a1, b1, a2, a3. skip=1, top_k=1
+    is b1. Asking each leg for skip=1, top_k=1 returns a2 from index a and nothing
+    from index b.
+    """
+    monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
+    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
+    from digisearch.search._stub import _stub_index, query_index
+
+    _stub_index.clear()
+    _stub_index["a"] = [
+        _chunk("a1", "alpha one"),
+        _chunk("a2", "alpha two"),
+        _chunk("a3", "alpha three"),
+    ]
+    _stub_index["b"] = [_chunk("b1", "alpha bee")]
+    resp = query_index(Query(text="alpha", top_k=1, skip=1), index_name="a,b")
+    assert [r.chunk.id for r in resp.results] == ["b1"]
+
+
+def test_fan_out_pages_do_not_repeat_when_a_shared_chunk_ranks_later(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A shared chunk outside the first per-leg window must not reorder page 1.
+
+    With top_k=1, a growing window scores X on page 2 only, and both pages
+    returned A1. With top_k=2, page 2 still contained B1. The fused list is
+    one ranking: X, A1, B1 and X, A1, B1, A2.
+    """
+    monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
+    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
+    from digisearch.search._stub import _stub_index, query_index
+
+    _stub_index.clear()
+    _stub_index["a"] = [_chunk("A1", "alpha a1"), _chunk("X", "alpha shared")]
+    _stub_index["b"] = [_chunk("B1", "alpha b1"), _chunk("X", "alpha shared")]
+    first = query_index(Query(text="alpha", top_k=1, skip=0), index_name="a,b")
+    second = query_index(Query(text="alpha", top_k=1, skip=1), index_name="a,b")
+    assert [r.chunk.id for r in first.results] == ["X"]
+    assert [r.chunk.id for r in second.results] == ["A1"]
+
+    _stub_index["a"] = [
+        _chunk("A1", "alpha"),
+        _chunk("A2", "alpha"),
+        _chunk("X", "alpha"),
+        _chunk("A4", "alpha"),
+    ]
+    _stub_index["b"] = [
+        _chunk("B1", "alpha"),
+        _chunk("B2", "alpha"),
+        _chunk("X", "alpha"),
+        _chunk("B4", "alpha"),
+    ]
+    page1 = query_index(Query(text="alpha", top_k=2, skip=0), index_name="a,b")
+    page2 = query_index(Query(text="alpha", top_k=2, skip=2), index_name="a,b")
+    assert [r.chunk.id for r in page1.results] == ["X", "A1"]
+    assert [r.chunk.id for r in page2.results] == ["B1", "A2"]
+
+
+def test_fan_out_total_count_is_deduped_when_every_leg_is_exhaustive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
+    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
+    from digisearch.search._stub import _stub_index, query_index
+
+    _stub_index.clear()
+    _stub_index["a"] = [
+        _chunk("a1", "alpha one"),
+        _chunk("a2", "alpha two"),
+        _chunk("a3", "alpha three"),
+    ]
+    _stub_index["b"] = [_chunk("b1", "alpha bee")]
+    resp = query_index(
+        Query(text="alpha", top_k=10, include_total_count=True),
+        index_name="a,b",
+    )
+    assert resp.total_count == 4
+
+    short = query_index(
+        Query(text="alpha", top_k=1, skip=1, include_total_count=True),
+        index_name="a,b",
+    )
+    assert [r.chunk.id for r in short.results] == ["b1"]
+    # Index a is longer than the page. The total is the deduped match count.
+    assert short.total_count == 4
+
+
 def test_fan_out_respects_top_k(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
     monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
@@ -85,7 +171,7 @@ def test_rrf_merge_prefers_multi_index_hits() -> None:
         return Result(chunk=_chunk(id, "alpha"), score=0.5, rank=rank)
 
     merged = _rrf_merge_results(
-        [[_result("both", 1), _result("a-only", 2)], [_result("both", 1)]],
+        [("a", [_result("both", 1), _result("a-only", 2)]), ("b", [_result("both", 1)])],
         top_k=10,
     )
     assert [r.chunk.id for r in merged] == ["both", "a-only"]
@@ -99,173 +185,139 @@ def test_rrf_merge_handles_unset_ranks() -> None:
     def _result(id: str) -> Result:
         return Result(chunk=_chunk(id, "alpha"), score=0.5, rank=None)
 
-    merged = _rrf_merge_results([[_result("x")], [_result("y")]], top_k=10)
+    merged = _rrf_merge_results([("a", [_result("x")]), ("b", [_result("y")])], top_k=10)
     assert [r.chunk.id for r in merged] == ["x", "y"]
     assert all(r.rank is not None for r in merged)
 
 
-# --- fan-out leg isolation (#4991) -------------------------------------------------
-#
-# Production incident: one broken index in "occ_help,occ_tickets" aborted the whole
-# fan-out comprehension, so a fault on occ_tickets also took occ_help down and the
-# whole OCC tenant returned status "failed". Each leg is now isolated.
+# ── per-index provenance (#5045) ──────────────────────────────────────────────
 
 
-class _EmbeddingModelMismatchError(Exception):
-    """Stand-in for digisearch's Chroma-side model mismatch, which is NOT a
-    _BACKEND_ERRORS member -- that is exactly why it used to escape."""
-
-
-def _patch_legs(monkeypatch: pytest.MonkeyPatch, **behaviour: str | BaseException) -> None:
-    """Make `_query_single_index` succeed ('ok') or raise, per index name."""
-    from digisearch.search import _stub
-
-    def _fake(query: Query, index_name: str) -> SearchResponse:
-        outcome = behaviour.get(index_name, "ok")
-        # BaseException, not Exception: KeyboardInterrupt is not an Exception
-        # subclass, and this helper must be able to raise one.
-        if isinstance(outcome, BaseException):
-            raise outcome
-        return _fake.SearchResponse(
-            results=[Result(chunk=_chunk(f"{index_name}-1", "alpha"), score=0.5, rank=1)],
-            facets=None,
-            backend=index_name,
-        )
-
-    _fake.SearchResponse = SearchResponse  # type: ignore[attr-defined]
-    monkeypatch.setattr(_stub, "_query_single_index", _fake)
-
-
-def _single_failure(index_name: str, error: Exception) -> str:
-    return f"{index_name} must be the leg that fails"
-
-
-def test_failing_leg_does_not_take_down_the_others(
+def test_single_index_query_stamps_index_provenance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
     monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
-    _patch_legs(
-        monkeypatch,
-        occ_help="ok",
-        occ_tickets=_EmbeddingModelMismatchError("written under a different embedder"),
+    from digisearch.search._stub import _stub_index, query_index
+
+    _stub_index.clear()
+    _stub_index["only"] = [_chunk("1", "alpha once"), _chunk("2", "alpha twice")]
+    resp = query_index(Query(text="alpha", top_k=10), index_name="only")
+    assert resp.index_names == ["only"]
+    assert [r.index_names for r in resp.results] == [["only"], ["only"]]
+
+
+def test_fan_out_results_carry_source_index(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
+    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
+    from digisearch.search._stub import _stub_index, query_index
+
+    _stub_index.clear()
+    _stub_index["docs"] = [_chunk("d1", "alpha password reset")]
+    _stub_index["tickets"] = [_chunk("t1", "alpha login failure")]
+    resp = query_index(Query(text="alpha", top_k=10), index_name="docs,tickets")
+    assert resp.index_names == ["docs", "tickets"]
+    by_id = {r.chunk.id: r.index_names for r in resp.results}
+    assert by_id == {"d1": ["docs"], "t1": ["tickets"]}
+
+
+def test_shared_chunk_records_all_contributing_indexes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
+    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
+    from digisearch.search._stub import _stub_index, query_index
+
+    _stub_index.clear()
+    _stub_index["a"] = [_chunk("same", "alpha shared")]
+    _stub_index["b"] = [_chunk("same", "alpha shared")]
+    resp = query_index(Query(text="alpha", top_k=10), index_name="a,b")
+    assert [r.chunk.id for r in resp.results] == ["same"]
+    # The RRF duplicate-fold must keep BOTH contributing indexes, fan-out order.
+    assert resp.results[0].index_names == ["a", "b"]
+
+
+def test_rrf_merge_preserves_all_contributing_index_names() -> None:
+    from digisearch.core.models import Result
+    from digisearch.search._stub import _rrf_merge_results
+
+    def _result(id: str, rank: int) -> Result:
+        return Result(chunk=_chunk(id, "alpha"), score=0.5, rank=rank)
+
+    merged = _rrf_merge_results(
+        [
+            ("idx1", [_result("shared", 1), _result("only1", 2)]),
+            ("idx2", [_result("shared", 1)]),
+            ("idx3", [_result("shared", 1), _result("only3", 2)]),
+        ],
+        top_k=10,
     )
-    from digisearch.search._stub import query_index
+    by_id = {r.chunk.id: r.index_names for r in merged}
+    assert by_id["shared"] == ["idx1", "idx2", "idx3"]
+    assert by_id["only1"] == ["idx1"]
+    assert by_id["only3"] == ["idx3"]
 
-    resp = query_index(Query(text="alpha", top_k=10), index_name="occ_help,occ_tickets")
 
-    # occ_help still answers; backend stays 'multi' because we did fan out.
-    assert [r.chunk.id for r in resp.results] == ["occ_help-1"]
+def test_fan_out_golden_order_and_scores_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression pin (#5045): provenance must not change retrieval behaviour.
+
+    Golden values are the pre-change RRF maths for this fixture (k=60, stub
+    ranks are 1-based scan order, merged score = sum of 1/(k+rank) over the
+    contributing indexes, stable sort on insertion order for ties):
+
+    * ``s``  — rank 3 in ``a``, rank 2 in ``b`` -> 1/63 + 1/62 (only folded hit)
+    * ``a1`` — rank 1 in ``a``                  -> 1/61
+    * ``b1`` — rank 1 in ``b``                  -> 1/61 (tie, inserted after a1)
+    * ``a2`` — rank 2 in ``a``                  -> 1/62
+    """
+    monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
+    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
+    from digisearch.search._stub import _stub_index, query_index
+
+    _stub_index.clear()
+    _stub_index["a"] = [
+        _chunk("a1", "alpha one"),
+        _chunk("a2", "alpha two"),
+        _chunk("s", "alpha shared"),
+    ]
+    _stub_index["b"] = [
+        _chunk("b1", "alpha three"),
+        _chunk("s", "alpha shared"),
+    ]
+    resp = query_index(Query(text="alpha", top_k=10), index_name="a,b")
     assert resp.backend == "multi"
+    assert [r.chunk.id for r in resp.results] == ["s", "a1", "b1", "a2"]
+    assert [r.rank for r in resp.results] == [1, 2, 3, 4]
+    assert [r.score for r in resp.results] == [
+        1.0 / (60 + 3) + 1.0 / (60 + 2),
+        1.0 / (60 + 1),
+        1.0 / (60 + 1),
+        1.0 / (60 + 2),
+    ]
 
 
-def test_failing_leg_is_logged_with_its_index_name(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
-    _patch_legs(
-        monkeypatch,
-        occ_help="ok",
-        occ_tickets=_EmbeddingModelMismatchError("written under a different embedder"),
-    )
-    from digisearch.search._stub import query_index
+def test_rerank_path_preserves_index_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reranker providers rebuild Results (dropping new fields); _maybe_rerank
+    must restore provenance so it survives DIGISEARCH_RERANK_ENABLED=1 (#5045)."""
+    monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
+    monkeypatch.setenv("DIGISEARCH_RERANK_ENABLED", "1")
+    import digisearch.search._stub as stub
+    from digisearch.core.models import Result
 
-    with caplog.at_level(logging.ERROR):
-        query_index(Query(text="alpha", top_k=10), index_name="occ_help,occ_tickets")
+    class _RebuildingReranker:
+        """Mimics _rerank_cohere/_rerank_bge: fresh Result(chunk, score, rank)."""
 
-    dropped = [r for r in caplog.records if getattr(r, "index_name", None) == "occ_tickets"]
-    assert len(dropped) == 1, _single_failure("occ_tickets", _EmbeddingModelMismatchError("x"))
-    assert dropped[0].outcome == "degraded"
-    assert dropped[0].error_type == "_EmbeddingModelMismatchError"
+        def rerank(self, text: str, results: list[Result], top_n: int | None = None):
+            kept = results if top_n is None else results[:top_n]
+            return [Result(chunk=r.chunk, score=r.score, rank=i + 1) for i, r in enumerate(kept)]
 
-
-def test_all_legs_failing_raises_rather_than_returning_empty(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An empty fan-out must not read downstream as 'no matching rows'.
-
-    Returning an empty SearchResponse would let the assistant answer confidently
-    that nothing was found; a visible failure is the honest outcome.
-    """
-    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
-    boom = _EmbeddingModelMismatchError("every leg broken")
-    _patch_legs(monkeypatch, occ_help=boom, occ_tickets=boom)
-    from digisearch.search._stub import query_index
-
-    with pytest.raises(_EmbeddingModelMismatchError):
-        query_index(Query(text="alpha", top_k=10), index_name="occ_help,occ_tickets")
-
-
-def test_single_index_path_still_raises(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The fast path must NOT be silently degraded -- no fan-out, no isolation."""
-    _patch_legs(monkeypatch, solo=_EmbeddingModelMismatchError("single index broken"))
-    from digisearch.search._stub import query_index
-
-    with pytest.raises(_EmbeddingModelMismatchError):
-        query_index(Query(text="alpha", top_k=10), index_name="solo")
-
-
-def test_one_surviving_leg_keeps_its_results_ordered_by_rrf(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
-    _patch_legs(monkeypatch, a="ok", b=_EmbeddingModelMismatchError("b broken"), c="ok")
-    from digisearch.search._stub import query_index
-
-    resp = query_index(Query(text="alpha", top_k=10), index_name="a,b,c")
-
-    assert sorted(r.chunk.id for r in resp.results) == ["a-1", "c-1"]
-    assert [r.rank for r in resp.results] == [1, 2]
-
-
-def test_authoritative_backend_error_still_aborts_the_fanout(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """M1: isolation must not swallow an authoritative-index failure.
-
-    ``_vectorize_backend`` deliberately keeps ``VectorizeBackendError`` out of
-    ``_BACKEND_ERRORS`` so a configured, failing remote index is never answered
-    from a different corpus with no error surfaced. Degrading such a leg would
-    hand back the *other* index's hits, which is exactly the thing that
-    invariant exists to prevent. Contrast: the same error on a single index
-    raises today, and must keep raising.
-    """
-    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
-    _patch_legs(
-        monkeypatch,
-        occ_help="ok",
-        occ_tickets=VectorizeBackendError("remote index is authoritative and down"),
-    )
-    from digisearch.search._stub import query_index
-
-    with pytest.raises(VectorizeBackendError):
-        query_index(Query(text="alpha", top_k=10), index_name="occ_help,occ_tickets")
-
-
-def test_search_backend_error_also_aborts_the_fanout(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
-    _patch_legs(
-        monkeypatch,
-        a="ok",
-        b=SearchBackendError("this corpus is authoritative"),
-    )
-    from digisearch.search._stub import query_index
-
-    with pytest.raises(SearchBackendError):
-        query_index(Query(text="alpha", top_k=10), index_name="a,b")
-
-
-def test_base_exceptions_are_not_swallowed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Only Exception is caught; KeyboardInterrupt/SystemExit must propagate."""
-    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
-    _patch_legs(monkeypatch, good="ok", bad=KeyboardInterrupt())
-    from digisearch.search._stub import query_index
-
-    with pytest.raises(KeyboardInterrupt):
-        query_index(Query(text="alpha", top_k=10), index_name="good,bad")
+    monkeypatch.setattr(stub, "_get_reranker", lambda provider: _RebuildingReranker())
+    stub._stub_index.clear()
+    stub._stub_index["a"] = [_chunk("a1", "alpha one")]
+    stub._stub_index["b"] = [_chunk("b1", "alpha two")]
+    resp = stub.query_index(Query(text="alpha", top_k=10), index_name="a,b")
+    assert resp.index_names == ["a", "b"]
+    by_id = {r.chunk.id: r.index_names for r in resp.results}
+    assert by_id == {"a1": ["a"], "b1": ["b"]}

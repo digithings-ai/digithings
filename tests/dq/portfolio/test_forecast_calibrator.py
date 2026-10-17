@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -365,7 +366,7 @@ class TestNoH8Coupling:
     def test_module_does_not_import_sizing(self) -> None:
         import digiquant.portfolio.forecast_calibration as mod
 
-        src = open(mod.__file__, encoding="utf-8").read()
+        src = Path(mod.__file__).read_text(encoding="utf-8")
         assert "sizing" not in src
         assert "phase7e" not in src
         assert "sized_book" not in src

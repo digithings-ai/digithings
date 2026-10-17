@@ -184,10 +184,26 @@
     background: var(--hair);
   }
 
+  /* What the selected stage does, in one line. Sits between the head and the
+     inputs/outputs because it is the sentence that makes the pair readable —
+     the run diagnostics below it are optional and often absent. */
+  .pl-note {
+    margin: 0;
+    padding: 0.8rem 1.1rem 0;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+
+  /* `auto-fit` rather than a fixed four, because a node may carry any subset of
+     the four diagnostics: a two-wide grid left two empty tracks when only two
+     were present, which reads as missing data. */
   .pl-diag-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
     border-top: 1px solid var(--hair);
+    margin-top: 0.8rem;
   }
 
   .pl-diag-k {
@@ -510,6 +526,12 @@
   display: flex;
   gap: 0.4rem;
   border-bottom: 1px solid var(--hair);
+  /* The strip must never force the page wider than the viewport: tabs
+     scroll inside the strip (the ink is absolutely positioned, so it
+     scrolls with them) instead of pushing the document to 545px on phones. */
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .tab-strip.pill {

@@ -49,7 +49,7 @@ vi.mock("@/lib/ecosystem", () => ({
   getEcosystemEndpoints: vi.fn(async () => ({
     digigraphUrl: "http://127.0.0.1:8000",
     digiquantUrl: "http://127.0.0.1:8001",
-    digismithUrl: "http://127.0.0.1:8003",
+    digitraceUrl: "http://127.0.0.1:8003",
     digisearchUrl: "",
   })),
 }));
@@ -1158,6 +1158,60 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(body.error).toBe("byok_model_required");
   });
 
+  // #5029: the hint used to spell one provider's model out in full
+  // ("openai/gpt-4o-mini") while eliding the others as "claude-…" / "gemini/…".
+  // A model id is provider vocabulary, not a stable part of this contract, so
+  // every example is elided the same way. Reverting the message to name a
+  // concrete slug fails on the last assertion.
+  // #5029: this message used to name three hardcoded model ids in one sentence
+  // sent to every provider, so two of the three were not served by the provider
+  // being told to use them. The example now comes from the caller's own provider
+  // entry in config/byok-providers.json — the same catalog digigraph's
+  // byok_model_example() reads, so the two refusals cannot drift apart.
+  it("names a model the caller's own provider serves (#5029)", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "sk-or-v1-test",
+          "x-byok-provider": "openrouter",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    // openrouter's own first fallbackModels entry — not openai's, even though
+    // openrouter happens to route to it.
+    expect(body.message).toContain("openai/gpt-4o-mini");
+    // No other provider's examples leak into an openrouter caller's message.
+    expect(body.message).not.toContain("claude-");
+    expect(body.message).not.toContain("gemini-");
+  });
+
+  it("does not offer an OpenAI model to a non-OpenAI provider (#5029)", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "xai-test",
+          "x-byok-provider": "xai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.message).toMatch(/grok-/);
+    expect(body.message).not.toContain("gpt-");
+  });
+
   // #2351: byokNeedsModel is now byokRequiresModel(byokProvider) from the shared
   // apps/digichat/src/lib/byok-providers.ts module instead of a hand-written
   // OR-chain — these three cover the other requiresModel:true providers the old
@@ -1339,6 +1393,71 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       }
     });
 
+    // DIG-613: an internal monitor had no sanctioned way past the free-turn cap,
+    // so the hourly DataTap answer-integrity check spent the whole 3-turn budget
+    // in its first hour and then reported 402 trial_gate on every run after.
+    describe("monitor allowlist", () => {
+      const MONITOR_SECRET = "monitor-secret-0123456789abcdef0123456789abcdef";
+
+      it("serves an allowlisted monitor indefinitely and never consults the per-IP quota", async () => {
+        process.env.DIGICHAT_MONITOR_TOKENS = MONITOR_SECRET;
+        const quotaModule = await import("@/lib/embed-turn-quota");
+        const overSpy = vi.spyOn(quotaModule, "isOverEmbedTrialLimit");
+        const recordSpy = vi.spyOn(quotaModule, "recordEmbedTrialTurn");
+        try {
+          // Well past the cap, which is the whole point: an hourly job must not
+          // be gated after the first three probes.
+          for (let i = 0; i < EMBED_FREE_TURN_LIMIT + 3; i++) {
+            const res = await POST(
+              trialReq({ "x-embed-monitor-token": MONITOR_SECRET }),
+            );
+            expect(res.status).toBe(200);
+          }
+          expect(overSpy).not.toHaveBeenCalled();
+          expect(recordSpy).not.toHaveBeenCalled();
+          expect(createFoundryStreamResponse).toHaveBeenCalledTimes(
+            EMBED_FREE_TURN_LIMIT + 3,
+          );
+        } finally {
+          overSpy.mockRestore();
+          recordSpy.mockRestore();
+        }
+      });
+
+      it("still gates a caller holding only the published X-Embed-Token, even with an allowlist configured", async () => {
+        // The tenant token is a Stripe-style publishable key rendered into the
+        // embedding page (DIG-619), so a bypass keyed on it would be public and
+        // would hand every visitor an unlimited budget. This pins that.
+        process.env.DIGICHAT_MONITOR_TOKENS = MONITOR_SECRET;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq({ "x-embed-token": "published-token" }))).status).toBe(200);
+        }
+        const gated = await POST(trialReq({ "x-embed-token": "published-token" }));
+        expect(gated.status).toBe(402);
+        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+
+      it("still gates a caller presenting the wrong monitor secret", async () => {
+        process.env.DIGICHAT_MONITOR_TOKENS = MONITOR_SECRET;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          await POST(trialReq({ "x-embed-monitor-token": "not-the-secret" }));
+        }
+        const gated = await POST(trialReq({ "x-embed-monitor-token": "not-the-secret" }));
+        expect(gated.status).toBe(402);
+        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+
+      it("fails open when DIGICHAT_MONITOR_TOKENS is absent, leaving the per-IP cap in force for everyone", async () => {
+        delete process.env.DIGICHAT_MONITOR_TOKENS;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq({ "x-embed-monitor-token": MONITOR_SECRET }))).status).toBe(200);
+        }
+        const gated = await POST(trialReq({ "x-embed-monitor-token": MONITOR_SECRET }));
+        expect(gated.status).toBe(402);
+        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+    });
+
     it("skips the quota entirely when the client IP is unknown, so a broken ingress fails open rather than collapsing every visitor into one bucket", async () => {
       const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
       const spy = vi.mocked(clientIpForRateLimit).mockReturnValue("unknown");
@@ -1424,6 +1543,22 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     it("returns 403 plan_tier_required when no proof is supplied (#3662)", async () => {
       const req = dashboardReq();
       const res = await POST(req);
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("plan_tier_required");
+    });
+
+    it("does not let the DIG-613 monitor identity bypass the plan-tier gate", async () => {
+      // The monitor bypass is scoped to the trial_form free-turn gate. It must
+      // not become a general capability: the plan-tier check runs before it and
+      // nothing about it consults the monitor allowlist.
+      process.env.DIGICHAT_MONITOR_TOKENS =
+        "monitor-secret-0123456789abcdef0123456789abcdef";
+      const res = await POST(
+        dashboardReq({
+          "x-embed-monitor-token": "monitor-secret-0123456789abcdef0123456789abcdef",
+        }),
+      );
       expect(res.status).toBe(403);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe("plan_tier_required");

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -24,13 +25,15 @@ try:
 except ImportError:
     _HAS_SB = False
 
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv  # type: ignore
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+    logger.debug("python-dotenv is not installed; continuing without it")
 
 ROOT = Path(__file__).parent.parent
 
@@ -48,7 +51,8 @@ def _sb():
 def _render_markdown(payload: dict) -> str:
     # Keep backend renderer in one place for now (also used by update_tearsheet).
     # Import locally to avoid importing heavy deps at module import time.
-    from scripts.update_tearsheet import _render_markdown_from_payload  # type: ignore
+    # Sibling import stays local: update_tearsheet pulls yfinance at import.
+    from update_tearsheet import _render_markdown_from_payload  # type: ignore
 
     return _render_markdown_from_payload(payload)
 

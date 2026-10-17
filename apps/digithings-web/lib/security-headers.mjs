@@ -10,6 +10,84 @@
 export const DEFAULT_DIGICHAT_EMBED_ORIGIN = "https://digithings.ai";
 
 /**
+ * R2-backed market-data Worker the landing page's price tape reads
+ * (`GET /v1/market/closes`). The same public endpoint digiquant.io uses; the
+ * landing tape takes only this keyless read.
+ */
+export const DEFAULT_MARKET_DATA_ORIGIN = "https://graph.digithings.ai";
+
+/**
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ * @returns {string | null} absolute origin, or null if unset/invalid
+ */
+export function resolveMarketDataOrigin(env = process.env) {
+  const raw = env.NEXT_PUBLIC_MARKET_DATA_URL?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Origin for CSP connect-src: market-data env when valid, else production
+ * default. Without this the browser blocks the tape's fetch under the strict
+ * `connect-src 'self'` and the band is stuck on its connecting line.
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ */
+export function marketDataOriginForCsp(env = process.env) {
+  return resolveMarketDataOrigin(env) ?? DEFAULT_MARKET_DATA_ORIGIN;
+}
+
+/**
+ * Origin of the digiquant Supabase project the landing band's live reads use
+ * (`public_accounting_nav_history`, `strategy_tearsheets`). Resolved from the
+ * same public var the digiquant site and dashboard use, so the three surfaces
+ * share one backend origin. Unset means no entry: the band falls back to its
+ * badged example series and the static export still builds.
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ * @returns {string | null}
+ */
+export function resolveSupabaseOrigin(env = process.env) {
+  const raw = env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Origin for CSP connect-src, or null when the env is unset — deliberately no
+ * production default: a hard-coded Supabase ref would either be wrong or would
+ * leak a project id into the repo.
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ */
+export function supabaseOriginForCsp(env = process.env) {
+  return resolveSupabaseOrigin(env);
+}
+
+/**
+ * dashboard-api origin (`NEXT_PUBLIC_DASHBOARD_API_URL`) for CSP connect-src,
+ * or null when that env is unset. Production page reads still default to
+ * `https://graph.digithings.ai/dashboard-api` in `dashboardApiBase()`; that
+ * host is already allowed via the market-data origin.
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ * @returns {string | null}
+ */
+export function dashboardApiOriginForCsp(env = process.env) {
+  const raw = env.NEXT_PUBLIC_DASHBOARD_API_URL?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
  * @returns {string | null} absolute origin, or null if unset/invalid
  */
@@ -31,18 +109,44 @@ export function frameSrcForCsp(env = process.env) {
   return resolveDigichatEmbedOrigin(env) ?? DEFAULT_DIGICHAT_EMBED_ORIGIN;
 }
 
+/** Local digichat already allows `http://127.0.0.1:*` parents. Production
+ *  digithings.ai does not, so a localhost landing cannot frame it. */
+export const DEV_DIGICHAT_EMBED_ORIGIN = "http://127.0.0.1:3000";
+
 /**
- * Origin for `/chat` and `/chat/occ` iframes — same as CSP `frame-src`.
+ * Origin for `/chat` and the landing embed. Development uses the local
+ * digichat (tenant env is already loaded there). Every other runtime uses
+ * the CSP `frame-src` origin.
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
  */
 export function embedOriginForChat(env = process.env) {
+  const resolved = resolveDigichatEmbedOrigin(env);
+  if (resolved) return resolved;
+  if (env.NODE_ENV === "development") return DEV_DIGICHAT_EMBED_ORIGIN;
   return frameSrcForCsp(env);
 }
 
 /**
  * @param {string} [frameSrc]
+ * @param {string} [marketOrigin]
+ * @param {string | null} [supabaseOrigin]
  */
-export function digithingsCsp(frameSrc = frameSrcForCsp()) {
+export function digithingsCsp(
+  frameSrc = frameSrcForCsp(),
+  marketOrigin = marketDataOriginForCsp(),
+  supabaseOrigin = supabaseOriginForCsp(),
+  dashboardApiOrigin = dashboardApiOriginForCsp(),
+) {
+  const connectSrc = [
+    "connect-src",
+    "'self'",
+    "https://api.github.com",
+    marketOrigin,
+    supabaseOrigin,
+    dashboardApiOrigin,
+  ]
+    .filter(Boolean)
+    .join(" ");
   return [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
@@ -50,7 +154,9 @@ export function digithingsCsp(frameSrc = frameSrcForCsp()) {
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     // OpenAPI explorer loads same-origin /openapi/*.json; swagger-ui may use a blob worker.
-    "connect-src 'self' https://api.github.com",
+    // The market-data origin is the landing price tape's read (DEFAULT_MARKET_DATA_ORIGIN);
+    // the Supabase origin is the digiquant band's live reads, when that env is set.
+    connectSrc,
     "worker-src 'self' blob:",
     `frame-src ${frameSrc}`,
     "frame-ancestors 'none'",
@@ -100,9 +206,10 @@ export function openwikiCsp() {
 /**
  * Cloudflare Pages `_headers` file body.
  * @param {string} [frameSrc]
+ * @param {string | null} [supabaseOrigin]
  */
-export function renderCloudflareHeaders(frameSrc = frameSrcForCsp()) {
-  const csp = digithingsCsp(frameSrc);
+export function renderCloudflareHeaders(frameSrc = frameSrcForCsp(), supabaseOrigin = supabaseOriginForCsp()) {
+  const csp = digithingsCsp(frameSrc, marketDataOriginForCsp(), supabaseOrigin);
   const wikiCsp = openwikiCsp();
   return [
     "# Cloudflare Pages headers for digithings.ai. Fonts are self-hosted (next/font).",

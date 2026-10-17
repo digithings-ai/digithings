@@ -108,6 +108,7 @@ barrel, re-exported from `src/index.ts`:
 | `data-layout` | Odometer/OdometerStrip, DotMatrixStat, BentoGrid/BentoCell, ProductFrame, FeatureCell, TestimonialWall | `./styles/data-layout.css` |
 | `repo-activity` | RepoActivity (compact + detailed) + `fetchRepoActivityLive`. Snapshot-first GitHub velocity: three 30-day counts (commits on the configured branch, merged PRs, closed issues), current open PRs/issues, latest release, recent merged PRs, recently updated open issues. Optional client refresh applies atomically or keeps the snapshot. No stars/forks/watchers. | `./styles/repo-activity.css` |
 | `effects-chrome` | Pipeline, RotatingPrompts, StackingPanels, AnnouncementBar, TabStrip (+ `tabId`/`tabPanelId` helpers), ToastStack | `./styles/effects-chrome.css` |
+| `diagrams` | `TerminalSchematic` — fully drawn terminal flow (legend, dotted stack, loop, numbered notes, receipt, traveling marks). Dress is the `.tschem` block in `styles/diagrams.css`. | `./styles/diagrams.css` |
 
 The #1463 reverse-promotion added the **`finance-tearsheet`** family — the
 print-grade SVG tearsheet grammar (`.ts-*`) promoted from
@@ -479,11 +480,10 @@ all" would overstate it. `scripts/check_frontend_canon.py` (the unconditional
 `frontend-canon` job) does scan this workspace for raw palette utilities, legacy
 vocabulary and colour literals. What it does *not* scan here is new CSS class
 families: digiweb is exempt from that census by design, because the reference is
-where new families are supposed to be born. `make score` also reaches this
-directory — only `packages/design/` sits in `score.py`'s skip list — but
-`ci.yml`'s `score` path filter excludes `apps/**` and `packages/**` (#1310), so the lane does
-not fire on a frontend-only PR. Note the distinction: the CI *filter* excludes
-`apps/**` and `packages/**`, the *tool* does not.
+where new families are supposed to be born. (The former `make score` lane also
+reached this directory, with only `packages/design/` in its skip list, while its
+CI path filter excluded `apps/**` and `packages/**` (#1310) — both the tool and
+the lane were removed in #4868.)
 
 The suite has no auth, crypto, or live-trading surface, so
 the human-gate items in `CLAUDE.md` do not apply to component work here (a

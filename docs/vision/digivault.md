@@ -39,7 +39,7 @@ digivault is a vertical service that digigraph orchestrates: the hub fetches its
 tools via `POST /v1/orchestrator_tools` and invokes them via
 `POST /v1/orchestrator_invoke`, so agents can search the vault by tag, fetch
 backlinks, lint, and create notes. It reuses digikey for JWT auth
-(`digivault:read` / `digivault:write`) and digismith for tracing.
+(`digivault:read` / `digivault:write`) and digitrace for tracing.
 
 It is complementary to two other modules:
 

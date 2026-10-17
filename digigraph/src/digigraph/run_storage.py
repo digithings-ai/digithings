@@ -30,8 +30,10 @@ def get_run_data_dir() -> str | None:
         path = cfg.get_run_data_dir()
         if path and str(path).strip():
             return str(path).strip()
-    except Exception:
-        pass
+    except Exception as exc:
+        import logging as _logging
+
+        _logging.getLogger(__name__).debug("run data dir config load failed (%s)", exc)
     return None
 
 
@@ -84,8 +86,12 @@ def write_search_results(
         digistore_name = f"search_{next_idx}"
         digistore_put(session_id, digistore_name, results)
         ref = str(digistore_get(session_id, digistore_name))
-    except Exception:
-        pass
+    except Exception as exc:
+        import logging as _logging
+
+        _logging.getLogger(__name__).debug(
+            "digistore write skipped for session %s (%s)", session_id, exc
+        )
     return ref
 
 
@@ -100,7 +106,11 @@ def resolve_dataset_ref(session_id: str | None, dataset_ref: str) -> Path:
 
         return digistore_get(session_id, dataset_ref)
     except ImportError:
-        pass
+        import logging as _logging
+
+        _logging.getLogger(__name__).debug(
+            "digistore unavailable; resolving dataset_ref from filesystem"
+        )
     root = get_run_data_dir()
     if not root:
         raise ValueError("run_data_dir not set; cannot resolve dataset_ref")

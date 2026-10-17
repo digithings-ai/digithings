@@ -349,6 +349,21 @@ describe("vendored ui kit renders server-side", () => {
     expect(html).toContain("[data-slot=table-cell]]:py-1");
   });
 
+  it("Table density=dense frees the header height and tightens rows", () => {
+    const html = renderToStaticMarkup(
+      <Table density="dense">
+        <TableBody>
+          <TableRow>
+            <TableCell>1.20</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(html).toContain('data-density="dense"');
+    expect(html).toContain("[data-slot=table-head]]:h-auto");
+    expect(html).toContain("[data-slot=table-cell]]:py-0.5");
+  });
+
   it("TableRowHeader renders a scoped row header inside a body row", () => {
     const html = renderToStaticMarkup(
       <Table>

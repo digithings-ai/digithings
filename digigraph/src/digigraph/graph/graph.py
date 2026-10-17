@@ -17,6 +17,7 @@ from digigraph.graph.nodes import (
 from digigraph.graph.research_subgraph import build_research_subgraph
 from digigraph.graph.state import WorkflowState
 from digigraph.project_config import DigiProjectConfig
+from digigraph.tracing import trace_node
 
 # Shared checkpointer so thread_id persists across HTTP requests (see LANGGRAPH_REVIEW.md).
 _checkpointer_lock = threading.Lock()
@@ -107,6 +108,49 @@ def _bounded_conn_string(conn_string: str) -> str:
         return conn_string
 
 
+def _apply_sqlite_retention(saver: object) -> object | None:
+    """Prune and VACUUM a freshly opened file checkpointer (DIG-2896).
+
+    Runs while the process is starting, so it must never be able to take the process
+    down: every failure is logged and swallowed, and the file is left as it is. Losing
+    a retention pass costs disk; refusing to start costs the run.
+
+    Only the file backend is handled. Postgres retention stays where it is -- in the
+    database, on a schedule the service does not own (see ARCHITECTURE.md 5.5.2).
+    """
+    import logging as _logging
+
+    from digigraph.graph import checkpoint_retention
+
+    _log = _logging.getLogger(__name__)
+    try:
+        retain_days = checkpoint_retention.retain_days_from_env()
+    except checkpoint_retention.RetentionConfigError as exc:
+        _log.warning(
+            "%s is unusable (%s); using the %d-day default rather than skipping "
+            "retention, which would leave the checkpoint file unpruned",
+            checkpoint_retention.RETAIN_DAYS_ENV,
+            exc,
+            checkpoint_retention.DEFAULT_RETAIN_DAYS,
+        )
+        retain_days = checkpoint_retention.DEFAULT_RETAIN_DAYS
+    try:
+        conn = getattr(saver, "conn", None)
+        if conn is None:
+            _log.error(
+                "sqlite checkpointer exposes no connection; retention did not run and "
+                "the checkpoint file will grow unbounded"
+            )
+            return None
+        result = checkpoint_retention.apply_retention(conn, retain_days=retain_days)
+    except Exception:
+        _log.exception("sqlite checkpoint retention failed; the checkpoint file is untouched")
+        return None
+    if result.pruned_any:
+        _log.info("sqlite checkpoint retention: %s", checkpoint_retention.describe(result))
+    return result
+
+
 # Sync checkpointers (SqliteSaver/PostgresSaver, not the Async* variants) are correct
 # here because every call site in workflow.py is a plain `def` (FastAPI runs these off
 # the event loop in its own threadpool already). If any route here ever becomes
@@ -147,7 +191,11 @@ def get_checkpointer():
 
                 _checkpointer_instance = MemorySaver()
             except ImportError:
-                pass
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug(
+                    "langgraph-checkpoint-memory not installed; running without a checkpointer"
+                )
         elif kind == "sqlite":
             try:
                 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -159,6 +207,9 @@ def get_checkpointer():
                 cm = SqliteSaver.from_conn_string(uri)
                 _cm_holders.append(cm)
                 _checkpointer_instance = cm.__enter__()
+                # The file backend has no cron and nothing in langgraph expires a
+                # thread, so retention runs where the saver is opened (#2896).
+                _apply_sqlite_retention(_checkpointer_instance)
             except ImportError:
                 import logging as _logging
 
@@ -171,7 +222,11 @@ def get_checkpointer():
 
                     _checkpointer_instance = MemorySaver()
                 except ImportError:
-                    pass
+                    import logging as _logging
+
+                    _logging.getLogger(__name__).debug(
+                        "langgraph-checkpoint-memory not installed; running without a checkpointer"
+                    )
         elif kind == "postgres":
             try:
                 from langgraph.checkpoint.postgres import PostgresSaver
@@ -183,7 +238,11 @@ def get_checkpointer():
                     _checkpointer_instance = cm.__enter__()
                     _checkpointer_instance.setup()
             except ImportError:
-                pass
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug(
+                    "langgraph-checkpoint-postgres not installed; running without a checkpointer"
+                )
         if _checkpointer_instance is not None and not isinstance(
             _checkpointer_instance, McpTokenRedactingCheckpointer
         ):
@@ -337,11 +396,14 @@ def build_workflow_graph():
     research_sg = build_research_subgraph()
     builder: StateGraph[WorkflowState] = StateGraph(WorkflowState)
     if supervisor_on:
-        builder.add_node("supervisor", supervisor_node)
+        builder.add_node("supervisor", trace_node("supervisor")(supervisor_node))
+    # NOTE (#4931): the compiled research subgraph stays unwrapped so
+    # graph.stream(..., subgraphs=True) custom events keep flowing; its spans
+    # come from LangSmith auto-instrumentation (configure_langgraph_tracing).
     builder.add_node("research", research_sg)
-    builder.add_node("validate_strategy", strategy_validator_node)
-    builder.add_node("backtest", backtest_node)
-    builder.add_node("optimize", optimize_node)
+    builder.add_node("validate_strategy", trace_node("validate_strategy")(strategy_validator_node))
+    builder.add_node("backtest", trace_node("backtest")(backtest_node))
+    builder.add_node("optimize", trace_node("optimize")(optimize_node))
     if supervisor_on:
         builder.add_edge(START, "supervisor")
         builder.add_conditional_edges("supervisor", _route_after_supervisor)

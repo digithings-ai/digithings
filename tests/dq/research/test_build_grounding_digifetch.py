@@ -11,6 +11,7 @@ import pytest
 from digiquant.data.gloomberb import (
     EQUITY_TOOLS,
     GLOOMBERB_ATTRIBUTION,
+    GLOOMBERB_ENABLED_ENV,
     GLOOMBERB_SESSION_COOKIE_ENV,
     GloomberbClient,
     agent_tools,
@@ -57,10 +58,20 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
 
 
 @pytest.fixture(autouse=True)
-def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def _clean_env(monkeypatch: pytest.MonkeyPatch):
+    """Opt the Gloomberb family back in.
+
+    GLOOMBERB_ENABLED now defaults ON (DIG-2752 rescope, decision
+    d4922299, superseding the DIG-1233 opt-in), so the explicit opt-in below
+    is belt-and-braces rather than load-bearing. DIG-3907 retired the
+    session-cookie path, so there is no gate to stub: session/preview/pro
+    tools never advertise, with or without a cookie.
+    """
     monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
     monkeypatch.setattr(_node_factory, "_research_data_client", lambda: object())
+    yield
 
 
 @pytest.mark.unit
@@ -95,9 +106,11 @@ def test_build_grounding_adds_the_flagged_subset_and_routes_a_call(
 
 
 @pytest.mark.unit
-def test_build_grounding_adds_session_tools_with_a_cookie(
+def test_build_grounding_never_adds_retired_session_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # DIG-3907: the cookie path is retired, so a session-gated name stays out
+    # even with a cookie set — the cookie no longer opens anything.
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "gloomberb.session_token=test")
     monkeypatch.setattr(
         agent_tools,
@@ -112,7 +125,7 @@ def test_build_grounding_adds_session_tools_with_a_cookie(
     )
     assert tools is not None
     names = {t["function"]["name"] for t in tools}
-    assert "digifetch_analyst_research" in names  # session-gated, cookie present
+    assert "digifetch_analyst_research" not in names  # retired, cookie or not
 
 
 @pytest.mark.unit

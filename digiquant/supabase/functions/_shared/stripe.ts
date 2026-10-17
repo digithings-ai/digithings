@@ -5,7 +5,28 @@
  * Signature verification uses the Stripe-Webhook-Signatures scheme (HMAC-SHA256).
  */
 
-const STRIPE_API = "https://api.stripe.com/v1";
+/** Production Stripe API base. Everything billing posts to goes through this. */
+export const DEFAULT_STRIPE_API_BASE = "https://api.stripe.com/v1";
+
+/**
+ * Base URL for Stripe API calls.
+ *
+ * Defaults to `api.stripe.com` and stays there unless `STRIPE_API_BASE` is set, so
+ * a deployment that never sets it keeps talking to Stripe. Set it to point the
+ * functions at a local stub (the self-host reference stack runs one) or at a
+ * Stripe test-mode proxy: the whole point is that the local stack can exercise
+ * checkout, portal and webhook flows without a live key and without spending.
+ *
+ * Only ever point this at a host you control. It carries the secret key in the
+ * Authorization header, so a wrong value here exfiltrates it.
+ */
+export function stripeApiBase(
+  getEnv: (key: string) => string | undefined = (k) => Deno.env.get(k),
+): string {
+  const raw = (getEnv("STRIPE_API_BASE") ?? "").trim();
+  if (raw === "") return DEFAULT_STRIPE_API_BASE;
+  return raw.replace(/\/+$/, "");
+}
 
 export class StripeHttpError extends Error {
   readonly status: number;
@@ -156,9 +177,10 @@ async function stripeForm(
   method: "POST",
   path: string,
   params: Record<string, string>,
+  apiBase: string = stripeApiBase(),
 ): Promise<Record<string, unknown>> {
   const body = new URLSearchParams(params);
-  const res = await fetch(`${STRIPE_API}${path}`, {
+  const res = await fetch(`${apiBase}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${secretKey}`,
@@ -184,6 +206,7 @@ export async function createCheckoutSession(
     successUrl: string;
     cancelUrl: string;
   },
+  apiBase?: string,
 ): Promise<{ id: string; url: string | null }> {
   const params: Record<string, string> = {
     mode: "subscription",
@@ -199,7 +222,7 @@ export async function createCheckoutSession(
   } else if (args.customerEmail) {
     params.customer_email = args.customerEmail;
   }
-  const session = await stripeForm(secretKey, "POST", "/checkout/sessions", params);
+  const session = await stripeForm(secretKey, "POST", "/checkout/sessions", params, apiBase);
   return {
     id: String(session.id ?? ""),
     url: typeof session.url === "string" ? session.url : null,
@@ -209,10 +232,11 @@ export async function createCheckoutSession(
 export async function createBillingPortalSession(
   secretKey: string,
   args: { customerId: string; returnUrl: string },
+  apiBase?: string,
 ): Promise<{ url: string | null }> {
   const session = await stripeForm(secretKey, "POST", "/billing_portal/sessions", {
     customer: args.customerId,
     return_url: args.returnUrl,
-  });
+  }, apiBase);
   return { url: typeof session.url === "string" ? session.url : null };
 }

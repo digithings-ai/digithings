@@ -20,6 +20,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       # --frozen fails if uv.lock is stale rather than silently re-resolving,

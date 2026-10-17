@@ -40,7 +40,7 @@ digithings' core, truthful differentiator: an **open-core, self-hostable stack**
 - **One motion moment per surface** — motion is deliberate and singular, always honoring `prefers-reduced-motion`.
 - **Token-backed Tailwind utilities + semantic classes** are preferred over ad-hoc CSS values, so spacing/colour stay consistent across both domains.
 - Digi product/module names are always lowercase in prose and UI copy (e.g. digithings, digiquant, digichat) — see the repo's `CLAUDE.md` naming table; this is a hard constraint on any UI copy digiweb work touches.
-- `packages/design/` and `**.css` are exempt from the repo's Python-oriented `make score` gate — design work here is meant to iterate live via preview servers, not against that rubric.
+- `packages/design/` and `**.css` are a preview-driven surface — design work here iterates live via preview servers, with review as the quality gate.
 
 ## Brand Commitments
 

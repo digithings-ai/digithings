@@ -13,9 +13,9 @@ Gallery CSS is `uv-`-prefixed and does **not** ship to product apps until we pro
 | Source | Role in the blend |
 |--------|-------------------|
 | digiweb Instrument Panel | Spine — tokens, three colour domains, hairline elevation, money fencing |
-| [herdr.dev](references/herdr.dev.md) | Zero radius, claim+install hero, sharp fields, diegetic terminal |
-| [agentmail.to](references/agentmail.to.md) | White rect CTA, sparse nav/density, bracket docs control |
-| [omarchy.org](references/omarchy.org.md) | Mono-everything voice |
+| herdr.dev | Zero radius, claim+install hero, sharp fields, diegetic terminal |
+| agentmail.to | White rect CTA, sparse nav/density, bracket docs control |
+| omarchy.org | Mono-everything voice |
 | Cursor / Graphite / xAI | Section discipline / optional motion / `//` kickers |
 
 ## Round 1 — raw picks (your preference)
@@ -62,7 +62,7 @@ These are a **starting point**, not absolute law. Below is the consistency pass 
 ### Cohesive v0.1 rules (locked · promoted)
 
 1. **Radius:** `0` everywhere in marketing and product chrome. No pills. Device bezels may still simulate hardware.
-2. **Type:** Geist Mono (or JetBrains Mono on full-terminal surfaces) for display, body, and chrome. Weight 400–500; hierarchy by size/tracking, not bold.
+2. **Type:** Geist Mono for display, body, and chrome (every surface, no exceptions). Weight 400–500; hierarchy by size/tracking, not bold.
 3. **Loud control:** one white (paper) filled rectangle per viewport on dark; dark ink label. Sibling docs control uses bracket corners.
 4. **Nav:** few links, ghost/hairline; one filled Login/Install max.
 5. **Kicker:** `// section` mono comment — keep.

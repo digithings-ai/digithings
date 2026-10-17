@@ -15,7 +15,10 @@ from typing import Any, Literal
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
+from digisearch.client import SURFACE_MCP, require_art9_clear
 from digisearch.core.models import Query
+from digisearch.grokipedia.tools import grokipedia_get_page as _grokipedia_get_page
+from digisearch.grokipedia.tools import grokipedia_search as _grokipedia_search
 from digisearch.logging import configure_logging
 from digisearch.monitors.models import DeliveryConfig, Watch, WatchSchedule
 from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
@@ -603,6 +606,112 @@ def websets_export(webset_id: str, format: str = "json") -> str:
     except WebsetServiceError as e:
         return _websets_error("export", e)
     return export_csv(webset, items) if fmt == "csv" else export_json(webset, items)
+
+
+# --- grokipedia unofficial JSON spike -----------------------------------------
+#
+# Read-only tools over grokipedia.com JSON APIs the public site JS already
+# calls. ``/api/page`` 404s; ``get_page`` uses ``/api/page-preview``. robots.txt
+# currently Disallow: /api/ — HOLD hatch (legal/product). No HTML scrape.
+
+
+@mcp.tool()
+def grokipedia_search(query: str, limit: int = 10) -> str:
+    """Search grokipedia.com (unofficial JSON spike; HOLD hatch).
+
+    Calls ``GET /api/full-text-search?query=&limit=``. Returns JSON
+    ``{ok, query, results:[{slug,title,snippet,...}], total_count}`` or
+    ``{ok:false, error, status_code, retryable}``. Polite rate limits apply.
+    Not an official xAI API. robots.txt currently Disallow: /api/.
+    """
+    return _grokipedia_search(query=query, limit=limit)
+
+
+@mcp.tool()
+def grokipedia_get_page(slug: str, include_content: bool = True) -> str:
+    """Fetch one grokipedia page via page-preview (unofficial JSON spike).
+
+    Calls ``GET /api/page-preview?slug=`` (``/api/page`` is dead / 404).
+    ``include_content=True`` sends ``includeContent=true``; ``False`` sends
+    the site's short-preview flag ``content=0``. Long content is truncated.
+    Returns JSON ``{ok, found, page:{slug,title,content,truncated}}`` or
+    ``{ok:false, error, status_code, retryable}``. No HTML scrape.
+    """
+    return _grokipedia_get_page(slug=slug, include_content=include_content)
+
+
+# --- Art. 9 screen on the MCP surface (DIG-1083 leaf 10; spec DIG-912 §5.4) --
+# This server is loopback-bound and unauthenticated by default: ``DIGI_MCP_REQUIRE_AUTH``
+# is read in exactly one place repo-wide and it is not here. Screening is therefore the
+# only control standing in front of the surface, which is why the surface is declared
+# explicitly (``digisearch.client.SURFACE_MCP``) rather than left to the path-keyed floor
+# in ``digibase.art9`` — a registry keyed by path cannot see a surface that has no path.
+#
+# FastMCP 1.9.3 has no middleware hook (``mcp.server.fastmcp.middleware`` does not exist),
+# so the seam is the registered ``Tool.fn``: dispatch runs
+# ``ToolManager.call_tool`` -> ``Tool.run`` -> ``fn_metadata`` -> ``fn(**arguments)``.
+# Reassigning ``Tool.fn`` therefore intercepts genuine server-side tool calls. Wrapping
+# ``FastMCP.call_tool`` instead would intercept nothing — that is the client-facing path —
+# and would read like a guard while screening no tool call at all.
+def _tool_payload(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any]:
+    """The argument map a tool call arrives with, as a screenable payload."""
+    if kwargs:
+        return dict(kwargs)
+    return {"args": list(args)}
+
+
+def _screened_tool_fn(tool_name: str, fn: Any, is_async: bool) -> Any:
+    if is_async:
+
+        async def screened(*args: Any, **kwargs: Any) -> Any:
+            require_art9_clear(SURFACE_MCP, _tool_payload(args, kwargs))
+            return await fn(*args, **kwargs)
+
+    else:
+
+        def screened(*args: Any, **kwargs: Any) -> Any:  # type: ignore[misc]
+            require_art9_clear(SURFACE_MCP, _tool_payload(args, kwargs))
+            return fn(*args, **kwargs)
+
+    screened.__name__ = getattr(fn, "__name__", tool_name)
+    screened.__doc__ = fn.__doc__
+    screened.__art9_screened__ = True
+    # Record what was wrapped so a test can undo the screen in place and
+    # prove the guard can go red (DIG-1083).
+    screened.__wrapped__ = fn
+    return screened
+
+
+def install_art9_surface_screen(server: Any | None = None) -> int:
+    """Screen every registered MCP tool call through the Art. 9 surface registry.
+
+    Returns the number of tools wrapped. Raises when the server serves **no tools
+    at all**: a screen covering nothing is indistinguishable from a screen that is
+    not installed, and FastMCP's private manager going away must fail loudly rather
+    than pass silently. Re-installing over already-screened tools returns 0 and
+    raises nothing — that is idempotence, not absence.
+    """
+    srv = mcp if server is None else server
+    manager = getattr(srv, "_tool_manager", None)
+    if manager is None:
+        raise RuntimeError("FastMCP exposes no _tool_manager; Art. 9 screen cannot be installed")
+    tools = list(manager.list_tools())
+    if not tools:
+        raise RuntimeError("no digisearch MCP tools registered; Art. 9 screen would cover nothing")
+    wrapped = 0
+    for tool in tools:
+        original = tool.fn
+        if getattr(original, "__art9_screened__", False):
+            continue
+        tool.fn = _screened_tool_fn(tool.name, original, bool(tool.is_async))
+        wrapped += 1
+    if wrapped:
+        logger.info("art9 screen installed on %d digisearch MCP tools", wrapped)
+    return wrapped
+
+
+#: Number of MCP tools the import-time screen covers. Asserted non-zero by the tests.
+ART9_SCREENED_TOOLS = install_art9_surface_screen()
 
 
 def run_mcp(

@@ -3,7 +3,7 @@
 #
 # Intentional omissions:
 #   - digiquant / backtest / optimize (no DIGIQUANT_DATA_DIR, no :8001)
-#   - digismith HTTP (tracing library only)
+#   - digitrace HTTP (tracing library only)
 #
 # Multi-tenant corpus routing (digithings vs OCC) uses digichat headers
 # (X-Digi-Corpus-Index / X-Digi-Vault-Prefix) and DIGI_TENANT_CORPUS_MAP —
@@ -105,7 +105,7 @@ agents:
     ## Style
 
     Write digi product names in lowercase always, including at the start of a sentence:
-    digithings, digichat, digigraph, digiquant, digisearch, digikey, digismith,
+    digithings, digichat, digigraph, digiquant, digisearch, digikey, digitrace,
     digivault, digiclaw, digibase, digiskills, digiweb, digillm, digifetch.
 
     Wrap every diagram and code sample in a fenced Markdown code block with a

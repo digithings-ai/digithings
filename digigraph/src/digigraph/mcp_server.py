@@ -276,7 +276,11 @@ def create_mcp_server() -> Any:
         from digigraph.workflow import run_digigraph_workflow
 
         try:
-            _authorize_mcp_ctx(ctx, SCOPE_WORKFLOW)
+            # Same token chat/thread_state forward into TestClient. workflow
+            # calls the graph in-process, so the JWT has to ride on the request
+            # or WorkflowState.digi_bearer stays empty and digisearch/digiquant
+            # see no Authorization header.
+            token = _authorize_mcp_ctx(ctx, SCOPE_WORKFLOW)
         except McpAuthDenied as exc:
             return _mcp_denied_json(exc)
         try:
@@ -287,6 +291,7 @@ def create_mcp_server() -> Any:
             prompt=prompt,
             session_id=session_id,
             request_id=str(uuid.uuid4()),
+            digi_bearer=token,
         )
         try:
             result = run_digigraph_workflow(req)

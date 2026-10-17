@@ -2,7 +2,7 @@
  * Invested-% precedence for the dashboard-api worker (slice 0003).
  *
  * Server-side port of `resolveInvestedPct` in
- * `apps/dashboard/lib/performance-ssot.ts` (used by
+ * `@digiquant/contract/performance-ssot` (used by
  * `PortfolioShellInner.tsx` for the holdings tile). Contract §6.1 fallback
  * order: NAV tip → non-CASH book-weight sum on the committed book →
  * `portfolio_metrics.invested_pct` → null.
