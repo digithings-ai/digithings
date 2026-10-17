@@ -23,18 +23,18 @@ from typing import Literal
 
 import polars as pl
 
-from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel
-from digiquant.strategies.sdca.btc_power_law import load_coefficients as load_btc_coefficients
-from digiquant.strategies.sdca.generic_valuation import (
+from digiquant.strategies.lab.btc_power_law import BtcPowerLawRiskModel
+from digiquant.strategies.lab.btc_power_law import load_coefficients as load_btc_coefficients
+from digiquant.strategies.lab.generic_valuation import (
     GenericValuationRiskModel,
     ValuationForm,
     fit_generic_valuation,
 )
-from digiquant.strategies.sdca.generic_valuation import (
+from digiquant.strategies.lab.generic_valuation import (
     load_coefficients as load_generic_coefficients,
 )
-from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.rolling_z import DEFAULT_ROLLING_WINDOW, RollingZRiskModel
+from digiquant.strategies.lab.risk_model import RiskModel
+from digiquant.strategies.lab.rolling_z import DEFAULT_ROLLING_WINDOW, RollingZRiskModel
 
 KNOWN_SDCA_RISK_MODELS: tuple[str, ...] = (
     "btc_power_law",

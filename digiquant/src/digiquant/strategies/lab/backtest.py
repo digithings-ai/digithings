@@ -15,8 +15,8 @@ from datetime import date
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.strategies.sdca.curve import AccumDistCurve
-from digiquant.strategies.sdca.dca_metrics import flat_dca_mark_to_market
+from digiquant.strategies.lab.curve import AccumDistCurve
+from digiquant.strategies.lab.dca_metrics import flat_dca_mark_to_market
 
 
 class SdcaBacktestReport(BaseModel):

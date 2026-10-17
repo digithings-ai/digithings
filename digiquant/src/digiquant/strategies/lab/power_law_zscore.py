@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from digiquant.strategies.sdca.price_oscillators import agreement_scaled_blend
+from digiquant.strategies.lab.price_oscillators import agreement_scaled_blend
 
 _TREND_WINDOW = 180
 _SIGMA_FLOOR = 1e-12

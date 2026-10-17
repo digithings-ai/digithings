@@ -25,15 +25,15 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.data.prices.history_cache import load_cached
-from digiquant.strategies.sdca.backtest import run_backtest
-from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, load_coefficients
-from digiquant.strategies.sdca.curve import AccumDistCurve
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
-from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights, build_extra_indicators
-from digiquant.strategies.sdca.optimize import drop_extras_missing_sources, load_sdca_extra_sources
-from digiquant.strategies.sdca.presets import load_preset
-from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
-from digiquant.strategies.sdca.risk_index import build_risk_index
+from digiquant.strategies.lab.backtest import run_backtest
+from digiquant.strategies.lab.btc_power_law import BtcPowerLawRiskModel, load_coefficients
+from digiquant.strategies.lab.curve import AccumDistCurve
+from digiquant.strategies.lab.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.indicator_catalog import SdcaCompositeWeights, build_extra_indicators
+from digiquant.strategies.lab.optimize import drop_extras_missing_sources, load_sdca_extra_sources
+from digiquant.strategies.lab.presets import load_preset
+from digiquant.strategies.lab.price_oscillators import SdcaOscillatorSpec
+from digiquant.strategies.lab.risk_index import build_risk_index
 
 logger = logging.getLogger(__name__)
 

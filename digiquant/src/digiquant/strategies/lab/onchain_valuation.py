@@ -26,10 +26,10 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.data.onchain.bitview import DEFAULT_SERIES, FORBIDDEN_SERIES
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight
-from digiquant.strategies.sdca.indicator_catalog import align_to_dates
-from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.rolling_z import DEFAULT_ROLLING_WINDOW, RollingZRiskModel
+from digiquant.strategies.lab.composite_risk import IndicatorWeight
+from digiquant.strategies.lab.indicator_catalog import align_to_dates
+from digiquant.strategies.lab.risk_model import RiskModel
+from digiquant.strategies.lab.rolling_z import DEFAULT_ROLLING_WINDOW, RollingZRiskModel
 
 # Bitview ids ingested for v1 (research note). MVRV-Z is derived, not fetched.
 ONCHAIN_SERIES_IDS: tuple[str, ...] = DEFAULT_SERIES

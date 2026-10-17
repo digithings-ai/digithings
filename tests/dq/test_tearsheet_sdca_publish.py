@@ -31,7 +31,7 @@ _EXAMPLE_COEFFS = (
     / "src"
     / "digiquant"
     / "strategies"
-    / "sdca"
+    / "lab"
     / "btc_power_law_coefficients.example.json"
 )
 
@@ -99,7 +99,7 @@ def test_richer_composite_sidecar_matches_settings() -> None:
     sidecar = json.loads(
         (
             Path(__file__).resolve().parents[2]
-            / "digiquant/src/digiquant/strategies/sdca/btc_richer_composite.json"
+            / "digiquant/src/digiquant/strategies/lab/btc_richer_composite.json"
         ).read_text()
     )
     settings = gts.load_settings()

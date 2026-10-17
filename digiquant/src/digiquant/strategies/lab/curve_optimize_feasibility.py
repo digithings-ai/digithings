@@ -41,9 +41,9 @@ from __future__ import annotations
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.strategies.sdca.backtest import run_backtest
-from digiquant.strategies.sdca.curve import AccumDistCurve
-from digiquant.strategies.sdca.curve_optimize import (
+from digiquant.strategies.lab.backtest import run_backtest
+from digiquant.strategies.lab.curve import AccumDistCurve
+from digiquant.strategies.lab.curve_optimize import (
     WIDE_KNEE_COARSE_GRID,
     WIDE_KNEE_SEARCH_BOUNDS,
     CurveOptimizeGates,
@@ -53,8 +53,8 @@ from digiquant.strategies.sdca.curve_optimize import (
     sample_wide_knee_curve_trials,
     score_shape_on_index,
 )
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
-from digiquant.strategies.sdca.walk_forward import SdcaOptimizeObjective
+from digiquant.strategies.lab.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.walk_forward import SdcaOptimizeObjective
 
 # Anchor the floor on the walk-forward gate's own default (walk_forward.py)
 # rather than a second hardcoded literal, so this can't silently drift from

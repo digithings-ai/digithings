@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
-from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
+from digiquant.strategies.lab.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.indicator_catalog import SdcaCompositeWeights
 
 DEFAULT_WEIGHT_STEP = 0.1
 DEFAULT_RATE_SCALE = 0.7

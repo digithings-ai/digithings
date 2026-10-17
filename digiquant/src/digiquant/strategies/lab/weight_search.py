@@ -15,21 +15,21 @@ from itertools import product
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
-from digiquant.strategies.sdca.cycle_windows import SdcaCycleWindows
-from digiquant.strategies.sdca.indicator_catalog import (
+from digiquant.strategies.lab.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.cycle_windows import SdcaCycleWindows
+from digiquant.strategies.lab.indicator_catalog import (
     EXTRA_INDICATOR_NAMES,
     SdcaCompositeWeights,
     extra_indicators_for_window,
     missing_extra_names,
 )
-from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.stage_a import (
+from digiquant.strategies.lab.risk_model import RiskModel
+from digiquant.strategies.lab.stage_a import (
     CombinedCycleOverlapScore,
     combined_cycle_overlap_score,
     risk_from_weighted_z,
 )
-from digiquant.strategies.sdca.walk_forward import (
+from digiquant.strategies.lab.walk_forward import (
     FoldScore,
     RailsFitter,
     SdcaOptimizeObjective,

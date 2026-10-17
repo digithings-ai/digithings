@@ -73,8 +73,8 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from digiquant.paths import canonicalize_path
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight, causal_ema_smooth
-from digiquant.strategies.sdca.price_oscillators import (
+from digiquant.strategies.lab.composite_risk import IndicatorWeight, causal_ema_smooth
+from digiquant.strategies.lab.price_oscillators import (
     SdcaOscillatorSpec,
     agreement_scaled_blend,
     mtf_rsi_z,

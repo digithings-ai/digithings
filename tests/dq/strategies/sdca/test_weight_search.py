@@ -251,7 +251,7 @@ def test_checked_in_weights_sidecar_searched_full_catalog() -> None:
     payload = json.loads(
         (
             Path(__file__).resolve().parents[4]
-            / "digiquant/src/digiquant/strategies/sdca/btc_composite_weights.json"
+            / "digiquant/src/digiquant/strategies/lab/btc_composite_weights.json"
         ).read_text()
     )
     # Gold legs added in #4804 postdate the BTC published search; they are

@@ -38,7 +38,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from digiquant.paths import canonicalize_path
-from digiquant.strategies.sdca.quantile_rails import detect_crossings, rearrange_non_crossing
+from digiquant.strategies.lab.quantile_rails import detect_crossings, rearrange_non_crossing
 
 logger = logging.getLogger(__name__)
 

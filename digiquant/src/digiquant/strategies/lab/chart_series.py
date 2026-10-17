@@ -15,14 +15,14 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.strategies.sdca.composite_risk import z_to_risk
-from digiquant.strategies.sdca.indicator_catalog import (
+from digiquant.strategies.lab.composite_risk import z_to_risk
+from digiquant.strategies.lab.indicator_catalog import (
     EXTRA_INDICATOR_NAMES,
     SdcaCompositeWeights,
     indicator_display_name,
 )
-from digiquant.strategies.sdca.presets import load_preset
-from digiquant.strategies.sdca.valuation import valuation_z_score
+from digiquant.strategies.lab.presets import load_preset
+from digiquant.strategies.lab.valuation import valuation_z_score
 
 _BOOK_FRAC_EPS = 1e-12
 # Reconstruction Δunits floor: JSON round-trip jitter, not a real fill.

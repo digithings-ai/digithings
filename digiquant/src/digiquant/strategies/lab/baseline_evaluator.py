@@ -15,19 +15,19 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, ConfigDict
 
-from digiquant.strategies.sdca.curve_optimize import (
+from digiquant.strategies.lab.curve_optimize import (
     CurveOptimizeGates,
     CurveTrialScore,
     params_from_shape,
     score_shape_on_index,
 )
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape, risk50_linear_reference_curve
-from digiquant.strategies.sdca.optimize import (
+from digiquant.strategies.lab.curve_shape import SdcaCurveShape, risk50_linear_reference_curve
+from digiquant.strategies.lab.optimize import (
     SDCA_SHAPE_DEFAULTS,
     SdcaWalkForwardResult,
     run_sdca_walk_forward,
 )
-from digiquant.strategies.sdca.walk_forward import (
+from digiquant.strategies.lab.walk_forward import (
     RailsFitter,
     SdcaOptimizeObjective,
     SdcaTrialEvaluator,

@@ -17,9 +17,9 @@ from __future__ import annotations
 
 from datetime import date
 
-from digiquant.strategies.sdca.cycle_windows import SdcaCycleWindows
-from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
-from digiquant.strategies.sdca.stage_a import cycle_overlap_score, risk_from_weighted_z
+from digiquant.strategies.lab.cycle_windows import SdcaCycleWindows
+from digiquant.strategies.lab.indicator_catalog import SdcaCompositeWeights
+from digiquant.strategies.lab.stage_a import cycle_overlap_score, risk_from_weighted_z
 
 _DATES: list[date] | None = None
 _POWER_LAW_Z: list | None = None

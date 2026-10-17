@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from digiquant.strategies.sdca.curve import RISK_NODES
+from digiquant.strategies.lab.curve import RISK_NODES
 
 _RATE_EPS = 1e-12
 _MID_TIER_RATE_FRAC = 0.5

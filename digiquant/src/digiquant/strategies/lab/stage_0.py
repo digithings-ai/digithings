@@ -22,34 +22,34 @@ from pathlib import Path
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.strategies.sdca.backtest import run_backtest
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight
-from digiquant.strategies.sdca.curve import AccumDistCurve
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
-from digiquant.strategies.sdca.curve_sim import evaluate_sdca_trial_curve_sim
-from digiquant.strategies.sdca.cycle_windows import SdcaCycleWindows
-from digiquant.strategies.sdca.indicator_catalog import (
+from digiquant.strategies.lab.backtest import run_backtest
+from digiquant.strategies.lab.composite_risk import IndicatorWeight
+from digiquant.strategies.lab.curve import AccumDistCurve
+from digiquant.strategies.lab.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.curve_sim import evaluate_sdca_trial_curve_sim
+from digiquant.strategies.lab.cycle_windows import SdcaCycleWindows
+from digiquant.strategies.lab.indicator_catalog import (
     EXTRA_INDICATOR_NAMES,
     SdcaCompositeWeights,
     extra_indicators_for_window,
     indicator_display_name,
     missing_extra_names,
 )
-from digiquant.strategies.sdca.optimize import (
+from digiquant.strategies.lab.optimize import (
     SDCA_SHAPE_DEFAULTS,
     SdcaWalkForwardResult,
     btc_power_law_rails_fitter,
     load_sdca_extra_z,
     load_sdca_ohlcv,
 )
-from digiquant.strategies.sdca.risk_index import build_risk_index
-from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.two_stage import (
+from digiquant.strategies.lab.risk_index import build_risk_index
+from digiquant.strategies.lab.risk_model import RiskModel
+from digiquant.strategies.lab.two_stage import (
     persist_two_stage,
     run_stage_b_frozen,
     stage_b_trials,
 )
-from digiquant.strategies.sdca.walk_forward import (
+from digiquant.strategies.lab.walk_forward import (
     FoldScore,
     RailsFitter,
     SdcaOptimizeObjective,
@@ -59,7 +59,7 @@ from digiquant.strategies.sdca.walk_forward import (
     shape_from_params,
     window_slice,
 )
-from digiquant.strategies.sdca.weight_search import (
+from digiquant.strategies.lab.weight_search import (
     optimize_stage_1_survivor_weights,
     search_names_with_data,
 )
@@ -592,7 +592,7 @@ def _cli(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--out-dir",
         type=Path,
-        default=Path("digiquant/src/digiquant/strategies/sdca"),
+        default=Path("digiquant/src/digiquant/strategies/lab"),
         help="Provenance sidecar directory",
     )
     parser.add_argument(

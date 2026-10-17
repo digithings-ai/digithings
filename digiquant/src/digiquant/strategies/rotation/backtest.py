@@ -4,7 +4,7 @@ Long-only top-N sleeves from ``RsRanker``, absolute-strength cash gate, optional
 ``risk_on`` overlay from the macro-liquidity regime (#1085). Reports vs
 equal-weight and buy-&-hold — **not** a published ``BacktestResult``.
 NautilusTrader remains the sole published engine; this harness pins allocation
-math the same way ``strategies/sdca/backtest.py`` and
+math the same way ``strategies/lab/backtest.py`` and
 ``indicators.macro_liquidity.backtest_regime_gate`` do.
 """
 

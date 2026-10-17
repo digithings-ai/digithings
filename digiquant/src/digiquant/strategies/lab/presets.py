@@ -16,8 +16,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter, field_validator, model_validator
 
-from digiquant.strategies.sdca.curve import RISK_NODES
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.curve import RISK_NODES
+from digiquant.strategies.lab.curve_shape import SdcaCurveShape
 
 _PRESETS_PATH = Path(__file__).parent / "presets.json"
 

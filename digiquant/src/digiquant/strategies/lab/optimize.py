@@ -21,8 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.data.loader import load_ohlcv_csv
 from digiquant.models import OptimizeResult
-from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, fit_btc_power_law
-from digiquant.strategies.sdca.indicator_catalog import (
+from digiquant.strategies.lab.btc_power_law import BtcPowerLawRiskModel, fit_btc_power_law
+from digiquant.strategies.lab.indicator_catalog import (
     ExtraIndicatorSources,
     SdcaCompositeWeights,
     composite_weights_from_params,
@@ -31,9 +31,9 @@ from digiquant.strategies.sdca.indicator_catalog import (
     load_date_value_frame,
     missing_extra_names,
 )
-from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec, price_oscillator_z_vectors
-from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.walk_forward import (
+from digiquant.strategies.lab.price_oscillators import SdcaOscillatorSpec, price_oscillator_z_vectors
+from digiquant.strategies.lab.risk_model import RiskModel
+from digiquant.strategies.lab.walk_forward import (
     SENSITIVITY_SPIKE_PCT,
     FoldScore,
     RailsFitter,

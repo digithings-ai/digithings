@@ -23,7 +23,7 @@ halts the whole backtest with ``AccountBalanceNegative`` (published
 
 Usage:
     import polars as pl
-    from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategyConfig, SdcaStrategy
+    from digiquant.strategies.lab.nautilus_strategy import SdcaStrategyConfig, SdcaStrategy
 
     pl.DataFrame({"date": dates, "risk": risk}).write_parquet("/tmp/sdca_risk.parquet")
 
@@ -58,9 +58,9 @@ from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.trading.strategy import Strategy
 
+from digiquant.strategies.lab.backtest import size_trade
+from digiquant.strategies.lab.curve import DEFAULT_BTC_NODES, RISK_NODES, AccumDistCurve
 from digiquant.strategies.registry import register
-from digiquant.strategies.sdca.backtest import size_trade
-from digiquant.strategies.sdca.curve import DEFAULT_BTC_NODES, RISK_NODES, AccumDistCurve
 
 
 class SdcaStrategyConfig(StrategyConfig, frozen=True):

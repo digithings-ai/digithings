@@ -14,13 +14,13 @@ from datetime import date
 
 import polars as pl
 
-from digiquant.strategies.sdca.backtest import run_backtest
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight
-from digiquant.strategies.sdca.curve import AccumDistCurve
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
-from digiquant.strategies.sdca.risk_index import build_risk_index
-from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.walk_forward import SdcaTrialMetrics
+from digiquant.strategies.lab.backtest import run_backtest
+from digiquant.strategies.lab.composite_risk import IndicatorWeight
+from digiquant.strategies.lab.curve import AccumDistCurve
+from digiquant.strategies.lab.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.risk_index import build_risk_index
+from digiquant.strategies.lab.risk_model import RiskModel
+from digiquant.strategies.lab.walk_forward import SdcaTrialMetrics
 
 DEFAULT_TRIAL_CASH = 100_000.0
 

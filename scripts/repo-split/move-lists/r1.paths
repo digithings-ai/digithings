@@ -3,7 +3,7 @@
 # noted in README, not a path); test-nautilus.yml dropped (global rule, mapped in DIG-3605).
 # Verified present at github/develop d227b6ed5 (2026-10-14). One path per line.
 # Directories keep the whole subtree; files are exact.
-digiquant/src/digiquant/strategies/sdca
+digiquant/src/digiquant/strategies/lab
 digiquant/src/digiquant/strategies/slapper.py
 digiquant/src/digiquant/strategies/m2_liquidity.py
 digiquant/src/digiquant/strategies/rotation

@@ -23,17 +23,17 @@ from nautilus_trader.model.objects import Money
 from nautilus_trader.persistence.wranglers import BarDataWrangler
 from nautilus_trader.test_kit.providers import TestInstrumentProvider
 
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
-from digiquant.strategies.sdca.dca_metrics import (
+from digiquant.strategies.lab.composite_risk import IndicatorWeight
+from digiquant.strategies.lab.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.dca_metrics import (
     breakdown_from_daily,
     daily_state_from_fills,
     fills_from_nautilus_report,
 )
-from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
-from digiquant.strategies.sdca.risk_index import build_risk_index, write_risk_index
-from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.walk_forward import SdcaTrialMetrics, max_drawdown_magnitude_pct
+from digiquant.strategies.lab.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+from digiquant.strategies.lab.risk_index import build_risk_index, write_risk_index
+from digiquant.strategies.lab.risk_model import RiskModel
+from digiquant.strategies.lab.walk_forward import SdcaTrialMetrics, max_drawdown_magnitude_pct
 
 DEFAULT_TRIAL_CASH = 100_000.0
 

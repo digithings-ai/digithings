@@ -14,24 +14,24 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.data.prices.history_cache import DEFAULT_CACHE_DIR, load_cached
 from digiquant.paths import canonicalize_path
-from digiquant.strategies.sdca.asset_profile import (
+from digiquant.strategies.lab.asset_profile import (
     SdcaAssetProfile,
     daily_closes_from_cache,
     daily_closes_from_ohlcv,
     stage_a_search_names,
     technicals_from_ohlcv,
 )
-from digiquant.strategies.sdca.indicator_catalog import (
+from digiquant.strategies.lab.indicator_catalog import (
     ExtraIndicatorSources,
     SdcaCompositeWeights,
     extra_z_vectors,
     sources_from_optional_paths,
 )
-from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
-from digiquant.strategies.sdca.regularize import regularize_weights
-from digiquant.strategies.sdca.stage_a import CycleOverlapScore, optimize_stage_a_weights
-from digiquant.strategies.sdca.two_stage import freeze_weight_params
-from digiquant.strategies.sdca.valuation import valuation_z_score
+from digiquant.strategies.lab.providers import resolve_sdca_risk_model
+from digiquant.strategies.lab.regularize import regularize_weights
+from digiquant.strategies.lab.stage_a import CycleOverlapScore, optimize_stage_a_weights
+from digiquant.strategies.lab.two_stage import freeze_weight_params
+from digiquant.strategies.lab.valuation import valuation_z_score
 
 KNOWN_SDCA_PROFILES: tuple[str, ...] = ("btc_v1", "eth_research_v1")
 

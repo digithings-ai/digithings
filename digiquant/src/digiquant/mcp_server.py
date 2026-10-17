@@ -3190,7 +3190,7 @@ def create_mcp_server(
         since the fit requires at least 730 daily observations and a short bulk window
         would leave a cold cache short of that); ``refresh=False`` fits directly from
         whatever is already cached (useful when network access is unavailable). Persists
-        the fit to ``output_path`` (default: ``sdca/btc_power_law_coefficients.json``,
+        the fit to ``output_path`` (default: ``lab/btc_power_law_coefficients.json``,
         replacing the synthetic placeholder shipped with #1082 — pass an explicit
         ``output_path`` under a non-editable/read-only install where the package source
         tree isn't writable). Returns a JSON summary

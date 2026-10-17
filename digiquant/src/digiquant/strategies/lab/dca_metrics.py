@@ -28,7 +28,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.strategies.sdca.chart_series import (
+from digiquant.strategies.lab.chart_series import (
     allocated_pct,
     allocated_pct_series,
     cash_from_net_deployed,
@@ -36,7 +36,7 @@ from digiquant.strategies.sdca.chart_series import (
     fill_markers_from_daily,
     knees_from_preset,
 )
-from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
+from digiquant.strategies.lab.indicator_catalog import SdcaCompositeWeights
 from digiquant.tearsheet_data import TearsheetDcaBreakdown
 
 

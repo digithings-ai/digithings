@@ -9,9 +9,9 @@ from itertools import product
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
-from digiquant.strategies.sdca.cycle_windows import CycleKind, SdcaCycleWindows
-from digiquant.strategies.sdca.indicator_catalog import EXTRA_INDICATOR_NAMES, SdcaCompositeWeights
+from digiquant.strategies.lab.composite_risk import IndicatorWeight, compute_composite_risk
+from digiquant.strategies.lab.cycle_windows import CycleKind, SdcaCycleWindows
+from digiquant.strategies.lab.indicator_catalog import EXTRA_INDICATOR_NAMES, SdcaCompositeWeights
 
 ACCUMULATE_RISK_MAX = 35.0
 DISTRIBUTE_RISK_MIN = 80.0

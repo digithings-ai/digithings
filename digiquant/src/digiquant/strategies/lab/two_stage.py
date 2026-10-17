@@ -9,15 +9,15 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.strategies.sdca.cycle_windows import CycleWindow, SdcaCycleWindows
-from digiquant.strategies.sdca.indicator_catalog import WEIGHT_PARAM_BY_NAME, SdcaCompositeWeights
-from digiquant.strategies.sdca.optimize import (
+from digiquant.strategies.lab.cycle_windows import CycleWindow, SdcaCycleWindows
+from digiquant.strategies.lab.indicator_catalog import WEIGHT_PARAM_BY_NAME, SdcaCompositeWeights
+from digiquant.strategies.lab.optimize import (
     RAILS_PROTOCOL,
     SdcaWalkForwardResult,
     run_sdca_walk_forward,
 )
-from digiquant.strategies.sdca.regularize import regularize_curve_shape, regularize_weights
-from digiquant.strategies.sdca.walk_forward import (
+from digiquant.strategies.lab.regularize import regularize_curve_shape, regularize_weights
+from digiquant.strategies.lab.walk_forward import (
     RailsFitter,
     SdcaTrialEvaluator,
     shape_from_params,

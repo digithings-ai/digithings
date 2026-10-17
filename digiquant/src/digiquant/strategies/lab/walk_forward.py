@@ -22,13 +22,13 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
-from digiquant.strategies.sdca.indicator_catalog import (
+from digiquant.strategies.lab.composite_risk import IndicatorWeight
+from digiquant.strategies.lab.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.indicator_catalog import (
     composite_weights_from_params,
     extra_indicators_for_window,
 )
-from digiquant.strategies.sdca.risk_model import RiskModel
+from digiquant.strategies.lab.risk_model import RiskModel
 
 RailsFitter = Callable[[Sequence[date], Sequence[float]], RiskModel]
 

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from digiquant.strategies.sdca.quantile_rails import MIN_FIT_HISTORY_DAYS
+from digiquant.strategies.lab.quantile_rails import MIN_FIT_HISTORY_DAYS
 
 DEFAULT_ROLLING_WINDOW = 90
 _MIN_SAMPLES = 2

@@ -18,7 +18,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from digiquant.paths import canonicalize_path
-from digiquant.strategies.sdca.quantile_rails import (
+from digiquant.strategies.lab.quantile_rails import (
     LABEL_BY_QUANTILE,
     MIN_FIT_HISTORY_DAYS,
     QUANTILE_LABELS,

@@ -222,7 +222,7 @@ def optimize(
 @click.option(
     "--out-dir",
     type=click.Path(path_type=Path),
-    default=Path("digiquant/src/digiquant/strategies/sdca"),
+    default=Path("digiquant/src/digiquant/strategies/lab"),
     help="Provenance sidecar directory",
 )
 @click.option(

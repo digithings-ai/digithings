@@ -30,7 +30,7 @@ DEFAULT_CACHE_CANDIDATES = (
     REPO_ROOT / "data" / "price-history" / "BTC-USD.csv",
     Path("/workspace/data/price-history/BTC-USD.csv"),
 )
-SDCA_DIR = REPO_ROOT / "digiquant" / "src" / "digiquant" / "strategies" / "sdca"
+SDCA_DIR = REPO_ROOT / "digiquant" / "src" / "digiquant" / "strategies" / "lab"
 DEFAULT_COEFF_CANDIDATES = (
     Path("/tmp/sdca-research/btc_power_law_coefficients.json"),
     SDCA_DIR / "btc_power_law_coefficients.json",

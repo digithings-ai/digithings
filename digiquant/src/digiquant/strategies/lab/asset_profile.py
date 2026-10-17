@@ -19,17 +19,17 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from digiquant.data.prices.history_cache import load_cached
-from digiquant.strategies.sdca.cycle_windows import SdcaCycleWindows
-from digiquant.strategies.sdca.indicator_catalog import (
+from digiquant.strategies.lab.cycle_windows import SdcaCycleWindows
+from digiquant.strategies.lab.indicator_catalog import (
     BTC_PLUGIN_INDICATOR_NAMES,
     GENERIC_TECHNICAL_NAMES,
     SdcaCompositeWeights,
 )
-from digiquant.strategies.sdca.price_oscillators import (
+from digiquant.strategies.lab.price_oscillators import (
     SdcaOscillatorSpec,
     price_oscillator_z_vectors,
 )
-from digiquant.strategies.sdca.providers import SdcaRiskModelName
+from digiquant.strategies.lab.providers import SdcaRiskModelName
 
 
 class SdcaAssetProfile(BaseModel):

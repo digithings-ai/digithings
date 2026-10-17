@@ -49,7 +49,7 @@ RULES: list[tuple[str, str, str]] = [
         "GHA exit (DIG-3605): workflows move to local-ci/Cloudflare cron, never to a private repo",
     ),
     # ---- R1: proprietary strategies + optimiser ----
-    ("digiquant/src/digiquant/strategies/sdca/", "R1", "proprietary SDCA strategy"),
+    ("digiquant/src/digiquant/strategies/lab/", "R1", "proprietary SDCA strategy"),
     ("digiquant/src/digiquant/strategies/rotation/", "R1", "proprietary rotation strategy"),
     ("digiquant/src/digiquant/strategies/pinescript/", "R1", "proprietary pinescript strategies"),
     ("digiquant/src/digiquant/strategies/slapper.py", "R1", "proprietary slapper strategy"),

@@ -21,7 +21,7 @@ days (~395) before ``regime_score`` is non-null.
 The gate backtest (``backtest_regime_gate``) is a CI-only long-vs-cash harness
 for documenting whether the gate helps vs always-invested — **not** a
 published ``BacktestResult`` and not a Nautilus path (same CI-parity exception
-as ``strategies/sdca/backtest.py``).
+as ``strategies/lab/backtest.py``).
 """
 
 from __future__ import annotations
