@@ -1387,3 +1387,60 @@ Removing `benchmark_max_drawdown_pct=abs(report.buy_hold_max_drawdown_pct) * 100
 directly, and there is no `test_curve_sim.py`. Its receipt is the live gate run above. One
 case asserting `benchmark_max_drawdown_pct == max_drawdown_magnitude_pct(prices)` would
 close it.
+
+## The valuation ceiling is monotone (2026-10-18)
+
+### The defect: a free quadratic per rail, and every one of them bends down
+Each of the seven valuation rails was fitted independently as `10 ** (c + a*u + b*u**2)` with
+`u = ln(days since genesis) - mu` -- a free parabola in centred log-time. All seven fitted `b`
+were negative, and `q95` carried the most negative of the seven. Measured on the previously
+checked-in coefficients: the q95 ceiling peaked **2025-11-08** and fell from there
+113,367 -> 111,226 (2026-10-16) -> 99,322 (2028) -> 55,424 (2032), while on the all-time-high close
+of 2025-10-06 (124,720.09) the q95 rail read 113,367 and even q99 read only 121,173. A ceiling
+below the asset's own ATH makes `valuation_z_score` divide by a shrinking
+`log(high) - log(median)`, which pins the risk index toward the sell band.
+
+**The regression itself is faithful**: in-sample coverage over the 4059 fit rows landed within
+0.1pp of every quantile target (q01 1.03%, q10 10.05%, q25 25.03%, q50 50.01%, q75 74.97%,
+q95 94.95%, q99 98.97%). The functional form is the defect, not the fit.
+
+### The fix: an explicit linear design for the upper three rails
+`fit_btc_power_law` gained `linear_quantiles: tuple[str, ...] = ()` and fits those labels with the
+two-column design, so `b = 0` and the rail is monotone by construction.
+`MONOTONE_QUANTILE_LABELS = ("q75", "q95", "q99")` records the decision, the default stays `()`
+(the historical all-quadratic behaviour), and `btc_power_law_rails_fitter` opts in so the
+walk-forward refits carry it as well as the checked-in coefficients. Those were re-fitted on the
+same window (2015-07-20 -> 2026-08-29, 4059 rows); the four lower quantiles came out bit-identical
+and the `notes` field now records the constraint and both coverage vectors.
+
+### Measured effect
+- **Calibration cost <= 0.02pp**: q75 0.7497 -> 0.7499, q95 0.9495 -> 0.9497 (q01..q50 unchanged).
+- **Monotonicity**: before, all seven rails fell over a forward sweep; after, only the four
+  deliberately-quadratic ones do. The ceiling the user flagged no longer slopes down.
+- **The linear ceiling's own cost, stated rather than hidden**: a pure power law with a ~ 1.76-2.24
+  extrapolates hard -- q95 reads 197,898 at 2026-10-16 and 3.07M by 2040 -- and the three upper
+  rails reconcile onto one another far out (147/148 horizon rows carry raw crossings, clamped by
+  `rearrange_non_crossing`). `low < median < high` still holds on every row of an 11-year sweep.
+- A fully coherent family beyond that needs the all-linear or `b >= 0` variant (option (b)/(c)),
+  which is a follow-up decision, not part of this change.
+
+### Downstream: the gate re-measured
+Same harness, same data, before -> after: candidate `mean_oos_vs_flat_dca_pct` **18.48 -> 77.49**,
+baseline **-5.79 -> 29.37**, delta **24.28 -> 48.12** (`beats_baseline_oos` true both times).
+Folds 0 and 2 are byte-identical (dd 61.42 / 37.03, vs_flat -1.61 / +16.73) -- the change binds
+only where the ceiling was binding. **Fold 1 (oos 2020-01-17..2022-04-16) is where everything
+moved**: candidate vs_flat 40.33 -> 217.33, baseline -12.31 -> 93.17. And
+**`holdout_traded` flipped false -> true on both sides**: the holdout that was measured dead
+(no trades, byte-identical metrics) now trades and now discriminates -- candidate
+`vs_flat_dca_pct` +9.53 vs baseline **+32.41**, i.e. on the holdout the naive risk50-linear
+baseline beats the optimized curve. Sensitivity: candidate stays unstable (40 neighbours),
+the baseline turned unstable too.
+
+A large OOS move produced by a model change is a re-measurement, not a performance discovery:
+the constraint changed how the valuation index reads "expensive", and fold 1 is where that binds.
+
+### Pins and proof
+Five new tests: the checked-in file constrains only the ceiling; upper rails never fall over a
+forward horizon; reconciled rails stay ordered; the constraint applies to the named quantiles only;
+an unknown label raises. Mutation proof: 4 of 4 killed -- including reverting the shipped
+coefficients, which kills both the `b == 0` pin and the monotonicity pin.
