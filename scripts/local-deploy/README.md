@@ -102,3 +102,39 @@ LOCAL_DEPLOY_APPROVED_BY=Chris \
 bash scripts/local-deploy/publish_image.sh digichat --ref develop
 bash scripts/local-deploy/publish_image.sh digillm --tag digillm-v0.2.0
 ```
+
+## Per-service releases: one train, one tag per surface
+
+`release/vX.Y.Z` is the release **train** — the ref carrying a promoted set of
+changes for every service at once. Each deployable surface also gets its own
+**annotated tag on that train**, so what a single service was released as stays
+visible and returnable:
+
+```
+dashboard-api-v0.2.0                  digiquant-runner-v0.2.0
+digichat-cloudflare-v0.2.0            digithings-cron-v0.2.0
+digidata-api-v0.2.0                   digithings-stack-cloudflare-v0.2.0
+digithings-web-v0.2.0                 twelvex-runner-v0.2.0
+dashboard-v0.2.0          (Pages)     digichat-v0.2.0          (Pages)
+digiquant-web-v0.2.0      (Pages)     digiquant-app-v0.2.0     (Pages)
+```
+
+Updating ONE service is then:
+
+```sh
+git fetch github --tags
+git checkout -B deploy/<surface> <surface>-v0.2.0
+scripts/local-deploy/deploy_worker.sh <surface> --live
+```
+
+**Why tags and not a branch per service.** The repository's branch taxonomy
+(`scripts/hooks/pre-push.sh`, mirrored in `scripts/github-rulesets/01-branch-naming.json`
+and pinned in sync by `tests/scripts/test_branch_taxonomy_release_please.sh`) admits
+only `release/vX.Y.Z` in the release namespace, and these are monorepo services — a
+long-lived branch per service would have to replicate every change to a shared
+package. **Tags are exempt from the branch taxonomy** (the hook polices `refs/heads/`
+only), so this needs no governance change at all.
+
+The `<surface>-v0.2.0` tags sit on the *release-train* axis deliberately: they cannot
+collide with release-please's `<component>-v<semver>` lineage (e.g. `digichat-v2.4.0`),
+which release-please owns and which must not be pre-empted by hand.
