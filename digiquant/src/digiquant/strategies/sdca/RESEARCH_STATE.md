@@ -1286,3 +1286,50 @@ object, so this is the real behaviour.
 - **Open decisions:** whether to accept an informational holdout for BTC or move
   to a rolling holdout; and whether to guard the rails degeneracy explicitly
   (not done — that would be an unrequested modelling change).
+
+## Selection drops infeasible folds while the headline averages over them (2026-10-18)
+
+`run_sdca_walk_forward` ranks trials with `_trial_oos_objective`, which keeps only those
+fold scores whose out-of-sample leg satisfies `SdcaOptimizeObjective`
+(`capital_deployed_floor_pct = 10.0`, `max_drawdown_cap_pct = 50.0`). The reported
+`mean_oos_vs_flat_dca_pct` is averaged over ALL folds. When a fold is dropped, the
+headline therefore covers a window the search was not allowed to optimise, and two
+candidates can be ranked on different fold subsets.
+
+### The live btc_optimized numbers (gate driver, 2026-10-18)
+
+| fold | OOS window | candidate max_dd | candidate vs_flat | feasible |
+|---|---|---|---|---|
+| 0 | 2017-10-18..2020-01-16 | 61.42 | -1.61% | **no** |
+| 1 | 2020-01-17..2022-04-16 | 14.02 | +40.33% | yes |
+| 2 | 2022-04-17..2024-07-15 | 37.03 | +16.73% | yes |
+
+The baseline `risk50_linear` breaches the same fold: fold 0 max_dd 63.40, vs_flat -4.10%,
+also infeasible; its folds 1 and 2 are feasible at 29.93 and 48.39.
+
+- The reported `mean_oos_vs_flat_dca_pct = 18.48409443050952` is
+  (-1.6053856999369676 + 40.32725754845401 + 16.730411443011505)/3 exactly.
+- The selection basis is (40.32725754845401 + 16.730411443011505)/2 = 28.52883449573276.
+
+### The cap sits below the asset's own drawdown in every window
+
+BTC-USD close-to-close peak-to-trough: fold 0 83.80%, fold 1 53.17%, fold 2 62.03%,
+holdout 53.08% (whole series 83.80%). A 50% cap is therefore under the benchmark's own
+drawdown everywhere in this series, so the veto is not discriminating between curves --
+it is dead precisely where it fires hardest. It still bites on fold 2 (baseline 48.39
+against a cap of 50).
+
+### What shipped
+
+`SdcaWalkForwardResult.selection_excluded_folds` records the dropped fold indices;
+`SdcaOptimizeProvenance.selection_excluded_folds` records them in the sidecar (`None`
+means "written before the field existed", which is not the same claim as `[]`); the
+`OptimizeResult.message` reports them.
+
+### Open decisions
+
+1. Raise `max_drawdown_cap_pct` (~65-70 makes fold 0 feasible for both sides), or make it
+   window-relative (k x the benchmark's own drawdown for that window). The value is a risk
+   rail and a policy number.
+2. Or fail a trial that has any infeasible fold -- honest, but it zeroes every candidate
+   on today's cap.
