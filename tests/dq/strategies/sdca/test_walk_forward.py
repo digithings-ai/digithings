@@ -14,6 +14,7 @@ from digiquant.strategies.sdca.walk_forward import (
     SdcaTrialMetrics,
     WalkForwardFold,
     duration_weighted_mean,
+    effective_drawdown_cap_pct,
     is_feasible,
     make_walk_forward_folds,
     max_drawdown_magnitude_pct,
@@ -357,3 +358,58 @@ class TestMidTierParamsReachTheGate:
         assert neighbors
         assert any(n["buy_max_rate"] != params["buy_max_rate"] for n in neighbors)
         assert all(n["buy_mid_knee_risk"] is None for n in neighbors)
+
+
+class TestWindowRelativeDrawdownCap:
+    """The cap may be a multiple of the benchmark's own drawdown for the window."""
+
+    def _metrics(
+        self, max_drawdown_pct: float, benchmark: float | None = None
+    ) -> SdcaTrialMetrics:
+        return SdcaTrialMetrics(
+            vs_flat_dca_pct=1.0,
+            vs_lump_pct=0.0,
+            capital_deployed_pct=40.0,
+            capital_deployed_peak_pct=40.0,
+            max_drawdown_pct=max_drawdown_pct,
+            benchmark_max_drawdown_pct=benchmark,
+        )
+
+    def test_an_unreported_benchmark_restores_the_absolute_cap(self) -> None:
+        # Every synthetic evaluator omits the field, so this is the arm the rest of the
+        # suite runs on, and it must be exactly the old behaviour.
+        obj = SdcaOptimizeObjective()
+        assert obj.max_drawdown_cap_relative_k == 1.0
+        assert effective_drawdown_cap_pct(self._metrics(10.0), obj) == 50.0
+        assert not is_feasible(self._metrics(60.0), obj)
+
+    def test_a_larger_benchmark_relaxes_the_cap_to_k_times_it(self) -> None:
+        # fold 0 on the live index: the strategy drew down 61.42% while buy-and-hold
+        # drew down 83.80%, which the fixed 50% cap rejected.
+        obj = SdcaOptimizeObjective()
+        metrics = self._metrics(61.42486506472665, benchmark=83.80)
+        assert effective_drawdown_cap_pct(metrics, obj) == pytest.approx(83.80)
+        assert is_feasible(metrics, obj)
+
+    def test_the_rail_still_rejects_a_curve_worse_than_the_benchmark(self) -> None:
+        obj = SdcaOptimizeObjective()
+        assert not is_feasible(self._metrics(90.0, benchmark=83.80), obj)
+
+    def test_a_smaller_benchmark_leaves_the_absolute_cap_in_force(self) -> None:
+        # The absolute cap is a floor on the allowance: a calm window cannot make the
+        # rail stricter than the stated cap.
+        obj = SdcaOptimizeObjective()
+        assert effective_drawdown_cap_pct(self._metrics(10.0, benchmark=20.0), obj) == 50.0
+
+    def test_k_none_disables_the_relative_term(self) -> None:
+        obj = SdcaOptimizeObjective(max_drawdown_cap_relative_k=None)
+        metrics = self._metrics(61.42, benchmark=83.80)
+        assert effective_drawdown_cap_pct(metrics, obj) == 50.0
+        assert not is_feasible(metrics, obj)
+
+    def test_a_smaller_k_can_still_reject_the_benchmark_curve(self) -> None:
+        # k = 0.75 admits 61.42% (against 0.75 x 83.80 = 62.85) but still rejects the
+        # naive risk50-linear baseline's 63.40%.
+        obj = SdcaOptimizeObjective(max_drawdown_cap_relative_k=0.75)
+        assert is_feasible(self._metrics(61.42486506472665, benchmark=83.80), obj)
+        assert not is_feasible(self._metrics(63.400107663244974, benchmark=83.80), obj)

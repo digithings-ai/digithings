@@ -69,6 +69,7 @@ def evaluate_sdca_trial_curve_sim(
         capital_deployed_pct=report.capital_deployed_pct,
         capital_deployed_peak_pct=report.capital_deployed_peak_pct,
         max_drawdown_pct=abs(report.dca_max_drawdown_pct) * 100.0,
+        benchmark_max_drawdown_pct=abs(report.buy_hold_max_drawdown_pct) * 100.0,
     )
 
 

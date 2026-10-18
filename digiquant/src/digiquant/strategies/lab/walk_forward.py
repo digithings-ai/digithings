@@ -49,6 +49,19 @@ class SdcaOptimizeObjective(BaseModel):
 
     capital_deployed_floor_pct: float = Field(10.0, ge=0.0, le=100.0)
     max_drawdown_cap_pct: float = Field(50.0, gt=0.0, le=100.0)
+    max_drawdown_cap_relative_k: float | None = Field(
+        default=1.0,
+        gt=0.0,
+        description=(
+            "Multiple of the window's own buy-and-hold drawdown used as an "
+            "additional drawdown allowance: the effective cap is "
+            "max(max_drawdown_cap_pct, k * benchmark_max_drawdown_pct) whenever the "
+            "evaluator reports a benchmark drawdown. 1.0 means a window may draw "
+            "down as much as simply holding the asset did. None disables the "
+            "relative term. The absolute cap is always the floor of the allowance, "
+            "so this can only relax the rail."
+        ),
+    )
 
 
 class WalkForwardFold(BaseModel):
@@ -90,6 +103,15 @@ class SdcaTrialMetrics(BaseModel):
     max_drawdown_pct: float = Field(
         ...,
         description="Drawdown as a ×100 percent magnitude (15.0 = 15% peak-to-trough)",
+    )
+    benchmark_max_drawdown_pct: float | None = Field(
+        default=None,
+        description=(
+            "The same window's lump-sum (buy-and-hold) drawdown magnitude, ×100, "
+            "when the evaluator measures it. Feeds the window-relative drawdown "
+            "allowance in ``effective_drawdown_cap_pct``; None (no measurement) "
+            "falls back to the absolute cap."
+        ),
     )
 
 
@@ -343,6 +365,25 @@ def duration_weighted_mean(
     return weighted_sum / total_weight
 
 
+def effective_drawdown_cap_pct(
+    metrics: SdcaTrialMetrics, objective: SdcaOptimizeObjective
+) -> float:
+    """Drawdown allowance for one window, in percent.
+
+    The absolute ``max_drawdown_cap_pct`` is a floor on the allowance. When the
+    window reports the benchmark's own (buy-and-hold) drawdown and the objective
+    sets ``max_drawdown_cap_relative_k``, a window where the market itself drew
+    down more than that floor allows ``k`` times the benchmark drawdown instead
+    of vetoing every strategy that participated at all. A window that does not
+    report a benchmark drawdown keeps the absolute rail.
+    """
+    k = objective.max_drawdown_cap_relative_k
+    benchmark = metrics.benchmark_max_drawdown_pct
+    if k is None or benchmark is None:
+        return objective.max_drawdown_cap_pct
+    return max(objective.max_drawdown_cap_pct, k * benchmark)
+
+
 def is_feasible(metrics: SdcaTrialMetrics, objective: SdcaOptimizeObjective) -> bool:
     """Capital-deployed floor (on peak) and drawdown cap. Drawdown is a positive magnitude.
 
@@ -352,7 +393,7 @@ def is_feasible(metrics: SdcaTrialMetrics, objective: SdcaOptimizeObjective) -> 
     """
     if metrics.capital_deployed_peak_pct < objective.capital_deployed_floor_pct:
         return False
-    if metrics.max_drawdown_pct > objective.max_drawdown_cap_pct:
+    if metrics.max_drawdown_pct > effective_drawdown_cap_pct(metrics, objective):
         return False
     return True
 
