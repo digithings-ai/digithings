@@ -102,12 +102,31 @@ class BtcPowerLawCoefficients(BaseModel):
         return v
 
 
+# Upper rails are fit with the LINEAR design (b = 0) instead of the quadratic.
+#
+# A free quadratic in centred log-time is downward-opening when b < 0, so an upper
+# rail rises to a vertex and then FALLS: the ceiling slopes down over time and can
+# drop below the observed all-time high. Measured on the 2015-07-20..2026-08-29 fit:
+# all seven b were negative, q95 was the most negative of the seven, its ceiling
+# peaked on 2025-11-08, and by 2026-10-16 the q95 rail (111,226) sat BELOW the
+# close ATH (124,720.09 on 2025-10-06). The whole family is a set of parabolas with
+# vertices spread from 2025 (q95) to 2077 (q01).
+#
+# Nothing else in the fit constrains monotonicity, and `rearrange_non_crossing` only
+# repairs quantiles crossing EACH OTHER — it cannot stop a ceiling bending down. So
+# the upper rails are fit without the quadratic term, which makes them monotone by
+# construction. Pass this to `fit_btc_power_law` at production call sites; the
+# library default stays unconstrained so synthetic-recovery tests are unaffected.
+MONOTONE_QUANTILE_LABELS: tuple[str, ...] = ("q75", "q95", "q99")
+
+
 def fit_btc_power_law(
     dates: pl.Series,
     price: pl.Series,
     *,
     genesis: date = BTC_GENESIS_DATE,
     notes: str = "",
+    linear_quantiles: tuple[str, ...] = (),
 ) -> BtcPowerLawCoefficients:
     """Fit the 7 quantile power-law curves from BTC daily close history.
 
@@ -116,6 +135,11 @@ def fit_btc_power_law(
     ``price`` must be non-null, finite, and positive. Raises ``ValueError`` with
     the reason on any violation, including too little history (see
     ``MIN_FIT_HISTORY_DAYS``) — the data-sufficiency guard #1082 asks for.
+
+    ``linear_quantiles`` names the quantile labels to fit with the linear design
+    (``b = 0``), which makes those rails monotone instead of parabolic. Production
+    callers pass :data:`MONOTONE_QUANTILE_LABELS`; the empty default reproduces the
+    historical all-quadratic fit exactly.
     """
     if dates.dtype != pl.Date:
         raise ValueError(f"fit_btc_power_law requires dates to be pl.Date, got {dates.dtype}")
@@ -174,10 +198,18 @@ def fit_btc_power_law(
     mu = float(raw_x.mean())
     x = raw_x - mu
     y = np.log10(np.array(price.to_list(), dtype=float))
-    design = np.column_stack([np.ones_like(x), x, x**2])
+    unknown_linear = sorted(set(linear_quantiles) - set(QUANTILE_LABELS))
+    if unknown_linear:
+        raise ValueError(
+            f"fit_btc_power_law: linear_quantiles must be quantile labels "
+            f"{QUANTILE_LABELS}, got {unknown_linear}"
+        )
+    design_quadratic = np.column_stack([np.ones_like(x), x, x**2])
+    design_linear = design_quadratic[:, :2]
 
     quantile_coeffs: dict[str, QuantileCoefficients] = {}
     for q, label in zip(QUANTILES, QUANTILE_LABELS, strict=True):
+        design = design_linear if label in linear_quantiles else design_quadratic
         # QuantReg.fit's IRLS solver never raises on non-convergence — it silently
         # returns whatever `beta` the loop was on at max_iter (or mid-cycle), with
         # only a warnings.warn(IterationLimitWarning/ConvergenceWarning) as the
@@ -195,7 +227,12 @@ def fit_btc_power_law(
                 f"fit_btc_power_law: QuantReg failed to converge for quantile {q} "
                 f"({label}): {non_convergence[0].message}"
             )
-        c, a, b = (float(v) for v in result.params)
+        if label in linear_quantiles:
+            # Two-parameter design: store the linear fit's own shape, b is not fitted.
+            c, a = (float(v) for v in result.params)
+            b = 0.0
+        else:
+            c, a, b = (float(v) for v in result.params)
         quantile_coeffs[label] = QuantileCoefficients(c=c, a=a, b=b)
 
     return BtcPowerLawCoefficients(

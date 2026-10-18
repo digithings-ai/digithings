@@ -486,3 +486,91 @@ class TestRailsCrossingReconciliation:
 
         reconciled = rearrange_non_crossing(raw)
         np.testing.assert_allclose(reconciled, np.sort(raw, axis=1))
+
+
+class TestMonotoneUpperRails:
+    """Option (a): the ceiling must not fall. q75/q95/q99 are fit with b = 0.
+
+    Measured before the fix: every one of the seven rails was a free quadratic in
+    centred log-time with b < 0, so the q95 ceiling peaked 2025-11-08 and fell
+    afterwards (113.4k -> 55.4k by 2032), sitting below the 2024-2025 all-time high.
+    The constraint is opt-in so the historical all-quadratic fit stays reproducible.
+    """
+
+    @staticmethod
+    def _horizon(start: date = date(2026, 10, 16), n: int = 44) -> pl.Series:
+        return pl.Series(
+            "date",
+            [start + timedelta(days=90 * i) for i in range(n)],
+            dtype=pl.Date,
+        )
+
+    def test_checked_in_coefficients_constrain_only_the_ceiling(self) -> None:
+        from digiquant.strategies.sdca.btc_power_law import (
+            MONOTONE_QUANTILE_LABELS,
+            load_coefficients,
+        )
+
+        coeffs = load_coefficients()
+        for label in MONOTONE_QUANTILE_LABELS:
+            assert coeffs.quantiles[label].b == 0.0, label
+        # Option (a) deliberately leaves the lower rails quadratic.
+        for label in ("q01", "q10", "q25", "q50"):
+            assert coeffs.quantiles[label].b != 0.0, label
+
+    def test_upper_rails_never_fall_over_a_forward_horizon(self) -> None:
+        from digiquant.strategies.sdca.btc_power_law import (
+            MONOTONE_QUANTILE_LABELS,
+            _evaluate_rails,
+            load_coefficients,
+        )
+
+        frame = _evaluate_rails(load_coefficients(), self._horizon())
+        for label in MONOTONE_QUANTILE_LABELS:
+            values = frame[label].to_list()
+            falls = [i for i in range(1, len(values)) if values[i] < values[i - 1]]
+            assert not falls, f"{label} falls at rows {falls[:3]}"
+
+    def test_reconciled_rails_stay_ordered_over_the_horizon(self) -> None:
+        from digiquant.strategies.sdca.btc_power_law import (
+            BtcPowerLawRiskModel,
+            load_coefficients,
+        )
+
+        horizon = self._horizon()
+        # ``rails()`` returns only low/median/high (no date column), so pair each row
+        # with the horizon date we asked for — the frame is in the same row order.
+        frame = BtcPowerLawRiskModel(load_coefficients()).rails(horizon)
+        bad = [
+            day
+            for day, lo, med, hi in zip(
+                horizon.to_list(),
+                frame["low"].to_list(),
+                frame["median"].to_list(),
+                frame["high"].to_list(),
+                strict=True,
+            )
+            if not (lo < med < hi)
+        ]
+        assert bad == []
+
+    def test_fit_applies_the_constraint_to_the_named_quantiles_only(self) -> None:
+        from digiquant.strategies.sdca.btc_power_law import (
+            MONOTONE_QUANTILE_LABELS,
+            fit_btc_power_law,
+        )
+
+        dates, price = _synthetic_series(median_log10=(3.5, 2.0, 0.3))
+        coeffs = fit_btc_power_law(dates, price, linear_quantiles=MONOTONE_QUANTILE_LABELS)
+        for label in MONOTONE_QUANTILE_LABELS:
+            assert coeffs.quantiles[label].b == 0.0, label
+        # Quadratic-truth data: the unconstrained median still fits a quadratic, so a
+        # zero here would mean the constraint leaked onto a quantile it must not touch.
+        assert coeffs.quantiles["q50"].b != 0.0
+
+    def test_rejects_an_unknown_linear_quantile_label(self) -> None:
+        from digiquant.strategies.sdca.btc_power_law import fit_btc_power_law
+
+        dates, price = _synthetic_series()
+        with pytest.raises(ValueError, match="linear_quantiles"):
+            fit_btc_power_law(dates, price, linear_quantiles=("q42",))

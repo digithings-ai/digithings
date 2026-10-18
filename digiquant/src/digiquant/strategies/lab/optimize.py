@@ -21,7 +21,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.data.loader import load_ohlcv_csv
 from digiquant.models import OptimizeResult
-from digiquant.strategies.lab.btc_power_law import BtcPowerLawRiskModel, fit_btc_power_law
+from digiquant.strategies.lab.btc_power_law import (
+    MONOTONE_QUANTILE_LABELS,
+    BtcPowerLawRiskModel,
+    fit_btc_power_law,
+)
 from digiquant.strategies.lab.indicator_catalog import (
     ExtraIndicatorSources,
     SdcaCompositeWeights,
@@ -175,6 +179,7 @@ def btc_power_law_rails_fitter(dates: list[date], prices: list[float]) -> RiskMo
         pl.Series("date", list(dates), dtype=pl.Date),
         pl.Series("price", list(prices), dtype=pl.Float64),
         notes="walk-forward fold IS window (#3174); not full-history",
+        linear_quantiles=MONOTONE_QUANTILE_LABELS,
     )
     return BtcPowerLawRiskModel(coeffs)
 
