@@ -124,6 +124,15 @@ class SdcaWalkForwardResult(BaseModel):
             "carries no information -- read the OOS folds instead."
         ),
     )
+    selection_excluded_folds: list[int] = Field(
+        default_factory=list,
+        description=(
+            "Fold indices dropped from the selection objective because their "
+            "out-of-sample leg breached a feasibility rail. Candidates are ranked "
+            "on the remaining folds, so a non-empty list means mean_oos_* covers "
+            "folds that did not inform the search."
+        ),
+    )
     sensitivity: SensitivityReport
     num_evaluations: int = Field(ge=0)
     objective: SdcaOptimizeObjective
@@ -151,6 +160,9 @@ class SdcaOptimizeProvenance(BaseModel):
     mean_oos_vs_flat_dca_pct: float
     is_oos_gap_pct: float
     holdout_vs_flat_dca_pct: float | None
+    # None on sidecars written before the field existed -- "not recorded", which is not
+    # the same claim as [] ("every fold was eligible for selection").
+    selection_excluded_folds: list[int] | None = None
     beats_flat_dca_oos: bool
     sensitivity_stable: bool
     rails_protocol: str
@@ -459,6 +471,9 @@ def run_sdca_walk_forward(
     # ``None`` over any mid knee the candidate carried, and this drop is what makes that
     # override stick instead of leaking the candidate's mid tier into the comparator.
     best_params = {key: value for key, value in best_params.items() if value is not None}
+    # Selection keeps only feasible folds (see _trial_oos_objective) while the reported
+    # means average over all of them, so record which folds the search actually saw.
+    excluded_folds = [s.fold.fold for s in best_folds if not s.feasible]
 
     mean_is = _mean_is_for(best_folds, fold_weighting)
     mean_oos = _mean_oos_for(best_folds, fold_weighting)
@@ -494,6 +509,7 @@ def run_sdca_walk_forward(
         is_oos_gap_pct=mean_is - mean_oos,
         holdout_metrics=holdout_metrics,
         holdout_traded=holdout_traded,
+        selection_excluded_folds=excluded_folds,
         sensitivity=sensitivity,
         num_evaluations=evaluated,
         objective=obj,
@@ -645,6 +661,7 @@ def persist_btc_optimized(
         mean_oos_vs_flat_dca_pct=result.mean_oos_vs_flat_dca_pct,
         is_oos_gap_pct=result.is_oos_gap_pct,
         holdout_vs_flat_dca_pct=hold_vs,
+        selection_excluded_folds=list(result.selection_excluded_folds),
         beats_flat_dca_oos=result.beats_flat_dca_oos,
         sensitivity_stable=result.sensitivity.stable,
         rails_protocol=result.rails_protocol,
@@ -680,7 +697,8 @@ def walk_forward_to_optimize_result(
         f"{result.mean_oos_vs_flat_dca_pct:.4f} mean_is_vs_flat_dca_pct="
         f"{result.mean_is_vs_flat_dca_pct:.4f} gap={result.is_oos_gap_pct:.4f} "
         f"holdout_vs_flat_dca_pct={hold_txt} holdout_traded="
-        f"{result.holdout_traded} beats_flat_dca_oos="
+        f"{result.holdout_traded} selection_excluded_folds="
+        f"{result.selection_excluded_folds} beats_flat_dca_oos="
         f"{result.beats_flat_dca_oos} sensitivity_stable={result.sensitivity.stable}"
     )
     return OptimizeResult(

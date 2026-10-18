@@ -29,6 +29,7 @@ from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import (
     SdcaOptimizeObjective,
     SdcaTrialMetrics,
+    make_walk_forward_folds,
     sensitivity_neighbors,
 )
 from digiquant.strategy_specs import (
@@ -684,3 +685,78 @@ class TestHoldoutTradedFlag:
             self._result(0.0, 0.0), strategy_name="sdca", symbols=["BTC-USD"]
         )
         assert "holdout_traded=False" in envelope.message
+
+
+class TestSelectionFoldExclusion:
+    """A fold dropped from selection must be recorded, not silently averaged over."""
+
+    def _result(self, breach_oos_start: date | None) -> SdcaWalkForwardResult:
+        def _run(
+            dates: list[date],
+            prices: list[float],
+            risk_model: RiskModel,
+            shape: SdcaCurveShape,
+            valuation_weight: float,
+            extra_indicators=None,
+        ) -> SdcaTrialMetrics:
+            breach = breach_oos_start is not None and dates[0] == breach_oos_start
+            return SdcaTrialMetrics(
+                vs_flat_dca_pct=-5.0 if breach else 1.0,
+                vs_lump_pct=0.0,
+                capital_deployed_pct=100.0,
+                capital_deployed_peak_pct=100.0,
+                max_drawdown_pct=90.0 if breach else 10.0,
+            )
+
+        return run_sdca_walk_forward(
+            _dates(60),
+            [100.0 + i for i in range(60)],
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_run,
+            evaluator_label="synthetic_fixture",
+        )
+
+    def test_a_fold_that_breached_a_rail_is_recorded_as_excluded(self) -> None:
+        folds, _ = make_walk_forward_folds(_dates(60))
+        target = folds[0].oos_start
+        expected = [f.fold for f in folds if f.oos_start == target]
+        result = self._result(target)
+        assert expected, "fixture must breach at least one fold or the test is vacuous"
+        assert result.fold_scores[0].feasible is False
+        assert result.selection_excluded_folds == expected
+
+    def test_no_fold_is_excluded_when_every_fold_is_feasible(self) -> None:
+        result = self._result(None)
+        assert all(score.feasible for score in result.fold_scores)
+        assert result.selection_excluded_folds == []
+
+    def test_the_message_reports_the_excluded_folds(self) -> None:
+        folds, _ = make_walk_forward_folds(_dates(60))
+        vetoed = self._result(folds[0].oos_start)
+        assert vetoed.selection_excluded_folds, "fixture must exclude a fold"
+        envelope = walk_forward_to_optimize_result(
+            vetoed, strategy_name="sdca", symbols=["BTC-USD"]
+        )
+        rendered = f"selection_excluded_folds={vetoed.selection_excluded_folds}"
+        assert rendered in envelope.message
+        clean = walk_forward_to_optimize_result(
+            self._result(None), strategy_name="sdca", symbols=["BTC-USD"]
+        )
+        assert "selection_excluded_folds=[]" in clean.message
+
+    def test_the_provenance_records_the_excluded_folds(self, tmp_path: Path) -> None:
+        folds, _ = make_walk_forward_folds(_dates(60))
+        result = self._result(folds[0].oos_start)
+        presets_path = tmp_path / "presets.json"
+        presets_path.write_text(json.dumps({}))
+        provenance_path = tmp_path / "provenance.json"
+        persist_btc_optimized(
+            result,
+            presets_path=presets_path,
+            provenance_path=provenance_path,
+            notes="selection exclusion",
+        )
+        sidecar = json.loads(provenance_path.read_text())
+        assert result.selection_excluded_folds, "fixture must exclude a fold"
+        assert sidecar["selection_excluded_folds"] == result.selection_excluded_folds
