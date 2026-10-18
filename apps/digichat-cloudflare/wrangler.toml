@@ -12,15 +12,51 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
-# Zone routes moved to digithings-stack (cost epic: one DigiChat container, not two).
-# This worker stays deployable for rollback only: re-add the routes here AND remove
-# them from apps/digithings-stack-cloudflare/wrangler.toml to roll back.
-# Deleting the live digithings-digichat worker + its container app is a separate,
-# owner-approved step after the stack cutover is verified.
-# DIG-3585: this one route stays. A deploy of this worker without it deletes the
-# live /chat/occ binding and Pages serves the chat shell to everyone. The same
-# pattern is on apps/digithings-stack-cloudflare/wrangler.toml so a stack deploy
-# keeps the gate. Valid ?token= or the occ_invite cookie passes through to Pages.
+# ROUTE HOLD (2026-10-18): the zone routes were moved to digithings-stack in code
+# (cost epic: one DigiChat container, not two), but that cutover has NOT been
+# deployed - the stack's live deployment predates it and still carries only
+# graph/key/search. Deploying this worker with only /chat/occ* would therefore
+# DELETE the seven live routes below and Pages would 404 /embed and /api/chat,
+# taking OCC down.
+#
+# OCC is in active use, so this deploy re-asserts the CURRENT live route set
+# (verified live: all eight routes resolve to digithings-digichat) and changes
+# nothing about traffic. To complete the cutover later: remove these seven from
+# here, keep them on apps/digithings-stack-cloudflare/wrangler.toml, and deploy
+# the stack first.
+#
+# To roll back: this exact route list IS the rollback shape.
+[[routes]]
+pattern = "digithings.ai/embed*"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/api/chat*"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/api/embed*"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/api/byok*"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/api/plan-proof*"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/api/health"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/_dtchat*"
+zone_name = "digithings.ai"
+
+# DIG-3585: the invite-gated OCC Pages shell. Same pattern is on
+# apps/digithings-stack-cloudflare/wrangler.toml so a stack deploy keeps the gate.
+# Valid ?token= or the occ_invite cookie passes through to Pages.
 [[routes]]
 pattern = "digithings.ai/chat/occ*"
 zone_name = "digithings.ai"
