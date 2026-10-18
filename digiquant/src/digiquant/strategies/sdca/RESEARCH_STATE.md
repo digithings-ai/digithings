@@ -1333,3 +1333,57 @@ means "written before the field existed", which is not the same claim as `[]`); 
    rail and a policy number.
 2. Or fail a trial that has any infeasible fold -- honest, but it zeroes every candidate
    on today's cap.
+
+## The drawdown cap is now window-relative (2026-10-18)
+
+### The problem: an absolute cap that sits below the asset's own drawdown
+`SdcaOptimizeObjective.max_drawdown_cap_pct` was a flat 50% on the strategy's own
+portfolio (`dca_max_drawdown_pct`), applied per out-of-sample fold. BTC-USD's own
+close-to-close peak-to-trough exceeds that in EVERY window of this price series:
+
+| window | benchmark close-to-close drawdown | trough |
+|---|---|---|
+| fold 0 (2017-10-18..2020-01-16) | 83.80% | 2018-12-15 |
+| fold 1 (2020-01-17..2022-04-16) | 53.17% | 2020-03-12 |
+| fold 2 (2022-04-17..2024-07-15) | 62.03% | 2022-11-21 |
+| holdout (2024-07-16..2026-10-13) | 53.08% | 2026-06-30 |
+| whole series (2015-07-20..2026-10-16) | 83.80% | 2018-12-15 |
+
+So on fold 0 the rail rejected the whole WINDOW rather than a curve: it fired on the
+optimized curve (61.42%) and on the naive risk50-linear baseline (63.40%) alike. Fold 0
+was then dropped from selection while still being averaged into the reported mean.
+
+### The design
+`max_drawdown_cap_pct` is now a FLOOR on the allowance rather than the whole rule:
+
+    effective_drawdown_cap_pct(metrics, objective) =
+        max(max_drawdown_cap_pct, k * benchmark_max_drawdown_pct)
+
+`max_drawdown_cap_relative_k` defaults to 1.0 ("may not draw down more than simply holding
+the asset did"); `None` disables the relative term. `benchmark_max_drawdown_pct` is
+optional on `SdcaTrialMetrics`, where `None` means "not reported" — an unreported benchmark
+restores exactly the old absolute rail, which makes the change INERT for every synthetic
+evaluator in the suite and live on the real path. Both production evaluators report it:
+`curve_sim` from the report's `buy_hold_max_drawdown_pct`, `nautilus_evaluator` from the
+price series.
+
+### The measured effect at k = 1.0 (gate driver, 2026-10-18)
+Every fold is feasible on both sides, `selection_excluded_folds` goes `[0] -> []` on both,
+and the winner does NOT move: `best_params` identical, `mean_oos_vs_flat_dca_pct` still
+18.48409443050952 (baseline -5.794150735085369, delta 24.27824516559489), sensitivity
+still `neighbor_count 40` / `stable false`, `holdout_traded false`. The per-fold benchmark
+drawdowns the gate now records are 83.8015349610509 / 53.1680122028708 / 62.02728180638664,
+matching the independent price-CSV computation above.
+
+### Consequence, and the k trade-off
+At k = 1.0 the rail is NON-BINDING on this data: it trips only for a curve that draws down
+more than the market did. k = 0.75 would keep it discriminating at fold 0 — a cap of 62.85
+admits the candidate at 61.42 and still rejects the baseline at 63.40 — at the cost of
+being a tuned number. The default is left at the principled 1.0.
+
+### Known coverage gap
+Removing `benchmark_max_drawdown_pct=abs(report.buy_hold_max_drawdown_pct) * 100.0` from
+`curve_sim.py` SURVIVES the unit suite: no test calls `evaluate_sdca_trial_curve_sim`
+directly, and there is no `test_curve_sim.py`. Its receipt is the live gate run above. One
+case asserting `benchmark_max_drawdown_pct == max_drawdown_magnitude_pct(prices)` would
+close it.
