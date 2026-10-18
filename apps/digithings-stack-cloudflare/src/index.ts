@@ -156,10 +156,33 @@ export class DigiStackContainer extends Container {
   };
 
   /**
+   * A request waiting on a cold start must not have the container stopped under
+   * it. `startAndWaitForPorts` does NOT renew the activity timer, so with
+   * sleepAfter = "1m" the idle alarm fires mid-boot and SIGTERMs the container
+   * before its port opens; the port wait then fails with "The container is not
+   * running, consider calling start()" and every caller gets 503
+   * container_booting while the container itself logs a clean boot (no errors,
+   * every supervisord program RUNNING). Observed 2026-10-18: after the R5 wheel
+   * install (#5762) the boot takes ~60s at 0.5 vCPU, which is exactly the
+   * sleepAfter window. Holding the window open for the life of the request is
+   * the fix; the 1m idle tail itself is unchanged once requests stop.
+   */
+  private keepAwakeForRequest = false;
+
+  /** Sleep only when nothing is waiting on us (see keepAwakeForRequest). */
+  override async onActivityExpired(): Promise<void> {
+    if (this.keepAwakeForRequest) return;
+    await super.onActivityExpired();
+  }
+
+  /**
    * Wait longer than the default ~20s portReadyTimeout while supervisord
    * brings up digigraph (and the requested service) under Firecracker.
    */
   override async fetch(request: Request): Promise<Response> {
+    // Hold the idle window open for as long as this request is waiting on a
+    // cold start (see keepAwakeForRequest).
+    this.keepAwakeForRequest = true;
     // switchPort sets cf-container-target-port; containerFetch(request) alone
     // ignores that header and always uses defaultPort (digigraph :8000) — which
     // made key.digithings.ai / JWKS / bff_session hit digigraph (smoke NO-GO).
@@ -198,6 +221,8 @@ export class DigiStackContainer extends Container {
         return containerEvictedResponse("stack", message);
       }
       return containerBootingResponse("stack", message);
+    } finally {
+      this.keepAwakeForRequest = false;
     }
     // An eviction can also land between start and fetch: map only the
     // confirmed-evicted signal to 410, rethrow everything else so the
@@ -252,7 +277,21 @@ export class DigiQuantMcpContainer extends Container {
     R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY ?? "",
   };
 
+  /**
+   * Do not let the idle alarm stop a container a request is waiting on — see
+   * the DigiStackContainer note: nothing renews the activity timer during
+   * `startAndWaitForPorts`, so a cold start longer than sleepAfter is killed
+   * mid-boot.
+   */
+  private keepAwakeForRequest = false;
+
+  override async onActivityExpired(): Promise<void> {
+    if (this.keepAwakeForRequest) return;
+    await super.onActivityExpired();
+  }
+
   override async fetch(request: Request): Promise<Response> {
+    this.keepAwakeForRequest = true;
     try {
       await this.startAndWaitForPorts({
         ports: [DIGIQUANT_MCP_PORT],
@@ -268,6 +307,8 @@ export class DigiQuantMcpContainer extends Container {
         return containerEvictedResponse("mcp", message);
       }
       return containerBootingResponse("mcp", message);
+    } finally {
+      this.keepAwakeForRequest = false;
     }
     try {
       return await this.containerFetch(request, DIGIQUANT_MCP_PORT);
@@ -343,7 +384,22 @@ export class DigiChatContainer extends Container {
       env.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? env.SUPABASE_ANON_KEY ?? "",
   };
 
+  /**
+   * Do not let the idle alarm stop a container a request is waiting on — see
+   * the DigiStackContainer note: nothing renews the activity timer during
+   * `startAndWaitForPorts`, so a cold start longer than sleepAfter is killed
+   * mid-boot. The digichat container is the smallest SKU (basic) and boots the
+   * Next standalone server, so it is the most exposed to the race.
+   */
+  private keepAwakeForRequest = false;
+
+  override async onActivityExpired(): Promise<void> {
+    if (this.keepAwakeForRequest) return;
+    await super.onActivityExpired();
+  }
+
   override async fetch(request: Request): Promise<Response> {
+    this.keepAwakeForRequest = true;
     // switchPort sets cf-container-target-port; containerFetch(request) alone
     // ignores that header and always uses defaultPort — the digichat branch in
     // the Worker fetch() below sets it explicitly to :3000, and this override
@@ -365,6 +421,8 @@ export class DigiChatContainer extends Container {
         return containerEvictedResponse("digichat", message);
       }
       return containerBootingResponse("digichat", message);
+    } finally {
+      this.keepAwakeForRequest = false;
     }
     try {
       return await this.containerFetch(request, targetPort);

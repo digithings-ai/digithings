@@ -85,7 +85,9 @@ describe("digichat mount (same predicate as the standalone worker)", () => {
   it("pins the Next standalone port and the shared container id", () => {
     expect(DIGICHAT_PORT).toBe(3000);
     expect(SHARED_DIGICHAT_CONTAINER_ID).toBe(standaloneContainerId);
-    expect(SHARED_DIGICHAT_CONTAINER_ID).toBe("shared-v10");
+    // Bumped v10 -> v11 on 2026-10-18 to recycle the warm container so the
+    // rebuilt DIGICHAT_EMBED_TENANTS (OCC tenant) reached its process env.
+    expect(SHARED_DIGICHAT_CONTAINER_ID).toBe("shared-v11");
   });
 });
 
