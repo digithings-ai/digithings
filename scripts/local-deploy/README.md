@@ -49,8 +49,8 @@ LOCAL_DEPLOY_APPROVED_BY=Chris \
   deploy. Without it the docker build fails
   `failed to compute cache key ... not found`, which is how `digiquant-runner`
   sat on its 2026-10-01 image for two weeks while every gate stayed green.
-- **If a container deploy dies on the image push, push the image yourself and
-  re-run.** Observed 2026-10-18:
+- **If a container deploy dies on the image push, re-run the deploy.**
+  Observed 2026-10-18 on the first live run:
 
   ```
   failed to do request: Put "https://registry.cloudflare.com/v2/.../blobs/uploads/...":
@@ -60,14 +60,15 @@ LOCAL_DEPLOY_APPROVED_BY=Chris \
   The push leaves the VM through Docker Desktop's proxy at `192.168.65.1:3128`,
   which forwards to the host's `wireproxy` on `127.0.0.1:18450` — the rotating
   VPN slot. A slot rotation mid-upload breaks the pipe. Nothing is corrupted:
-  the built image is still local and tagged, so recover with
+  the build is cached and the image is still tagged locally.
 
-  ```sh
-  docker push registry.cloudflare.com/<account>/<app>-<class>:<tag>
-  ```
-
-  and then re-run the deploy. Blobs already in the registry are skipped, so the
-  second push only carries what is missing.
+  **Recover by re-running the deploy, not by pushing by hand.** `wrangler`
+  mints the registry credential as part of the deploy, and that credential is
+  short-lived — a later manual `docker push` fails `401 Unauthorized` against
+  a perfectly good image even though `docker-credential-desktop` still returns
+  a username and secret. Re-running re-authenticates *and* re-pushes; blobs
+  already in the registry are skipped, and Docker's layer cache makes the
+  rebuild much cheaper than the first run.
 
 ## Safety rules (all four scripts)
 
