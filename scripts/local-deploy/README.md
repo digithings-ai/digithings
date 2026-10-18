@@ -49,6 +49,25 @@ LOCAL_DEPLOY_APPROVED_BY=Chris \
   deploy. Without it the docker build fails
   `failed to compute cache key ... not found`, which is how `digiquant-runner`
   sat on its 2026-10-01 image for two weeks while every gate stayed green.
+- **If a container deploy dies on the image push, push the image yourself and
+  re-run.** Observed 2026-10-18:
+
+  ```
+  failed to do request: Put "https://registry.cloudflare.com/v2/.../blobs/uploads/...":
+    write tcp 192.168.65.3:...->192.168.65.1:3128: write: broken pipe
+  ```
+
+  The push leaves the VM through Docker Desktop's proxy at `192.168.65.1:3128`,
+  which forwards to the host's `wireproxy` on `127.0.0.1:18450` — the rotating
+  VPN slot. A slot rotation mid-upload breaks the pipe. Nothing is corrupted:
+  the built image is still local and tagged, so recover with
+
+  ```sh
+  docker push registry.cloudflare.com/<account>/<app>-<class>:<tag>
+  ```
+
+  and then re-run the deploy. Blobs already in the registry are skipped, so the
+  second push only carries what is missing.
 
 ## Safety rules (all four scripts)
 
