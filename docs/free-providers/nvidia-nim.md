@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-10-11
+verified_at: 2026-10-18
 source_urls:
   - https://build.nvidia.com/explore/discover
   - https://docs.api.nvidia.com/nim/reference/llm-apis
@@ -114,3 +114,4 @@ NVIDIA NIM API pay-per-token after credits. Pricing varies by model. Enterprise 
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
 | 2026-10-11 | Automated snapshot sync | provider-review scan |
+| 2026-10-18 | Automated snapshot sync | provider-review scan |
