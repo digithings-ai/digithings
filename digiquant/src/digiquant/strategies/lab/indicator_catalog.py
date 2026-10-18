@@ -96,6 +96,7 @@ MACRO_INDICATOR_NAMES: tuple[str, ...] = (
     "nfci",
     "gdx_gld",
     "gld_slv",
+    "btc_gold",
     "real_rate",
 )
 GOLD_MACRO_NAMES: tuple[str, ...] = (
@@ -152,6 +153,7 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "nfci": "nfci_weight",
     "gdx_gld": "gdx_gld_weight",
     "gld_slv": "gld_slv_weight",
+    "btc_gold": "btc_gold_weight",
     "real_rate": "real_rate_weight",
     "weekly_rsi": "weekly_rsi_weight",
     "weekly_macd": "weekly_macd_weight",
@@ -180,6 +182,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "nfci": "financial conditions (NFCI)",
     "gdx_gld": "GDX/GLD participation",
     "gld_slv": "gold/silver ratio",
+    "btc_gold": "BTC/gold ratio",
     "real_rate": "real yield (DFII10)",
     "weekly_rsi": "weekly RSI",
     "weekly_macd": "weekly log-MACD",
@@ -229,6 +232,7 @@ class SdcaCompositeWeights(BaseModel):
     nfci: float = Field(0.0, ge=0.0)
     gdx_gld: float = Field(0.0, ge=0.0)
     gld_slv: float = Field(0.0, ge=0.0)
+    btc_gold: float = Field(0.0, ge=0.0)
     real_rate: float = Field(0.0, ge=0.0)
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
@@ -264,6 +268,7 @@ class SdcaCompositeWeights(BaseModel):
             ("nfci", self.nfci),
             ("gdx_gld", self.gdx_gld),
             ("gld_slv", self.gld_slv),
+            ("btc_gold", self.btc_gold),
             ("real_rate", self.real_rate),
             ("weekly_rsi", self.weekly_rsi),
             ("weekly_macd", self.weekly_macd),
@@ -325,6 +330,8 @@ class ExtraIndicatorSources(BaseModel):
     gdx_close: pl.Series | None = None
     slv_dates: pl.Series | None = None
     slv_close: pl.Series | None = None
+    gld_dates: pl.Series | None = None
+    gld_close: pl.Series | None = None
     real_rate_dates: pl.Series | None = None
     real_rate_values: pl.Series | None = None
 
@@ -351,6 +358,7 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         nfci=float(params.get("nfci_weight", 0.0)),
         gdx_gld=float(params.get("gdx_gld_weight", 0.0)),
         gld_slv=float(params.get("gld_slv_weight", 0.0)),
+        btc_gold=float(params.get("btc_gold_weight", 0.0)),
         real_rate=float(params.get("real_rate_weight", 0.0)),
         weekly_rsi=float(params.get("weekly_rsi_weight", 0.0)),
         weekly_macd=float(params.get("weekly_macd_weight", 0.0)),
@@ -387,6 +395,7 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         nfci=float(payload.get("nfci", 0.0)),
         gdx_gld=float(payload.get("gdx_gld", 0.0)),
         gld_slv=float(payload.get("gld_slv", 0.0)),
+        btc_gold=float(payload.get("btc_gold", 0.0)),
         real_rate=float(payload.get("real_rate", 0.0)),
         weekly_rsi=float(payload.get("weekly_rsi", 0.0)),
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
@@ -928,6 +937,80 @@ def gld_slv_z(
     return causal_rolling_z(ratio, window=window, min_samples=min_samples).alias("gld_slv")
 
 
+def btc_gold_z(
+    dates: pl.Series,
+    btc_price: pl.Series,
+    gld_dates: pl.Series,
+    gld_close: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """``log(BTC/GLD)`` rolling-z. Bitcoin strong vs gold = risk-on → +z (no flip).
+
+    Unlike ``gdx_gld_z`` / ``gld_slv_z`` -- whose "gld" leg is the *asset* close
+    and therefore collapses to ``GDX/BTC`` on a BTC frame -- this leg needs a
+    real GLD series, so it reads its own ``GLD-USD.csv`` source pair.
+    """
+    gld = align_to_dates(dates, gld_dates, gld_close, forward_fill=False)
+    ratio = (btc_price / gld).log()
+    return causal_rolling_z(ratio, window=window, min_samples=min_samples).alias("btc_gold")
+
+
+#: Extras whose ``ExtraIndicatorSources`` pair is NOT ``<name>_dates`` /
+#: ``<name>_values``. Anything else falls back to that convention.
+SOURCE_PAIR_BY_NAME: dict[str, tuple[str, str]] = {
+    "rs_eth": ("eth_dates", "eth_close"),
+    "uup": ("uup_dates", "uup_close"),
+    "gdx_gld": ("gdx_dates", "gdx_close"),
+    "gld_slv": ("slv_dates", "slv_close"),
+    "btc_gold": ("gld_dates", "gld_close"),
+}
+
+#: Extras that need no source series at all: the oscillators read the asset
+#: close and ``fast_crash_vol`` is realized vol of the same close.
+SOURCELESS_EXTRA_NAMES: frozenset[str] = frozenset(
+    {"fast_crash_vol", *PRICE_OSCILLATOR_NAMES}
+)
+
+
+def _extra_source_pair(name: str) -> tuple[str, str]:
+    """``ExtraIndicatorSources`` field names for ``name``'s dates/values pair."""
+    return SOURCE_PAIR_BY_NAME.get(name, (f"{name}_dates", f"{name}_values"))
+
+
+def _display_only_extras(
+    weights: SdcaCompositeWeights,
+    sources: ExtraIndicatorSources,
+) -> dict[str, float]:
+    """Weight-0 extras that are *staged*: their source series is present.
+
+    These carry weight 0.0 so ``compute_composite_risk`` (which filters
+    ``weight != 0.0``) never blends them; they exist only so a diagnostic
+    ``{name}_z`` column reaches the tearsheet. Source-less extras
+    (oscillators, ``fast_crash_vol``) qualify without a pair -- their input is
+    the asset close the caller already holds.
+
+    Only names in :data:`EXTRA_INDICATOR_NAMES` are considered: the chart
+    iterates that tuple, so a research-only name has no display slot and
+    materializing it would be wasted compute.
+    """
+    out: dict[str, float] = {}
+    published = frozenset(EXTRA_INDICATOR_NAMES)
+    for name, weight in weights.extra_items():
+        if weight != 0.0 or name not in published:
+            continue
+        if name in SOURCELESS_EXTRA_NAMES:
+            out[name] = 0.0
+            continue
+        dates_field, values_field = _extra_source_pair(name)
+        dates = getattr(sources, dates_field, None)
+        values = getattr(sources, values_field, None)
+        if dates is not None and values is not None:
+            out[name] = 0.0
+    return out
+
+
 def build_extra_indicators(
     dates: pl.Series,
     btc_price: pl.Series,
@@ -940,6 +1023,7 @@ def build_extra_indicators(
     oscillators: SdcaOscillatorSpec | None = None,
     allowlist: Sequence[str] | None = None,
     extra_windows: dict[str, int] | None = None,
+    include_display_only: bool = False,
 ) -> list[IndicatorWeight]:
     """Materialize enabled extras. Weight 0 is omitted (does not null the blend).
 
@@ -955,9 +1039,17 @@ def build_extra_indicators(
     window=60 while every other extra not present in the dict keeps using
     the shared ``window`` exactly as before. Absent or ``None``, every extra
     uses the shared ``window`` (unchanged behavior).
+
+    ``include_display_only=True`` additionally materializes *staged but
+    unweighted* extras -- published names whose weight is 0.0 but whose source
+    series is present -- at weight 0.0. They are pure display: ``compute_composite_risk``
+    filters ``weight != 0.0``, so the risk column is unchanged bit-for-bit,
+    while the diagnostic ``{name}_z`` column (and therefore the tearsheet
+    curve) now exists. Default ``False`` keeps every modelling caller exactly
+    as it was. The ``allowlist`` is applied to the widened set too -- an
+    unlisted staged name is silently dropped, never raised.
     """
     spec = oscillators or SdcaOscillatorSpec()
-    enabled = weights.enabled_extras()
 
     def _window_for(name: str) -> int:
         if extra_windows is not None and name in extra_windows:
@@ -965,9 +1057,18 @@ def build_extra_indicators(
         return window
 
     if allowlist is not None:
-        forbidden = [name for name in enabled if name not in allowlist]
+        forbidden = [name for name in weights.enabled_extras() if name not in allowlist]
         if forbidden:
             raise ValueError(f"{forbidden} not in extra_indicators allowlist")
+    enabled = weights.enabled_extras()
+    if include_display_only:
+        allowed = None if allowlist is None else set(allowlist)
+        staged = _display_only_extras(weights, sources)
+        if allowed is not None:
+            staged = {name: 0.0 for name in staged if name in allowed}
+        # Real weights win; staged members are always 0.0 so the merge order
+        # only guards against a future name appearing in both sets.
+        enabled = {**staged, **enabled}
     extras: list[IndicatorWeight] = []
     if "m2" in enabled:
         m2_dates = _require_pair(sources.m2_dates, sources.m2_values, "m2")
@@ -1259,6 +1360,22 @@ def build_extra_indicators(
                 weight=enabled["gld_slv"],
             )
         )
+    if "btc_gold" in enabled:
+        gld_dates = _require_pair(sources.gld_dates, sources.gld_close, "btc_gold")
+        extras.append(
+            IndicatorWeight(
+                name="btc_gold",
+                z=btc_gold_z(
+                    dates,
+                    btc_price,
+                    gld_dates,
+                    sources.gld_close,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["btc_gold"],
+            )
+        )
     if "real_rate" in enabled:
         real_rate_dates = _require_pair(
             sources.real_rate_dates, sources.real_rate_values, "real_rate"
@@ -1502,6 +1619,8 @@ __all__ = [
     "GOLD_MACRO_NAMES",
     "MACRO_INDICATOR_NAMES",
     "PRICE_OSCILLATOR_NAMES",
+    "SOURCE_PAIR_BY_NAME",
+    "SOURCELESS_EXTRA_NAMES",
     "WEIGHT_PARAM_BY_NAME",
     "INDICATOR_DISPLAY_NAMES",
     "ExtraIndicatorSources",
@@ -1509,6 +1628,7 @@ __all__ = [
     "align_to_dates",
     "build_extra_indicators",
     "breakeven_5y_z",
+    "btc_gold_z",
     "causal_rolling_z",
     "composite_weights_from_params",
     "dxy_z",

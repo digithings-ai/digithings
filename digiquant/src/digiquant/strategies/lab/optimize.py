@@ -80,6 +80,7 @@ SDCA_SHAPE_DEFAULTS: dict[str, float] = {
     "real_rate_weight": 0.0,
     "gdx_gld_weight": 0.0,
     "gld_slv_weight": 0.0,
+    "btc_gold_weight": 0.0,
     "weekly_rsi_weight": 0.0,
     "weekly_macd_weight": 0.0,
     "sma_band_weight": 0.0,
@@ -259,6 +260,7 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     nfci_path = _first_existing(base, ("NFCI.csv", "NFCI.parquet"))
     gdx_path = _first_existing(base, ("GDX-USD.csv", "GDX-USD.parquet"))
     slv_path = _first_existing(base, ("SLV.csv", "SLV.parquet"))
+    gld_path = _first_existing(base, ("GLD-USD.csv", "GLD-USD.parquet"))
     dfii10_path = _first_existing(base, ("DFII10.csv", "DFII10.parquet"))
     m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
     eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
@@ -272,6 +274,7 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     nfci_dates, nfci_values = load_date_value_frame(nfci_path) if nfci_path else (None, None)
     gdx_dates, gdx_close = load_date_value_frame(gdx_path) if gdx_path else (None, None)
     slv_dates, slv_close = load_date_value_frame(slv_path) if slv_path else (None, None)
+    gld_dates, gld_close = load_date_value_frame(gld_path) if gld_path else (None, None)
     real_rate_dates, real_rate_values = (
         load_date_value_frame(dfii10_path) if dfii10_path else (None, None)
     )
@@ -300,6 +303,8 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
         gdx_close=gdx_close,
         slv_dates=slv_dates,
         slv_close=slv_close,
+        gld_dates=gld_dates,
+        gld_close=gld_close,
         real_rate_dates=real_rate_dates,
         real_rate_values=real_rate_values,
     )
@@ -335,6 +340,8 @@ def drop_extras_missing_sources(
         payload["gdx_gld"] = 0.0
     if payload["gld_slv"] > 0.0 and sources.slv_dates is None:
         payload["gld_slv"] = 0.0
+    if payload["btc_gold"] > 0.0 and sources.gld_dates is None:
+        payload["btc_gold"] = 0.0
     if payload["real_rate"] > 0.0 and sources.real_rate_dates is None:
         payload["real_rate"] = 0.0
     return SdcaCompositeWeights(**payload)

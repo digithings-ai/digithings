@@ -256,8 +256,11 @@ def test_checked_in_weights_sidecar_searched_full_catalog() -> None:
     )
     # Gold legs added in #4804 postdate the BTC published search; they are
     # excluded from the published BTC path by zero defaults. A BTC re-search
-    # covering them is future work, not this assertion's job.
-    assert set(payload["search_names"]) == set(EXTRA_INDICATOR_NAMES) - set(GOLD_MACRO_NAMES)
+    # covering them is future work, not this assertion's job. btc_gold (the
+    # visibility package's zero-weight ratio) is in the same position.
+    assert set(payload["search_names"]) == set(EXTRA_INDICATOR_NAMES) - set(
+        GOLD_MACRO_NAMES
+    ) - {"btc_gold"}
     assert payload["num_evaluations"] >= 128
     kept = {k: v for k, v in payload["weights"].items() if k != "valuation" and v > 0}
     assert kept == {}

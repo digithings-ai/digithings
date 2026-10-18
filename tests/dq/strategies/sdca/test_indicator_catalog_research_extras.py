@@ -233,6 +233,7 @@ class TestDormantNames:
             "nfci",
             "gdx_gld",
             "gld_slv",
+            "btc_gold",
             "real_rate",
         )
         assert MACRO_INDICATOR_NAMES == macro
@@ -300,8 +301,9 @@ class TestDefaultCompositeIsTheValuationRailAlone:
         w = SdcaCompositeWeights()
         assert w.enabled_extras() == {}
         listed = dict(w.extra_items())
-        # 13 BTC names from this leaf + the 9 gold legs on develop + real_rate (#4804).
-        assert len(listed) == 23, "the extra catalogue is 23 names on develop plus this leaf"
+        # 13 BTC names from this leaf + the 9 gold legs on develop + real_rate (#4804)
+        # + btc_gold (visibility package, 2026-10-18).
+        assert len(listed) == 24, "the extra catalogue is 24 names on develop plus this leaf"
         assert set(listed.values()) == {0.0}
         for name in RESEARCH_ONLY_NAMES:
             assert listed[name] == pytest.approx(0.0), f"{name} must be listed, at weight 0"

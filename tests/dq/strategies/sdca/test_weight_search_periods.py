@@ -881,6 +881,7 @@ class TestSearchableExtraNameSetIsPinned:
             "nfci",
             "gdx_gld",
             "gld_slv",
+            "btc_gold",
             "real_rate",
             "weekly_rsi",
             "weekly_macd",

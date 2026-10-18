@@ -1444,3 +1444,100 @@ Five new tests: the checked-in file constrains only the ceiling; upper rails nev
 forward horizon; reconciled rails stay ordered; the constraint applies to the named quantiles only;
 an unknown label raises. Mutation proof: 4 of 4 killed -- including reverting the shipped
 coefficients, which kills both the `b == 0` pin and the monotonicity pin.
+
+## The visibility package: the tearsheet can draw staged series (2026-10-18)
+
+### The defect: a weight-0 series could not reach the chart at all
+The path was closed at one gate. `build_extra_indicators` took `enabled =
+weights.enabled_extras()`, which filters on `weight > 0.0`; `build_risk_index` then writes a
+`{name}_z` diagnostic column only for the members it was handed, and
+`chart_series.z_from_risk_index` reads the column iff it exists. A staged-but-unweighted series
+therefore rendered as a layout-only curve with `points == []`: on the staged BTC frame the
+tearsheet drew **none of the 17** published extras — valuation was the only series with points.
+Staging a source — GLD-USD.csv, UUP.csv — changed nothing the user could see.
+
+### The change: an opt-in widening at the gate, at the tearsheet call site only
+`build_extra_indicators(..., include_display_only: bool = False)`. When true,
+`_display_only_extras()` returns every **published** extra whose weight is `0.0` and whose source
+pair is present (or that needs no source: the three close-derived oscillators), all at `0.0`, and
+`enabled = {**staged, **enabled}` — real weights win. `generate_tearsheets.py` passes `True`; no
+other caller does.
+
+**This is a disclosed deviation from the handoff, which asked to widen the gate unconditionally.**
+An unconditional widening changes `extra_z_vectors` for every modelling caller and breaks two
+deliberate pins (`test_btc_vectors_ignore_ratio_files_on_disk`,
+`test_build_extras_honor_profile_spec_and_allowlist`), i.e. it moves the modelling input path that
+this work was not meant to touch. The opt-in delivers the user-visible outcome with zero modelling
+blast radius.
+
+Two rules fall out of the existing contracts:
+- **Source mapping.** Four names do not follow `<name>_dates` / `<name>_values`, so
+  `SOURCE_PAIR_BY_NAME` names them explicitly: `rs_eth -> eth_*`, `uup -> uup_*`,
+  `gdx_gld -> gdx_*`, `gld_slv -> slv_*`, `btc_gold -> gld_*`. Everything else falls back to the
+  convention. `fast_crash_vol` and the oscillators are in `SOURCELESS_EXTRA_NAMES`.
+- **Allowlist.** When an allowlist is given, staged names are intersected with it: an *unlisted
+  staged* name is silently dropped, while an *unlisted positive weight* still raises. `fit_weights`
+  and `sdca_mcp` pass an allowlist; the tearsheet does not, so an unintersected widening would have
+  broken the fitting path. A name whose source is absent is skipped — `_require_pair` raises, so it
+  is never called for a display-only member.
+
+### `btc_gold`: a real BTC/gold ratio, weight 0
+Registered in every site the catalogue pins: the weights field, `WEIGHT_PARAM_BY_NAME`, the display
+name, `MACRO_INDICATOR_NAMES` (so `EXTRA_INDICATOR_NAMES` derives 16 -> 17), `extra_items()`, both
+param readers, the `ExtraIndicatorSources` GLD pair, the `z` block, `__all__`, `SDCA_SHAPE_DEFAULTS`,
+the loader and `drop_extras_missing_sources`.
+
+`btc_gold_z` is `log(BTC / GLD)` rolling-z: BTC strong against gold reads `+z` (risk-on, no flip).
+It reads its **own** GLD series on purpose. `gdx_gld_z` and `gld_slv_z` take the *asset* close as
+their "gld" leg, so on a BTC frame those collapse to `GDX / BTC`; copying that shape here would make
+this `BTC / BTC`.
+
+It is deliberately **not** in `GOLD_MACRO_NAMES`: for a gold asset the BTC leg *is* the asset, so
+the ratio degenerates. It belongs to the BTC-only set, which is what `test_weight_search` computes as
+`EXTRA_INDICATOR_NAMES - GOLD_MACRO_NAMES`.
+
+### Measured effect (staged BTC frame, 4107 rows)
+- **The risk parquet is byte-identical**: the same sha256 both ways —
+  `b65e8e95cfb1bc5b73894b9c69954175f4f23b579e153cbaabe4b1f750d4754e`. `write_risk_index` persists
+  only `date`/`risk`, and `compute_composite_risk` filters `weight != 0.0`, so the widening cannot
+  reach the index — two independent reasons, both measured.
+- **Curves drawn: 1 -> 15.** Newly drawn, all with `in_index: False`: `breakeven_5y`, `btc_gold`,
+  `dxy`, `gvz`, `hy_oas`, `ig_oas`, `m2`, `nfci`, `real_rate`, `sma_band`, `uup`, `walcl`,
+  `weekly_macd`, `weekly_rsi`.
+- **Still empty: `gdx_gld`, `gld_slv`, `rs_eth`** — those sources are genuinely absent on this host,
+  so the rule skips them rather than raising.
+- Staged here: `m2 dxy uup gvz walcl hy_oas ig_oas breakeven_5y nfci real_rate btc_gold`; `gdx` and
+  `slv` are not.
+
+### Pins and proof
+22 tests in `test_sdca_visibility_package.py`, covering the opt-in default, the per-name source
+gating, the half-present pair, the allowlist asymmetry, risk equality with and without the widened
+members, and every `btc_gold` registration site.
+
+Mutation proof, each mutant restored byte-identically from a disk snapshot:
+- making `include_display_only` a no-op **kills 6 nodes**, including the end-to-end curve test that
+  goes `build_extra_indicators -> build_risk_index -> z_from_risk_index -> catalog_indicator_curves`
+  (so the pin is on the widening, not merely on the chart layer);
+- inverting the `btc_gold` ratio, and substituting the asset leg for GLD, each **kill exactly one
+  node** (`test_the_ratio_reads_gld_not_the_asset_leg`) — the specific pin, not blanket failure.
+
+Gate of record: the 60-file union plus the new file -> **1 failed, 1232 passed, 0 skipped**. The
+failure is the pre-existing nautilus smoke (local `nautilus_trader` 1.223.0 vs the pinned 1.230.0,
+ADR-0033), reproduced identically at `HEAD` in a detached worktree. `ruff check digiquant/src` is red
+before and after with the **same three findings** (`server.py` x2, `lab/optimize.py:8` I001), so this
+change adds none.
+
+One environment note: staging `GLD-USD.csv` un-skipped
+`test_gold_sell_mask.py::test_frozen_box_grounds_on_real_inputs`, which also needs the gitignored
+`digiquant/.scratch/gold_mayer_multiple.json`. It is produced by
+`digiquant/scripts/measure_gold_mayer_multiple.py` from the same CSV; regenerating it locally makes
+that test pass.
+
+### Open decisions (recorded, not taken)
+1. **Which now-visible series should carry non-zero weight** in the index — a modelling change, and
+   the user's call. Staged and ready: `hy_oas`, `ig_oas`, `real_rate`, `uup`, plus `m2` / `rs_eth`.
+   Until then every one of them is drawn at weight 0 and votes on nothing.
+2. **The on-chain provider for Phase D** — Bitview / Coinmetrics / BGeometrics / Fear & Greed, or
+   defer. No on-chain data exists on this host, and the SDCA entrypoints never pass
+   `onchain_*_path` at all (a wiring gap; `onchain_addr_ratio` has no path mechanism). The ingest
+   writers for all four providers already ship.

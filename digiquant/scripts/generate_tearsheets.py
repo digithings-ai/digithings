@@ -879,7 +879,9 @@ def run_and_write(
             else DEFAULT_ROLLING_WINDOW,
             rolling_z=float(rolling_z) if rolling_z is not None else 1.0,
         )
-        extras = build_extra_indicators(idx_dates, ohlcv["close"], weights, sources)
+        extras = build_extra_indicators(
+            idx_dates, ohlcv["close"], weights, sources, include_display_only=True
+        )
         index = materialize_sdca_risk_index(
             ohlcv,
             tmp_risk,
