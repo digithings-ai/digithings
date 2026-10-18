@@ -79,5 +79,15 @@ if grep -q '^\[\[containers\]\]' "apps/$APP/wrangler.toml"; then
   python3 scripts/package_r5_image_inputs.py
 fi
 
-(cd "apps/$APP" && npm exec -- wrangler deploy)
+# DIG-3229: prefer the app's OWN deploy script when it defines one.
+# digithings-stack-cloudflare deploys via `node scripts/deploy.mjs`, which injects
+# --var STACK_CONTAINER_REV:<commit> and then verifies /_stack/meta reports the id
+# that commit implies. Deploying it with a bare command still serves traffic but
+# ships the LEGACY container id (shared-v18) and cannot guarantee eviction.
+if node -e "process.exit(require('./apps/$APP/package.json').scripts && require('./apps/$APP/package.json').scripts.deploy ? 0 : 1)" 2>/dev/null; then
+  echo "--- using apps/$APP's own deploy script (pins the container id) ---"
+  npm run deploy --workspace "$PKG"
+else
+  (cd "apps/$APP" && npm exec -- wrangler deploy)
+fi
 echo "DEPLOYED $APP (approved by $LOCAL_DEPLOY_APPROVED_BY). Verify the Worker before closing out."
