@@ -6,8 +6,9 @@ import { QuantWordmark } from "./QuantWordmark";
 
 /** The closing mark above the footer, drawn at the width between the page rails (one gutter in from each) so its
  *  edges line up with the frame. It builds like the top hero each time it
- *  scrolls into view on a load, then keeps flashing. Server render, no-JS and
- *  reduced motion show the finished mark. */
+ *  scrolls into view on a load, then keeps flashing. Reduced motion shows
+ *  the finished mark. Server render and no-JS show a blank canvas box: the
+ *  shared-definition port paints on mount (DIG-2702), unlike the old SVG. */
 export function FooterWordmark() {
   const safe = useMotionSafe();
   const ref = useRef<HTMLDivElement>(null);
@@ -19,6 +20,8 @@ export function FooterWordmark() {
     if (!safe || !el || typeof IntersectionObserver === "undefined") return;
     setPhase("idle");
     setArmed(true);
+    // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+    // IntersectionObserver constructor takes (callback, options?) — both args are consumed.
     const io = new IntersectionObserver(
       ([entry]) => {
         if (entry?.isIntersecting) {

@@ -28,6 +28,17 @@ describe("embed stock chrome wiring", () => {
     expect(shellSrc).not.toMatch(/resolveEmbedClientConfigFromParams/);
   });
 
+  it("resolves the embed token from the proxy header first, query as fallback (DIG-3523)", () => {
+    // The proxy strips ?token= from the render URL (flight payload echo),
+    // so the shell must read the forwarded x-embed-token header first.
+    const shellSrc = readFileSync(
+      join(__dirname, "../embed-route-shell.tsx"),
+      "utf8",
+    );
+    expect(shellSrc).toMatch(/x-embed-token/);
+    expect(shellSrc).toMatch(/resolveEmbedRenderToken/);
+  });
+
   it("does not mount language / help / new-conversation chrome", () => {
     expect(embedClientSrc).not.toMatch(/StockChromeBar/);
     expect(embedClientSrc).not.toMatch(/LanguageSelect/);

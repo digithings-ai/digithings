@@ -100,6 +100,7 @@ def apply(
                     "date": d["date"],
                     "document_key": d["document_key"],
                     "doc_type": d["doc_type"],
+                    "title": d["title"],
                     "payload": d["payload"],
                 }
                 for d in documents

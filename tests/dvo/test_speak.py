@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import signal
@@ -1045,7 +1046,8 @@ def test_stop_kills_the_player_process(tmp_path: Path, monkeypatch: pytest.Monke
             os.kill(pid, 0)
     finally:
         if pid_path.is_file():
-            try:
+            # Best-effort cleanup: the process is already gone
+            # (ProcessLookupError) or the pid file holds no integer
+            # (ValueError) — neither is a failure.
+            with contextlib.suppress(ProcessLookupError, ValueError):
                 os.kill(int(pid_path.read_text(encoding="utf-8")), signal.SIGKILL)
-            except (ProcessLookupError, ValueError):
-                pass

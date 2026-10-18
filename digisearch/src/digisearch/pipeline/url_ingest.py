@@ -141,6 +141,8 @@ def ingest_url(
     try:
         os.chmod(tmpdir, 0o700)
     except OSError:
+        # Best effort: mkdtemp already created the dir; a chmod failure
+        # must not fail the ingest.
         pass
     try:
         try:
@@ -232,6 +234,8 @@ def ingest_url(
             try:
                 active.close()
             except Exception:
+                # Best effort: close() runs in finally and must never mask
+                # the in-flight result or error.
                 pass
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -283,6 +287,8 @@ def fetch_json_feed(
             try:
                 active.close()
             except Exception:
+                # Best effort: close() runs in finally and must never mask
+                # the in-flight result or error.
                 pass
 
 

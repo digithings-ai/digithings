@@ -376,18 +376,39 @@ def test_a_requires_url_gets_no_path_unless_the_check_opts_in():
 
 
 def test_dashboard_api_probes_healthz_not_the_origin():
-    """The gate must ask dashboard-api for /healthz, not for the origin.
+    """The gate must ask dashboard-api for /healthz, not the origin.
 
     apps/dashboard-api/src/index.ts routes only /healthz, /ledger,
     /v1/tables/* and the MCP path; every other GET answers
-    errorResponse("bad_request", "unknown route ...") at :193. Probing the
-    origin alone therefore reads 400 from a healthy service.
+    errorResponse("bad_request", "unknown route ...") at :244/:255. Probing
+    the origin alone therefore reads 400 from a healthy service.
+
+    DIG-2697: the row no longer takes a requires= key. DT_DASHBOARD_API_URL
+    had no producer anywhere in the repo, so the check resolved to
+    (None, "not set") -- permanently SKIPPED, which health.py counts as a
+    failure under REQUIRE_ALL=1. It now carries a literal loopback default
+    in digichat/digitrace shape, so it resolves with nothing configured at
+    all and DT_DASHBOARD_API_PORT overrides the port.
     """
     check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "dashboard-api")
-    assert check.path == "/healthz"
-    url, reason = contracts.resolve(check, {"DT_DASHBOARD_API_URL": "http://127.0.0.1:8788"})
+    assert check.requires is None, "a requires key with no producer skips forever"
+    assert check.path is None, "the probe path now lives in the built-in URL"
+
+    # Nothing configured: the built-in default must resolve, never skip.
+    url, reason = contracts.resolve(check, {})
     assert reason is None
-    assert url == "http://127.0.0.1:8788/healthz"
+    assert url == "http://127.0.0.1:8887/healthz"
+    assert url.endswith("/healthz"), "probe the route, not the origin"
+
+    # Env-overridable, same shape as digichat's port template.
+    url, reason = contracts.resolve(check, {"DT_DASHBOARD_API_PORT": "9999"})
+    assert reason is None
+    assert url == "http://127.0.0.1:9999/healthz"
+
+    # An empty value falls back to the default rather than to a bare port.
+    url, reason = contracts.resolve(check, {"DT_DASHBOARD_API_PORT": ""})
+    assert reason is None
+    assert url == "http://127.0.0.1:8887/healthz"
 
 
 def test_with_path_does_not_double_an_already_complete_path():

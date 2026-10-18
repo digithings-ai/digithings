@@ -1,0 +1,3 @@
+# R1-owned files inside R2's digiquant/scripts/ dir; removed second pass.
+digiquant/scripts/export_sdca_macro.py
+digiquant/scripts/plot_sdca_tearsheet.py

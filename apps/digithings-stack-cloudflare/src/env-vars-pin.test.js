@@ -110,6 +110,15 @@ const WORKER_SCOPED_VARS = new Set([
   // it stays Worker-scoped. (The deprecated DIGICHAT_EMBED_ENABLED alias IS a
   // forwarded key, like on the standalone worker.)
   "DIGICHAT_LEGACY_EMBED_ENABLED",
+  // DIG-3229: the deploying commit, injected at deploy time and read by the
+  // Worker to derive the shared-stack Container id (ports.ts /
+  // stackContainer() in index.ts). No container process ever reads this name --
+  // forwarding it would put a Durable Object naming input into the container's
+  // runtime env, where nothing consumes it.
+  "STACK_CONTAINER_REV",
+  // DIG-3585: /chat/occ invite gate. The container authorizes via the tenant
+  // token, never this Worker secret.
+  "OCC_INVITE_KEY",
 ]);
 
 // Deliberately throws rather than returning an empty match -- a re-indented

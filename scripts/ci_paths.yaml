@@ -71,6 +71,11 @@ digigraph:
   - tests/dg/**
   - tests/contracts/**
   - .github/workflows/test-digigraph.yml
+  # The OpenAPI drift check (scripts/export_openapi.py --check) runs in the
+  # digigraph lane, so artifact-only edits must fire it (DIG-513). Without
+  # this entry a docs/openapi/** change skips every lane while the aggregate
+  # still reports success because skips count as success.
+  - docs/openapi/**
   # config/ is loaded at digigraph runtime (model_modes.yaml, byok-providers.json,
   # mcp_servers.yaml, digiquant_models.yaml -- all read by tests/dg/*), and
   # infra/digichat-release/config/ is its vendored copy for the Profile A release
@@ -402,3 +407,21 @@ npm_audit:
   - npm-audit-ignore.txt
   - scripts/classify_npm_audit.py
   - .github/workflows/security-npm-audit.yml
+
+# Worker dry-run build gate (DIG-3770). One glob per matrix app dir plus the
+# wrangler.toml catch-all and the install inputs: `npm ci` resolves the hoisted
+# wrangler, so a lockfile change is a build input. A per-app wrangler.toml
+# entry would be a dead duplicate of the catch-all, same as the matrix test
+# pins for the standalone trigger it replaces.
+workers:
+  - apps/digithings-cron/**
+  - apps/dashboard-api/**
+  - apps/digidata-api/**
+  - apps/digiquant-runner/**
+  - apps/digitrace-langfuse/**
+  - apps/digichat-cloudflare/**
+  - apps/digithings-stack-cloudflare/**
+  - apps/twelvex-runner/**
+  - apps/**/wrangler.toml
+  - package.json
+  - package-lock.json

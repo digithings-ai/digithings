@@ -12,6 +12,7 @@ import {
   renderRebalanceMarkdown,
   renderRiskDebateMarkdown,
   renderSegmentReportMarkdown,
+  escapeTableCell,
 } from './render-pipeline-payloads';
 
 function s(v: unknown): string {
@@ -290,7 +291,7 @@ export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?
         const m = asObj(row);
         if (!m) continue;
         const tickers = Array.isArray(m.candidate_tickers) ? m.candidate_tickers.map((x) => s(x)).join(', ') : '';
-        const rat = s(m.rationale).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+        const rat = escapeTableCell(m.rationale);
         out.push(`| \`${s(m.thesis_id)}\` | ${tickers} | ${rat} |`);
       }
       out.push('');
@@ -330,7 +331,7 @@ export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?
       for (const row of tw) {
         const r = asObj(row);
         if (!r) continue;
-        const rationale = s(r.rationale).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+        const rationale = escapeTableCell(r.rationale);
         out.push(
           `| ${s(r.ticker)} | ${s(r.target_weight_pct)} | ${s(r.prior_weight_pct)} | ${rationale} | ${s(r.deliberation_document_key) || '—'} |`
         );

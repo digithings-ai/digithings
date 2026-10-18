@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import os
 import re
 import sys
@@ -144,7 +145,10 @@ class StdioBridge:
                     for w in waiters:
                         w.cancel()
         except Exception:
-            pass
+            # The MCP child failed to start or died; _ensure() surfaces this
+            # as ToolError on the next call, but without a log line the cause
+            # is invisible, so record it here.
+            logging.getLogger(__name__).exception("digiquant-web MCP runner exited")
         finally:
             self._session = None
             self._ready.clear()

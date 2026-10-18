@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
 import uuid
 from datetime import date
 from pathlib import Path
@@ -68,6 +70,9 @@ SDCA_SHAPE_DEFAULTS: dict[str, float] = {
     "m2_weight": 0.0,
     "rs_eth_weight": 0.0,
     "dxy_weight": 0.0,
+    "uup_weight": 0.0,
+    "gdx_gld_weight": 0.0,
+    "gld_slv_weight": 0.0,
     "weekly_rsi_weight": 0.0,
     "weekly_macd_weight": 0.0,
     "sma_band_weight": 0.0,
@@ -84,6 +89,14 @@ class SensitivityReport(BaseModel):
     max_abs_delta_oos_pct: float
     stable: bool
     neighbor_count: int = Field(ge=0)
+    worst_neighbor_key: str | None = Field(
+        default=None,
+        description=(
+            "Gate-level attribution only ('<param>:<sign><pct>', e.g. 'buy_max_rate:+5%'). "
+            "Mean-OOS design: per-fold neighbor keys are explicitly out of scope. "
+            "None when no neighbors were evaluated."
+        ),
+    )
 
 
 class SdcaWalkForwardResult(BaseModel):
@@ -139,6 +152,9 @@ def btc_power_law_rails_fitter(dates: list[date], prices: list[float]) -> RiskMo
     return BtcPowerLawRiskModel(coeffs)
 
 
+_SDCA_SYMBOL_RE = re.compile(r"[A-Za-z0-9._-]+")
+
+
 def load_sdca_ohlcv(
     *,
     symbols: list[str],
@@ -149,7 +165,15 @@ def load_sdca_ohlcv(
     if data_path is not None:
         path = Path(data_path)
     elif data_dir is not None and symbols:
-        path = Path(data_dir) / f"{symbols[0]}.csv"
+        symbol = symbols[0]
+        if not _SDCA_SYMBOL_RE.fullmatch(symbol) or ".." in symbol:
+            raise ValueError(f"SDCA optimize refuses symbol {symbol!r}: unsafe characters")
+        real_dir = os.path.realpath(os.path.abspath(os.fspath(data_dir)))
+        dir_prefix = real_dir if real_dir.endswith(os.sep) else real_dir + os.sep
+        candidate = os.path.realpath(os.path.normpath(os.path.join(real_dir, f"{symbol}.csv")))
+        if candidate != real_dir and not candidate.startswith(dir_prefix):
+            raise ValueError(f"SDCA optimize refuses symbol {symbol!r}: escapes data_dir")
+        path = Path(candidate)
     else:
         raise ValueError("SDCA optimize requires data_path or data_dir with symbols")
     df = load_ohlcv_csv(path)
@@ -166,10 +190,23 @@ def load_sdca_ohlcv(
 
 
 def _first_existing(root: Path, names: tuple[str, ...]) -> Path | None:
+    """Return the first of ``names`` present as a regular file under ``root``.
+
+    The match resolves against the directory's own entries and the returned
+    path is that entry itself, never a string built from ``names``: a hostile
+    element can therefore never escape ``root`` however it arrives here (every
+    live caller passes constants). Keeping the parameter out of the returned
+    value entirely is also what the py/path-injection rule needs to see
+    (#5888: CodeQL flagged the previous join-then-check form at line 200).
+    """
+    try:
+        entries = [p for p in Path(root).iterdir() if p.is_file()]
+    except OSError:
+        return None
     for name in names:
-        candidate = root / name
-        if candidate.exists():
-            return candidate
+        for entry in entries:
+            if entry.name == name:
+                return entry
     return None
 
 
@@ -181,9 +218,27 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     m2_path = _first_existing(base, ("M2SL.csv", "M2.csv", "M2SL.parquet"))
     eth_path = _first_existing(base, ("ETH-USD.csv", "ETH-USD.parquet"))
     dxy_path = _first_existing(base, ("DTWEXBGS.csv", "DXY.csv", "DTWEXBGS.parquet"))
+    uup_path = _first_existing(base, ("UUP.csv", "UUP.parquet"))
+    gvz_path = _first_existing(base, ("GVZCLS.csv", "GVZCLS.parquet"))
+    walcl_path = _first_existing(base, ("WALCL.csv", "WALCL.parquet"))
+    hy_path = _first_existing(base, ("BAMLH0A0HYM2.csv", "BAMLH0A0HYM2.parquet"))
+    ig_path = _first_existing(base, ("BAMLC0A0CM.csv", "BAMLC0A0CM.parquet"))
+    be5y_path = _first_existing(base, ("T5YIE.csv", "T5YIE.parquet"))
+    nfci_path = _first_existing(base, ("NFCI.csv", "NFCI.parquet"))
+    gdx_path = _first_existing(base, ("GDX-USD.csv", "GDX-USD.parquet"))
+    slv_path = _first_existing(base, ("SLV.csv", "SLV.parquet"))
     m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
     eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
     dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
+    uup_dates, uup_close = load_date_value_frame(uup_path) if uup_path else (None, None)
+    gvz_dates, gvz_values = load_date_value_frame(gvz_path) if gvz_path else (None, None)
+    walcl_dates, walcl_values = load_date_value_frame(walcl_path) if walcl_path else (None, None)
+    hy_oas_dates, hy_oas_values = load_date_value_frame(hy_path) if hy_path else (None, None)
+    ig_oas_dates, ig_oas_values = load_date_value_frame(ig_path) if ig_path else (None, None)
+    be5y_dates, be5y_values = load_date_value_frame(be5y_path) if be5y_path else (None, None)
+    nfci_dates, nfci_values = load_date_value_frame(nfci_path) if nfci_path else (None, None)
+    gdx_dates, gdx_close = load_date_value_frame(gdx_path) if gdx_path else (None, None)
+    slv_dates, slv_close = load_date_value_frame(slv_path) if slv_path else (None, None)
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
         m2_values=m2_values,
@@ -191,6 +246,24 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
         eth_close=eth_close,
         dxy_dates=dxy_dates,
         dxy_values=dxy_values,
+        uup_dates=uup_dates,
+        uup_close=uup_close,
+        gvz_dates=gvz_dates,
+        gvz_values=gvz_values,
+        walcl_dates=walcl_dates,
+        walcl_values=walcl_values,
+        hy_oas_dates=hy_oas_dates,
+        hy_oas_values=hy_oas_values,
+        ig_oas_dates=ig_oas_dates,
+        ig_oas_values=ig_oas_values,
+        breakeven_5y_dates=be5y_dates,
+        breakeven_5y_values=be5y_values,
+        nfci_dates=nfci_dates,
+        nfci_values=nfci_values,
+        gdx_dates=gdx_dates,
+        gdx_close=gdx_close,
+        slv_dates=slv_dates,
+        slv_close=slv_close,
     )
 
 
@@ -206,6 +279,24 @@ def drop_extras_missing_sources(
         payload["rs_eth"] = 0.0
     if payload["dxy"] > 0.0 and sources.dxy_dates is None:
         payload["dxy"] = 0.0
+    if payload["uup"] > 0.0 and sources.uup_dates is None:
+        payload["uup"] = 0.0
+    if payload["gvz"] > 0.0 and sources.gvz_dates is None:
+        payload["gvz"] = 0.0
+    if payload["walcl"] > 0.0 and sources.walcl_dates is None:
+        payload["walcl"] = 0.0
+    if payload["hy_oas"] > 0.0 and sources.hy_oas_dates is None:
+        payload["hy_oas"] = 0.0
+    if payload["ig_oas"] > 0.0 and sources.ig_oas_dates is None:
+        payload["ig_oas"] = 0.0
+    if payload["breakeven_5y"] > 0.0 and sources.breakeven_5y_dates is None:
+        payload["breakeven_5y"] = 0.0
+    if payload["nfci"] > 0.0 and sources.nfci_dates is None:
+        payload["nfci"] = 0.0
+    if payload["gdx_gld"] > 0.0 and sources.gdx_dates is None:
+        payload["gdx_gld"] = 0.0
+    if payload["gld_slv"] > 0.0 and sources.slv_dates is None:
+        payload["gld_slv"] = 0.0
     return SdcaCompositeWeights(**payload)
 
 
@@ -218,7 +309,10 @@ def load_sdca_extra_z(
 ) -> dict[str, list[float | None]]:
     """Load independent extras from sibling files next to the BTC OHLCV CSV.
 
-    Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``.
+    Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``,
+    ``UUP.csv``, plus the gold legs ``GVZCLS.csv``, ``WALCL.csv``, ``BAMLH0A0HYM2.csv``,
+    ``BAMLC0A0CM.csv``, ``T5YIE.csv``, ``NFCI.csv``, ``GDX-USD.csv``, ``SLV.csv``
+    (each also accepted as parquet).
     Missing files omit that extra (trials that need it are skipped).
     """
     root = Path(data_path).parent if data_path is not None else None
@@ -331,6 +425,26 @@ def run_sdca_walk_forward(
     )
 
 
+def _worst_neighbor_key(
+    best_params: dict[str, float | int | str],
+    worst_neighbor: dict[str, float | int | str] | None,
+) -> str | None:
+    """Derive '<param>:<sign><pct>' from the argmax neighbor (None if unevaluated)."""
+    if worst_neighbor is None:
+        return None
+    diffs = [key for key in worst_neighbor if worst_neighbor[key] != best_params.get(key)]
+    if len(diffs) != 1:
+        raise ValueError(
+            f"sensitivity neighbor must differ from best_params in exactly one key, "
+            f"got {len(diffs)} differing keys: {sorted(str(k) for k in diffs)}"
+        )
+    key = diffs[0]
+    best_val = float(best_params[key])  # type: ignore[arg-type]
+    neighbor_val = float(worst_neighbor[key])  # type: ignore[arg-type]
+    rel_pct = (neighbor_val - best_val) / best_val * 100.0 if best_val != 0.0 else 0.0
+    return f"{key}:{rel_pct:+g}%"
+
+
 def _sensitivity_of(
     best_params: dict[str, float | int | str],
     mean_oos: float,
@@ -345,6 +459,8 @@ def _sensitivity_of(
 ) -> SensitivityReport:
     deltas: list[float] = []
     neighbors = sensitivity_neighbors(best_params, frac=frac)
+    worst_delta = float("-inf")
+    worst_neighbor: dict[str, float | int | str] | None = None
     for neighbor in neighbors:
         if missing_extra_names(composite_weights_from_params(neighbor), extra_z):
             continue
@@ -358,7 +474,11 @@ def _sensitivity_of(
             objective,
             extra_z=extra_z,
         )
-        deltas.append(abs(_mean_oos(scores) - mean_oos))
+        delta = abs(_mean_oos(scores) - mean_oos)
+        deltas.append(delta)
+        if delta > worst_delta:
+            worst_delta = delta
+            worst_neighbor = neighbor
     max_delta = max(deltas) if deltas else 0.0
     return SensitivityReport(
         frac=frac,
@@ -366,6 +486,7 @@ def _sensitivity_of(
         max_abs_delta_oos_pct=max_delta,
         stable=max_delta <= SENSITIVITY_SPIKE_PCT,
         neighbor_count=len(neighbors),
+        worst_neighbor_key=_worst_neighbor_key(best_params, worst_neighbor),
     )
 
 

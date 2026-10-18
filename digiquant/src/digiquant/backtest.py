@@ -8,8 +8,12 @@ import logging
 import os
 from pathlib import Path
 
-from digiquant.models import BacktestResult
-from digiquant.nautilus_runner import run_nautilus_backtest
+from digiquant.models import (
+    BacktestResult,
+    apply_engine_provenance,
+    build_engine_provenance,
+)
+from digiquant.nautilus_runner import RETURNS_SERIES_MISSING, run_nautilus_backtest
 from digiquant.strategy_aliases import STRATEGY_ALIASES
 from digiquant.strategy_specs import STRATEGY_PARAM_SPECS
 
@@ -158,6 +162,17 @@ def run_backtest(
         full_tearsheet=full_tearsheet,
     )
     if result is not None:
+        # DIG-945: stamp the build that produced this result, once, from the
+        # live process. Verified means the chart series survived withholding:
+        # RETURNS_SERIES_MISSING (single-symbol) or its "(k/n symbols)"
+        # aggregate form is absent from missing.
+        verified = not any(
+            m == RETURNS_SERIES_MISSING or m.startswith(f"{RETURNS_SERIES_MISSING} (")
+            for m in result.missing
+        )
+        result = apply_engine_provenance(
+            result, build_engine_provenance(returns_series_verified=verified)
+        )
         if _CACHE_ENABLED and tearsheet_path is None:
             if key in _backtest_cache_order:
                 _backtest_cache_order.remove(key)

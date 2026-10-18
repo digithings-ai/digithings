@@ -418,7 +418,9 @@ def _upload_interrupted_best_effort(run_id: str, run_date: str) -> None:
     def _target() -> None:
         try:
             upload_interrupted(run_id, run_date)
-        except BaseException as exc:  # noqa: BLE001 — best-effort; still exit 143
+        except BaseException as exc:  # noqa: BLE001 — intentional: the worker thread
+            # must record cancellation as well as errors so the diagnostic below
+            # still names it; nothing is swallowed and the run still exits 143.
             errors.append(exc)
 
     thread = threading.Thread(target=_target, name="interrupted-upload", daemon=True)
@@ -530,12 +532,29 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _require_run_id(run_id: str) -> str:
+    """Keep a run id inside one path segment under STATUS_DIR.
+
+    Callers send a UUID. A query or body value is still attacker-controlled,
+    and ``STATUS_DIR / f"{run_id}.log"`` would follow ``../`` out of /tmp/runner.
+    """
+    if not isinstance(run_id, str) or not run_id or len(run_id) > 128:
+        raise RuntimeError("invalid run_id")
+    if run_id[0] == "." or ".." in run_id:
+        raise RuntimeError("invalid run_id")
+    for ch in run_id:
+        if ("A" <= ch <= "Z") or ("a" <= ch <= "z") or ("0" <= ch <= "9") or ch in "._-":
+            continue
+        raise RuntimeError("invalid run_id")
+    return run_id
+
+
 def _log_path(run_id: str) -> Path:
-    return STATUS_DIR / f"{run_id}.log"
+    return STATUS_DIR / f"{_require_run_id(run_id)}.log"
 
 
 def _status_path(run_id: str) -> Path:
-    return STATUS_DIR / f"{run_id}.status.json"
+    return STATUS_DIR / f"{_require_run_id(run_id)}.status.json"
 
 
 def _tail(path: Path, lines: int = LOG_TAIL_LINES) -> str:
@@ -696,7 +715,9 @@ def _publish_bounded(command: str, run_id: str, paths: list[str]) -> None:
     def _target() -> None:
         try:
             _publish(command, run_id, paths)
-        except BaseException as exc:  # noqa: BLE001 — re-raised below
+        except BaseException as exc:  # noqa: BLE001 — intentional: whatever the
+            # publish thread hit (including cancellation) is re-raised below;
+            # narrowing to Exception would turn a cancelled publish into a silent success.
             errors.append(exc)
 
     thread = threading.Thread(target=_target, name=f"publish-{run_id}", daemon=True)
@@ -832,6 +853,9 @@ def _on_sigterm(signum: int, _frame: object) -> None:
         try:
             os.killpg(pgid, signal.SIGTERM)
         except ProcessLookupError:
+            # The process group already exited (or was never spawned) between
+            # the status write and the kill — an expected shutdown race, so
+            # there is nothing to report.
             pass
     raise SystemExit(143)
 

@@ -112,7 +112,7 @@ export default function PipelineNodeDetail({
           size === 'full' ? 'md:mx-auto md:w-full md:max-w-3xl' : '',
         ].join(' ')}
       >
-        {documentKey && loading && (
+        {loading && (
           <SkeletonGroup aria-label="Loading document" className="py-4 flex flex-col gap-3">
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="w-full" />
@@ -122,7 +122,7 @@ export default function PipelineNodeDetail({
         )}
 
         {/* Error */}
-        {documentKey && !loading && error && (
+        {!loading && error && (
           <div className="space-y-2">
             <p className="text-warn text-sm">{error}</p>
             <p className="text-xs text-ink-mute">
@@ -132,7 +132,7 @@ export default function PipelineNodeDetail({
         )}
 
         {/* Document content — reused LibraryDocumentBody dispatch */}
-        {documentKey && !loading && !error && doc && (
+        {!loading && !error && doc && (
           <div className="space-y-4">
             {explanation && (
               <p className="border-b border-hair pb-3 text-xs leading-relaxed text-ink-mute">
@@ -150,7 +150,7 @@ export default function PipelineNodeDetail({
         )}
 
         {/* Not found */}
-        {documentKey && !loading && !error && !doc && (
+        {!loading && !error && !doc && (
           <div className="space-y-2 py-4">
             <p className="text-ink-mute text-sm">
               No output found for <span className="font-mono text-ink">{documentKey}</span> on {date}.

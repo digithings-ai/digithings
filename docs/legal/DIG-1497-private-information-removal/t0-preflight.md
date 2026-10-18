@@ -18,17 +18,44 @@ Checked directly. Not derived from anything.
 | --- | --- | --- |
 | Fork count | `gh api repos/digithings-ai/digithings --jq .forks_count` | **2** |
 | Fork list | `gh api repos/digithings-ai/digithings/forks --paginate` | `itsnjstyle27`, `webclinic017` — no third fork |
-| `main` tip | `gh api repos/digithings-ai/digithings/commits/main --jq .sha` | `da88fa715e32a737572950ec46d0c0d6096614ac` — **unchanged, nothing pushed** |
+| `main` tip at incident time | pinned by DIG-1496 §7 — never re-read | `da88fa715e32a737572950ec46d0c0d6096614ac` — the pre-rewrite tip, **baseline** |
+| `main` tip now | `gh api repos/digithings-ai/digithings/commits/main --jq .sha` | `e37b85463821f4fade4347b41682011b57d26893` as of 2026-10-08 — **observation, not a baseline** |
+| Snapshot in the `main` tip tree | `gh api repos/digithings-ai/digithings/contents/…/seed/occ_tickets.jsonl?ref=main` | **absent — 404** as of 2026-10-08 |
 | Blob at pinned commit, ours | `curl -r 0-0 …/digithings-ai/digithings/86cb1ec5d…` | **206** |
 | Blob at pinned commit, `itsnjstyle27` | same, fork path | **206** |
 | Blob at pinned commit, `webclinic017` | same, fork path | **206** |
 
 **The section 5 enumeration is confirmed accurate as written.** Both fork rows — creation dates
 2026-08-18 and 2026-05-29, last pushes 2026-08-18 and 2026-05-25, default branch `develop` — match
-the live API. The only edit section 5 needs at t0 is the enumeration date.
+the live API. The only edit section 5 needs at t0 is the enumeration date. Re-verified 2026-10-08:
+`forks_count` is still **2**, the same two forks, same dates, same default branch. **Still no third
+fork.**
 
-**The trigger has not fired.** `main` is still `da88fa715e32…`, which is the pre-rewrite tip named in
-DIG-1496 §7.
+### How to read the three `main` rows
+
+The old single row conflated three separate facts into one SHA. Read them separately:
+
+1. **Tip at incident time** — `da88fa715e32…`, the pre-rewrite tip named in DIG-1496 §7. Pinned,
+   unchanging, never re-read at t0.
+2. **Tip now** — read fresh at t0. It is a dated observation and it is **expected** to differ from
+   row 1. A different SHA is **not a defect and not a finding**: the tip moves on every ordinary
+   merge. Do not reconcile row 2 to row 1, and never edit row 1 to match row 2.
+3. **Snapshot in the tip tree** — the contents-API check. As of 2026-10-08 it returns **404,
+   absent**. This is the only row that speaks to exposure at the tip, and it is what the old
+   single row was silently standing in for.
+
+**"Nothing pushed to `main`" was true once and is now inverted.** On 2026-10-06 the tip still
+carried the snapshot, so an unchanged tip *was* the evidence that the content was still exposed at
+the tip. That is no longer true: `197b08cfd` retired the committed snapshot on the main line, so
+the tip no longer contains the file. **Absence from the tip tree is not absence from history** —
+`86cb1ec5d…` is still an ancestor of `main`, and the blob is still retrievable at the pinned
+commit on our repo and both forks (the three 206 rows above). Nothing in these rows authorises
+sending, and nothing here changes DIG-1496.
+
+**The trigger still has not fired — but a moving tip is not the trigger.** The test is whether
+`86cb1ec5d…` is still an ancestor of `main`; as of 2026-10-08 it is, so the history rewrite
+DIG-1496 §7 plans is still unsatisfied. An unchanged tip was only ever a proxy for that test, and
+the proxy broke on the first ordinary deploy.
 
 ---
 

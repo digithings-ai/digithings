@@ -235,23 +235,15 @@ def test_new_tools_declare_session_entitlement(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", sorted(NEW_SESSION_TOOLS))
-def test_new_tools_registered_in_full_and_read_scope(
-    name: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from digiquant.data.gloomberb import session_gate
-    from digiquant.data.gloomberb.session_gate import SessionGateStatus
+def test_retired_tools_registered_on_no_scope(name: str) -> None:
+    # DIG-3907: the cookie path is retired, so the retired session tools are
+    # advertised on neither scope — no cookie, no probe, no gate.
     from digiquant.tool_names import canonical_tool_name
 
-    session_gate.reset_session_gate_cache()
-    monkeypatch.setattr(
-        session_gate,
-        "session_gate_status",
-        lambda *args, **kwargs: SessionGateStatus(True, "ok", "authenticated for registration"),
-    )
     public = canonical_tool_name(name)
     full = {t.name for t in create_mcp_server(scope="full")._tool_manager.list_tools()}
     read = {t.name for t in create_mcp_server(scope="read")._tool_manager.list_tools()}
-    assert public in full and public in read
+    assert public not in full and public not in read
     assert name not in full and name not in read
 
 

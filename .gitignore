@@ -83,6 +83,10 @@ build/
 .cache/
 # Runtime results (exports, audit logs) – recreated on run
 digiquant/results/
+# Gold enrichment snapshots (research staging; README.md is committed docs) — #4804
+digiquant/data/enrichment/snapshots/
+# SDCA research-trial scratch tearsheets (emit_sdca_trial_tearsheet.py output)
+digiquant/.scratch/
 # Repo-root runtime caches (research price-history, agent-cache paths) — JAN-004
 /data/
 # Local agent memory archives (Cursor/agent tooling) — JAN-005
@@ -126,19 +130,19 @@ apps/*/.selfhost-dev/
 # Large data files and caches (CSV, Parquet, pickles)
 # note: sample data in repo may be checked in intentionally, but user-owned
 # datasets should not be
-**/data/*.csv
-**/data/*.parquet
-**/data/*.pkl
-**/data/*.pickle
-**/data/*/*.csv
-**/data/*/*.parquet
-**/data/*/*.pkl
-**/data/*/*.pickle
+# ** matches any nesting depth (data/*.ext, data/x/*.ext, data/x/y/*.ext, ...)
+# so cache dirs like data/onchain/bitview/ are covered without a new tier
+# each time a client nests one directory deeper.
+**/data/**/*.csv
+**/data/**/*.parquet
+**/data/**/*.pkl
+**/data/**/*.pickle
 # Packaging output
 digi-bundle-*.tar.gz
 .DS_Store
 # digigraph ECharts (installed in Docker / local npm ci; do not vendor node_modules)
 digigraph/src/digigraph/tools/analytics/visualization/echarts/node_modules/
+digigraph/src/digigraph/tools/analytics/visualization/echarts/package-lock.json
 # digisearch EDGAR dev exports (generated; keep devdata/edgar_sample/.gitkeep)
 digisearch/devdata/edgar_sample/edgar_*.md
 digisearch/devdata/edgar_sample/edgar_*.yaml

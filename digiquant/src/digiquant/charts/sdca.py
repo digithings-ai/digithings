@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from math import isnan
 from pathlib import Path
 
 from digiquant.strategies.sdca.chart_series import (
@@ -131,7 +132,7 @@ def plot_valuation_index(inputs: Mapping[str, object], path: Path) -> Path:
 
     prices = inputs["prices"]
     dates = _dates(inputs["dates"])  # type: ignore[arg-type]
-    finite = [(d, p) for d, p in zip(dates, prices, strict=True) if p == p and p > 0]
+    finite = [(d, p) for d, p in zip(dates, prices, strict=True) if not isnan(p) and p > 0]
     if finite:
         ax2 = ax.twinx()
         ax2.set_yscale("log")
@@ -267,7 +268,7 @@ def plot_allocation(inputs: Mapping[str, object], path: Path) -> Path:
         )
 
     prices = inputs["prices"]
-    finite = [(d, p) for d, p in zip(dates, prices, strict=True) if p == p and p > 0]
+    finite = [(d, p) for d, p in zip(dates, prices, strict=True) if not isnan(p) and p > 0]
     if finite:
         ax2 = ax.twinx()
         ax2.set_yscale("log")
@@ -370,3 +371,28 @@ __all__ = [
     "plot_valuation_index",
     "render_sdca_diagnostic_charts",
 ]
+
+
+def _register_sdca_charts() -> None:
+    """Self-register SDCA chart builders (repo-split 1.2, DIG-3691).
+
+    After the split this module lives in R1 and registers through the
+    ``digiquant.strategies`` entry point instead; the registry stays the
+    same so callers are unaffected.
+    """
+    try:
+        from digiquant import plugin as _plugin
+
+        for _name, _fn in {
+            "plot_equity_vs_hold": plot_equity_vs_hold,
+            "plot_valuation_index": plot_valuation_index,
+            "plot_indicator_multiples": plot_indicator_multiples,
+            "plot_allocation": plot_allocation,
+            "render_sdca_diagnostic_charts": render_sdca_diagnostic_charts,
+        }.items():
+            _plugin.register_chart(f"sdca.{_name}", _fn)
+    except Exception:
+        pass
+
+
+_register_sdca_charts()

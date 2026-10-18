@@ -22,8 +22,6 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import httpx
-
 __all__ = ["run_due_monitors"]
 
 _DEFAULT_DIGISEARCH_URL = "http://127.0.0.1:8002"
@@ -37,8 +35,10 @@ _TIMEOUT_S = 120.0
 
 def _post(url: str, token: str) -> dict[str, Any]:
     """POST ``url`` with the service bearer token; raise on transport/HTTP failure."""
-    with httpx.Client(timeout=_TIMEOUT_S) as client:
-        response = client.post(url, headers={"authorization": f"Bearer {token}"})
+    from digibase.http_client import sync_client
+
+    with sync_client(timeout=_TIMEOUT_S) as client:
+        response = client.post(url, headers={"Authorization": f"Bearer {token}"})
         response.raise_for_status()
         return response.json()
 

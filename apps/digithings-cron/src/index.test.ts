@@ -515,6 +515,7 @@ describe("POST /kick", () => {
       DRY_RUN: "0",
       CRON_KICK_SECRET: "kick-secret",
       GH_DISPATCH_TOKEN: "token",
+      GITHUB_OVERRIDE_JOBS: "twelve-x-market-context-daily",
     };
 
     const res = await worker.fetch(
@@ -531,6 +532,56 @@ describe("POST /kick", () => {
     );
     expect(JSON.parse(String(init.body)).inputs).toEqual({ bucket: "weekly" });
   });
+
+  it("kick carries a caller-supplied run_date onto the twelve-x backfill row", async () => {
+    // DIG-1335 (CTO verdict on DIG-1272): a run_date given to the Worker must
+    // arrive as an input on the dispatched workflow_dispatch run. Today the
+    // row does not exist, so the kick maps to no job and dispatches nothing.
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      GH_DISPATCH_TOKEN: "token",
+    };
+
+    const res = await worker.fetch(
+      kick({ cron: "41 3 * * *", args: { run_date: "2026-10-05" } }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain(
+      "/repos/digithings-ai/twelve-x/actions/workflows/daily_run.yml/dispatches",
+    );
+    expect(JSON.parse(String(init.body)).inputs).toEqual({ run_date: "2026-10-05" });
+  });
+
+  it("kick without args derives run_date for the twelve-x backfill row", async () => {
+    // Same row, no caller date: the Worker stamps the scheduled day instead
+    // of dispatching inputs {} (the Oct-6 defect shape: date dropped on floor).
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      GH_DISPATCH_TOKEN: "token",
+    };
+
+    const res = await worker.fetch(
+      kick({ cron: "41 3 * * *", scheduledTime: Date.UTC(2026, 9, 15, 3, 41) }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).inputs).toEqual({ run_date: "2026-10-15" });
+  });
   it("answers 400 when GitHub refuses an undeclared workflow input", async () => {
     const fetchMock = vi.fn(
       async () =>
@@ -546,11 +597,12 @@ describe("POST /kick", () => {
       DRY_RUN: "0",
       CRON_KICK_SECRET: "kick-secret",
       GH_DISPATCH_TOKEN: "github-token",
+      GITHUB_OVERRIDE_JOBS: "twelve-x-market-context-daily",
     };
 
-    // twelve-x-market-context-daily is the only row on this cron. It is a
-    // workflow_dispatch with inputs { bucket: "daily" }, so GitHub refusing
-    // "bucket" is a real shape for this route.
+    // twelve-x-market-context-daily is the only row on this cron. It is kind
+    // twelvex, and GITHUB_OVERRIDE_JOBS sends it back to workflow_dispatch.
+    // GitHub refusing "bucket" is still the shape of that fallback.
     const res = await worker.fetch(kick({ cron: "30 5 * * *" }), env, executionContext([]));
 
     expect(res.status).toBe(400);
