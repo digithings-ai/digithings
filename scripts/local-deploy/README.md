@@ -18,10 +18,37 @@ or spends without an explicit live flag plus a named approval.
 | `publish-digichat-image.yml` (GHCR publish) | `publish_image.sh digichat` | Only with `--push` |
 | `publish-digillm-image.yml` (GHCR publish) | `publish_image.sh digillm` | Only with `--push` |
 
-`deploy-digithings-stack-cloudflare.yml` and `publish-service-images.yml`
-are still active on GitHub, so they have no local replacement yet. When
-they are disabled, they land here under the same shape: dry-run by
-default, live only with `--live` plus a named approval.
+`deploy-digithings-stack-cloudflare.yml` is named by both apps' READMEs and
+by `docs/ops/SECRETS_INVENTORY.md`, but **it does not exist in the repo** — it
+was deleted on 2026-10-01 by `f54af7052` (#4919, Human Gate, DIG-2843), and
+`deploy-digichat-cloudflare-container.yml` went with it. `deploy_worker.sh`
+already covers both, because it takes any directory under `apps/`; there was
+never a replacement to write.
+
+## The release branch: one ref, one Worker at a time
+
+`release/vX.Y.Z` is the ref production deploys from — the pre-push hook's
+branch taxonomy allows only `release/v<major>.<minor>.<patch>`, which is why
+the branch is version-shaped rather than named after Cloudflare.
+
+```sh
+git worktree add ~/cf-rel release/v0.2.0
+cd ~/cf-rel && npm ci --no-audit --no-fund
+bash scripts/local-deploy/deploy_worker.sh digiquant-runner            # dry-run
+LOCAL_DEPLOY_APPROVED_BY=Chris \
+  bash scripts/local-deploy/deploy_worker.sh digiquant-runner --live --yes
+```
+
+- **One app per run.** `<app>` is a directory under `apps/`, so updating one
+  Worker never rebuilds or redeploys the others.
+- **The branch is the pin.** Merge or cherry-pick onto it when you want that
+  change live. `main` is not the deploy source, so promoting `develop` to
+  `main` and deploying a Worker are independent decisions.
+- **A container app needs its image inputs first.** `deploy_worker.sh` runs
+  `scripts/package_r5_image_inputs.py` automatically before a live container
+  deploy. Without it the docker build fails
+  `failed to compute cache key ... not found`, which is how `digiquant-runner`
+  sat on its 2026-10-01 image for two weeks while every gate stayed green.
 
 ## Safety rules (all four scripts)
 

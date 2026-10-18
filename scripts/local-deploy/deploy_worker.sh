@@ -68,5 +68,16 @@ if [ "$YES" -eq 0 ]; then
 fi
 echo "--- live deploy (approved by $LOCAL_DEPLOY_APPROVED_BY) ---"
 export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+
+# DIG-3701: a container image build COPYs from image-packages/ (gitignored),
+# so the docker build fails "failed to compute cache key ... not found" unless
+# this ran first. Neither this script nor the (disabled) CI lane did it, which
+# is how digiquant-runner stayed on its 2026-10-01 image while every gate
+# stayed green. Never-again step, not an optimisation.
+if grep -q '^\[\[containers\]\]' "apps/$APP/wrangler.toml"; then
+  echo "--- packaging image inputs (scripts/package_r5_image_inputs.py) ---"
+  python3 scripts/package_r5_image_inputs.py
+fi
+
 (cd "apps/$APP" && npm exec -- wrangler deploy)
 echo "DEPLOYED $APP (approved by $LOCAL_DEPLOY_APPROVED_BY). Verify the Worker before closing out."
