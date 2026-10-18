@@ -11,6 +11,8 @@
  * Fonts are loaded in app/layout.tsx via next/font.
  */
 
+import { escapeUnsafeChars } from "@/lib/escape-unsafe-chars";
+
 export type TypeSuite = {
   id: string;
   label: string;
@@ -139,4 +141,4 @@ const MAP = Object.fromEntries(
   TYPE_SUITES.filter((t) => t.id !== "default").map((t) => [t.id, [t.display, t.body, t.mono]]),
 );
 
-export const typeInitScript = `(function(){try{var m=${JSON.stringify(MAP)};var v=localStorage.getItem('${KEY}');if(!v||v==='default')return;var t=m[v];if(!t)return;var el=document.documentElement;el.style.setProperty('--font-display',t[0]);el.style.setProperty('--font-sans',t[1]);el.style.setProperty('--font-mono',t[2]);}catch(e){}})();`;
+export const typeInitScript = `(function(){try{var m=${escapeUnsafeChars(JSON.stringify(MAP))};var v=localStorage.getItem('${KEY}');if(!v||v==='default')return;var t=m[v];if(!t)return;var el=document.documentElement;el.style.setProperty('--font-display',t[0]);el.style.setProperty('--font-sans',t[1]);el.style.setProperty('--font-mono',t[2]);}catch(e){}})();`;
