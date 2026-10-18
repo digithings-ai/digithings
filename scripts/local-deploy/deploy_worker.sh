@@ -75,8 +75,15 @@ export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
 # is how digiquant-runner stayed on its 2026-10-01 image while every gate
 # stayed green. Never-again step, not an optimisation.
 if grep -q '^\[\[containers\]\]' "apps/$APP/wrangler.toml"; then
-  echo "--- packaging image inputs (scripts/package_r5_image_inputs.py) ---"
-  python3 scripts/package_r5_image_inputs.py
+  if [ -d image-packages ]; then
+    echo "--- image inputs already present ($(find image-packages -type f 2>/dev/null | wc -l | tr -d ' ') files) — skipping packaging ---"
+    echo "    Packaging rewrites file mtimes, which changes the container image layer"
+    echo "    digests; a retry would then re-upload ~8 layers instead of finding them"
+    echo "    already in the registry. Delete image-packages/ to force a rebuild."
+  else
+    echo "--- packaging image inputs (scripts/package_r5_image_inputs.py) ---"
+    python3 scripts/package_r5_image_inputs.py
+  fi
 fi
 
 # DIG-3229: prefer the app's OWN deploy script when it defines one.
