@@ -54,7 +54,7 @@ The `instance` is the id this deploy derived from `DIGICHAT_CONTAINER_REV` (see
 to and what `GET /_digichat/meta` reports.
 The instance moves to `stopped` within about ten seconds and the next real
 request cold-starts a fresh one (20–60 s). Verified 2026-10-19: destroyed a live
-instance and the following OCC chat came back and executed a Zammad tool call.
+instance and the following OCC chat came back and executed a live ticket lookup.
 
 Status codes are deliberate:
 
