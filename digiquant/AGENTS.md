@@ -478,7 +478,7 @@ used by dashboard/research ([`supabase/`](supabase/), `project_id "digiquant-res
 (renamed `core`) as the suite-wide backend. It is **not** a separate project: the free-tier
 2-project limit is taken by dashboard + the confidential **twelve-x** project. The shared market
 datasets already live here; #1064 only **adds** the strategy store
-([`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql)).
+([`supabase/migrations/prod/046_strategy_store.sql`](supabase/migrations/prod/046_strategy_store.sql)).
 
 The strategy-store accessor (`digiquant.data.store`, `build_digiquant_client`) resolves the
 standardized `CORE_SUPABASE_URL` / `CORE_SUPABASE_SERVICE_KEY`
