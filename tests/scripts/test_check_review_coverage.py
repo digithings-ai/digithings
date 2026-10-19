@@ -1166,6 +1166,26 @@ def test_commits_in_range_refuses_a_record_that_cannot_be_parsed(
         crc.commits_in_range("origin/main", "head")
 
 
+def test_commits_in_range_keeps_a_separator_inside_the_subject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the last two separators are structural; the subject may hold \\x1f."""
+    monkeypatch.setattr(
+        crc,
+        "_run",
+        lambda _args: "sha1\x1ffeat: a\x1fb\x1fauthor\x1fp1 p2\x1e\n",
+    )
+    rows = crc.commits_in_range("origin/main", "head")
+    assert rows == [
+        {
+            "sha": "sha1",
+            "subject": "feat: a\x1fb",
+            "author": "author",
+            "parents": "p1 p2",
+        }
+    ], "a separator in the subject must not shift author/parents"
+
+
 def test_a_shallow_clone_refuses_to_judge_the_range(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1208,6 +1228,18 @@ def test_a_range_whose_oldest_commit_is_a_grafted_root_refuses(
     assert "parent" in reason
 
 
+def test_a_parentless_commit_anywhere_in_the_range_refuses() -> None:
+    """A replace/graft boundary need not be the first row `git log` returns."""
+    reason = crc.graft_boundary_reason(
+        [
+            {"sha": "a" * 40, "subject": "x", "author": "a", "parents": "p"},
+            {"sha": "b" * 40, "subject": "y", "author": "a", "parents": ""},
+        ]
+    )
+    assert reason is not None
+    assert "bbbbbbbb" in reason
+
+
 def test_a_normal_range_has_no_graft_boundary() -> None:
     assert (
         crc.graft_boundary_reason(
@@ -1227,7 +1259,7 @@ def test_main_refuses_a_shallow_clone_before_running_the_range(
 
     monkeypatch.setattr(crc, "commits_in_range", must_not_run)
     monkeypatch.setattr(sys, "argv", ["check_review_coverage.py", "--json"])
-    assert crc.main() != 0
+    assert crc.main() == 2
     assert "shallow" in capsys.readouterr().err
 
 
@@ -1242,7 +1274,7 @@ def test_main_fails_closed_when_the_range_cannot_be_read(
 
     monkeypatch.setattr(crc, "commits_in_range", unreadable)
     monkeypatch.setattr(sys, "argv", ["check_review_coverage.py", "--json"])
-    assert crc.main() != 0
+    assert crc.main() == 2
     assert "cannot read the local range" in capsys.readouterr().err
 
 
@@ -1294,6 +1326,71 @@ def test_commits_from_compare_keeps_the_subject_not_the_body(tmp_path: Path) -> 
     assert crc.commits_from_compare(str(path))[0]["subject"] == "fix: one line (#2)"
 
 
+def test_commits_from_compare_keeps_both_parents_of_a_merge_commit(tmp_path: Path) -> None:
+    """Dropping to the first parent would make `is_merge_commit` miss a merge."""
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(
+            _compare_payload([_compare_commit(parents=["c" * 40, "d" * 40])])
+        ),
+        encoding="utf-8",
+    )
+    row = crc.commits_from_compare(str(path))[0]
+    assert row["parents"] == f"{'c' * 40} {'d' * 40}"
+    assert crc.is_merge_commit(row["parents"])
+
+
+def test_commits_from_compare_refuses_a_payload_that_ends_elsewhere(
+    tmp_path: Path,
+) -> None:
+    """A stale or swapped compare must not be judged as this promotion."""
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(_compare_payload([_compare_commit(sha="a" * 40)])),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"not b{12}"):
+        crc.commits_from_compare(str(path), expected_head="b" * 40)
+
+
+def test_commits_from_compare_refuses_an_empty_payload_for_a_named_head(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "compare.json"
+    path.write_text(json.dumps(_compare_payload([])), encoding="utf-8")
+    with pytest.raises(ValueError, match="empty"):
+        crc.commits_from_compare(str(path), expected_head="b" * 40)
+
+
+def test_commits_from_compare_accepts_the_named_head_prefix(tmp_path: Path) -> None:
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(_compare_payload([_compare_commit(sha="a" * 40)])),
+        encoding="utf-8",
+    )
+    assert crc.commits_from_compare(str(path), expected_head="a" * 12)
+
+
+def test_commits_from_compare_refuses_a_malformed_payload(tmp_path: Path) -> None:
+    path = tmp_path / "compare.json"
+    path.write_text(json.dumps({"total_commits": 1, "commits": [{"nope": True}]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="40-hex"):
+        crc.commits_from_compare(str(path))
+
+
+def test_commits_from_compare_requires_a_file(tmp_path: Path) -> None:
+    with pytest.raises(OSError):
+        crc.commits_from_compare(str(tmp_path / "missing.json"))
+
+
+def test_main_refuses_a_missing_compare_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["check_review_coverage.py", "--commits-json", str(tmp_path / "missing.json")])
+    assert crc.main() == 2
+    assert "refusing the supplied commit set" in capsys.readouterr().err
+
+
 def test_commits_from_compare_refuses_a_truncated_payload(tmp_path: Path) -> None:
     """GitHub caps compare at 250 commits; judging a capped set is a false green."""
     path = tmp_path / "compare.json"
@@ -1321,7 +1418,7 @@ def test_main_refuses_a_truncated_compare_payload(
     monkeypatch.setattr(
         sys, "argv", ["check_review_coverage.py", "--commits-json", str(path)]
     )
-    assert crc.main() != 0
+    assert crc.main() == 2
     assert "truncated" in capsys.readouterr().err
 
 
