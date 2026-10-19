@@ -76,7 +76,21 @@ export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
 # stayed green. Never-again step, not an optimisation.
 if grep -q '^\[\[containers\]\]' "apps/$APP/wrangler.toml"; then
   if [ -d image-packages ]; then
-    echo "--- image inputs already present ($(find image-packages -type f 2>/dev/null | wc -l | tr -d ' ') files) — skipping packaging ---"
+    echo "--- image inputs present ($(find image-packages -type f 2>/dev/null | wc -l | tr -d ' ') files) — verifying they match the sources ---"
+    # DIG-4423: the directory existing is not evidence that it is current. On
+    # 2026-10-18 a digigraph/src-only change deployed green three times while the
+    # packaged digigraph wheel was dated the previous day and contained none of
+    # the change. The check is content-based on purpose — checkout stamps every
+    # source mtime with "now", so an mtime rule would refuse a clean tree and
+    # force a repackage (see the layer-digest note below).
+    if ! python3 scripts/package_r5_image_inputs.py --check-only; then
+      echo "ABORT: image-packages/ does not match the packaged sources (drift above)."
+      echo "  Deploying now would build an image around stale wheels/npm packages."
+      echo "  Fix, then re-run this deploy:"
+      echo "    rm -rf image-packages && python3 scripts/package_r5_image_inputs.py"
+      exit 1
+    fi
+    echo "--- skipping packaging ---"
     echo "    Packaging rewrites file mtimes, which changes the container image layer"
     echo "    digests; a retry would then re-upload ~8 layers instead of finding them"
     echo "    already in the registry. Delete image-packages/ to force a rebuild."
