@@ -68,5 +68,33 @@ if [ "$YES" -eq 0 ]; then
 fi
 echo "--- live deploy (approved by $LOCAL_DEPLOY_APPROVED_BY) ---"
 export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
-(cd "apps/$APP" && npm exec -- wrangler deploy)
+
+# DIG-3701: a container image build COPYs from image-packages/ (gitignored),
+# so the docker build fails "failed to compute cache key ... not found" unless
+# this ran first. Neither this script nor the (disabled) CI lane did it, which
+# is how digiquant-runner stayed on its 2026-10-01 image while every gate
+# stayed green. Never-again step, not an optimisation.
+if grep -q '^\[\[containers\]\]' "apps/$APP/wrangler.toml"; then
+  if [ -d image-packages ]; then
+    echo "--- image inputs already present ($(find image-packages -type f 2>/dev/null | wc -l | tr -d ' ') files) — skipping packaging ---"
+    echo "    Packaging rewrites file mtimes, which changes the container image layer"
+    echo "    digests; a retry would then re-upload ~8 layers instead of finding them"
+    echo "    already in the registry. Delete image-packages/ to force a rebuild."
+  else
+    echo "--- packaging image inputs (scripts/package_r5_image_inputs.py) ---"
+    python3 scripts/package_r5_image_inputs.py
+  fi
+fi
+
+# DIG-3229: prefer the app's OWN deploy script when it defines one.
+# digithings-stack-cloudflare deploys via `node scripts/deploy.mjs`, which injects
+# --var STACK_CONTAINER_REV:<commit> and then verifies /_stack/meta reports the id
+# that commit implies. Deploying it with a bare command still serves traffic but
+# ships the LEGACY container id (shared-v18) and cannot guarantee eviction.
+if node -e "process.exit(require('./apps/$APP/package.json').scripts && require('./apps/$APP/package.json').scripts.deploy ? 0 : 1)" 2>/dev/null; then
+  echo "--- using apps/$APP's own deploy script (pins the container id) ---"
+  npm run deploy --workspace "$PKG"
+else
+  (cd "apps/$APP" && npm exec -- wrangler deploy)
+fi
 echo "DEPLOYED $APP (approved by $LOCAL_DEPLOY_APPROVED_BY). Verify the Worker before closing out."
