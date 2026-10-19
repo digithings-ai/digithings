@@ -1,6 +1,6 @@
 # Recovering a wedged digichat container
 
-How to recover `digithings-digichat` when its single Container instance stops
+How to recover `digithings-digichat` when a Container instance stops
 serving and will not be reclaimed. Written 2026-10-19 after the fourth
 occurrence, with the reset lever added the same day.
 
@@ -101,10 +101,11 @@ instances but not stop one, and the REST API exposes only listing and SSH.
 
 ## Why it happens
 
-`max_instances = 1` (`apps/digichat-cloudflare/wrangler.toml`), so one bad
-instance is the entire capacity. The only reaper is `sleepAfter = "1m"` via the
-base `onActivityExpired()`, which calls `stop()` — and `stop()` is a no-op
-unless the container is `running`.
+`max_instances = 2` (`apps/digichat-cloudflare/wrangler.toml`, DIG-4487), so
+one bad instance still leaves a slot for a cold start; **two** bad instances
+are the entire capacity, and then the pool is exhausted. The only reaper is
+`sleepAfter = "1m"` via the base `onActivityExpired()`, which calls `stop()` —
+and `stop()` is a no-op unless the container is `running`.
 
 **Hypothesis, not yet proven:** `isActivityExpired()` returns false while
 `inflightRequests > 0`, and that counter is incremented in `containerFetch` but
