@@ -475,8 +475,46 @@ def _posted_verdict_reason(pr: dict[str, Any]) -> list[str]:
     ]
 
 
+def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
+    """The PR's reviews, minus the two entries that are not review evidence.
+
+    2026-10-18 (Chris): now that the queue no longer demands a non-author approval,
+    this hatch is the review gate, so it must not be satisfiable by a review that
+    proves nothing:
+
+      * any review by the PR's own author - GitHub refuses a self-approval in
+        production, so the APPROVED shape is a fixture rather than a live one, and
+        an author's own review is not evidence that anyone else read the change;
+      * an APPROVED review whose login is a `[bot]` - a linter saying it found no
+        problems. A real bot review pass is still accepted: `check_review_coverage`
+        counts it through its own REVIEW_BOTS hatch or a REVIEW_BOT_CHECK_NAMES check.
+
+    Everything else is passed through untouched.
+    """
+    author = str((pr.get("author") or {}).get("login") or "")
+    kept: list[dict[str, Any]] = []
+    for review in pr.get("reviews") or []:
+        login = str((review.get("author") or {}).get("login") or "")
+        if login and login == author:
+            continue
+        if login.endswith("[bot]") and str(review.get("state") or "").upper() == "APPROVED":
+            continue
+        kept.append(review)
+    return kept
+
+
 def _gate_review(pr: dict[str, Any], acting_role: str, attest_role: str | None) -> list[str]:
-    """Satisfied by an approving review from someone else, or by another role's attestation."""
+    """Refuse a PR whose review is unresolved; review EVIDENCE is enforced by
+    `_gate_review_coverage`.
+
+    2026-10-18 (Chris): the non-author approval requirement is RETIRED. It was
+    unsatisfiable in this org - every seat pushes under one GitHub login, so
+    GitHub refuses `gh pr review --approve` on any seat-authored PR - and it
+    blocked PRs that had been properly reviewed and tested. What the queue
+    requires is evidence that a review happened, which `_gate_review_coverage`
+    enforces (in-session findings, a Bot review, a real approval, or
+    `reviewed:owner`).
+    """
     reasons: list[str] = []
     if str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
         reasons.append("review has outstanding change requests")
@@ -486,31 +524,18 @@ def _gate_review(pr: dict[str, Any], acting_role: str, attest_role: str | None) 
     # `--attest-review qa` and a posted "changes requested", and it merged.
     reasons.extend(_posted_verdict_reason(pr))
 
-    author = str((pr.get("author") or {}).get("login") or "")
-    reviews = pr.get("reviews") or []
-    approved_by_other = any(
-        str(r.get("state") or "").upper() == "APPROVED"
-        and str((r.get("author") or {}).get("login") or "") != author
-        # A bot's APPROVED is a linter saying it found no problems, not a person
-        # taking responsibility for the change. GitHub's own review summary
-        # ignores bot reviews for the same reason.
-        and not str((r.get("author") or {}).get("login") or "").endswith("[bot]")
-        for r in reviews
-    )
-    if approved_by_other:
-        return reasons
-
-    # No usable approval. Someone has to stand behind the review, and it cannot be
-    # the role doing the merging: on this org every agent shares one GitHub login,
-    # so a role that authored a PR is indistinguishable from one that did not. The
-    # role is therefore asserted explicitly, and self-attestation is refused.
-    if attest_role is None:
-        reasons.append("no approving review from a non-author; needs --attest-review <role>")
-    elif attest_role == acting_role:
-        reasons.append(
-            f"attested by '{acting_role}', which is also the merging role; "
-            "attestation must come from a different role"
-        )
+    # 2026-10-18 (Chris via One): the approval-or-attestation demand that used to sit
+    # here is RETIRED. It required an APPROVED review from a non-author, or another
+    # role's `--attest-review`, and NEITHER was reachable: every agent in this org
+    # pushes under one GitHub login, so GitHub refuses a self-approval on any
+    # seat-authored PR, and after the false-QA-attestation removal the driver passes
+    # `attest_role=None` on every run. It blocked PRs that were properly reviewed,
+    # tested and green. Review EVIDENCE is what this queue requires, and
+    # `_gate_review_coverage` is where it is enforced (an in-session findings comment
+    # marked `<!-- in-session-review -->`, a completed Bot review, a real approval, or
+    # `reviewed:owner`). `acting_role`/`attest_role` stay in the signature, and
+    # `--attest-review` stays on the CLI, only so existing callers keep working: the
+    # flag now gates nothing.
     return reasons
 
 
@@ -558,9 +583,9 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
     * `--attest-review` no longer substitutes for review evidence. Both
       reopen cases merged attested by `qa` with zero reviews and zero
       comments; attestation is an assertion, and an assertion with no artifact
-      is exactly what the promotion gate refuses. The attestation mechanism
-      itself is unchanged — it still satisfies `_gate_review` — but it does
-      not satisfy this gate.
+      is exactly what the promotion gate refuses. The demand it used to satisfy
+      was retired at `_gate_review` too (2026-10-18): the flag is still accepted
+      for caller compatibility, but it no longer gates anything.
     * Comments are fetched lazily and only when a `reviewed:agent` label makes
       them load-bearing (`fetch_queue` carries labels but not comments). An
       unreadable comments read fails closed, for the same reason an absent
@@ -602,7 +627,7 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
     }
     crc._apply_reviews_checks_comments(
         state,
-        reviews=pr.get("reviews") or [],
+        reviews=_evidence_reviews(pr),
         checks=pr.get("statusCheckRollup") or [],
         comments=comments if isinstance(comments, list) else [],
     )
@@ -693,7 +718,12 @@ def _audit_body(
     verdict: Verdict, authority: Authority, policy: Policy, attest_role: str | None
 ) -> str:
     checks = "\n".join(f"- `{c}`" for c in verdict.checks) or "- (no checks reported)"
-    review = f"attested by `{attest_role}`" if attest_role else "approving review from a non-author"
+    # The non-author-approval demand was retired on 2026-10-18, so this line must name
+    # the evidence the queue actually accepted rather than an approval no seat could
+    # give. Every merged PR's audit comment is permanent; it must not assert one.
+    review = "review evidence via the coverage gate (`_gate_review_coverage`)"
+    if attest_role:
+        review += f"; attested by `{attest_role}`"
     return (
         "Merged through the `develop` merge queue — no decision card required.\n\n"
         f"- merging role: `{authority.role}` ({authority.title})\n"
