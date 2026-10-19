@@ -4,16 +4,16 @@
 **Date:** 2026-10-19
 **Author:** Board (local session), on Chris's decision.
 **Raised by:** DIG-2904. PR #5903 merged the class change without moving the lock; PR #5924 is this correction.
-**Supersedes:** the instance-type clause of the "Chris lock" in `docs/superpowers/plans/2026-09-30-digiquant-house-run-phase3.md` (`:15`, `:22`, `:843`) and `docs/superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md` (`:25`, `:32`).
-**Amends:** `docs/ops/digiquant-runner.md`, `config/contract/contract.yaml`, `apps/digiquant-runner/container/exec_job_test.py`, and the class comment in both image Dockerfiles.
+**Supersedes:** the instance-type clause of the "Chris lock" in `docs/superpowers/plans/2026-09-30-digiquant-house-run-phase3.md` (`:15`, `:28`, `:849`) and `docs/superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md` (`:25`, `:671`).
+**Amends:** `docs/ops/digiquant-runner.md`, `config/contract/contract.yaml`, `apps/digiquant-runner/container/exec_job_test.py`, and the class comment in the runner image Dockerfile (`infra/docker/Dockerfile.digiquant-runner`).
 
 ## Context
 
 `#5903` (merged 2026-10-19T08:23:06Z) right-sized `DigiQuantRunnerContainer` from
 `standard-2` (1 vCPU / 6 GiB) to `standard-1` (0.5 vCPU / 4 GiB). It updated
-`apps/digiquant-runner/wrangler.toml` and `src/commands.test.ts`, and left four other
+`apps/digiquant-runner/wrangler.toml` and `src/commands.test.ts`, and left five other
 artefacts asserting `standard-2`: the image guard in `container/exec_job_test.py`, the ops
-doc, the contract entry, and both plan locks. The guard runs in CI under the check
+doc, the contract entry, both plan locks, and the runner image Dockerfile's class comment. The guard runs in CI under the check
 `Test: web apps / lint`, so develop's runner job went red on the next run — the same class
 of defect as DIG-4249, a repo-wide red that blocks every PR touching the path.
 
@@ -47,7 +47,7 @@ contract and production agree. Do not upsize.
   exist.
 - **The hazard the lock was standing in for is untouched.** The plan warns that a price tick
   overlapping the house chain can push the box into OOM *at 6 GiB as well*
-  (`phase3:170`, `:827`). Halving the memory halves the margin, and nothing in this change
+  (`phase3:176`, `:833`). Halving the memory halves the margin, and nothing in this change
   buys margin back. Two follow-ups are owed and are tracked on DIG-2904:
   1. make the house chain exclusive against price ticks (`MAX_INFLIGHT` / concurrency
      group) — the plan's own recommended option at `:827`;

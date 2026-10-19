@@ -17,6 +17,8 @@
 > **Amended 2026-10-19 (ADR-0034):** the instance class is now `standard-1` (4 GiB).
 > Chris kept the cheaper class instead of reverting the code, so the lock, the ops doc,
 > the contract and both guards moved with it. Every hazard recorded below still applies.
+> This supersedes the `Instance type` row in the table below, and the "Instance type is
+> not open" clause further down: both record the original lock.
 
 Locked for this plan. An implementation PR that violates it is out of scope.
 
@@ -844,7 +846,7 @@ Adapted from epic Phase 3. Sizing lines follow the Chris lock, not the epic's `s
 
 ## Open questions
 
-Instance type is **not** open. It is `standard-2` on `DigiQuantRunnerContainer`.
+Instance type is **not** open. It is `standard-2` on `DigiQuantRunnerContainer`. *(Amended 2026-10-19: the class is now `standard-1` - ADR-0034.)*
 
 1. **Does house-run serialize the other cadence?** Recommended default in this plan: yes — queue prices, market-data, tearsheets, on-chain, metrics, and the execution probe while the `house-run` lock is held; promote them after it finishes; still one instance; reap after the queue drains. The alternative is today's `MAX_INFLIGHT = 2`, which lets one other command share the 1 vCPU / 6 GiB box with the chain. Chris / One should pick before Task 4 is implemented. Task 4's test is written for the recommended default.
 

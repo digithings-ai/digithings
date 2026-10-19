@@ -402,28 +402,54 @@ def _check_phase2(commands: dict[str, Any]) -> None:
     # `package_r5_image_inputs.py` declares what ships (RUNNER_FILES, RUNNER_OPT and
     # the module wheels) and the Dockerfile copies `image-packages/runner/payload`.
     # Pin that source of truth rather than the retired COPY spelling.
-    for needle in (
+    #
+    # Membership is read from the declared tuple, not from the whole file: `digigraph`
+    # also appears in STACK_PACKAGES and in a comment, so a wheel dropped from
+    # RUNNER_WHEELS would still be found by a plain substring search and the check
+    # would pass on the very regression it exists to catch.
+    def declares(name: str, values: tuple[str, ...]) -> None:
+        head = exporter.find(f"\n{name}")
+        tail = exporter.find("\n)", head) if head >= 0 else -1
+        if head < 0 or tail < 0:
+            raise SystemExit(f"payload: {name} is not declared as a tuple")
+        block = exporter[head:tail]
+        for value in values:
+            if f'"{value}"' not in block:
+                raise SystemExit(f"payload must declare {value} in {name}")
+
+    declares(
+        "RUNNER_WHEELS",
         # The house chain imports these in-process; a missing module crash-loops it.
-        "digigraph",
-        "digillm",
-        "digitrace",
-        # Both are loaded fail-loud at import by digigraph (llm_auth / model_config);
-        # the house chain steps run it in-process, so omitting either crash-loops the
-        # house image. Pinned because the failure only shows up in production.
-        "config/byok-providers.json",
-        "config/model-policy.json",
-        # Loaded *softly*, so its absence is silent rather than a crash-loop:
-        # /app/config/ already exists here, so pricing.py finds the directory
-        # and returns an empty table. Pinned for that reason.
-        "config/digiquant-model-prices.json",
-        ".github/digiquant-pipeline.yml",
-        ".github/workflows/pipeline-digiquant-allocation-shadow.yml",
-        "house_chain_step.py",
-        "wake_stack.py",
-        "web_search_preflight.py",
-    ):
-        if needle not in exporter:
-            raise SystemExit(f"payload must carry {needle}")
+        ("digigraph", "digillm", "digitrace"),
+    )
+    declares(
+        "RUNNER_FILES",
+        (
+            # The cron probe: without it the execution check silently stops running.
+            "scripts/execution_cron_check.py",
+            # Both are loaded fail-loud at import by digigraph (llm_auth / model_config);
+            # the house chain steps run it in-process, so omitting either crash-loops the
+            # house image. Pinned because the failure only shows up in production.
+            "config/byok-providers.json",
+            "config/model-policy.json",
+            # Loaded *softly*, so its absence is silent rather than a crash-loop:
+            # /app/config/ already exists here, so pricing.py finds the directory
+            # and returns an empty table. Pinned for that reason.
+            "config/digiquant-model-prices.json",
+            ".github/digiquant-pipeline.yml",
+            ".github/workflows/pipeline-digiquant-allocation-shadow.yml",
+        ),
+    )
+    declares(
+        "RUNNER_OPT",
+        (
+            # Declared repo-relative, not as basenames: RUNNER_OPT copies these four
+            # plus commands.json into payload/opt/runner.
+            "apps/digiquant-runner/container/house_chain_step.py",
+            "apps/digiquant-runner/container/wake_stack.py",
+            "apps/digiquant-runner/container/web_search_preflight.py",
+        ),
+    )
     github_at = ignore.find("\n.github\n")
     pipeline_at = ignore.find("!.github/digiquant-pipeline.yml")
     shadow_at = ignore.find("!.github/workflows/pipeline-digiquant-allocation-shadow.yml")

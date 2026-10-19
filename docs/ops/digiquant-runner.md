@@ -28,7 +28,9 @@ never sends `run_writers`. A kick can pass `args`.
 ## Phase 2 commands
 
 Same container class (`DigiQuantRunnerContainer`, `standard-1`). The image
-sync adds `--extra nautilus` for tearsheets and research-metrics. The
+install carries the `nautilus` extra (declared by `RUNNER_EXPORTS` in
+`scripts/package_r5_image_inputs.py`; the Dockerfile installs the generated project) for
+tearsheets and research-metrics. The
 nautilus 1.230.0 cp312 manylinux x86_64 wheel is 182608916 bytes, under the
 ~8 GB split, so there is no `DigiQuantRunnerNautilusContainer`. `ccxt` stays
 out of the lockfile; the Coinbase step is `uv run --frozen --with ccxt`.
