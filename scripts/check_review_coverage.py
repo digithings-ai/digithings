@@ -66,6 +66,13 @@ Usage:
     scripts/check_review_coverage.py                 # main..develop
     scripts/check_review_coverage.py --base main --head develop
     scripts/check_review_coverage.py --json          # machine-readable
+    scripts/check_review_coverage.py --commits-json compare.json
+                                                     # judge a GitHub compare payload
+
+A shallow clone cannot express the promotion range: `git log` stops at the graft
+boundary and can see one commit where the promotion has hundreds. The gate
+refuses to answer over such a range (exit 2) rather than report false green;
+`--commits-json` lets a caller supply the commit set from GitHub's compare API.
 """
 
 from __future__ import annotations
@@ -192,7 +199,9 @@ _REST_POOL = 8
 
 
 def _run(args: list[str]) -> str:
-    return subprocess.check_output(args, text=True, cwd=REPO_ROOT).strip()
+    # rstrip newline only. `str.strip()` treats \x1f and \x1e as whitespace, so it
+    # eats the field/record separators `commits_in_range` depends on (DIG-4389).
+    return subprocess.check_output(args, text=True, cwd=REPO_ROOT).rstrip("\n")
 
 
 def _gh_json(args: list[str]) -> dict | list:
@@ -216,7 +225,11 @@ def _chunks(items: list, size: int) -> list[list]:
 
 @lru_cache(maxsize=1)
 def _repo_slug() -> str:
-    return _run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+    # `_run` only trims newlines, so strip the single-token result here. Safe:
+    # a slug never contains \x1f/\x1e, the characters `strip()` would eat.
+    return _run(
+        ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]
+    ).strip()
 
 
 def _repo_owner_name() -> tuple[str, str]:
@@ -593,8 +606,151 @@ def commits_in_range(base: str, head: str) -> list[dict]:
         record = record.strip("\n")
         if not record:
             continue
-        sha, subject, author, parents = record.split("\x1f")
+        # The last two fields are author and parents; anchor on them so a
+        # subject containing \x1f (possible in principle) stays in the subject
+        # instead of shifting the fields. Empty `%P` leaves a trailing \x1f; a
+        # short record may leave the parents field out entirely.
+        fields = record.split("\x1f")
+        if len(fields) >= 4:
+            sha = fields[0]
+            subject = "\x1f".join(fields[1:-2])
+            author, parents = fields[-2], fields[-1]
+        elif len(fields) == 3:
+            sha, subject, author = fields
+            parents = ""
+        else:
+            # Dropping the record could hide an unreviewed commit: fail closed.
+            raise ValueError(
+                f"git log record has {len(fields)} field(s), expected at least 3: "
+                f"{record[:80]!r}"
+            )
         out.append({"sha": sha, "subject": subject, "author": author, "parents": parents})
+    return out
+
+
+def _shallow_repository() -> bool:
+    """True when local history is truncated by a shallow clone (fail closed)."""
+    try:
+        return _run(["git", "rev-parse", "--is-shallow-repository"]).strip() == "true"
+    except subprocess.CalledProcessError:
+        # Cannot prove the clone is complete, so do not claim coverage over it.
+        return True
+
+
+def _shares_history(base: str, head: str) -> bool:
+    """True when base and head have a common ancestor (fail closed on doubt).
+
+    This is not `--is-ancestor`: promotions into main are squashed, and develop
+    is rebased, so main is often not an ancestor of develop while still sharing
+    history. Disconnected history, however, means `base..head` is not the
+    promotion set we think it is.
+    """
+    result = subprocess.run(
+        ["git", "merge-base", base, head], cwd=REPO_ROOT, capture_output=True
+    )
+    return result.returncode == 0
+
+
+def history_gap_reason(base: str, head: str) -> str | None:
+    """Why local history cannot express `base..head`, or None when it can.
+
+    A shallow clone grafts history at a boundary. If the graft boundary sits on or
+    near the promotion head, `git log base..head` returns a handful of commits —
+    measured at one commit on 2026-10-19 — while GitHub's compare reports >250.
+    Judging that set would report SUCCESS over a fraction of the promotion, so
+    the gate refuses to answer instead (DIG-4389).
+    """
+    if _shallow_repository():
+        return (
+            "this clone is shallow (`git rev-parse --is-shallow-repository` says "
+            "true), so `git log` stops at the graft boundary and the range can be "
+            "a handful of commits instead of the whole promotion. Fetch full "
+            "history (`git fetch --unshallow`) or pass a complete GitHub compare "
+            "payload with --commits-json."
+        )
+    if not _shares_history(base, head):
+        return (
+            f"{base} and {head} share no common ancestor (or one ref is "
+            "unresolvable): the local range does not describe a promotion, so "
+            "its commit set is not the one to judge. Fetch the base branch and retry."
+        )
+    return None
+
+
+def graft_boundary_reason(commits: list[dict]) -> str | None:
+    """Why a parsed range contains a grafted root, or None.
+
+    Every commit in `base..head` except a true repository root has a parent. An
+    empty `%P` anywhere in the range means history was cut at a graft boundary,
+    even when `--is-shallow-repository` did not say so (replace refs, graft
+    files). Checking every commit, not just the oldest, catches a boundary that
+    `git log --reverse` did not put first.
+    """
+    for commit in commits:
+        if not commit["parents"].strip():
+            return (
+                f"commit {commit['sha'][:8]} in the range has no parent: local "
+                "history starts at a graft boundary, so the range is truncated. "
+                "Fetch full history (`git fetch --unshallow`) and retry."
+            )
+    return None
+
+
+def commits_from_compare(path: str, expected_head: str | None = None) -> list[dict]:
+    """Commit set from a GitHub compare payload (`repos/{o}/{r}/compare/{b}...{h}`).
+
+    `local_ci` uses this on a shallow clone, where local history cannot express
+    the range. GitHub caps the compare commit list (250 at time of writing), so a
+    payload whose `total_commits` exceeds `len(commits)` is truncated; refuse it
+    rather than judge a fraction of the promotion. When `expected_head` is given
+    (a full or abbreviated sha), the payload must end at that commit — a stale,
+    swapped or `behind` compare must not be judged as this promotion.
+    """
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("compare payload was not an object")
+    commits = data.get("commits")
+    total = data.get("total_commits")
+    if not isinstance(commits, list):
+        raise ValueError("compare payload has no commit list")
+    if not isinstance(total, int):
+        raise ValueError("compare payload has no total_commits")
+    if total != len(commits):
+        raise ValueError(
+            f"GitHub compare is truncated ({len(commits)} of {total} commits), so "
+            "it cannot express this range. Fetch full history with "
+            "`git fetch --unshallow` and retry."
+        )
+    out: list[dict] = []
+    for entry in commits:
+        if not isinstance(entry, dict):
+            raise ValueError("compare commit was not an object")
+        sha = str(entry.get("sha") or "")
+        if not re.fullmatch(r"[0-9a-f]{40}", sha):
+            raise ValueError("compare commit had no 40-hex sha")
+        commit = entry.get("commit") or {}
+        message = str(commit.get("message") or "")
+        subject = message.splitlines()[0] if message else ""
+        author = str((commit.get("author") or {}).get("name") or "")
+        parents = " ".join(
+            str(parent.get("sha") or "")
+            for parent in (entry.get("parents") or [])
+            if isinstance(parent, dict)
+        )
+        out.append(
+            {"sha": sha, "subject": subject, "author": author, "parents": parents}
+        )
+    if expected_head:
+        if not out:
+            raise ValueError(
+                f"GitHub compare is empty, so it cannot contain head {expected_head}. "
+                "The base may already contain the head; fetch fresh refs and retry."
+            )
+        if not out[-1]["sha"].startswith(expected_head.lower()):
+            raise ValueError(
+                f"GitHub compare ends at {out[-1]['sha'][:12]}, not {expected_head}: "
+                "the payload is stale or belongs to another range."
+            )
     return out
 
 
@@ -814,13 +970,54 @@ def verdict_for(state: dict) -> tuple[bool, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default="origin/main")
-    parser.add_argument("--head", default="origin/develop")
+    parser.add_argument(
+        "--head",
+        default=None,
+        help="commit or ref to judge (default: origin/develop; with "
+        "--commits-json it also verifies the payload ends there)",
+    )
+    parser.add_argument(
+        "--commits-json",
+        metavar="PATH",
+        help=(
+            "judge this GitHub compare payload instead of a local git range; used "
+            "when a shallow clone cannot express base..head"
+        ),
+    )
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args()
+    head = args.head or "origin/develop"
 
-    commits = commits_in_range(args.base, args.head)
+    if args.commits_json:
+        try:
+            commits = commits_from_compare(args.commits_json, expected_head=args.head)
+        except (OSError, ValueError) as exc:
+            print(
+                f"review coverage: refusing the supplied commit set: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        reason = history_gap_reason(args.base, head)
+        if reason:
+            print(f"review coverage: refusing a degenerate range: {reason}", file=sys.stderr)
+            return 2
+        try:
+            commits = commits_in_range(args.base, head)
+        except (subprocess.CalledProcessError, ValueError) as exc:
+            print(
+                "review coverage: cannot read the local range "
+                f"{args.base}..{head}: {exc}. Fetch both refs and retry.",
+                file=sys.stderr,
+            )
+            return 2
+        reason = graft_boundary_reason(commits)
+        if reason:
+            print(f"review coverage: refusing a degenerate range: {reason}", file=sys.stderr)
+            return 2
+
     if not commits:
-        print(f"review coverage: {args.base}..{args.head} is empty — nothing to promote.")
+        print(f"review coverage: {args.base}..{head} is empty — nothing to promote.")
         return 0
 
     try:
