@@ -101,9 +101,9 @@ retrievable from a public repo since 2026-10-02 and the history rewrite is a sep
 **2. The OCC surface is gated behind a private invite link, not a login.**
 digichat already enforces a per-tenant `X-Embed-Token`. OCC was exempt for one reason: the
 host `occ.digithings.ai` was added to `FIRST_PARTY_EMBED_HOSTS`, and a first-party host is
-authorised with no token at all. The plan that added it says so —
-`docs/superpowers/plans/2026-08-10-occ-client-chat.md:131` added the host "so the iframe
-works **without `?token=`**". The OCC registry entry already carries the schema-required
+authorised with no token at all. The plan that added it (removed with DIG-3394; git history
+keeps it) added the host "so the iframe works **without `?token=`**". The OCC registry entry
+already carries the schema-required
 `token` field; it was simply never enforced. The link form is
 `https://digithings.ai/chat/occ?token=<key>` (PR #5172), and the enforcement switch is
 deleting one line from `FIRST_PARTY_EMBED_HOSTS` (Act B2).
