@@ -10,7 +10,7 @@ on:
       - main
     paths:
       - "apps/digiquant-runner/**"
-      - "Dockerfile.digiquant-runner"
+      - "infra/docker/Dockerfile.digiquant-runner"
       - "digiquant/**"
       - ".github/workflows/deploy-digiquant-runner.yml"
   workflow_dispatch:

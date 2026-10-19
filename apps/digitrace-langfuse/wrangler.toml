@@ -32,7 +32,7 @@ bucket_name = "digitrace-langfuse-events"
 [[containers]]
 class_name = "LangfuseWebContainer"
 # image / image_build_context resolve relative to THIS config file.
-image = "../../Dockerfile.digitrace-langfuse-web"
+image = "../../infra/docker/Dockerfile.digitrace-langfuse-web"
 image_build_context = "../.."
 max_instances = 2
 # Web needs real RAM (lite = 256MiB is far too small for Next.js Langfuse).
@@ -40,7 +40,7 @@ instance_type = "standard-2"
 
 [[containers]]
 class_name = "LangfuseWorkerContainer"
-image = "../../Dockerfile.digitrace-langfuse-worker"
+image = "../../infra/docker/Dockerfile.digitrace-langfuse-worker"
 image_build_context = "../.."
 max_instances = 1
 # Queue drain needs CPU/RAM; same floor as Web. CH stays external.

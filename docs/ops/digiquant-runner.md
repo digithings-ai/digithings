@@ -128,7 +128,7 @@ can set it:
 
 ```bash
 python3 scripts/package_r5_image_inputs.py
-docker build -f Dockerfile.digiquant-runner \
+docker build -f infra/docker/Dockerfile.digiquant-runner \
   --build-arg GIT_SHA="$(git rev-parse --short HEAD)" .
 ```
 

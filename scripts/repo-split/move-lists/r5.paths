@@ -9,10 +9,10 @@ apps/digithings-stack-cloudflare
 apps/digichat-cloudflare
 apps/digitrace-langfuse
 apps/digithings-cron
-Dockerfile.digithings-stack-cloudflare
-Dockerfile.digichat-cloudflare
-Dockerfile.digitrace-langfuse-web
-Dockerfile.digitrace-langfuse-worker
+infra/docker/Dockerfile.digithings-stack-cloudflare
+infra/docker/Dockerfile.digichat-cloudflare
+infra/docker/Dockerfile.digitrace-langfuse-web
+infra/docker/Dockerfile.digitrace-langfuse-worker
 infra/digichat-release
 infra/digichat-digithings
 scripts/zammad_mcp

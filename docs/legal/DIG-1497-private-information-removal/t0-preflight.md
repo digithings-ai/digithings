@@ -262,7 +262,7 @@ DIG-1496, 2026-10-06.**
   path. **No registry takedown is required and none is requested here.** Registry access was never a
   disclosure vector. **Correction on the record: the count is 2 images, not ~83, and both are
   deleted** (digests `sha256:e5cf82fc…` and `sha256:7b160edc…`). Only
-  `Dockerfile.digithings-stack-cloudflare` copies the seed directory, so the other four registries
+  `infra/docker/Dockerfile.digithings-stack-cloudflare` copies the seed directory, so the other four registries
   cannot contain the payload. Deleting images is housekeeping for DIG-1611 and needs Chris's account
   access — it is not remediation of a disclosure. One residual unknown: whether Cloudflare retains a
   build cache of the seeded layer is not observable through any API or CLI surface Security has.

@@ -145,7 +145,7 @@ RULES: list[tuple[str, str, str]] = [
     ("scripts/digiquant_archive_checkpoints.py", "R2", "pipeline checkpoint archiver"),
     ("scripts/digiquant_checkpoint_size_gate.py", "R2", "pipeline checkpoint gate"),
     ("scripts/digiquant_seal_byok.py", "R2", "desk BYOK sealer"),
-    ("Dockerfile.digiquant-runner", "R2", "runner image"),
+    ("infra/docker/Dockerfile.digiquant-runner", "R2", "runner image"),
     # ---- R3: Brief desk + digiquant.io ----
     ("apps/dashboard/app/twelve-x/", "R7", "twelve-x desk pages live under the Brief desk tree"),
     (
@@ -173,10 +173,10 @@ RULES: list[tuple[str, str, str]] = [
     ("config/litellm.cheaperinference.yaml", "R5", "litellm config"),
     ("config/litellm.dev.yaml", "R5", "litellm config"),
     ("config/litellm.omniroute.yaml", "R5", "litellm config"),
-    ("Dockerfile.digithings-stack-cloudflare", "R5", "stack image"),
-    ("Dockerfile.digichat-cloudflare", "R5", "digichat image"),
-    ("Dockerfile.digitrace-langfuse-web", "R5", "langfuse image"),
-    ("Dockerfile.digitrace-langfuse-worker", "R5", "langfuse image"),
+    ("infra/docker/Dockerfile.digithings-stack-cloudflare", "R5", "stack image"),
+    ("infra/docker/Dockerfile.digichat-cloudflare", "R5", "digichat image"),
+    ("infra/docker/Dockerfile.digitrace-langfuse-web", "R5", "langfuse image"),
+    ("infra/docker/Dockerfile.digitrace-langfuse-worker", "R5", "langfuse image"),
     # ---- R6: client corpora + rollout tooling ----
     ("docs/projects/online-compliance-center/", "R6", "client corpus"),
     ("docs/ops/OCC_INVITE_KEY.md", "R6", "rollout tooling doc"),
@@ -475,7 +475,7 @@ RULES: list[tuple[str, str, str]] = [
     (".claude/", "R0", "agent wiring (open)"),
     (".cursor/", "R0", "agent wiring (open)"),
     ("projects/", "R0", "projects (open)"),
-    ("Dockerfile.digillm", "R0", "open image"),
+    ("infra/docker/Dockerfile.digillm", "R0", "open image"),
 ]
 
 

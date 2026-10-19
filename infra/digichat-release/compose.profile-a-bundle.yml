@@ -1,7 +1,7 @@
 # Profile A — single stack image + digichat (website-chat local / CF parity)
 #
 # Same multi-process image as Cloudflare Containers
-# (Dockerfile.digithings-stack-cloudflare + supervisord):
+# (infra/docker/Dockerfile.digithings-stack-cloudflare + supervisord):
 #   digikey :8005, digigraph :8000 (published)
 #   digisearch :8002, digivault :8004, LiteLLM (digillm, PyPI wheel) :4000, Redis :6379 (loopback)
 #
@@ -24,7 +24,7 @@ services:
   digithings-stack:
     build:
       context: ../..
-      dockerfile: Dockerfile.digithings-stack-cloudflare
+      dockerfile: infra/docker/Dockerfile.digithings-stack-cloudflare
     image: digithings-stack:local
     ports:
       - "127.0.0.1:8000:8000"
