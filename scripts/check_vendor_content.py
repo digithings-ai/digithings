@@ -105,9 +105,20 @@ REDACTION_WINDOW = 12
 # --------------------------------------------------------------------------
 # Rule table
 # --------------------------------------------------------------------------
-# ``ere`` is the POSIX-extended regex handed to ``git grep`` for the merge-base
-# comparison (V rules only). ``re`` is the Python regex used for the working
-# tree scan; for V rules the two are equivalent by construction.
+# ``ere`` is the POSIX-extended regex handed to ``git grep -i`` for the
+# merge-base comparison (V rules only). ``re`` is the Python regex used for the
+# working tree scan; the two agree on case end to end (DIG-4318): the ``-i``
+# in ``baseline_pairs`` mirrors the ``re.IGNORECASE`` on V2-V5, and both sides
+# of the membership check compare case-folded lines, so a tree line that
+# differs from its merge-base version only by case is the same content, not a
+# new occurrence. Before, a case-sensitive baseline grep never recorded lines
+# whose case differs from the lowercase ERE (``PrimeMarket`` under V4), and the
+# case-insensitive scan then reported pre-existing content as new.
+# V1's *detection* stays case-sensitive on purpose: it fires on upper-case env
+# shapes only. The ``-i`` only affects what the baseline records — a base line
+# it can match case-insensitively is the same vendor env name — so the
+# exclusion widens exactly along the case-fold boundary, the detection does
+# not.
 
 
 @dataclass(frozen=True)
@@ -454,15 +465,23 @@ def resolve_base(base_ref: str) -> str:
 
 
 def baseline_pairs(base: str) -> set[tuple[str, str]]:
-    """(path, stripped line) pairs present at the baseline ref, per vendor rule."""
+    """(path, case-folded stripped line) pairs present at the baseline ref.
+
+    The grep runs ``-i`` so the baseline uses the case semantics the scan uses:
+    V2-V5 are compiled ``re.IGNORECASE``, and a case-sensitive baseline lookup
+    never recorded a pre-existing line whose case differs from the lowercase
+    ERE, so the case-insensitive scan then reported it as new (DIG-4318).
+    Members are case-folded too, so a working-tree line that differs from its
+    merge-base version only by case does not read as new either.
+    """
     pairs: set[tuple[str, str]] = set()
     for rule in VENDOR_RULES:
         prefix = f"{base}:"
-        for line in git("grep", "-I", "-n", "-E", rule.ere, base, "--").splitlines():
+        for line in git("grep", "-I", "-n", "-i", "-E", rule.ere, base, "--").splitlines():
             if not line.startswith(prefix):
                 continue
             path, _, body = line[len(prefix) :].split(":", 2)
-            pairs.add((path, body.strip()))
+            pairs.add((path, body.casefold().strip()))
     return pairs
 
 
@@ -514,7 +533,7 @@ def scan(base: str, allowlist: Allowlist) -> tuple[list[Finding], list[str]]:
 
         for rule, lineno, line in vendor_hits:
             matched = rule.pattern.search(lines[lineno - 1]).group(0)  # type: ignore[union-attr]
-            if (rel, lines[lineno - 1].strip()) in baseline:
+            if (rel, lines[lineno - 1].casefold().strip()) in baseline:
                 continue
             entry = allowlist.approved_for(rule.id, rel, matched)
             if entry is not None:

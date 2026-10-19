@@ -74,6 +74,13 @@ REDACTED_SHAPE = """# Ops note
 ENV_NAME_ONLY = "The stage id PMT_RETAIL_BOOK selects the retail book stage.\n"
 ENDPOINT_ONLY = "Probe https://api.gloom.sh/health for the endpoint inventory.\n"
 
+# The brand-word fixture on its own: it trips V4 and nothing else (a bare
+# "PrimeMarket desk" has no `PRIMEMARKET_` shape and no endpoint), so a
+# case-difference on it can only ever be about the V4 baseline versus the V4
+# scan. The mixed-case form is what the real pre-existing lines on develop
+# carry, which is what made the case-sensitive grep miss them (DIG-4318).
+BRAND_WORD_ONLY = "The PrimeMarket desk runs the stage.\n"
+
 # The acquisition act named, with no click path and no instruction to copy. This
 # trips M5 alone, so a pending entry for M5 is the only thing under test.
 SESSION_STEPS = (
@@ -175,6 +182,71 @@ def test_vendor_identifier_present_at_base_is_not_new(tmp_path: Path) -> None:
     _land_on_main(repo, "docs/vendor.md", ENV_NAME_ONLY, "vendor note lands on main")
     proc = _run(repo)
     assert proc.returncode == 0, proc.stdout
+
+
+def test_brand_word_present_at_base_in_mixed_case_is_not_new(tmp_path: Path) -> None:
+    """DIG-4318: the baseline grep must see what the case-insensitive scan sees.
+
+    `PrimeMarket` sits at the merge base, but the V4 ERE is lower-case and the
+    pre-fix baseline grep was case-sensitive, so the pair was never recorded and
+    the scan reported the pre-existing line as new. The case-blind/-sensitive
+    split between the two sides is the bug; this is its end-to-end shape.
+    """
+    repo = _make_repo(tmp_path)
+    _land_on_main(repo, "docs/vendor.md", BRAND_WORD_ONLY, "brand prose lands on main")
+    proc = _run(repo)
+    assert proc.returncode == 0, proc.stdout
+    assert "0 failing" in proc.stdout, proc.stdout
+    assert "FAIL" not in proc.stdout, proc.stdout
+
+
+def test_case_only_difference_against_base_is_not_new(tmp_path: Path) -> None:
+    """DIG-4318: a re-case of a base line is the same content, not new work.
+
+    The membership check compares case-folded lines, and V1's baseline grep runs
+    `-i` for the same reason, so a base `pmt_retail_book` that the tree writes as
+    `PMT_RETAIL_BOOK` is not a new occurrence. Case-blindness must not reach the
+    *detection*: a lower-case name still matches nothing on V1, and a genuinely
+    new string is covered by the negative control below.
+    """
+    repo = _make_repo(tmp_path)
+    _land_on_main(
+        repo, "docs/vendor.md", ENV_NAME_ONLY.lower(), "lower-case note lands on main"
+    )
+    _stage(repo, "docs/vendor.md", ENV_NAME_ONLY)
+    proc = _run(repo)
+    assert proc.returncode == 0, proc.stdout
+    assert "0 failing" in proc.stdout, proc.stdout
+
+
+def test_brand_word_re_cased_agains_base_is_not_new(tmp_path: Path) -> None:
+    """DIG-4318: V4's case-folded membership also covers a re-cased base line."""
+    repo = _make_repo(tmp_path)
+    _land_on_main(repo, "docs/vendor.md", BRAND_WORD_ONLY, "brand prose lands on main")
+    _stage(repo, "docs/vendor.md", BRAND_WORD_ONLY.replace("PrimeMarket", "PRIMEMARKET"))
+    proc = _run(repo)
+    assert proc.returncode == 0, proc.stdout
+    assert "0 failing" in proc.stdout, proc.stdout
+
+
+def test_case_insensitivity_never_swallows_a_new_brand_line(tmp_path: Path) -> None:
+    """Negative control: folding the baseline must not swallow genuinely new lines.
+
+    A second, different sentence that mentions the brand still fails; only the
+    case difference between base and tree is excused, nothing else. Without this
+    the fixture above could pass while both baseline sides had gone empty.
+    """
+    repo = _make_repo(tmp_path)
+    _land_on_main(repo, "docs/vendor.md", BRAND_WORD_ONLY, "brand prose lands on main")
+    _stage(
+        repo, "docs/vendor.md",
+        BRAND_WORD_ONLY + "And PrimeMarket handles settlement on the same desk.\n",
+    )
+    proc = _run(repo)
+    assert proc.returncode == 1, proc.stdout
+    assert re.search(r"^  docs/vendor\.md:2  FAIL", proc.stdout, re.M), proc.stdout
+    assert not re.search(r"^  docs/vendor\.md:1  FAIL", proc.stdout, re.M), proc.stdout
+    assert "[V4 vendor-public-brand-word]" in proc.stdout, proc.stdout
 
 
 def test_approved_vendor_entry_does_not_fail(tmp_path: Path) -> None:
