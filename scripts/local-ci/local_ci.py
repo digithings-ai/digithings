@@ -543,6 +543,9 @@ def prepare_wt(n, sha, base, out):
     out.write(f"===== worktree {sha[:12]}\n")
     sh(["git", "fetch", "-q", "origin", base, "main", f"pull/{n}/head"], cwd=MAIN, timeout=600, out=out)
     if os.path.isdir(WT) and wt_head() is None:
+        if not wt_is_ours(WT):
+            return False, (f"{WT} is not a worktree this runner created; refusing to rebuild "
+                           "over it (set LOCAL_CI_WT to the runner's own worktree directory)")
         out.write("worktree unreadable by git; rebuilding\n")
         shutil.rmtree(WT, ignore_errors=True)
         sh(["git", "worktree", "prune"], cwd=MAIN, out=out)
@@ -550,6 +553,11 @@ def prepare_wt(n, sha, base, out):
         sh(["git", "worktree", "add", "--detach", "-f", WT, sha], cwd=MAIN, timeout=900, out=out)
     sh(["git", "checkout", "-q", "--detach", "-f", sha], cwd=WT, timeout=900, out=out)
     sh(["git", "clean", "-fdq", "-e", ".venv", "-e", "node_modules"], cwd=WT, out=out)
+    try:
+        with open(os.path.join(WT, ".local-ci-worktree"), "w", encoding="utf-8") as fh:
+            fh.write(sha + "\n")
+    except OSError as exc:  # a read-only worktree still works; it just cannot be rebuilt
+        out.write(f"could not mark the worktree as ours: {exc}\n")
     head = wt_head()
     if head != sha:
         out.write(f"worktree FAIL: HEAD {head} != PR head {sha}; no gate ran\n")
@@ -1050,11 +1058,50 @@ def watchdog():
     _clear_child_state()
     return True
 
+def wt_is_ours(path):
+    """True only for a linked worktree this runner created from MAIN.
+
+    LOCAL_CI_WT is operator-supplied (DIG-4490), so the rebuild path must not delete a
+    directory it did not make: a typo such as LOCAL_CI_WT=$HOME/Code would otherwise take
+    the whole tree with it. A worktree of ours is a directory whose .git is a *file*
+    naming a gitdir under MAIN.
+    """
+    if os.path.exists(os.path.join(path, ".local-ci-worktree")):
+        return True
+    if os.environ.get("LOCAL_CI_WT"):
+        # Operator-supplied path: only the sentinel we write makes it ours. A worktree of
+        # MAIN is still someone's tree, and deleting it in a rebuild would lose work.
+        return False
+    gitfile = os.path.join(path, ".git")
+    if not os.path.exists(gitfile) or os.path.isdir(gitfile):
+        return False
+    try:
+        with open(gitfile, encoding="utf-8", errors="replace") as fh:
+            text = fh.read(4096)
+    except OSError:
+        return False
+    if "gitdir:" not in text:
+        return False
+    target = os.path.realpath(text.split("gitdir:", 1)[1].strip())
+    return os.path.realpath(MAIN) in target
+
+
 def main():
     dry = "--dry-run" in sys.argv
+    if os.environ.get("LOCAL_CI_WT") and os.path.isdir(WT) and not wt_is_ours(WT):
+        sys.exit(f"local_ci: LOCAL_CI_WT={WT} exists and is not a worktree of {MAIN}; "
+                 "refusing to run rather than rebuild over it")
+    if not os.environ.get("LOCAL_CI_MAIN") and not os.path.isdir(os.path.join(MAIN, ".git")):
+        sys.exit(f"local_ci: default checkout {MAIN} is not a git repository; "
+                 "set LOCAL_CI_MAIN (scripts/local-ci/install.sh writes it)")
     only = int(sys.argv[sys.argv.index("--pr") + 1]) if "--pr" in sys.argv else None
-    watchdog()
-    if not acquire_lock(): return
+    if dry:
+        # A preview changes nothing: taking the tick lock or running the watchdog would
+        # perturb the live gate (DIG-4490 review).
+        pass
+    else:
+        watchdog()
+        if not acquire_lock(): return
     try:
         prs = list_prs("develop")
         main_prs = list_prs("main")

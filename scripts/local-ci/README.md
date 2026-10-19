@@ -21,7 +21,7 @@ whose merges it gates, at the same version as the code it gates.
 | `local_ci.py` | the tick: picks queued PRs, runs the static gates, posts the status |
 | `review_applied.py` | decides `review-applied`: a review pass left findings and every thread is resolved or answered |
 | `pr_template.py` | checks a PR body against the required sections and the Human Gate question |
-| `ruff.toml` | keeps this directory lint-clean while leaving the copied code byte-identical |
+  (`pr_template.py` is byte-identical; the runner and the review check carry the small
 
 Tests are `tests/scripts/test_local_ci.py`, `test_review_applied.py` and
 `test_pr_template.py`, so the repository's own `pytest` run covers the gate that
@@ -30,7 +30,7 @@ gates the repository.
 ## Running it
 
 ```
-python3 scripts/local-ci/local_ci.py --dry-run     # evaluate, change nothing
+`--dry-run` prints the rendered plist and touches nothing: no write, no bootout, no
 python3 scripts/local-ci/local_ci.py --pr 1234     # one PR
 python3 scripts/local-ci/local_ci.py               # one tick over the queue
 ```
@@ -42,7 +42,7 @@ without editing it: `LOCAL_CI_MAIN` (the checkout the checks run against) and
 `install.sh` writes the launchd plist for a checkout and starts it:
 
 ```
-scripts/local-ci/install.sh --dry-run              # print the plist, change nothing
+`--dry-run` prints the rendered plist and touches nothing: no write, no bootout, no
 scripts/local-ci/install.sh ~/Code/digithings
 ```
 
@@ -63,3 +63,10 @@ scripts/local-ci/install.sh ~/Code/digithings
 Nothing secret is printed, logged or committed. Logs live under
 `~/.config/digithings/logs/local-ci/`; state and the tick lock under
 `~/.config/digithings/state/`.
+
+## Keeping the job loaded
+
+This script installs the runner only. The job that keeps it loaded and breaks a wedged
+tick is `dt-daemon-liveness`, published in the private `digiforge` repository at
+`scripts/dt-daemon-liveness` (DIG-4478). Install that alongside, or a stopped runner looks
+exactly like an idle one.

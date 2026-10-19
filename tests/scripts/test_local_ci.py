@@ -15,6 +15,11 @@ import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS = os.path.abspath(os.path.join(_HERE, "..", "..", "scripts", "local-ci"))
+if _SCRIPTS not in sys.path:
+    # local_ci imports review_applied and pr_template from its own directory; without
+    # this the repo's suite would silently exercise the ImportError branch while the
+    # host exercises the real modules (DIG-4490 review).
+    sys.path.insert(0, _SCRIPTS)
 _spec = importlib.util.spec_from_file_location(
     "local_ci", os.path.join(_SCRIPTS, "local_ci.py"))
 _mod = importlib.util.module_from_spec(_spec)
@@ -272,7 +277,7 @@ class PrepareWorktreeTest(unittest.TestCase):
     fail closed, never run gates on whatever tree is left in WT."""
     SHA = "a" * 40
 
-    def _run(self, heads, wt_exists=True):
+    def _run(self, heads, wt_exists=True, own=True):
         import io
         calls = []
         seq = list(heads)
@@ -281,6 +286,8 @@ class PrepareWorktreeTest(unittest.TestCase):
         wt = os.path.join(tmp, "wt")
         if wt_exists:
             os.mkdir(wt)
+            if own:  # a worktree this runner created carries its sentinel
+                open(os.path.join(wt, ".local-ci-worktree"), "w").write(self.SHA)
         def fake_sh(cmd, cwd=None, timeout=1800, out=None):
             calls.append(cmd)
             return 0, ""
@@ -317,6 +324,14 @@ class PrepareWorktreeTest(unittest.TestCase):
         self.assertIn("rebuilding", text)
         self.assertTrue(any(c[:3] == ["git", "worktree", "prune"] for c in calls))
         self.assertTrue(any(c[:3] == ["git", "worktree", "add"] for c in calls))
+
+    def test_a_directory_we_did_not_create_is_never_deleted(self):
+        """LOCAL_CI_WT is operator-supplied: a typo must not delete someone's tree."""
+        (ok, why), calls, _ = self._run([None, self.SHA], own=False)
+        self.assertFalse(ok)
+        self.assertIn("not a worktree this runner created", why)
+        self.assertFalse(any(c[:3] == ["git", "worktree", "prune"] for c in calls))
+        self.assertFalse(any(c[:3] == ["git", "worktree", "add"] for c in calls))
 
     def test_missing_worktree_added(self):
         (ok, _), calls, _ = self._run([self.SHA], wt_exists=False)

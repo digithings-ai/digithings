@@ -6,14 +6,22 @@
 #
 # The checkout given here becomes both the runner's location and LOCAL_CI_MAIN, the
 # tree the checks run against. Pass a dedicated clone on develop, not the working tree.
+#
+# The install is staged: the new plist is rendered and linted before the live job is
+# touched, the previous plist is kept, and a failed bootstrap puts it back. A gate that
+# disappears because an installer half-finished is the failure this script exists to
+# prevent (DIG-4490 review).
 set -eu
+: "${HOME:?install.sh: HOME is empty; refusing to install outside a user tree}"
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LABEL=ai.digithings.local-ci
 CHECKOUT=""
 DRY=0
+ALLOW_WT=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY=1 ;;
+    --allow-worktree) ALLOW_WT=1 ;;
     -*) echo "install.sh: unknown option: $arg" >&2; exit 2 ;;
     *) CHECKOUT="$arg" ;;
   esac
@@ -22,7 +30,7 @@ if [ -z "$CHECKOUT" ]; then
   CHECKOUT=$(CDPATH= cd -- "$HERE/../.." && pwd)
 fi
 CHECKOUT=$(CDPATH= cd -- "$CHECKOUT" && pwd)
-if [ -f "$CHECKOUT/.git" ] && [ "${2:-}" != "--allow-worktree" ]; then
+if [ -f "$CHECKOUT/.git" ] && [ "$ALLOW_WT" != 1 ]; then
   echo "install.sh: $CHECKOUT is a linked worktree (.git is a file)." >&2
   echo "install.sh: point the daemon at a dedicated clone on develop, or pass --allow-worktree." >&2
   exit 1
@@ -32,15 +40,46 @@ if [ ! -f "$SCRIPT" ]; then
   echo "install.sh: no runner at $SCRIPT" >&2
   exit 1
 fi
-OUT=$(sed -e "s|__CHECKOUT__|$CHECKOUT|g" -e "s|__HOME__|$HOME|g" "$HERE/$LABEL.plist.template")
+if ! git -C "$CHECKOUT" rev-parse --verify -q HEAD > /dev/null 2>&1; then
+  echo "install.sh: $CHECKOUT is not a git checkout; the runner fetches and needs one" >&2
+  exit 1
+fi
+BRANCH=$(git -C "$CHECKOUT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+if [ "$BRANCH" != "develop" ]; then
+  echo "install.sh: warning: $CHECKOUT is on '$BRANCH', not develop" >&2
+fi
+# Paths go through sed; escape the three characters that would change the pattern.
+esc() { printf '%s' "$1" | sed -e 's/[&|\\]/\\&/g'; }
+OUT=$(sed -e "s|__CHECKOUT__|$(esc "$CHECKOUT")|g" -e "s|__HOME__|$(esc "$HOME")|g" "$HERE/$LABEL.plist.template")
 if [ "$DRY" = 1 ]; then
   printf '%s\n' "$OUT"
   exit 0
 fi
 DEST="$HOME/Library/LaunchAgents/$LABEL.plist"
+BACKUP="$DEST.bak.$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$HOME/Library/LaunchAgents" "$HOME/.config/digithings/logs/local-ci"
-printf '%s\n' "$OUT" > "$DEST"
-plutil -lint "$DEST" > /dev/null
+printf '%s\n' "$OUT" > "$DEST.staged"
+if ! plutil -lint "$DEST.staged" > /dev/null; then
+  echo "install.sh: the rendered plist does not lint; nothing changed" >&2
+  rm -f "$DEST.staged"
+  exit 1
+fi
+if [ -f "$DEST" ]; then
+  cp "$DEST" "$BACKUP"
+  echo "install.sh: previous plist saved as $BACKUP"
+fi
+mv "$DEST.staged" "$DEST"
 launchctl bootout "gui/$(id -u)" "$DEST" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$DEST"
+if ! launchctl bootstrap "gui/$(id -u)" "$DEST"; then
+  echo "install.sh: bootstrap failed; restoring the previous job" >&2
+  if [ -f "$BACKUP" ]; then
+    cp "$BACKUP" "$DEST"
+    launchctl bootstrap "gui/$(id -u)" "$DEST" \
+      || echo "install.sh: restore failed too - $LABEL is NOT running" >&2
+  else
+    echo "install.sh: there was no previous plist; $LABEL is NOT running" >&2
+  fi
+  exit 1
+fi
 echo "install.sh: installed $LABEL from $CHECKOUT"
+echo "install.sh: note - this installs the runner only; dt-daemon-liveness (digiforge) keeps it loaded"
