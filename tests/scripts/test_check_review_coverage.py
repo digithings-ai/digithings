@@ -739,9 +739,10 @@ def test_an_unlisted_bots_bare_login_approval_never_reaches_the_approvals_sink()
     assert not reviewed
     assert "no approval" in why
 
-    # The same review through the queue's evidence list must not resurrect it:
-    # `_evidence_reviews` passes bot reviews through on purpose, the sink is
-    # where they are judged.
+    # The queue routes the SAME reviews list into this sink (`_gate_review_
+    # coverage` calls it directly on `_evidence_reviews`' pass-through), so the
+    # sink-side verdict is the one both gates grade; the merge-queue suite runs
+    # `_evidence_reviews` itself and refuses this shape there too.
     state = _state()
     crc._apply_reviews_checks_comments(
         state,
@@ -756,10 +757,13 @@ def test_an_unlisted_bots_bare_login_approval_never_reaches_the_approvals_sink()
 
 
 def test_an_unlisted_suffixed_bot_approval_is_not_an_approval_either() -> None:
-    """Any `[bot]` suffix is a bot designation, listed in the sink or not — still
-    seen in `REVIEW_BOTS`, not in `BOT_AUTHORS`, refused on its own."""
+    """Any `[bot]` suffix is a bot designation whether or not the sink lists the
+    login: `netlify[bot]` is in neither REVIEW_BOTS nor BOT_AUTHORS, so the
+    2026-10-18 sink would have counted it as a person's approval. Nothing picks
+    its review up as agent evidence, so on its own the shape is refused."""
     state, reviewed, why = _sink([{"author": {"login": "netlify[bot]"}, "state": "APPROVED"}])
     assert state["approvals"] == []
+    assert state["agent_tool"] == []
     assert not reviewed
     assert "no approval" in why
 
@@ -788,6 +792,20 @@ def test_the_graphql_batch_catches_an_unlisted_bare_bot_the_same_way() -> None:
     reviewed, why = crc.verdict_for(counts)
     assert reviewed
     assert "approved by flaky-lint" in why
+
+
+def test_the_batch_query_asks_for_the_review_authors_typename(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No test executes `_pr_batch_query`, and a malformed reviews field would
+    only fail at runtime — so pin the shape here instead: the review author has
+    to carry `__typename`, or the batched path loses its bot signal and an
+    unlisted bare bot's approval sneaks past the sink on promotion runs.
+    (The REST fallback keeps classifying via `is_bot`/`type`, so the degradation
+    is quiet rather than loud — which is exactly why the query is pinned.)"""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    query = crc._pr_batch_query([1894, 1893])
+    assert "reviews(last: 80) { nodes { state author { login __typename } } }" in query
 
 
 def test_a_persons_approval_survives_the_bot_rule() -> None:
@@ -836,7 +854,7 @@ def test_rest_typing_is_caught_the_same_way() -> None:
     assert crc.is_bot_login("coderabbitai[bot]")
 
 
-def test_is_bot_login_classifies_the_ow_shape_of_every_record() -> None:
+def test_is_bot_login_classifies_the_raw_shape_of_every_record() -> None:
     """The one rule, pinned input by input.
 
     Name signals classify without any record (`[bot]` suffix, `REVIEW_BOTS`

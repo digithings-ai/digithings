@@ -604,7 +604,11 @@ def test_an_unlisted_bots_bare_login_approval_is_refused() -> None:
 
 def test_an_unlisted_suffixed_bot_approval_is_refused_too() -> None:
     """The name rule catches what the 2026-10-18 sink missed: any `[bot]` suffix,
-    listed or not, is a linter verdict, and it must not be evidence either way."""
+    listed or not, is a linter verdict that must not be evidence either way. The
+    outcome is unchanged from the old queue (its suffix strip refused it via
+    `_evidence_reviews`); what changed is the mechanism - the refusal now comes
+    from the one sink rule both gates share, which the coverage suite pins
+    (`approvals` empty while the review stays in the list)."""
     pr = _pr(1, reviews=[{"author": {"login": "netlify[bot]"}, "state": "APPROVED"}])
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
     assert not verdict.eligible

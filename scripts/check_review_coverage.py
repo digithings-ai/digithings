@@ -297,23 +297,25 @@ def is_bot_login(author: dict | str | None) -> bool:
     `REVIEW_BOTS`), so a bare-login bot's APPROVED review passed both filters
     and cleared coverage as though a person had approved.
 
-    A login is a bot when
+    One login is a bot when
 
       * its record says so -- `gh --json`'s ``is_bot``, REST's ``type``, or
         GraphQL's ``__typename`` being ``Bot`` (when the query asks for it).
-        This is what catches an UNLISTED bot whose login is bare: ``gh`` has
-        always sent ``is_bot`` on the author records both filters read, and the
-        bare login alone is indistinguishable from a person's; or
+        This is what catches an UNLISTED bot whose login is bare: gh builds at
+        least since 2.102 (the review environments this repo actually runs)
+        send ``is_bot`` on the author records both filters read, and the bare
+        login alone is indistinguishable from a person's; or
       * its name says so -- the ``[bot]`` suffix GitHub appends in the REST
         timeline, or a login in `REVIEW_BOTS`/`BOT_AUTHORS` (both spellings are
-        in the sets), which is what classifies hand-built fixtures.
+        in the sets), which is what classifies hand-built fixtures and feeds
+        that predate the record typing.
 
     A record with no typing field and an unlisted bare name is treated as a
     person. That is deliberate: assuming the login is a bot would refuse real
     approvals -- the failure mode that retired the non-author-approval demand on
-    2026-10-18 -- and the production fetches (``gh pr list/view --json``) always
-    carry ``is_bot``, so a bare name with nothing else is a fixture artefact,
-    not a review a bot could actually submit.
+    2026-10-18 -- and both production fetches (``gh pr list/view --json``) carry
+    ``is_bot``, so a bare name with nothing else is a fixture artefact, not a
+    review a bot could actually submit.
 
     Call it with whatever makes the login: the author record (`gh --json`,
     GraphQL or REST shape), or the bare login string itself.
@@ -330,6 +332,13 @@ def is_bot_login(author: dict | str | None) -> bool:
         login = str(record.get("login") or "")
     if not login:
         return False
+    # Name signals outrank a record that says human (2026-10-19, DIG-4298): the
+    # SAME login is graded as a reviewer bot elsewhere in this module (the
+    # REVIEW_BOTS hatch matches bare spellings), so trusting `is_bot: false`
+    # here would let one evaluation disagree with itself. A person whose real
+    # login collides with a reviewer-bot name loses nothing either way: their
+    # verdict degrades from the approval hatch to the agent-review hatch, both
+    # of which count.
     if login.endswith("[bot]") or login in REVIEW_BOTS or login in BOT_AUTHORS:
         return True
     if record.get("is_bot") is True:
