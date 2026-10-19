@@ -109,13 +109,22 @@ def test_richer_composite_sidecar_matches_settings() -> None:
     assert sidecar["public_name"] == "BTC-SDCA"
 
 
-def test_sdca_risk_index_uses_signal_delayed_frame_only(tmp_path: Path) -> None:
+def test_sdca_risk_index_uses_signal_delayed_frame_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """#1462: delayed OHLCV is the only input — no risk-index row after truncated end."""
+    # DIG-4057: sinks confine to DIGIQUANT_DATA_ROOT — read the example
+    # coefficients from a copy inside tmp so input and output share one root.
+    root = tmp_path / "root"
+    root.mkdir()
+    coeffs = root / "btc_power_law_coefficients.example.json"
+    coeffs.write_text(_EXAMPLE_COEFFS.read_text())
+    monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(root))
     raw = _daily_ohlcv(date(2020, 1, 1), 30)
     delayed = gts.apply_signal_delay(raw, 5)
     assert delayed["timestamp"].max() < raw["timestamp"].max()
-    out = tmp_path / "risk.parquet"
-    index = gts.materialize_sdca_risk_index(delayed, out, coefficients_path=_EXAMPLE_COEFFS)
+    out = root / "risk.parquet"
+    index = gts.materialize_sdca_risk_index(delayed, out, coefficients_path=coeffs)
     end = delayed["timestamp"].max()
     if not isinstance(end, date):
         end = end.date()  # type: ignore[union-attr]

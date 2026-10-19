@@ -23,6 +23,15 @@ _EXAMPLE_COEFFICIENTS = (
 )
 
 
+def _example_coefficients(cache_root: Path) -> Path:
+    """Copy the repo example coefficients under the test data root (DIG-4057: sinks confine)."""
+    import shutil
+
+    dest = cache_root / "btc_power_law_coefficients.example.json"
+    shutil.copyfile(_EXAMPLE_COEFFICIENTS, dest)
+    return dest
+
+
 def _tool():
     server = create_mcp_server()
     return server._tool_manager.get_tool("digiquant_build_sdca_risk_index").fn
@@ -93,7 +102,7 @@ class TestBuildSdcaRiskIndexTool:
                 ticker="BTC-USD",
                 cache_dir=str(tmp_path),
                 refresh=False,
-                coefficients_path=str(_EXAMPLE_COEFFICIENTS),
+                coefficients_path=str(_example_coefficients(tmp_path)),
                 output_path=str(out),
             )
         )
@@ -117,7 +126,7 @@ class TestBuildSdcaRiskIndexTool:
             ticker="BTC-USD",
             cache_dir=str(tmp_path),
             refresh=False,
-            coefficients_path=str(_EXAMPLE_COEFFICIENTS),
+            coefficients_path=str(_example_coefficients(tmp_path)),
         )
         a = json.loads(_tool()(**base, output_path=str(out_default)))
         b = json.loads(
@@ -147,7 +156,7 @@ class TestBuildSdcaRiskIndexTool:
             ticker="BTC-USD",
             cache_dir=str(tmp_path),
             refresh=False,
-            coefficients_path=str(_EXAMPLE_COEFFICIENTS),
+            coefficients_path=str(_example_coefficients(tmp_path)),
         )
         json.loads(_tool()(**base, output_path=str(out_solo)))
         payload = json.loads(
