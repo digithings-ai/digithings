@@ -206,6 +206,10 @@ def test_run_tick_saves_nothing_when_nothing_is_new() -> None:
 def test_vendored_copy_is_byte_identical_to_the_pinned_blob() -> None:
     data = VENDORED.read_bytes()
     assert len(data) == 2133
+    # the pin literal is asserted here, not merely the module constant: a
+    # mutant that re-pins ``VENDOR_BLOB_SHA1`` (or re-vendors the bytes and
+    # the constant together) must fail this test, not silently pass it.
+    assert mod.VENDOR_BLOB_SHA1 == "0bbd3527e8359c2192f4cdc4837b38a202d132ae"
     assert mod.blob_sha1(data) == mod.VENDOR_BLOB_SHA1
 
 
@@ -244,7 +248,7 @@ def test_check_vendor_reports_an_unreadable_file(
     assert mod.check_vendor() == 2
 
 
-def test_cli_check_vendor_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_check_vendor_exits_zero() -> None:
     assert mod.main(["--check-vendor"]) == 0
 
 
@@ -393,9 +397,100 @@ def test_find_board_issue_ignores_loose_query_matches(
     assert calls[0][0:2] == ("POST", f"/companies/{CFG['company']}/issues")
 
 
+def test_find_board_issue_requires_the_source_repo_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The find-or-create key is (source_repo, github_issue_number): a
+    description carrying only the number marker (another vendored repo's
+    board issue with colliding numbering) is not the board issue for n."""
+    number_only = mod.board_marker(7)
+    rows = [
+        {
+            "id": "foreign",
+            "status": "todo",
+            "description": f"other repo's alarm\n\n{number_only}\n",
+        }
+    ]
+    calls: list[tuple[str, str, Any]] = []
+    _stub_board(monkeypatch, rows, calls)
+    deliver = mod.build_board_deliver(CFG, {7: _issue(7, 1001)})
+
+    deliver(7)
+
+    assert calls[0][0:2] == ("POST", f"/companies/{CFG['company']}/issues")
+    assert "source_repo: twelve-x" in calls[0][2]["description"]
+
+
+def test_prefer_open_board_issue_when_a_closed_one_also_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A human closed the board issue, then a duplicate open one exists:
+    the caller must comment on the OPEN row, not file a third copy."""
+    open_row = {
+        "id": "board-open",
+        "status": "todo",
+        "description": mod.board_issue_description(7, "t", "u"),
+    }
+    closed_row = {
+        "id": "board-closed",
+        "status": "done",
+        "description": mod.board_issue_description(7, "t", "u"),
+    }
+    calls: list[tuple[str, str, Any]] = []
+    _stub_board(monkeypatch, [closed_row, open_row], calls)
+    deliver = mod.build_board_deliver(CFG, {7: {"title": "t", "html_url": "u"}})
+
+    deliver(7)
+
+    assert len(calls) == 1
+    (method, path, payload) = calls[0]
+    assert (method, path) == ("POST", "/issues/board-open/comments")
+    assert "re-raised" in payload["body"]
+
+
 # ---------------------------------------------------------------------------
 # state document store / read
 # ---------------------------------------------------------------------------
+
+
+def test_resolve_state_issue_returns_the_exact_identifier_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The host issue is matched on the exact ``identifier`` field, so a loose
+    ``?q=`` hit whose identifier merely contains the string is not it."""
+    rows = [
+        {"id": "noise", "identifier": "DIG-25940"},
+        {"id": "host", "identifier": "DIG-2594"},
+    ]
+    monkeypatch.setattr(mod, "_list_issues", lambda cfg, query: rows)
+    assert mod.resolve_state_issue(CFG) == "host"
+
+
+def test_resolve_state_issue_refuses_an_ambiguous_board(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        mod,
+        "_list_issues",
+        lambda cfg, query: [
+            {"id": "a", "identifier": "DIG-2594"},
+            {"id": "b", "identifier": "DIG-2594"},
+        ],
+    )
+    with pytest.raises(RuntimeError, match="found 2"):
+        mod.resolve_state_issue(CFG)
+
+
+def test_resolve_state_issue_refuses_a_missing_host_issue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        mod,
+        "_list_issues",
+        lambda cfg, query: [{"id": "other", "identifier": "DIG-2594-xyz"}],
+    )
+    with pytest.raises(RuntimeError, match="found 0"):
+        mod.resolve_state_issue(CFG)
 
 
 def test_read_state_is_empty_when_the_document_does_not_exist(
@@ -472,13 +567,45 @@ def test_cli_issues_file_dry_run_needs_no_credentials(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    for name in BOARD_ENV_VARS + ("PAPERCLIP_RUN_ID",):
-        monkeypatch.delenv(name, raising=False)
+    _clear_board_env(monkeypatch)
+    monkeypatch.delenv("PAPERCLIP_RUN_ID", raising=False)
     issues_path = tmp_path / "issues.json"
     issues_path.write_text(json.dumps([_issue(7, 1001)]), encoding="utf-8")
 
     assert mod.main(["--issues-file", str(issues_path)]) == 0
     assert "would report #7" in capsys.readouterr().out
+
+
+def test_cli_combined_flags_still_assert_the_vendor_pin(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``--check-vendor`` next to ``--issues-file`` asserts the pin before
+    the run, so a drifted vendored copy can never be evaluated on."""
+    issues_path = tmp_path / "issues.json"
+    issues_path.write_text(json.dumps([_issue(7, 1001)]), encoding="utf-8")
+    assert mod.main(["--check-vendor", "--issues-file", str(issues_path)]) == 0
+    out = capsys.readouterr().out
+    assert "pinned blob" in out
+    assert "would report #7" in out
+
+
+def test_list_issues_encodes_the_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A space in the query must not reach the URL raw: urllib raises
+    ``http.client.InvalidURL`` on control characters before any request."""
+    seen: list[tuple[str, str, Any]] = []
+
+    def fake_request(cfg, method, path, payload=None):
+        seen.append((method, path, payload))
+        return []
+
+    monkeypatch.setattr(mod, "_request", fake_request)
+    mod._list_issues(CFG, "FX Alarm")
+    (method, path, payload) = seen[0]
+    assert (method, payload) == ("GET", None)
+    assert "q=FX%20Alarm" in path
 
 
 def test_save_watermarks_round_trip_silences_the_next_tick(
