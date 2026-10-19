@@ -11,7 +11,7 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["react", "react-dom"],
+    "types": ["node", "react", "react-dom"],
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src"]

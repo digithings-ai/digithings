@@ -25,7 +25,7 @@ describe("DigichatWordmark session", () => {
     // returns before the session claim and the once-per-tab pin is void.
     HTMLCanvasElement.prototype.getContext = function () {
       return new Proxy({}, { get: () => () => {} }) as unknown as CanvasRenderingContext2D;
-    };
+    } as unknown as HTMLCanvasElement["getContext"];
     window.matchMedia = ((query: string) => ({
       matches: false,
       media: query,

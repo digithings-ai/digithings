@@ -12,6 +12,7 @@ describe('ContributionReturnChart', () => {
       ],
       colors: { AAA: 'var(--accent)', HEDGE: 'var(--down)' },
       benchmark: { label: 'SPY', values: [0, 1.1] },
+      ariaLabel: 'Return contributions',
     }));
 
     expect(html).toContain('data-chart-layer="contributions"');

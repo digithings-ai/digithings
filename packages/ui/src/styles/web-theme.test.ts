@@ -2,8 +2,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-// Single `__dirname` usage: the tsconfig carries no node types, so this file
-// already reports TS2304 for it (pre-existing, like its node: imports).
 const here = __dirname;
 
 const css = readFileSync(path.resolve(here, "web-theme.css"), "utf8");

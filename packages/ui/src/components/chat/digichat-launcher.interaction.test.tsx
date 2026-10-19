@@ -28,11 +28,11 @@ describe("DigichatLauncher interactions", () => {
   function renderLauncher(onOpenChange = vi.fn()) {
     act(() => {
       root.render(
-        createElement(
-          DigichatLauncher,
-          { portal: false, onOpenChange },
-          createElement("div", { "data-chat-body": "1" }),
-        ),
+        createElement(DigichatLauncher, {
+          portal: false,
+          onOpenChange,
+          children: createElement("div", { "data-chat-body": "1" }),
+        }),
       );
     });
     return onOpenChange;
@@ -146,11 +146,12 @@ describe("DigichatLauncher interactions", () => {
     function renderWithHotkey(hotkey: string, onOpenChange = vi.fn()) {
       act(() => {
         root.render(
-          createElement(
-            DigichatLauncher,
-            { portal: false, hotkey, onOpenChange },
-            createElement("div", { "data-chat-body": "1" }),
-          ),
+          createElement(DigichatLauncher, {
+            portal: false,
+            hotkey,
+            onOpenChange,
+            children: createElement("div", { "data-chat-body": "1" }),
+          }),
         );
       });
       return onOpenChange;
@@ -232,11 +233,11 @@ describe("DigichatLauncher interactions", () => {
       const onOpenChange = vi.fn();
       act(() => {
         root.render(
-          createElement(
-            DigichatLauncher,
-            { portal: false, onOpenChange },
-            createElement("div", { "data-chat-body": "1" }),
-          ),
+          createElement(DigichatLauncher, {
+            portal: false,
+            onOpenChange,
+            children: createElement("div", { "data-chat-body": "1" }),
+          }),
         );
       });
 

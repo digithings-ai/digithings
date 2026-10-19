@@ -2,9 +2,6 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-// Single `__dirname` usage: the tsconfig carries no node types, so this file
-// reports TS2304 for it (pre-existing, like its node: imports — see
-// contrast.contract.test.ts).
 const here = __dirname;
 const repoRoot = path.resolve(here, "../../../..");
 const at = (rel: string) => readFileSync(path.join(repoRoot, rel), "utf8");
@@ -28,8 +25,11 @@ const SURFACES = [
  * digichat still loads Inter, IBM Plex and Geist Mono in its route layouts.
  * It rejoins SURFACES when [DIG-3449] applies the 14 Oct Geist Mono decision.
  * Until then the contract does not police it.
+ *
+ * digiquant-app still loads Inter and JetBrains Mono through its own next/font
+ * call. It rejoins SURFACES when its fonts move to `@digithings/design/fonts`.
  */
-const PENDING_PORT = ["apps/digichat/"];
+const PENDING_PORT = ["apps/digichat/", "apps/digiquant-app/"];
 
 /** Type-specimen galleries and demos show font alternatives on purpose. */
 const OUT_OF_SCOPE = [
