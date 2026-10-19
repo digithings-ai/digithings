@@ -51,6 +51,7 @@ from digiquant.strategies.lab.walk_forward import (
     params_are_valid,
     score_trial_on_folds,
     sensitivity_neighbors,
+    sensitivity_quantile,
     shape_from_params,
     window_slice,
 )
@@ -88,13 +89,35 @@ SDCA_SHAPE_DEFAULTS: dict[str, float] = {
 
 
 class SensitivityReport(BaseModel):
-    """5% perturbation of the winner. A spike is not a plateau."""
+    """5% perturbation of the winner. A spike is not a plateau.
+
+    ``stable`` is decided by ``p75_abs_delta_oos_pct``, not by the worst single
+    neighbour: a ``max`` over a few dozen correlated perturbations is an
+    extreme-value statistic that reports the worst axis rather than the plateau,
+    and it cannot tell a flat surface with one steep edge from a broadly sloping
+    one. ``max_abs_delta_oos_pct`` is kept as a diagnostic.
+    """
 
     model_config = ConfigDict(frozen=True, strict=True)
 
     frac: float = Field(0.05, gt=0.0, lt=1.0)
     spike_threshold_pct: float = Field(SENSITIVITY_SPIKE_PCT, gt=0.0)
-    max_abs_delta_oos_pct: float
+    max_abs_delta_oos_pct: float = Field(
+        description="Worst single neighbour. Diagnostic only -- decides nothing."
+    )
+    p75_abs_delta_oos_pct: float = Field(
+        description="p75 of |delta| across the neighbourhood. This is what ``stable`` tests."
+    )
+    worst_loss_pct: float = Field(
+        description="Most negative neighbour delta: the fragility the gate exists to catch."
+    )
+    best_gain_pct: float = Field(
+        description=(
+            "Most positive neighbour delta. Reported, NOT gated: a neighbour that improves "
+            "the result means the winner sits left of its optimum, which is under-fitting, "
+            "not the spike #3174 guards against."
+        )
+    )
     stable: bool
     neighbor_count: int = Field(ge=0)
     worst_neighbor_key: str | None = Field(
@@ -650,10 +673,10 @@ def _sensitivity_of(
             objective,
             extra_z=extra_z,
         )
-        delta = abs(_mean_oos_for(scores, fold_weighting) - mean_oos)
+        delta = _mean_oos_for(scores, fold_weighting) - mean_oos
         deltas.append(delta)
-        if delta > worst_delta:
-            worst_delta = delta
+        if abs(delta) > worst_delta:
+            worst_delta = abs(delta)
             worst_neighbor = neighbor
     if not deltas:
         # Every neighbour was dropped before it could be scored -- an invalid shape, or a
@@ -665,12 +688,16 @@ def _sensitivity_of(
             f"(neighbors={len(neighbors)}, scored={len(deltas)}); "
             "the stability verdict would be unfalsifiable"
         )
-    max_delta = max(deltas)
+    max_delta = max(abs(delta) for delta in deltas)
+    plateau = sensitivity_quantile(deltas)
     return SensitivityReport(
         frac=frac,
         spike_threshold_pct=SENSITIVITY_SPIKE_PCT,
         max_abs_delta_oos_pct=max_delta,
-        stable=max_delta <= SENSITIVITY_SPIKE_PCT,
+        p75_abs_delta_oos_pct=plateau,
+        worst_loss_pct=min(deltas),
+        best_gain_pct=max(deltas),
+        stable=plateau <= SENSITIVITY_SPIKE_PCT,
         neighbor_count=len(neighbors),
         worst_neighbor_key=_worst_neighbor_key(best_params, worst_neighbor),
     )

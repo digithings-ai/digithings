@@ -22,6 +22,7 @@ from digiquant.strategies.sdca.walk_forward import (
     params_are_valid,
     score_trial_on_folds,
     sensitivity_neighbors,
+    sensitivity_quantile,
     shape_from_params,
     window_slice,
 )
@@ -358,6 +359,41 @@ class TestMidTierParamsReachTheGate:
         assert neighbors
         assert any(n["buy_max_rate"] != params["buy_max_rate"] for n in neighbors)
         assert all(n["buy_mid_knee_risk"] is None for n in neighbors)
+
+
+class TestSensitivityQuantile:
+    """The plateau statistic: three quarters of the neighbourhood, not the worst axis.
+
+    Issue #3174 asks for a stable *plateau*. A ``max`` over a few dozen correlated
+    perturbations cannot tell a flat surface with one steep edge from a broadly
+    sloping one, so it rejects both; the quantile can.
+    """
+
+    def test_a_single_steep_edge_does_not_fail_a_flat_surface(self) -> None:
+        deltas = [0.1] * 20 + [-9.0]
+        assert max(abs(delta) for delta in deltas) == pytest.approx(9.0)
+        assert sensitivity_quantile(deltas) == pytest.approx(0.1)
+
+    def test_a_broadly_sloping_surface_fails(self) -> None:
+        # Every axis moves together -- that is what fragility actually looks like.
+        assert sensitivity_quantile([-3.0] * 20) == pytest.approx(3.0)
+
+    def test_linear_interpolation_between_neighbours(self) -> None:
+        assert sensitivity_quantile([0.0, 1.0], q=0.5) == pytest.approx(0.5)
+        assert sensitivity_quantile([2.0, 1.0, 3.0, 0.0], q=0.0) == pytest.approx(0.0)
+        assert sensitivity_quantile([2.0, 1.0, 3.0, 0.0], q=1.0) == pytest.approx(3.0)
+
+    def test_sign_is_irrelevant_to_the_plateau(self) -> None:
+        assert sensitivity_quantile([-1.0, 1.0]) == pytest.approx(1.0)
+
+    def test_empty_sequence_raises(self) -> None:
+        # A gate that passes on zero measurements is a guard that cannot fail.
+        with pytest.raises(ValueError, match="at least one"):
+            sensitivity_quantile([])
+
+    def test_quantile_out_of_range_raises(self) -> None:
+        with pytest.raises(ValueError, match=r"in \[0, 1\]"):
+            sensitivity_quantile([1.0], q=1.5)
 
 
 class TestWindowRelativeDrawdownCap:

@@ -34,7 +34,19 @@ RailsFitter = Callable[[Sequence[date], Sequence[float]], RiskModel]
 
 # A 5% bump that moves mean OOS vs-flat-DCA by more than this many percentage
 # points is treated as a spike, not a plateau (#3174 sensitivity).
+#
+# The threshold is applied to the p75 of the neighbour deltas, not to the worst
+# single neighbour. A ``max`` over ~25-35 correlated perturbations is an
+# extreme-value statistic: it is dominated by one axis and biased upward by the
+# parameter count, so it reports the worst axis rather than the plateau. Measured
+# on BTC, 2026-10-19: a live config and a joint-grid corner read 5.89 and 5.61 on
+# the max -- indistinguishable -- while their p75s were 1.23 and 0.82; a
+# deliberately fragile config (buy_knee_risk=30, mean OOS +28 against +60) read
+# 2.05. Gating on the p75 therefore still rejects the fragile case while telling
+# the plateau apart. ``max_abs_delta_oos_pct`` stays in the report as a
+# diagnostic; it decides nothing.
 SENSITIVITY_SPIKE_PCT = 2.0
+SENSITIVITY_QUANTILE = 0.75
 
 
 class SdcaOptimizeObjective(BaseModel):
@@ -328,9 +340,43 @@ def sensitivity_neighbors(
         for sign in (1.0, -1.0):
             bumped = dict(params)
             bumped[key] = float(val) * (1.0 + sign * frac)
+            if bumped[key] == params[key]:
+                # +-5% of a zero weight is still zero: an identical neighbour is
+                # not a perturbation, and counting it would dilute any statistic
+                # taken over the neighbourhood.
+                continue
             if params_are_valid(bumped):
                 neighbors.append(bumped)
     return neighbors
+
+
+def sensitivity_quantile(
+    deltas: Sequence[float],
+    *,
+    q: float = SENSITIVITY_QUANTILE,
+) -> float:
+    """Linear-interpolated quantile of ``|delta|`` -- the plateau, not the worst axis.
+
+    ``q=0.75`` by default: three quarters of the neighbourhood must sit inside the
+    cap. One pathological axis therefore cannot fail an otherwise flat surface,
+    while a broadly sloping surface -- which is what a fragile optimum looks like
+    -- still fails, because it moves most neighbours at once.
+
+    Signed deltas are expected; the magnitude is what a plateau is measured in.
+    Raises on an empty sequence: a gate that passes on zero measurements is a
+    guard that cannot fail (#3174).
+    """
+    if not deltas:
+        raise ValueError("sensitivity quantile needs at least one neighbour delta")
+    if not 0.0 <= q <= 1.0:
+        raise ValueError(f"quantile q must be in [0, 1], got {q}")
+    ordered = sorted(abs(delta) for delta in deltas)
+    position = q * (len(ordered) - 1)
+    low = int(position)
+    high = min(low + 1, len(ordered) - 1)
+    if position == low:
+        return ordered[low]
+    return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
 
 
 def duration_weighted_mean(
@@ -408,6 +454,7 @@ def objective_score(metrics: SdcaTrialMetrics, objective: SdcaOptimizeObjective)
 __all__ = [
     "FoldScore",
     "RailsFitter",
+    "SENSITIVITY_QUANTILE",
     "SENSITIVITY_SPIKE_PCT",
     "SdcaOptimizeObjective",
     "SdcaTrialEvaluator",
@@ -421,6 +468,7 @@ __all__ = [
     "params_are_valid",
     "score_trial_on_folds",
     "sensitivity_neighbors",
+    "sensitivity_quantile",
     "shape_from_params",
     "valuation_weight_from_params",
     "window_slice",

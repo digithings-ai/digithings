@@ -1793,6 +1793,89 @@ unfitted" and *toward* "the SDCA curve shape has no plateau on these axes: OOS r
 the knees are pushed." The gate cannot tell that apart from brittleness — which is the governance
 question, and it is now the live one.
 
+## The stability gate: measure the plateau, not the worst axis (2026-10-19)
+
+The question above is answered here, in the gate rather than in the curve.
+
+### What the gate was specified to do
+
+Issue **#3174** says, verbatim: *"if a 5% perturbation of the winning parameters **materially**
+changes the result, the optimum is a spike and should be rejected in favour of a stable plateau."*
+
+**No number appears in the issue.** The `2.0` enters in `9928277650` as a bare constant with a
+one-line comment and no recorded calibration, so it is an implementation choice that can be audited.
+
+### The measurement
+
+Every ±5% neighbour was enumerated for three configs — not just the maximum the gate reports:
+
+| config | mean OOS | SE | median \|Δ\| | **p75** | p90 | **max** |
+|---|---|---|---|---|---|---|
+| **A** live (buy 35, sell 80) | +60.62 | 10.97 | 1.00 | **1.23** | 1.85 | **5.89** |
+| **B** fragile control (buy 30) | +28.07 | 29.06 | 1.10 | **2.05** | 5.29 | **16.37** |
+| **C** joint-grid corner (42, 70) | +74.50 | 58.36 | 0.44 | **0.82** | 1.39 | **5.61** |
+
+### Four findings
+
+1. **`max` saturates and cannot see the distinction that matters.** A reads 5.89 and C reads 5.61 —
+   indistinguishable — while C's neighbourhood is twice as tight at the median (0.44 against 1.00).
+   A max over ~21-35 correlated perturbations is an extreme-value statistic: dominated by one axis,
+   biased upward by the parameter count, and it reports the worst axis rather than the plateau.
+2. **It is two-sided, so it punishes a winner for sitting left of its optimum.** At the live config
+   `sell_knee_risk:-5%` trips the cap by **gaining +2.38**. That is under-fitting — the opposite of
+   the spike #3174 guards against.
+3. **The cap is below the noise floor of the statistic it gates — but normalising by noise is the
+   wrong repair.** Per-fold OOS of +56.2 / +81.4 / +44.2 gives the mean **SE ≈ 10.97** and a fold
+   range of 37.2pp, so 2.0pp is **0.18 SE**. That explains eight failing verdicts out of eight.
+   **However**, dividing by SE destroys the discrimination: A sits at 0.54 SE and the fragile B at
+   0.56 SE. Recorded to close the idea off, not to propose it.
+4. **A robust quantile does discriminate**, which is the falsification test this change had to pass:
+   B (2.05) > A (1.23) > C (0.82) at p75, and B is the only config whose p90 and max are in a
+   different regime.
+
+### The change
+
+- `walk_forward.sensitivity_quantile(deltas, *, q=SENSITIVITY_QUANTILE)` — linear-interpolated
+  quantile of `|delta|`, `q = 0.75`, raising on an empty sequence. `SENSITIVITY_QUANTILE = 0.75`
+  sits beside `SENSITIVITY_SPIKE_PCT = 2.0`, which now applies to the p75.
+- `_sensitivity_of` collects **signed** deltas, so it can report `worst_loss_pct` (fragility) and
+  `best_gain_pct` (under-fitting) separately. `stable` tests the p75; `max_abs_delta_oos_pct` stays
+  as a diagnostic that decides nothing.
+- `sensitivity_neighbors` no longer emits neighbours identical to the candidate: **±5% of a zero
+  weight is still zero.** Those no-ops were inflating `neighbor_count` (35 on the live config, of
+  which 21 actually differ) and, by construction, diluting any statistic taken over the
+  neighbourhood — the more zero weights a candidate carried, the easier the gate became.
+
+### Result on the live index
+
+`p75 = 1.2303 ≤ 2.0` → **`stable = True`**, with `max_abs_delta_oos_pct = 5.8909` still reported,
+`worst_loss_pct = -5.8909`, `best_gain_pct = +2.3815`, `neighbor_count = 21`,
+`worst_neighbor_key = buy_knee_risk:-5%`. The corner config passes at 0.82; the fragile control
+still **fails** at 2.05.
+
+### Pins
+
+- `TestSensitivityQuantile` — one steep edge on a flat surface passes, a broadly sloping surface
+  fails, interpolation is exact, empty raises, `q` out of range raises.
+- `TestSensitivityNeighboursSkipNoOps` — a zero weight produces no neighbour, and every neighbour
+  differs in exactly one key.
+- `TestSensitivityGateUsesThePlateau` — **both arms**: a synthetic evaluator with a single 8-point
+  cliff passes at p75 0.0 while reporting `max` 8.0; a synthetic evaluator where every axis moves by
+  3.0 still fails. The second arm is the anti-vacuity pin: relaxing `max` to a quantile must not turn
+  the gate into one that never fires.
+
+Gate of record: `tests/dq/strategies/sdca` → **1165 passed**; `ruff check` on the changed files
+reports only the pre-existing `I001` at `lab/optimize.py:8`.
+
+### What this does not do
+
+Nothing is promoted and no weight moved. The eight historical verdicts are **not** re-scored —
+they record what was decided at the time, and retro-scoring them under a new rule would rewrite
+history. This does **not** make the curve robust: the knee axes are still monotone and the fold
+dispersion (+56 / +81 / +44) is still large. The `2.0` threshold itself is inherited, and three
+configs are a calibration set of three, not a sample.
+
+
 
 
 

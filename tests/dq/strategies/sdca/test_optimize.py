@@ -27,10 +27,12 @@ from digiquant.strategies.sdca.presets import load_preset
 from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import (
+    SENSITIVITY_SPIKE_PCT,
     SdcaOptimizeObjective,
     SdcaTrialMetrics,
     make_walk_forward_folds,
     sensitivity_neighbors,
+    shape_from_params,
 )
 from digiquant.strategy_specs import (
     _resolve_strategy_name,
@@ -119,6 +121,121 @@ def _evaluator(
         capital_deployed_peak_pct=40.0,
         max_drawdown_pct=12.0,
     )
+
+
+class TestSensitivityNeighboursSkipNoOps:
+    """+-5% of a zero weight is still zero: that is not a perturbation.
+
+    Counting those as neighbours used to deflate any statistic taken over the
+    neighbourhood, and made the report's ``neighbor_count`` depend on how many
+    zero weights a candidate happened to carry.
+    """
+
+    def test_a_zero_weight_is_not_a_perturbation(self) -> None:
+        base = {**SDCA_SHAPE_DEFAULTS, "valuation_weight": 1.0, "m2_weight": 0.0}
+        neighbors = sensitivity_neighbors(base, frac=0.05)
+        assert neighbors
+        # No neighbour was produced BY the zero-valued m2 bump ...
+        assert not any([k for k in n if n[k] != base[k]] == ["m2_weight"] for n in neighbors)
+        # ... while a non-zero weight still produces both of its own.
+        bumped = sorted(n["valuation_weight"] for n in neighbors if n["valuation_weight"] != 1.0)
+        assert bumped[0] == pytest.approx(0.95)
+        assert bumped[-1] == pytest.approx(1.05)
+
+    def test_every_neighbour_differs_in_exactly_one_key(self) -> None:
+        base = {**SDCA_SHAPE_DEFAULTS, "valuation_weight": 1.0}
+        for neighbor in sensitivity_neighbors(base, frac=0.05):
+            differing = [key for key in neighbor if neighbor[key] != base[key]]
+            assert len(differing) == 1
+
+
+class TestSensitivityGateUsesThePlateau:
+    """#3174 asks for a stable *plateau*. Both arms are the pin.
+
+    The second arm is the falsification test: a candidate whose whole
+    neighbourhood moves together must still be rejected, so relaxing the
+    statistic from ``max`` to a quantile cannot quietly turn the gate into one
+    that never fires.
+    """
+
+    @staticmethod
+    def _base() -> dict[str, float]:
+        return {**SDCA_SHAPE_DEFAULTS, "valuation_weight": 1.0}
+
+    def _report(self, evaluator: object) -> object:
+        base = self._base()
+        dates = _dates()
+        prices = [100.0 + i for i in range(len(dates))]
+        folds, _holdout = make_walk_forward_folds(dates)
+        return _sensitivity_of(
+            base,
+            100.0,
+            dates,
+            prices,
+            folds,
+            _fitter,
+            evaluator,  # type: ignore[arg-type]
+            SdcaOptimizeObjective(),
+            0.05,
+            None,
+        )
+
+    def test_one_steep_edge_on_a_flat_surface_still_passes(self) -> None:
+        base_shape = shape_from_params(self._base())
+
+        def evaluator(
+            dates: list[date],
+            prices: list[float],
+            model: RiskModel,
+            shape: SdcaCurveShape,
+            valuation_weight: float,
+            extra_indicators: object = None,
+        ) -> SdcaTrialMetrics:
+            assert isinstance(model, _ConstRails)
+            vs = 92.0 if shape.buy_knee_risk != base_shape.buy_knee_risk else 100.0
+            return SdcaTrialMetrics(
+                vs_flat_dca_pct=vs,
+                vs_lump_pct=-1.0,
+                capital_deployed_pct=40.0,
+                capital_deployed_peak_pct=40.0,
+                max_drawdown_pct=12.0,
+            )
+
+        report = self._report(evaluator)
+        # The worst axis is a cliff ...
+        assert report.max_abs_delta_oos_pct == pytest.approx(8.0)
+        # ... but the surface is flat, which is what the gate is asking about.
+        assert report.p75_abs_delta_oos_pct == pytest.approx(0.0)
+        assert report.stable is True
+        assert report.worst_neighbor_key == "buy_knee_risk:+5%"
+        assert report.worst_loss_pct == pytest.approx(-8.0)
+
+    def test_a_broadly_sloping_surface_still_fails(self) -> None:
+        base = self._base()
+        base_shape = shape_from_params(base)
+
+        def evaluator(
+            dates: list[date],
+            prices: list[float],
+            model: RiskModel,
+            shape: SdcaCurveShape,
+            valuation_weight: float,
+            extra_indicators: object = None,
+        ) -> SdcaTrialMetrics:
+            assert isinstance(model, _ConstRails)
+            unchanged = shape == base_shape and valuation_weight == base["valuation_weight"]
+            return SdcaTrialMetrics(
+                vs_flat_dca_pct=100.0 if unchanged else 97.0,
+                vs_lump_pct=-1.0,
+                capital_deployed_pct=40.0,
+                capital_deployed_peak_pct=40.0,
+                max_drawdown_pct=12.0,
+            )
+
+        report = self._report(evaluator)
+        assert report.p75_abs_delta_oos_pct == pytest.approx(3.0)
+        assert report.p75_abs_delta_oos_pct > SENSITIVITY_SPIKE_PCT
+        assert report.stable is False
 
 
 class TestStrategySpecsSdca:
