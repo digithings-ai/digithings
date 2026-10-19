@@ -183,12 +183,12 @@ describe("phase 3 house-run", () => {
     expect(spec).not.toHaveProperty("failure_issue");
   });
 
-  it("keeps one standard-2 container class", () => {
+  it("keeps one standard-1 container class", () => {
     const toml = readFileSync(join(__dirname, "../wrangler.toml"), "utf8");
     const containers = toml.match(/^\[\[containers\]\]/gm) ?? [];
     expect(containers).toHaveLength(1);
     expect(toml).toContain('class_name = "DigiQuantRunnerContainer"');
-    expect(toml).toContain('instance_type = "standard-2"');
+    expect(toml).toContain('instance_type = "standard-1"');
     expect(toml).toContain("max_instances = 1");
     expect(toml).not.toContain("standard-3");
     expect(toml).not.toContain("standard-4");
