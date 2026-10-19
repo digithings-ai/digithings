@@ -62,7 +62,7 @@ if [ "$IMAGE" = "digichat" ]; then
   HEALTH_PATH="/healthz"; VERSION_PATH="/api/health"
 else
   REPO="ghcr.io/digithings-ai/digillm"
-  DOCKERFILE="Dockerfile.digillm"
+  DOCKERFILE="infra/docker/Dockerfile.digillm"
   if [ -n "$TAG" ]; then
     [[ "$TAG" =~ ^digillm-v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "ERROR: bad tag $TAG." >&2; exit 1; }
     VERSION="${BASH_REMATCH[1]}"

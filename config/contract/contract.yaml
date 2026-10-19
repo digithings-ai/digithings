@@ -98,7 +98,7 @@ services:
   image: ghcr.io/digithings-ai/digillm:0.1.0
   build_context:
     context: .
-    dockerfile: Dockerfile.digillm
+    dockerfile: infra/docker/Dockerfile.digillm
   ports:
   - 127.0.0.1:4000:4000
   profiles: []
@@ -1869,7 +1869,7 @@ bindings:
 - worker: digiquant-runner
   type: container
   class_name: DigiQuantRunnerContainer
-  image: ../../Dockerfile.digiquant-runner
+  image: ../../infra/docker/Dockerfile.digiquant-runner
   max_instances: 1
   instance_type: standard-2
   source: apps/digiquant-runner/wrangler.toml
@@ -1896,7 +1896,7 @@ bindings:
 - worker: digithings-digichat
   type: container
   class_name: DigiChatContainer
-  image: ../../Dockerfile.digichat-cloudflare
+  image: ../../infra/docker/Dockerfile.digichat-cloudflare
   max_instances: 5
   instance_type: null
   source: apps/digichat-cloudflare/wrangler.toml
@@ -1908,7 +1908,7 @@ bindings:
 - worker: digithings-stack
   type: container
   class_name: DigiStackContainer
-  image: ../../Dockerfile.digithings-stack-cloudflare
+  image: ../../infra/docker/Dockerfile.digithings-stack-cloudflare
   max_instances: 5
   instance_type: standard-2
   source: apps/digithings-stack-cloudflare/wrangler.toml
@@ -1937,14 +1937,14 @@ bindings:
 - worker: digitrace-langfuse
   type: container
   class_name: LangfuseWebContainer
-  image: ../../Dockerfile.digitrace-langfuse-web
+  image: ../../infra/docker/Dockerfile.digitrace-langfuse-web
   max_instances: 2
   instance_type: standard-2
   source: apps/digitrace-langfuse/wrangler.toml
 - worker: digitrace-langfuse
   type: container
   class_name: LangfuseWorkerContainer
-  image: ../../Dockerfile.digitrace-langfuse-worker
+  image: ../../infra/docker/Dockerfile.digitrace-langfuse-worker
   max_instances: 1
   instance_type: standard-2
   source: apps/digitrace-langfuse/wrangler.toml

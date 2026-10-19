@@ -33,7 +33,7 @@ COPY apps/digichat ./apps/digichat
 COPY tsconfig.base.json ./tsconfig.base.json
 # BYOK provider pins are imported from the repo-root config (#5020).
 COPY config/byok-providers.json ./config/byok-providers.json
-# Same bake as Dockerfile.digichat-cloudflare: health version matches package.json.
+# Same bake as infra/docker/Dockerfile.digichat-cloudflare: health version matches package.json.
 ARG DIGICHAT_VERSION
 RUN VERSION="${DIGICHAT_VERSION:-$(node -p "require('./apps/digichat/package.json').version")}" \
  && printf '%s' "$VERSION" > /tmp/digichat-version \

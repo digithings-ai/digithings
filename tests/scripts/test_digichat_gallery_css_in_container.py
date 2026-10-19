@@ -21,7 +21,7 @@ BRIDGE_CSS = "packages/ui/src/styles/digichat-app-theme.css"
 GALLERY_CSS = "apps/reference/app/(chatbot)/chatbot/chatbot.css"
 SHIM_CSS = "packages/ui/src/styles/chatbot.css"
 DOCKERFILES = (
-    "Dockerfile.digichat-cloudflare",
+    "infra/docker/Dockerfile.digichat-cloudflare",
     "apps/digichat/Dockerfile",
 )
 

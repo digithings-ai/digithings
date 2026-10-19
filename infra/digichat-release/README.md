@@ -21,7 +21,7 @@ Install unit: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (not npm, not `:latest`).
 | digichat | **GHCR** `ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` |
 | digichat-db | Public `postgres:16-alpine` |
 | digikey-blocklist-redis | Public `redis:7-alpine` |
-| digillm (alias `litellm`) | `ghcr.io/digithings-ai/digillm:0.1.0` — LiteLLM from the pinned PyPI wheel (`Dockerfile.digillm`, DIG-1780) |
+| digillm (alias `litellm`) | `ghcr.io/digithings-ai/digillm:0.1.0` — LiteLLM from the pinned PyPI wheel (`infra/docker/Dockerfile.digillm`, DIG-1780) |
 | digikey / digigraph / digivault | **GHCR** `ghcr.io/digithings-ai/<svc>:${DIGI_IMAGE_TAG}` |
 
 Pin stack and digichat tags separately (`DIGI_IMAGE_TAG` ≠ `DIGICHAT_VERSION`). Prefer
@@ -124,7 +124,7 @@ Full monorepo stack (all Python services) alternative: [`docs/templates/self-hos
 ## Profile A bundle — one stack image (Cloudflare parity)
 
 Preferred **local** path for website digichat while CF backends use the same
-Dockerfile (`Dockerfile.digithings-stack-cloudflare` + supervisord): digikey +
+Dockerfile (`infra/docker/Dockerfile.digithings-stack-cloudflare` + supervisord): digikey +
 digigraph + digisearch + digivault + LiteLLM + Redis in **one** container.
 digichat (+ Postgres) stay separate.
 
