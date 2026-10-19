@@ -72,7 +72,7 @@ from pathlib import Path
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from digiquant.paths import canonicalize_path
+from digiquant.paths import resolve_under_data_root
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
@@ -1368,7 +1368,7 @@ def load_date_value_frame(path: Path | str) -> tuple[pl.Series, pl.Series]:
     Accepts ``date`` / ``timestamp`` / ``observation_date`` (FRED fredgraph.csv)
     plus ``value`` / ``close`` or the remaining numeric series column.
     """
-    dest = canonicalize_path(path)
+    dest = resolve_under_data_root(path, label="series_path")
     if not dest.exists():
         raise ValueError(f"macro/extra series file not found: {dest}")
     frame = pl.read_parquet(dest) if dest.suffix.lower() == ".parquet" else pl.read_csv(dest)

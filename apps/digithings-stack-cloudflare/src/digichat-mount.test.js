@@ -4,11 +4,16 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DIGICHAT_PORT,
-  SHARED_DIGICHAT_CONTAINER_ID,
+  digichatContainerRev,
+  sharedDigichatContainerId,
   shouldProxyToDigiChat,
 } from "./digichat";
 import { shouldProxyToDigiChat as standalonePredicate } from "../../digichat-cloudflare/src/paths";
-import { SHARED_DIGICHAT_CONTAINER_ID as standaloneContainerId } from "../../digichat-cloudflare/src/paths";
+import {
+  digichatContainerRev as standaloneRev,
+  sharedDigichatContainerId as standaloneContainerId,
+  LEGACY_SHARED_DIGICHAT_CONTAINER_ID,
+} from "../../digichat-cloudflare/src/paths";
 import { legacyEmbedEnabledValue } from "../../digichat-cloudflare/src/embed-flag";
 import {
   getStackStatus,
@@ -82,10 +87,91 @@ describe("digichat mount (same predicate as the standalone worker)", () => {
     }
   });
 
-  it("pins the Next standalone port and the shared container id", () => {
+  it("pins the Next standalone port", () => {
     expect(DIGICHAT_PORT).toBe(3000);
-    expect(SHARED_DIGICHAT_CONTAINER_ID).toBe(standaloneContainerId);
-    expect(SHARED_DIGICHAT_CONTAINER_ID).toBe("shared-v10");
+  });
+});
+
+// DIG-3814: the Container id used to be a hand-edited literal this file pinned
+// twice — once for equality with the standalone worker, once for the value
+// "shared-v10". Both pins were the same manual step: the two literals had to
+// be bumped in step, by hand, and a stale instance was already the mitigation
+// for a warm container serving an old DIGICHAT_EMBED_TENANTS (DIG-1381 Act B1).
+//
+// The id is now derived from the deploying commit by the standalone worker's own
+// paths.ts, and the fold re-exports that function. So the properties worth
+// pinning changed shape:
+//
+//   - EQUALITY BY CONSTRUCTION — the folded id IS the standalone derivation
+//     (same function object), not a second copy that can drift.
+//   - DERIVATION — the id is a function of the rev, and rev-less is the legacy
+//     fallback. This is the property the deleted literal used to fake: it
+//     asserted one hard-coded point, not the function that produced it.
+//
+// A test asserting `sharedDigichatContainerId(rev) === "shared-" + rev` is what
+// makes a hand-pinned id impossible to reintroduce: reintroducing one means the
+// function ignores its argument, and these die.
+describe("folded digichat container id is derived, not pinned (DIG-3814)", () => {
+  const REVS = [
+    "3528cf9f7ab1",
+    "0000000000",
+    "abcdef012345",
+    "fedcba987654",
+  ];
+
+  it("the fold re-exports the standalone derivation itself, not a copy", () => {
+    // Object identity: the strongest available statement of "by construction".
+    // A fold that reimplemented the function would fail here even when both
+    // happened to return equal values today.
+    expect(sharedDigichatContainerId).toBe(standaloneContainerId);
+    expect(digichatContainerRev).toBe(standaloneRev);
+  });
+
+  it("derives the id from the deploying commit's rev", () => {
+    for (const rev of REVS) {
+      expect(sharedDigichatContainerId(rev)).toBe(`shared-${rev}`);
+    }
+  });
+
+  it("folded and standalone agree on every rev (the property the literal replaced)", () => {
+    for (const rev of REVS) {
+      expect(sharedDigichatContainerId(rev)).toBe(standaloneContainerId(rev));
+      expect(digichatContainerRev(rev)).toBe(standaloneRev(rev));
+    }
+  });
+
+  it("falls back to the legacy id when a deploy carried no rev", () => {
+    // Unset is an honest state — a bare `npx wrangler deploy` — not an error.
+    for (const empty of [undefined, null, "", "   "]) {
+      expect(sharedDigichatContainerId(empty)).toBe(
+        LEGACY_SHARED_DIGICHAT_CONTAINER_ID,
+      );
+      expect(digichatContainerRev(empty)).toBeNull();
+    }
+  });
+
+  it("strips anything that is not a hex rev before it becomes a Container name", () => {
+    // The derived string reaches getContainer as a Durable Object name, so a
+    // malformed value must degrade to the fallback rather than pass through.
+    expect(sharedDigichatContainerId("../../etc/passwd")).toBe(
+      LEGACY_SHARED_DIGICHAT_CONTAINER_ID,
+    );
+    expect(sharedDigichatContainerId("  3528CF9F7AB1  ")).toBe("shared-3528cf9f7ab1");
+  });
+
+  it("never declares a Container id constant in the fold or the source module", () => {
+    // The literal is gone, not renamed: `export const SHARED_…_CONTAINER_ID` is
+    // what a future hand-pick would look like, and it must not come back.
+    const foldSource = readFileSync(join(here, "digichat.ts"), "utf-8");
+    const pathsSource = readFileSync(
+      join(here, "..", "..", "digichat-cloudflare", "src", "paths.ts"),
+      "utf-8",
+    );
+    expect(foldSource).not.toMatch(/SHARED_DIGICHAT_CONTAINER_ID(?!_LEGACY)/);
+    expect(foldSource).not.toMatch(/export\s+const\s+SHARED_/);
+    expect(pathsSource).not.toMatch(/export\s+const\s+SHARED_DIGICHAT_CONTAINER_ID/);
+    // Control: the matcher fires on the legacy constant's own line.
+    expect(pathsSource).toMatch(/export const LEGACY_SHARED_DIGICHAT_CONTAINER_ID/);
   });
 });
 
@@ -152,7 +238,7 @@ describe("digichat adapter source pins", () => {
   it("reuses the standalone worker's paths module instead of reimplementing routes", () => {
     expect(source).toContain('from "../../digichat-cloudflare/src/paths"');
     expect(source).toContain("shouldProxyToDigiChat");
-    expect(source).toContain("SHARED_DIGICHAT_CONTAINER_ID");
+    expect(source).toContain("sharedDigichatContainerId");
     expect(source).not.toContain('"/api/chat"');
     expect(source).not.toContain('"/api/embed/"');
     expect(source).not.toContain('"/api/byok/"');
@@ -178,7 +264,7 @@ describe("digichat index.ts wiring pins", () => {
   it("proxies through the digichat container on :3000 with switchPort", () => {
     expect(source).toContain('"digichat"');
     expect(source).toContain('() => import("./digichat")');
-    expect(source).toContain("getContainer(workerEnv.DIGICHAT, SHARED_DIGICHAT_CONTAINER_ID)");
+    expect(source).toContain("getContainer(workerEnv.DIGICHAT, sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV))");
     expect(source).toContain("switchPort(request, DIGICHAT_PORT)");
   });
 

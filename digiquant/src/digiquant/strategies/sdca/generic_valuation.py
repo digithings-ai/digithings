@@ -17,7 +17,7 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from digiquant.paths import canonicalize_path
+from digiquant.paths import resolve_under_data_root
 from digiquant.strategies.sdca.quantile_rails import (
     LABEL_BY_QUANTILE,
     MIN_FIT_HISTORY_DAYS,
@@ -220,7 +220,7 @@ def save_coefficients(coefficients: GenericValuationCoefficients, path: Path) ->
 
 def load_coefficients(path: Path) -> GenericValuationCoefficients:
     """Load generic-valuation coefficients. JSON mode so ISO dates parse under strict."""
-    path = canonicalize_path(path)
+    path = resolve_under_data_root(path, label="coefficients_path")
     if not path.exists():
         raise FileNotFoundError(path)
     return GenericValuationCoefficients.model_validate_json(path.read_text())

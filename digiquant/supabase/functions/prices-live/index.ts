@@ -371,7 +371,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     try {
       quotes[symbol] = await fetchQuote(symbol, finnhubKey);
     } catch (err) {
-      errors[symbol] = err instanceof Error ? err.message : String(err);
+      errors[symbol] = err instanceof Error ? err.message : "unknown error";
     }
   }
 
@@ -410,7 +410,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     } catch (err) {
       // postgrest-js normally returns transport failures in `error`, but an unexpected throw
       // here would 500 the whole run and lose the per-symbol error report below with it.
-      published = err instanceof Error ? err.message : String(err);
+      published = err instanceof Error ? err.message : "unknown error";
     }
   }
   if (published !== "ok" && quoted > 0) {
