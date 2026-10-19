@@ -98,7 +98,7 @@ class_name = "DigiStackContainer"
 # own directory (`dirname(image)`); pinned to the monorepo root explicitly so
 # the COPY digibase/ / digikey/ / ... lines can never drift to a narrower
 # context (#4046).
-image = "../../Dockerfile.digithings-stack-cloudflare"
+image = "../../infra/docker/Dockerfile.digithings-stack-cloudflare"
 image_build_context = "../.."
 # Cost minimum (Cloudflare cost epic): one replica; traffic is ~2k req/day.
 max_instances = 1
@@ -141,7 +141,7 @@ instance_type = "standard-1"
 # The container app that used to back this class
 # (digithings-stack-digichatcontainer) is deleted; the class, its Durable
 # Object binding and the digichat image COPY/untar in
-# Dockerfile.digithings-stack-cloudflare are removed with it.
+# infra/docker/Dockerfile.digithings-stack-cloudflare are removed with it.
 
 # Ops SSH debug key removed (cost/hygiene epic). Re-add [[containers.authorized_keys]]
 # temporarily only for a live debugging session.

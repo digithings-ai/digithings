@@ -14,10 +14,10 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO = Path(__file__).resolve().parents[2]
-RUNNER = "Dockerfile.digiquant-runner"
-STACK = "Dockerfile.digithings-stack-cloudflare"
+RUNNER = "infra/docker/Dockerfile.digiquant-runner"
+STACK = "infra/docker/Dockerfile.digithings-stack-cloudflare"
 DIGICHAT = (
-    "Dockerfile.digichat-cloudflare",
+    "infra/docker/Dockerfile.digichat-cloudflare",
     "apps/digichat/Dockerfile",
 )
 SIBLING_COPY = (

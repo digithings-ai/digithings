@@ -103,7 +103,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # digillm: digithings' LiteLLM proxy (Dockerfile.digillm). The `litellm`
+  # digillm: digithings' LiteLLM proxy (infra/docker/Dockerfile.digillm). The `litellm`
   # alias keeps OPENAI_API_BASE=http://litellm:4000/v1 working unchanged.
   digillm:
     image: ghcr.io/digithings-ai/digillm:0.1.0

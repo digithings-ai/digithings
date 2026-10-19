@@ -40,7 +40,7 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTAINER = REPO_ROOT / "apps" / "digithings-stack-cloudflare"
 RELEASE = REPO_ROOT / "infra" / "digichat-release"
-DOCKERFILE = REPO_ROOT / "Dockerfile.digithings-stack-cloudflare"
+DOCKERFILE = REPO_ROOT / "infra/docker/Dockerfile.digithings-stack-cloudflare"
 SUPERVISORD = CONTAINER / "container" / "supervisor" / "supervisord.conf"
 CONTAINER_SCRIPTS = CONTAINER / "container"
 
@@ -286,7 +286,7 @@ def test_ticket_seed_script_is_not_shipped() -> None:
 
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     offenders = [
-        f"Dockerfile.digithings-stack-cloudflare:{lineno}: {line.strip()}"
+        f"infra/docker/Dockerfile.digithings-stack-cloudflare:{lineno}: {line.strip()}"
         for lineno, line in enumerate(dockerfile.splitlines(), start=1)
         if "seed_occ_tickets" in line and not line.strip().startswith("#")
     ]
@@ -305,7 +305,7 @@ def test_dockerfile_has_a_rebuild_marker_for_the_removal() -> None:
     still contains the seeder and its supervisord block — keeps being tagged.
     """
     assert re.search(r"^# Rebuild marker v17 ", DOCKERFILE.read_text(encoding="utf-8"), re.M), (
-        "Dockerfile.digithings-stack-cloudflare has no v17 rebuild marker. The ticket "
+        "infra/docker/Dockerfile.digithings-stack-cloudflare has no v17 rebuild marker. The ticket "
         "seeder was removed from the image, which is a build-context change wrangler "
         "cannot detect; bump the marker or the old image is reused."
     )

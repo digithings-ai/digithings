@@ -62,7 +62,7 @@ commit and the id follows it back. The MCP container id is `MCP_CONTAINER_ID` (`
 constant.
 
 **Conflicting instruction to ignore.** `apps/digithings-stack-cloudflare/README.md:30-31` and the rebuild-marker
-comments (`Dockerfile.digichat-cloudflare:65-69`, `Dockerfile.digithings-stack-cloudflare:77-95`) say to bump the
+comments (`infra/docker/Dockerfile.digichat-cloudflare:65-69`, `infra/docker/Dockerfile.digithings-stack-cloudflare:77-95`) say to bump the
 **Dockerfile rebuild marker** to propagate env. That changes the image tag, not the instance id; it does not by itself
 replace a warm instance. Prefer the redeploy (which moves the derived id), and treat the marker as an image-rebuild trigger only.
 

@@ -71,7 +71,7 @@ digichat needs `AUTH_SECRET`, `AUTH_URL`, and `DIGIKEY_BFF_TOKEN` in `.env`. Aut
 
 ## LiteLLM
 
-LiteLLM is the only LLM router. Compose runs the `digillm` service (`ghcr.io/digithings-ai/digillm:0.1.0`, built from `Dockerfile.digillm`: `litellm[proxy]==1.83.14` from PyPI, never the vendor image — DIG-1780; network alias `litellm`, port 4000) with explicit `--config` and a `/health/liveliness` healthcheck.
+LiteLLM is the only LLM router. Compose runs the `digillm` service (`ghcr.io/digithings-ai/digillm:0.1.0`, built from `infra/docker/Dockerfile.digillm`: `litellm[proxy]==1.83.14` from PyPI, never the vendor image — DIG-1780; network alias `litellm`, port 4000) with explicit `--config` and a `/health/liveliness` healthcheck.
 
 **Auth modes:**
 
@@ -163,7 +163,7 @@ digichat Node for digithings still runs on operator Compose + Cloudflare Tunnel;
 different surface from the `digichat-cloudflare` Worker.
 
 The Worker fronts the `DigiChatContainer` Container (`apps/digichat-cloudflare/wrangler.toml`,
-`Dockerfile.digichat-cloudflare`); deploying it by hand is `npx wrangler deploy` from
+`infra/docker/Dockerfile.digichat-cloudflare`); deploying it by hand is `npx wrangler deploy` from
 `apps/digichat-cloudflare/` with the build context at the monorepo root, per
 [`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md). No workflow
 deploys it — the section below measures exactly that.
@@ -323,7 +323,7 @@ Read the routes column as "what `wrangler.toml` declares", not as a claim about 
 currently serving. Both are Workers **Containers**: both need **Workers Paid**, and both need
 a Docker CLI locally for `wrangler deploy` to build the image.
 
-Both `Dockerfile.digichat-cloudflare` and `Dockerfile.digithings-stack-cloudflare` are live at
+Both `infra/docker/Dockerfile.digichat-cloudflare` and `infra/docker/Dockerfile.digithings-stack-cloudflare` are live at
 the repo root. It is the workflow YAML that is missing, not the build.
 
 #### Why the lane is missing — it was deleted, not never written

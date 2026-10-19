@@ -20,7 +20,7 @@ Locked for this plan. An implementation PR that violates it is out of scope.
 |---|---|
 | Container class | `DigiQuantRunnerContainer` only. `wrangler.toml` keeps a single `[[containers]]` entry. |
 | Instance type | `instance_type = "standard-2"` (epic table: 1 vCPU, 6 GiB memory, 12 GB disk). |
-| Image | One `Dockerfile.digiquant-runner`. Slim the `uv sync` / extras / `COPY` set until the chain imports on that disk. |
+| Image | One `infra/docker/Dockerfile.digiquant-runner`. Slim the `uv sync` / extras / `COPY` set until the chain imports on that disk. |
 | Instances | `max_instances = 1`. Durable Object id stays `runner-v1`. |
 | Idle | `sleepAfter = "2m"` when the ledger has no lock and no queue. No always-on warm pool. |
 | Second class / standard-3 / standard-4 | Rejected as the design. A note in [Risks](#risks) records them as a doomed escape hatch that this phase does not implement. |
@@ -65,7 +65,7 @@ Why one small class: every live cadence shares this Worker. A larger `instance_t
 | Surface | What is true today |
 |---|---|
 | Class | `apps/digiquant-runner/wrangler.toml` — one `[[containers]]`, `class_name = "DigiQuantRunnerContainer"`, `instance_type = "standard-2"`, `max_instances = 1`. Comment on lines 20–23: do not add `OPENROUTER_API_KEY`, `DIGIQUANT_DIGIKEY_API_KEY`, or `LANGSMITH_API_KEY` until the house run. |
-| Image | `Dockerfile.digiquant-runner` — `uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus`. Copies `digibase`, `digikey`, `digifetch`, `digiquant`, `scripts/refresh_market_data_r2.py`, `scripts/backfill_market_data_r2.py`, `scripts/execution_cron_check.py`, `exec_job.py`, `commands.json`. Nautilus wheel size already recorded in the Dockerfile header: 182608916 bytes. No curl, no tini. `CMD` is `python /opt/runner/exec_job.py serve`. |
+| Image | `infra/docker/Dockerfile.digiquant-runner` — `uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus`. Copies `digibase`, `digikey`, `digifetch`, `digiquant`, `scripts/refresh_market_data_r2.py`, `scripts/backfill_market_data_r2.py`, `scripts/execution_cron_check.py`, `exec_job.py`, `commands.json`. Nautilus wheel size already recorded in the Dockerfile header: 182608916 bytes. No curl, no tini. `CMD` is `python /opt/runner/exec_job.py serve`. |
 | Catalog | `apps/digiquant-runner/commands.json` has market-data-refresh, prices-fx-candles, prices-at-open, prices-eod-macro, prices-fx-refresh-writers, onchain-bitview, execution-cron-check, research-metrics, tearsheets. No `house-run`. |
 | Tests that must move | `apps/digiquant-runner/src/commands.test.ts` expects `assertKnownCommand("house-run")` to throw. `apps/digiquant-runner/src/runner.test.ts` uses `command: "house-run"` as the unknown-command 400. |
 | Cron | `apps/digithings-cron/src/jobs.ts` lines 168–174: `rd("house-run-09"…"12", "17 9/10/11/12 * * *", DIGITHINGS, "digiquant-baseline")`. Comment: house-run stays `repository_dispatch`. |
@@ -99,7 +99,7 @@ Work from a clean tree. Do not `wrangler deploy`.
 
 ```bash
 # 0. Current production image (baseline). Expect chain import to fail.
-docker build -f Dockerfile.digiquant-runner -t digiquant-runner:phase2 .
+docker build -f infra/docker/Dockerfile.digiquant-runner -t digiquant-runner:phase2 .
 docker image inspect digiquant-runner:phase2 --format 'phase2 Size={{.Size}}'
 docker run --rm digiquant-runner:phase2 python -c \
   "import shutil; u=shutil.disk_usage('/'); print(f'phase2 total={u.total} free={u.free}')"
@@ -113,7 +113,7 @@ Save the `ModuleNotFoundError` module name. That name is the next `COPY`, not a 
 uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus
 # If digigraph is the missing import, a second frozen sync keeps the first venv:
 uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres
-docker build -f Dockerfile.digiquant-runner -t digiquant-runner:house-candidate .
+docker build -f infra/docker/Dockerfile.digiquant-runner -t digiquant-runner:house-candidate .
 docker image inspect digiquant-runner:house-candidate --format 'candidate Size={{.Size}}'
 docker run --rm digiquant-runner:house-candidate python -c \
   "import shutil; u=shutil.disk_usage('/'); print(f'candidate total={u.total} free={u.free}')"
@@ -324,7 +324,7 @@ R2 ledger reads from the Worker use an `[[r2_buckets]]` binding `ARCHIVE` on buc
 | `apps/digiquant-runner/container/wake_stack.py` | Create. Stdlib HTTP. Always exit 0. |
 | `apps/digiquant-runner/container/web_search_preflight.py` | Create. Six attempts, exit 1 if all fail. |
 | `apps/digiquant-runner/wrangler.toml` | Comment update only in the code PR: Phase 3 secrets are now in scope. **No** second `[[containers]]`. **No** `instance_type` change. Add `[[r2_buckets]]` binding `ARCHIVE`. |
-| `Dockerfile.digiquant-runner` | `COPY` the pipeline file, the shadow workflow file, the new container scripts, and only those workspace members the probe named. `uv sync` line is whatever the probe ladder stopped on. |
+| `infra/docker/Dockerfile.digiquant-runner` | `COPY` the pipeline file, the shadow workflow file, the new container scripts, and only those workspace members the probe named. `uv sync` line is whatever the probe ladder stopped on. |
 | `.dockerignore` | `!.github/digiquant-pipeline.yml` and `!.github/workflows/pipeline-digiquant-allocation-shadow.yml`. |
 | `apps/digithings-cron/src/jobs.ts` | Four `rd(...)` house rows become `cj(...)`. |
 | `apps/digithings-cron/src/index.ts` | Build house args. Strip scope / dry_run / resume unless `force`. |
@@ -745,7 +745,7 @@ Do not set `GITHUB_OVERRIDE_JOBS` in `wrangler.toml` (it stays `""`).
 
 ### Task 6 — Image slim, dockerignore, workflow comment
 
-**Files:** `Dockerfile.digiquant-runner`, `.dockerignore`, `.github/workflows/pipeline-digiquant.yml` header, `digiquant/scripts/research/house_schedule_skip.py` comment, `docs/ops/digiquant-runner.md` runbook, `apps/digithings-cron/README.md`, `apps/digiquant-runner/wrangler.toml` comment + `ARCHIVE` binding.
+**Files:** `infra/docker/Dockerfile.digiquant-runner`, `.dockerignore`, `.github/workflows/pipeline-digiquant.yml` header, `digiquant/scripts/research/house_schedule_skip.py` comment, `docs/ops/digiquant-runner.md` runbook, `apps/digithings-cron/README.md`, `apps/digiquant-runner/wrangler.toml` comment + `ARCHIVE` binding.
 
 - [ ] **Step 1:** Apply the sync line and `COPY` set from Task 0. Refuse the edit if Task 0's numbers are absent from the PR body.
 - [ ] **Step 2:** `wrangler.toml` still has one `[[containers]]` and `instance_type = "standard-2"`. A vitest or a tiny node assert in `commands.test.ts` can read the file and lock that.
@@ -759,7 +759,7 @@ Do not set `GITHUB_OVERRIDE_JOBS` in `wrangler.toml` (it stays `""`).
 - [ ] **Step 4:** Local image check, no prod credentials:
 
 ```bash
-docker build -f Dockerfile.digiquant-runner -t digiquant-runner:house .
+docker build -f infra/docker/Dockerfile.digiquant-runner -t digiquant-runner:house .
 docker run --rm digiquant-runner:house python -c "import digiquant.portfolio.chain; print('chain import ok')"
 docker run --rm digiquant-runner:house python /opt/runner/house_chain_step.py --help
 ```

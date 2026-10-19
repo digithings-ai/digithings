@@ -26,7 +26,7 @@ on:
       - "digisearch/Dockerfile"
       - "digikey/Dockerfile"
       # digigraph depends_on digillm (LiteLLM proxy image, DIG-1780).
-      - "Dockerfile.digillm"
+      - "infra/docker/Dockerfile.digillm"
       - "digillm/**"
       - ".github/workflows/test-e2e.yml"
 

@@ -277,7 +277,7 @@ describe("digichat separation pins (Chris, 2026-10-19)", () => {
 
   it("pins the digichat image bind (:3000 on 0.0.0.0, same as standalone)", () => {
     const dockerfile = readFileSync(
-      join(here, "..", "..", "..", "Dockerfile.digichat-cloudflare"),
+      join(here, "..", "..", "..", "infra/docker/Dockerfile.digichat-cloudflare"),
       "utf-8",
     );
     expect(dockerfile).toContain("EXPOSE 3000");

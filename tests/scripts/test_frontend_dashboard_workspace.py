@@ -77,7 +77,7 @@ def test_dashboard_does_not_ship_olympus_public_env_keys() -> None:
 def test_dockerfiles_consume_dashboard_manifest_not_olympus() -> None:
     """npm ci still needs the dashboard manifest. It comes from the packaged
     inputs, not a sibling COPY of apps/dashboard, and never from olympus."""
-    for rel in ("apps/digichat/Dockerfile", "Dockerfile.digichat-cloudflare"):
+    for rel in ("apps/digichat/Dockerfile", "infra/docker/Dockerfile.digichat-cloudflare"):
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert "image-packages/digichat/manifests/dashboard/package.json" in text
         assert "COPY apps/dashboard" not in text

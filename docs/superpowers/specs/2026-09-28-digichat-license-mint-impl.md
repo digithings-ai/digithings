@@ -154,7 +154,7 @@ No code. The owner copies the one-time `license_jwt` stdout line into the existi
 2. the customer config block: which env var/file carries the JWT, the `hosts` it was minted for, the `exp` date in plain language (term end),
 3. the renewal note: each digichat release ships a fresh license; rotation is a side effect of staying current (design § Issuance flow).
 
-Operating rules (binding on the human, not the code): never commit a JWT to the repo, never paste one into an issue or PR, never bake one into an image layer (same prohibition as tenant tokens, `Dockerfile.digichat-cloudflare:4-5`). If a JWT is ever exposed in the wrong place, revoke and re-mint — the drill in §5 is the recovery procedure.
+Operating rules (binding on the human, not the code): never commit a JWT to the repo, never paste one into an issue or PR, never bake one into an image layer (same prohibition as tenant tokens, `infra/docker/Dockerfile.digichat-cloudflare:4-5`). If a JWT is ever exposed in the wrong place, revoke and re-mint — the drill in §5 is the recovery procedure.
 
 ## 8. Test plan
 

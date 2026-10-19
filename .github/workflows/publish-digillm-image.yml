@@ -1,7 +1,7 @@
 # Build, smoke-test and publish the digillm image (DIG-1780).
 #
 # digillm is digithings' LiteLLM proxy: LiteLLM from the pinned PyPI wheel plus
-# the repo's digillm package (Dockerfile.digillm), replacing the vendor
+# the repo's digillm package (infra/docker/Dockerfile.digillm), replacing the vendor
 # berriai image in every compose file.
 #
 # * pull_request / push to develop touching the image inputs: build + smoke test
@@ -18,13 +18,13 @@ name: "Publish: digillm image"
 on:
   pull_request:
     paths:
-      - "Dockerfile.digillm"
+      - "infra/docker/Dockerfile.digillm"
       - "digillm/**"
       - ".github/workflows/publish-digillm-image.yml"
   push:
     branches: [develop]
     paths:
-      - "Dockerfile.digillm"
+      - "infra/docker/Dockerfile.digillm"
       - "digillm/**"
       - ".github/workflows/publish-digillm-image.yml"
     tags:
@@ -93,7 +93,7 @@ jobs:
             || { echo "::error::docker-compose.yml does not pin digillm:${VERSION}"; exit 1; }
 
       - name: Build
-        run: docker build -f Dockerfile.digillm -t digillm:ci .
+        run: docker build -f infra/docker/Dockerfile.digillm -t digillm:ci .
 
       - name: Smoke test
         run: |
@@ -143,7 +143,7 @@ jobs:
           REV: ${{ github.sha }}
         run: |
           set -euo pipefail
-          docker build -f Dockerfile.digillm \
+          docker build -f infra/docker/Dockerfile.digillm \
             --label "org.opencontainers.image.revision=$REV" \
             --label "org.opencontainers.image.source=https://github.com/digithings-ai/digithings" \
             --label "org.opencontainers.image.version=$VERSION" \

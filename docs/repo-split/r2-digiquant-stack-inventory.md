@@ -176,7 +176,7 @@ absorbs the core pipeline, not only its configuration. Measured blocks, added to
 * **Secret contract** — `config/contract/secrets.yaml`, 1 file. See the "contract split" decision
   in section 6.
 
-Measured, the effect on R2's build: `Dockerfile.digiquant-runner` lines 62-66 copy six
+Measured, the effect on R2's build: `infra/docker/Dockerfile.digiquant-runner` lines 62-66 copy six
 `scripts/` entry points whose digiquant twins live in `execution/` (`cron_check`, `route_cron`,
 `sync`, `staging_e2e`, `house_pipeline_proof`, `pages_dashboard_gate`), so the image and the
 package are one unit after the split. `config/contract/secrets.yaml` is the only file in
@@ -334,7 +334,7 @@ references; this is the only one that touches an R2 file.
 
 `.github/digiquant-pipeline.yml` (2658 bytes, 0 secret references) is a non-secret tunable set
 that `pipeline-digiquant.yml` loads into `$GITHUB_ENV`. It stays in R0 as local-ci or cron job
-config, so **R2's `Dockerfile.digiquant-runner` can no longer copy it.** Measured: line 67 copies
+config, so **R2's `infra/docker/Dockerfile.digiquant-runner` can no longer copy it.** Measured: line 67 copies
 `.github/digiquant-pipeline.yml`, line 68 copies
 `.github/workflows/pipeline-digiquant-allocation-shadow.yml`. Both `COPY` instructions must be
 re-pointed at a committed copy inside R2, or the tunables must be passed as environment variables
@@ -397,7 +397,7 @@ settled from the workflow blobs alone — the "plan secret count" decision in se
 3. **`digiquant/src/digiquant/research/config/` is 18 files, not 19.**
 4. **`GITHUB_TOKEN` is missing from the secret list** (section 3).
 5. **The R2 `config/` contents are wrong for the runner.**
-   `Dockerfile.digiquant-runner` copies, measured:
+   `infra/docker/Dockerfile.digiquant-runner` copies, measured:
    line 46 `config/byok-providers.json`, line 50 `config/model-policy.json`,
    line 57 `config/digiquant-model-prices.json`.
    So the runner needs `byok-providers.json` and `model-policy.json`, and it does **not** copy
@@ -474,7 +474,7 @@ that test in R5 must still pass, and it fails loudly if the import path breaks.
 
 ### 5.3 Plan 1f — Dockerfile cross-tree `COPY`
 
-`Dockerfile.digiquant-runner` has 23 `COPY` instructions.
+`infra/docker/Dockerfile.digiquant-runner` has 23 `COPY` instructions.
 
 * Lines 39-45: `COPY digibase|digikey|digifetch|digiquant|digigraph|digillm|digitrace ./` —
   7 sibling package sources. These are the PyPI pins, so R2 must consume them as packages,
@@ -488,13 +488,13 @@ that test in R5 must still pass, and it fails loudly if the import path breaks.
   `.github/workflows/pipeline-digiquant-allocation-shadow.yml`. Lines 70-74: runner container
   files plus `commands.json`.
 
-`Dockerfile.digichat-cloudflare` (R5):
+`infra/docker/Dockerfile.digichat-cloudflare` (R5):
 
 * Line 16 `COPY apps/dashboard/package.json apps/dashboard/` — the plan's citation is **exact**.
 * **Line 33 `COPY config/byok-providers.json`.** So `byok-providers.json` is needed by **both**
   the R2 runner and R5 digichat. The plan assigns it to neither explicitly. See section 6.
 
-`Dockerfile.digithings-stack-cloudflare` (R5): lines 128, 130, 131, 134 are
+`infra/docker/Dockerfile.digithings-stack-cloudflare` (R5): lines 128, 130, 131, 134 are
 `infra/digichat-release/config`, `config/litellm.cheaperinference.yaml`,
 `scripts/merge_litellm_cheaperinference.py`, `scripts/zammad_mcp` — the plan's 128-134 is **exact**.
 Lines 53-117 also copy 9 sibling package sources including `digisearch/seeds`, and line 149
@@ -545,8 +545,8 @@ before either copy step.
 
 These are decisions, not measurements. Each one blocks a clean copy step.
 
-1. **`config/byok-providers.json` has two consumers, no owner.** `Dockerfile.digiquant-runner:46`
-   (R2) and `Dockerfile.digichat-cloudflare:33` (R5) both copy it. Options: R2 owns it and R5
+1. **`config/byok-providers.json` has two consumers, no owner.** `infra/docker/Dockerfile.digiquant-runner:46`
+   (R2) and `infra/docker/Dockerfile.digichat-cloudflare:33` (R5) both copy it. Options: R2 owns it and R5
    consumes it as a released package; R5 owns it and R2 consumes it; or it stays in R0 and both
    read it from there. Needs a ruling before any copy script is written.
 2. **`config/contract/` (18 files), `config/generated/compose-contract.env`,
@@ -589,11 +589,11 @@ Minimum, measured. **Revision 1's first three items are withdrawn**: no `.github
 `scripts/ci_paths.yaml` keeps its entry at line 95. Caller and callee stay together in R0
 (section 2).
 
-1. `Dockerfile.digiquant-runner` lines 39-45: re-point the 7 `COPY` instructions from sibling
+1. `infra/docker/Dockerfile.digiquant-runner` lines 39-45: re-point the 7 `COPY` instructions from sibling
    package directories to the released package pins.
-2. `Dockerfile.digiquant-runner` lines 67-68: re-point or remove the two `.github` `COPY`
+2. `infra/docker/Dockerfile.digiquant-runner` lines 67-68: re-point or remove the two `.github` `COPY`
    instructions (section 2.1). They cannot work once the workflows stay in R0.
-3. Re-point the R5 `Dockerfile.digichat-cloudflare:33` reference to `config/byok-providers.json`,
+3. Re-point the R5 `infra/docker/Dockerfile.digichat-cloudflare:33` reference to `config/byok-providers.json`,
    subject to decision 1 in section 6.
 4. Land DIG-3693 (section 5.4) before moving `apps/dashboard-api/`, or R3, R4 and R5 all break in
    the same commit.
