@@ -7,7 +7,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from digikey.db_migrate import upgrade_jti_issued_table
+from digikey.db_migrate import upgrade_jti_issued_table, upgrade_licenses_table
 from digikey.db_schema import Base
 
 _engine = None
@@ -67,4 +67,9 @@ def init_db() -> None:
     # the working table. Persistent SQLite volumes from before #3917 still have
     # the old shape, which rehydrate/revoke reference.
     upgrade_jti_issued_table(engine)
+    # Same reason: a persistent volume can hold a ``digikey_licenses`` table from
+    # before DIG-4290 with no ``terms_version`` column, which the first
+    # ``license-mint`` would then fail on. No-op when the table is absent (a
+    # fresh install — ``create_all`` creates it complete) or already upgraded.
+    upgrade_licenses_table(engine)
     Base.metadata.create_all(bind=engine)

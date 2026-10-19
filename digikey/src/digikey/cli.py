@@ -52,6 +52,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     mint.add_argument("--label", default="", help="Owner note, stored on the row only")
     mint.add_argument(
+        "--terms-version",
+        default=None,
+        dest="terms_version",
+        help="Terms version the licence is minted against (blank = not supplied)",
+    )
+    mint.add_argument(
         "--dry-run",
         action="store_true",
         dest="dry_run",
@@ -130,6 +136,7 @@ def _cmd_license_mint(parser: argparse.ArgumentParser, args: argparse.Namespace)
         services = parse_services(args.services)
     except ValueError as exc:
         parser.error(str(exc))
+    terms_version = (args.terms_version or "").strip() or None
 
     if not os.environ.get("DIGIKEY_DATABASE_URL"):
         print("DIGIKEY_DATABASE_URL required", file=sys.stderr)
@@ -153,6 +160,7 @@ def _cmd_license_mint(parser: argparse.ArgumentParser, args: argparse.Namespace)
             hosts=hosts,
             services=services,
             term_days=term_days,
+            terms_version=terms_version,
         )
         print(json.dumps(claims, indent=2, sort_keys=True))
         return
@@ -168,6 +176,7 @@ def _cmd_license_mint(parser: argparse.ArgumentParser, args: argparse.Namespace)
         hosts=hosts,
         services=services,
         term_days=term_days,
+        terms_version=terms_version,
     )
     sf = session_factory()
     with sf() as session:
@@ -179,6 +188,7 @@ def _cmd_license_mint(parser: argparse.ArgumentParser, args: argparse.Namespace)
             services=services,
             expires_at=exp,
             label=args.label,
+            terms_version=terms_version,
         )
 
     print(f"license_id={license_id}")
