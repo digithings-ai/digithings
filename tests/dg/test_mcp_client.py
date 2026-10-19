@@ -92,15 +92,15 @@ def test_expand_mcp_disabled_tokens() -> None:
 @pytest.mark.unit
 def test_expand_mcp_disabled_tokens_matches_case_insensitively() -> None:
     """The client lowercases a toggle id; the registered tool name keeps its case."""
-    extra = ["jira_getJiraIssue", "jira_createJiraIssue", "zammad_search_tickets"]
+    extra = ["jira_getJiraIssue", "jira_createJiraIssue", "crm_search_tickets"]
     assert expand_mcp_disabled_tokens(["jira_getjiraissue"], extra) == frozenset(
         {"jira_getJiraIssue"}
     )
     assert expand_mcp_disabled_tokens(["jira"], extra) == frozenset(
         {"jira_getJiraIssue", "jira_createJiraIssue"}
     )
-    assert expand_mcp_disabled_tokens(["zammad_search_tickets"], extra) == frozenset(
-        {"zammad_search_tickets"}
+    assert expand_mcp_disabled_tokens(["crm_search_tickets"], extra) == frozenset(
+        {"crm_search_tickets"}
     )
 
 
