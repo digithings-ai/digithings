@@ -6,8 +6,10 @@
  * kind "probe" fetches public URLs inside this Worker. It does not call
  * RUNNER or api.github.com unless that same override list names the job id.
  * kind "watch" (DIG-3065) READS digiquant-runner over the RUNNER binding and
- * raises on GitHub when a run is open past its deadline. It never POSTs to
- * /v1/jobs, so it has nothing to start, re-kick or re-run.
+ * raises on GitHub when a run is open past its deadline, when Monday's POST
+ * never reached the runner (DIG-4416), or when an accepted run never landed
+ * (DIG-3456). It never POSTs to /v1/jobs, so it has nothing to start, re-kick or
+ * re-run.
  */
 import type { Env } from "./env";
 import { houseRunDeadlineSeconds, type Job } from "./jobs";
@@ -386,6 +388,8 @@ async function dispatchWatch(
     lost: watch.lost.length,
     unreadable: watch.unreadable.length,
     raised: watch.raised.filter((entry) => entry.raised).length,
+    missing_dispatch: watch.missingDispatch.length,
+    never_landed: watch.neverLanded.length,
   });
   // ok mirrors whether the check completed, not whether it found something. A
   // tick that reads the runner cleanly and finds one lost run is a healthy tick
