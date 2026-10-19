@@ -100,15 +100,10 @@ image_build_context = "../.."
 # DIGICHAT_VERSION for GET /api/health is baked from apps/digichat/package.json
 # inside infra/docker/Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
 # (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
-# Two slots, not one (DIG-4487): the container id is derived from the deploying
-# commit (src/paths.ts), so every deploy addresses a NEW id while the previous
-# id's instance is still running — warm, or draining for up to 15 minutes
-# after the rollout's SIGTERM. With one slot the new instance cannot start
-# until the old one has fully exited, and every request that needs a
-# container start then fails with "Maximum number of running container
-# instances exceeded". The second slot is only used while a previous id's
-# instance drains; in steady state the Worker addresses one id and runs one
-# instance.
+# 2, not 1: a rolling deploy must be able to start the new revision while the
+# old one drains, or the account's container-instance cap refuses the start
+# (DIG-4459). Only one instance serves traffic once the rollout settles; the
+# second slot is rollout headroom, not steady-state cost.
 max_instances = 2
 instance_type = "basic"
 
