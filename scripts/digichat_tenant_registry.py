@@ -626,13 +626,15 @@ def main(argv=None):
 
     code, _out = secret_put(args.worker, args.secret_name, payload, wrangler_cmd, args.worker_dir)
     if code != 0:
-        # The command output is not printed: the command was handed the
-        # registry on stdin, so its output may carry the secret. Re-run it
-        # in your own terminal to read the error.
+        # Nothing the command produced is logged, not even its exit code:
+        # the command was handed the registry, so its output and its status
+        # are secret-derived text. Re-run it in your own terminal to read
+        # the error.
         sys.stderr.write(
-            "the secret write failed (rc=%d). The container was not recycled. "
-            "The command output is not printed, so no secret can reach the "
-            "log; re-run the command in your own terminal to read it.\n" % code
+            "the registry write failed. The container was not recycled. "
+            "Nothing from the command is printed, so no credential can reach "
+            "the log; re-run the command in your own terminal to read the "
+            "error.\n"
         )
         return 1
     print("the worker secret was written to the worker %s" % args.worker)
