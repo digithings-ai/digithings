@@ -36,7 +36,14 @@
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
-import { containerEvictedResponse, isContainerEvictedError } from "./container-errors";
+import {
+  CONTAINER_RETRY_AFTER_SECONDS,
+  containerEvictedResponse,
+  containerFailedResponse,
+  isContainerEvictedError,
+  isContainerFailedError,
+} from "./container-errors";
+import { fetchWithContainerRetry } from "./container-retry";
 import { getStackStatus, runIsolated } from "./route-modules";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
@@ -214,19 +221,30 @@ export class DigiStackContainer extends Container {
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("stack", message);
       }
+      // DIG-4477: the container was RECYCLED or FAILED under the request (a
+      // rollout exit, "not running", "no container instance"). That is not a
+      // cold boot: a fresh instance can serve the request, so answer with the
+      // retryable `container_failed` code and let the Worker retry once
+      // instead of surfacing the failure to the client.
+      if (isContainerFailedError(message)) {
+        return containerFailedResponse("stack", message);
+      }
       return containerBootingResponse("stack", message);
     } finally {
       this.keepAwakeForRequest = false;
     }
-    // An eviction can also land between start and fetch: map only the
-    // confirmed-evicted signal to 410, rethrow everything else so the
-    // existing failure behavior is unchanged.
+    // An eviction can also land between start and fetch: map the confirmed
+    // signals (evicted -> 410, failed -> retryable 503) and rethrow
+    // everything else so the existing failure behavior is unchanged.
     try {
       return await this.containerFetch(request, targetPort);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("stack", message);
+      }
+      if (isContainerFailedError(message)) {
+        return containerFailedResponse("stack", message);
       }
       throw err;
     }
@@ -300,6 +318,11 @@ export class DigiQuantMcpContainer extends Container {
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("mcp", message);
       }
+      // DIG-4477: recycled / failed container -> retryable 503, one fresh
+      // attempt from the Worker (see ./container-retry.ts).
+      if (isContainerFailedError(message)) {
+        return containerFailedResponse("mcp", message);
+      }
       return containerBootingResponse("mcp", message);
     } finally {
       this.keepAwakeForRequest = false;
@@ -310,6 +333,9 @@ export class DigiQuantMcpContainer extends Container {
       const message = err instanceof Error ? err.message : String(err);
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("mcp", message);
+      }
+      if (isContainerFailedError(message)) {
+        return containerFailedResponse("mcp", message);
       }
       throw err;
     }
@@ -338,17 +364,12 @@ function targetPortFromRequest(request: Request): number {
 export const CONTAINER_BOOTING_CODE = "container_booting";
 
 /**
- * Poll hint (seconds) for a booting container. Small enough that a ready
- * container is picked up promptly, large enough that a full ~240s boot costs
- * ~50 upstream polls. The BFF clamps this into its own [1s, 30s] window.
+ * JSON 503 with the boot code + Retry-After for all three containers.
  *
- * DIG-3226: a confirmed container eviction (see ./container-errors.ts) never
- * uses this code — it answers 410 `container_evicted` with no `Retry-After`
- * so callers stop retrying an instance that is gone.
+ * The poll hint itself lives in ./container-errors.ts
+ * (CONTAINER_RETRY_AFTER_SECONDS) so the boot 503 and the failed-container
+ * 503 cannot drift apart.
  */
-const CONTAINER_BOOT_RETRY_AFTER_SECONDS = 5;
-
-/** JSON 503 with the boot code + Retry-After for all three containers. */
 export function containerBootingResponse(
   service: "stack" | "mcp" | "digichat",
   message: string,
@@ -357,7 +378,7 @@ export function containerBootingResponse(
     { code: CONTAINER_BOOTING_CODE, message: `${service} container not ready: ${message}` },
     {
       status: 503,
-      headers: { "Retry-After": String(CONTAINER_BOOT_RETRY_AFTER_SECONDS) },
+      headers: { "Retry-After": String(CONTAINER_RETRY_AFTER_SECONDS) },
     },
   );
 }
@@ -573,7 +594,15 @@ export default {
       // only these paths (503); every other group keeps serving.
       return runIsolated("key-proxy", () => import("./ports"), async ({ DIGIKEY_PORT }) => {
         const container = stackContainer(workerEnv);
-        return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
+        // DIG-4477: a recycled container must not fail the client request —
+        // the Durable Object id is a NAME, so one fresh attempt reaches the
+        // live instance (see ./container-retry.ts). The clone per attempt is
+        // what makes the replay possible: a consumed body cannot be re-sent.
+        return fetchWithContainerRetry(() =>
+          container.fetch(
+            switchPort(rewriteKeyStackPath(request.clone()), DIGIKEY_PORT),
+          ),
+        );
       });
     }
 
@@ -603,9 +632,14 @@ export default {
           const stripped = slash === -1 ? "/" : rest.slice(slash);
           const target = new URL(url.toString());
           target.pathname = stripped;
-          const forwarded = new Request(target.toString(), request);
           const container = stackContainer(workerEnv);
-          return container.fetch(switchPort(forwarded, port));
+          // DIG-4477: retry once on a recycled container (see
+          // ./container-retry.ts); the clone per attempt is what makes the
+          // replay possible.
+          return fetchWithContainerRetry(() => {
+            const forwarded = new Request(target.toString(), request.clone());
+            return container.fetch(switchPort(forwarded, port));
+          });
         });
       }
     }
@@ -658,7 +692,9 @@ export default {
       // Lazy ports import per route group (#4685).
       return runIsolated("container-routes", () => import("./ports"), async ({ MCP_CONTAINER_ID }) => {
         const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
-        return container.fetch(request);
+        // DIG-4477: retry once on a recycled container (see
+        // ./container-retry.ts).
+        return fetchWithContainerRetry(() => container.fetch(request.clone()));
       });
     }
 
@@ -690,7 +726,12 @@ export default {
           return sleepingHealthResponse(request);
         }
       }
-      return container.fetch(switchPort(request, port));
+      // DIG-4477: retry once on a recycled container (see
+      // ./container-retry.ts). The clone per attempt is what makes the replay
+      // possible: a consumed body cannot be re-sent.
+      return fetchWithContainerRetry(() =>
+        container.fetch(switchPort(request.clone(), port)),
+      );
     });
   },
 };
