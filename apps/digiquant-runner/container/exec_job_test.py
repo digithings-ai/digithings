@@ -433,8 +433,8 @@ def _check_phase2(commands: dict[str, Any]) -> None:
         raise SystemExit("nautilus stays on the phase 1 class")
     if wrangler.count("[[containers]]") != 1:
         raise SystemExit("runner must keep a single container class")
-    if 'instance_type = "standard-2"' not in wrangler or "max_instances = 1" not in wrangler:
-        raise SystemExit("runner must stay on standard-2 with max_instances 1")
+    if 'instance_type = "standard-1"' not in wrangler or "max_instances = 1" not in wrangler:
+        raise SystemExit("runner must stay on standard-1 with max_instances 1")
     if "standard-3" in wrangler or "standard-4" in wrangler:
         raise SystemExit("runner must not add a larger instance type")
     if 'binding = "ARCHIVE"' not in wrangler or 'bucket_name = "digithings-archive"' not in wrangler:
