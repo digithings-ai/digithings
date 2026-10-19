@@ -1761,5 +1761,38 @@ they want it to mean. **Caveat on both sweeps above: they are OOS-based, so choo
 them would be exactly the overfit the gate exists to prevent — the sanctioned route searches the shape
 on the in-sample span and lets the walk-forward judge the result.**
 
+**A pre-registered joint knee grid does NOT produce a plateau (2026-10-19).** Grid fixed *before* the
+run, precisely because the sweeps above were OOS-based: `buy_knee_risk ∈ {35, 38, 42} ×
+sell_knee_risk ∈ {70, 76, 80}`, 9 trials, everything else live, judged by `run_sdca_walk_forward`
+(rails refit per fold). Mean OOS vs flat DCA, same folds:
+
+| buy \ sell | 70 | 76 | 80 |
+|---|---|---|---|
+| **35** | +69.2 | +63.0 | +60.6 |
+| **38** | +74.4 | +66.3 | +63.1 |
+| **42** | **+74.5** | +65.3 | +61.7 |
+
+The walk-forward's own argmax is the **grid CORNER (42, 70)** — the surface is monotone in *both*
+axes across the entire grid, with no interior maximum. Mean OOS is **+74.5** against the live +60.6,
+`beats_flat_dca_oos=True`, `selection_excluded_folds=[]` — but **`sensitivity.stable` is still
+`False`**, at 5.61 with `worst_neighbor sell_knee_risk:+5%`.
+
+Two readings that matter more than the headline:
+
+- the mean is carried by **one fold** — fold 1 OOS **+190.7%**, against fold 0 **+6.97%** and fold 2
+  **+25.8%**. An aggregate that moves 14 points because one fold tripled is not a plateau either;
+- **`holdout traded` flips to `True`** under this shape (it was `False` for the live configuration),
+  so for the first time the holdout window actually deployed capital and its metrics carry
+  information.
+
+**So the shape-fix hypothesis is not confirmed.** A joint re-fit buys ~14 OOS points and does **not**
+produce a plateau — it produces a corner, which is the signature of an unbounded surface and is read
+here as an edge artefact rather than an interior optimum, exactly as the pre-registration note warned.
+Combined with the single-axis sweeps, the evidence now leans *away* from "the knees are merely
+unfitted" and *toward* "the SDCA curve shape has no plateau on these axes: OOS rises monotonically as
+the knees are pushed." The gate cannot tell that apart from brittleness — which is the governance
+question, and it is now the live one.
+
+
 
 
