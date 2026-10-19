@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@digithings/design": "*",
+    "@digithings/hero-banner": "*",
     "@digithings/ui": "*",
     "@luxalgo/vela": "0.8.2",
     "@supabase/supabase-js": "^2.101.1",

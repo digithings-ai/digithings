@@ -412,7 +412,7 @@ attempt-aware production row in this sample is 2026-08-05. Therefore:
 
 The implementation and migration explain this explicitly in
 [`diagnostics.py`](../../digiquant/src/digiquant/research/diagnostics.py) and
-[`065_atlas_run_diagnostics_attempt.sql`](../../digiquant/supabase/migrations/065_atlas_run_diagnostics_attempt.sql).
+[`065_atlas_run_diagnostics_attempt.sql`](../../digiquant/supabase/migrations/engine/065_atlas_run_diagnostics_attempt.sql).
 
 ### 12.2 Recorded economics
 

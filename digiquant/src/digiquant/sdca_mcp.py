@@ -22,6 +22,7 @@ from digiquant.data.onchain.coinmetrics import (
     fetch_coinmetrics_series,
 )
 from digiquant.data.prices.history_cache import DEFAULT_CACHE_DIR, incremental_update, load_cached
+from digiquant.paths import canonicalize_path
 from digiquant.strategies.sdca.asset_profile import daily_closes_from_ohlcv
 from digiquant.strategies.sdca.fit_weights import (
     fit_sdca_weights_from_cache,
@@ -238,7 +239,7 @@ def run_build_sdca_risk_index(
         if df is None or df.is_empty():
             return json.dumps({"error": f"no cached price history for {ticker!r}"})
 
-        coeff_path = Path(coefficients_path) if coefficients_path else None
+        coeff_path = canonicalize_path(coefficients_path) if coefficients_path else None
         if coeff_path is not None and not coeff_path.exists():
             return json.dumps({"error": f"coefficients file not found: {coeff_path}"})
 

@@ -2,8 +2,10 @@
 
 Owns start/stop/pause/resume for scheduled agents. Agent execution is injected via
 ``AgentRunner`` so this module stays free of digigraph/OpenClaw coupling until
-those runtimes exist. Event-triggered mode is modeled in the schema but not
-wired here (#218 acceptance focuses on cron + continuous).
+those runtimes exist. There is no working default runner: without an explicit
+``runner=``, due agents fail loudly (``AgentRunnerNotConfiguredError``) instead of
+being recorded as a successful no-op. Event-triggered mode is modeled in the schema
+but not wired here (#218 acceptance focuses on cron + continuous).
 """
 
 from __future__ import annotations
@@ -45,6 +47,10 @@ class SchedulerError(ValueError):
         self.code = code
         self.message = message
         super().__init__(f"{code}: {message}")
+
+
+class AgentRunnerNotConfiguredError(RuntimeError):
+    """Raised when no real agent runtime has been injected into the scheduler."""
 
 
 class AgentRuntimeState(BaseModel):
@@ -138,8 +144,16 @@ def default_state_path() -> Path:
 
 
 def default_agent_runner(agent: AgentDefinition) -> None:
-    """No-op placeholder runner until OpenClaw / digigraph invocation exists."""
-    _ = agent
+    """Refuse to run until a real agent runtime (OpenClaw / digigraph) is wired.
+
+    The scheduler must be constructed with an explicit ``runner`` for real
+    execution. Returning cleanly here would let ``_run_isolated`` persist
+    ``last_status="ok"`` for a no-op run, reporting fake success (#3881).
+    """
+    raise AgentRunnerNotConfiguredError(
+        f"no runner configured for agent {agent.name!r}; "
+        "construct Scheduler with an explicit runner= to execute agents"
+    )
 
 
 class Scheduler:

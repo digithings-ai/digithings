@@ -3,26 +3,29 @@
  */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+
 
 import { DigichatWordmark } from "./DigichatWordmark";
-import { WORDMARK_CLOCK_HOST, shadeHex } from "./digichat-wordmark";
+import * as React from "react";
 
-const DIM = shadeHex("dim");
-const REST = shadeHex("rest");
-
-function host(): Record<string, unknown> {
-  return window as unknown as Record<string, unknown>;
-}
+// Test-env only: packages/hero-banner ships no tsconfig, so vitest compiles
+// its web.tsx with classic JSX while production (Next.js) uses automatic.
+// The free `React` name resolves here at render time.
+(globalThis as unknown as Record<string, unknown>).React ??= React;
 
 describe("DigichatWordmark session", () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    vi.useFakeTimers();
     sessionStorage.clear();
-    delete host()[WORDMARK_CLOCK_HOST];
+    // happy-dom has no canvas 2d context; without this the banner effect
+    // returns before the session claim and the once-per-tab pin is void.
+    HTMLCanvasElement.prototype.getContext = function () {
+      return new Proxy({}, { get: () => () => {} }) as unknown as CanvasRenderingContext2D;
+    };
     window.matchMedia = ((query: string) => ({
       matches: false,
       media: query,
@@ -44,8 +47,6 @@ describe("DigichatWordmark session", () => {
     act(() => root.unmount());
     container.remove();
     sessionStorage.clear();
-    delete host()[WORDMARK_CLOCK_HOST];
-    vi.useRealTimers();
   });
 
   function renderMark() {
@@ -54,38 +55,33 @@ describe("DigichatWordmark session", () => {
     });
   }
 
-  it("scrambles on the first load and not after a reload", () => {
+  it("mounts a canvas carrying the digichat label", () => {
     renderMark();
-    act(() => {
-      vi.advanceTimersByTime(80);
-    });
-    expect(container.innerHTML).toContain(DIM);
-
-    act(() => root.unmount());
-    delete host()[WORDMARK_CLOCK_HOST];
-    root = createRoot(container);
-    renderMark();
-    act(() => {
-      vi.advanceTimersByTime(400);
-    });
-    expect(container.innerHTML).not.toContain(DIM);
-    expect(container.innerHTML).toContain(REST);
+    const canvas = container.querySelector("canvas");
+    expect(canvas).not.toBeNull();
+    expect(canvas?.getAttribute("aria-label")).toBe("digichat");
   });
 
-  it("does not restart the scramble when the header remounts", () => {
+  it("plays loading once per tab through the component", () => {
     renderMark();
-    act(() => {
-      vi.advanceTimersByTime(3000);
-    });
-    expect(container.innerHTML).not.toContain(DIM);
+    expect(sessionStorage.getItem("hero-banner:digichat:played")).toBe("1");
+    expect(container.querySelector("canvas")).not.toBeNull();
+  });
 
+  it("does not replay on header remount", () => {
+    renderMark();
     act(() => root.unmount());
     root = createRoot(container);
     renderMark();
-    act(() => {
-      vi.advanceTimersByTime(120);
-    });
-    expect(container.innerHTML).not.toContain(DIM);
-    expect(container.innerHTML).toContain(REST);
+    expect(sessionStorage.getItem("hero-banner:digichat:played")).toBe("1");
+    expect(container.querySelector("canvas")?.getAttribute("aria-label")).toBe("digichat");
+  });
+
+  it("survives a header remount without losing the label", () => {
+    renderMark();
+    act(() => root.unmount());
+    root = createRoot(container);
+    renderMark();
+    expect(container.querySelector("canvas")?.getAttribute("aria-label")).toBe("digichat");
   });
 });

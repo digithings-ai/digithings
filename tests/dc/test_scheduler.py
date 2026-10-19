@@ -386,3 +386,56 @@ def test_scheduler_drops_stale_agent_state_on_restore(tmp_path: Path) -> None:
     persisted = JsonStateStore(state_path).load()
     assert "gone" not in persisted.agents
     assert "kept" in persisted.agents
+
+
+@pytest.mark.unit
+def test_default_runner_never_reports_ok(tmp_path: Path) -> None:
+    """A no-op/default runner must not be recorded as a successful run."""
+    agents = [
+        AgentDefinition(
+            name="noop",
+            schedule=AgentSchedule(mode=ScheduleMode.CONTINUOUS, interval_seconds=5),
+        )
+    ]
+    state_path = tmp_path / "state.json"
+    sched = Scheduler(definitions=agents, state_store=JsonStateStore(state_path))
+    t0 = datetime(2026, 8, 27, 12, 0, tzinfo=timezone.utc)
+    sched.start("noop", now=t0)
+
+    outcomes = sched.tick(now=t0)
+    assert len(outcomes) == 1
+    assert outcomes[0].ok is False
+    assert outcomes[0].error is not None
+
+    row = sched.status()[0]
+    assert row.last_status != "ok"
+
+    persisted = JsonStateStore(state_path).load()
+    assert persisted.agents["noop"].last_status != "ok"
+    assert persisted.agents["noop"].last_error is not None
+
+
+@pytest.mark.unit
+def test_cli_tick_default_runner_does_not_print_ok(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``schedule tick`` must not claim success when no real runner is configured."""
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "demo.yaml").write_text(
+        "name: demo\nschedule:\n  mode: continuous\n  interval_seconds: 5\n",
+        encoding="utf-8",
+    )
+    state = tmp_path / "state.json"
+    from digiclaw.cli import main
+
+    assert (
+        main(["schedule", "start", "demo", "--agents-dir", str(agents_dir), "--state", str(state)])
+        == 0
+    )
+    capsys.readouterr()
+
+    rc = main(["schedule", "tick", "--agents-dir", str(agents_dir), "--state", str(state)])
+    out = capsys.readouterr().out
+    assert ": ok" not in out
+    assert rc != 0
