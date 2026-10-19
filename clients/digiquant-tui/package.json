@@ -1,5 +1,13 @@
 {
   "name": "digiquant-tui",
+  "description": "Terminal client for digiquant.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "clients/digiquant-tui"
+  },
   "private": true,
   "version": "0.0.0",
   "type": "module",

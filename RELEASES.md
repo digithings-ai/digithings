@@ -79,8 +79,7 @@ was closed and the version was forced to **1.0.0** (`package.json` +
 `.release-please-manifest.json` + `CHANGELOG.md`) so the next develop→main
 promote publishes `ghcr.io/digithings-ai/digichat:v1.0.0`.
 
-**Do not delete `ghcr.io/digithings-ai/digichat:v0.9.3`.** DataTap and other
-existing clients remain pinned there until they upgrade.
+**Do not delete `ghcr.io/digithings-ai/digichat:v0.9.3`.** Existing clients remain pinned there until they upgrade.
 
 Historically, while digichat was pre-1.0, release-please used
 `bump-patch-for-minor-pre-major` + `bump-minor-pre-major` so every release was

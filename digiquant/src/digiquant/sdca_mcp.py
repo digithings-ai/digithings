@@ -22,6 +22,7 @@ from digiquant.data.onchain.coinmetrics import (
     fetch_coinmetrics_series,
 )
 from digiquant.data.prices.history_cache import DEFAULT_CACHE_DIR, incremental_update, load_cached
+from digiquant.paths import canonicalize_path
 from digiquant.strategies.sdca.asset_profile import daily_closes_from_ohlcv
 from digiquant.strategies.sdca.fit_weights import (
     fit_sdca_weights_from_cache,
@@ -65,7 +66,7 @@ def run_fetch_bitview_series(
             allow_derived=allow_derived,
         )
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
 
 
@@ -97,7 +98,7 @@ def run_fetch_bgeometrics_series(
             session=session,
         )
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
 
 
@@ -134,7 +135,7 @@ def run_fetch_coinmetrics_series(
             session=session,
         )
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
 
 
@@ -154,7 +155,7 @@ def run_list_coinmetrics_catalog(
     try:
         result = fetch_coinmetrics_catalog(asset, timeout=timeout, api_key=api_key, session=session)
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
 
 
@@ -186,8 +187,17 @@ def run_fit_sdca_weights(
             output_path=output_path,
             profile_name=profile,
         )
+    except ValueError as exc:
+        missing_cache = (
+            bool(exc.args)
+            and isinstance(exc.args[0], str)
+            and exc.args[0].startswith("no cached price history")
+        )
+        return json.dumps(
+            {"error": "no cached price history" if missing_cache else "ValueError"}
+        )
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
 
 
@@ -229,7 +239,7 @@ def run_build_sdca_risk_index(
         if df is None or df.is_empty():
             return json.dumps({"error": f"no cached price history for {ticker!r}"})
 
-        coeff_path = Path(coefficients_path) if coefficients_path else None
+        coeff_path = canonicalize_path(coefficients_path) if coefficients_path else None
         if coeff_path is not None and not coeff_path.exists():
             return json.dumps({"error": f"coefficients file not found: {coeff_path}"})
 
@@ -274,7 +284,7 @@ def run_build_sdca_risk_index(
         dest = Path(output_path) if output_path else Path(f"{ticker}_sdca_risk.parquet")
         path = write_risk_index(frame, dest)
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
 
     dates_col = frame["date"]
     result = RiskIndexBuildResult(

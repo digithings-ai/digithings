@@ -2,6 +2,10 @@
 
 Canonical for **digithings**, **twelve-x**, and any other digithings-ai repo. Apply in Cursor, Claude Code, Copilot, and similar coding agents. Do **not** invent a custom review skill — use existing repo commands and built-in review agents/skills.
 
+## Review requests go to the Code Reviewer, never to a substitute
+
+A code review request is not a question for the chain. It is a gate issue for the Code Reviewer on the leaf, plus a merge-gate fact. If the Code Reviewer is unavailable, the EM holds the review on the leaf and the requester waits. A review request is **never** re-addressed to a substitute reviewer, and nobody above the Code Reviewer — not the EM, not the CTO, not the CEO — answers a "review PR X" card. (DIG-2408)
+
 ## Default: in-session review
 
 Prefer **in-session** review on a **fresh-context subagent** (author session must not review its own diff):

@@ -167,6 +167,8 @@ class StatusReporter:
             try:
                 temp.unlink(missing_ok=True)
             except OSError:
+                # Best effort: the status write already failed; dropping the
+                # temp file must not raise a second error.
                 pass
         if state in {"error", "empty"}:
             note = detail or text or state
@@ -195,6 +197,8 @@ class CancelToken:
         try:
             self._path.unlink(missing_ok=True)
         except OSError:
+            # Best effort: missing_ok covers absence; a concurrent removal
+            # race must not fail the clear.
             pass
 
 

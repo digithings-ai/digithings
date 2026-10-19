@@ -1,8 +1,9 @@
 """The Worker build matrix must cover every Worker in the repo, and must keep the
 two flags that make the gate credential-free and Docker-free.
 
-`.github/workflows/build-cloudflare-workers.yml` is the only place a Cloudflare
-Worker gets a real build before it reaches `develop`. `tsc` cannot see a type-only
+The `worker-build` job in `.github/workflows/ci.yml` is the only place a
+Cloudflare Worker gets a real build before it reaches `develop`. `tsc` cannot
+see a type-only
 import, so a Durable Object class that is only ``import type``d compiles, passes
 typecheck, passes every test — and ``wrangler deploy`` then refuses to bundle the
 Worker (*depends on the following Durable Objects, which are not exported in your
@@ -32,8 +33,11 @@ matrix has to learn about it.
 The two flags are pinned for the same reach-in-reverse reason. Drop
 `--containers-rollout=none` and wrangler demands a Docker CLI to build the
 container image *"even in dry-run mode"*, so the job fails outright on any
-machine without one — three of the six apps are container Workers. Drop
-`--dry-run` and the gate starts needing Cloudflare credentials, which breaks it
+machine without one — four of the seven apps are container Workers
+(digichat-cloudflare, digiquant-runner, digithings-stack-cloudflare and
+digitrace-langfuse ship `[[containers]]`; digithings-cron, dashboard-api and
+digidata-api do not — each verified with `grep -c '\[\[containers\]\]'`).
+Drop `--dry-run` and the gate starts needing Cloudflare credentials, which breaks it
 on fork PRs and puts a secret on the path of a read-only check.
 """
 
@@ -47,7 +51,8 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "build-cloudflare-workers.yml"
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+WORKER_JOB = "worker-build"
 APPS_DIR = REPO_ROOT / "apps"
 
 pytestmark = pytest.mark.unit
@@ -60,17 +65,20 @@ def _workflow() -> dict[str, Any]:
 
 
 def _trigger_paths() -> list[str]:
-    # PyYAML resolves a bare top-level `on:` key to the boolean True (YAML 1.1), so
-    # the trigger block is not reachable under the string "on".
-    return _workflow()[True]["pull_request"]["paths"]
+    # The job is path-gated by the `changes` job's dorny/paths-filter step, so
+    # the trigger lives in the embedded `workers:` filter block — generated
+    # from scripts/ci_paths.yaml — not under a top-level `on:` key.
+    steps = _workflow()["jobs"]["changes"]["steps"]
+    filt = next(s for s in steps if str(s.get("uses", "")).startswith("dorny/paths-filter"))
+    return list(yaml.safe_load(str(filt["with"]["filters"]))["workers"])
 
 
 def _matrix_apps() -> list[str]:
-    return list(_workflow()["jobs"]["build"]["strategy"]["matrix"]["app"])
+    return list(_workflow()["jobs"][WORKER_JOB]["strategy"]["matrix"]["app"])
 
 
 def _run_blocks() -> list[str]:
-    steps = _workflow()["jobs"]["build"]["steps"]
+    steps = _workflow()["jobs"][WORKER_JOB]["steps"]
     return [step["run"] for step in steps if isinstance(step.get("run"), str)]
 
 
@@ -99,7 +107,7 @@ def test_derivation_is_not_empty() -> None:
     passes on an empty comparison and the gate silently stops being guarded.
     """
     derived = _buildable_workers()
-    assert len(derived) >= 6, f"expected the six known Workers, derived {sorted(derived)}"
+    assert len(derived) >= 7, f"expected the seven known Workers, derived {sorted(derived)}"
     # The negative case the derivation exists for. digithings-web has a wrangler.toml
     # and is deliberately not a matrix member; if that ever changes the reason is gone.
     assert "digithings-web" not in derived
@@ -126,7 +134,9 @@ def test_matrix_has_no_stale_entries() -> None:
     for a reason unrelated to any code, which is how a real failure gets ignored.
     """
     stale = sorted(set(_matrix_apps()) - _buildable_workers())
-    assert not stale, f"matrix.app names {stale}, which no longer ship a wrangler.toml + wrangler dep"
+    assert not stale, (
+        f"matrix.app names {stale}, which no longer ship a wrangler.toml + wrangler dep"
+    )
 
 
 @pytest.mark.parametrize("app", sorted(_buildable_workers()))
@@ -142,7 +152,9 @@ def test_paths_filter_watches_every_worker(app: str) -> None:
     job is listed but silent on exactly the PRs it was written for.
     """
     paths = _trigger_paths()
-    assert f"apps/{app}/**" in paths, f"apps/{app}/** missing from the pull_request paths filter"
+    assert paths.count(f"apps/{app}/**") == 1, (
+        f"expected exactly one apps/{app}/** entry in the workers filter"
+    )
 
 
 @pytest.mark.parametrize("manifest", ["package.json", "package-lock.json"])
@@ -156,9 +168,10 @@ def test_paths_filter_watches_the_install_inputs(manifest: str) -> None:
     assert manifest in _trigger_paths()
 
 
-def test_paths_filter_watches_the_workflow_itself() -> None:
-    """Editing the matrix is a build-input change to the gate that reads the matrix."""
-    assert f".github/workflows/{WORKFLOW.name}" in _trigger_paths()
+# NOTE (DIG-3771 rehome): no "the filter watches the workflow itself" test.
+# The `workers:` block carries no `.github/workflows/ci.yml` entry, so a PR
+# editing only ci.yml — including the matrix above — does not fire
+# worker-build. That gap belongs to the parent (DIG-2437), not to this guard.
 
 
 @pytest.mark.parametrize(
@@ -193,30 +206,15 @@ def test_no_cloudflare_credentials_reach_this_workflow() -> None:
     Asserted so a future "make it a real deploy" edit cannot quietly add one
     without this test going red and the reason being re-read.
     """
-    text = WORKFLOW.read_text(encoding="utf-8")
+    text = "\n".join(str(s) for s in _workflow()["jobs"][WORKER_JOB].get("steps", []))
     assert "secrets." not in text, "a credential-free build check must not reference secrets.*"
     assert "CLOUDFLARE_API_TOKEN" not in text
 
 
-def test_no_push_trigger() -> None:
-    """push is absent on purpose: the deploy workflows already build on develop.
-
-    A push trigger here would duplicate the real deploy build with no credentials,
-    and race the deploy workflows on the same commit.
-
-    Scoped honestly (DIG-2843): four of the six matrix apps have a deploy workflow
-    that builds on develop — digithings-cron, digiquant-runner, and the two lanes
-    the header means by "the deploy workflows". `digichat-cloudflare` and
-    `digithings-stack-cloudflare` do not: their deploy workflows were deleted by
-    f54af7052 (#4919, Human Gate) and they ship out-of-band, by hand. For those two
-    the race argument is now vacuous and the real argument is the credentials one —
-    a push here would build without them — so the assertion below still holds and
-    still needs the same reason. The absence is documented in
-    docs/DEPLOYMENT.md; this test pins the trigger, not the deploy story.
-    """
-    triggers = _workflow()[True]
-    assert "push" not in triggers, "a push trigger races the deploy workflows and needs credentials"
-    assert "workflow_dispatch" in triggers, "the gate must stay manually trippable"
+# NOTE (DIG-3771 rehome): no "no push trigger" test. ci.yml is push-triggered
+# by design — it is the whole CI — so the standalone file's push absence does
+# not transfer. The credential-free half of that argument still holds and is
+# pinned by test_no_cloudflare_credentials_reach_this_workflow above.
 
 
 def test_install_is_at_the_repo_root() -> None:
@@ -226,7 +224,7 @@ def test_install_is_at_the_repo_root() -> None:
     `apps/<app>` installs a different (partial) tree than the one the deploy
     workflows build against.
     """
-    steps = _workflow()["jobs"]["build"]["steps"]
+    steps = _workflow()["jobs"][WORKER_JOB]["steps"]
     install = [s for s in steps if "npm ci" in str(s.get("run", ""))]
     assert len(install) == 1, "expected exactly one npm ci step"
     assert "working-directory" not in install[0]
@@ -234,7 +232,7 @@ def test_install_is_at_the_repo_root() -> None:
 
 def test_build_step_targets_the_matrix_directory() -> None:
     """`working-directory:` is what selects the app; assert it is still interpolated."""
-    steps = _workflow()["jobs"]["build"]["steps"]
+    steps = _workflow()["jobs"][WORKER_JOB]["steps"]
     build = [s for s in steps if "wrangler deploy" in str(s.get("run", ""))]
     assert len(build) == 1
     assert build[0]["working-directory"] == "apps/${{ matrix.app }}"

@@ -119,7 +119,8 @@ already hold a token). The POST uses a 120s httpx client timeout and
 returning an empty tick, the scheduler persists them as the agent's
 `last_status="error"` + `last_error`, and `digiclaw schedule tick` prints the
 failed outcome. Only `web-watch-tick` maps to this runner; every other agent name
-keeps the scheduler's no-op `default_agent_runner`. The helper aggregates the
+falls through to the scheduler's `default_agent_runner`, which raises
+`AgentRunnerNotConfiguredError` instead of recording a no-op `ok` (#3881). The helper aggregates the
 route's `{"runs": [MonitorRun...]}` payload into counts, where `failed` counts
 runs with `status == "failed"` (per-watch failures are isolated inside digisearch
 and still come back as stored runs).
