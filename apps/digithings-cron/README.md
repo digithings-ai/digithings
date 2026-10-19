@@ -22,6 +22,7 @@ workflow_dispatch and logs `github_override` at error.
 - src/et-open.ts — season-specific America/New_York 09:30 gate
 - src/backfill.ts — pure plan builder for POST /backfill (allowlist, date validation)
 - src/backfill-do.ts — BackfillLedger Durable Object, per-date idempotence
+- src/counter-do.ts — StartCounter Durable Object, per-slot cron-tick claims
 - src/index.ts — scheduled + GET /healthz + optional POST /kick, POST /backfill, GET /runs/:id
 
 ## Env
@@ -33,6 +34,7 @@ workflow_dispatch and logs `github_override` at error.
 - Var GITHUB_OVERRIDE_JOBS = "" (comma-separated job ids that stay on GitHub)
 - Var BACKFILL_ENABLED = "0" by default; "1" enables POST /backfill (404 `backfill_disabled` otherwise)
 - DO binding BACKFILL_LEDGER → class BackfillLedger (SQLite-backed; needs a migration tag)
+- DO binding START_COUNTER → class StartCounter (SQLite-backed; migration tag v2). Claims one cron slot per job so a duplicate delivery cannot dispatch twice — see `## One tick, one dispatch`.
 
 Set secrets from this directory with wrangler secret put (never echo values).
 
@@ -81,6 +83,67 @@ value must be a string.
 Every other failure keeps its previous shape. `dispatchGithub` throws, the
 error leaves the route, and the response is the Worker runtime's 500.
 
+
+## One tick, one dispatch (DIG-4384)
+
+Cloudflare delivers a Cron Trigger **at least once**. On 14-17 Oct 2026 a large
+share of this Worker's ticks (all of them on 15 Oct) arrived twice, 7-29s apart,
+and each copy carried its own `scheduledTime` (the `52 * * * MON-FRI` slot
+arrived as `00:52:48` and `00:52:55`). Both copies dispatched, so every affected
+workflow started twice.
+
+`scheduled()` now claims each job's slot in the `START_COUNTER` Durable Object
+before dispatching. The claim is keyed by cron plus job id and by the UTC
+minute, never by the exact delivery time, which is the only unit the two copies
+share. A cron expression fires at most once per minute, so one job owes at most
+one dispatch per slot and no legitimate start is collapsed; rows that share a
+workflow file have their own ids and their own claims. A duplicate delivery
+logs `skipped: "duplicate_tick"` and starts nothing.
+
+Two properties are deliberate:
+
+- **Fail open.** A missing `START_COUNTER` binding or an unreachable object
+  dispatches anyway (`start_counter_unbound` / `start_counter_unreachable`).
+  A duplicate run costs Actions minutes; a dropped tick costs a production
+  clock.
+- **Release on failure.** If the dispatch itself fails, nothing started
+  upstream, so the slot is released for the next delivery of the same tick to
+  retry. A claim is only ever kept for a dispatch that GitHub (or a runner)
+  accepted.
+
+A claim moves through three states. It is written before the dispatch
+(`claimed`), moved to `dispatching` immediately before the call, and to
+`confirmed` when that call is accepted. A `claimed` slot that never reached the
+dispatch is handed out again after 5s, so a Worker that dies between the two
+does not lose the tick. A `dispatching` slot is held for 6h, above the longest
+synchronous dispatch (`house-run` declares 14400s and twelve-x ingest 1200s), so
+an ordinary second delivery 7-29s later, or a late one during a long run, cannot
+duplicate the dispatch. A dispatch that outlives that long lease is treated as
+dead; that is the same fail-open trade as the missing-binding rule, because a
+duplicate costs Actions minutes and a dropped daily clock costs a day. Every
+transition and the release are fenced by the claim token, so a stale delivery
+cannot confirm or erase the new owner's claim.
+
+Two residual windows are deliberate and small. A Worker killed after
+`dispatching` is written but before the dispatch call leaves the slot held, so
+the duplicate pair does not recover it; the window is between one Durable Object
+write and the next call. If writing `dispatching` itself fails on an unreachable
+counter, the worker dispatches anyway (the fail-open rule) and the claim can
+expire after 5s; the duplicate would then start a second run.
+
+The slot is the UTC minute because that is the only unit the two copies share;
+0 of 514 measured pairs straddled a minute boundary. A pair that does straddle
+one gets two slots and would dispatch twice. That case cannot be collapsed
+safely for an every-minute clock: a copy at `:00:05` is indistinguishable from
+the next legitimate tick.
+
+Claims are kept per UTC day (`slots:<cron + job>:<day>`), and the claim
+transaction drops the previous day it wrote. A minute never recurs, so nothing
+needs to expire to avoid re-arming a duplicate, and an every-minute clock does
+not add a row a minute forever.
+
+`POST /kick` never claims: a human kicking a cron twice in a minute is not a
+duplicate delivery.
 
 ## Unique crons
 

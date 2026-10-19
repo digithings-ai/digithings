@@ -28,6 +28,12 @@ export interface Env {
    * writes production snapshots; the endpoint must be turned on deliberately.
    */
   BACKFILL_ENABLED?: string;
+  /**
+   * Cron-tick claim ledger. Absent means the tick cannot detect a second
+   * Cloudflare delivery and dispatches anyway (fail open), so a missing binding
+   * costs duplicates, never a dropped clock.
+   */
+  START_COUNTER?: DurableObjectNamespace;
 }
 
 declare namespace Cloudflare {
@@ -41,5 +47,6 @@ declare namespace Cloudflare {
     GITHUB_OVERRIDE_JOBS?: string;
     BACKFILL_LEDGER?: DurableObjectNamespace;
     BACKFILL_ENABLED?: string;
+    START_COUNTER?: DurableObjectNamespace;
   }
 }
