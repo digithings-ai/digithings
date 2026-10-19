@@ -9,6 +9,12 @@ branches: it reads the open PRs targeting a base, evaluates each against the
 gates the absent server-side rules would have enforced, and merges the eligible
 ones one at a time in creation order, re-reading the queue after every merge.
 
+Because a base branch that requires up-to-date checks means every merge pushes every
+other PR behind its base — and a PR behind its base is refused, not fixed, by merging
+it — ``run`` also brings one stale branch up to date per tick. That step is the
+difference between a queue that drains and one that needs an operator to clear a path
+after every single merge.
+
 Two things this deliberately does not do, because reading a green run as if it
 proved more than it does is how a queue gets mistaken for a fence:
 
@@ -156,6 +162,11 @@ class Verdict:
     reasons: tuple[str, ...] = field(default_factory=tuple)
     checks: tuple[str, ...] = field(default_factory=tuple)
     review_evidence: str = ""
+    #: The base moved and nothing else is wrong: the only thing that can make this PR
+    #: queueable is updating its branch, which a merge cannot do. Kept separate from
+    #: `reasons` so the update step can act on a stale branch without also acting on
+    #: one that is merely broken — an update spends a full CI run either way.
+    stale_base_only: bool = False
 
     def order_key(self) -> tuple[str, int]:
         """FIFO on creation time, PR number breaking ties.
@@ -769,8 +780,9 @@ def evaluate(
     # to prevent, and the ruleset path catches it with `strict_required_status_checks_policy`.
     # The local queue has to catch it itself.
     state = str(pr.get("mergeStateStatus") or "")
+    stale_reason = f"mergeStateStatus={state} (base moved since the checks ran)"
     if state in STALE_MERGE_STATES:
-        reasons.append(f"mergeStateStatus={state} (base moved since the checks ran)")
+        reasons.append(stale_reason)
 
     reasons.extend(_gate_checks(pr, policy))
     reasons.extend(_gate_review(pr))
@@ -780,6 +792,14 @@ def evaluate(
     # per PR, and a PR already refused elsewhere needs no second reason to wait.
     if not reasons:
         reasons.extend(_gate_review_threads(pr, repo))
+
+    # BEHIND is the one stale state an update can clear, and only when it is the sole
+    # reason: the checks passed, just against the base this merge would land on top of.
+    # Every other reason — a conflict, a red check, missing review evidence — would
+    # still be there after the update, so paying for a full CI run to clear nothing is
+    # how a queue burns its own capacity. Read off the finished `reasons` rather than
+    # re-testing each gate, so a gate added later cannot silently become updatable.
+    stale_base_only = state == "BEHIND" and reasons == [stale_reason]
 
     rollup = _rollup(pr)
     return Verdict(
@@ -794,6 +814,7 @@ def evaluate(
         checks=tuple(
             f"{_check_name(e)}={e.get('conclusion') or e.get('state') or '?'}" for e in rollup
         ),
+        stale_base_only=stale_base_only,
     )
 
 
@@ -854,6 +875,65 @@ def merge_one(repo: str, verdict: Verdict, authority: Authority, policy: Policy)
         raise QueueError(f"merge of #{verdict.number} failed: {proc.stderr.strip()}")
 
 
+def update_branch(repo: str, verdict: Verdict) -> bool:
+    """Bring a stale PR's branch onto the base, so its checks run against it.
+
+    `mergeStateStatus=BEHIND` means the checks on this PR ran against a base that has
+    since moved, so merging them would land evidence about different code — the queue
+    refuses, and refusing is right. What was missing is what comes next. Every merge
+    this script performs moves the base for every other PR, so with no update step the
+    queue is a one-way door: it drains exactly one PR and then dead-ends on a state
+    nothing in it can clear. Measured on `digithings` on 2026-10-19: fourteen
+    hand-run `gh pr update-branch` calls moved a single PR, and the queue reported
+    `0 eligible` again the moment that merge landed.
+
+    Updating is safe where merging is not. It writes a merge of the base *into* the
+    branch, so it loses no work and cannot land a change that was not reviewed; it
+    re-triggers the checks. The `expected_head_sha` is still pinned, exactly as
+    `merge_one` pins `--match-head-commit`: an update is only ever applied to the head
+    the gates were read from, so a push landing in between is reported rather than
+    silently merged under. The PR is re-evaluated on a later tick, never merged on the
+    read that prompted the update.
+
+    Returns `False` when GitHub refused the update, which leaves the branch exactly as
+    it was: the caller must not report a refusal as an update.
+    """
+    proc = subprocess.run(
+        [
+            "gh",
+            "api",
+            "--method",
+            "PUT",
+            f"repos/{repo}/pulls/{verdict.number}/update-branch",
+            "-f",
+            f"expected_head_sha={verdict.head_sha}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        # A refusal arrives as 422 for two different reasons and the response does not
+        # separate them: a real one (a conflict, or a head that moved between the read
+        # and this call) and the benign "there are no new commits on the base branch",
+        # which a concurrent tick or a retry produces. Neither is an operational
+        # failure — the branch is left exactly as it was and the next tick tries again —
+        # and failing the run would report the tick as broken *after* its merges had
+        # already landed, which is worse than the refusal it is reporting. Anything else
+        # (a token that lost write access, a 5xx) is a real failure and stops the run.
+        # The status is read out of `gh`'s own rendering of a REST error, which is
+        # `<message> (HTTP 422)`. If that format ever changes this raises instead, which
+        # is the safe direction: a refused update is never reported as a done one.
+        if "HTTP 422" in proc.stderr:
+            print(
+                f"warning: update-branch of #{verdict.number} refused (422) — the branch "
+                f"is unchanged and the next tick retries: {proc.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return False
+        raise QueueError(f"update-branch of #{verdict.number} failed: {proc.stderr.strip()}")
+    return True
+
+
 def comment_audit(repo: str, verdict: Verdict, body: str) -> None:
     proc = subprocess.run(
         ["gh", "pr", "comment", str(verdict.number), "--repo", repo, "--body", body],
@@ -878,6 +958,18 @@ def print_queue(verdicts: list[Verdict], *, queued_only: bool) -> None:
             print(f"  {i:>2}. #{v.number} {v.head_ref} — {v.title}")
     else:
         print("queued: none")
+    # Stale, not blocked: named separately and before the blocked list, because the
+    # action on them is different — nobody has to fix anything, a run tick clears
+    # them — and reporting them as blocked is what made 10 green PRs look like work.
+    stale = [v for v in verdicts if v.stale_base_only]
+    if stale and not queued_only:
+        print(
+            f"\nstale ({len(stale)}) — green against a base we have left, and counted "
+            "below as not eligible; nobody has to fix these, a run tick updates one "
+            "branch, oldest first:"
+        )
+        for v in stale:
+            print(f"  #{v.number} {v.head_ref} — {v.title}")
     if blocked and not queued_only:
         print(f"\nblocked ({len(blocked)}):")
         for v in blocked:
@@ -904,6 +996,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=40, help="max PRs to inspect")
     parser.add_argument("--max-merges", type=int, default=1, help="max merges in run mode")
     parser.add_argument(
+        "--max-updates",
+        type=int,
+        default=1,
+        help=(
+            "max stale branches to bring up to date in run mode (0 disables). One by "
+            "default: a merge moves the base for every other PR, so updating a whole "
+            "stale set at once queues CI runs that the next merge invalidates"
+        ),
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="evaluate and report; change nothing"
     )
     args = parser.parse_args(argv)
@@ -921,6 +1023,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.limit < 1 or args.max_merges < 1:
         print("merge_queue: --limit and --max-merges must be >= 1", file=sys.stderr)
+        return EXIT_OPERATIONAL
+
+    if args.max_updates < 0:
+        print("merge_queue: --max-updates must be >= 0", file=sys.stderr)
         return EXIT_OPERATIONAL
 
     authority = policy.authority(args.acting_role)
@@ -991,6 +1097,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"\nblocked ({len(blocked)}) — see `list` for reasons")
             return EXIT_OK
 
+        updated: list[Verdict] = []
         merged: list[Verdict] = []
         verdicts: list[Verdict] = []
         while len(merged) < args.max_merges:
@@ -1011,14 +1118,36 @@ def main(argv: list[str] | None = None) -> int:
             merged.append(head)
             print(f"merged #{head.number} {head.head_ref} as {authority.role}")
 
+        if args.max_updates:
+            # Clear a stale base *after* the merges, so the update lands on the base the
+            # merge just produced rather than the one it replaced. `verdicts` is the last
+            # read, so this costs no extra API call, and a PR that only became stale
+            # *because* of this tick's merge is not in it — it still read CLEAN — so it is
+            # picked up on the next tick instead of being updated twice.
+            for candidate in [v for v in verdicts if v.stale_base_only][: args.max_updates]:
+                if not update_branch(args.repo, candidate):
+                    # Refused: the branch is exactly as it was, so this is not an update
+                    # and must not be reported, counted or dropped from the dump as one.
+                    # The queue is FIFO, so a refusal stops the tick rather than skipping
+                    # past the oldest PR to a younger one.
+                    break
+                updated.append(candidate)
+                print(
+                    f"updated #{candidate.number} {candidate.head_ref} onto {args.base} — "
+                    "checks re-run against the current base; the next tick re-evaluates it"
+                )
+
         if not merged:
             print("nothing merged — no PR passed the queue gates")
         if len(merged) < args.max_merges:
             # The loop drained, so `verdicts` is the queue as it stands now and the
             # blocked list is worth showing. When --max-merges cut the run short,
             # `verdicts` still lists what we just merged, and printing it would
-            # report a landed PR as queued.
-            print_queue(verdicts, queued_only=False)
+            # report a landed PR as queued. A branch updated on this read is dropped
+            # for the same reason — it is no longer stale — but only that PR: losing
+            # the rest of the dump would hide the tick's "why is nothing else merging".
+            just_updated = {v.number for v in updated}
+            print_queue([v for v in verdicts if v.number not in just_updated], queued_only=False)
         else:
             print("`list` shows the current queue.")
         return EXIT_OK
