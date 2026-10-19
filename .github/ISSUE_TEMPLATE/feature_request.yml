@@ -58,8 +58,8 @@ body:
       label: Third-party data access
       description: |
         Fill this in only if the change calls someone else's data, endpoint, or authentication flow.
-        No third-party data access merges without a `docs/vendor-terms/<vendor>/INDEX.md` entry.
+        No third-party data access merges without a vendor terms record in the private vendor-records store (local only, never committed here).
         An open-source license does not cover their data. Contacting a vendor is a separate decision.
-      placeholder: "Vendor: <name>\nEntry: docs/vendor-terms/<name>/INDEX.md (exists | to write)"
+      placeholder: "Vendor: <name>\nRecord: private vendor-records store (exists | to write)"
     validations:
       required: false
