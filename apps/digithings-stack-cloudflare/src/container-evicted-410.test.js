@@ -11,8 +11,9 @@ import {
 /**
  * DIG-3226: confirmed container evictions must not collapse into the generic
  * boot 503. Behavioral pins on the pure helper module (dependency-free, so
- * importable here) plus wiring pins that all three container wrappers branch
- * to the 410.
+ * importable here) plus wiring pins that both remaining container wrappers
+ * branch to the 410. (The digichat Container left this Worker on 2026-10-19;
+ * apps/digichat-cloudflare carries its own copy of this wiring.)
  *
  * Deliberately plain `.js`, same reason as container-booting-503.test.js:
  * tsconfig scopes `types` to @cloudflare/workers-types only, so a `.ts`
@@ -55,7 +56,7 @@ describe("containerEvictedResponse", () => {
   });
 });
 
-describe("all three containers wire the evicted branch", () => {
+describe("both containers wire the evicted branch", () => {
   it("imports the eviction helpers", () => {
     expect(stackSource()).toContain('from "./container-errors"');
     expect(stackSource()).toContain("isContainerEvictedError");
@@ -67,7 +68,7 @@ describe("all three containers wire the evicted branch", () => {
     // containerFetch catch); exactly 2 each proves neither collapsed back
     // to the uniform 503 (a presence-only check cannot tell).
     const source = stackSource();
-    for (const service of ["stack", "mcp", "digichat"]) {
+    for (const service of ["stack", "mcp"]) {
       const needle = `return containerEvictedResponse("${service}", message);`;
       expect(source.split(needle).length - 1).toBe(2);
     }
@@ -75,7 +76,7 @@ describe("all three containers wire the evicted branch", () => {
 
   it("keeps the boot 503 for the non-evicted path", () => {
     const source = stackSource();
-    for (const service of ["stack", "mcp", "digichat"]) {
+    for (const service of ["stack", "mcp"]) {
       expect(source).toContain(`return containerBootingResponse("${service}", message);`);
     }
   });

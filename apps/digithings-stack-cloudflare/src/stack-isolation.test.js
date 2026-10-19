@@ -339,11 +339,14 @@ describe("index.ts isolation wiring", () => {
     expect(source).toContain('"dashboard-api"');
     expect(source).toContain('() => import("./dashboard-api")');
     expect(source).toContain("handleDashboardApi(request, workerEnv, url)");
-    expect(source).toContain('"digichat"');
-    expect(source).toContain('() => import("./digichat")');
-    expect(source).toContain("shouldProxyToDigiChat(url.pathname)");
-    expect(source).toContain("getContainer(workerEnv.DIGICHAT, sharedDigichatContainerId(");
-    expect(source).toContain("switchPort(request, DIGICHAT_PORT)");
+    // The digichat route group was removed (Chris, 2026-10-19): the client
+    // surface no longer lazy-loads through this Worker at all. Assert the
+    // absence rather than develop's `digichat` group expectations.
+    expect(source).not.toContain('runIsolated("digichat"');
+    expect(source).not.toContain('() => import("./digichat")');
+    expect(source).not.toContain("shouldProxyToDigiChat(url.pathname)");
+    expect(source).not.toContain("getContainer(workerEnv.DIGICHAT, sharedDigichatContainerId(");
+    expect(source).not.toContain("switchPort(request, DIGICHAT_PORT)");
     expect(source).toContain('runIsolated("container-routes", () => import("./ports")');
   });
 

@@ -48,24 +48,30 @@ booted with until the instance is recycled. Evidence: `apps/digithings-stack-clo
 (`apps/digichat-cloudflare/src/index.ts:26`), `3m` for the stack sibling (`apps/digithings-stack-cloudflare/src/index.ts:83`),
 `3m` for the MCP container (`:208`) and the folded digichat class (`:260`). So a re-`put` secret looks rotated in `secret list` while the old value stays live — R5.
 
-**The lever that works today: bump the container id.** Change `SHARED_DIGICHAT_CONTAINER_ID`
-(`apps/digichat-cloudflare/src/paths.ts:23`) from `shared-v9` to `shared-v10` and deploy. Incident #4289 / PR #4290
-did the same bump on an earlier suffix (`shared-v6`→`shared-v7`): a new instance boots with the current image + env while the old one goes
-inactive. The stack equivalent is `SHARED_STACK_CONTAINER_ID` (`apps/digithings-stack-cloudflare/src/ports.ts:48`,
-`shared-v17`); its comment names the exact case — "to pick up the rotated `DIGIKEY_ADMIN_TOKEN`, since the container
-reads worker env only when the instance starts" (`ports.ts:34-35`). The MCP container id is `MCP_CONTAINER_ID` (`ports.ts:29`).
+**The lever that works today: recycle the instance.** Two ways, both of which move the *derived* id
+rather than a literal. (a) Call the reset lever (§15):
+`POST /_digichat-admin/container/reset` destroys the live instance, so the next request boots a fresh
+one with the current image + env. (b) Deploy a commit whose rev differs: the digichat id is
+`shared-<sha12>` derived from `DIGICHAT_CONTAINER_REV` (`apps/digichat-cloudflare/src/paths.ts`) and the
+stack id likewise from `STACK_CONTAINER_REV` (`apps/digithings-stack-cloudflare/src/ports.ts`), both
+injected by the app's own `scripts/deploy.mjs`. The id follows the commit — which also means that
+re-deploying the *identical* commit reuses the warm instance instead of recycling it, so the stale-env
+case needs either the reset lever or a rev that changed. A deploy that carries no rev falls back to the
+legacy id (`shared-v10` for digichat) rather than moving. Rollback is symmetric: redeploy the previous
+commit and the id follows it back. The MCP container id is `MCP_CONTAINER_ID` (`ports.ts`), still a
+constant.
 
 **Conflicting instruction to ignore.** `apps/digithings-stack-cloudflare/README.md:30-31` and the rebuild-marker
 comments (`Dockerfile.digichat-cloudflare:65-69`, `Dockerfile.digithings-stack-cloudflare:77-95`) say to bump the
 **Dockerfile rebuild marker** to propagate env. That changes the image tag, not the instance id; it does not by itself
-replace a warm instance. Prefer the `SHARED_*_CONTAINER_ID` bump, and treat the marker as an image-rebuild trigger only.
+replace a warm instance. Prefer the redeploy (which moves the derived id), and treat the marker as an image-rebuild trigger only.
 
 **The `envVars` whitelist is the only path into the container.** A secret `put` on the Worker but absent from the
 Container's `envVars` never reaches the process — silently. The digichat whitelist is `apps/digichat-cloudflare/src/index.ts:32-56`;
-the stack Worker runs three Container classes, each with its own `envVars`:
-`DigiStackContainer` (`apps/digithings-stack-cloudflare/src/index.ts:89-146`),
-`DigiQuantMcpContainer` (`:218-227`), and `DigiChatContainer` (`:256`, `envVars`
-at `:277-305`). Known silent drops: on digichat,
+the stack Worker runs two Container classes, each with its own `envVars`:
+`DigiStackContainer` (`apps/digithings-stack-cloudflare/src/index.ts:85-140`) and
+`DigiQuantMcpContainer` (`:254-262`). (`DigiChatContainer` left this Worker on 2026-10-19;
+digichat runs in `apps/digichat-cloudflare`.) Known silent drops: on digichat,
 `DIGICHAT_DATABASE_URL` (`wrangler.toml:58`), `CHEAPERINFERENCE_API_KEY`, `OPENROUTER_API_KEY`; on the stack,
 `DIGI_CONFIG_PATH`, `DIGI_PROJECT_CONFIG`, `DIGI_WORKFLOW_PROFILE`, `DIGI_ALLOWED_TOOLS` are no longer
 `[vars]` — the `container/entrypoint.sh` defaults are the live values (`wrangler.toml:266-269`) (R4).
@@ -75,27 +81,28 @@ at `:277-305`). Known silent drops: on digichat,
 ```bash
 # stack: the live instance id is served by the Worker itself (src/index.ts:507).
 curl -sf https://graph.digithings.ai/_stack/meta \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["containerId"])'   # → shared-v17 (or the bumped value)
-# digichat has no id probe. Prove the recycle behaviourally: rotate AUTH_SECRET, then a
-# pre-rotation browser session must fail and a fresh login must succeed (see §13).
-sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance drains within this window (paths.ts:23, index.ts:26)
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["containerId"])'   # → shared-<deploying sha12>
+# digichat: the id is served by the digichat Worker's own /_digichat/meta.
+curl -sf https://digithings.ai/_digichat/meta \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["containerId"])'
+sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance drains within this window (index.ts:26)
 ```
 
 ## Per-target procedures
 
 ### 1. `MCP_EDGE_KEY` + `DIGICHAT_EMBED_TENANTS`
 
-**Blast radius** — `/_stack/mcp/{zammad,digisearch,digivault}/*` returns fail-closed 401 (`apps/digithings-stack-cloudflare/src/index.ts:344-345`); the embed MCP tool calls break. `DIGICHAT_EMBED_TENANTS` drives all tenant routing, gate mode and per-tenant tokens (R10).
+**Blast radius** — `/_stack/mcp/{digisearch,digivault}/*` returns fail-closed 401 (`apps/digithings-stack-cloudflare/src/index.ts:344-345`); the embed MCP tool calls break. The `zammad` route left this edge on 2026-10-19 and is now gated on the digichat host by a different key — see §12. `DIGICHAT_EMBED_TENANTS` drives all tenant routing, gate mode and per-tenant tokens (R10).
 **Copies** — stack Worker secret `MCP_EDGE_KEY` (declared `apps/digithings-stack-cloudflare/wrangler.toml:35`, consumed `src/index.ts:282`); the value **as a literal `token`** inside digichat `DIGICHAT_EMBED_TENANTS` (`apps/digichat-cloudflare/src/index.ts:48`; `apps/digichat/config/examples/occ-embed.yaml:56-58`). Optional `MCP_EDGE_KEYS` JSON overrides per server (`src/index.ts:283-296`).
 **Pre-flight** — read the tenant JSON shape at `apps/digichat-cloudflare/README.md:81-142`; locate the single `mcp.servers` entry for the OCC Zammad route.
 **Steps**
 1. Generate: `openssl rand -hex 32`.
 2. On the stack Worker: `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put MCP_EDGE_KEY`. The Worker reads it per request, so the edge rotates instantly.
 3. Replace the literal `token` in `DIGICHAT_EMBED_TENANTS`, then `printf '%s' "$JSON" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGICHAT_EMBED_TENANTS` in `apps/digichat-cloudflare`.
-4. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`) so the container reboots with the new tenant JSON.
+4. Recycle the container so it reboots on the new value: call the reset lever (§15) or deploy a commit whose rev differs — the id follows the commit, and re-deploying the identical commit reuses the warm instance.
 5. `npx --yes wrangler@4.133.0 deploy` for the digichat Worker.
 **Verify** — new key not 401, old/absent key 401:
-`curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $NEW" https://graph.digithings.ai/_stack/mcp/zammad/mcp` → any status except `401`; drop the header → `401`.
+`curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $NEW" https://graph.digithings.ai/_stack/mcp/digisearch/mcp` → any status except `401`; drop the header → `401`. (Do not verify against `/_stack/mcp/zammad/mcp`: the Zammad MCP no longer runs in the stack — §12.)
 **Rollback** — re-put the previous `MCP_EDGE_KEY` **and** the previous tenant JSON together.
 **Gotchas** — a one-sided rotation 401s the embed (R10). `tokenEnv` cannot resolve the key: the stack Worker secret is never forwarded into the digichat container, so the literal is required (`apps/digichat-cloudflare/README.md:115-117`).
 
@@ -106,17 +113,18 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 ### 2. `DIGIKEY_BFF_TOKEN`
 
 **Blast radius** — digichat BFF→digikey session exchange; chat auth. A one-sided rotation breaks chat (R6). The token is a static bearer compared with `secrets.compare_digest` (`digikey/src/digikey/server.py:233-240`).
-**Copies** — digichat Worker (`apps/digichat-cloudflare/wrangler.toml:54`, forwarded `src/index.ts:51`); stack Worker (`apps/digithings-stack-cloudflare/wrangler.toml:136`, forwarded `src/index.ts:66`); digikey process (`digikey/src/digikey/settings.py:20`); `docker-compose.yml:560`; `infra/digichat-release/.env.profile-a.example:44`.
+**Copies** — digichat Worker (`apps/digichat-cloudflare/wrangler.toml:54`, forwarded `src/index.ts:51`); stack Worker (`apps/digithings-stack-cloudflare/wrangler.toml:136`, forwarded `src/index.ts:66`); digikey process (`digikey/src/digikey/settings.py:20`); `docker-compose.yml:560`; `infra/digichat-release/.env.profile-a.example:44`. Two local copies are easy to leave behind and are part of this set: `~/Code/digithings/.env` and the Keychain item **`digithings-local/DIGIKEY_BFF_TOKEN`**.
 **Pre-flight** — both Workers must be deployable in the same window; the values **must agree**.
 **Steps**
 1. Generate the new value once.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_BFF_TOKEN` in `apps/digithings-stack-cloudflare`.
 3. Same command in `apps/digichat-cloudflare`.
-4. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:48`) and `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`).
+4. Redeploy both Workers from a commit whose rev differs so both derived ids move (Redeploy the stack from a commit whose rev differs); a warm instance otherwise keeps its boot env.
 5. Deploy both Workers.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://key.digithings.ai/v1/oauth/token -H "Authorization: Bearer $NEW" -H 'Content-Type: application/json' -d '{"grant_type":"bff_session","tenant_slug":"digithings","subject":"bff-rotation-probe"}'` → `200`; with the previous value → `401`.
 **Rollback** — re-put the previous value on both Workers and bump both ids again.
 **Gotchas** — no dual-accept window (`server.py:233` accepts exactly one value), so move both surfaces within seconds. Rotating this is also the only way to block outstanding BFF JWTs (`digikey/ARCHITECTURE.md:354`).
+**Drift check (added 2026-10-19 after an outage).** Equality is *never* verified against live state (see the Alias-equality note at the end of this file), so a stale copy sits unnoticed until a container recycles and adopts the current secret. Measured case: `DIGIKEY_BFF_TOKEN` was rotated on the stack side only; every OCC chat then answered `502 upstream_auth` — `digikey bff_session exchange failed` — because the still-warm stack container was serving its pre-rotation boot env and the digichat copy had never been updated. It surfaced hours later, on an unrelated deploy, not on the rotation itself. To find drift cheaply, run the §Verify probe with each stored copy in turn: the live value returns `200`, a stale one `401`.
 
 ### 3. Cloudflare token family — `CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN`
 
@@ -129,7 +137,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 3. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put CLOUDFLARE_API_TOKEN` in `apps/digithings-stack-cloudflare`. Leave the legacy names in place — they are the fallback.
 4. `gh secret set CLOUDFLARE_API_TOKEN` (stdin / `--body-file -`).
 5. Update the gitignored local `.env`.
-6. Bump `SHARED_STACK_CONTAINER_ID`, then deploy the stack.
+6. Deploy the stack from a commit whose rev differs, so the derived stack container id moves.
 7. Only after Verify passes, delete `VECTORIZE_API_TOKEN` / `D1_API_TOKEN` (`wrangler secret delete` or dashboard).
 **Verify** — three checks, because `env -u` makes wrangler use the login, not the secret:
 `CLOUDFLARE_API_TOKEN="$NEW" npx --yes wrangler@4.133.0 vectorize info digithings_docs` → non-empty `vectorCount` (the new token itself carries Vectorize scope); `env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 whoami` → the login identity (wrangler is not shadowed); then a digisearch query on `search.digithings.ai` with a digikey JWT scoped `digisearch:query` returns hits from the remote index, i.e. the container resolved the credentials on boot (`docs/ops/vectorize-cutover.md:132-207`).
@@ -159,7 +167,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Steps**
 1. Generate.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_ADMIN_TOKEN` in `apps/digithings-stack-cloudflare`.
-3. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:48` — its comment names this exact token as the reason).
+3. Deploy the stack from a commit whose rev differs, so the derived stack container id moves (the rotated secret reaches a fresh instance).
 4. Deploy.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://key.digithings.ai/v1/admin/keys -H "Authorization: Bearer $NEW" -H 'Content-Type: application/json' -d '{}'` → anything except `503` / `401` (a 4xx validation error still proves the bearer was accepted); with the old token → `401`.
 **Rollback** — re-put the previous token and bump the id.
@@ -173,7 +181,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Steps**
 1. Generate a new RSA-2048 PKCS8 PEM (unencrypted) offline and store it in the secrets manager.
 2. `printf '%s' "$PEM" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_PRIVATE_KEY_PEM` in `apps/digithings-stack-cloudflare`.
-3. Bump `SHARED_STACK_CONTAINER_ID`.
+3. Redeploy the stack from a commit whose rev differs so the derived id moves (`shared-<sha12>`); a warm instance otherwise keeps its boot env.
 4. Deploy, and announce the 401 window.
 **Verify** — fingerprint the served public key (never the private one):
 `curl -s https://key.digithings.ai/.well-known/jwks.json | python3 -c 'import sys,json,hashlib;k=json.load(sys.stdin)["keys"][0];print(k["kid"],hashlib.sha256(k["n"].encode()).hexdigest()[:16])'` → the fingerprint changes; `kid` stays `digikey-1`. Then a BFF token exchange → 200.
@@ -188,7 +196,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Steps**
 1. Change the role password in Postgres (dashboard or `ALTER ROLE … PASSWORD`).
 2. `printf '%s' "$NEW_DSN" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_DATABASE_URL` in `apps/digithings-stack-cloudflare`.
-3. Bump `SHARED_STACK_CONTAINER_ID`.
+3. Redeploy the stack from a commit whose rev differs so the derived id moves (`shared-<sha12>`); a warm instance otherwise keeps its boot env.
 4. Deploy.
 5. If the store itself changed, re-issue the digiquant service key per `docs/ops/digiquant-digikey-service-key.md:77-103`.
 **Verify** — `curl -sf https://key.digithings.ai/healthz` → `{"ok":true}`; then a BFF/API-key exchange → 200; and a key issued **before** the rotation still exchanges (proves the durable store, not `/data`).
@@ -229,7 +237,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 1. Generate both new values.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put LITELLM_MASTER_KEY` and the same for `LITELLM_PROXY_API_KEY` in `apps/digithings-stack-cloudflare`.
 3. Rotate `DIGIKEY_LITELLM_PROXY_KEY` in lockstep **only** if it is not derived from the master key.
-4. Bump `SHARED_STACK_CONTAINER_ID`; deploy.
+4. Deploy the stack from a commit whose rev differs.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4000/v1/models -H "Authorization: Bearer $LITELLM_MASTER_KEY"` → `200` (loopback in the container; reproduce locally with `PATH="$PWD/.venv/bin:$PATH" make stack-local` then the same curl). Hosted verification is indirect: a chat completion through `graph.digithings.ai` with a digikey JWT.
 **Rollback** — re-put the previous pair and bump the id.
 **Gotchas** — `LITELLM_MASTER_KEY` is absent from the wrangler secret checklist (R9): enumerate live names with `secret list` before assuming. See `SECURITY.md:44` for the master-key + virtual-key model.
@@ -242,22 +250,23 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 1. Rotate upstream in the provider console.
 2. `gh secret set OPENROUTER_API_KEY` (and `CHEAPERINFERENCE_API_KEY`, `GROQ_API_KEY`).
 3. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put OPENROUTER_API_KEY` in `apps/digithings-stack-cloudflare` (repeat per key). There is no CI workflow that puts these Worker secrets.
-4. Bump `SHARED_STACK_CONTAINER_ID`; deploy the stack.
+4. Deploy the stack from a commit whose rev differs.
 **Verify** — a one-token completion through LiteLLM: `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4000/v1/chat/completions -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H 'Content-Type: application/json' -d '{"model":"house","messages":[{"role":"user","content":"ping"}],"max_tokens":1}'` → `200`.
 **Rollback** — re-put the previous key and bump the id.
 **Gotchas** — setting `CHEAPERINFERENCE_API_KEY` flips the house default upstream (`apps/digithings-stack-cloudflare/container/entrypoint.sh:33-52`; [cheaperinference](../providers/cheaperinference.md)); `DIGI_HOUSE_UPSTREAM=openrouter` forces OpenRouter. The digichat copies are misdirected: rotating them changes no behaviour, but keep them hygienic.
 
 ### 12. `ZAMMAD_API_TOKEN`
 
-**Blast radius** — the read-only Zammad helpdesk MCP (OCC demo) 401s (`apps/digithings-stack-cloudflare/src/index.ts:111`).
-**Copies** — stack Worker (`apps/digithings-stack-cloudflare/wrangler.toml:150`, forwarded `src/index.ts:111`); `docker-compose.yml:457-458` (via `.env`); the tenant entry references the env name, not the value (`apps/digichat/config/examples/occ-embed.yaml`).
+**Blast radius** — the read-only Zammad helpdesk MCP 401s. Since 2026-10-19 that MCP runs **inside the digichat image**, not the stack: it is exposed at `https://digithings.ai/api/mcp/zammad/mcp` and gated there by the digichat Worker's `ZAMMAD_EDGE_KEY`. The stack no longer serves a zammad route (it left `MCP_EDGE_SERVERS` and the module left the image), so the stack's `ZAMMAD_API_TOKEN` is **vestigial** — it is documented here only so nobody rotates it by mistake, and it is safe to delete.
+**Copies** — digichat Worker: `ZAMMAD_API_TOKEN` (the Zammad API credential), `ZAMMAD_BASE_URL`, and `ZAMMAD_EDGE_KEY` (the `x-digi-mcp-key` gate on the route). The container forwards the token to the in-image MCP process on `127.0.0.1:8770` — `apps/digichat/scripts/trusted-proxy-server.mjs` spawns it only when `ZAMMAD_API_TOKEN` is set — and Next forwards `/api/mcp/zammad/*` to it (`apps/digichat/src/app/api/mcp/zammad/[[...path]]/route.ts`). Local compose keeps its own copy (`docker-compose.yml:457-458`).
 **Steps**
 1. Regenerate the token in Zammad.
-2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put ZAMMAD_API_TOKEN` in `apps/digithings-stack-cloudflare`.
-3. Bump `SHARED_STACK_CONTAINER_ID`; deploy.
-**Verify** — the edge gate first: `curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $MCP_EDGE_KEY" https://graph.digithings.ai/_stack/mcp/zammad/mcp` → not `401`; then confirm a real Zammad tool call succeeds from the OCC embed (edge key and Zammad token are independent gates).
-**Rollback** — re-put the previous token and bump the id.
-**Gotchas** — a raw token or `Token token=` form is accepted (`docker-compose.yml:457-458` comment). A wrong edge key masks a token problem: the 401 is returned before the token is ever used (`src/index.ts:344`).
+2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put ZAMMAD_API_TOKEN` in `apps/digichat-cloudflare` (repeat for `ZAMMAD_BASE_URL` if the tenant URL moved).
+3. Recycle the container so it reboots on the new value: call the reset lever (§15) or deploy a commit whose rev differs — the id follows the commit, and re-deploying the identical commit reuses the warm instance.
+4. `npx --yes wrangler@4.133.0 deploy` for the digichat Worker.
+**Verify** — the edge gate first: `curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $ZAMMAD_EDGE_KEY" https://digithings.ai/api/mcp/zammad/mcp` → not `401`; then confirm a real Zammad tool call succeeds from the OCC embed (edge key and Zammad token are independent gates).
+**Rollback** — re-put the previous token and recycle the digichat container (reset lever §15, or a new-commit deploy).
+**Gotchas** — a raw token or `Token token=` form is accepted (`docker-compose.yml:457-458` comment). A wrong edge key masks a token problem: the 401 is returned before the token is ever used. Rotating the **stack's** copy changes nothing — that secret is dead.
 
 ### 13. `AUTH_SECRET`
 
@@ -266,7 +275,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Steps**
 1. Generate the new value once.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put AUTH_SECRET` in `apps/digichat-cloudflare`.
-3. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`).
+3. Recycle the container so it reboots on the new value: call the reset lever (§15) or deploy a commit whose rev differs — the id follows the commit, and re-deploying the identical commit reuses the warm instance.
 4. Deploy the digichat Worker.
 5. Update the compose / profile env files for the non-Cloudflare instances.
 **Verify** — `/api/auth/*` is not a Worker-proxied path (`paths.ts:6-19`), so there is no curl probe. Prove it in a browser: `curl -s -o /dev/null -w '%{http_code}\n' 'https://digithings.ai/embed?host=digithings.ai'` → not `5xx` (container up), then log in at `https://digithings.ai/chat` and reload a pre-rotation session — it must be logged out, which is the expected proof of the rotation.
@@ -280,10 +289,23 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Steps**
 1. Generate.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGICHAT_PLAN_PROOF_SECRET` in `apps/digichat-cloudflare`.
-3. Bump `SHARED_DIGICHAT_CONTAINER_ID`; deploy.
+3. Recycle the container so it reboots on the new value: call the reset lever (§15) or deploy a commit whose rev differs — the id follows the commit, and re-deploying the identical commit reuses the warm instance.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://digithings.ai/api/plan-proof -H 'X-Embed-Host: digiquant.io' -H 'X-Embed-Token: ***'` → `401`/`403` without a valid Supabase access token; a real dashboard session mints `{proof,…}` and `/api/chat` accepts `X-Embed-Plan-Proof`. A proof minted before rotation must now fail verification.
 **Rollback** — re-put the previous secret and bump the id.
 **Gotchas** — proofs hold the old signature until expiry; the mint endpoint is the only source, so clients must re-mint.
+
+### 15. `DIGICHAT_ADMIN_KEY`
+
+**Blast radius** — the container reset lever stops working: `POST /_digichat-admin/container/reset` fails closed with `404`, so a wedged container can only be recovered by the fallbacks in [digichat-container-recovery.md](digichat-container-recovery.md). Chat itself is unaffected while the container is healthy.
+**Copies** — digichat Worker only (`apps/digichat-cloudflare/src/index.ts`, `src/admin-reset.ts`); operator custody `digithings-local/DIGICHAT_ADMIN_KEY` in Keychain. It is **never** forwarded into the container, and `src/env-vars-pin.test.ts` pins that absence.
+**Steps**
+1. Generate.
+2. From the repo root: `printf '%s' "$NEW" | npx --yes wrangler@4.133.0 secret put DIGICHAT_ADMIN_KEY --config apps/digichat-cloudflare/wrangler.toml`.
+3. Store the new value in Keychain under `digithings-local/DIGICHAT_ADMIN_KEY`.
+4. Deploy the digichat Worker.
+**Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://digithings.ai/_digichat-admin/container/reset -H "x-digi-admin-key: $NEW"` → `200` with `{"ok":true,…}`; the previous value → `404`. Note the rotate path **destroys the live instance**.
+**Rollback** — re-put the previous value and redeploy.
+**Gotchas** — `404` deliberately means "unset, missing, or wrong" so the route never reveals whether a key is valid; a `GET` returns `405` with `Allow: POST`. After the reset the first chat may answer `502 upstream_auth` while the sleeping stack container warms digikey — a cold-dependency artefact, not a bad token.
 
 ## Rotation cadence
 
@@ -299,6 +321,7 @@ default; before this line it was written down only in the Security & Risk Lead's
 | `DIGIKEY_DATABASE_URL` | 12 months, with the DB role | DB incident; role audit | data platform |
 | `MCP_EDGE_KEY` + tenant JSON | 12 months | edge 401 incident; tenant offboarding | Cloudflare / platform operator |
 | OCC tenant `token` in `DIGICHAT_EMBED_TENANTS` | on every staff off-handoff, and 12 months otherwise — **rotation is the only revocation** ([OCC_INVITE_KEY.md](OCC_INVITE_KEY.md)); before Act B2 it grants nothing, after Act B2 it is the whole perimeter | invite link leaked; staff offboarding | Cloudflare / platform operator, custody with security |
+| `DIGICHAT_ADMIN_KEY` | 12 months | operator offboarding; any suspected exposure | Cloudflare / platform operator, custody with security |
 | `GH_DISPATCH_TOKEN` | 12 months — **not a chosen cadence**: the provider ceiling for a fine-grained PAT, which expires 2027-09-15 and is not agent-rotatable. Dated exemption below | CI PAT expiry (GitHub notifies); offboarding | CI / platform operator |
 | `CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN` | 12 months | token expiry; leaked-scope audit | Cloudflare / platform operator |
 | `AUTH_SECRET` | 12 months | auth incident; expected session reset | digichat owner |
