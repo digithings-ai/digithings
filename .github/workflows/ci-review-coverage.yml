@@ -68,15 +68,26 @@ jobs:
       # A dispatch run's status attaches to github.sha (the dispatched ref's
       # tip), not to inputs.head_sha. Without this guard a caller could gate an
       # arbitrary SHA and have the green check land on a different commit.
-      - name: Refuse a dispatch whose head is not the commit being checked
+      # Two dispatch-only guards, both fail-closed:
+      #  - the status attaches to github.sha, so the gated SHA must be that commit;
+      #  - base_ref is caller-supplied, and a base equal to the head yields an
+      #    empty range, which check_review_coverage.py treats as "nothing to
+      #    promote" and passes. This gate is the production gate, so main is the
+      #    only base it may be asked to judge.
+      - name: Refuse a dispatch that would gate the wrong range
         if: github.event_name == 'workflow_dispatch'
         env:
           HEAD_SHA: ${{ inputs.head_sha }}
           CHECKED_SHA: ${{ github.sha }}
+          BASE_REF: ${{ inputs.base_ref }}
         run: |
           set -euo pipefail
           if [ "${HEAD_SHA}" != "${CHECKED_SHA}" ]; then
             echo "::error::head_sha ${HEAD_SHA} is not the commit this run checks (${CHECKED_SHA}); the status would attach to the wrong commit"
+            exit 1
+          fi
+          if [ "${BASE_REF}" != "main" ]; then
+            echo "::error::base_ref must be main; '${BASE_REF}' would compare the wrong range and can pass on an empty diff"
             exit 1
           fi
 
