@@ -53,14 +53,15 @@ export const SLOT_LEASE_MS = 5_000;
 /**
  * How long a dispatch in flight blocks another delivery.
  *
- * Longer than any normal GitHub call, including the Retry-After sleeps inside
- * `postGithub`, because the second delivery arriving during a slow dispatch is
- * the ordinary case, not a crash. A dispatch that outlives this has to be
- * treated as dead, or a hung invocation could hold the slot forever; the cost
- * is the same fail-open trade the tick path already makes (a duplicate costs
- * Actions minutes, a dropped daily clock costs a day).
+ * Sized above the longest synchronous dispatch this Worker makes, not above the
+ * redelivery gap: twelve-x ingest may hold the runner request for 1200s and
+ * `house-run` declares 14400s, so a delivery that arrives late in a real run
+ * must still see the slot held. A dispatch that outlives this is treated as
+ * dead, or a hung invocation could hold the slot forever; the cost is the same
+ * fail-open trade the tick path already makes (a duplicate costs Actions
+ * minutes, a dropped daily clock costs a day).
  */
-export const DISPATCH_LEASE_MS = 120_000;
+export const DISPATCH_LEASE_MS = 6 * 60 * 60 * 1000;
 
 /** Counts and claims carry different prefixes, so a claim never reads as a count. */
 const countsKey = (job: string, day: string): string => `counts:${job}:${day}`;
@@ -156,6 +157,8 @@ export class StartCounter {
       const slots = await txn.get<DaySlots>(dayKey);
       const held = slots?.[slot];
       if (!slots || !held || held.token !== token) return false;
+      // A confirmed slot is finished; only the owner's in-flight claim may move.
+      if (held.state === "confirmed") return false;
       if (held.state === "claimed") {
         slots[slot] = { state: "dispatching", at: now, token };
         await txn.put(dayKey, slots);

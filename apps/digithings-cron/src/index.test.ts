@@ -279,8 +279,10 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
     }
 
     expect(githubFetch).toHaveBeenCalledOnce();
-    // Without the confirm the claim expires after its lease and the second
-    // delivery takes the slot again, so this assertion is part of the pin.
+    // Both writes are load-bearing: without dispatching the slow-call lease is
+    // never armed, and without confirm the claim expires after its short lease.
+    // Either omission lets the second delivery dispatch again.
+    expect(events.some((event) => event.startsWith("dispatching:"))).toBe(true);
     expect(events.some((event) => event.startsWith("confirm:"))).toBe(true);
   });
 

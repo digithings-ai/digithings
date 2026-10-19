@@ -112,17 +112,24 @@ Two properties are deliberate:
   accepted.
 
 A claim moves through three states. It is written before the dispatch
-(`claimed`), moved to `dispatching` immediately before the GitHub call, and to
+(`claimed`), moved to `dispatching` immediately before the call, and to
 `confirmed` when that call is accepted. A `claimed` slot that never reached the
 dispatch is handed out again after 5s, so a Worker that dies between the two
-does not lose the tick. A `dispatching` slot is held for 120s, longer than any
-normal GitHub call including `Retry-After` waits, so the ordinary second
-delivery 7-29s later cannot duplicate a slow dispatch. Only a dispatch that
-outlives that long lease is treated as dead; that is the same fail-open trade as
-the missing-binding rule, because a duplicate costs Actions minutes and a
-dropped daily clock costs a day. Every transition and the release are fenced by
-the claim token, so a stale delivery cannot confirm or erase the new owner's
-claim.
+does not lose the tick. A `dispatching` slot is held for 6h, above the longest
+synchronous dispatch (`house-run` declares 14400s and twelve-x ingest 1200s), so
+an ordinary second delivery 7-29s later, or a late one during a long run, cannot
+duplicate the dispatch. A dispatch that outlives that long lease is treated as
+dead; that is the same fail-open trade as the missing-binding rule, because a
+duplicate costs Actions minutes and a dropped daily clock costs a day. Every
+transition and the release are fenced by the claim token, so a stale delivery
+cannot confirm or erase the new owner's claim.
+
+Two residual windows are deliberate and small. A Worker killed after
+`dispatching` is written but before the dispatch call leaves the slot held, so
+the duplicate pair does not recover it; the window is between one Durable Object
+write and the next call. If writing `dispatching` itself fails on an unreachable
+counter, the worker dispatches anyway (the fail-open rule) and the claim can
+expire after 5s; the duplicate would then start a second run.
 
 The slot is the UTC minute because that is the only unit the two copies share;
 0 of 514 measured pairs straddled a minute boundary. A pair that does straddle
