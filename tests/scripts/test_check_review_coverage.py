@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import inspect
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -1096,6 +1097,232 @@ def test_baseline_ancestor_set_is_one_rev_list(monkeypatch: pytest.MonkeyPatch) 
     ancestors = crc.baseline_ancestor_shas("e03c7095")
     assert ancestors == {"aaa", "bbb"}
     assert runs == [["git", "rev-list", "e03c7095"]]
+
+
+# ── the shallow-clone boundary (DIG-4389) ────────────────────────────────────
+#
+# `git log` emits `%H\x1f%s\x1f%an\x1f%P\x1e`, choosing \x1f and \x1e so a subject
+# can contain anything. Python's `str.strip()` treats BOTH as whitespace, so a
+# record whose `%P` is empty — the grafted root of a shallow clone — lost its
+# trailing separators and crashed the parser. That crash fails closed, which is
+# the safe state; merely deleting `.strip()` converts it into a gate that judges
+# the ONE commit a shallow clone can see and reports SUCCESS over a ~1000-commit
+# promotion. These tests pin both halves: the parser must survive an empty
+# `%P`, and the gate must refuse to answer over a degenerate range at all.
+
+
+_GRAFT_RAW = (
+    "6ad9aa1d73796da95cdf414b46409797a7f260a3"
+    "\x1fci(merge-queue): board review pass (#5895)\x1fChris\x1f\x1e\n"
+)
+
+
+def test_run_does_not_eat_the_record_and_unit_separators(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The root cause: \x1f and \x1e are whitespace to `str.strip()`."""
+    assert "\x1f".isspace() and "\x1e".isspace()
+    monkeypatch.setattr(crc.subprocess, "check_output", lambda *a, **k: _GRAFT_RAW)
+    out = crc._run(["git", "log"])
+    assert out == _GRAFT_RAW.rstrip("\n")
+    assert out.endswith("\x1e"), "the record terminator must survive the trim"
+
+
+def test_commits_in_range_parses_a_graft_boundary_record_with_empty_parents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A grafted root has empty `%P`; it must parse as parents="" and not crash."""
+    monkeypatch.setattr(crc, "_run", lambda _args: _GRAFT_RAW.rstrip("\n"))
+    rows = crc.commits_in_range("origin/main", "6ad9aa1d7379")
+    assert rows == [
+        {
+            "sha": "6ad9aa1d73796da95cdf414b46409797a7f260a3",
+            "subject": "ci(merge-queue): board review pass (#5895)",
+            "author": "Chris",
+            "parents": "",
+        }
+    ]
+
+
+def test_commits_in_range_tolerates_a_record_without_a_parents_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Defensive parse: three fields means no parents, not a crash."""
+    monkeypatch.setattr(
+        crc, "_run", lambda _args: "sha1\x1fsubject\x1fauthor\x1e\n"
+    )
+    rows = crc.commits_in_range("origin/main", "head")
+    assert rows == [
+        {"sha": "sha1", "subject": "subject", "author": "author", "parents": ""}
+    ]
+
+
+def test_commits_in_range_refuses_a_record_that_cannot_be_parsed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dropping an unparseable record could hide an unreviewed commit."""
+    monkeypatch.setattr(crc, "_run", lambda _args: "sha1\x1fauthor\x1e\n")
+    with pytest.raises(ValueError, match="expected at least 3"):
+        crc.commits_in_range("origin/main", "head")
+
+
+def test_a_shallow_clone_refuses_to_judge_the_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One commit is not the promotion; refuse instead of reporting coverage."""
+    monkeypatch.setattr(crc, "_shallow_repository", lambda: True)
+    reason = crc.history_gap_reason("origin/main", "6ad9aa1d7379")
+    assert reason is not None
+    assert "shallow" in reason
+    assert "--commits-json" in reason, "the refusal must name the way through"
+
+
+def test_a_disconnected_base_refuses_to_judge_the_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`base..head` over disconnected history is not a promotion range."""
+    monkeypatch.setattr(crc, "_shallow_repository", lambda: False)
+    monkeypatch.setattr(crc, "_shares_history", lambda _base, _head: False)
+    reason = crc.history_gap_reason("origin/main", "6ad9aa1d7379")
+    assert reason is not None
+    assert "common ancestor" in reason
+
+
+def test_squashed_or_rebased_history_is_not_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Promotions into main are squashed: main need not be an ancestor of develop."""
+    monkeypatch.setattr(crc, "_shallow_repository", lambda: False)
+    monkeypatch.setattr(crc, "_shares_history", lambda _base, _head: True)
+    assert crc.history_gap_reason("origin/main", "develop") is None
+
+
+def test_a_range_whose_oldest_commit_is_a_grafted_root_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The boundary signature that survives a misleading shallow check."""
+    reason = crc.graft_boundary_reason(
+        [{"sha": "s", "subject": "x", "author": "a", "parents": ""}]
+    )
+    assert reason is not None
+    assert "parent" in reason
+
+
+def test_a_normal_range_has_no_graft_boundary() -> None:
+    assert (
+        crc.graft_boundary_reason(
+            [{"sha": "s", "subject": "x", "author": "a", "parents": "p1 p2"}]
+        )
+        is None
+    )
+
+
+def test_main_refuses_a_shallow_clone_before_running_the_range(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(crc, "_shallow_repository", lambda: True)
+
+    def must_not_run(_base: str, _head: str) -> list[dict[str, Any]]:
+        raise AssertionError("the range must not be judged on a shallow clone")
+
+    monkeypatch.setattr(crc, "commits_in_range", must_not_run)
+    monkeypatch.setattr(sys, "argv", ["check_review_coverage.py", "--json"])
+    assert crc.main() != 0
+    assert "shallow" in capsys.readouterr().err
+
+
+def test_main_fails_closed_when_the_range_cannot_be_read(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(crc, "_shallow_repository", lambda: False)
+    monkeypatch.setattr(crc, "_shares_history", lambda _base, _head: True)
+
+    def unreadable(_base: str, _head: str) -> list[dict[str, Any]]:
+        raise subprocess.CalledProcessError(128, "git log")
+
+    monkeypatch.setattr(crc, "commits_in_range", unreadable)
+    monkeypatch.setattr(sys, "argv", ["check_review_coverage.py", "--json"])
+    assert crc.main() != 0
+    assert "cannot read the local range" in capsys.readouterr().err
+
+
+def _compare_payload(commits: list[dict[str, Any]], total: int | None = None) -> dict[str, Any]:
+    return {
+        "total_commits": len(commits) if total is None else total,
+        "commits": commits,
+    }
+
+
+def _compare_commit(
+    sha: str = "a" * 40,
+    message: str = "fix(ci): a subject (#1)\n\nbody",
+    author: str = "Chris",
+    parents: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "sha": sha,
+        "commit": {"message": message, "author": {"name": author}},
+        "parents": [{"sha": p} for p in (parents if parents is not None else ["b" * 40])],
+    }
+
+
+def test_commits_from_compare_reads_a_complete_payload(tmp_path: Path) -> None:
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(_compare_payload([_compare_commit()])), encoding="utf-8"
+    )
+    assert crc.commits_from_compare(str(path)) == [
+        {
+            "sha": "a" * 40,
+            "subject": "fix(ci): a subject (#1)",
+            "author": "Chris",
+            "parents": "b" * 40,
+        }
+    ]
+
+
+def test_commits_from_compare_keeps_the_subject_not_the_body(tmp_path: Path) -> None:
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(
+            _compare_payload(
+                [_compare_commit(message="fix: one line (#2)\n\nlong body\nmore")]
+            )
+        ),
+        encoding="utf-8",
+    )
+    assert crc.commits_from_compare(str(path))[0]["subject"] == "fix: one line (#2)"
+
+
+def test_commits_from_compare_refuses_a_truncated_payload(tmp_path: Path) -> None:
+    """GitHub caps compare at 250 commits; judging a capped set is a false green."""
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(_compare_payload([_compare_commit()], total=1086)),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="truncated"):
+        crc.commits_from_compare(str(path))
+
+
+def test_main_refuses_a_truncated_compare_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        crc,
+        "_shallow_repository",
+        lambda: (_ for _ in ()).throw(AssertionError("compare input needs no local history")),
+    )
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(_compare_payload([_compare_commit()], total=1086)),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["check_review_coverage.py", "--commits-json", str(path)]
+    )
+    assert crc.main() != 0
+    assert "truncated" in capsys.readouterr().err
 
 
 # ── the direct-push hatch (a commit with no source PR) ───────────────────────
