@@ -31,6 +31,10 @@ BACKFILL_ENABLED = "0"
 #                         defaultBranchRef) fails with it. See docs/ops/SECRETS_INVENTORY.md.
 #   CRON_KICK_SECRET    — optional; enables POST /kick and GET /runs/:id
 #   RUNNER_AUTH_TOKEN   — Bearer for the digiquant-runner service binding
+#   TWELVEX_RUNNER_AUTH — Bearer cron sends to twelvex-runner; must equal that
+#                         Worker's RUNNER_AUTH_TOKEN. Separate from
+#                         RUNNER_AUTH_TOKEN so rotating one cannot break the other.
+#                         Empty falls back to RUNNER_AUTH_TOKEN.
 #
 # printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
 
@@ -112,7 +116,7 @@ crons = [
   "8 9 * * MON",       # twelve-x-digisearch-parity (GHA was 0 9 * * 1; :08 offset)
   "41 14 * * MON-FRI",  # twelve-x-feed-confirm (DIG-1073: detect an unpublished day)
   "23 16 * * MON-FRI",  # twelve-x-feed-confirm-watchdog (DIG-1073: detect no detection)
-  "23 * * * *",        # digiquant-house-run-watch (lost house-run watcher, DIG-3065)
+  "22 * * * *",        # digiquant-house-run-watch (DIG-3065; Monday confirm arm DIG-4416)
   "40 */6 * * *",      # twelve-x-session-heartbeat-watchdog (moved off GHA schedule)
   "23 7 * * MON",      # occ-help-recrawl (OCC help-docs weekly, DIG-3576)
 ]

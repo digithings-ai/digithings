@@ -125,6 +125,10 @@ apps/*/wrangler.selfhost.toml
 apps/*/.selfhost-dev/
 .dev.vars
 .dev.vars.*
+# Generated flat view of the layered Supabase migration chain for the local
+# Supabase CLI (DIG-4449). scripts/localstack/supabase_flat.py recreates it and
+# `dt up` / `dt reset` / `dt down` point the CLI at it with --workdir.
+digiquant/.supabase-local/
 # Log files
 *.log
 # Large data files and caches (CSV, Parquet, pickles)

@@ -283,21 +283,49 @@ export class RunnerSession {
     run_date: string;
     landed: boolean;
     open_house_runs: string[];
+    dispatched: boolean;
     verifiable: boolean;
   }> {
     const ledger = await this.load();
     const openHouseRuns = Object.values(ledger.locks)
       .map((lock) => lock.run_id)
       .filter((id) => ledger.runs[id]?.command === "house-run");
+    // Did a house run for this run_date reach the runner at all (DIG-4416).
+    // `open_house_runs` only answers "is one holding a lock now": a run accepted
+    // while another job holds a lock is queued by mustQueue() and holds none, so
+    // an empty lock list cannot tell a queued dispatch from a missing POST. The
+    // run record survives the lock, so this reads the accept itself whatever
+    // state the run is in.
+    const dispatched = Object.values(ledger.runs).some(
+      (run) => run.command === "house-run" && run.args.run_date === runDate,
+    );
     const key = `pipeline-runs/house-run/${runDate}/success.json`;
     if (!this.deps.archive) {
-      return { run_date: runDate, landed: false, open_house_runs: openHouseRuns, verifiable: false };
+      return {
+        run_date: runDate,
+        landed: false,
+        open_house_runs: openHouseRuns,
+        dispatched,
+        verifiable: false,
+      };
     }
     try {
       const hit = await this.deps.archive.head(key);
-      return { run_date: runDate, landed: hit != null, open_house_runs: openHouseRuns, verifiable: true };
+      return {
+        run_date: runDate,
+        landed: hit != null,
+        open_house_runs: openHouseRuns,
+        dispatched,
+        verifiable: true,
+      };
     } catch {
-      return { run_date: runDate, landed: false, open_house_runs: openHouseRuns, verifiable: false };
+      return {
+        run_date: runDate,
+        landed: false,
+        open_house_runs: openHouseRuns,
+        dispatched,
+        verifiable: false,
+      };
     }
   }
 

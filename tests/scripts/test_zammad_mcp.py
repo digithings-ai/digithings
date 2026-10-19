@@ -403,12 +403,31 @@ def test_format_ticket_report_aggregates():
 def test_allowed_host_patterns_append_port_wildcard():
     from scripts.zammad_mcp import server
 
-    assert server._allowed_host_patterns("zammad-mcp") == ["zammad-mcp:*"]
+    assert server._allowed_host_patterns("zammad-mcp") == ["zammad-mcp", "zammad-mcp:*"]
     assert server._allowed_host_patterns("zammad-mcp:8770, localhost:*") == [
         "zammad-mcp:8770",
         "localhost:*",
     ]
     assert server._allowed_host_patterns(" , ") == []
+
+
+def test_allowed_host_patterns_match_portless_and_ported_host():
+    """A portless edge Host and a ported service Host both pass FastMCP's check."""
+    ts = pytest.importorskip("mcp.server.transport_security")
+    from scripts.zammad_mcp import server
+
+    middleware = ts.TransportSecurityMiddleware(
+        ts.TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=server._allowed_host_patterns("digithings.ai, mcp-sidecar"),
+        )
+    )
+
+    assert middleware._validate_host("digithings.ai")
+    assert middleware._validate_host("digithings.ai:443")
+    assert middleware._validate_host("mcp-sidecar:8770")
+    assert not middleware._validate_host("evil.example")
+    assert not middleware._validate_host("digithings.ai.evil.example")
 
 
 def test_run_mcp_allowlists_env_hosts(monkeypatch):

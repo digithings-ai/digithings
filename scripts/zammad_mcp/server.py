@@ -41,10 +41,12 @@ mcp = FastMCP("zammad", json_response=True)
 def _allowed_host_patterns(raw: str) -> list[str]:
     """Turn ``ZAMMAD_MCP_ALLOWED_HOSTS`` into FastMCP allowed-host patterns.
 
-    Entries without a port get ``:*`` appended, so the compose service name
-    ``zammad-mcp`` matches the ``zammad-mcp:8770`` Host header digigraph
-    sends. FastMCP matches exact hosts and a literal ``:*`` suffix only, so
-    entries with any other wildcard are dropped. Whether FastMCP actually
+    An entry without a port allows both the bare host and ``host:*``: the
+    compose service name ``zammad-mcp`` must match the ``zammad-mcp:8770``
+    Host header digigraph sends, and an edge request arrives with a portless
+    Host such as ``digithings.ai`` that ``:*`` alone does not match. FastMCP
+    matches exact hosts and a literal ``:*`` suffix only, so entries with any
+    other wildcard are dropped. Whether FastMCP actually
     enforces the allowlist depends on the mcp build — versions without a
     ``transport_security`` setting accept the configuration but ignore it
     (see ``run_mcp``).
@@ -54,7 +56,10 @@ def _allowed_host_patterns(raw: str) -> list[str]:
         host = item.strip()
         if not host or ("*" in host and not host.endswith(":*")):
             continue
-        patterns.append(host if ":" in host else f"{host}:*")
+        if ":" in host:
+            patterns.append(host)
+        else:
+            patterns.extend([host, f"{host}:*"])
     return patterns
 
 
