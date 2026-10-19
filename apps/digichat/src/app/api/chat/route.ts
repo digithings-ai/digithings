@@ -55,9 +55,10 @@ import {
   resolveAnonymousInstallChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
-import { isPlanTierSatisfied } from "@/lib/embed-tenants";
+import { isPlanTierSatisfied, normalizeEmbedHost } from "@/lib/embed-tenants";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
+import { verifyTrialProof } from "@/lib/trial-proof";
 import {
   acquireChatRunLock,
   releaseChatRunLockOnResponseEnd,
@@ -314,6 +315,38 @@ export async function POST(req: Request) {
           "[trial-gate] monitor allowlist error, falling back to the per-IP cap:",
           e,
         );
+      }
+    }
+
+    if (!quotaSatisfied) {
+      // A trial proof is a server-signed token (lib/trial-proof.ts) that this
+      // server mints for an embed host, so a visitor who has completed the
+      // trial form can be let through the free-turn cap without a client-
+      // asserted header. Unlike x-embed-trial-unlock below — which the client
+      // asserts and anyone can send — a proof cannot be forged: the signature
+      // covers host|exp and only this server holds DIGICHAT_TRIAL_PROOF_SECRET,
+      // so only it can produce a token that verifies. A raw client-asserted
+      // X-Embed-Trial-Proof value is NEVER trusted.
+      // The proof binds host|exp|sig only — no tenant, no nonce — so the gate
+      // compares the VERIFIED host itself and a valid proof for another host
+      // buys nothing. The proof's host is the canonical bare registry host
+      // while the browser sends the embed origin as a URL, so compare the
+      // canonical forms. A sanctioned bypass must not spend the visitor's
+      // budget, so once a proof is accepted the per-IP quota below is not
+      // consulted at all. No proof, no bypass: an absent, malformed, expired,
+      // wrongly-signed or wrong-host proof leaves the gate exactly as it was.
+      const proofToken = req.headers.get("x-embed-trial-proof")?.trim();
+      const proofSecret = process.env.DIGICHAT_TRIAL_PROOF_SECRET?.trim();
+      if (proofToken && proofSecret) {
+        const proofHost = verifyTrialProof(proofToken, proofSecret);
+        const embedHost = normalizeEmbedHost(req.headers.get("x-embed-host"));
+        if (
+          proofHost &&
+          embedHost &&
+          normalizeEmbedHost(proofHost) === embedHost
+        ) {
+          quotaSatisfied = true;
+        }
       }
     }
 
