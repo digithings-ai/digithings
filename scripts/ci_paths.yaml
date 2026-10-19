@@ -181,7 +181,7 @@ web:
   # two compose: that PR's union guard reads every glob in this file, so this directory
   # entry independently satisfies it.
   - apps/reference/**
-  # digichat Containers Worker + Dockerfile (workspace digithings-digichat-cloudflare).
+  # digichat Containers Worker + Dockerfile (workspace digichat-cloudflare).
   # Pages does not build it; vitest/wrangler live in that package. Keep on the web lane
   # so package.json is never an orphan install-input (#2073 / #2074).
   - apps/digichat-cloudflare/**

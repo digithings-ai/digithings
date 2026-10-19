@@ -1,4 +1,4 @@
-# design-reference
+# @digithings/reference
 
 The go-to **live** design reference for digithings frontend work — a React /
 Next.js / Tailwind / Motion app that renders every reusable pattern (visual
@@ -9,7 +9,7 @@ start here: copy a pattern, keep its grammar.
 ## Run it
 
 ```bash
-npm run dev --workspace design-reference -- --port 4013
+npm run dev --workspace @digithings/reference -- --port 4013
 # Gallery: http://127.0.0.1:4013/
 # Chatbot (isolated root): http://127.0.0.1:4013/chatbot/
 ```
