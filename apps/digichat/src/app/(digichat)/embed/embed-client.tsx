@@ -394,6 +394,14 @@ function EmbedChat({
   const tenantLanguage = stockClient.chrome.defaultLanguage || DEFAULT_LANGUAGE_CODE;
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
+    // Start on the tenant's curated default so the first turn uses the model
+    // the picker shows as selected (v4.1-flash on OCC) instead of falling
+    // through to the digigraph operator default. Only tenants that publish a
+    // list can be picked, so only they get a preselected value.
+    model:
+      stockClient.models.available.length > 0
+        ? stockClient.models.default?.trim() || stockClient.models.available[0] || ""
+        : "",
     language: tenantLanguage,
     view: stockClient.features.view,
     thinking: stockClient.features.thinking,

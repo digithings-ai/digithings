@@ -100,7 +100,11 @@ image_build_context = "../.."
 # DIGICHAT_VERSION for GET /api/health is baked from apps/digichat/package.json
 # inside infra/docker/Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
 # (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
-max_instances = 1
+# 2, not 1: a rolling deploy must be able to start the new revision while the
+# old one drains, or the account's container-instance cap refuses the start
+# (DIG-4459). Only one instance serves traffic once the rollout settles; the
+# second slot is rollout headroom, not steady-state cost.
+max_instances = 2
 instance_type = "basic"
 
 [[durable_objects.bindings]]
