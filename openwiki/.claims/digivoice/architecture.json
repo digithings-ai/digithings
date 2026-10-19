@@ -1,5 +1,10 @@
 {
   "schemaVersion": 1,
+  "pageVersion": "sha256:9a922b18ba754b4488621971f26c13fb596b65acc54c602624b80555f791b0e2",
+  "verification": {
+    "by": "DIG-3433",
+    "at": "2026-10-14T05:10:00.000Z"
+  },
   "claims": [
     {
       "id": "claim_digivoice_noport",

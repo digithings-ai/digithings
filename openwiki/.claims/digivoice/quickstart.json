@@ -1,5 +1,10 @@
 {
   "schemaVersion": 1,
+  "pageVersion": "sha256:31f38aa1e54b60efaf829d6c451951e7f7d0942ba094abb8928b3809b5220e2f",
+  "verification": {
+    "by": "DIG-3433",
+    "at": "2026-10-14T05:10:00.000Z"
+  },
   "claims": [
     {
       "id": "claim_digivoice_local",
