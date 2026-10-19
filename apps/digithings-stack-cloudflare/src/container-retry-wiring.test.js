@@ -49,6 +49,25 @@ describe("every container-backed route retries once", () => {
     // needs its own clone. One per container-backed route.
     const source = stackSource();
     expect(source.match(/request\.clone\(\)/g) ?? []).toHaveLength(4);
+    // A clone hoisted ABOVE the retry closure would keep the count at 4 and
+    // this test green, while attempt 2 then tries to re-send a consumed body
+    // (TypeError) and the replay silently stops working. Every clone must be
+    // an inline argument of the attempt.
+    expect(source).not.toMatch(/=\s*request\.clone\(\)/);
+  });
+
+  it("wraps every container fetch in a closure", () => {
+    const source = stackSource();
+    expect(source.match(/fetchWithContainerRetry\(\(\) =>/g) ?? []).toHaveLength(4);
+  });
+
+  it("converts the containers package's 500 into the failed-container answer", () => {
+    // @cloudflare/containers 0.3.7 answers a container that died mid-request
+    // with a 500 instead of throwing, so the recycle has to be recognised on
+    // the RESPONSE — once per container class.
+    const source = stackSource();
+    expect(source).toContain("containerRestartMessage");
+    expect(source.split("await containerRestartMessage(response)").length - 1).toBe(2);
   });
 
   it("keeps the MCP edge proxy forwarding to the mapped port", () => {

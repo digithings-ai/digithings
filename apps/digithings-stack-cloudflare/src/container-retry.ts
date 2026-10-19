@@ -34,6 +34,7 @@
 import {
   CONTAINER_EVSCITED_CODE,
   CONTAINER_FAILED_CODE,
+  containerRestartMessage,
   isContainerEvictedError,
   isContainerFailedError,
 } from "./container-errors";
@@ -75,15 +76,24 @@ async function readErrorCode(response: Response): Promise<string | null> {
  *
  * A `container_booting` 503 is NOT one of them: that container is starting,
  * and the client's own `Retry-After` budget is the right answer for it.
+ *
+ * A 500 that carries the container's own restart signal counts too, because
+ * @cloudflare/containers answers a container that died mid-request with a
+ * 500 instead of throwing (see containerRestartMessage). The container
+ * wrapper normally converts that 500 into `container_failed` first, so this
+ * is the fallback for any path that does not go through the wrapper.
  */
 export async function isContainerRecycledResponse(
   response: Response,
 ): Promise<boolean> {
-  if (response.status !== 410 && response.status !== 503) {
-    return false;
+  if (response.status === 410 || response.status === 503) {
+    const code = await readErrorCode(response);
+    return code === CONTAINER_EVSCITED_CODE || code === CONTAINER_FAILED_CODE;
   }
-  const code = await readErrorCode(response);
-  return code === CONTAINER_EVSCITED_CODE || code === CONTAINER_FAILED_CODE;
+  if (response.status === 500) {
+    return (await containerRestartMessage(response)) !== null;
+  }
+  return false;
 }
 
 export interface ContainerRetryOptions {
@@ -107,10 +117,14 @@ export interface ContainerRetryOptions {
  *     untouched, after exactly ONE attempt (a served request is never
  *     re-served);
  *   - a thrown error that is not a recycle signal is re-thrown immediately —
- *     an application error inside the container must not be retried;
- *   - a recycled failure (thrown, 410 `container_evicted`, or 503
- *     `container_failed`) is retried ONCE; if that attempt fails too, the
- *     failure surfaces exactly as it would have without this helper.
+ *     an application error inside the container must not be retried, and it
+ *     must not be masked by the answer of an earlier attempt either: if the
+ *     retry reached a live container and failed for an unrelated reason, the
+ *     client is told "the container is gone" while the real error is dropped;
+ *   - a recycled failure (thrown, 410 `container_evicted`, 503
+ *     `container_failed`, or a 500 carrying the container's restart signal)
+ *     is retried ONCE; if that attempt fails too, the failure surfaces
+ *     exactly as it would have without this helper.
  *
  * One honest caveat: a non-idempotent request whose answer was lost to the
  * recycle can be executed twice. The alternative — surfacing the failure —
@@ -124,24 +138,16 @@ export async function fetchWithContainerRetry(
 ): Promise<Response> {
   const retries = Math.max(0, options.retries ?? 1);
   let attemptIndex = 0;
-  let lastResponse: Response | undefined;
   for (;;) {
     try {
       const response = await attempt();
       if (attemptIndex < retries && (await isContainerRecycledResponse(response))) {
-        // Remember the machine-readable answer: if the retry dies hard, the
-        // client is better served by "the container was recycled" than by a
-        // raw exception.
-        lastResponse = response;
         attemptIndex += 1;
         continue;
       }
       return response;
     } catch (error) {
       if (attemptIndex >= retries || !isContainerRecycledError(error)) {
-        if (lastResponse) {
-          return lastResponse;
-        }
         throw error;
       }
       attemptIndex += 1;

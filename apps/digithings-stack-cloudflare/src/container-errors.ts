@@ -94,17 +94,36 @@ export const CONTAINER_FAILED_CODE = "container_failed";
 
 /**
  * Substrings (lowercased) identifying a container that was recycled or failed
- * while the request was in flight. Sourced from the production rows of the
- * 2026-10-19 episode (DIG-4477): the rollout exit (143), the "not running"
- * refusal and the missing instance.
+ * while the request was in flight.
  *
- * Deliberately NOT matched: "Maximum number of running container instances
- * exceeded" — a capacity refusal (owned by DIG-4422), where an immediate
- * retry cannot conjure a slot. And not a port timeout: that is a cold boot.
+ * Anchored on the PRODUCER's own vocabulary — @cloudflare/containers 0.3.7
+ * (`dist/lib/container.js`) classifies a container that died under a request
+ * with exactly these strings:
+ *   - RUNTIME_SIGNALLED_ERROR  "runtime signalled the container to exit:"
+ *     (the runtime stopped the container: a new version rollout) — this is the
+ *     shape the digithings-stack Worker logged on 2026-10-19.
+ *   - UNEXPECTED_EXIT_ERROR    "container exited with unexpected exit code:"
+ *     (the container crashed).
+ *   - NO_CONTAINER_INSTANCE_ERROR
+ *     "there is no container instance that can be provided to this durable
+ *     object" (the Durable Object aborted itself because the platform could
+ *     not give it an instance).
+ *
+ * Deliberately NOT matched, and why:
+ *   - "The container is not running, consider calling start()" — this Worker
+ *     documents that message as the COLD-BOOT kill: the idle alarm fires
+ *     mid-boot and SIGTERMs the container before its port opens, and every
+ *     caller is meant to get 503 `container_booting` (see index.ts, #5762).
+ *     Retrying it would retry a cold boot, which the digichat BFF's extended
+ *     cold-boot budget already covers.
+ *   - "the container is not listening" (NOT_LISTENING_ERROR) — the container
+ *     is still starting.
+ *   - "Maximum number of running container instances exceeded" — a capacity
+ *     refusal (owned by DIG-4422); an immediate retry cannot conjure a slot.
  */
 const FAILED_PATTERNS = [
   "signalled the container to exit",
-  "container is not running",
+  "container exited with unexpected exit code",
   "no container instance",
 ] as const;
 
@@ -141,4 +160,46 @@ export function containerFailedResponse(
       headers: { "Retry-After": String(CONTAINER_RETRY_AFTER_SECONDS) },
     },
   );
+}
+
+/**
+ * The message of a response that says "the container died under this
+ * request", or null when it says nothing of the sort.
+ *
+ * @cloudflare/containers 0.3.7 catches the error ITSELF in `containerFetch`
+ * and answers with a 500 instead of throwing — its own comment on the branch
+ * is "This error means that the container might've just restarted". Two
+ * shapes, both status 500:
+ *   - "Container suddenly disconnected, try again" — the network to the
+ *     container was lost.
+ *   - "Error proxying request to container: <message>" — the inner message is
+ *     the container's own error (the runtime signalled the exit, the
+ *     container crashed, ...). It only counts when it is one of the
+ *     failed-container shapes above.
+ *
+ * The body is read from a CLONE, so the caller keeps a readable response.
+ */
+export async function containerRestartMessage(
+  response: Response,
+): Promise<string | null> {
+  if (response.status !== 500) {
+    return null;
+  }
+  let text: string;
+  try {
+    text = await response.clone().text();
+  } catch {
+    return null;
+  }
+  const lowered = text.toLowerCase();
+  if (lowered.includes("container suddenly disconnected")) {
+    return text.trim();
+  }
+  const marker = "error proxying request to container:";
+  const at = lowered.indexOf(marker);
+  if (at === -1) {
+    return null;
+  }
+  const inner = text.slice(at + marker.length);
+  return isContainerFailedError(inner) ? inner.trim() : null;
 }

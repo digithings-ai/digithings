@@ -40,6 +40,7 @@ import {
   CONTAINER_RETRY_AFTER_SECONDS,
   containerEvictedResponse,
   containerFailedResponse,
+  containerRestartMessage,
   isContainerEvictedError,
   isContainerFailedError,
 } from "./container-errors";
@@ -236,8 +237,9 @@ export class DigiStackContainer extends Container {
     // An eviction can also land between start and fetch: map the confirmed
     // signals (evicted -> 410, failed -> retryable 503) and rethrow
     // everything else so the existing failure behavior is unchanged.
+    let response: Response;
     try {
-      return await this.containerFetch(request, targetPort);
+      response = await this.containerFetch(request, targetPort);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (isContainerEvictedError(message)) {
@@ -248,6 +250,17 @@ export class DigiStackContainer extends Container {
       }
       throw err;
     }
+    // @cloudflare/containers catches a container that died mid-request ITSELF
+    // and answers with a 500 instead of throwing (its own comment on that
+    // branch: "This error means that the container might've just restarted"),
+    // so the recycle has to be recognised on the RESPONSE. Convert it into
+    // the machine-readable failed-container code so the Worker retries it
+    // once (see ./container-retry.ts) instead of surfacing a bare 500.
+    const restart = await containerRestartMessage(response);
+    if (restart !== null) {
+      return containerFailedResponse("stack", restart);
+    }
+    return response;
   }
 }
 
@@ -327,8 +340,9 @@ export class DigiQuantMcpContainer extends Container {
     } finally {
       this.keepAwakeForRequest = false;
     }
+    let response: Response;
     try {
-      return await this.containerFetch(request, DIGIQUANT_MCP_PORT);
+      response = await this.containerFetch(request, DIGIQUANT_MCP_PORT);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (isContainerEvictedError(message)) {
@@ -339,6 +353,13 @@ export class DigiQuantMcpContainer extends Container {
       }
       throw err;
     }
+    // A container that died mid-request answers with a 500, not a throw —
+    // see the DigiStackContainer note and ./container-errors.ts.
+    const restart = await containerRestartMessage(response);
+    if (restart !== null) {
+      return containerFailedResponse("mcp", restart);
+    }
+    return response;
   }
 }
 
