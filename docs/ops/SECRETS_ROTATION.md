@@ -106,7 +106,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 ### 2. `DIGIKEY_BFF_TOKEN`
 
 **Blast radius** — digichat BFF→digikey session exchange; chat auth. A one-sided rotation breaks chat (R6). The token is a static bearer compared with `secrets.compare_digest` (`digikey/src/digikey/server.py:233-240`).
-**Copies** — digichat Worker (`apps/digichat-cloudflare/wrangler.toml:54`, forwarded `src/index.ts:51`); stack Worker (`apps/digithings-stack-cloudflare/wrangler.toml:136`, forwarded `src/index.ts:66`); digikey process (`digikey/src/digikey/settings.py:20`); `docker-compose.yml:560`; `infra/digichat-release/.env.profile-a.example:44`.
+**Copies** — digichat Worker (`apps/digichat-cloudflare/wrangler.toml:54`, forwarded `src/index.ts:51`); stack Worker (`apps/digithings-stack-cloudflare/wrangler.toml:136`, forwarded `src/index.ts:66`); digikey process (`digikey/src/digikey/settings.py:20`); `docker-compose.yml:560`; `infra/digichat-release/.env.profile-a.example:44`. Two local copies are easy to leave behind and are part of this set: `~/Code/digithings/.env` and the Keychain item **`digithings-local/DIGIKEY_BFF_TOKEN`**.
 **Pre-flight** — both Workers must be deployable in the same window; the values **must agree**.
 **Steps**
 1. Generate the new value once.
@@ -117,6 +117,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://key.digithings.ai/v1/oauth/token -H "Authorization: Bearer $NEW" -H 'Content-Type: application/json' -d '{"grant_type":"bff_session","tenant_slug":"digithings","subject":"bff-rotation-probe"}'` → `200`; with the previous value → `401`.
 **Rollback** — re-put the previous value on both Workers and bump both ids again.
 **Gotchas** — no dual-accept window (`server.py:233` accepts exactly one value), so move both surfaces within seconds. Rotating this is also the only way to block outstanding BFF JWTs (`digikey/ARCHITECTURE.md:354`).
+**Drift check (added 2026-10-19 after an outage).** Equality is *never* verified against live state (see the Alias-equality note at the end of this file), so a stale copy sits unnoticed until a container recycles and adopts the current secret. Measured case: `DIGIKEY_BFF_TOKEN` was rotated on the stack side only; every OCC chat then answered `502 upstream_auth` — `digikey bff_session exchange failed` — because the still-warm stack container was serving its pre-rotation boot env and the digichat copy had never been updated. It surfaced hours later, on an unrelated deploy, not on the rotation itself. To find drift cheaply, run the §Verify probe with each stored copy in turn: the live value returns `200`, a stale one `401`.
 
 ### 3. Cloudflare token family — `CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN`
 
