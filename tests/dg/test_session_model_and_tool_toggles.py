@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from digigraph import model_config
+import pytest
 from digigraph.tool_policy import expand_disabled_tool_tokens
+
+from digigraph import model_config
 
 
 def test_house_model_only_binds_allowlisted(monkeypatch) -> None:
@@ -20,6 +22,20 @@ def test_house_model_only_binds_allowlisted(monkeypatch) -> None:
         try:
             assert model_config.get_house_model_override() is None
             assert model_config.get_model_for_mode() == "house/default"
+        finally:
+            model_config.pop_house_model(tok)
+
+
+def test_house_model_refused_in_free_mode_when_paid(monkeypatch) -> None:
+    monkeypatch.setenv("DIGI_SESSION_MODEL_ALLOWLIST", "a/paid")
+    with (
+        patch.object(model_config, "_get_llm_mode", return_value="free"),
+        patch.object(model_config, "is_free_tier_model", return_value=False),
+    ):
+        tok = model_config.push_house_model("a/paid")
+        try:
+            with pytest.raises(ValueError, match="llm_mode=free"):
+                model_config.get_model_for_mode()
         finally:
             model_config.pop_house_model(tok)
 

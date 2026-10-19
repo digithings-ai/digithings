@@ -846,7 +846,8 @@ def get_model_for_mode() -> str:
     """
     override = _house_model_override.get()
     if override and not get_byok_override():
-        return override
+        # The session pick obeys the same free-mode refusal as the operator default.
+        return _refuse_paid_in_free_mode(override, _get_llm_mode())
     return _apply_byok_model_override(operator_default_model())
 
 
