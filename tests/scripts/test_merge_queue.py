@@ -512,8 +512,8 @@ def test_a_matching_gate_announces_nothing(gh_stub: Any) -> None:
     assert done.returncode == EXIT_OK
     assert "misconfigured" not in done.stderr
     assert done.stderr.strip() == "", done.stderr
-    # These PRs block on review (no non-author approval), not on the gate — so the
-    # silence is not just "everything was blocked anyway". The check gate passed:
+    # These PRs block on review EVIDENCE (the coverage gate), not on the check gate —
+    # so the silence is not just "everything was blocked anyway". The check passed:
     # with the wrong list every one of them would say `required check 'test'`.
     assert "required check" not in done.stdout
 
@@ -559,7 +559,7 @@ def test_the_author_approving_their_own_pr_does_not_count() -> None:
     pr = _pr(1, reviews=[{"author": {"login": "chrizefan"}, "state": "APPROVED"}])
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
     assert not verdict.eligible
-    assert any("no approving review from a non-author" in r for r in verdict.reasons)
+    assert any("review coverage" in r for r in verdict.reasons), verdict.reasons
 
 
 def test_an_approving_review_from_someone_else_is_enough() -> None:
@@ -580,7 +580,36 @@ def test_a_bots_approval_is_not_a_review() -> None:
     pr = _pr(1, reviews=[{"author": {"login": "coderabbitai[bot]"}, "state": "APPROVED"}])
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
     assert not verdict.eligible
-    assert any("no approving review from a non-author" in r for r in verdict.reasons)
+    assert any("review coverage" in r for r in verdict.reasons), verdict.reasons
+
+
+def test_review_evidence_alone_is_enough_at_the_production_setting() -> None:
+    """The configuration production actually runs: `attest_role` is None and no seat
+    can approve its own PR, so review EVIDENCE alone must make a PR eligible.
+
+    Every other `attest_role=None` case in this file asserts a REFUSAL, so before this
+    test the queue's happy path was only exercised with an approval or an attestation —
+    neither of which production can supply. Without this, the queue could be re-broken
+    (stalled as it was from 2026-10-17) with the suite still green.
+    """
+    pr = _pr(
+        1,
+        comments=[
+            {
+                "id": "IC_kwDOreview_1",
+                "author": {"login": "chrizefan"},
+                "authorAssociation": "MEMBER",
+                "createdAt": "2026-10-19T00:00:00Z",
+                "body": (
+                    "<!-- in-session-review -->\n\n"
+                    "## Verdict: approve-with-nits\n\n0 blockers, 2 majors filed.\n"
+                ),
+            }
+        ],
+    )
+    pr["labels"] = ["reviewed:agent"]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
+    assert verdict.eligible, verdict.reasons
 
 
 def test_a_commit_status_cannot_stand_in_for_the_build() -> None:
@@ -611,19 +640,29 @@ def test_outstanding_change_requests_block() -> None:
     assert "review has outstanding change requests" in verdict.reasons
 
 
-def test_the_merging_role_cannot_attest_its_own_review() -> None:
-    """Self-attestation is refused.
+def test_attestation_no_longer_gates_the_review() -> None:
+    """`--attest-review` is inert: review EVIDENCE is the gate (2026-10-18, Chris).
 
-    Every agent in this org pushes under one GitHub login, so GitHub cannot tell
-    the author of a PR from the role merging it. The role is the only granularity
-    available, which is why an attestation naming the merging role is rejected
-    outright rather than trusted.
+    The approval-or-attestation demand is retired, so the role a run attests (or that it
+    attests nothing at all) cannot change the verdict. The old rule refused the merging
+    role's own attestation because every agent here pushes under one GitHub login - which
+    is also why the demand was unreachable in the first place: GitHub refuses
+    `gh pr review --approve` on a seat-authored PR, so a PR with no review evidence was
+    blocked no matter what it waited for.
+
+    `_pr(1)` carries no review evidence, so every arm is refused by the COVERAGE gate,
+    and the refusal must not mention attestation or roles.
     """
-    verdict = mq.evaluate(
-        _pr(1), mq.load_policy(), acting_role="cto", base="develop", attest_role="cto"
-    )
-    assert not verdict.eligible
-    assert any("also the merging role" in reason for reason in verdict.reasons)
+    for role in (None, "qa", "cto"):
+        verdict = mq.evaluate(
+            _pr(1), mq.load_policy(), acting_role="cto", base="develop", attest_role=role
+        )
+        assert not verdict.eligible, role
+        assert any("review coverage" in reason for reason in verdict.reasons), (role, verdict.reasons)
+        assert not any("merging role" in reason or "attest" in reason for reason in verdict.reasons), (
+            role,
+            verdict.reasons,
+        )
 
 
 def test_attestation_alone_no_longer_suffices() -> None:
@@ -633,7 +672,7 @@ def test_attestation_alone_no_longer_suffices() -> None:
     comments, and the promotion gate refused both. An attestation asserts a
     review happened; with no artifact the promotion gate cannot see it, so the
     queue cannot accept it either. The attestation mechanism itself is
-    unchanged — it still satisfies `_gate_review` — but it does not satisfy
+    not changed by the 2026-10-18 retirement — but it does not satisfy
     review coverage.
     """
     verdict = mq.evaluate(
