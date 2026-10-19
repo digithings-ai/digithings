@@ -141,3 +141,7 @@ class LicenseRow(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: Owner note, never in the JWT.
     label: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    #: Terms version the licence was minted against (DIG-4290). NULL = minted
+    #: before a versioned Terms document existed — the honest record, not a
+    #: backfilled guess. Present as a JWT claim only when supplied at mint.
+    terms_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
