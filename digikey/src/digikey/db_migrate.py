@@ -15,6 +15,10 @@ This module upgrades ``digikey_jti_issued`` in place, preserving every row:
   the old table is never silently wiped.
 - Other dialects (Postgres) get additive ``ALTER TABLE`` statements.
 
+It also adds the nullable ``digikey_licenses.terms_version`` column (DIG-4290)
+when a table predates it. That column has no server default, so it is a plain
+``ADD COLUMN`` on both dialects — no rebuild, no data movement.
+
 Both paths are idempotent and safe to run on every startup.
 """
 
@@ -25,7 +29,7 @@ import logging
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
-from digikey.db_schema import JtiIssuedRow
+from digikey.db_schema import JtiIssuedRow, LicenseRow
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +109,46 @@ def upgrade_jti_issued_table(engine: Engine) -> bool:
         raise SchemaUpgradeError(
             "failed to upgrade digikey_jti_issued; back up the database and re-run "
             "the upgrade before starting digikey"
+        ) from e
+    return True
+
+
+_LICENSES_TABLE = LicenseRow.__tablename__
+#: Added by DIG-4290. Nullable with no server default, so both SQLite and
+#: Postgres take it as a plain ``ADD COLUMN`` — no table rebuild, no data move.
+_TERMS_VERSION_COLUMN = "terms_version"
+
+
+def upgrade_licenses_table(engine: Engine) -> bool:
+    """Add ``terms_version`` to ``digikey_licenses`` in place. Returns True when it changed.
+
+    ``create_all`` never alters an existing table, so a persistent ``digikey.db``
+    whose ``digikey_licenses`` predates DIG-4290 has no ``terms_version`` column,
+    and the first ``license-mint`` after the deploy would fail with
+    ``table digikey_licenses has no column named terms_version``. Inspect first:
+    a blind re-run on the next restart raises ``duplicate column name``.
+    """
+    inspector = inspect(engine)
+    columns = _columns(inspector, _LICENSES_TABLE)
+    if columns is None or _TERMS_VERSION_COLUMN in columns:
+        return False
+
+    logger.warning(
+        "digikey_licenses is missing %s; upgrading in place (%s)",
+        _TERMS_VERSION_COLUMN,
+        engine.dialect.name,
+    )
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    f"ALTER TABLE {_LICENSES_TABLE} ADD COLUMN {_TERMS_VERSION_COLUMN} VARCHAR(64)"
+                )
+            )
+    except Exception as e:  # pragma: no cover - defensive
+        raise SchemaUpgradeError(
+            "failed to add digikey_licenses.terms_version; back up the database and "
+            "re-run the upgrade before starting digikey"
         ) from e
     return True
 
