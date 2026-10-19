@@ -251,6 +251,31 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     m2_path = _first_existing(base, ("M2SL.csv", "M2.csv", "M2SL.parquet"))
     eth_path = _first_existing(base, ("ETH-USD.csv", "ETH-USD.parquet"))
     dxy_path = _first_existing(base, ("DTWEXBGS.csv", "DXY.csv", "DTWEXBGS.parquet"))
+    # On-chain (Bitview/BRK) and its CoinMetrics / alternative.me companions
+    # cache under data/onchain/<source>/ -- a SIBLING of data/price-history/,
+    # not inside it -- so a fresh ``digiquant onchain fetch-*`` run is picked
+    # up with no manual export step. An explicit sibling CSV in ``base`` wins.
+    def _onchain_path(source: str, csv_names: tuple[str, ...], cache_stem: str) -> Path | None:
+        path = _first_existing(base, csv_names)
+        if path is not None:
+            return path
+        cache = base.parent / "onchain" / source / f"{cache_stem}.parquet"
+        return cache if cache.exists() else None
+
+    onchain_mvrv_path = _onchain_path("bitview", ("ONCHAIN_MVRV.csv", "BITVIEW_MVRV.csv"), "mvrv")
+    onchain_asopr_path = _onchain_path(
+        "bitview", ("ONCHAIN_ASOPR.csv", "BITVIEW_ASOPR.csv"), "asopr_24h"
+    )
+    onchain_puell_path = _onchain_path(
+        "bitview", ("ONCHAIN_PUELL.csv", "BITVIEW_PUELL.csv"), "puell_multiple"
+    )
+    onchain_rhodl_path = _onchain_path(
+        "bitview", ("ONCHAIN_RHODL.csv", "BITVIEW_RHODL.csv"), "rhodl_ratio"
+    )
+    onchain_addr_ratio_path = _onchain_path(
+        "coinmetrics", ("ONCHAIN_ADDR_RATIO.csv", "COINMETRICS_ADRACTCNT.csv"), "btc_AdrActCnt"
+    )
+    fear_greed_path = _onchain_path("fear_greed", ("FEAR_GREED.csv", "FNG.csv"), "fear_greed")
     uup_path = _first_existing(base, ("UUP.csv", "UUP.parquet"))
     gvz_path = _first_existing(base, ("GVZCLS.csv", "GVZCLS.parquet"))
     walcl_path = _first_existing(base, ("WALCL.csv", "WALCL.parquet"))
@@ -265,6 +290,24 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
     eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
     dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
+    onchain_mvrv_dates, onchain_mvrv_values = (
+        load_date_value_frame(onchain_mvrv_path) if onchain_mvrv_path else (None, None)
+    )
+    onchain_asopr_dates, onchain_asopr_values = (
+        load_date_value_frame(onchain_asopr_path) if onchain_asopr_path else (None, None)
+    )
+    onchain_puell_dates, onchain_puell_values = (
+        load_date_value_frame(onchain_puell_path) if onchain_puell_path else (None, None)
+    )
+    onchain_rhodl_dates, onchain_rhodl_values = (
+        load_date_value_frame(onchain_rhodl_path) if onchain_rhodl_path else (None, None)
+    )
+    onchain_addr_ratio_dates, onchain_addr_ratio_values = (
+        load_date_value_frame(onchain_addr_ratio_path) if onchain_addr_ratio_path else (None, None)
+    )
+    fear_greed_dates, fear_greed_values = (
+        load_date_value_frame(fear_greed_path) if fear_greed_path else (None, None)
+    )
     uup_dates, uup_close = load_date_value_frame(uup_path) if uup_path else (None, None)
     gvz_dates, gvz_values = load_date_value_frame(gvz_path) if gvz_path else (None, None)
     walcl_dates, walcl_values = load_date_value_frame(walcl_path) if walcl_path else (None, None)
@@ -285,6 +328,18 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
         eth_close=eth_close,
         dxy_dates=dxy_dates,
         dxy_values=dxy_values,
+        onchain_mvrv_dates=onchain_mvrv_dates,
+        onchain_mvrv_values=onchain_mvrv_values,
+        onchain_asopr_dates=onchain_asopr_dates,
+        onchain_asopr_values=onchain_asopr_values,
+        onchain_puell_dates=onchain_puell_dates,
+        onchain_puell_values=onchain_puell_values,
+        onchain_rhodl_dates=onchain_rhodl_dates,
+        onchain_rhodl_values=onchain_rhodl_values,
+        onchain_addr_ratio_dates=onchain_addr_ratio_dates,
+        onchain_addr_ratio_values=onchain_addr_ratio_values,
+        fear_greed_dates=fear_greed_dates,
+        fear_greed_values=fear_greed_values,
         uup_dates=uup_dates,
         uup_close=uup_close,
         gvz_dates=gvz_dates,
@@ -322,6 +377,18 @@ def drop_extras_missing_sources(
         payload["rs_eth"] = 0.0
     if payload["dxy"] > 0.0 and sources.dxy_dates is None:
         payload["dxy"] = 0.0
+    if payload["onchain_mvrv"] > 0.0 and sources.onchain_mvrv_dates is None:
+        payload["onchain_mvrv"] = 0.0
+    if payload["onchain_asopr"] > 0.0 and sources.onchain_asopr_dates is None:
+        payload["onchain_asopr"] = 0.0
+    if payload["onchain_puell"] > 0.0 and sources.onchain_puell_dates is None:
+        payload["onchain_puell"] = 0.0
+    if payload["onchain_rhodl"] > 0.0 and sources.onchain_rhodl_dates is None:
+        payload["onchain_rhodl"] = 0.0
+    if payload["onchain_addr_ratio"] > 0.0 and sources.onchain_addr_ratio_dates is None:
+        payload["onchain_addr_ratio"] = 0.0
+    if payload["fear_greed"] > 0.0 and sources.fear_greed_dates is None:
+        payload["fear_greed"] = 0.0
     if payload["uup"] > 0.0 and sources.uup_dates is None:
         payload["uup"] = 0.0
     if payload["gvz"] > 0.0 and sources.gvz_dates is None:

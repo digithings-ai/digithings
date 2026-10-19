@@ -244,6 +244,13 @@ class TestBuildExtraIndicators:
             )
 
     def test_onchain_addr_ratio_wires_into_build_extra_indicators(self) -> None:
+        """The on-chain series defaults to an *expanding* z; an explicit
+        ``extra_windows`` entry still pins the older rolling form.
+
+        The shared ``window`` kwarg deliberately does NOT reach the on-chain
+        names any more -- that is the whole point of ``ONCHAIN_EXPANDING_NAMES``
+        -- so the pin is the two arms together, not one window.
+        """
         dates = _dates(30)
         price = pl.Series([100.0] * 30)
         addr = pl.Series([1000.0 + i for i in range(30)])
@@ -259,8 +266,22 @@ class TestBuildExtraIndicators:
         by_name = {e.name: e for e in extras}
         assert "onchain_addr_ratio" in by_name
         assert by_name["onchain_addr_ratio"].enabled
-        expected = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=5)
-        assert by_name["onchain_addr_ratio"].z.to_list() == expected.to_list()
+        expanding = onchain_addr_ratio_z(dates, price, dates, addr, min_samples=5)
+        assert by_name["onchain_addr_ratio"].z.to_list() == expanding.to_list()
+
+        pinned = build_extra_indicators(
+            dates,
+            price,
+            SdcaCompositeWeights(valuation=1.0, onchain_addr_ratio=1.0),
+            sources,
+            window=10,
+            min_samples=5,
+            extra_windows={"onchain_addr_ratio": 10},
+        )
+        rolling = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=5)
+        assert {e.name: e for e in pinned}["onchain_addr_ratio"].z.to_list() == rolling.to_list()
+        # The two arms must actually differ, or neither arm is evidence.
+        assert rolling.to_list() != expanding.to_list()
 
     def test_extra_windows_overrides_per_indicator_window(self) -> None:
         """extra_windows lets dxy use its own period while m2 (absent from the

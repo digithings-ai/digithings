@@ -118,6 +118,20 @@ EXTRA_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES + PRICE_OSCILLATO
 DEFAULT_ROLLING_WINDOW = 90
 _MIN_SAMPLES = 20
 _SIGMA_FLOOR = 1e-12
+
+# On-chain extras whose z-score is EXPANDING by default (window=None) rather
+# than the shared rolling window. Measured 2026-10-19: expanding beat every
+# rolling window for all four Bitview series, and a 90-day window inverts under
+# cycle-pin jitter. An explicit ``extra_windows`` entry still pins a window.
+ONCHAIN_EXPANDING_NAMES: frozenset[str] = frozenset(
+    {
+        "onchain_mvrv",
+        "onchain_asopr",
+        "onchain_puell",
+        "onchain_rhodl",
+        "onchain_addr_ratio",
+    }
+)
 # fast_crash_vol's raw realized-vol lookback -- short on purpose, see the module
 # docstring. The z-score window stays DEFAULT_ROLLING_WINDOW.
 _FAST_CRASH_VOL_WINDOW = 14
@@ -418,6 +432,22 @@ def causal_rolling_z(
     return ((values - mu) / sigma.clip(lower_bound=_SIGMA_FLOOR)).clip(-3.0, 3.0)
 
 
+def _expanding_z(values: pl.Series, *, min_samples: int) -> pl.Series:
+    """Causal expanding z clipped to ``[-3, 3]``; null until ``min_samples``.
+
+    A deliberate local mirror of ``onchain_valuation.causal_expanding_z``:
+    that module imports ``align_to_dates`` from *here*, so importing it back
+    would be a cycle. On a 4,107-row frame the two are identical -- their
+    expanding window is capped at 100_000, i.e. never capped in practice.
+    """
+    n = values.len()
+    if n < max(min_samples, 2):
+        return pl.Series([None] * n, dtype=pl.Float64)
+    mu = values.rolling_mean(window_size=n, min_samples=min_samples)
+    sigma = values.rolling_std(window_size=n, min_samples=min_samples)
+    return ((values - mu) / sigma.clip(lower_bound=_SIGMA_FLOOR)).clip(-3.0, 3.0)
+
+
 def align_to_dates(
     dates: pl.Series,
     src_dates: pl.Series,
@@ -547,7 +577,7 @@ def _log_ratio_sign_flipped_z(
     src_dates: pl.Series,
     src_values: pl.Series,
     *,
-    window: int,
+    window: int | None,
     min_samples: int,
     name: str,
 ) -> pl.Series:
@@ -571,7 +601,13 @@ def _log_ratio_sign_flipped_z(
     )["value"]
     aligned = align_to_dates(dates, src_dates, positive_values, forward_fill=True)
     log_values = aligned.log()
-    return (-causal_rolling_z(log_values, window=window, min_samples=min_samples)).alias(name)
+    if window is None:
+        # Expanding: the measured best family for these series, and it has no
+        # window to tune. See RESEARCH_STATE.md, "on-chain normalisation".
+        z = _expanding_z(log_values, min_samples=min_samples)
+    else:
+        z = causal_rolling_z(log_values, window=window, min_samples=min_samples)
+    return (-z).alias(name)
 
 
 def onchain_mvrv_z(
@@ -579,10 +615,14 @@ def onchain_mvrv_z(
     mvrv_dates: pl.Series,
     mvrv_values: pl.Series,
     *,
-    window: int = DEFAULT_ROLLING_WINDOW,
+    window: int | None = None,
     min_samples: int = _MIN_SAMPLES,
 ) -> pl.Series:
-    """Bitview/BRK MVRV — see ``_log_ratio_sign_flipped_z``."""
+    """Bitview/BRK MVRV — see ``_log_ratio_sign_flipped_z``.
+
+    Defaults to an *expanding* z (``window=None``); pass an explicit
+    ``window`` to get the older rolling form.
+    """
     return _log_ratio_sign_flipped_z(
         dates,
         mvrv_dates,
@@ -598,10 +638,14 @@ def onchain_asopr_z(
     asopr_dates: pl.Series,
     asopr_values: pl.Series,
     *,
-    window: int = DEFAULT_ROLLING_WINDOW,
+    window: int | None = None,
     min_samples: int = _MIN_SAMPLES,
 ) -> pl.Series:
-    """Bitview/BRK adjusted SOPR (24h) — see ``_log_ratio_sign_flipped_z``."""
+    """Bitview/BRK adjusted SOPR (24h) — see ``_log_ratio_sign_flipped_z``.
+
+    Defaults to an *expanding* z (``window=None``); pass an explicit
+    ``window`` to get the older rolling form.
+    """
     return _log_ratio_sign_flipped_z(
         dates,
         asopr_dates,
@@ -617,10 +661,14 @@ def onchain_puell_z(
     puell_dates: pl.Series,
     puell_values: pl.Series,
     *,
-    window: int = DEFAULT_ROLLING_WINDOW,
+    window: int | None = None,
     min_samples: int = _MIN_SAMPLES,
 ) -> pl.Series:
-    """Bitview/BRK Puell Multiple — see ``_log_ratio_sign_flipped_z``."""
+    """Bitview/BRK Puell Multiple — see ``_log_ratio_sign_flipped_z``.
+
+    Defaults to an *expanding* z (``window=None``); pass an explicit
+    ``window`` to get the older rolling form.
+    """
     return _log_ratio_sign_flipped_z(
         dates,
         puell_dates,
@@ -636,10 +684,14 @@ def onchain_rhodl_z(
     rhodl_dates: pl.Series,
     rhodl_values: pl.Series,
     *,
-    window: int = DEFAULT_ROLLING_WINDOW,
+    window: int | None = None,
     min_samples: int = _MIN_SAMPLES,
 ) -> pl.Series:
-    """Bitview/BRK RHODL Ratio — see ``_log_ratio_sign_flipped_z``."""
+    """Bitview/BRK RHODL Ratio — see ``_log_ratio_sign_flipped_z``.
+
+    Defaults to an *expanding* z (``window=None``); pass an explicit
+    ``window`` to get the older rolling form.
+    """
     return _log_ratio_sign_flipped_z(
         dates,
         rhodl_dates,
@@ -656,7 +708,7 @@ def onchain_addr_ratio_z(
     addr_dates: pl.Series,
     addr_values: pl.Series,
     *,
-    window: int = DEFAULT_ROLLING_WINDOW,
+    window: int | None = None,
     min_samples: int = _MIN_SAMPLES,
 ) -> pl.Series:
     """Price-per-active-address ratio (NVT/Metcalfe-style) — see ``_log_ratio_sign_flipped_z``.
@@ -1038,7 +1090,9 @@ def build_extra_indicators(
     onchain_addr_ratio, fear_greed) -- e.g. ``{"dxy": 60}`` computes dxy_z at
     window=60 while every other extra not present in the dict keeps using
     the shared ``window`` exactly as before. Absent or ``None``, every extra
-    uses the shared ``window`` (unchanged behavior).
+    uses the shared ``window`` -- except the on-chain series in
+    ``ONCHAIN_EXPANDING_NAMES``, which default to an *expanding* z
+    (``window=None``) unless the dict pins one for them.
 
     ``include_display_only=True`` additionally materializes *staged but
     unweighted* extras -- published names whose weight is 0.0 but whose source
@@ -1051,9 +1105,11 @@ def build_extra_indicators(
     """
     spec = oscillators or SdcaOscillatorSpec()
 
-    def _window_for(name: str) -> int:
+    def _window_for(name: str) -> int | None:
         if extra_windows is not None and name in extra_windows:
             return extra_windows[name]
+        if name in ONCHAIN_EXPANDING_NAMES:
+            return None  # expanding -- see ONCHAIN_EXPANDING_NAMES
         return window
 
     if allowlist is not None:
@@ -1614,6 +1670,7 @@ def _require_pair(dates: pl.Series | None, values: pl.Series | None, name: str) 
 __all__ = [
     "BTC_PLUGIN_INDICATOR_NAMES",
     "DEFAULT_ROLLING_WINDOW",
+    "ONCHAIN_EXPANDING_NAMES",
     "EXTRA_INDICATOR_NAMES",
     "GENERIC_TECHNICAL_NAMES",
     "GOLD_MACRO_NAMES",

@@ -1541,3 +1541,113 @@ that test pass.
    defer. No on-chain data exists on this host, and the SDCA entrypoints never pass
    `onchain_*_path` at all (a wiring gap; `onchain_addr_ratio` has no path mechanism). The ingest
    writers for all four providers already ship.
+
+## On-chain: the loader wiring restored, and what normalisation actually fits the cycle (2026-10-19)
+
+This answers open decision 2 from the section above, and supersedes its line *"No on-chain data
+exists on this host, and the SDCA entrypoints never pass `onchain_*_path` at all"*. The data does
+exist; the loader never saw it.
+
+### The data exists, and the loader never saw it
+
+Bitview/BRK daily history for all four series lives on this host (fetched 2026-10-11), staged
+read-only under `digiquant/data/onchain/` — the directory the loader looks in, a sibling of
+`data/price-history/`, not inside it. `bitview/{mvrv,asopr_24h,puell_multiple,rhodl_ratio}.parquet`
+(6,493 rows each, 2009-01-03..2026-10-13), plus `coinmetrics/{btc_CapMVRVCur,btc_PriceUSD}.parquet`
+and `bgeometrics/mvrv.parquet` for the cross-checks. All gitignored.
+
+`load_sdca_extra_sources` probed only flat files directly in `root` and set **no** `onchain_*` field,
+on any ref of develop or main — so `run_onchain_solo_search.py` printed `SKIPPED (no source found)`
+four times and every one of the 17 on-chain research scripts was dead here. The wiring existed on
+`claude/sdca-full-recalibration` (`d9c776029f`, 31 ahead / 1503 behind develop, never merged); it is
+now ported as one generalised helper `_onchain_path(source, csv_names, cache_stem)` plus six paths,
+six `load_date_value_frame` pairs, twelve `ExtraIndicatorSources` kwargs and six
+`drop_extras_missing_sources` clauses. `fear_greed` and `onchain_addr_ratio` stay `None` until their
+parquet is fetched; the drop-clauses make that fail-soft by construction.
+
+### The 17 research scripts are stale for a SECOND, independent reason
+
+They are written against pre-rename names: `base_power_law_z` still appears in 10 script files and
+**0** files under `src/` (the current `lab/weight_search.py` calls the same slot
+`base_valuation_z`), and `power_law_weight` appears in 34 script files and **0** under `src/`.
+`run_onchain_solo_search.py` now aborts with `TypeError: ... unexpected keyword argument
+'base_power_law_z'`. Deliberately not fixed (house rule: do not port 27 scripts). Consequence to
+state plainly: **the September on-chain verdicts are not reproducible on this branch for two
+independent reasons**, one now fixed and one not.
+
+### The normalisation study
+
+`bench_onchain_norm.py` in `.scratch/` (not committed) scores six transform families x windows on
+six series against four pre-registered metrics, plus two additions that turned out to matter more
+than the metrics: **JIT**, the worst score when every cycle pin is slid by 0/+-30/+-60 days, and **R
+price**, BTC log-price alone — the trend every extra in this pool inherits.
+
+The controls gate the run: a series built from M1's own labels scores +2.04, a random walk -0.45,
+and a true 1461-day cosine only +0.90 because it drifts against the real pins (2017-12-17 ->
+2021-11-10 is 1424 days, -> 2025-01-20 is 1167).
+
+| series | best transform | M1 | JIT | LOO |
+|---|---|---|---|---|
+| RHODL | roll-log w1095 | +2.65 | **+2.27** | +2.63 |
+| MVRV | expanding z | +2.76 | +1.77 | +2.61 |
+| Coinmetrics MVRV | expanding z | +2.77 | +1.73 | +2.61 |
+| Puell | expanding z | +2.34 | +1.19 | +1.90 |
+| aSOPR | roll-log w1460 | +1.84 | +0.44 | +1.57 |
+| **BTC price alone** | roll-log w1095 | +2.20 | **+1.71** | +2.12 |
+| deviation-from-EMA (hl30) | — | +0.17 | **-1.78** | -0.22 |
+| cross-cycle phase | — | -0.08 | -0.70 | -0.32 |
+
+1. **The shipped 90-day window is the worst choice in the family.** JIT rises monotonically with
+   window — w90 **-1.34** -> w180 -0.74 -> w365 -0.09 -> w730 +0.97 -> w1095 +1.61 -> w1460 +1.75 —
+   and at w90 the transform *inverts* under pin jitter. A 90-day rolling z measures "expensive
+   versus the last quarter", i.e. momentum/overextension, not cycle position.
+2. **Expanding z (no window) is best-or-equal on every series** and has no parameter to tune.
+3. **All-history percentile rank is competitive and has the best production objective.**
+4. **Deviation-from-a-moving-average is the worst family and inverts out of sample** (-1.78). It is a
+   mean-reversion measure, already served by RSI/bands in the pool.
+5. **The cycle-phase transforms fail the leave-one-cycle-out gate** (-0.70 JIT, p 0.57; the in-cycle
+   variant is not evaluable at n=851). ~3 cycles and 30-day bins is not enough resolution.
+6. **The confound: BTC log-price alone scores JIT +1.71.** MVRV (+1.77) and Coinmetrics MVRV (+1.73)
+   are within noise of the shared trend, so **RHODL (+2.27) is the only series with evidence above
+   it.** Puell (+1.19) and aSOPR (+0.44) are not.
+7. **Nothing here predicts 12-month forward returns** (M2 ~ 0 for every family; price's own M2 is the
+   highest in the table). Cycle-fit and forward-return predictability are largely decoupled — which is
+   why the accept gate stays a walk-forward backtest, not a cycle-overlap score.
+
+Bitview MVRV and Coinmetrics `CapMVRVCur` agree on every transform, which is a useful cross-check;
+Bitview's series caps at 10.0 while `CapMVRVCur` reaches 146, so Bitview is clipped at the tops, and
+their daily agreement suggests the clip is not material. `bgeometrics/mvrv` is one cycle long
+(1,455 rows) with a negative JIT — not enough to judge, and not used.
+
+### The change
+
+The five on-chain wrappers now default to an **expanding** z. `window: int | None = None` on each,
+dispatched inside `_log_ratio_sign_flipped_z`; `ONCHAIN_EXPANDING_NAMES` names the five, and a new
+`_window_for` branch returns `None` for them *before* consulting the shared `window`, so the legacy
+90-day knob no longer reaches them. An explicit `extra_windows` entry still pins the rolling form —
+that is the escape hatch, and it is pinned. `_expanding_z` is mirrored locally in
+`indicator_catalog.py` rather than imported, because `onchain_valuation.py` imports `align_to_dates`
+*from* `indicator_catalog` and importing back would be a cycle. `fear_greed_z` is deliberately
+unchanged: its metric family was never measured.
+
+### Pins and proof
+
+`test_onchain_addr_ratio_wires_into_build_extra_indicators` now pins **both arms** — the expanding
+default and the `extra_windows` rolling pin — and asserts the two differ, so neither arm is evidence
+on its own. A behaviour probe confirms `default == expanding`, `default != rolling w1095`, and
+`pinned(1095) == rolling w1095`.
+
+Gate of record: the 60-file union -> **1 failed, 1211 passed**; the whole `tests/dq/strategies/sdca`
+dir -> **1155 passed**. The one failure is the pre-existing nautilus smoke (local `nautilus_trader`
+1.223.0 vs the pinned 1.230.0, ADR-0033). `ruff check` on the changed files reports only the
+pre-existing `I001` at `lab/optimize.py:8`, present at HEAD before this work.
+
+### What this does not settle
+
+No weight changed and nothing was promoted: all five on-chain extras still vote at 0.0. **Next is a
+single trial with RHODL at the expanding z plus the live weights, through the accept gate** (3-fold
+walk-forward + holdout, `beats_baseline_oos` versus `risk50_linear`, `sensitivity.max_abs_delta_oos_pct
+<= 2.0`). The on-chain paths are still not threaded through the MCP/server entrypoints
+(`sources_from_optional_paths` hardcodes `onchain_addr_ratio` to `None, None`), and Fear & Greed plus
+Coinmetrics `AdrActCnt` remain unfetched — the local proxy blackholes both, so a fetch needs
+`--noproxy '*'` or `NO_PROXY` extended.
