@@ -26,6 +26,22 @@ const PACKAGE_503 =
 const PACKAGE_500 = "Failed to start container: Maximum number of running container instances exceeded";
 
 /**
+ * The production body, verbatim. The platform's own instance-limit message
+ * carries a tail ("Try again later, or try configuring a higher value for
+ * max_instances") that the package keeps when it wraps the start failure
+ * ("Failed to start container: " + the platform message). This is the text a
+ * client actually receives when a rollout holds the slot.
+ *
+ * The production rows also show "Container error: Error: <the platform
+ * message>". That is the package's own `console.error` in onError
+ * (dist/lib/container.js), so it is a log line and never a response body:
+ * the body the client sees is the wrapped one below.
+ */
+const PLATFORM_INSTANCE_LIMIT_500 =
+  "Failed to start container: Maximum number of running container instances exceeded. " +
+  "Try again later, or try configuring a higher value for max_instances";
+
+/**
  * The package's proxy catch, verbatim (@cloudflare/containers 0.3.7,
  * dist/lib/container.js): the container died under the request.
  */
@@ -68,6 +84,11 @@ describe("isInstanceLimitResponse", () => {
 
   it("recognises the platform's instance-limit error surfaced as a 500", () => {
     expect(isInstanceLimitResponse(500, PACKAGE_500)).toBe(true);
+  });
+
+  it("recognises the production body, with the platform's own tail", () => {
+    // The tail the platform adds must not stop the marker from matching.
+    expect(isInstanceLimitResponse(500, PLATFORM_INSTANCE_LIMIT_500)).toBe(true);
   });
 
   it("does NOT recognise a 503 raised by the application inside the container", () => {
