@@ -26,8 +26,8 @@ const SURFACES = [
  * It rejoins SURFACES when [DIG-3449] applies the 14 Oct Geist Mono decision.
  * Until then the contract does not police it.
  *
- * digiquant-app still loads Inter and JetBrains Mono through its own next/font
- * call. It rejoins SURFACES when its fonts move to `@digithings/design/fonts`.
+ * digiquant-app still loads Inter, JetBrains Mono and Geist Mono through its own
+ * next/font call. It rejoins SURFACES when its fonts move to `@digithings/design/fonts`.
  */
 const PENDING_PORT = ["apps/digichat/", "apps/digiquant-app/"];
 
