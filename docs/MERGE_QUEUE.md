@@ -63,13 +63,14 @@ GitHub can verify: pass it with `--acting-role`, and the queue writes it into th
 comment on the PR so the record names who acted. Adding a role to the roster is a policy
 change and needs the CEO — it is not something an agent does on its own initiative.
 
-An approval is likewise asserted when the reviewer is not a distinct GitHub account:
-`--attest-review <role>` records which role reviewed. The merging role may **not** attest
-its own review, which is what stops a single-credential setup from silently collapsing
-into "I reviewed it and merged it". Attestation satisfies the approval gate only —
-it is an assertion, and since DIG-3154 it does **not** satisfy review coverage: PRs
-#5489 and #5277 merged attested with zero reviews and zero comments, and the promotion
-gate refused both. A PR without review evidence needs the evidence, not an attestation.
+A review cannot be asserted the same way. `--attest-review <role>` was removed on
+2026-10-17: with one login, no agent can give a non-author approval, so the old review gate
+could only be met by an attestation, and the launchd wrapper stamped `qa` on every merge
+without QA doing anything. PRs #5489 and #5277 had already shown the cost (merged attested
+with zero reviews and zero comments). The review that counts is an artifact on the PR: a
+review pass by the board's reviewer seats that left its findings there, with those comments
+resolved or addressed (Chris's 2026-10-15 definition). No formal approval is required. QA is
+not in the review path, and a `qa/gate` commit status is ignored in both directions.
 
 ## What may be merged
 
@@ -82,9 +83,11 @@ gate refused both. A PR without review evidence needs the evidence, not an attes
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
-| Review | No outstanding `CHANGES_REQUESTED` review and no posted verdict of `changes_requested`. Review *evidence* is the row below; the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is still accepted but now gates nothing. |
-| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bot run, an approval, a Bot review, an in-session review with its findings comment, or `reviewed:owner`. `--attest-review` does not count — it asserts a review happened but leaves no artifact the promotion gate can see. |
-| Change requests | Any `CHANGES_REQUESTED` review blocks. |
+| Review | No outstanding `CHANGES_REQUESTED` review and no posted verdict of `changes_requested`. Review *evidence* is the row below: the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. |
+| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. |
+| Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
+| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested` still scoped to the branch, blocks. |
+| Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
 
 Two of these are deliberate choices worth stating plainly.
 
@@ -171,10 +174,6 @@ still blocks. The rules and the approved allowlist are in
 ```bash
 # What is waiting, and why anything is not.
 python3 scripts/merge_queue.py list --repo digithings-ai/twelve-x --acting-role cto
-
-# Merging a review that happened in-session rather than on GitHub.
-python3 scripts/merge_queue.py list --repo digithings-ai/twelve-x \
-  --acting-role cto --attest-review qa
 
 # Merge the oldest eligible PR. Default is one merge per run.
 python3 scripts/merge_queue.py run --repo digithings-ai/twelve-x --acting-role em
