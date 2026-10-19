@@ -658,7 +658,7 @@
       "ticket": "DIG-3689"
     },
     "scripts/r0_client_literals_baseline.json": {
-      "count": 20,
+      "count": 19,
       "ticket": "DIG-3689"
     },
     "scripts/repo-split/README.md": {
@@ -987,10 +987,6 @@
     },
     "tests/dg/test_skill_library.py": {
       "count": 5,
-      "ticket": "DIG-4043"
-    },
-    "tests/scripts/test_datatap_answer_check_report_line.py": {
-      "count": 17,
       "ticket": "DIG-4043"
     }
   }
