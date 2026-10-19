@@ -4,7 +4,10 @@
  * retrieve hit as its own top-level `source` part (and repeated the same
  * hits per retrieve span). The rows rendered inline between tool groups,
  * duplicated, and the message crashed with React #185 (max update depth).
- * Sources must render once, deduped, in a single footer outside the body.
+ * Since DIG-1210 no source list is rendered at all: the citations stay inline
+ * links and the body carries no source rows. The assertions below are the
+ * live ones; the footer/dedupe assertions that used to sit behind a bare
+ * `return` were unreachable and described a footer the product no longer has.
  */
 import type { ChatModelAdapter, ThreadMessageLike } from "@assistant-ui/react";
 import { AssistantRuntimeProvider, useLocalRuntime, type AssistantRuntime } from "@assistant-ui/react";
@@ -75,7 +78,7 @@ function Harness() {
 afterEach(() => document.body.replaceChildren());
 
 describe("DigichatThread sources (digisearch + digivault_get_note)", () => {
-  it("renders each source once in a footer, not inline, without an update loop", async () => {
+  it("renders no source list at all (DIG-1210) and the stream does not update-loop", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const host = document.createElement("div");
     document.body.append(host);
@@ -94,19 +97,6 @@ describe("DigichatThread sources (digisearch + digivault_get_note)", () => {
     // DIG-1210: no auto-rendered source list at all; citations are inline links.
     expect(host.querySelectorAll('[data-slot="aui_message-sources"]').length).toBe(0);
     expect(host.querySelectorAll(".aui-source-row").length).toBe(0);
-    act(() => root.unmount());
-    return;
-    const footer = host.querySelectorAll('[data-slot="aui_message-sources"]');
-    const rows = footer[0]!.querySelectorAll(".aui-source-row");
-    expect(rows.length).toBe(HITS.length);
-    // A url-bearing copy of a hit wins over its url-less duplicate.
-    expect(footer[0]!.querySelectorAll('a[data-slot="aui_source-url"]').length).toBe(3);
-    // No source rows outside the footer (inline in the body).
-    expect(host.querySelectorAll(".aui-source-row").length).toBe(HITS.length);
-    // Completed citations carry a static mark, never the animated "searching" one.
-    const marks = footer[0]!.querySelectorAll(".aui-source-mark");
-    expect(marks.length).toBe(HITS.length);
-    for (const m of marks) expect(m.outerHTML).not.toMatch(/searching/);
     act(() => root.unmount());
   });
 
