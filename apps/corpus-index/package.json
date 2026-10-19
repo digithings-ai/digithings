@@ -1,5 +1,13 @@
 {
   "name": "corpus-index",
+  "description": "Daily corpus indexer that builds the digisearch Vectorize corpus from site and helpdesk sources.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/corpus-index"
+  },
   "private": true,
   "type": "module",
   "scripts": {

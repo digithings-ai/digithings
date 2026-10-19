@@ -1,5 +1,13 @@
 {
   "name": "twelvex-runner",
+  "description": "On-demand Cloudflare Container that runs the twelve-x ingest and session-heartbeat jobs.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/twelvex-runner"
+  },
   "private": true,
   "type": "module",
   "scripts": {
