@@ -95,4 +95,6 @@ hosts:
       llmAccess: operator
       showByok: false
       showLanguageSelector: true
+      # Pin the house model and hide per-session model/MCP/tool controls.
+      lockSessionControls: true
       webSearch: false

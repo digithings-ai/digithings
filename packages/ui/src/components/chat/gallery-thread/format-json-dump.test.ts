@@ -14,6 +14,17 @@ describe("formatJsonDump", () => {
     );
   });
 
+  it("pretty-prints partial streaming args, closing open brackets", () => {
+    expect(formatJsonDump('{"query":"occ refund policy","limit":5,"filters":{"tag":"bil')).toBe(
+      '{\n  "query": "occ refund policy",\n  "limit": 5,\n  "filters": {\n    "tag": "bil"\n  }\n}',
+    );
+    expect(formatJsonDump('{"query":"a","limit":')).toBe('{\n  "query": "a"\n}');
+    expect(formatJsonDump('{"query":"a","lim')).toBe('{\n  "query": "a"\n}');
+    expect(formatJsonDump('{"ids":[1,2,')).toBe('{\n  "ids": [\n    1,\n    2\n  ]\n}');
+    expect(formatJsonDump('{"ok":tr')).toBe("{}");
+    expect(formatJsonDump("{")).toBe("{}");
+  });
+
   it("leaves non-JSON strings alone", () => {
     expect(formatJsonDump("not json")).toBe("not json");
   });

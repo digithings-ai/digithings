@@ -1165,7 +1165,10 @@ const AssistantMessage: FC = () => {
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "source":
-                return <SourceComponent {...part} />;
+                // Citations are inline markdown links in the answer (DIG-1210);
+                // rendering source parts here stacked duplicate rows between
+                // tool groups on every retrieve span.
+                return null;
               default:
                 return null;
             }
