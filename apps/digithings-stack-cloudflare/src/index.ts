@@ -68,7 +68,6 @@ import {
   SHARED_DIGICHAT_CONTAINER_ID,
   shouldProxyToDigiChat,
 } from "./digichat";
-import { isOccShellPath, occGate } from "../../digichat-cloudflare/src/occ-gate";
 import {
   containerIsAwake,
   isHealthProbe,
@@ -649,9 +648,10 @@ function stackContainer(workerEnv: Env): DurableObjectStub<DigiStackContainer> {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
-    if (isOccShellPath(url.pathname)) {
-      return occGate(request, workerEnv.OCC_INVITE_KEY);
-    }
+    // The OCC invite gate is NOT applied here: the invite-gated shell
+    // (`/chat/occ*`) belongs to apps/digichat-cloudflare, which owns that route
+    // and holds OCC_INVITE_KEY (Chris, 2026-10-19 — client surface off the base
+    // platform). This Worker serves only graph./key./search.digithings.ai.
     if (url.pathname === "/_stack/meta") {
       // containerId is derived from the deploying commit (DIG-3229), so it is
       // the operator's proof that the running instance came from this deploy
@@ -749,26 +749,12 @@ export default {
       );
     }
 
-    // Folded digichat (#4689): the standalone worker's own paths
-    // (/embed*, /api/chat*, /api/embed/*, /api/byok/*, /api/plan-proof*,
-    // /api/health, /_dtchat/*) proxied to the dedicated digichat Container
-    // (Next standalone :3000). Path predicate is the standalone worker's own
-    // `shouldProxyToDigiChat`, so folded and standalone routing stay
-    // identical. Auth stays in-container — no edge gating here (no 401, no
-    // JWT check). A digichat failure degrades only these paths (503); the
-    // container-routes catch-all below is untouched.
-    if (shouldProxyToDigiChat(url.pathname)) {
-      // Lazy digichat import: the folded route predicate constants load on
-      // first use here.
-      return runIsolated(
-        "digichat",
-        () => import("./digichat"),
-        async ({ DIGICHAT_PORT, SHARED_DIGICHAT_CONTAINER_ID }) => {
-          const container = getContainer(workerEnv.DIGICHAT, SHARED_DIGICHAT_CONTAINER_ID);
-          return container.fetch(switchPort(request, DIGICHAT_PORT));
-        },
-      );
-    }
+    // The digichat product surface (and OCC, one of its tenants) is NOT served
+    // here (Chris, 2026-10-19): it belongs to apps/digichat-cloudflare on the
+    // `digithings-digichat` Worker and its own container. The folded-digichat
+    // branch (#4689) and its route declarations were removed so the client
+    // surface never rides the base platform, and so a deploy of this Worker
+    // stops fighting another Worker for the same digithings.ai routes.
 
     // Dedicated digiquant-mcp container (#3780 Task 8): reachable only via the
     // reserved mcp.digithings.ai hostname once its route is enabled (HUMAN GATE

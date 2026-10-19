@@ -167,46 +167,25 @@ describe("digichat adapter source pins", () => {
   });
 });
 
-describe("digichat index.ts wiring pins", () => {
+describe("digichat separation pins (Chris, 2026-10-19)", () => {
   const source = readFileSync(join(here, "index.ts"), "utf-8");
 
-  it("matches the branch on the standalone predicate (no copied path list)", () => {
-    expect(source).toContain("shouldProxyToDigiChat(url.pathname)");
-    const branch = source.slice(source.indexOf("shouldProxyToDigiChat(url.pathname)"));
-    expect(branch).not.toContain('"/api/chat"');
-    expect(branch).not.toContain('"/_dtchat');
+  it("does NOT mount a digichat branch — the surface stays on digithings-digichat", () => {
+    expect(source).not.toContain("shouldProxyToDigiChat(url.pathname)");
+    expect(source).not.toContain('() => import("./digichat")');
+    expect(source).not.toContain("getContainer(workerEnv.DIGICHAT");
+    expect(source).not.toContain("switchPort(request, DIGICHAT_PORT)");
   });
 
-  it("proxies through the digichat container on :3000 with switchPort", () => {
-    expect(source).toContain('"digichat"');
-    expect(source).toContain('() => import("./digichat")');
-    expect(source).toContain("getContainer(workerEnv.DIGICHAT, SHARED_DIGICHAT_CONTAINER_ID)");
-    expect(source).toContain("switchPort(request, DIGICHAT_PORT)");
-  });
-
-  it("applies no edge gating on digichat paths (auth stays in-container)", () => {
-    const branchStart = source.indexOf("shouldProxyToDigiChat(url.pathname)");
-    expect(branchStart).toBeGreaterThan(-1);
-    const branchEnd = source.indexOf("Dedicated digiquant-mcp container", branchStart);
-    expect(branchEnd).toBeGreaterThan(branchStart);
-    const branch = source.slice(branchStart, branchEnd);
-    expect(branch).not.toContain("401");
-    expect(branch).not.toContain("unauthorized");
-    expect(branch).not.toContain("x-digi-mcp-key");
-    expect(branch).not.toContain("JWT");
+  it("does NOT gate the OCC shell here — the invite gate stays on the digichat worker", () => {
+    expect(source).not.toContain("occGate(");
+    expect(source).not.toContain("isOccShellPath(");
   });
 
   it("keeps the /_dtchat asset prefix (no clash with Pages /_next)", () => {
     // The predicate owns the prefix; this pins the contract from this side so
     // a predicate swap that drops /_dtchat fails here, not in production.
     expect(shouldProxyToDigiChat("/_dtchat/_next/static/x.js")).toBe(true);
-  });
-
-  it("mounts the digichat branch before the container-routes catch-all", () => {
-    const chatBranch = source.indexOf("shouldProxyToDigiChat(url.pathname)");
-    const catchAll = source.indexOf('runIsolated("container-routes"');
-    expect(chatBranch).toBeGreaterThan(-1);
-    expect(catchAll).toBeGreaterThan(chatBranch);
   });
 
   it("pins the digichat image bind (:3000 on 0.0.0.0, same as standalone)", () => {
