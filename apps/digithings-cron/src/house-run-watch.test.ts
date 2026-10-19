@@ -438,7 +438,13 @@ describe("the dispatch-confirmation arm (DIG-4416)", () => {
   });
 
   it("never raises on a landing read it could not verify", () => {
-    for (const status of [null, { ...MISSING, verifiable: false }]) {
+    for (const status of [
+      null,
+      { ...MISSING, verifiable: false },
+      // A runner older than the `dispatched` field cannot answer the question.
+      // Unknown is never "no dispatch" (DIG-4416 review finding).
+      { ...MISSING, dispatched: null },
+    ]) {
       const verdict = evaluateDispatchMissing(
         "2026-10-12",
         { nowMs: AT_CONFIRM, graceSeconds: DISPATCH_CONFIRM_GRACE_SECONDS },
@@ -450,6 +456,18 @@ describe("the dispatch-confirmation arm (DIG-4416)", () => {
         reason: "unverifiable",
       });
     }
+  });
+
+  it("fires when an open house run from an earlier date holds the lock", () => {
+    // The 2026-10-19 shape: the container was awake holding a stale lock, so
+    // open_house_runs is not empty while today's POST never arrived. That lock
+    // is not date-scoped, so it must not silence the one arm built to catch it.
+    const verdict = evaluateDispatchMissing(
+      "2026-10-12",
+      { nowMs: AT_CONFIRM, graceSeconds: DISPATCH_CONFIRM_GRACE_SECONDS },
+      { ...MISSING, open_house_runs: ["house-run-2026-10-05"] },
+    );
+    expect(verdict).toEqual({ run_date: "2026-10-12", lost: true, reason: "missing-dispatch" });
   });
 
   it("files one issue at the confirm tick, titled as a missing dispatch", async () => {
@@ -568,6 +586,15 @@ describe("the never-landed arm (DIG-3456, refocused by DIG-4416)", () => {
     expect(verdict).toEqual({ run_date: "2026-10-12", lost: false, reason: "not-dispatched" });
   });
 
+  it("still fires at the deadline when the runner cannot report dispatched", () => {
+    const verdict = evaluateNeverLanded(
+      "2026-10-12",
+      { nowMs: PAST_DEADLINE, deadlineSeconds: DEADLINE },
+      { ...ACCEPTED_NOT_LANDED, dispatched: null },
+    );
+    expect(verdict).toEqual({ run_date: "2026-10-12", lost: true, reason: "never-landed" });
+  });
+
   it("never raises on a landing read it could not verify", () => {
     for (const status of [null, { ...ACCEPTED_NOT_LANDED, verifiable: false }]) {
       const verdict = evaluateNeverLanded(
@@ -610,8 +637,8 @@ describe("the never-landed arm (DIG-3456, refocused by DIG-4416)", () => {
 
   // DIG-4416. A runner that predates the dispatched field cannot answer whether
   // the POST arrived. Reading its body as "no dispatch" would file a false
-  // missing-dispatch issue on every Monday, so the answer is unreadable.
-  it("rejects a landing body without the dispatched field", async () => {
+  // missing-dispatch issue on every Monday, so the answer is unknown.
+  it("reads a landing body without the dispatched field as an unknown dispatch", async () => {
     const old = (async () =>
       Response.json({
         run_date: "2026-10-12",
@@ -619,7 +646,49 @@ describe("the never-landed arm (DIG-3456, refocused by DIG-4416)", () => {
         open_house_runs: [],
         verifiable: true,
       })) as unknown as WatchFetch;
-    expect(await readHouseStatus(old, "2026-10-12", "runner-token")).toBeNull();
+    const status = await readHouseStatus(old, "2026-10-12", "runner-token");
+    expect(status).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [],
+      dispatched: null,
+      verifiable: true,
+    });
+  });
+
+  // DIG-4416 review finding: the two apps deploy from main on separate
+  // workflows. A cron newer than its runner must not lose the older
+  // never-landed arm, which reads no `dispatched` field at all.
+  it("keeps the never-landed arm alive when the runner cannot report dispatched", async () => {
+    const fetchRunner = (async (url: string) => {
+      if (url.includes("/healthz")) return Response.json({ ok: true, running: [] });
+      return Response.json({
+        run_date: "2026-10-12",
+        landed: false,
+        open_house_runs: [],
+        verifiable: true,
+      });
+    }) as unknown as WatchFetch;
+    const github: WatchFetch = vi.fn(async (url: string) => {
+      if (url.includes("/issues?")) return Response.json([]);
+      if (url.includes("/labels/")) return Response.json({ name: HOUSE_RUN_WATCH_LABEL });
+      return Response.json({ html_url: "https://github.com/x/y/issues/9" }, { status: 201 });
+    }) as unknown as WatchFetch;
+    const result = await checkHouseRuns({
+      fetchRunner,
+      fetchGithub: github,
+      runnerToken: "runner-token",
+      githubToken: "github-token",
+      timeoutSeconds: TIMEOUT,
+      nowMs: PAST_DEADLINE,
+    });
+    expect(result.missingDispatch).toEqual([]);
+    expect(result.neverLanded).toEqual([
+      { run_date: "2026-10-12", lost: true, reason: "never-landed" },
+    ]);
+    expect(result.raised).toEqual([
+      { run_id: "house-run:2026-10-12", raised: true, url: "https://github.com/x/y/issues/9" },
+    ]);
   });
 
   it("reads the landing with the runner bearer token", async () => {

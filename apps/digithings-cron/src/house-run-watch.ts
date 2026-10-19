@@ -183,8 +183,13 @@ export type HouseStatus = {
    * A house run for this run_date reached the runner, whatever state it is in.
    * `open_house_runs` cannot answer this: a run accepted while another job
    * holds a lock is queued and holds none (DIG-4416).
+   *
+   * `null` means the runner did not report the field. Both apps deploy from
+   * `main` on separate workflows, so a cron newer than its runner is a real
+   * window: unknown is not "not dispatched", and it is not a reason to lose the
+   * older never-landed arm either.
    */
-  dispatched: boolean;
+  dispatched: boolean | null;
   verifiable: boolean;
 };
 
@@ -343,14 +348,16 @@ export async function readHouseStatus(
   const row = body as Record<string, unknown>;
   if (row.run_date !== runDate) return null;
   if (typeof row.landed !== "boolean" || typeof row.verifiable !== "boolean") return null;
-  if (typeof row.dispatched !== "boolean") return null;
+  // Absent or unrecognised is unknown, never false: the confirm arm must not
+  // read a runner that predates the field as "no POST arrived" (DIG-4416).
+  const dispatched = typeof row.dispatched === "boolean" ? row.dispatched : null;
   if (!Array.isArray(row.open_house_runs)) return null;
   if (!row.open_house_runs.every((id): id is string => typeof id === "string")) return null;
   return {
     run_date: runDate,
     landed: row.landed,
     open_house_runs: row.open_house_runs,
-    dispatched: row.dispatched,
+    dispatched,
     verifiable: row.verifiable,
   };
 }
@@ -380,12 +387,19 @@ export function mondayStartMs(runDate: string): number {
  *
  * `lost` is true on exactly one condition: past the confirm grace, the landing
  * read succeeded, no marker exists, and the runner holds no record of a house
- * run for that run_date — neither queued nor running. The POST never arrived.
+ * run for that run_date. That is the operational fact the alarm reports: no
+ * house run for today exists five minutes after the tick. Two causes produce
+ * it, and the issue names both: the POST never reached the runner, or it
+ * reached it while a job held the `digiquant-pipeline` lock and `accept()`
+ * answered `already_running` without writing a record.
  *
  * `dispatched` is what makes this arm honest. A run accepted while another job
  * holds a lock is queued by `mustQueue()` and holds no lock, so
  * `open_house_runs` reads empty even though the POST landed. The 2026-10-19
  * Monday ran with a stale lock open, which is exactly that shape.
+ * `open_house_runs` is deliberately NOT part of this test: it is not
+ * date-scoped, so a hung run from an earlier Monday would silence the arm on
+ * the one Monday it is for.
  */
 export function evaluateDispatchMissing(
   runDate: string,
@@ -399,14 +413,17 @@ export function evaluateDispatchMissing(
   if (!status || !status.verifiable) {
     return { run_date: runDate, lost: false, reason: "unverifiable" };
   }
-  if (status.landed || status.dispatched || status.open_house_runs.length > 0) {
+  if (status.dispatched === null) {
+    return { run_date: runDate, lost: false, reason: "unverifiable" };
+  }
+  if (status.landed || status.dispatched) {
     return { run_date: runDate, lost: false, reason: "dispatched" };
   }
   return { run_date: runDate, lost: true, reason: "missing-dispatch" };
 }
 
 export function dispatchMissingTitle(runDate: string): string {
-  return `digiquant house-run for ${runDate} never reached the runner`;
+  return `digiquant house-run for ${runDate} never started on the runner`;
 }
 
 export function dispatchMissingBody(runDate: string, graceSeconds: number): string {
@@ -419,7 +436,12 @@ export function dispatchMissingBody(runDate: string, graceSeconds: number): stri
     `- expected marker: \`pipeline-runs/house-run/${runDate}/success.json\``,
     `- read it: \`GET https://digiquant-runner/v1/jobs/house-status?run_date=${runDate}\` (runner bearer token)`,
     "",
-    `This is the missing-dispatch class: the clock fired but no run reached the runner. A run that arrived and never landed is the separate never-landed class, and a run the runner still holds open is the lost-run class.`,
+    `This is the missing-dispatch class: no house run for ${runDate} reached the runner's ledger. Two causes give this shape, and the ledger cannot tell them apart after the fact:`,
+    "",
+    `1. **The POST never reached the runner.** The clock fired and the request was lost between \`digithings-cron\` and \`digiquant-runner\`.`,
+    `2. **The POST arrived while the \`digiquant-pipeline\` lock was held.** \`accept()\` answers \`already_running\` and writes no run record, so nothing queued and nothing started.`,
+    "",
+    `Both leave the same hole — no house run for ${runDate} — and both take the same repair: a forced house run. This is not the never-landed class (that run is in the ledger) and not the lost-run class (nothing is open).`,
     "",
     `Run-watch key: \`${RUN_WATCH_KEY}\` (DIG-3061). A recurrence of the same condition belongs on that key, not in a new ticket.`,
     "",
@@ -486,7 +508,7 @@ export function evaluateNeverLanded(
   if (status.open_house_runs.length > 0) {
     return { run_date: runDate, lost: false, reason: "open-house-run" };
   }
-  if (!status.dispatched) {
+  if (status.dispatched === false) {
     return { run_date: runDate, lost: false, reason: "not-dispatched" };
   }
   return { run_date: runDate, lost: true, reason: "never-landed" };
@@ -496,16 +518,24 @@ export function neverLandedTitle(runDate: string): string {
   return `digiquant house-run for ${runDate} never landed`;
 }
 
-export function neverLandedBody(runDate: string, deadlineSeconds: number): string {
+export function neverLandedBody(
+  runDate: string,
+  deadlineSeconds: number,
+  dispatchKnown = true,
+): string {
   const lines = [
-    `The runner accepted a house run for Monday ${runDate}, no house run is open, and no success marker exists past the deadline.`,
+    dispatchKnown
+      ? `The runner accepted a house run for Monday ${runDate}, no house run is open, and no success marker exists past the deadline.`
+      : `No success marker exists for Monday ${runDate} past the deadline, no house run is open, and the runner did not report whether it accepted one (it predates the \`dispatched\` field).`,
     "",
     `- run date: \`${runDate}\``,
     `- expected marker: \`pipeline-runs/house-run/${runDate}/success.json\``,
     `- deadline: Monday 09:17 UTC + ${deadlineSeconds}s (timeout_seconds + ${WATCHDOG_GRACE_SECONDS}s watchdog grace)`,
     `- read it: \`GET https://digiquant-runner/v1/jobs/house-status?run_date=${runDate}\` (runner bearer token)`,
     "",
-    `This is the never-landed class: the POST arrived, the run left no lock and no marker. A Monday with no accepted run at all is the missing-dispatch class and is filed five minutes after the tick.`,
+    dispatchKnown
+      ? `This is the never-landed class: the POST arrived, the run left no lock and no marker. A Monday with no accepted run at all is the missing-dispatch class and is filed five minutes after the tick.`
+      : `The runner could not say whether it accepted a run, so this covers both classes: a missing POST, or an accepted run that left no lock and no marker. The cron's confirm arm reports the first from five minutes after the tick once the runner reports \`dispatched\`.`,
     "",
     `Run-watch keys: \`${RUN_WATCH_KEY}\` (DIG-3061) and \`run-watch:house-run:no-dispatch-since-2026-09-28\` (DIG-3456). A recurrence of the same condition belongs on those keys, not in a new ticket.`,
     "",
@@ -522,6 +552,7 @@ export async function raiseNeverLandedAlarm(
   runDate: string,
   deadlineSeconds: number,
   fetcher: WatchFetch,
+  dispatchKnown = true,
 ): Promise<RaisedAlarm> {
   const run_id = `house-run:${runDate}`;
   const title = neverLandedTitle(runDate);
@@ -533,7 +564,11 @@ export async function raiseNeverLandedAlarm(
       fetcher,
       `https://api.github.com/repos/${ALERT_REPO}/issues`,
       token,
-      { title, body: neverLandedBody(runDate, deadlineSeconds), labels: [HOUSE_RUN_WATCH_LABEL] },
+      {
+        title,
+        body: neverLandedBody(runDate, deadlineSeconds, dispatchKnown),
+        labels: [HOUSE_RUN_WATCH_LABEL],
+      },
     );
     if (!WRITE_OK_STATUSES.has(status)) return { run_id, raised: false };
     const html = (body as { html_url?: unknown } | null)?.html_url;
@@ -727,7 +762,13 @@ export async function checkHouseRuns(opts: {
   if (never.lost) {
     result.neverLanded.push(never);
     result.raised.push(
-      await raiseNeverLandedAlarm(opts.githubToken, runDate, deadlineSeconds, opts.fetchGithub),
+      await raiseNeverLandedAlarm(
+        opts.githubToken,
+        runDate,
+        deadlineSeconds,
+        opts.fetchGithub,
+        status?.dispatched !== null,
+      ),
     );
   }
   return result;
