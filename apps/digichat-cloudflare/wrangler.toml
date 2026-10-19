@@ -56,6 +56,17 @@ zone_name = "digithings.ai"
 pattern = "digithings.ai/_dtchat*"
 zone_name = "digithings.ai"
 
+# Post-deploy read-back for scripts/deploy.mjs. That script injects
+# `--var DIGICHAT_CONTAINER_REV:<sha12>` and then fetches this path to confirm
+# the Worker is addressing the Container its commit implies. `paths.ts` records
+# that the route must be enabled here; without it the deploy finishes
+# DEPLOYED-but-UNVERIFIED (non-zero) *after* a successful upload, so a real
+# problem reads as a verification failure and a verification failure reads as a
+# deploy failure.
+[[routes]]
+pattern = "digithings.ai/_digichat/meta"
+zone_name = "digithings.ai"
+
 # Worker-owned, secret-gated container reset lever: intercepted by this Worker
 # (never proxied to the container) so an instance that outlived its idle tail
 # can be destroyed. Additive; gated by x-digi-admin-key == DIGICHAT_ADMIN_KEY.
