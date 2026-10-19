@@ -680,6 +680,14 @@
       "owner": "Security b14d7a18 + Counsel 0e57e884",
       "ticket": "DIG-3130 / PR #5469",
       "reason": "vendor brand word inside the same twelve-x doc link, new since the merge base with main via batch seed PR #5469. No approver yet for this path."
+    },
+    {
+      "rule": "V4",
+      "path": "scripts/vendor/twelve_x/fx_alarm_watch.py",
+      "match": "primemarket",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-2707",
+      "reason": "the token is the vendor's own alarm label inside the pinned vendored reader (blob 0bbd3527, vendored byte-identical per the DIG-877 ruling), so this side cannot edit it; not a maintainer string, relying on the pending report-only policy until Security rules."
     }
   ]
 }
