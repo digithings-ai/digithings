@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: regional_law
-verified_at: 2026-10-11
+verified_at: 2026-10-18
 source_urls:
   - https://api-docs.deepseek.com/quick_start/pricing
   - https://platform.deepseek.com/api-docs
@@ -32,7 +32,7 @@ DeepSeek offers the strongest math/quantitative reasoning of any free-accessible
 |---|---|---|---|
 | `deepseek-v4-flash` | 1,000,000 | 384,000 | active |
 | `deepseek-v4-pro` | 1,000,000 | 384,000 | active |
-| `deepseek-chat` | 65,536 | 8,192 | ⚠️ Error code: 402 - {'error': {'message': 'Insufficient Balance (request_id: 3bb3d375-b70b-4699-9b16-5c4a99e4b160)', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}} |
+| `deepseek-chat` | 65,536 | 8,192 | ⚠️ Error code: 402 - {'error': {'message': 'Insufficient Balance (request_id: 9ad49e1d-aab0-4b1e-97cc-556d42787bd3)', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}} |
 | `deepseek-reasoner` | 65,536 | 8,192 | **deprecated** |
 
 > DeepSeek V4 / R2 variants may be available by the time you read this — check platform.deepseek.com for the current model list.
@@ -123,3 +123,4 @@ After grant: $0.27/$1.10 per 1M in/out (V3/chat); $0.55/$2.19 (R1/reasoner). Off
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
 | 2026-10-11 | Automated snapshot sync | provider-review scan |
+| 2026-10-18 | Automated snapshot sync | provider-review scan |
