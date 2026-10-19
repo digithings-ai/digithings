@@ -1004,6 +1004,70 @@ def test_a_fetched_empty_comment_list_is_still_a_clearance() -> None:
     assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
+@pytest.mark.parametrize("payload", ["null", "[]"])
+def test_a_comment_read_with_no_comment_list_is_not_an_empty_read(
+    gh_stub: Any, payload: str
+) -> None:
+    """A read that returns no comment list is unreadable, not clean.
+
+    `_gh_json` maps empty stdout to `None`, and `gh` is not promised to answer with an
+    object, so `null` and a bare list are the shapes that reach the guard. Reading either
+    as "no verdict was posted" is the same hole one layer down, so the refusal stands.
+    """
+    gh_stub(
+        gh_rule(r"^pr view", stdout=payload),
+        gh_rule(r"^api graphql", stdout=NO_THREADS),
+    )
+    pr = _pr(347, approved=True, omit=("comments",))
+    verdict = mq.evaluate(
+        pr,
+        mq.load_policy(),
+        acting_role="em",
+        base="develop",
+        repo="digithings-ai/digithings",
+    )
+    assert not verdict.eligible
+    assert any("returned no comment list" in r for r in verdict.reasons)
+
+
+def test_a_comment_read_that_could_not_be_parsed_is_a_refusal_not_a_traceback(
+    gh_stub: Any,
+) -> None:
+    """An unparseable read is refused in the gate's own words, not as a traceback.
+
+    `gh` answered with something that is not JSON, so `_gh_json` raises `ValueError`.
+    Escaping `evaluate` would surface as a traceback instead of the queue's named
+    refusal, for a shape the gate could simply read as unreadable.
+    """
+    gh_stub(
+        gh_rule(r"^pr view", stdout="{not json"),
+        gh_rule(r"^api graphql", stdout=NO_THREADS),
+    )
+    pr = _pr(347, approved=True, omit=("comments",))
+    verdict = mq.evaluate(
+        pr,
+        mq.load_policy(),
+        acting_role="em",
+        base="develop",
+        repo="digithings-ai/digithings",
+    )
+    assert not verdict.eligible
+    assert any("could not be read" in r for r in verdict.reasons)
+
+
+def test_a_comments_field_that_is_not_a_list_is_refused() -> None:
+    """A malformed row is unreadable, not empty.
+
+    `comments is not None` would have accepted any truthy value here, and both gates
+    would then have scored it as no comments at all. The guard asks for a list.
+    """
+    pr = _pr(347, approved=True)
+    pr["comments"] = "not a list"
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("not a list" in r for r in verdict.reasons)
+
+
 def test_a_missing_commits_key_does_not_clear_a_posted_block() -> None:
     """The second leg of `#5903`: unverifiable ancestry must not spend a block.
 
@@ -1977,4 +2041,8 @@ def test_an_unreadable_comments_fetch_is_refused(gh_stub: Any) -> None:
         repo="digithings-ai/digithings",
     )
     assert not verdict.eligible
-    assert any("could not be read" in reason for reason in verdict.reasons)
+    # Name the gate: `_review_coverage` also says it could not read something,
+    # and this PR is about which one speaks first on a row with no comments.
+    assert any(
+        reason.startswith("the review record could not be read") for reason in verdict.reasons
+    ), verdict.reasons

@@ -569,8 +569,15 @@ def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
     completed here when it can be, and refused when it cannot: with no repo there is
     nothing to read, and a failed read is not an empty one.
     """
-    if pr.get("comments") is not None:
+    comments = pr.get("comments")
+    if isinstance(comments, list):
         return None
+    if comments is not None:
+        return (
+            "the review record could not be read: this row's comments field is "
+            f"{type(comments).__name__}, not a list, so a posted code-review "
+            "verdict cannot be ruled out"
+        )
     if repo is None:
         return (
             "the review record could not be read: this row carries no comments and "
@@ -587,12 +594,22 @@ def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
             "--json",
             "comments",
         )
-    except QueueError:
+    except (QueueError, ValueError, OSError):
         return (
             "the review record could not be read: fetching this PR's comments "
             "failed, so a posted code-review verdict cannot be ruled out"
         )
-    pr["comments"] = (data or {}).get("comments") or []
+    if not isinstance(data, dict) or not isinstance(data.get("comments"), list):
+        # A payload with no comment list is a failed read, not an empty one.
+        # `_gh_json` returns None for empty stdout, and `gh` is not promised to
+        # answer in any particular shape; reading either as "no verdict was
+        # posted" is the hole this function exists to close.
+        return (
+            "the review record could not be read: fetching this PR's comments "
+            "returned no comment list, so a posted code-review verdict cannot "
+            "be ruled out"
+        )
+    pr["comments"] = data["comments"]
     return None
 
 
@@ -757,8 +774,11 @@ def _review_coverage(pr: dict[str, Any], repo: str | None) -> tuple[list[str], s
       assertion with no artifact is exactly what the promotion gate refuses.
       `--attest-review` is gone (2026-10-17), and no non-author approval is
       required on top of this evidence (Chris's 2026-10-15 definition).
-    * Comments are fetched lazily and only when a `reviewed:agent` label makes
-      them load-bearing (`fetch_queue` carries labels but not comments). An
+    * The comments this gate scores are supplied by `fetch_queue` and, when the
+      row arrives without them, completed by `_ensure_comments` — which runs
+      before this function precisely because an unreadable review record must
+      fail here rather than be read as "no verdict was posted". The lazy fetch
+      below survives only as a defence for callers that hand in a raw row. An
       unreadable comments read fails closed, for the same reason an absent
       check fails closed: the alternative reads "no evidence" as "approved".
     """
