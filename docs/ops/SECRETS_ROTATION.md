@@ -85,7 +85,7 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 
 ### 1. `MCP_EDGE_KEY` + `DIGICHAT_EMBED_TENANTS`
 
-**Blast radius** — `/_stack/mcp/{zammad,digisearch,digivault}/*` returns fail-closed 401 (`apps/digithings-stack-cloudflare/src/index.ts:344-345`); the embed MCP tool calls break. `DIGICHAT_EMBED_TENANTS` drives all tenant routing, gate mode and per-tenant tokens (R10).
+**Blast radius** — `/_stack/mcp/{digisearch,digivault}/*` returns fail-closed 401 (`apps/digithings-stack-cloudflare/src/index.ts:344-345`); the embed MCP tool calls break. The `zammad` route left this edge on 2026-10-19 and is now gated on the digichat host by a different key — see §12. `DIGICHAT_EMBED_TENANTS` drives all tenant routing, gate mode and per-tenant tokens (R10).
 **Copies** — stack Worker secret `MCP_EDGE_KEY` (declared `apps/digithings-stack-cloudflare/wrangler.toml:35`, consumed `src/index.ts:282`); the value **as a literal `token`** inside digichat `DIGICHAT_EMBED_TENANTS` (`apps/digichat-cloudflare/src/index.ts:48`; `apps/digichat/config/examples/occ-embed.yaml:56-58`). Optional `MCP_EDGE_KEYS` JSON overrides per server (`src/index.ts:283-296`).
 **Pre-flight** — read the tenant JSON shape at `apps/digichat-cloudflare/README.md:81-142`; locate the single `mcp.servers` entry for the OCC Zammad route.
 **Steps**
@@ -95,7 +95,7 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 4. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`) so the container reboots with the new tenant JSON.
 5. `npx --yes wrangler@4.133.0 deploy` for the digichat Worker.
 **Verify** — new key not 401, old/absent key 401:
-`curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $NEW" https://graph.digithings.ai/_stack/mcp/zammad/mcp` → any status except `401`; drop the header → `401`.
+`curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $NEW" https://graph.digithings.ai/_stack/mcp/digisearch/mcp` → any status except `401`; drop the header → `401`. (Do not verify against `/_stack/mcp/zammad/mcp`: the Zammad MCP no longer runs in the stack — §12.)
 **Rollback** — re-put the previous `MCP_EDGE_KEY` **and** the previous tenant JSON together.
 **Gotchas** — a one-sided rotation 401s the embed (R10). `tokenEnv` cannot resolve the key: the stack Worker secret is never forwarded into the digichat container, so the literal is required (`apps/digichat-cloudflare/README.md:115-117`).
 
@@ -249,15 +249,16 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 
 ### 12. `ZAMMAD_API_TOKEN`
 
-**Blast radius** — the read-only Zammad helpdesk MCP (OCC demo) 401s (`apps/digithings-stack-cloudflare/src/index.ts:111`).
-**Copies** — stack Worker (`apps/digithings-stack-cloudflare/wrangler.toml:150`, forwarded `src/index.ts:111`); `docker-compose.yml:457-458` (via `.env`); the tenant entry references the env name, not the value (`apps/digichat/config/examples/occ-embed.yaml`).
+**Blast radius** — the read-only Zammad helpdesk MCP 401s. Since 2026-10-19 that MCP runs **inside the digichat image**, not the stack: it is exposed at `https://digithings.ai/api/mcp/zammad/mcp` and gated there by the digichat Worker's `ZAMMAD_EDGE_KEY`. The stack no longer serves a zammad route (it left `MCP_EDGE_SERVERS` and the module left the image), so the stack's `ZAMMAD_API_TOKEN` is **vestigial** — it is documented here only so nobody rotates it by mistake, and it is safe to delete.
+**Copies** — digichat Worker: `ZAMMAD_API_TOKEN` (the Zammad API credential), `ZAMMAD_BASE_URL`, and `ZAMMAD_EDGE_KEY` (the `x-digi-mcp-key` gate on the route). The container forwards the token to the in-image MCP process on `127.0.0.1:8770` — `apps/digichat/scripts/trusted-proxy-server.mjs` spawns it only when `ZAMMAD_API_TOKEN` is set — and Next forwards `/api/mcp/zammad/*` to it (`apps/digichat/src/app/api/mcp/zammad/[[...path]]/route.ts`). Local compose keeps its own copy (`docker-compose.yml:457-458`).
 **Steps**
 1. Regenerate the token in Zammad.
-2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put ZAMMAD_API_TOKEN` in `apps/digithings-stack-cloudflare`.
-3. Bump `SHARED_STACK_CONTAINER_ID`; deploy.
-**Verify** — the edge gate first: `curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $MCP_EDGE_KEY" https://graph.digithings.ai/_stack/mcp/zammad/mcp` → not `401`; then confirm a real Zammad tool call succeeds from the OCC embed (edge key and Zammad token are independent gates).
-**Rollback** — re-put the previous token and bump the id.
-**Gotchas** — a raw token or `Token token=` form is accepted (`docker-compose.yml:457-458` comment). A wrong edge key masks a token problem: the 401 is returned before the token is ever used (`src/index.ts:344`).
+2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put ZAMMAD_API_TOKEN` in `apps/digichat-cloudflare` (repeat for `ZAMMAD_BASE_URL` if the tenant URL moved).
+3. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`apps/digichat-cloudflare/src/paths.ts`) so the container reboots with the new values — a warm container keeps its boot env.
+4. `npx --yes wrangler@4.133.0 deploy` for the digichat Worker.
+**Verify** — the edge gate first: `curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $ZAMMAD_EDGE_KEY" https://digithings.ai/api/mcp/zammad/mcp` → not `401`; then confirm a real Zammad tool call succeeds from the OCC embed (edge key and Zammad token are independent gates).
+**Rollback** — re-put the previous token, bump `SHARED_DIGICHAT_CONTAINER_ID`, redeploy digichat.
+**Gotchas** — a raw token or `Token token=` form is accepted (`docker-compose.yml:457-458` comment). A wrong edge key masks a token problem: the 401 is returned before the token is ever used. Rotating the **stack's** copy changes nothing — that secret is dead.
 
 ### 13. `AUTH_SECRET`
 
