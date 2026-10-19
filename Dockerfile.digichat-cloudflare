@@ -72,12 +72,17 @@ LABEL org.digithings.image.registry="${IMAGE_PUSH_REGISTRY}" \
       org.digithings.image.repository="${IMAGE_PUSH_REPOSITORY}"
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN apk add --no-cache curl
+# zammad-mcp (read-only OCC helpdesk MCP) runs beside the Node process: the
+# trusted proxy spawns `python3 -m scripts.zammad_mcp.server` and routes
+# /api/mcp/zammad* to it. Same dep pin as scripts/zammad_mcp/Dockerfile.mcp.
+RUN apk add --no-cache curl python3 py3-pip \
+ && python3 -m pip install --no-cache-dir --break-system-packages "mcp>=1.26,<2" "httpx>=0.28,<1"
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/.next/static ./apps/digichat/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/public ./apps/digichat/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/scripts/trusted-proxy-server.mjs ./apps/digichat/scripts/trusted-proxy-server.mjs
+COPY --chown=nextjs:nodejs scripts/zammad_mcp ./scripts/zammad_mcp
 COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/drizzle ./apps/digichat/drizzle
 COPY --from=builder /tmp/digichat-version /etc/digichat-version
 # Empty when image_vars/--build-arg is omitted; trusted-proxy then reads /etc/digichat-version.

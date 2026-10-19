@@ -17,24 +17,55 @@ enabled = true
 # deployed - the stack's live deployment predates it and still carries only
 # graph/key/search. Deploying this worker with only /chat/occ* would therefore
 # DELETE the seven live routes below and Pages would 404 /embed and /api/chat,
-# CUTOVER COMPLETE (2026-10-18): the seven digichat routes now belong to
-# apps/digithings-stack-cloudflare. Verified live: digithings.ai/embed*,
-# /api/chat*, /api/embed*, /api/byok*, /api/plan-proof*, /api/health and
-# /_dtchat* resolve to digithings-stack; only /chat/occ* still resolves here.
-# They are removed from this file so a redeploy of this worker cannot steal them
-# back from the stack.
+# taking OCC down.
 #
-# DIG-3585: the invite-gated OCC Pages shell. This worker stays deployed for this
-# one route, because OCC_INVITE_KEY exists on this worker and NOT on the stack,
-# and the gate FAILS CLOSED (occGate returns 404 for every input when the key is
-# undefined) - moving this route without the key would 404 every OCC link. It
-# costs no container wake: both branches of occGate fetch PAGES (the original
-# /chat/occ is re-fetched on accept, /__not-found__ on refuse), never the
-# DigiChatContainer. Valid ?token= or the occ_invite cookie passes through.
+# OCC is in active use, so this deploy re-asserts the CURRENT live route set
+# (verified live: all eight routes resolve to digithings-digichat) and changes
+# nothing about traffic. The /api/mcp/zammad* route below is additive and
+# secret-gated (stage 1 of moving the OCC helpdesk MCP off the shared base
+# stack); nothing consumes it yet. To complete the cutover later: remove these
+# seven from here, keep them on apps/digithings-stack-cloudflare/wrangler.toml,
+# and deploy the stack first.
 #
-# To roll back: re-add the seven routes here, remove them from
-# apps/digithings-stack-cloudflare/wrangler.toml, and deploy this worker.
-# All eight routes were declared together in commit 3f9ae0019b.
+# To roll back: this exact route list IS the rollback shape.
+[[routes]]
+pattern = "digithings.ai/embed*"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/api/chat*"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/api/embed*"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/api/byok*"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/api/plan-proof*"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/api/health"
+zone_name = "digithings.ai"
+
+[[routes]]
+pattern = "digithings.ai/_dtchat*"
+zone_name = "digithings.ai"
+
+# Read-only OCC helpdesk MCP (stage 1): secret-gated by x-digi-mcp-key ==
+# ZAMMAD_EDGE_KEY, then served by the in-container zammad-mcp through the
+# trusted proxy. ADDITIVE — no live traffic uses it until stage 2.
+[[routes]]
+pattern = "digithings.ai/api/mcp/zammad*"
+zone_name = "digithings.ai"
+
+# DIG-3585: the invite-gated OCC Pages shell. Same pattern is on
+# apps/digithings-stack-cloudflare/wrangler.toml so a stack deploy keeps the gate.
+# Valid ?token= or the occ_invite cookie passes through to Pages.
 [[routes]]
 pattern = "digithings.ai/chat/occ*"
 zone_name = "digithings.ai"
@@ -68,6 +99,9 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGICHAT_MONITOR_TOKENS   # monitor free-turn bypass (DIG-613); optional, fails open
 #   DIGICHAT_DASHBOARD_SUPABASE_URL
 #   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
+#   ZAMMAD_API_TOKEN         # read-only Zammad helpdesk MCP (in-container zammad-mcp, OCC tickets)
+#   ZAMMAD_BASE_URL          # Zammad base URL for that MCP (optional; client default otherwise)
+#   ZAMMAD_EDGE_KEY          # Worker-only /api/mcp/zammad gate; never forwarded to the container
 # Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB.
 # It is deliberately NOT forwarded to the Container. This Cloudflare deployment
 # is DB-less (no Postgres instance or secret), so digichat falls back to

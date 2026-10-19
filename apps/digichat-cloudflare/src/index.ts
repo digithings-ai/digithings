@@ -21,6 +21,12 @@ import { isOccShellPath, occGate } from "./occ-gate";
  */
 const workerVars = env as unknown as Env;
 
+/**
+ * OCC helpdesk MCP: the secret-gated edge path served by the in-container
+ * zammad-mcp (python) through the trusted proxy, not by Next.
+ */
+const ZAMMAD_MCP_PREFIX = "/api/mcp/zammad";
+
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
   /** Short idle tail: each wake bills for the whole sleepAfter window. */
@@ -55,6 +61,9 @@ export class DigiChatContainer extends Container {
     DIGICHAT_DASHBOARD_SUPABASE_URL: workerVars.DIGICHAT_DASHBOARD_SUPABASE_URL ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
       workerVars.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? "",
+    // Read-only Zammad helpdesk MCP (in-container zammad-mcp, OCC tickets).
+    ZAMMAD_API_TOKEN: workerVars.ZAMMAD_API_TOKEN ?? "",
+    ZAMMAD_BASE_URL: workerVars.ZAMMAD_BASE_URL ?? "",
   };
 }
 
@@ -80,6 +89,11 @@ export interface Env {
   DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
+  /** Read-only Zammad helpdesk MCP: base URL + API token, forwarded to the container. */
+  ZAMMAD_API_TOKEN?: string;
+  ZAMMAD_BASE_URL?: string;
+  /** Worker-only gate for /api/mcp/zammad*; never forwarded to the container. */
+  ZAMMAD_EDGE_KEY?: string;
 }
 
 export default {
@@ -88,7 +102,17 @@ export default {
     if (isOccShellPath(url.pathname)) {
       return occGate(request, workerEnv.OCC_INVITE_KEY);
     }
-    if (!shouldProxyToDigiChat(url.pathname)) {
+    // OCC helpdesk MCP: /api/mcp/zammad* is served by the in-container
+    // zammad-mcp through the trusted proxy, not by Next. Gate it here with the
+    // edge key this Worker holds; the container never sees the key. Fail closed.
+    const isZammadMcp = url.pathname.startsWith(ZAMMAD_MCP_PREFIX);
+    if (isZammadMcp) {
+      const expected = workerEnv.ZAMMAD_EDGE_KEY?.trim();
+      const provided = request.headers.get("x-digi-mcp-key")?.trim();
+      if (!expected || !provided || provided !== expected) {
+        return new Response("digithings-digichat: unauthorized", { status: 401 });
+      }
+    } else if (!shouldProxyToDigiChat(url.pathname)) {
       return new Response(
         "digichat Worker: path not routed. Marketing /chat shells are on Pages.",
         { status: 404 },

@@ -47,6 +47,8 @@ const WORKER_ONLY_ENV_MEMBERS: Record<string, string> = {
     "resolved into the forwarded DIGICHAT_EMBED_ENABLED; never forwarded itself",
   OCC_INVITE_KEY:
     "Worker-only /chat/occ shell gate (DIG-1210); the container resolves it via tenant tokenEnv",
+  ZAMMAD_EDGE_KEY:
+    "Worker-only /api/mcp/zammad gate (stage 1); the container never sees the edge key",
 };
 
 /**
