@@ -25,7 +25,10 @@
 # env blocks — one script (develop/prod not split). Cloudflare tracing is
 # Langfuse only. allocation-shadow command allowlist stays empty. Do not
 # commit values.
-# One container class. instance_type stays standard-2. max_instances stays 1.
+# One container class. instance_type standard-1 (was standard-2, 6 GiB -> 4 GiB):
+# the runner is idle most of the day and memory is billed per GiB-s. Revert to
+# standard-2 if a house run OOMs (watch the runner's exit code and log).
+# max_instances stays 1.
 # Nautilus stays on this image; it is not a second class.
 # ARCHIVE is the house-run skip ledger on the existing digithings-archive bucket.
 name = "digiquant-runner"
@@ -42,7 +45,7 @@ enabled = true
 class_name = "DigiQuantRunnerContainer"
 image = "../../Dockerfile.digiquant-runner"
 image_build_context = "../.."
-instance_type = "standard-2"
+instance_type = "standard-1"
 max_instances = 1
 
 [[durable_objects.bindings]]

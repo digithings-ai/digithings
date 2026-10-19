@@ -476,7 +476,7 @@ def _posted_verdict_reason(pr: dict[str, Any]) -> list[str]:
 
 
 def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
-    """The PR's reviews, minus the two entries that are not review evidence.
+    """The PR's reviews, minus the entry that is not review evidence.
 
     2026-10-18 (Chris): now that the queue no longer demands a non-author approval,
     this hatch is the review gate, so it must not be satisfiable by a review that
@@ -484,10 +484,19 @@ def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
 
       * any review by the PR's own author - GitHub refuses a self-approval in
         production, so the APPROVED shape is a fixture rather than a live one, and
-        an author's own review is not evidence that anyone else read the change;
-      * an APPROVED review whose login is a `[bot]` - a linter saying it found no
-        problems. A real bot review pass is still accepted: `check_review_coverage`
-        counts it through its own REVIEW_BOTS hatch or a REVIEW_BOT_CHECK_NAMES check.
+        an author's own review is not evidence that anyone else read the change.
+
+    Bot reviews are deliberately NOT stripped here (2026-10-19, DIG-4298). The
+    `[bot]`-suffix strip this hatch used to apply was the queue's only bot rule,
+    bare logins slipped past it into the coverage module's approvals sink, and
+    the strip itself starved the `REVIEW_BOTS` hatch: a `coderabbitai[bot]`
+    approval counted as NO evidence through this queue while its bare spelling
+    counted as a person's approval through the promotion gate - two spellings,
+    two verdicts, for one review. There is now one rule for "this login is a
+    bot", `check_review_coverage.is_bot_login`, and it is applied once at the
+    sink (`_apply_reviews_checks_comments`) that both the queue and the
+    promotion gate call: bot logins are excluded from `approvals` there, while
+    listed reviewer-bot reviews still flow through to the `REVIEW_BOTS` hatch.
 
     Everything else is passed through untouched.
     """
@@ -496,8 +505,6 @@ def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
     for review in pr.get("reviews") or []:
         login = str((review.get("author") or {}).get("login") or "")
         if login and login == author:
-            continue
-        if login.endswith("[bot]") and str(review.get("state") or "").upper() == "APPROVED":
             continue
         kept.append(review)
     return kept
