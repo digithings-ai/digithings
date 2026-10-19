@@ -122,10 +122,18 @@ const START_COUNTER_NAME = "cron-ticks";
 
 /** The slice of StartCounter this Worker uses on the tick path. */
 type TickCounter = {
-  claimSlot(key: string, slot: string): Promise<boolean>;
-  confirmSlot(key: string, slot: string): Promise<void>;
-  releaseSlot(key: string, slot: string): Promise<void>;
+  claimSlot(key: string, slot: string): Promise<string | null>;
+  markDispatching(key: string, slot: string, token: string): Promise<boolean>;
+  confirmSlot(key: string, slot: string, token: string): Promise<void>;
+  releaseSlot(key: string, slot: string, token: string): Promise<void>;
 };
+
+/**
+ * The result of asking for a tick slot. `token` is null when the caller does
+ * not dedupe (/kick) or when the counter failed open; only a real claim can be
+ * confirmed or released, so the token is the fence.
+ */
+type TickClaim = { owned: boolean; token: string | null };
 
 /**
  * The job a cron tick slot belongs to.
@@ -163,8 +171,8 @@ function tickCounter(env: Env): TickCounter | undefined {
 let warnedUnboundCounter = false;
 
 /**
- * True when this delivery owns the slot, false when another delivery of the
- * same tick already claimed it.
+ * The claim token when this delivery owns the slot, `{owned: false}` when
+ * another delivery of the same tick already claimed it.
  *
  * Fails OPEN on every failure: a missing binding or an unreachable counter
  * dispatches anyway. A duplicate run costs Actions minutes, a dropped tick
@@ -176,7 +184,7 @@ async function claimTick(
   cron: string,
   job: Job,
   scheduledTime: number,
-): Promise<boolean> {
+): Promise<TickClaim> {
   try {
     const counter = tickCounter(env);
     if (!counter) {
@@ -184,15 +192,46 @@ async function claimTick(
         warnedUnboundCounter = true;
         console.error(JSON.stringify({ cron, job: job.id, error: "start_counter_unbound" }));
       }
-      return true;
+      return { owned: true, token: null };
     }
-    return await counter.claimSlot(tickKey(cron, job), tickSlot(scheduledTime));
+    const token = await counter.claimSlot(tickKey(cron, job), tickSlot(scheduledTime));
+    return token === null ? { owned: false, token: null } : { owned: true, token };
   } catch (err) {
     console.error(
       JSON.stringify({
         cron,
         job: job.id,
         error: "start_counter_unreachable",
+        detail: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return { owned: true, token: null };
+  }
+}
+
+/**
+ * Record that this delivery is about to call GitHub. False means another
+ * delivery took the slot over, so this one must not dispatch. A counter
+ * failure fails open, like the claim: dispatch, and accept the duplicate risk.
+ */
+async function markDispatchingTick(
+  env: Env,
+  cron: string,
+  job: Job,
+  scheduledTime: number,
+  token: string | null,
+): Promise<boolean> {
+  if (!token) return true;
+  try {
+    const counter = tickCounter(env);
+    if (!counter) return true;
+    return await counter.markDispatching(tickKey(cron, job), tickSlot(scheduledTime), token);
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        cron,
+        job: job.id,
+        error: "start_counter_dispatching_failed",
         detail: err instanceof Error ? err.message : String(err),
       }),
     );
@@ -211,11 +250,13 @@ async function confirmTick(
   cron: string,
   job: Job,
   scheduledTime: number,
+  token: string | null,
 ): Promise<void> {
+  if (!token) return;
   try {
     const counter = tickCounter(env);
     if (!counter) return;
-    await counter.confirmSlot(tickKey(cron, job), tickSlot(scheduledTime));
+    await counter.confirmSlot(tickKey(cron, job), tickSlot(scheduledTime), token);
   } catch (err) {
     console.error(
       JSON.stringify({
@@ -238,11 +279,13 @@ async function releaseTick(
   cron: string,
   job: Job,
   scheduledTime: number,
+  token: string | null,
 ): Promise<void> {
+  if (!token) return;
   try {
     const counter = tickCounter(env);
     if (!counter) return;
-    await counter.releaseSlot(tickKey(cron, job), tickSlot(scheduledTime));
+    await counter.releaseSlot(tickKey(cron, job), tickSlot(scheduledTime), token);
   } catch (err) {
     console.error(
       JSON.stringify({
@@ -266,8 +309,26 @@ function claimTickIfAsked(
   job: Job,
   scheduledTime: number,
   opts: RunOptions,
-): Promise<boolean> {
-  return opts.dedupeTick ? claimTick(env, cron, job, scheduledTime) : Promise.resolve(true);
+): Promise<TickClaim> {
+  return opts.dedupeTick
+    ? claimTick(env, cron, job, scheduledTime)
+    : Promise.resolve({ owned: true, token: null });
+}
+
+/**
+ * One line per skipped duplicate keeps the double delivery visible without
+ * starting the workflow again.
+ */
+function logDuplicate(cron: string, job: Job, scheduledTime: number): void {
+  console.log(
+    JSON.stringify({
+      cron,
+      repo: job.repo,
+      job: job.id,
+      skipped: "duplicate_tick",
+      scheduled_time: scheduledTime,
+    }),
+  );
 }
 
 async function runJobsForCron(
@@ -328,27 +389,21 @@ async function runJobsForCron(
       args = backfillArgs(opts.args ?? {}, scheduledTime);
     }
     pending.push(
-      claimTickIfAsked(env, cron, job, scheduledTime, opts).then((owned) => {
-        if (!owned) {
-          // The tick already dispatched this job. Log instead of dispatching:
-          // one line per skipped duplicate keeps the double delivery visible
-          // without starting the workflow again.
-          console.log(
-            JSON.stringify({
-              cron,
-              repo: job.repo,
-              job: job.id,
-              skipped: "duplicate_tick",
-              scheduled_time: scheduledTime,
-            }),
-          );
+      claimTickIfAsked(env, cron, job, scheduledTime, opts).then(async (claim) => {
+        if (!claim.owned) {
+          logDuplicate(cron, job, scheduledTime);
+          return undefined;
+        }
+        // The claim may still be taken over between the claim and this write
+        // if it sat longer than the lease, so a false here is a duplicate too.
+        if (!(await markDispatchingTick(env, cron, job, scheduledTime, claim.token))) {
+          logDuplicate(cron, job, scheduledTime);
           return undefined;
         }
         return dispatch(env, job, cron, scheduledTime, { args, force: opts.force === true })
           .then(async (result) => {
             // The dispatch was accepted, so this slot stays claimed for good.
-            // A confirm failure only shortens the claim to its lease.
-            if (opts.dedupeTick) await confirmTick(env, cron, job, scheduledTime);
+            await confirmTick(env, cron, job, scheduledTime, claim.token);
             return startedRun(job, result);
           })
           .catch(async (err: unknown) => {
@@ -356,7 +411,7 @@ async function runJobsForCron(
             console.error(JSON.stringify({ cron, job: job.id, error: msg }));
             // Nothing started upstream, so the slot goes back for the next
             // delivery of the same tick to try again.
-            if (opts.dedupeTick) await releaseTick(env, cron, job, scheduledTime);
+            await releaseTick(env, cron, job, scheduledTime, claim.token);
             throw err;
           });
       }),

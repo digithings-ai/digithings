@@ -111,11 +111,18 @@ Two properties are deliberate:
   retry. A claim is only ever kept for a dispatch that GitHub (or a runner)
   accepted.
 
-A claim is written before the dispatch and confirmed after it is accepted. An
-unconfirmed claim is handed out again after 5s, so a Worker that dies between
-the two does not lose the tick: the duplicate delivery 7-29s later can start it.
-The cost is that a dispatch that itself runs longer than 5s can be duplicated by
-a very late copy; that is the same trade as the fail-open rule.
+A claim moves through three states. It is written before the dispatch
+(`claimed`), moved to `dispatching` immediately before the GitHub call, and to
+`confirmed` when that call is accepted. A `claimed` slot that never reached the
+dispatch is handed out again after 5s, so a Worker that dies between the two
+does not lose the tick. A `dispatching` slot is held for 120s, longer than any
+normal GitHub call including `Retry-After` waits, so the ordinary second
+delivery 7-29s later cannot duplicate a slow dispatch. Only a dispatch that
+outlives that long lease is treated as dead; that is the same fail-open trade as
+the missing-binding rule, because a duplicate costs Actions minutes and a
+dropped daily clock costs a day. Every transition and the release are fenced by
+the claim token, so a stale delivery cannot confirm or erase the new owner's
+claim.
 
 The slot is the UTC minute because that is the only unit the two copies share;
 0 of 514 measured pairs straddled a minute boundary. A pair that does straddle

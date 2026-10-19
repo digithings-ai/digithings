@@ -22,31 +22,45 @@ export interface StartCounts extends DayCounts {
   day: string;
 }
 
+/** One job's claimed cron slots on one UTC day, as stored. */
+type DaySlots = Record<string, SlotClaim>;
+
+type SlotState = "claimed" | "dispatching" | "confirmed";
+
 /**
- * One job's claimed cron slots on one UTC day, as stored.
- *
- * `CONFIRMED_SLOT` means a dispatch was accepted for the slot. A positive
- * number is the claim time in epoch milliseconds, still in flight; see
- * `SLOT_LEASE_MS`.
+ * One slot's state. `token` is the ownership fence: only the delivery that
+ * claimed the slot may move it to `dispatching`, `confirmed`, or release it.
+ * Without it, a slow first delivery can delete or confirm the second
+ * delivery's claim after the first lease expired.
  */
-type DaySlots = Record<string, number>;
-
-/** Stored value for a claim whose dispatch was accepted. Never expires. */
-const CONFIRMED_SLOT = -1;
+type SlotClaim = {
+  state: SlotState;
+  /** Epoch milliseconds of the last state change. */
+  at: number;
+  token: string;
+};
 
 /**
- * How long an unconfirmed claim blocks a second delivery.
+ * How long a claim that has not started dispatching blocks another delivery.
  *
- * The claim is written before the dispatch and confirmed only after the
- * dispatch is accepted, so the window exists to survive a runtime that dies
- * between the two. A duplicate delivery arrives 7-29s after the first, so the
- * lease has to be shorter than the shortest observed gap or the duplicate
- * cannot recover a dead tick. A dispatch that itself takes longer than this
- * can therefore be duplicated by a late delivery: the same fail-open trade the
- * tick path already makes, because a duplicate costs Actions minutes and a
- * dropped daily clock costs a day.
+ * This window exists to survive a runtime that dies between the claim and the
+ * dispatch. A duplicate delivery arrives 7-29s after the first, so the lease
+ * has to be shorter than the shortest observed gap or the duplicate cannot
+ * recover a dead tick.
  */
 export const SLOT_LEASE_MS = 5_000;
+
+/**
+ * How long a dispatch in flight blocks another delivery.
+ *
+ * Longer than any normal GitHub call, including the Retry-After sleeps inside
+ * `postGithub`, because the second delivery arriving during a slow dispatch is
+ * the ordinary case, not a crash. A dispatch that outlives this has to be
+ * treated as dead, or a hung invocation could hold the slot forever; the cost
+ * is the same fail-open trade the tick path already makes (a duplicate costs
+ * Actions minutes, a dropped daily clock costs a day).
+ */
+export const DISPATCH_LEASE_MS = 120_000;
 
 /** Counts and claims carry different prefixes, so a claim never reads as a count. */
 const countsKey = (job: string, day: string): string => `counts:${job}:${day}`;
@@ -85,8 +99,8 @@ export class StartCounter {
   }
 
   /**
-   * `true` for the first caller of `key` on `slot`, `false` for every caller
-   * after it until `releaseSlot` or the lease expires.
+   * The claim token for the first caller of `key` on `slot`, `null` for every
+   * caller after it until `releaseSlot` or the lease expires.
    *
    * `slot` is `YYYY-MM-DDTHH:MM`, the cron minute the job is owed in. A minute
    * does not recur, so a confirmed claim never has to expire to avoid re-arming
@@ -95,29 +109,25 @@ export class StartCounter {
    * last other day this key wrote. One day of slots per key is all any caller
    * can still need: a tick is delivered within seconds, never days.
    *
-   * A claim that was never confirmed is handed out again after `SLOT_LEASE_MS`,
-   * so a delivery that died between the claim and the accepted dispatch does
-   * not lose the clock. `now` is injectable for the lease tests only.
+   * A claim that never reached dispatch is handed out again after
+   * `SLOT_LEASE_MS`, so a delivery that died between the two does not lose the
+   * clock. A claim that is dispatching is held for `DISPATCH_LEASE_MS`, so the
+   * ordinary second delivery cannot duplicate a slow dispatch. `now` is
+   * injectable for the lease tests only.
    *
    * Transactional, so two overlapping callers cannot both observe an absent
    * slot (or the same expired one).
    */
-  async claimSlot(key: string, slot: string, now: number = Date.now()): Promise<boolean> {
+  async claimSlot(key: string, slot: string, now: number = Date.now()): Promise<string | null> {
     const day = slot.slice(0, 10);
     const dayKey = slotsKey(key, day);
     const markerKey = slotDayKey(key);
     return this.state.storage.transaction(async (txn) => {
       const slots = (await txn.get<DaySlots>(dayKey)) ?? {};
       const held = slots[slot];
-      // CONFIRMED_SLOT never expires. A timestamp is a claim still in flight,
-      // and only an expired one may be taken over.
-      if (
-        held !== undefined &&
-        (held === CONFIRMED_SLOT || now - held < SLOT_LEASE_MS)
-      ) {
-        return false;
-      }
-      slots[slot] = now;
+      if (held !== undefined && !claimExpired(held, now)) return null;
+      const token = crypto.randomUUID();
+      slots[slot] = { state: "claimed", at: now, token };
       await txn.put(dayKey, slots);
       const previous = await txn.get<string>(markerKey);
       // Only ever move forward. A tick scheduled at 23:59 can be delivered just
@@ -127,30 +137,66 @@ export class StartCounter {
         if (previous) await txn.delete(slotsKey(key, previous));
         await txn.put(markerKey, day);
       }
+      return token;
+    });
+  }
+
+  /**
+   * Record that this owner is about to call GitHub. Returns false when another
+   * delivery has taken the slot over, in which case this one must not dispatch.
+   */
+  async markDispatching(
+    key: string,
+    slot: string,
+    token: string,
+    now: number = Date.now(),
+  ): Promise<boolean> {
+    const dayKey = slotsKey(key, slot.slice(0, 10));
+    return this.state.storage.transaction(async (txn) => {
+      const slots = await txn.get<DaySlots>(dayKey);
+      const held = slots?.[slot];
+      if (!slots || !held || held.token !== token) return false;
+      if (held.state === "claimed") {
+        slots[slot] = { state: "dispatching", at: now, token };
+        await txn.put(dayKey, slots);
+      }
       return true;
     });
   }
 
-  /** Mark the slot's dispatch as accepted, so the claim no longer expires. */
-  async confirmSlot(key: string, slot: string): Promise<void> {
+  /** Mark the dispatch accepted, so the claim no longer expires. Fenced by token. */
+  async confirmSlot(key: string, slot: string, token: string): Promise<void> {
     const dayKey = slotsKey(key, slot.slice(0, 10));
     await this.state.storage.transaction(async (txn) => {
       const slots = await txn.get<DaySlots>(dayKey);
-      if (!slots || slots[slot] === undefined) return;
-      slots[slot] = CONFIRMED_SLOT;
+      const held = slots?.[slot];
+      if (!slots || !held || held.token !== token) return;
+      slots[slot] = { state: "confirmed", at: Date.now(), token };
       await txn.put(dayKey, slots);
     });
   }
 
-  /** Drop the slot so `claimSlot` can hand it out again after a failed dispatch. */
-  async releaseSlot(key: string, slot: string): Promise<void> {
+  /**
+   * Drop the slot so `claimSlot` can hand it out again after a failed dispatch.
+   * Fenced by token, so a late failure from a delivery that lost the slot
+   * cannot erase the new owner's claim.
+   */
+  async releaseSlot(key: string, slot: string, token: string): Promise<void> {
     const dayKey = slotsKey(key, slot.slice(0, 10));
     await this.state.storage.transaction(async (txn) => {
       const slots = await txn.get<DaySlots>(dayKey);
-      if (!slots?.[slot]) return;
+      const held = slots?.[slot];
+      if (!slots || !held || held.token !== token) return;
       delete slots[slot];
       if (Object.keys(slots).length === 0) await txn.delete(dayKey);
       else await txn.put(dayKey, slots);
     });
   }
+}
+
+/** True when `held` may be taken over at `now`. A confirmed slot never may. */
+function claimExpired(held: SlotClaim, now: number): boolean {
+  if (held.state === "confirmed") return false;
+  const lease = held.state === "dispatching" ? DISPATCH_LEASE_MS : SLOT_LEASE_MS;
+  return now - held.at >= lease;
 }

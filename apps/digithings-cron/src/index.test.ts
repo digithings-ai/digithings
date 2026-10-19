@@ -215,23 +215,30 @@ describe("scheduled", () => {
  * the first — the cross-invoke guarantee the real Durable Object provides.
  */
 function startCounter() {
-  const store = new Map<string, Set<string>>();
+  const store = new Map<string, string>();
   const events: string[] = [];
+  let sequence = 0;
+  const slotId = (key: string, slot: string) => `${key}@${slot}`;
   const stub = {
     async claimSlot(key: string, slot: string) {
       events.push(`claim:${key}@${slot}`);
-      const slots = store.get(key) ?? new Set<string>();
-      store.set(key, slots);
-      if (slots.has(slot)) return false;
-      slots.add(slot);
-      return true;
+      const id = slotId(key, slot);
+      if (store.has(id)) return null;
+      const token = `token-${++sequence}`;
+      store.set(id, token);
+      return token;
     },
-    async confirmSlot(key: string, slot: string) {
+    async markDispatching(key: string, slot: string, token: string) {
+      events.push(`dispatching:${key}@${slot}`);
+      return store.get(slotId(key, slot)) === token;
+    },
+    async confirmSlot(key: string, slot: string, token: string) {
       events.push(`confirm:${key}@${slot}`);
+      if (store.get(slotId(key, slot)) === token) store.set(slotId(key, slot), "confirmed");
     },
-    async releaseSlot(key: string, slot: string) {
+    async releaseSlot(key: string, slot: string, token: string) {
       events.push(`release:${key}@${slot}`);
-      store.get(key)?.delete(slot);
+      if (store.get(slotId(key, slot)) === token) store.delete(slotId(key, slot));
     },
   };
   const namespace = {
@@ -250,7 +257,7 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
   it("dispatches once when the same tick is delivered twice", async () => {
     const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", githubFetch);
-    const { namespace } = startCounter();
+    const { namespace, events } = startCounter();
     const env: Env = {
       DRY_RUN: "0",
       GH_DISPATCH_TOKEN: "github-token",
@@ -272,6 +279,9 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
     }
 
     expect(githubFetch).toHaveBeenCalledOnce();
+    // Without the confirm the claim expires after its lease and the second
+    // delivery takes the slot again, so this assertion is part of the pin.
+    expect(events.some((event) => event.startsWith("confirm:"))).toBe(true);
   });
 
   it("uses the cron minute, so a pair straddling a minute boundary is the known limit", async () => {
