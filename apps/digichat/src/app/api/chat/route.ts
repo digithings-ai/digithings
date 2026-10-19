@@ -382,7 +382,16 @@ export async function POST(req: Request) {
   // Prefer X-Digi-Model on the house path. Bound BYOK spends the visitor's
   // provider models — the CI picker must not reject those ids (#3829).
   let modelId = digigraphModelName();
-  const requestedModel = req.headers.get("x-digi-model")?.trim() || undefined;
+  // A tenant with lockSessionControls pins the house default model (DIG-1210):
+  // a visitor's /model pick or session_set_model result is never forwarded.
+  // Exception: a locked tenant that curates its own `models.available` list
+  // lets the visitor pick from exactly that list (allowlist enforced below).
+  const lockedWithoutModelList =
+    embedConfig?.lockSessionControls === true &&
+    (embedConfig.models?.available?.length ?? 0) === 0;
+  const requestedModel = lockedWithoutModelList
+    ? undefined
+    : req.headers.get("x-digi-model")?.trim() || undefined;
   // House-path session model (non-BYOK, allowlisted). digigraph only binds it
   // when the slug is also on its own DIGI_SESSION_MODEL_ALLOWLIST.
   let houseSessionModel: string | undefined;

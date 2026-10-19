@@ -9,6 +9,7 @@
  * mode (baseline) arrives in a later step.
  */
 
+import { useDigichatWarmupPhase } from "@digithings/ui/chat/use-warmup-phase";
 import type {
   ComponentProps,
   CSSProperties,
@@ -186,6 +187,7 @@ export function DigiChatHost({
   className,
   composerLayout,
 }: DigiChatHostProps) {
+  const wakePhase = useDigichatWarmupPhase();
   return (
     <AssistantRuntimeProvider runtime={runtime} config={auiConfig}>
       <RuntimeAdapterProvider
@@ -243,6 +245,13 @@ export function DigiChatHost({
                   ) : (
                     <DigichatBootLoader
                       ready={bootReady}
+                      statusText={
+                        wakePhase === "waking"
+                          ? "Waking up services…"
+                          : wakePhase === "error"
+                            ? "Services are slow to respond. Your message will send once they are ready."
+                            : null
+                      }
                       onSettled={onBootSettled}
                       welcome={headline}
                       welcomeBody={(skinChrome.welcomeBody ?? []).join(" ")}

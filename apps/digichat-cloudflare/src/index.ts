@@ -15,6 +15,7 @@ import {
   shouldProxyToDigiChat,
 } from "./paths";
 import { legacyEmbedEnabledValue } from "./embed-flag";
+import { resolveEmbedTenants } from "./tenants-kv";
 import { isOccShellPath, occGate } from "./occ-gate";
 import { digichatContainerReset } from "./admin-reset";
 
@@ -75,6 +76,32 @@ export class DigiChatContainer extends Container {
     ZAMMAD_API_TOKEN: workerVars.ZAMMAD_API_TOKEN ?? "",
     ZAMMAD_BASE_URL: workerVars.ZAMMAD_BASE_URL ?? "",
   };
+
+  private tenantsResolved = false;
+
+  /**
+   * Before the container boots, build DIGICHAT_EMBED_TENANTS from the KV
+   * tenant config (secret refs resolved from Worker secrets), falling back to
+   * the legacy secret. See ./tenants-kv.ts. Config edits apply on next boot.
+   */
+  override async fetch(request: Request): Promise<Response> {
+    if (!this.tenantsResolved) {
+      const { json, source } = await resolveEmbedTenants(
+        workerVars.DIGICHAT_TENANTS_KV,
+        workerVars.DIGICHAT_EMBED_TENANTS,
+        workerVars as unknown as Record<string, unknown>,
+      );
+      this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: json };
+      this.tenantsResolved = true;
+      console.log(`[tenants-kv] embed tenants source=${source}`);
+    }
+    return super.fetch(request);
+  }
+
+  /** Re-read KV tenant config on the next boot (the DO outlives container sleeps). */
+  override onStop(): void {
+    this.tenantsResolved = false;
+  }
 }
 
 export interface Env {
@@ -100,6 +127,8 @@ export interface Env {
   DIGICHAT_ENABLED_SERVICES?: string;
   AUTH_SECRET?: string;
   DIGICHAT_EMBED_TENANTS?: string;
+  /** KV with key `embed-tenants` (non-secret tenant config; refs via *Env). */
+  DIGICHAT_TENANTS_KV?: KVNamespace;
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGIKEY_BFF_TOKEN?: string;

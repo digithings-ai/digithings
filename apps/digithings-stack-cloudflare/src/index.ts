@@ -79,8 +79,13 @@ export class DigiStackContainer extends Container {
    * the JWKS the verifiers fetch), so it can never be optional.
    */
   requiredPorts = [DIGIGRAPH_PORT];
-  /** Cold starts are seamless (#4323); each wake bills the whole tail, so keep it minimal. */
-  sleepAfter = "1m";
+  /**
+   * Cold starts are seamless (#4323), but the idle timer also runs while
+   * supervisord is still booting: at 1m a slow cold boot (digigraph + digikey
+   * well past 60s) was stopped mid-boot by "Activity expired" and never bound
+   * its ports (OCC outage 2026-10-14). 5m covers the 180s port wait.
+   */
+  sleepAfter = "5m";
 
   /**
    * Runtime env for supervisord processes. Secrets from `wrangler secret put`;
@@ -107,9 +112,10 @@ export class DigiStackContainer extends Container {
     OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
     DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
     // Session model picker (OCC settings): house-upstream slugs a visitor may
-    // pick per session, set in wrangler.toml [vars]. digigraph binds only slugs
-    // on this list, so the empty fallback disables the picker.
-    DIGI_SESSION_MODEL_ALLOWLIST: env.DIGI_SESSION_MODEL_ALLOWLIST ?? "",
+    // pick per session. digigraph binds only slugs on this list.
+    DIGI_SESSION_MODEL_ALLOWLIST:
+      env.DIGI_SESSION_MODEL_ALLOWLIST ??
+      "deepseek/deepseek-v4.1-flash,z-ai/glm-5.3-flash,qwen/qwen3.8-flash,google/gemma-4-31b-it,xiaomi/mimo-v2.6-flash,z-ai/glm-4.7-flash",
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
     // Canonical shared Cloudflare credential pair (#2239 rename) -- one account +
     // token now authorizes both Vectorize and D1. VECTORIZE_*/D1_ACCOUNT_ID/
@@ -384,6 +390,7 @@ export interface Env {
   STACK_CONTAINER_REV?: string;
   OPENAI_API_BASE?: string;
   DIGI_LLM_MODE?: string;
+  /** House-upstream model slugs a visitor may pick per session (OCC picker). */
   DIGI_SESSION_MODEL_ALLOWLIST?: string;
   CHROMA_PATH?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;

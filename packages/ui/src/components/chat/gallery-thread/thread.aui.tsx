@@ -71,7 +71,6 @@ import {
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
-import { ThreadSource } from "./source";
 import { TypedWelcomeCopy } from "./typed-welcome-copy";
 import { useDigichatWarmupPhase } from "../use-warmup-phase";
 
@@ -1058,7 +1057,6 @@ const AssistantMessage: FC = () => {
     ToolFallback: ToolFallbackComponent = ToolFallback,
     ToolGroup,
     ReasoningGroup,
-    Source: SourceComponent = ThreadSource,
   } = useContext(ThreadComponentsContext);
   const { reasoning: reasoningMode, toolCalls: toolCallsMode } = useContext(
     ThreadGroupDisclosureContext,
@@ -1165,7 +1163,10 @@ const AssistantMessage: FC = () => {
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "source":
-                return <SourceComponent {...part} />;
+                // No auto-rendered source list (DIG-1210): a row per hit split
+                // the tool groups and repeated the same hit per retrieve span.
+                // The model cites inline with markdown links in its answer.
+                return null;
               default:
                 return null;
             }

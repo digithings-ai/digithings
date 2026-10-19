@@ -1,5 +1,6 @@
 "use client";
 
+import { warmFetch } from "@/lib/warmup-gate";
 import { useCallback, useEffect, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";

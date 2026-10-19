@@ -1949,6 +1949,10 @@ bindings:
   name: DIGICHAT
   class_name: DigiChatContainer
   source: apps/digichat-cloudflare/wrangler.toml
+- worker: digithings-digichat
+  type: kv_namespace
+  name: DIGICHAT_TENANTS_KV
+  source: apps/digichat-cloudflare/wrangler.toml
 - worker: digithings-stack
   type: container
   class_name: DigiStackContainer

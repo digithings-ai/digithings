@@ -36,6 +36,11 @@ _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 # One index name, or a comma-separated fan-out list (e.g. "occ_help,occ_tickets",
 # #4756): each element follows the single-index shape; empty elements rejected.
 _INDEX = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}(,[a-zA-Z0-9][a-zA-Z0-9._-]{0,127})*$")
+# Dedicated per-index digisearch tools (DIG-3269): name -> {index, description}.
+_TOOL_NAME = re.compile(r"^digisearch_[a-z0-9_]{1,48}$")
+_RESERVED_TOOL_NAMES = frozenset(
+    {"digisearch_fetch_all", "digisearch_research_delegate", "digisearch_semantic"}
+)
 _HEADER_CORPUS_INDEX = "x-digi-corpus-index"
 _HEADER_VAULT_PREFIX = "x-digi-vault-prefix"
 _HEADER_TENANT = "x-digi-tenant"
@@ -58,6 +63,45 @@ class TenantCorpusOverride(BaseModel):
     research_system_prompt: str | None = Field(
         default=None, description="Optional research system prompt override"
     )
+    digisearch_tools: dict[str, dict[str, str]] | None = Field(
+        default=None,
+        description="Dedicated digisearch tools for this tenant: tool name -> "
+        "{index, description}. When set, the generic digisearch tools are hidden and "
+        "each named tool queries only its own index (the model picks the tool).",
+    )
+    lock_session_controls: bool = Field(
+        default=False,
+        description="Hide model/MCP/tool session controls (session_set_model, "
+        "session_upsert_mcp, session_remove_mcp, session_toggle_tool) from this tenant",
+    )
+
+
+def _parse_digisearch_tools(raw: Any, slug: str) -> dict[str, dict[str, str]] | None:
+    """Validate ``digisearchTools``; invalid entries are dropped with a warning."""
+    if not raw:
+        return None
+    if not isinstance(raw, dict):
+        logger.warning("%s[%s]: digisearchTools must be an object", _ENV_VAR, slug)
+        return None
+    out: dict[str, dict[str, str]] = {}
+    for name, spec in raw.items():
+        if (
+            not isinstance(name, str)
+            or not _TOOL_NAME.match(name)
+            or name in _RESERVED_TOOL_NAMES
+            or not isinstance(spec, dict)
+        ):
+            logger.warning("%s[%s]: skip invalid digisearch tool %r", _ENV_VAR, slug, name)
+            continue
+        index = str(spec.get("index") or "").strip()
+        description = str(spec.get("description") or "").strip()
+        if not index or "," in index or not _INDEX.match(index) or not description:
+            logger.warning(
+                "%s[%s]: skip digisearch tool %r (index/description)", _ENV_VAR, slug, name
+            )
+            continue
+        out[name] = {"index": index, "description": description}
+    return out or None
 
 
 def _normalize_prefix(raw: str) -> str:
@@ -97,11 +141,17 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
         idx = value.get("digisearchIndex") or value.get("digisearch_index")
         prefix = value.get("vaultPathPrefix") or value.get("vault_path_prefix")
         prompt = value.get("researchSystemPrompt") or value.get("research_system_prompt")
+        lock = value.get("lockSessionControls", value.get("lock_session_controls", False))
+        tools = _parse_digisearch_tools(
+            value.get("digisearchTools") or value.get("digisearch_tools"), normalized_slug
+        )
         try:
             out[normalized_slug] = TenantCorpusOverride(
                 digisearch_index=str(idx).strip() if idx else None,
                 vault_path_prefix=_normalize_prefix(str(prefix)) if prefix else None,
                 research_system_prompt=str(prompt).strip() if prompt else None,
+                lock_session_controls=lock is True,
+                digisearch_tools=tools,
             )
         except Exception as exc:
             logger.warning("%s[%s]: %s", _ENV_VAR, normalized_slug, exc)
@@ -197,6 +247,8 @@ def resolve_corpus_override(
             digisearch_index=index,
             vault_path_prefix=mapped.vault_path_prefix,
             research_system_prompt=mapped.research_system_prompt,
+            lock_session_controls=mapped.lock_session_controls,
+            digisearch_tools=mapped.digisearch_tools,
         )
 
     # Single-tenant (map unset): headers may select corpus.
