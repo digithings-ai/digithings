@@ -555,6 +555,19 @@ def test_the_audit_comment_records_the_checks_actually_required(gh_stub: Any) ->
 # --- review: who is allowed to say the code was read --------------------------
 
 
+def _coverage_state() -> dict[str, Any]:
+    """A state dict shaped the way `_gate_review_coverage` builds one."""
+    return {
+        "labels": set(),
+        "approvals": [],
+        "bugbot": None,
+        "title": "",
+        "owner_review": None,
+        "agent_tool": [],
+        "agent_review": None,
+    }
+
+
 def test_the_author_approving_their_own_pr_does_not_count() -> None:
     pr = _pr(1, reviews=[{"author": {"login": "chrizefan"}, "state": "APPROVED"}])
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
@@ -570,17 +583,62 @@ def test_an_approving_review_from_someone_else_is_enough() -> None:
     ).eligible
 
 
-def test_a_bots_approval_is_not_a_review() -> None:
-    """A bot's APPROVED is a linter verdict, not a person owning the change.
+def test_an_unlisted_bots_bare_login_approval_is_refused() -> None:
+    """DIG-4298: an unlisted bot's APPROVED must not clear coverage.
 
-    GitHub's own review summary ignores bot reviews for exactly this reason. If a
-    bot approval satisfied the gate, a repo with an auto-reviewing bot would show
-    every PR as reviewed and the queue would merge on nothing but green checks.
+    `gh` returns the bare login (no `[bot]` suffix — in production it is
+    `flaky-lint` with `is_bot: true` on the author record), and the sink used to
+    exclude only three suffixed logins from `approvals`, so this review cleared
+    the gate as though a person had approved. Both filters that make up
+    `_gate_review_coverage` have to refuse it: the batched/`gh pr view` sink rule
+    and `_evidence_reviews`' pass-through feed the same evidence.
     """
-    pr = _pr(1, reviews=[{"author": {"login": "coderabbitai[bot]"}, "state": "APPROVED"}])
+    pr = _pr(
+        1,
+        reviews=[{"author": {"login": "flaky-lint", "is_bot": True}, "state": "APPROVED"}],
+    )
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
     assert not verdict.eligible
     assert any("review coverage" in r for r in verdict.reasons), verdict.reasons
+
+
+def test_an_unlisted_suffixed_bot_approval_is_refused_too() -> None:
+    """The name rule catches what the 2026-10-18 sink missed: any `[bot]` suffix,
+    listed or not, is a linter verdict, and it must not be evidence either way."""
+    pr = _pr(1, reviews=[{"author": {"login": "netlify[bot]"}, "state": "APPROVED"}])
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
+    assert not verdict.eligible
+    assert any("review coverage" in r for r in verdict.reasons), verdict.reasons
+
+
+def test_a_listed_reviewer_bots_approval_counts_as_an_agent_review_not_an_approval() -> None:
+    """A listed reviewer bot's APPROVED is still evidence — as an agent review.
+
+    Excluding bot logins from `approvals` (DIG-4298) must not exclude their
+    reviews from the gate: CodeRabbit and friends clear coverage through the
+    `REVIEW_BOTS` hatch, bare or suffixed, in both the queue path and the
+    promotion path, and the verdict they produce never claims `approved by` —
+    the audit trail must not say a person approved.
+    """
+    crc = mq._coverage_module()
+    for login in ("coderabbitai", "coderabbitai[bot]"):
+        pr = _pr(1, reviews=[{"author": {"login": login}, "state": "APPROVED"}])
+        verdict = mq.evaluate(
+            pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None
+        )
+        assert verdict.eligible, (login, verdict.reasons)
+        state = _coverage_state()
+        crc._apply_reviews_checks_comments(
+            state,
+            reviews=mq._evidence_reviews(pr),
+            checks=pr["statusCheckRollup"],
+            comments=[],
+        )
+        assert state["approvals"] == [], "a bot login must not sit in approvals as a person"
+        reviewed, why = crc.verdict_for(state)
+        assert reviewed
+        assert "agent review" in why
+        assert "approved by" not in why
 
 
 def test_review_evidence_alone_is_enough_at_the_production_setting() -> None:
