@@ -560,7 +560,7 @@ describe("dispatch", () => {
     );
     const job: Job = {
       id: "digiquant-house-run-watch",
-      cron: "23 * * * *",
+      cron: "22 * * * *",
       repo: "digithings-ai/digithings",
       kind: "watch",
       workflow: "pipeline-digiquant.yml",
@@ -595,7 +595,14 @@ describe("dispatch", () => {
     expect(result.ok).toBe(true);
     // The deadline came from house-run-09's own timeoutSeconds plus the grace.
     expect(result.watch?.deadline_seconds).toBe(14400 + 120);
-    expect(result.watch).toMatchObject({ ok: true, open: 0, lost: [], unreadable: [], neverDispatched: [] });
+    expect(result.watch).toMatchObject({
+      ok: true,
+      open: 0,
+      lost: [],
+      unreadable: [],
+      neverLanded: [],
+      missingDispatch: [],
+    });
   });
 
   it("forwards opts.args into the workflow_dispatch body", async () => {
