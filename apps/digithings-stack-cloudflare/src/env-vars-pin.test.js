@@ -119,6 +119,10 @@ const WORKER_SCOPED_VARS = new Set([
   // DIG-3585: /chat/occ invite gate. The container authorizes via the tenant
   // token, never this Worker secret.
   "OCC_INVITE_KEY",
+  // DIG-3814: the deploying commit's short sha. The Worker uses it to derive the
+  // folded digichat Container name (sharedDigichatContainerId, re-exported from
+  // the standalone worker's own paths.ts), so the container process never sees it.
+  "DIGICHAT_CONTAINER_REV",
 ]);
 
 // Deliberately throws rather than returning an empty match -- a re-indented
