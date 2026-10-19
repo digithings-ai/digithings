@@ -44,8 +44,9 @@ def _allowed_host_patterns(raw: str) -> list[str]:
     An entry without a port allows both the bare host and ``host:*``: the
     compose service name ``zammad-mcp`` must match the ``zammad-mcp:8770``
     Host header digigraph sends, and an edge request arrives with a portless
-    Host such as ``digithings.ai`` that ``:*`` alone does not match. FastMCP matches exact hosts and a literal ``:*`` suffix only, so
-    entries with any other wildcard are dropped. Whether FastMCP actually
+    Host such as ``digithings.ai`` that ``:*`` alone does not match. FastMCP
+    matches exact hosts and a literal ``:*`` suffix only, so entries with any
+    other wildcard are dropped. Whether FastMCP actually
     enforces the allowlist depends on the mcp build — versions without a
     ``transport_security`` setting accept the configuration but ignore it
     (see ``run_mcp``).
