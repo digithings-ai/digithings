@@ -296,36 +296,6 @@ export async function getLatestDigest(): Promise<
   };
 }
 
-/**
- * Top-N confluence trade ideas for a given run_date, ascending by rank
- * (rank 1 = strongest). Returns `[]` when unconfigured or none exist.
- *
- * The generation is resolved in SQL first — anchor, then filter — because this
- * read carries a limit and a superseded generation would otherwise compete for
- * it inside PostgREST. See `snapshot-generation-read.ts`.
- */
-export async function getTopConfluence(
-  runDate: string,
-  limit = 6
-): Promise<FxConfluenceSnapshotRow[]> {
-  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
-  if (!runDate) return [];
-  return readNewestGeneration<FxConfluenceSnapshotRow>({
-    table: 'fx_confluence_snapshot',
-    runDate,
-    run: querySupabase,
-    build: (sb, anchor) => {
-      const scoped = sb
-        .from('fx_confluence_snapshot')
-        .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
-        .eq('run_date', runDate);
-      return (anchor ? scoped.eq('as_of', anchor) : scoped)
-        .order('rank', { ascending: true })
-        .limit(limit);
-    },
-  });
-}
-
 /** Resolve the latest run_date present in `fx_confluence_snapshot`, or `null`. */
 async function getLatestConfluenceDate(): Promise<string | null> {
   const latest = await querySupabase<{ run_date: string }[]>((sb) =>
@@ -387,7 +357,9 @@ export function resolveCanonicalRunDate(candidates: {
  * run_date in `fx_confluence_snapshot`; pass `runDate` to pin a specific session.
  * Returns the full ranked set (rank 1 = strongest). `[]` when unconfigured/empty.
  *
- * Anchored, like `getTopConfluence`: this read carries a limit of its own.
+ * Anchored, like every other limited reader: this read carries a limit of its
+ * own, so a superseded generation would otherwise compete for it inside
+ * PostgREST.
  */
 export async function getIntelligence(
   runDate?: string,

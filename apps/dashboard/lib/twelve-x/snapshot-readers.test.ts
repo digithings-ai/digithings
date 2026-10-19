@@ -4,7 +4,6 @@ import {
   getEventOpinions,
   getIntelligence,
   getIntelligenceWhy,
-  getTopConfluence,
 } from './fetch';
 import type {
   FxConfluenceSnapshotRow,
@@ -296,7 +295,7 @@ describe('DIG-57 leaf 4 — anchor-then-filter on the limited readers', () => {
   it('issues the anchor query first and filters the main query on its stamp', async () => {
     snapshotDb.rows.fx_confluence_snapshot = limitFixture();
 
-    await getTopConfluence(CONFLUENCE_DATE, 3);
+    await getIntelligence(CONFLUENCE_DATE, 3);
 
     const queries = queriesFor('fx_confluence_snapshot');
     expect(queries).toHaveLength(2);
@@ -315,7 +314,7 @@ describe('DIG-57 leaf 4 — anchor-then-filter on the limited readers', () => {
   it('does not let the limit be consumed by the stale generation', async () => {
     snapshotDb.rows.fx_confluence_snapshot = limitFixture();
 
-    const rows = await getTopConfluence(CONFLUENCE_DATE, 3);
+    const rows = await getIntelligence(CONFLUENCE_DATE, 3);
 
     // Unanchored this returns three stale rows and no new-generation row at all.
     expect(rows.map((r) => r.title)).toEqual(['new rank 4', 'new rank 5']);
@@ -325,7 +324,7 @@ describe('DIG-57 leaf 4 — anchor-then-filter on the limited readers', () => {
   it('passes the anchor stamp through byte-identically, with no Date round trip', async () => {
     snapshotDb.rows.fx_confluence_snapshot = limitFixture();
 
-    await getTopConfluence(CONFLUENCE_DATE, 3);
+    await getIntelligence(CONFLUENCE_DATE, 3);
 
     const anchor = queriesFor('fx_confluence_snapshot')[0];
     const main = queriesFor('fx_confluence_snapshot')[1];
@@ -359,7 +358,7 @@ describe('DIG-57 leaf 4 — the CTO regression frame, 2026-06-02', () => {
   it('returns the USD long row and never the USD short row', async () => {
     snapshotDb.rows.fx_confluence_snapshot = ctoFrameRows();
 
-    const rows = await getTopConfluence(CONFLUENCE_DATE, 6);
+    const rows = await getIntelligence(CONFLUENCE_DATE, 6);
 
     expect(rows.map((r) => r.title)).toEqual(['USD LONG — via USD']);
 
@@ -501,7 +500,7 @@ describe('DIG-57 leaf 4 — no-anchor degradation is observable', () => {
     // no stamp to filter on. The reader must degrade to today's behaviour.
     snapshotDb.rows.fx_confluence_snapshot = [];
 
-    const rows = await getTopConfluence('2026-01-01', 6);
+    const rows = await getIntelligence('2026-01-01', 6);
 
     expect(rows).toEqual([]);
     const queries = queriesFor('fx_confluence_snapshot');
@@ -516,17 +515,86 @@ describe('DIG-57 leaf 4 — no-anchor degradation is observable', () => {
     ];
     snapshotDb.rows.fx_confluence_snapshot = rows;
 
-    const result = await getTopConfluence(CONFLUENCE_DATE, 6);
+    const result = await getIntelligence(CONFLUENCE_DATE, 6);
 
     // Today's behaviour: both rows, unfiltered, rather than an empty board.
     expect(result.map((r) => r.title)).toEqual(['unstamped rank 1', 'unstamped rank 2']);
     expect(asOfEq(queriesFor('fx_confluence_snapshot')[1])).toBeUndefined();
   });
 
+  /**
+   * An `as_of` the database could not have written: the column is a
+   * `timestamptz`, so such a value can only be a corrupt or legacy row. The
+   * reader must treat it as "no anchor" — it must not throw, and it must not
+   * put that value into the main query's equality, because that would filter
+   * on a string the database never wrote.
+   */
+  it('does not filter on an anchor stamp the database could not have written', async () => {
+    snapshotDb.rows.fx_confluence_snapshot = [
+      confluenceRow({
+        rank: 1,
+        currency: 'USD',
+        direction: 'long',
+        title: 'unreadable stamp rank 1',
+        as_of: 'not-a-timestamp',
+      }),
+    ];
+
+    const result = await getIntelligence(CONFLUENCE_DATE, 6);
+
+    // No throw, and the row is still there: a fallback, not an empty board.
+    expect(result.map((r) => r.title)).toEqual(['unreadable stamp rank 1']);
+    // The main query filtered on nothing at all, so it cannot have filtered on
+    // the unreadable stamp.
+    expect(asOfEq(queriesFor('fx_confluence_snapshot')[1])).toBeUndefined();
+  });
+
+  /**
+   * The fallback path runs the main query unanchored, so the result can carry
+   * more than one publish. `keepNewestPublish` is what keeps the board on one
+   * generation in that case: it drops the superseded publish and the row that
+   * carries no usable stamp at all.
+   *
+   * There is no anchor because the newest `as_of` row carries an unreadable
+   * stamp, and that value sorts before the real stamps in the DESC order the
+   * mock applies — so the anchor query returns it and the reader degrades.
+   */
+  it('keeps only the newest publish when the fallback path returns two generations', async () => {
+    snapshotDb.rows.fx_confluence_snapshot = [
+      confluenceRow({
+        rank: 1,
+        currency: 'USD',
+        direction: 'long',
+        title: 'unreadable stamp rank 1',
+        as_of: 'not-a-timestamp',
+      }),
+      confluenceRow({
+        rank: 2,
+        currency: 'EUR',
+        direction: 'long',
+        title: 'superseded rank 2',
+        as_of: OLD_STAMP,
+      }),
+      confluenceRow({
+        rank: 3,
+        currency: 'GBP',
+        direction: 'long',
+        title: 'newest publish rank 3',
+        as_of: NEW_STAMP,
+      }),
+    ];
+
+    const result = await getIntelligence(CONFLUENCE_DATE, 6);
+
+    // Only the newest publish survives: the superseded one is 23 days older
+    // than the newest, and the unreadable row carries no generation at all.
+    expect(result.map((r) => r.title)).toEqual(['newest publish rank 3']);
+  });
+
   it('warns on the fallback path, naming the table and run_date only', async () => {
     snapshotDb.rows.fx_confluence_snapshot = [];
 
-    await getTopConfluence('2026-01-01', 6);
+    await getIntelligence('2026-01-01', 6);
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
     const message = String(warnSpy.mock.calls[0][0]);
@@ -547,7 +615,7 @@ describe('DIG-57 leaf 4 — no-anchor degradation is observable', () => {
   it('does not warn when an anchor resolved', async () => {
     snapshotDb.rows.fx_confluence_snapshot = ctoFrameRows();
 
-    await getTopConfluence(CONFLUENCE_DATE, 6);
+    await getIntelligence(CONFLUENCE_DATE, 6);
 
     expect(warnSpy).not.toHaveBeenCalled();
   });
