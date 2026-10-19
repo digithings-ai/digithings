@@ -56,6 +56,13 @@ zone_name = "digithings.ai"
 pattern = "digithings.ai/_dtchat*"
 zone_name = "digithings.ai"
 
+# Worker-owned, secret-gated container reset lever: intercepted by this Worker
+# (never proxied to the container) so an instance that outlived its idle tail
+# can be destroyed. Additive; gated by x-digi-admin-key == DIGICHAT_ADMIN_KEY.
+[[routes]]
+pattern = "digithings.ai/_digichat-admin*"
+zone_name = "digithings.ai"
+
 # Read-only OCC helpdesk MCP (stage 1): secret-gated by x-digi-mcp-key ==
 # ZAMMAD_EDGE_KEY, then served by the in-container zammad-mcp through the
 # trusted proxy. ADDITIVE — no live traffic uses it until stage 2.
@@ -102,6 +109,7 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   ZAMMAD_API_TOKEN         # read-only Zammad helpdesk MCP (in-container zammad-mcp, OCC tickets)
 #   ZAMMAD_BASE_URL          # Zammad base URL for that MCP (optional; client default otherwise)
 #   ZAMMAD_EDGE_KEY          # Worker-only /api/mcp/zammad gate; never forwarded to the container
+#   DIGICHAT_ADMIN_KEY       # Worker-only /_digichat-admin container reset lever; never forwarded
 # Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB.
 # It is deliberately NOT forwarded to the Container. This Cloudflare deployment
 # is DB-less (no Postgres instance or secret), so digichat falls back to

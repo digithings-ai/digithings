@@ -14,6 +14,7 @@ import {
 } from "./paths";
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { isOccShellPath, occGate } from "./occ-gate";
+import { digichatContainerReset } from "./admin-reset";
 
 /**
  * `env` from `cloudflare:workers` is untyped until `wrangler types` generates
@@ -26,6 +27,13 @@ const workerVars = env as unknown as Env;
  * zammad-mcp (python) through the trusted proxy, not by Next.
  */
 const ZAMMAD_MCP_PREFIX = "/api/mcp/zammad";
+
+/**
+ * Worker-owned, secret-gated recovery lever for the shared Container. Handled
+ * here (never proxied to the container) so `destroy()` can reclaim an instance
+ * that outlived its idle tail while `max_instances = 1` blocks every cold start.
+ */
+const DIGICHAT_ADMIN_RESET_PATH = "/_digichat-admin/container/reset";
 
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
@@ -94,6 +102,11 @@ export interface Env {
   ZAMMAD_BASE_URL?: string;
   /** Worker-only gate for /api/mcp/zammad*; never forwarded to the container. */
   ZAMMAD_EDGE_KEY?: string;
+  /**
+   * Worker-only key for the container reset lever; never forwarded to the
+   * container. Unset means the lever is off (the route answers 404).
+   */
+  DIGICHAT_ADMIN_KEY?: string;
 }
 
 export default {
@@ -101,6 +114,13 @@ export default {
     const url = new URL(request.url);
     if (isOccShellPath(url.pathname)) {
       return occGate(request, workerEnv.OCC_INVITE_KEY);
+    }
+    // Worker-owned reset lever: intercepted here, before any container proxy,
+    // and fail-closed with a 404 that never discloses the route.
+    if (url.pathname === DIGICHAT_ADMIN_RESET_PATH) {
+      return digichatContainerReset(request, workerEnv.DIGICHAT_ADMIN_KEY, () =>
+        getContainer(workerEnv.DIGICHAT, SHARED_DIGICHAT_CONTAINER_ID).destroy(),
+      );
     }
     // OCC helpdesk MCP: /api/mcp/zammad* is served by the in-container
     // zammad-mcp through the trusted proxy, not by Next. Gate it here with the

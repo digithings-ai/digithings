@@ -49,6 +49,8 @@ const WORKER_ONLY_ENV_MEMBERS: Record<string, string> = {
     "Worker-only /chat/occ shell gate (DIG-1210); the container resolves it via tenant tokenEnv",
   ZAMMAD_EDGE_KEY:
     "Worker-only /api/mcp/zammad gate (stage 1); the container never sees the edge key",
+  DIGICHAT_ADMIN_KEY:
+    "Worker-only /_digichat-admin container reset lever; the container never sees the admin key",
 };
 
 /**
