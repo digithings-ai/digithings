@@ -43,3 +43,19 @@ describe("DigichatBootLoader", () => {
     expect(occurrences(html, 'class="dboot-chip"')).toBe(1);
   });
 });
+
+describe("DigichatBootLoader statusText", () => {
+  it("shows the wake step visibly and as the status label", () => {
+    const html = renderToStaticMarkup(
+      <DigichatBootLoader statusText="Waking up services…" />,
+    );
+    expect(html).toContain("dboot-status");
+    expect(html).toContain("Waking up services…");
+    expect(html).toContain('role="status"');
+  });
+
+  it("renders no status line when statusText is null", () => {
+    const html = renderToStaticMarkup(<DigichatBootLoader />);
+    expect(html).not.toContain("dboot-status");
+  });
+});
