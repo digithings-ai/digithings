@@ -34,14 +34,11 @@ const PATH_A_TRAP_IDS = [
 ] as const;
 
 const PATH_A_ENABLED_IDS = [
-  "agent-pr-finalizer",
   "agent-backlog-snapshot",
-  "ci-pr-hygiene",
+  "branch-age-guard",
   "refresh-repo-activity",
   "project-enforce-assignment",
   "smoke-stack",
-  "security-pip-audit",
-  "security-npm-audit",
   "token-canary",
   "openwiki-update",
   "production-deploy-gate-watchdog",
@@ -50,6 +47,20 @@ const PATH_A_ENABLED_IDS = [
   "smoke-site",
   "datatap-answer-check",
   "digiquant-house-run-watch",
+] as const;
+
+// DIG-4364: four clocks whose workflow the 2026-10-14 GitHub-exit cost lock set
+// to `disabled_manually`. A dispatch to a disabled workflow is a 422 that
+// `isBenign422` does not match, so each tick surfaced as a `scheduled`
+// exception. The rows stay (cron, workflow, inputs) so lifting the lock is one
+// flag; `enabled: false` is what stops the tick. This list is the pin: turning
+// one back on has to delete a line here, which is the deliberate edit the ticket
+// asks for.
+const GITHUB_LOCK_DISABLED_IDS = [
+  "agent-pr-finalizer",
+  "ci-pr-hygiene",
+  "security-pip-audit",
+  "security-npm-audit",
 ] as const;
 
 const TWELVE_X_ENABLED_IDS = [
@@ -253,7 +264,7 @@ describe("jobsForCron", () => {
       JOBS.filter((job) => !job.enabled)
         .map((job) => job.id)
         .sort(),
-    ).toEqual([...DISABLED_HOUSE_RETRY_IDS, ...MANUAL_ONLY_IDS].sort());
+    ).toEqual([...DISABLED_HOUSE_RETRY_IDS, ...MANUAL_ONLY_IDS, ...GITHUB_LOCK_DISABLED_IDS].sort());
     expect(
       JOBS.filter((job) => job.enabled)
         .map((job) => job.id)
@@ -273,7 +284,7 @@ describe("jobsForCron", () => {
     expect(uniqueEnabledCrons()).toContain("17 9 * * MON");
     expect(uniqueEnabledCrons()).toContain("40 13 * * MON-FRI");
     expect(uniqueEnabledCrons()).toContain("8 22 * * SUN");
-    expect(uniqueEnabledCrons()).toContain("11 7 * * *");
+    expect(uniqueEnabledCrons()).not.toContain("11 7 * * *");
     expect(uniqueEnabledCrons()).toContain("13 6 * * MON");
     expect(uniqueEnabledCrons()).toContain("10 6 * * MON");
     expect(uniqueEnabledCrons()).toContain("23 9 * * *");
@@ -282,13 +293,16 @@ describe("jobsForCron", () => {
       kind: "workflow_dispatch",
       workflow: "agent-pr-finalizer.yml",
       cron: "11 7 * * *",
-      enabled: true,
+      enabled: false,
       inputs: { dry_run: "false" },
       repo: "digithings-ai/digithings",
     });
     for (const id of PATH_A_TRAP_IDS) {
       const job = JOBS.find((row) => row.id === id);
-      expect(job?.enabled).toBe(true);
+      // agent-pr-finalizer is a Path A trap whose workflow the cost lock disabled
+      // on GitHub, so its row is off until the lock lifts (DIG-4364). The rest of
+      // the traps still clock.
+      expect(job?.enabled).toBe(!GITHUB_LOCK_DISABLED_IDS.includes(id as never));
       expect(job?.kind).toBe("workflow_dispatch");
       expect(job?.repo).toBe("digithings-ai/digithings");
     }
@@ -319,6 +333,43 @@ describe("jobsForCron", () => {
     expect(occHelp?.workflow).toBeUndefined();
     expect(jobsForCron("23 7 * * MON").map((job) => job.id)).toEqual(["occ-help-recrawl"]);
     expect(uniqueEnabledCrons()).toContain("23 7 * * MON");
+  });
+
+  it("keeps the four GitHub-lock clocks disabled until the lock lifts (DIG-4364)", () => {
+    // 2026-10-14 cost lock: `gh api .../actions/workflows/<file>` answers
+    // `disabled_manually` for all four, so each scheduled dispatch is a 422
+    // (`Cannot trigger a 'workflow_dispatch' on a disabled workflow`) that
+    // `isBenign422` deliberately does not match — the tick surfaces as a
+    // `scheduled` exception and the job never runs.
+    //
+    // The row keeps its cron and inputs, so restoring the lane is one flag once
+    // the workflows are re-enabled on GitHub; it is not this seat's call.
+    const expected = [
+      ["agent-pr-finalizer", "11 7 * * *", "agent-pr-finalizer.yml"],
+      ["ci-pr-hygiene", "21 6 * * *", "ci-pr-hygiene.yml"],
+      ["security-pip-audit", "33 6 * * MON", "security-pip-audit.yml"],
+      ["security-npm-audit", "37 6 * * MON", "security-npm-audit.yml"],
+    ] as const;
+    for (const [id, cron, workflow] of expected) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job, id).toMatchObject({
+        id,
+        cron,
+        workflow,
+        kind: "workflow_dispatch",
+        repo: "digithings-ai/digithings",
+        enabled: false,
+      });
+      // A disabled row is invisible to the tick, so the 422 cannot be raised.
+      expect(jobsForCron(cron), id).toEqual([]);
+      expect(jobsForCron(cron, { includeDisabled: true }).map((row) => row.id)).toEqual([id]);
+      // A manual kick must still be able to reach the row (POST /kick with
+      // includeDisabled), which is why the row exists at all.
+      expect(uniqueEnabledCrons(), id).not.toContain(cron);
+    }
+    expect(
+      JOBS.filter((job) => GITHUB_LOCK_DISABLED_IDS.includes(job.id as never)).map((job) => job.id).sort(),
+    ).toEqual([...GITHUB_LOCK_DISABLED_IDS].sort());
   });
 
   it("dispatches weekly twelve-x digisearch parity near Monday 09:00 UTC", () => {
