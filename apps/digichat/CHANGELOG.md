@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.5.1](https://github.com/digithings-ai/digithings/compare/digichat-v2.5.0...digichat-v2.5.1) (2026-10-19)
+
+Restores the OCC chat behaviour the 14 Oct build had, which the Cloudflare
+split did not carry over.
+
+### Bug Fixes
+
+* **occ:** citations are inline markdown only, deduped per turn, with a static source mark and non-web hrefs rendered as plain text ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** Allow/Deny only for an explicit approval or interrupt, not a server tool whose output was cut by a cold start ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** streaming tool args are pretty-printed from a repaired JSON prefix; DeepSeek's echoed search-template line is stripped ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** boot loader shows "Waking up services…" again ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** default model back to `deepseek/deepseek-v4.1-flash` with the six-model session allowlist and matching LiteLLM entries ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** `lockSessionControls` pins the house model and hides the session model/MCP/tool controls ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **digichat:** the digikey `bff_session` exchange retries a cold container with backoff ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+
 ## [2.5.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.2...digichat-v2.5.0) (2026-10-19)
 
 The first tagged digichat release after `digichat-v2.3.2`. It carries the OCC

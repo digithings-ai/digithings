@@ -1,5 +1,5 @@
 {
-  "name": "digithings-digichat-cloudflare",
+  "name": "digichat-cloudflare",
   "description": "Cloudflare container worker for digichat.",
   "license": "MIT",
   "homepage": "https://digithings.ai",

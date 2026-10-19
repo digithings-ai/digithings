@@ -46,7 +46,10 @@ DIG-1220 was filed for.
 This follows `.github/workflows/feed_confirm_watchdog.yml` (twelve-x PR #291), which asks another
 system's run history instead of writing its own heartbeat stamp: a stamp you write yourself is only
 ever as reliable as the thing writing it. Hence it files on absence **and** on its own lookup
-failing, and is silent only when a run exists inside the window.
+failing, and is silent only when a run exists inside the window. (The digithings-cron port of that
+workflow refined the last clause to `conclusion === "success"` after DIG-4381: a run that *exists*
+inside the window but was billing-blocked is `completed`/`failure`, and reading it as present made
+the watchdog silent — see `apps/digithings-cron/README.md`, "twelve-x watchdogs".)
 
 ## Why it runs on the operator's Mac and not in Cloudflare or Actions
 
