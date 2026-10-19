@@ -416,9 +416,7 @@ def test_mint_input_model_rejects_bad_services():
 def test_claims_terms_version_present_only_when_supplied(lic_env):
     from digikey.jwt_issue import build_license_claims
 
-    with_tv, _ = build_license_claims(
-        customer_slug="c", hosts=["h"], terms_version="2026-01-01"
-    )
+    with_tv, _ = build_license_claims(customer_slug="c", hosts=["h"], terms_version="2026-01-01")
     assert with_tv["terms_version"] == "2026-01-01"
 
     # Absent means the claim is omitted entirely — never a literal JSON null,
@@ -430,7 +428,9 @@ def test_claims_terms_version_present_only_when_supplied(lic_env):
     assert "terms_version" not in blank
 
 
-def test_cli_mint_without_terms_version_leaves_claim_and_column_absent(monkeypatch, capsys, lic_env):
+def test_cli_mint_without_terms_version_leaves_claim_and_column_absent(
+    monkeypatch, capsys, lic_env
+):
     out = _run_cli(monkeypatch, capsys, "license-mint", "--customer", "c", "--hosts", "h")
     license_id = out.out.strip().splitlines()[0].split("=", 1)[1]
     token = out.out.strip().splitlines()[3].split("=", 1)[1]

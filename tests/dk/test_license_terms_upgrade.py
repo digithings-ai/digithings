@@ -34,7 +34,7 @@ CREATE TABLE digikey_licenses (
 );
 CREATE INDEX ix_digikey_licenses_customer_slug ON digikey_licenses (customer_slug);
 INSERT INTO digikey_licenses (license_id, customer_slug, hosts, expires_at, label)
-    VALUES ('lic-old', 'datatap', '["a.com"]', 9999999999, 'legacy');
+    VALUES ('lic-old', 'example-customer', '["a.com"]', 9999999999, 'legacy');
 """
 
 
@@ -73,7 +73,7 @@ def test_init_db_adds_terms_version_without_data_loss(old_licenses_db) -> None:
     with sf() as session:
         row = session.get(LicenseRow, "lic-old")
         assert row is not None
-        assert row.customer_slug == "datatap"
+        assert row.customer_slug == "example-customer"
         assert row.terms_version is None
 
 
