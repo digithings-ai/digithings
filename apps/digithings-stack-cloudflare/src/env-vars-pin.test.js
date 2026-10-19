@@ -46,8 +46,8 @@ const indexSource = readFileSync(
 // MCP-scoped vars (#3780 Task 8): forwarded by DigiQuantMcpContainer.envVars
 // ONLY — never duplicated into DigiStackContainer.envVars (the stack container
 // ignores them; duplication was removed in review finding 6). The first
-// envVars block below is the stack container's, the second the MCP one's,
-// the third the digichat one's (#4689).
+// envVars block below is the stack container's, the second the MCP one's. The
+// digichat block was removed with the folded DigiChatContainer (#4689).
 const MCP_SCOPED_VARS = new Set([
   "DIGIQUANT_MCP_SCOPE",
   "DIGIQUANT_MARKET_DATA_BACKEND",
@@ -57,12 +57,11 @@ const MCP_SCOPED_VARS = new Set([
   "R2_SECRET_ACCESS_KEY",
 ]);
 
-// Digichat-scoped vars (#4689): forwarded by DigiChatContainer.envVars ONLY —
-// never duplicated into DigiStackContainer.envVars (the stack container runs
-// digikey/digigraph/digisearch, never the Next process). Exception:
-// DIGIKEY_BFF_TOKEN is legitimately shared (both containers read it), so it
-// is not in this set. Pinned present on the digichat block and absent from
-// the stack block below.
+// Digichat-scoped vars (#4689): these belonged to the retired
+// DigiChatContainer.envVars. They must stay out of every remaining container
+// block (the stack container runs digikey/digigraph/digisearch, never the Next
+// process; the MCP container runs digiquant-mcp). DIGIKEY_BFF_TOKEN is
+// legitimately shared with the stack container, so it is not in this set.
 const DIGICHAT_SCOPED_VARS = new Set([
   "DIGICHAT_EMBED_ENABLED",
   "DIGICHAT_REQUIRE_ROOT_AUTH",
@@ -79,6 +78,13 @@ const DIGICHAT_SCOPED_VARS = new Set([
   "DIGICHAT_DASHBOARD_SUPABASE_URL",
   "DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY",
 ]);
+
+// The fold's env surface, retired 2026-10-19. These names stay declared on
+// `Env` because wrangler.toml still carries them for this Worker, but the
+// DigiChatContainer that forwarded them is gone, so nothing keys them into an
+// envVars block. Exempt from the forward-everything check; the scoping check
+// below still refuses them in any remaining container's block.
+const RETIRED_FOLD_VARS = new Set([...DIGICHAT_SCOPED_VARS, "DIGICHAT_LEGACY_EMBED_ENABLED"]);
 
 // Worker-scoped vars: read by the Worker's own request handling and
 // deliberately NOT forwarded into any Container. `MARKET_DATA_ALLOWED_ORIGINS`
@@ -99,17 +105,8 @@ const WORKER_SCOPED_VARS = new Set([
   // MARKET_DATA_ALLOWED_ORIGINS above.
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
-  // Canonical anon key (#4700): same-worker fallback source for the legacy
-  // digichat forward; no container reads this name directly.
-  "SUPABASE_ANON_KEY",
   "MARKET_DATA_URL",
   "DASHBOARD_API_ALLOWED_ORIGINS",
-  // Folded digichat (#4689): DIGICHAT_LEGACY_EMBED_ENABLED is folded into the
-  // forwarded DIGICHAT_EMBED_ENABLED at Worker evaluation time (see the
-  // DigiChatContainer.envVars entry); the container never sees this name, so
-  // it stays Worker-scoped. (The deprecated DIGICHAT_EMBED_ENABLED alias IS a
-  // forwarded key, like on the standalone worker.)
-  "DIGICHAT_LEGACY_EMBED_ENABLED",
   // DIG-3229: the deploying commit, injected at deploy time and read by the
   // Worker to derive the shared-stack Container id (ports.ts /
   // stackContainer() in index.ts). No container process ever reads this name --
@@ -205,7 +202,10 @@ describe("Env / envVars parity", () => {
     const envMembers = extractEnvInterfaceStringMembers(indexSource);
     const forwarded = new Set(extractEnvVarsKeys(indexSource));
     const missing = envMembers.filter(
-      (name) => !forwarded.has(name) && !WORKER_SCOPED_VARS.has(name),
+      (name) =>
+        !forwarded.has(name) &&
+        !WORKER_SCOPED_VARS.has(name) &&
+        !RETIRED_FOLD_VARS.has(name),
     );
     expect(missing, `Env member(s) declared but never keyed in envVars: ${missing}`).toEqual(
       [],
@@ -226,9 +226,15 @@ describe("Env / envVars parity", () => {
 
   it("keeps MCP-scoped vars on the MCP container block only", () => {
     const blocks = extractAllEnvVarsBlocks(indexSource);
-    expect(blocks.length).toBe(3);
+    expect(blocks.length).toBe(2);
     const stackKeys = new Set(extractEnvVarsKeysFromBody(blocks[0]));
     const mcpKeys = new Set(extractEnvVarsKeysFromBody(blocks[1]));
+    // Name the two remaining blocks, so a truncated or re-ordered extraction
+    // fails here instead of making the scoping checks below vacuous.
+    expect(stackKeys.has("DIGIVAULT_URL"), "blocks[0] is not DigiStackContainer").toBe(true);
+    expect(mcpKeys.has("DIGIQUANT_MCP_SCOPE"), "blocks[1] is not DigiQuantMcpContainer").toBe(
+      true,
+    );
     const duplicated = [...MCP_SCOPED_VARS].filter((name) => stackKeys.has(name));
     expect(
       duplicated,
@@ -241,39 +247,27 @@ describe("Env / envVars parity", () => {
     ).toEqual([]);
   });
 
-  it("keeps digichat-scoped vars on the digichat container block only", () => {
+  it("keeps the retired digichat fold vars out of every remaining container block", () => {
+    // The DigiChatContainer.envVars block was removed with the class
+    // (2026-10-19). The fold's names may still be declared on Env because
+    // wrangler.toml carries them, but no remaining container may forward one:
+    // a key here with no container reading it is exactly the dead-config
+    // duplication this file exists to catch.
     const blocks = extractAllEnvVarsBlocks(indexSource);
-    expect(blocks.length).toBe(3);
+    expect(blocks.length).toBe(2);
     const stackKeys = new Set(extractEnvVarsKeysFromBody(blocks[0]));
-    const chatKeys = new Set(extractEnvVarsKeysFromBody(blocks[2]));
-    const duplicated = [...DIGICHAT_SCOPED_VARS].filter((name) => stackKeys.has(name));
-    expect(
-      duplicated,
-      `digichat-scoped var(s) duplicated into DigiStackContainer.envVars: ${duplicated}`,
-    ).toEqual([]);
-    const chatMissing = [...DIGICHAT_SCOPED_VARS].filter((name) => !chatKeys.has(name));
-    expect(
-      chatMissing,
-      `digichat-scoped var(s) missing from DigiChatContainer.envVars: ${chatMissing}`,
-    ).toEqual([]);
-  });
-
-  it("falls back to canonical Supabase names for legacy digichat dashboard keys", () => {
-    // #4700: the DIGICHAT_DASHBOARD names are legacy duplicates; the container
-    // must keep working once the old secrets are deleted post-deploy, so both
-    // entries pin the old-name-first, canonical-second chain.
-    const blocks = extractAllEnvVarsBlocks(indexSource);
-    const chatBody = blocks[2];
-    const urlStart = chatBody.indexOf("DIGICHAT_DASHBOARD_SUPABASE_URL:");
-    const anonStart = chatBody.indexOf("DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:");
-    expect(urlStart).toBeGreaterThan(-1);
-    expect(anonStart).toBeGreaterThan(urlStart);
-    expect(chatBody.slice(urlStart, anonStart)).toMatch(
-      /env\.DIGICHAT_DASHBOARD_SUPABASE_URL \?\? env\.SUPABASE_URL \?\? ""/,
+    const mcpKeys = new Set(extractEnvVarsKeysFromBody(blocks[1]));
+    expect(stackKeys.has("DIGIVAULT_URL"), "blocks[0] is not DigiStackContainer").toBe(true);
+    expect(mcpKeys.has("DIGIQUANT_MCP_SCOPE"), "blocks[1] is not DigiQuantMcpContainer").toBe(
+      true,
     );
-    expect(chatBody.slice(anonStart)).toMatch(
-      /env\.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY \?\? env\.SUPABASE_ANON_KEY \?\? ""/,
+    const leaked = [...DIGICHAT_SCOPED_VARS].filter(
+      (name) => stackKeys.has(name) || mcpKeys.has(name),
     );
+    expect(
+      leaked,
+      `retired digichat fold var(s) forwarded into a container envVars block: ${leaked}`,
+    ).toEqual([]);
   });
 
   it("declares Env for every env.* var envVars reads", () => {

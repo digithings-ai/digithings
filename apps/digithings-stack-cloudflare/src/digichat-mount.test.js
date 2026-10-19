@@ -9,7 +9,6 @@ import {
 } from "./digichat";
 import { shouldProxyToDigiChat as standalonePredicate } from "../../digichat-cloudflare/src/paths";
 import { SHARED_DIGICHAT_CONTAINER_ID as standaloneContainerId } from "../../digichat-cloudflare/src/paths";
-import { legacyEmbedEnabledValue } from "../../digichat-cloudflare/src/embed-flag";
 import {
   getStackStatus,
   resetStackModuleHealth,
@@ -179,6 +178,11 @@ describe("digichat separation pins (Chris, 2026-10-19)", () => {
     expect(source).not.toContain('() => import("./digichat")');
     expect(source).not.toContain("getContainer(workerEnv.DIGICHAT");
     expect(source).not.toContain("switchPort(request, DIGICHAT_PORT)");
+    // The orphaned class went with the fold (2026-10-19). Pinning its absence
+    // keeps a re-added container from shipping without a binding or a route —
+    // the exact dead-code shape this removal cleaned up.
+    expect(source).not.toContain("class DigiChatContainer");
+    expect(source).not.toContain("DurableObjectNamespace<DigiChatContainer>");
   });
 
   it("does NOT gate the OCC shell here — the invite gate stays on the digichat worker", () => {
@@ -203,22 +207,3 @@ describe("digichat separation pins (Chris, 2026-10-19)", () => {
   });
 });
 
-describe("digichat embed-flag parity", () => {
-  it("the inline envVars derivation matches legacyEmbedEnabledValue for every input", () => {
-    // index.ts keeps the OR inline so the envVars key↔ref pin still pairs
-    // DIGICHAT_EMBED_ENABLED with its own entry (see DigiChatContainer.envVars
-    // in index.ts). This truth table pins the inline copy equal to the
-    // canonical helper for all 9 input combinations.
-    const source = readFileSync(join(here, "index.ts"), "utf-8");
-    expect(source).toContain(
-      'env.DIGICHAT_EMBED_ENABLED === "1" || env.DIGICHAT_LEGACY_EMBED_ENABLED === "1"',
-    );
-    const inline = (embed, legacy) =>
-      embed === "1" || legacy === "1" ? "1" : "0";
-    for (const embed of ["1", "0", undefined]) {
-      for (const legacy of ["1", "0", undefined]) {
-        expect(inline(embed, legacy)).toBe(legacyEmbedEnabledValue(legacy, embed));
-      }
-    }
-  });
-});
