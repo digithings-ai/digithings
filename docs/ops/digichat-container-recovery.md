@@ -48,7 +48,10 @@ curl -s -X POST https://digithings.ai/_digichat-admin/container/reset \
   -H "x-digi-admin-key: $(security find-generic-password -s digithings-local/DIGICHAT_ADMIN_KEY -w)"
 ```
 
-Expect `200 {"ok":true,"action":"container_destroyed","instance":"shared-v15"}`.
+Expect `200 {"ok":true,"action":"container_destroyed","instance":"shared-<deploying sha12>"}`.
+The `instance` is the id this deploy derived from `DIGICHAT_CONTAINER_REV` (see
+`apps/digichat-cloudflare/src/paths.ts`), which is also what the Worker proxies
+to and what `GET /_digichat/meta` reports.
 The instance moves to `stopped` within about ten seconds and the next real
 request cold-starts a fresh one (20–60 s). Verified 2026-10-19: destroyed a live
 instance and the following OCC chat came back and executed a Zammad tool call.
@@ -75,15 +78,18 @@ sleeps, so a cold digikey can fail the exchange. Retry once. If it persists, it
 really is a token problem: compare the digichat and stack copies per
 [SECRETS_ROTATION.md](SECRETS_ROTATION.md) §2.
 
-## Step 4 — fallback: force a new instance name
+## Step 4 — fallback: move the instance id by redeploying
 
-If the lever is unavailable (key lost, route removed), bump
-`SHARED_DIGICHAT_CONTAINER_ID` in `apps/digichat-cloudflare/src/paths.ts`
-(`shared-v15` → `shared-v16`), update the pin at
-`apps/digithings-stack-cloudflare/src/digichat-mount.test.js`, and deploy
-digichat. This creates a **new** instance and abandons the old one; it does not
-stop it. It is the recovery used before the lever existed, and it needs no
-application deletion.
+If the lever is unavailable (key lost, route removed), deploy the digichat
+Worker from a commit whose rev differs. The Container id is *derived* from the
+deploying commit — `shared-<sha12>` via `DIGICHAT_CONTAINER_REV`, injected by
+`apps/digichat-cloudflare/scripts/deploy.mjs` — so a new rev mints a **new**
+instance and abandons the old one (it does not stop it). There is no literal to
+bump and no test pin to update.
+
+Beware the reverse: re-deploying the **identical** commit derives the same id and
+reuses the warm instance, so a same-rev redeploy is not a recycle. If nothing has
+changed to commit and the lever is gone, step 5 is the remaining option.
 
 ## Step 5 — last resort: delete and recreate
 

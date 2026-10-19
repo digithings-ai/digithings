@@ -233,7 +233,7 @@ _PR_GRAPHQL_FIELDS = """
 number
 title
 labels(first: 40) { nodes { name } }
-reviews(last: 80) { nodes { state author { login } } }
+reviews(last: 80) { nodes { state author { login __typename } } }
 comments(last: 100) { nodes { author { login } body createdAt url } }
 timelineItems(last: 80, itemTypes: [LABELED_EVENT]) {
   nodes {
@@ -283,6 +283,71 @@ def _author_login(node: dict | None) -> str:
     return ((node or {}).get("author") or (node or {}).get("user") or {}).get("login") or ""
 
 
+_BOT_TYPE_NAMES = frozenset({"bot"})
+
+
+def is_bot_login(author: dict | str | None) -> bool:
+    """One rule for "this login is a bot", applied at every review filter.
+
+    2026-10-19 (DIG-4298). The two filters used to disagree on what a bot is:
+    the queue's `_evidence_reviews` (scripts/merge_queue.py) stripped only
+    `[bot]`-suffix approvals, and this module's approvals sink excluded only the
+    three `[bot]` logins in `BOT_AUTHORS`. But ``gh --json`` returns the BARE
+    login (`coderabbitai`, not `coderabbitai[bot]` — see the note under
+    `REVIEW_BOTS`), so a bare-login bot's APPROVED review passed both filters
+    and cleared coverage as though a person had approved.
+
+    One login is a bot when
+
+      * its record says so -- `gh --json`'s ``is_bot``, REST's ``type``, or
+        GraphQL's ``__typename`` being ``Bot`` (when the query asks for it).
+        This is what catches an UNLISTED bot whose login is bare: gh builds at
+        least since 2.102 (the review environments this repo actually runs)
+        send ``is_bot`` on the author records both filters read, and the bare
+        login alone is indistinguishable from a person's; or
+      * its name says so -- the ``[bot]`` suffix GitHub appends in the REST
+        timeline, or a login in `REVIEW_BOTS`/`BOT_AUTHORS` (both spellings are
+        in the sets), which is what classifies hand-built fixtures and feeds
+        that predate the record typing.
+
+    A record with no typing field and an unlisted bare name is treated as a
+    person. That is deliberate: assuming the login is a bot would refuse real
+    approvals -- the failure mode that retired the non-author-approval demand on
+    2026-10-18 -- and both production fetches (``gh pr list/view --json``) carry
+    ``is_bot``, so a bare name with nothing else is a fixture artefact, not a
+    review a bot could actually submit.
+
+    Call it with whatever makes the login: the author record (`gh --json`,
+    GraphQL or REST shape), or the bare login string itself.
+    """
+    if isinstance(author, str):
+        record: dict = {}
+        login = author
+    else:
+        record = author if isinstance(author, dict) else {}
+        if record and not record.get("login"):
+            record = record.get("author") or record.get("user") or {}
+            if not isinstance(record, dict):
+                record = {}
+        login = str(record.get("login") or "")
+    if not login:
+        return False
+    # Name signals outrank a record that says human (2026-10-19, DIG-4298): the
+    # SAME login is graded as a reviewer bot elsewhere in this module (the
+    # REVIEW_BOTS hatch matches bare spellings), so trusting `is_bot: false`
+    # here would let one evaluation disagree with itself. A person whose real
+    # login collides with a reviewer-bot name loses nothing either way: their
+    # verdict degrades from the approval hatch to the agent-review hatch, both
+    # of which count.
+    if login.endswith("[bot]") or login in REVIEW_BOTS or login in BOT_AUTHORS:
+        return True
+    if record.get("is_bot") is True:
+        return True
+    if str(record.get("__typename") or "").lower() in _BOT_TYPE_NAMES:
+        return True
+    return str(record.get("type") or "").lower() in _BOT_TYPE_NAMES
+
+
 def _agent_review_from_comments(comments: list[dict], naming: str | None = None) -> dict | None:
     latest = None
     for comment in comments:
@@ -324,8 +389,8 @@ def _apply_reviews_checks_comments(
         _author_login(review)
         for review in reviews
         if review.get("state") == "APPROVED"
-        and _author_login(review) not in BOT_AUTHORS
         and _author_login(review)
+        and not is_bot_login(review.get("author") or review.get("user"))
     ]
     agent_tool: list[dict] = []
     for check in checks:
@@ -337,6 +402,13 @@ def _apply_reviews_checks_comments(
             state["bugbot"] = conclusion
         elif name in REVIEW_BOT_CHECK_NAMES and conclusion == "SUCCESS":
             agent_tool.append({"bot": name, "via": "check"})
+    # The SAME reviews list feeds the REVIEW_BOTS hatch: a bot login is kept out
+    # of `approvals` (2026-10-19, DIG-4298) but its submitted review is still
+    # evidence -- CodeRabbit and friends clear coverage through this hatch, bare
+    # or suffixed, so filtering them out of one sink must not filter them out of
+    # the other (2026-10-18's old sink let them into `approvals` as if a person
+    # had approved; the eager fix would have stopped a legitimate CodeRabbit
+    # pass counting at all).
     for review in reviews:
         login = _author_login(review)
         if login in REVIEW_BOTS and review.get("state") in REVIEW_STATES:

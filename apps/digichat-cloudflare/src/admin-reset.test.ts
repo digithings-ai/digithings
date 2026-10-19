@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { DIGICHAT_ADMIN_KEY_HEADER, digichatContainerReset } from "./admin-reset";
-import { SHARED_DIGICHAT_CONTAINER_ID } from "./paths";
 
 const KEY = "fixture-admin-key";
+/** Stands in for the id derived from the deploy rev; the lever takes it as a parameter. */
+const INSTANCE = "shared-3528cf9f7ab1";
 const URL_ = "https://digithings.ai/_digichat-admin/container/reset";
 
 /** A fresh destroy stub; assertion helpers also check it stayed argument-free. */
@@ -26,6 +27,7 @@ describe("digichatContainerReset", () => {
       const res = await digichatContainerReset(
         new Request(URL_, { method, headers: { [DIGICHAT_ADMIN_KEY_HEADER]: KEY } }),
         KEY,
+        INSTANCE,
         destroy,
       );
       expect(res.status, `${method} should be 405`).toBe(405);
@@ -39,6 +41,7 @@ describe("digichatContainerReset", () => {
     const res = await digichatContainerReset(
       new Request(URL_, { method: "POST", headers: { [DIGICHAT_ADMIN_KEY_HEADER]: KEY } }),
       undefined,
+      INSTANCE,
       destroy,
     );
     expect(res.status).toBe(404);
@@ -52,6 +55,7 @@ describe("digichatContainerReset", () => {
       const res = await digichatContainerReset(
         new Request(URL_, { method: "POST", headers }),
         KEY,
+        INSTANCE,
         destroy,
       );
       expect(res.status).toBe(404);
@@ -64,6 +68,7 @@ describe("digichatContainerReset", () => {
     const res = await digichatContainerReset(
       new Request(URL_, { method: "POST", headers: { [DIGICHAT_ADMIN_KEY_HEADER]: KEY } }),
       KEY,
+      INSTANCE,
       destroy,
     );
     expect(res.status).toBe(200);
@@ -74,7 +79,7 @@ describe("digichatContainerReset", () => {
     expect(body).toEqual({
       ok: true,
       action: "container_destroyed",
-      instance: SHARED_DIGICHAT_CONTAINER_ID,
+      instance: INSTANCE,
     });
   });
 
@@ -83,12 +88,13 @@ describe("digichatContainerReset", () => {
     const res = await digichatContainerReset(
       new Request(URL_, { method: "POST", headers: { [DIGICHAT_ADMIN_KEY_HEADER]: "wrong" } }),
       KEY,
+      INSTANCE,
       destroy,
     );
     expect(res.status).toBe(404);
     const text = await res.text();
     expect(text).not.toContain(KEY);
-    expect(text).not.toContain("shared-v15");
+    expect(text).not.toContain(INSTANCE);
   });
 });
 
@@ -110,5 +116,20 @@ describe("DIGICHAT_ADMIN_KEY stays Worker-only", () => {
     expect(resetAt).toBeGreaterThan(-1);
     expect(resetAt).toBeLessThan(zammadAt);
     expect(indexSource).toMatch(/DIGICHAT_ADMIN_RESET_PATH\)\s*\{\s*return digichatContainerReset\(/);
+  });
+
+  it("gives the reset lever the same derived id the proxy path addresses", () => {
+    // One derivation, computed once from the deploy rev: the lever destroys the
+    // instance the proxy would otherwise talk to, not a second id.
+    expect(indexSource).toMatch(
+      /const containerId = sharedDigichatContainerId\(workerEnv\.DIGICHAT_CONTAINER_REV\)/,
+    );
+    const resetCall = indexSource.indexOf("digichatContainerReset(");
+    const proxyCall = indexSource.indexOf("getContainer(workerEnv.DIGICHAT, containerId)");
+    expect(resetCall).toBeGreaterThan(-1);
+    expect(proxyCall).toBeGreaterThan(resetCall);
+    const resetBlock = indexSource.slice(resetCall, indexSource.indexOf("});", resetCall));
+    expect(resetBlock).toContain("containerId");
+    expect(resetBlock).not.toMatch(/sharedDigichatContainerId\(/);
   });
 });

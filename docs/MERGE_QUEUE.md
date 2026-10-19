@@ -63,13 +63,14 @@ GitHub can verify: pass it with `--acting-role`, and the queue writes it into th
 comment on the PR so the record names who acted. Adding a role to the roster is a policy
 change and needs the CEO — it is not something an agent does on its own initiative.
 
-An approval is likewise asserted when the reviewer is not a distinct GitHub account:
-`--attest-review <role>` records which role reviewed. The merging role may **not** attest
-its own review, which is what stops a single-credential setup from silently collapsing
-into "I reviewed it and merged it". Attestation satisfies the approval gate only —
-it is an assertion, and since DIG-3154 it does **not** satisfy review coverage: PRs
-#5489 and #5277 merged attested with zero reviews and zero comments, and the promotion
-gate refused both. A PR without review evidence needs the evidence, not an attestation.
+A review cannot be asserted the same way. `--attest-review <role>` was removed on
+2026-10-17: with one login, no agent can give a non-author approval, so the old review gate
+could only be met by an attestation, and the launchd wrapper stamped `qa` on every merge
+without QA doing anything. PRs #5489 and #5277 had already shown the cost (merged attested
+with zero reviews and zero comments). The review that counts is an artifact on the PR: a
+review pass by the board's reviewer seats that left its findings there, with those comments
+resolved or addressed (Chris's 2026-10-15 definition). No formal approval is required. QA is
+not in the review path, and a `qa/gate` commit status is ignored in both directions.
 
 ## What may be merged
 
@@ -81,10 +82,12 @@ gate refused both. A PR without review evidence needs the evidence, not an attes
 | Required check | The names in `required_checks_by_repo` for this repo must each have **reported** and concluded `SUCCESS`. For `twelve-x` that is `test` (from a workflow run). For `digithings` it is `local-ci` — which arrives as a commit StatusContext, never as a workflow run, so the names in `status_context_checks` are exempt from the workflow-run evidence rule (DIG-3707). |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
-| Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. |
-| Review | An `APPROVED` review from a person who is neither the author nor a bot, or `--attest-review` from a role on the review path that is not the merging role. Attestation covers this gate only, never review coverage below. |
-| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bot run, an approval, a Bot review, an in-session review with its findings comment, or `reviewed:owner`. `--attest-review` does not count — it asserts a review happened but leaves no artifact the promotion gate can see. |
-| Change requests | Any `CHANGES_REQUESTED` review blocks. |
+| Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
+| Review | No outstanding `CHANGES_REQUESTED` review and no posted verdict of `changes_requested`. Review *evidence* is the row below: the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. |
+| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. |
+| Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
+| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested` still scoped to the branch, blocks. |
+| Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
 
 Two of these are deliberate choices worth stating plainly.
 
@@ -135,6 +138,21 @@ means each merge in a batch has to wait for the next PR's CI, which is the cost 
 it correctly. `run` re-reads the queue after every merge for the same reason: a verdict
 computed before a merge is stale the moment that merge lands.
 
+**A stale branch is updated, not dead-ended.** Refusing `BEHIND` is only half the rule, and
+the other half is easy to miss: this queue's own merge is what puts every other PR behind.
+With no step that clears it, the queue drains exactly one PR and then stops on a state
+nothing in it can fix — measured on `digithings` on 2026-10-19, a single merge left 23 PRs
+blocked, and one of them had to be brought up to date by hand before it could queue again.
+So each `run` brings **one** stale branch up to date: the oldest PR whose *only* remaining
+reason is `BEHIND`. Never more than one by default, because a merge moves the base for every
+other PR, so updating a whole stale set at once queues CI runs the next merge invalidates.
+Never a PR with any other reason, because an update spends a full CI run and would not make
+it queueable. `--max-updates N` raises the cap and `--max-updates 0` disables the step;
+`list` names the candidates and changes nothing. Like the merge, the update is pinned to the
+head SHA the gates were read from, so it is never applied to a branch that moved underneath
+the verdict — and the PR is re-evaluated on a later tick, never merged on the read that
+prompted the update.
+
 **Order is FIFO, not greenest-first.** Sorting by check status turns a queue into a race
 that the loudest PR wins. Oldest-eligible-first is the only ordering that is fair and only
 one that is easy to explain to whoever has been waiting.
@@ -157,10 +175,6 @@ still blocks. The rules and the approved allowlist are in
 # What is waiting, and why anything is not.
 python3 scripts/merge_queue.py list --repo digithings-ai/twelve-x --acting-role cto
 
-# Merging a review that happened in-session rather than on GitHub.
-python3 scripts/merge_queue.py list --repo digithings-ai/twelve-x \
-  --acting-role cto --attest-review qa
-
 # Merge the oldest eligible PR. Default is one merge per run.
 python3 scripts/merge_queue.py run --repo digithings-ai/twelve-x --acting-role em
 
@@ -171,6 +185,12 @@ python3 scripts/merge_queue.py run --repo digithings-ai/twelve-x --acting-role c
 `run` re-reads the queue **after every merge**. Merging a PR moves the base, which can
 turn the next PR into `CONFLICTING`; re-reading is what makes that visible instead of
 sending a stale-base merge. The queue stops and reports when it happens.
+
+`run` also brings **one** stale branch up to date per tick — the oldest PR whose only
+remaining reason is `BEHIND` — for the reason above: a merge is what puts every other PR
+behind, and nothing else here can clear that. `--max-updates 0` merges only; `--max-updates N`
+allows up to N. An updated PR is never merged on the same read: its checks have to report
+against the new base first, so it queues on a later tick.
 
 Each merge passes `--match-head-commit`, so a push landing between evaluation and merge
 aborts the merge rather than landing a commit that was never gated. The queue never passes

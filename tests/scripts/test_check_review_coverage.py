@@ -708,6 +708,177 @@ def test_ancestor_pin_treats_a_missing_baseline_object_as_environment() -> None:
     assert "pytest.fail" in src
 
 
+# ── one bot rule at the approvals sink (DIG-4298, 2026-10-19) ────────────────
+#
+# `_evidence_reviews` (the queue) and this sink used to filter bots differently:
+# the queue stripped `[bot]`-suffix approvals, the sink only three named logins,
+# and both missed a bare-login bot (the shape `gh --json` actually returns). One
+# predicate, `is_bot_login`, now classifies for both; these tests pin it at the
+# sink through `verdict_for`, the only way a verdict can pick a bot up.
+
+
+def _sink(reviews: list[dict[str, Any]]) -> tuple[dict[str, Any], bool, str]:
+    """Run `_apply_reviews_checks_comments` exactly the way both gates call it."""
+    state = _state()
+    crc._apply_reviews_checks_comments(state, reviews=reviews, checks=[], comments=[])
+    reviewed, why = crc.verdict_for(state)
+    return state, reviewed, why
+
+
+def test_an_unlisted_bots_bare_login_approval_never_reaches_the_approvals_sink() -> None:
+    """The DIG-4298 hole: an unlisted bot, bare login, APPROVED — refused.
+
+    `gh` sends the record, not the polite spelling: bare login plus `is_bot`.
+    The login alone (`flaky-lint`) is indistinguishable from a person's, so only
+    the record can say bot — and the sink must not count the review as an
+    approval. Refusal is what `_gate_review_coverage` then sees.
+    """
+    state, reviewed, why = _sink(
+        [{"author": {"login": "flaky-lint", "is_bot": True}, "state": "APPROVED"}]
+    )
+    assert not reviewed
+    assert "no approval" in why
+
+    # The queue routes the SAME reviews list into this sink (`_gate_review_
+    # coverage` calls it directly on `_evidence_reviews`' pass-through), so the
+    # sink-side verdict is the one both gates grade; the merge-queue suite runs
+    # `_evidence_reviews` itself and refuses this shape there too.
+    state = _state()
+    crc._apply_reviews_checks_comments(
+        state,
+        reviews=[{"author": {"login": "flaky-lint", "is_bot": True}, "state": "APPROVED"}],
+        checks=[],
+        comments=[],
+    )
+    assert state["approvals"] == []
+    assert state["agent_tool"] == []
+    reviewed, _ = crc.verdict_for(state)
+    assert not reviewed
+
+
+def test_an_unlisted_suffixed_bot_approval_is_not_an_approval_either() -> None:
+    """Any `[bot]` suffix is a bot designation whether or not the sink lists the
+    login: `netlify[bot]` is in neither REVIEW_BOTS nor BOT_AUTHORS, so the
+    2026-10-18 sink would have counted it as a person's approval. Nothing picks
+    its review up as agent evidence, so on its own the shape is refused."""
+    state, reviewed, why = _sink([{"author": {"login": "netlify[bot]"}, "state": "APPROVED"}])
+    assert state["approvals"] == []
+    assert state["agent_tool"] == []
+    assert not reviewed
+    assert "no approval" in why
+
+
+def test_the_graphql_batch_catches_an_unlisted_bare_bot_the_same_way() -> None:
+    """`is_bot_login` must classify GraphQL records too — the batched fetch is
+    what the promotion range actually runs, and it carries `__typename`."""
+    state = crc.state_from_graphql_pr(
+        _graphql_pr(
+            reviews=[
+                {"author": {"login": "flaky-lint", "__typename": "Bot"}, "state": "APPROVED"},
+            ]
+        )
+    )
+    assert state["approvals"] == []
+    reviewed, _ = crc.verdict_for(state)
+    assert not reviewed
+    counts = crc.state_from_graphql_pr(
+        _graphql_pr(
+            reviews=[
+                {"author": {"login": "flaky-lint", "__typename": "User"}, "state": "APPROVED"},
+            ]
+        )
+    )
+    assert counts["approvals"] == ["flaky-lint"]
+    reviewed, why = crc.verdict_for(counts)
+    assert reviewed
+    assert "approved by flaky-lint" in why
+
+
+def test_the_batch_query_asks_for_the_review_authors_typename(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No test executes `_pr_batch_query`, and a malformed reviews field would
+    only fail at runtime — so pin the shape here instead: the review author has
+    to carry `__typename`, or the batched path loses its bot signal and an
+    unlisted bare bot's approval sneaks past the sink on promotion runs.
+    (The REST fallback keeps classifying via `is_bot`/`type`, so the degradation
+    is quiet rather than loud — which is exactly why the query is pinned.)"""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    query = crc._pr_batch_query([1894, 1893])
+    assert "reviews(last: 80) { nodes { state author { login __typename } } }" in query
+
+
+def test_a_persons_approval_survives_the_bot_rule() -> None:
+    """The rule exists to refuse bots, never to doubt a person: `is_bot: false`
+    (what `gh` sends for every human account) keeps the approval countable."""
+    state, reviewed, why = _sink(
+        [{"author": {"login": "reviewer", "is_bot": False}, "state": "APPROVED"}]
+    )
+    assert state["approvals"] == ["reviewer"]
+    assert reviewed
+    assert "approved by reviewer" in why
+
+
+def test_a_listed_reviewer_bots_approval_is_agent_evidence_in_both_spellings() -> None:
+    """CodeRabbit's approvals keep counting — through the `REVIEW_BOTS` hatch.
+
+    Excluding bot logins from `approvals` was the DIG-4298 fix; had it been done
+    by stripping them out of the evidence list (`_evidence_reviews`' old suffix
+    strip), a legitimate CodeRabbit pass would have stopped counting at all, and
+    the suffixed spelling already disagreed with the bare one inside one gate:
+    `coderabbitai` counted as a person's approval, `coderabbitai[bot]` as no
+    evidence. One rule at the sink, identical verdicts both spellings.
+    """
+    for login in ("coderabbitai", "coderabbitai[bot]"):
+        state, reviewed, why = _sink([{"author": {"login": login}, "state": "APPROVED"}])
+        assert state["approvals"] == [], login
+        assert state["agent_tool"] == [{"bot": login, "via": "review"}], login
+        assert reviewed
+        assert "agent review by" in why, login
+        assert "approved by" not in why, login
+
+
+def test_rest_typing_is_caught_the_same_way() -> None:
+    """Raw REST feeds flag bots with `type: "Bot"` rather than `gh`'s `is_bot`;
+    the rule takes the record in whichever shape it arrives."""
+    review = {"user": {"login": "sam", "type": "Bot"}, "state": "APPROVED"}
+    state, reviewed, why = _sink([review])
+    assert state["approvals"] == []
+    assert not reviewed
+    assert "no approval" in why
+
+    # And the bare-login-first helper shape (`_author_login`'s `author`/`user`
+    # nesting) still resolves: an author record passed directly.
+    assert crc.is_bot_login({"login": "sam", "type": "Bot"})
+    assert not crc.is_bot_login({"login": "sam", "type": "User"})
+    assert crc.is_bot_login("coderabbitai[bot]")
+
+
+def test_is_bot_login_classifies_the_raw_shape_of_every_record() -> None:
+    """The one rule, pinned input by input.
+
+    Name signals classify without any record (`[bot]` suffix, `REVIEW_BOTS`
+    spellings); record signals classify when the login is bare and unlisted;
+    a record with neither is a person, because assuming a bot refuses real
+    approvals (see `is_bot_login`'s docstring).
+    """
+    assert crc.is_bot_login("coderabbitai[bot]"), "suffix"
+    assert crc.is_bot_login("netlify[bot]"), "any suffix, listed or not"
+    assert crc.is_bot_login("coderabbitai"), "listed name, bare spelling"
+    assert not crc.is_bot_login("coderabbitai-bad"), "prefix is not the suffix"
+    bare_bot = {"login": "flaky-lint", "is_bot": True}
+    assert crc.is_bot_login(bare_bot), "gh --json record"
+    assert crc.is_bot_login({"author": bare_bot}), "review node"
+    assert crc.is_bot_login({"user": bare_bot}), "REST-ish record"
+    assert crc.is_bot_login({"login": "flaky-lint", "__typename": "Bot"}), "GraphQL record"
+    assert not crc.is_bot_login({"login": "sam", "__typename": "User"}), "GraphQL person"
+    assert not crc.is_bot_login({"login": "sam", "is_bot": False}), "gh --json person"
+    assert not crc.is_bot_login({"login": "sam"}), "no signals at all: a person"
+    assert not crc.is_bot_login(""), "empty login is empty, not a bot"
+    assert not crc.is_bot_login(None)
+    assert not crc.is_bot_login({})
+
+
 # ── batched GitHub fetch (no live network) ───────────────────────────────────
 #
 # Sequential `gh pr view` + per-SHA `/commits/{sha}/pulls` is the promotion-range

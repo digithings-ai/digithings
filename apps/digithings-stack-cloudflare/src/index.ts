@@ -56,6 +56,10 @@ import {
   stackContainerRev,
 } from "./ports";
 import {
+  digichatContainerRev,
+  sharedDigichatContainerId,
+} from "./digichat";
+import {
   containerIsAwake,
   isHealthProbe,
   isScannerPath,
@@ -445,6 +449,16 @@ export interface Env {
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
   /** DIG-3585 /chat/occ shell gate. Worker-scoped; never forwarded to a container. */
   OCC_INVITE_KEY?: string;
+  /**
+   * DIG-3814: short sha of the deploying commit, injected by this Worker's own
+   * deploy wrapper (`scripts/deploy.mjs`, which shares the rev logic with the
+   * digichat wrapper) via `wrangler deploy --var DIGICHAT_CONTAINER_REV:<sha12>`.
+   * The Worker reads it to report the digichat Container id this commit derives
+   * (see `sharedDigichatContainerId`). It mounts no digichat container since the
+   * 2026-10-19 separation, so there is no `envVars` to forward it into;
+   * env-vars-pin.test.js pins that no container block reads it.
+   */
+  DIGICHAT_CONTAINER_REV?: string;
 }
 
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
@@ -526,6 +540,15 @@ export default {
         service: "digithings-stack",
         containerId: sharedStackContainerId(workerEnv.STACK_CONTAINER_REV),
         stackRev: stackContainerRev(workerEnv.STACK_CONTAINER_REV),
+        // DIG-3814: the digichat Container id for this same deploying commit,
+        // derived by the standalone worker's own paths.ts and re-exported
+        // through ./digichat, so one read-back verifies the rev reached both
+        // Workers. This Worker does not serve digichat paths since the
+        // 2026-10-19 separation and mounts no digichat container; the field is
+        // reported for the shared deploy path's verification, not as a route
+        // this Worker answers.
+        digichatContainerId: sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV),
+        digichatRev: digichatContainerRev(workerEnv.DIGICHAT_CONTAINER_REV),
         note: "Worker up; container ports may still be starting",
       });
     }

@@ -1971,6 +1971,12 @@ bindings:
   name: TWELVEX_DB
   database_name: twelvex
   source: apps/digidata-api/wrangler.toml
+# Daily corpus index. The KV id in wrangler.toml is a placeholder. The live
+# namespace id stays out of this repo. No production deploy workflow.
+- worker: corpus-index
+  type: kv_namespace
+  name: CORPUS_INDEX_KV
+  source: apps/corpus-index/wrangler.toml
 # DIG-3759 tenant config. Recorded by binding NAME only, never the namespace
 # id: the id is a Cloudflare account resource, not a surface name, and the
 # parity gate records names and kinds only. Namespace-id pinning, if wanted

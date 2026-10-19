@@ -40,6 +40,7 @@ from digiquant.charts import (
     section_unavailable_html,
 )
 from digiquant.models import BacktestResult
+from digiquant.paths import resolve_under
 from digiquant.tearsheet_extract import (
     _compute_drawdown,
     _extract_equity_curve,
@@ -80,15 +81,8 @@ def create_tearsheet(
         raise ImportError("Tearsheet requires plotly. pip install digiquant[visualization]") from e
 
     # The hub already confines tearsheet_path. This check is in the function
-    # that writes, which is the check CodeQL counts. relative_to is not it.
-    base = os.path.realpath(os.path.abspath("backtest_results"))
-    raw = os.fspath(output_path)
-    joined = raw if os.path.isabs(raw) else os.path.join(base, raw)
-    real = os.path.realpath(os.path.normpath(joined))
-    prefix = base if base.endswith(os.sep) else base + os.sep
-    if real != base and not real.startswith(prefix):
-        raise ValueError("tearsheet_path must resolve under 'backtest_results'")
-    out = Path(real)
+    # that writes, which is the check CodeQL counts (DIG-4057 batch B).
+    out = resolve_under(Path.cwd() / "backtest_results", output_path, label="tearsheet_path")
     out.parent.mkdir(parents=True, exist_ok=True)
 
     timestamps, balances = _extract_equity_curve(account_report)

@@ -41,6 +41,10 @@ const indexSource = readFileSync(join(__dirname, "index.ts"), "utf-8");
  *   canonical `DIGICHAT_EMBED_ENABLED` the container receives via
  *   `legacyEmbedEnabledValue`. Forwarding the raw input too would let the
  *   container observe a flag the Worker already resolved to off.
+ * - `DIGICHAT_CONTAINER_REV` (DIG-3814) is the deploying commit's short sha; the
+ *   Worker uses it to derive the Container name via `sharedDigichatContainerId`.
+ *   Forwarding it would hand the container process a build identifier it has no
+ *   consumer for, and would make the var look like a container-facing setting.
  */
 const WORKER_ONLY_ENV_MEMBERS: Record<string, string> = {
   DIGICHAT_LEGACY_EMBED_ENABLED:
@@ -51,6 +55,8 @@ const WORKER_ONLY_ENV_MEMBERS: Record<string, string> = {
     "Worker-only /api/mcp/zammad gate (stage 1); the container never sees the edge key",
   DIGICHAT_ADMIN_KEY:
     "Worker-only /_digichat-admin container reset lever; the container never sees the admin key",
+  DIGICHAT_CONTAINER_REV:
+    "names the Container (sharedDigichatContainerId); the container process has no use for the commit that built it",
 };
 
 /**

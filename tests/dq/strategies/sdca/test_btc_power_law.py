@@ -231,6 +231,7 @@ class TestPersistence:
         with pytest.raises(FileNotFoundError):
             load_coefficients(tmp_path / "does_not_exist.json")
 
+    @pytest.mark.usefixtures("coefficients_root")
     def test_load_example_placeholder_warns(self, caplog) -> None:
         from digiquant.strategies.sdca.btc_power_law import (
             _COEFFICIENTS_EXAMPLE_PATH,
@@ -269,6 +270,8 @@ class TestPersistence:
 
 
 class TestBtcPowerLawRiskModel:
+    pytestmark = pytest.mark.usefixtures("coefficients_root")
+
     def test_satisfies_risk_model_protocol(self) -> None:
         from digiquant.strategies.sdca.btc_power_law import (
             _COEFFICIENTS_EXAMPLE_PATH,

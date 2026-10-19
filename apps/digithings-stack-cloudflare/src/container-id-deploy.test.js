@@ -2,8 +2,17 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  buildVarArg as buildDigichatVarArg,
+  metaMatchesDeploy as sharedMetaFieldMatches,
+  resolveDeployRev as sharedResolveDeployRev,
+  REV_VAR as DIGICHAT_WRAP_REV_VAR,
+} from "../../digichat-cloudflare/scripts/deploy.mjs";
 import { STACK_CONTAINER_REV_VAR, sharedStackContainerId } from "./ports";
 import {
+  DIGICHAT_REV_VAR,
+  META_FIELD,
+  META_URL,
   REV_LEN,
   REV_VAR,
   SHA_RE,
@@ -11,23 +20,41 @@ import {
   buildWranglerArgs,
   expectedContainerId,
   metaMatchesDeploy,
+  metaMatchesDigichat,
   resolveDeployRev,
 } from "../scripts/deploy.mjs";
+import { sharedDigichatContainerId } from "./digichat";
 
 /**
- * DIG-3229. The Container-id derivation in ports.ts is only worth anything if
- * every deploy actually carries the rev, because a deploy without it silently
- * falls back to the pinned legacy id — the exact defect this replaces. That is
- * a property of the DEPLOY PATH, not of the derivation, so it is pinned here:
- * the rev resolution, the wrangler argv, the package script that operators
- * run, and the post-deploy read-back.
+ * DIG-3229 + DIG-3814, merged: the stack deploy path carries BOTH revs now —
+ * the stack's OWN Durable Object id (ports.ts) and the digichat Container id
+ * derived from the same commit (re-exported through digichat.ts). A derivation
+ * is only worth anything if every deploy actually carries its rev, because a
+ * deploy without it silently falls back to the pinned legacy id. That is a
+ * property of the DEPLOY PATH, not of the derivation, so it is pinned here: the
+ * rev resolution (shared by import with the digichat wrapper), the wrangler
+ * argv, the package script operators run, and the post-deploy read-back of BOTH
+ * /_stack/meta fields.
+ *
+ * The property that matters most is not "the wrapper carries a rev" — it is
+ * that the wrapper verifies BOTH meta fields, each under its own key.
+ * `/_stack/meta` publishes two different container ids: `containerId` is the
+ * stack's own and `digichatContainerId` is the digichat one this commit derives.
+ * A wrapper pointed at the wrong key would either fail forever or, worse, pass
+ * while the digichat id stayed pinned. Every digichat-id assertion below is
+ * built around that distinction, and the discriminating arm is a meta payload
+ * carrying ONLY the stack's own id: the digichat check must refuse it rather
+ * than call it verified.
+ *
+ * Since the 2026-10-19 separation this Worker does not serve digichat paths and
+ * mounts no digichat container; the `digichatContainerId` field is reported for
+ * this one read-back, not because a route here answers to it.
  *
  * Deliberately plain `.js` (same reason as container-bind.test.js /
  * env-vars-pin.test.js): tsconfig.json scopes `types` to
  * @cloudflare/workers-types only, so node:fs / node:path / node:url have no
  * ambient declarations in a `.ts` file here. vitest runs it via the
- * `.test.{ts,js}` glob in vitest.config.ts, and the dynamic import of the
- * build-time script is what puts the two halves of the fix in one suite.
+ * `.test.{ts,js}` glob in vitest.config.ts.
  */
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, "..");
@@ -47,6 +74,14 @@ const FULL_SHA = "822af7515ab6d0e9f1c2b3a4d5e6f708192a3b4c";
 const SHORT_REV = FULL_SHA.slice(0, REV_LEN);
 
 describe("resolveDeployRev", () => {
+  it("is the digichat wrapper's implementation, not a stack-local copy", () => {
+    // Live-import proof (DIG-3814): if this were copied, editing the shared
+    // gate would leave the stack wrapper behind and the hole would reopen on
+    // the live surface. Identity against the shared module is the strongest
+    // available statement.
+    expect(resolveDeployRev).toBe(sharedResolveDeployRev);
+  });
+
   it("resolves the short commit sha, asking git for the verified HEAD", () => {
     const git = fakeGit({ stdout: `${FULL_SHA}\n` });
     expect(resolveDeployRev(git)).toBe(SHORT_REV);
@@ -77,7 +112,7 @@ describe("resolveDeployRev", () => {
   });
 });
 
-describe("buildVarArg", () => {
+describe("buildVarArg (the stack's own rev var)", () => {
   it("passes the rev as KEY:VALUE, unwrapped — a var, not a JSON literal", () => {
     expect(buildVarArg(SHORT_REV)).toBe(`--var=${REV_VAR}:${SHORT_REV}`);
     // `--var` takes a colon separator and a bare value; quoting it would put
@@ -93,18 +128,26 @@ describe("buildVarArg", () => {
 });
 
 describe("buildWranglerArgs", () => {
-  it("always carries exactly one rev var: there is no rev-free deploy argv", () => {
+  it("always carries BOTH rev vars for ONE commit: there is no one-id argv", () => {
     const args = buildWranglerArgs(SHORT_REV);
     expect(args.slice(0, 4)).toEqual(["exec", "--", "wrangler", "deploy"]);
     expect(args.filter((a) => a.startsWith("--var="))).toEqual([
       buildVarArg(SHORT_REV),
+      `--var=${DIGICHAT_REV_VAR}:${SHORT_REV}`,
     ]);
   });
 
-  it("passes operator arguments through without dropping the rev var", () => {
+  it("builds the digichat rev var through the shared wrapper's own builder", () => {
+    // Same identity proof as resolveDeployRev, one level up: the digichat-side
+    // --var string is built by the digichat module, not re-spelled here.
+    expect(buildDigichatVarArg(SHORT_REV)).toBe(`--var=${DIGICHAT_REV_VAR}:${SHORT_REV}`);
+    expect(DIGICHAT_REV_VAR).toBe(DIGICHAT_WRAP_REV_VAR);
+  });
+
+  it("passes operator arguments through without dropping either rev var", () => {
     const args = buildWranglerArgs(SHORT_REV, ["--containers-rollout=none"]);
     expect(args).toContain("--containers-rollout=none");
-    expect(args.filter((a) => a.startsWith("--var="))).toHaveLength(1);
+    expect(args.filter((a) => a.startsWith("--var="))).toHaveLength(2);
   });
 
   it("cannot be built at all without a valid rev", () => {
@@ -115,7 +158,7 @@ describe("buildWranglerArgs", () => {
   });
 });
 
-describe("the deploy path carries the rev", () => {
+describe("the deploy path carries both revs", () => {
   const pkg = JSON.parse(
     readFileSync(join(appDir, "package.json"), "utf-8"),
   );
@@ -128,7 +171,7 @@ describe("the deploy path carries the rev", () => {
     expect(pkg.scripts.deploy).not.toMatch(/wrangler deploy/);
   });
 
-  it("the rev var name is one string across the script, ports.ts and Env", () => {
+  it("the stack rev var name is one string across the script, ports.ts and Env", () => {
     // Three files, three spellings of the same key. A typo in any of them
     // yields a var nothing reads, i.e. a silent fall back to the legacy id.
     expect(REV_VAR).toBe(STACK_CONTAINER_REV_VAR);
@@ -138,13 +181,21 @@ describe("the deploy path carries the rev", () => {
     expect(sharedStackContainerId("822af7515ab")).toBe("shared-822af7515ab");
   });
 
-  it("the var is NOT hand-written into wrangler.toml [vars]", () => {
-    // A committed value would be a manual step again — and would pull the key
-    // into the config-contract and self-host parity gates that pin every [vars]
-    // entry. The deploy injects it; the config must not carry it.
+  it("the digichat rev var name is one string across script, Env and the fold", () => {
+    const index = readFileSync(join(appDir, "src", "index.ts"), "utf-8");
+    expect(index).toContain(`${DIGICHAT_REV_VAR}?: string;`);
+    expect(index).toContain(`workerEnv.${DIGICHAT_REV_VAR}`);
+    expect(sharedDigichatContainerId("822af7515ab")).toBe("shared-822af7515ab");
+  });
+
+  it("the rev vars are NOT hand-written into wrangler.toml [vars]", () => {
+    // A committed value would be a manual step again — and would pull the keys
+    // into the config-contract and self-host parity gates that pin every
+    // [vars] entry. The deploy injects them; the config must not carry them.
     const toml = readFileSync(join(appDir, "wrangler.toml"), "utf-8");
     const assigned = [...toml.matchAll(/^\s*([A-Z_]+)\s*=\s/gm)].map((m) => m[1]);
     expect(assigned).not.toContain(REV_VAR);
+    expect(assigned).not.toContain(DIGICHAT_REV_VAR);
     // Control: the census above really does see this file's assignments.
     expect(assigned).toContain("SUPABASE_URL");
   });
@@ -206,6 +257,21 @@ describe("the deploy path carries the rev", () => {
     expect(helper[0]).toMatch(/getContainer\(\s*workerEnv\.STACK,\s*sharedStackContainerId\(/);
   });
 
+  it("the stack reports the derived digichat id but fetches no digichat container", () => {
+    // DIG-3814's stack half, after the 2026-10-19 separation: the
+    // container is gone (the client surface lives on the digithings-digichat
+    // Worker), and what remains here is the derived-id report in /_stack/meta
+    // that the shared deploy wrapper verifies. No hand-pinned literal either.
+    const index = readFileSync(join(appDir, "src", "index.ts"), "utf-8");
+    expect(index).not.toContain("SHARED_DIGICHAT_CONTAINER_ID");
+    expect(index).not.toContain("SHARED_STACK_CONTAINER_ID");
+    expect(index).not.toContain("getContainer(workerEnv.DIGICHAT");
+    expect(index).not.toContain("switchPort(request, DIGICHAT_PORT)");
+    expect(index).toContain(
+      "digichatContainerId: sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV)",
+    );
+  });
+
   it("every read of the rev var is consumed as a call argument", () => {
     // Independent of the helper pin: a read that is computed and thrown away is
     // the silent-fallback class, and a count cannot be faked by a rename.
@@ -224,12 +290,16 @@ describe("the deploy path carries the rev", () => {
     expect(consumed).toBe(reads);
   });
 
-  it("/_stack/meta reports the id and the rev, so a deploy can be verified", () => {
+  it("/_stack/meta reports BOTH ids and both revs, so a deploy can be verified", () => {
     const index = readFileSync(join(appDir, "src", "index.ts"), "utf-8");
     expect(index).toContain(
       "containerId: sharedStackContainerId(workerEnv.STACK_CONTAINER_REV)",
     );
     expect(index).toContain("stackRev: stackContainerRev(workerEnv.STACK_CONTAINER_REV)");
+    expect(index).toContain(
+      "digichatContainerId: sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV)",
+    );
+    expect(index).toContain("digichatRev: digichatContainerRev(workerEnv.DIGICHAT_CONTAINER_REV)");
   });
 });
 
@@ -242,7 +312,7 @@ describe("the wrapper and ports.ts agree on the id", () => {
   });
 });
 
-describe("metaMatchesDeploy", () => {
+describe("metaMatchesDeploy (the stack's own field)", () => {
   it("accepts the id this commit implies", () => {
     expect(
       metaMatchesDeploy({ containerId: expectedContainerId(SHORT_REV) }, expectedContainerId(SHORT_REV)),
@@ -265,5 +335,60 @@ describe("metaMatchesDeploy", () => {
     const expected = expectedContainerId(SHORT_REV);
     expect(metaMatchesDeploy({ containerId: expected.slice(0, -1) }, expected)).toBe(false);
     expect(metaMatchesDeploy({ containerId: `${expected}0` }, expected)).toBe(false);
+  });
+});
+
+describe("metaMatchesDigichat (the digichat id field)", () => {
+  it("names the digichat field explicitly and reuses the shared field-aware matcher", () => {
+    // Control that makes the wrong-field arms meaningful: the two fields are
+    // different keys and the matcher is the shared module's, parameterised on
+    // the field rather than a second copy.
+    expect(META_FIELD).toBe("digichatContainerId");
+    expect(META_URL).toContain("_stack/meta");
+    expect(metaMatchesDigichat({
+      digichatContainerId: sharedDigichatContainerId(SHORT_REV),
+    }, sharedDigichatContainerId(SHORT_REV))).toBe(true);
+    expect(sharedMetaFieldMatches({ digichatContainerId: sharedDigichatContainerId(SHORT_REV) }, sharedDigichatContainerId(SHORT_REV), META_FIELD)).toBe(true);
+  });
+
+  it("passes only when digichatContainerId matches, even though containerId does not", () => {
+    // A realistic `/_stack/meta`: the digichat id is right, the stack's
+    // own value is deliberately different. A wrapper that read the wrong key
+    // would report failure here.
+    const meta = {
+      containerId: sharedStackContainerId("111111111111"),
+      digichatContainerId: sharedDigichatContainerId(SHORT_REV),
+      digichatRev: SHORT_REV,
+    };
+    expect(metaMatchesDigichat(meta, sharedDigichatContainerId(SHORT_REV))).toBe(true);
+  });
+
+  it("refuses a payload that reports only the stack's own id", () => {
+    // THE DISCRIMINATING ARM: `containerId` present and plausible,
+    // `digichatContainerId` absent. It must not read as verified.
+    const meta = { containerId: sharedStackContainerId(SHORT_REV) };
+    expect(metaMatchesDigichat(meta, sharedDigichatContainerId(SHORT_REV))).toBe(false);
+  });
+
+  it("refuses when the digichat id is stale", () => {
+    const meta = {
+      containerId: sharedStackContainerId(SHORT_REV),
+      digichatContainerId: "shared-v10",
+      digichatRev: null,
+    };
+    expect(metaMatchesDigichat(meta, sharedDigichatContainerId(SHORT_REV))).toBe(false);
+  });
+
+  it("treats an unreadable route as unproven, never as a pass", () => {
+    for (const meta of [null, undefined, {}, { digichatContainerId: null }]) {
+      expect(metaMatchesDigichat(meta, sharedDigichatContainerId(SHORT_REV))).toBe(false);
+    }
+  });
+
+  it("both fields together are required: one match alone is not a deploy proof", () => {
+    const expected = expectedContainerId(SHORT_REV);
+    const partial = { containerId: expected }; // digichat id missing
+    expect(metaMatchesDeploy(partial, expected)).toBe(true);
+    expect(metaMatchesDigichat(partial, expected)).toBe(false);
   });
 });

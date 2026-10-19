@@ -122,7 +122,10 @@ class TestSeriesDataParser:
 
 
 class TestBitviewClient:
-    def test_bulk_parses_v1_catalog(self, tmp_path: Path) -> None:
+    def test_bulk_parses_v1_catalog(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path))
         bodies = [
             _mvrv_slice(),
             {**_mvrv_slice(), "data": [1.01, 1.02, 1.00, 0.99, 1.03]},
@@ -141,6 +144,16 @@ class TestBitviewClient:
         loaded = pl.read_parquet(mvrv.path)
         assert loaded.columns == ["date", "value"]
         assert "bulk" in session.calls[0][0]
+
+    def test_rejects_cache_dir_outside_data_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # DIG-4057 batch B: the cache sink is confined to DIGIQUANT_DATA_ROOT.
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path / "root"))
+        session = _FakeSession(body=[_mvrv_slice()])
+        client = BitviewClient(session=session, cache_dir=tmp_path / "outside")
+        result = client.fetch(["mvrv"])
+        assert "DIGIQUANT_DATA_ROOT" in str(result.series["mvrv"].error)
 
     def test_refuses_nupl_without_http(self) -> None:
         session = _FakeSession(exc=AssertionError("must not fetch nupl"))

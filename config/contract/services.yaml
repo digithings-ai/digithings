@@ -215,3 +215,11 @@ workers:
     contract_vars: false # backend switch lives in .dev.vars; no [vars] table yet.
     note: D1-backed data API (DIG-2895). NOT deployed — no deploy workflow, no
       routes, no custom domain. Deploying or adding routes needs Chris's approval.
+  - name: corpus-index
+    file: apps/corpus-index/wrangler.toml
+    workers_dev: true
+    durable_objects: []
+    contract_vars: false # [vars] is DRY_RUN plus an account id; not a generated DT_* block.
+    note: Daily corpus index. Job URLs and index names live in KV, not in this
+      file. Registry entry is the build surface only. No production deploy
+      workflow is added here.
