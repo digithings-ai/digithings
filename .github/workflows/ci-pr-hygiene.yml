@@ -1,4 +1,6 @@
 # Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
+# DIG-4364: `disabled_manually` since the 2026-10-14 GitHub cost lock; the Worker's daily 06:21 UTC
+# clock is held off (`enabled: false` in jobs.ts) until the workflow is re-enabled on GitHub.
 name: "CI: PR hygiene"
 
 # Agent-task TSV coverage (path-gated), on schedule and PR.
