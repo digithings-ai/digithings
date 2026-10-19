@@ -414,7 +414,11 @@ def _check_phase2(commands: dict[str, Any]) -> None:
             raise SystemExit(f"payload: {name} is not declared as a tuple")
         block = exporter[head:tail]
         for value in values:
-            if f'"{value}"' not in block:
+            # Anchored to the entry form (`    "value",` on its own line inside the
+            # tuple). A bare substring would also match a commented-out entry or an
+            # inline mention elsewhere in the block, which is the failure this check
+            # exists to prevent.
+            if f'\n    "{value}"' not in block:
                 raise SystemExit(f"payload must declare {value} in {name}")
 
     declares(

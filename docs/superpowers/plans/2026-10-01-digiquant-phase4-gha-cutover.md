@@ -35,7 +35,7 @@ Locked for this plan. An implementation PR that violates it is out of scope.
 | Decision | Locked value |
 |---|---|
 | Container class | `DigiQuantRunnerContainer` only. `wrangler.toml` keeps a single `[[containers]]` entry. |
-| Instance type | `instance_type = "standard-2"` (1 vCPU, 6 GiB memory, 12 GB disk). |
+| Instance type | `instance_type = "standard-2"` *(now `standard-1` - ADR-0034)* (1 vCPU, 6 GiB memory, 12 GB disk). |
 | Image | The existing `infra/docker/Dockerfile.digiquant-runner`. Add two script `COPY` lines. Do not change the `uv sync` line. |
 | Instances | `max_instances = 1`. Durable Object id stays `runner-v1`. |
 | Idle | `sleepAfter = "2m"` when the ledger has no lock and no queue. |

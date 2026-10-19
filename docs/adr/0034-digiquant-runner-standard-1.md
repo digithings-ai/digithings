@@ -28,7 +28,7 @@ Two facts change the shape of the decision.
    30-minute idle tail was the cost (#5576), with container spend around $20/month. The
    class delta is a fraction of that, and it accrues only while the container is awake.
 
-The guard's authority was the plan lock at `phase3:843`, *"Instance type is **not** open. It
+The guard's authority was the plan lock at `phase3:849`, *"Instance type is **not** open. It
 is `standard-2` on `DigiQuantRunnerContainer`."* That is Chris's lock, so only Chris could
 move it; he chose to keep the cheaper class on 2026-10-19.
 
@@ -50,7 +50,7 @@ contract and production agree. Do not upsize.
   (`phase3:176`, `:833`). Halving the memory halves the margin, and nothing in this change
   buys margin back. Two follow-ups are owed and are tracked on DIG-2904:
   1. make the house chain exclusive against price ticks (`MAX_INFLIGHT` / concurrency
-     group) — the plan's own recommended option at `:827`;
+     group) — the plan's own recommended option at `phase3:178`;
   2. make runner memory observable. Today's "peak memory 0, OOM 0" is *no samples*, so a
      near-OOM on a 14,400-second job is currently invisible.
 - Acceptance: one measured house run at `standard-1`; revert to `standard-2` if it OOMs.
