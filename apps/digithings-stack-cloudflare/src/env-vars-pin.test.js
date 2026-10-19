@@ -86,9 +86,9 @@ const DIGICHAT_SCOPED_VARS = new Set([
 // container process reads it, so keying it into an envVars block would repeat
 // the dead-config duplication review finding 6 removed. Two-way pinned below:
 // exempt from the forward-everything check, and refused if forwarded anyway.
-// `MCP_EDGE_KEY` gates the Worker's /_stack/mcp/zammad edge path; the stack
-// container's zammad-mcp process reads its own ZAMMAD_API_TOKEN, never this
-// key, so it stays Worker-scoped too.
+// `MCP_EDGE_KEY` gates the Worker's /_stack/mcp/{digisearch,digivault} edge
+// paths; the stack container's in-container MCP servers read their own env,
+// never this key, so it stays Worker-scoped too.
 const WORKER_SCOPED_VARS = new Set([
   "MARKET_DATA_ALLOWED_ORIGINS",
   "MCP_EDGE_KEY",

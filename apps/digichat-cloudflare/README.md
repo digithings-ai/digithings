@@ -119,12 +119,14 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
 
 Tenant entries may also carry the same operator-only `mcp.servers` entries as
 the deploy YAML — `{ id, url, label?, default?, token?, tokenEnv?, authHeader? }`
-— e.g. the OCC Zammad server via the key-gated stack route
-(`url: https://graph.digithings.ai/_stack/mcp/zammad/mcp`,
-`token: <MCP_EDGE_KEY value>`, `authHeader: x-digi-mcp-key`). Use a literal
+— e.g. the OCC Zammad server, served by this Worker's own key-gated route
+(`url: https://digithings.ai/api/mcp/zammad/mcp`,
+`token: <ZAMMAD_EDGE_KEY value>`, `authHeader: x-digi-mcp-key`). Use a literal
 `token`: `tokenEnv` only resolves variables present in the Container's own
-environment, and the stack Worker's `MCP_EDGE_KEY` secret is not forwarded
-there. They are resolved server-side and stripped by the browser projections
+environment, and the Worker's `ZAMMAD_EDGE_KEY` secret is not forwarded there.
+The in-container zammad-mcp authenticates to Zammad with its own environment, so
+it needs `ZAMMAD_API_TOKEN` (and optionally `ZAMMAD_BASE_URL`) as Container
+secrets. They are resolved server-side and stripped by the browser projections
 (see `apps/digichat/ARCHITECTURE.md`).
 
 `DIGICHAT_EMBED_HOSTS` is already set in `wrangler.toml` `[vars]` (CSP
