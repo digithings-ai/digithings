@@ -658,9 +658,9 @@ jobs:
       # One broken app should still report the others.
       fail-fast: false
       matrix:
-        # Directory names, not package names: digichat-cloudflare is the
-        # directory and digithings-digichat-cloudflare is the package, so the
-        # directory is the only stable key for `working-directory:` below.
+        # Directory names, not package names: a package name does not always
+        # match its directory, so the directory is the only stable key for
+        # `working-directory:` below.
         app:
           - digithings-cron
           - dashboard-api

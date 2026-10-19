@@ -15,7 +15,7 @@ surface is assembled from the same tokens, livery, motion laws, and components.
 
 | Part | Location | Package | Role |
 | ---- | -------- | ------- | ---- |
-| **reference app** | [`reference/`](reference/) | `design-reference` | The live, browsable showcase — every reusable pattern rendered as working code at `http://127.0.0.1:4013`. Start here. |
+| **reference app** | [`reference/`](reference/) | `@digithings/reference` | The live, browsable showcase — every reusable pattern rendered as working code at `http://127.0.0.1:4013`. Start here. |
 | **design tokens** | [`design/`](design/) | `@digithings/design` | Colours, type, spacing, motion easings — `tokens.css`. The single palette every surface builds from. |
 | **shared components** | [`web/`](web/) | `@digithings/ui` | The React component layer (Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) consumed across all frontends. |
 
@@ -44,8 +44,8 @@ digiweb is built to be read by coding agents, not just people:
 ## Run the reference
 
 ```bash
-npm run dev --workspace design-reference     # http://127.0.0.1:4013
-# or the repo's preview tooling: launch config "design-reference"
+npm run dev --workspace @digithings/reference     # http://127.0.0.1:4013
+# or the repo's preview tooling: launch config "@digithings/reference"
 ```
 
 Chat gallery (official assistant-ui `Thread`, CSS-variable theme):
