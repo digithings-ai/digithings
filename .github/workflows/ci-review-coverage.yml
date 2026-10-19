@@ -65,6 +65,21 @@ jobs:
           # empty range and pass while reviewing nothing.
           fetch-depth: 0
 
+      # A dispatch run's status attaches to github.sha (the dispatched ref's
+      # tip), not to inputs.head_sha. Without this guard a caller could gate an
+      # arbitrary SHA and have the green check land on a different commit.
+      - name: Refuse a dispatch whose head is not the commit being checked
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          HEAD_SHA: ${{ inputs.head_sha }}
+          CHECKED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "${HEAD_SHA}" != "${CHECKED_SHA}" ]; then
+            echo "::error::head_sha ${HEAD_SHA} is not the commit this run checks (${CHECKED_SHA}); the status would attach to the wrong commit"
+            exit 1
+          fi
+
       - name: Check review coverage of the promotion range
         env:
           GH_TOKEN: ${{ github.token }}
