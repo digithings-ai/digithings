@@ -113,12 +113,15 @@ def build_license_claims(
     hosts: Sequence[str],
     services: Sequence[str] | None = None,
     term_days: int = LICENSE_DEFAULT_TERM_DAYS,
+    terms_version: str | None = None,
 ) -> tuple[dict[str, Any], str]:
     """Build customer-license JWT claims without signing.
 
     Returns ``(claims, license_id)`` where ``license_id`` mirrors the ``jti``.
     ``services`` is omitted from the claims entirely when not passed or empty
     (absent means entitled to the hosted services of the commercial term).
+    ``terms_version`` (DIG-4290) is omitted entirely when not supplied or blank —
+    never a literal JSON null, which a consumer cannot tell apart from absence.
     Raises ``ValueError`` on blank customer/hosts or an out-of-range term.
     """
     customer = customer_slug.strip()
@@ -130,6 +133,7 @@ def build_license_claims(
     if term_days < 1 or term_days > LICENSE_MAX_TERM_DAYS:
         raise ValueError(f"term_days must be 1..{LICENSE_MAX_TERM_DAYS}")
     svc = list(services) if services else None  # [] behaves like absent (pairwise-omit)
+    tv = (terms_version or "").strip() or None  # blank behaves like absent (pairwise-omit)
     now = datetime.now(timezone.utc)
     iat = int(now.timestamp())
     license_id = uuid.uuid4().hex
@@ -148,6 +152,8 @@ def build_license_claims(
     if svc is not None:
         claims["services"] = svc
         claims["scope"] = " ".join(svc)
+    if tv is not None:
+        claims["terms_version"] = tv
     return claims, license_id
 
 
@@ -172,6 +178,7 @@ def issue_license_token(
     hosts: Sequence[str],
     services: Sequence[str] | None = None,
     term_days: int = LICENSE_DEFAULT_TERM_DAYS,
+    terms_version: str | None = None,
 ) -> tuple[str, str, int]:
     """Mint a customer-license JWT with the digikey access-token keypair.
 
@@ -184,6 +191,7 @@ def issue_license_token(
         hosts=hosts,
         services=services,
         term_days=term_days,
+        terms_version=terms_version,
     )
     return (
         sign_license_claims(private_key, kid=kid, claims=claims),
