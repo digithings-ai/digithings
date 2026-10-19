@@ -50,8 +50,10 @@ agents:
     - web_search
   # research_brief still false below — web_search is never ambient on corpus RAG.
   # Serves BOTH tenants. A per-tenant override exists (researchSystemPrompt inside
-  # DIGI_TENANT_CORPUS_MAP, read by corpus_routing.py), but the deployed map sets it for
-  # neither, so this text is what digithings AND OCC users get — keep it corpus-neutral.
+  # DIGI_TENANT_CORPUS_MAP, read by corpus_routing.py) and the deployed maps carry
+  # it: the stack Worker's map sets it for `occ`, and the self-host compose map sets
+  # it for `digithings` and `occ` (measured on develop, DIG-3232). This text is the
+  # fallback for a slug the map does not carry, so keep it corpus-neutral.
   #
   # Rewritten for #2306. The previous version escalated to digivault_get_note only
   # "when a hit's excerpt isn't enough", which is a judgment the model cannot make: it

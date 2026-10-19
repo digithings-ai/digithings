@@ -27,9 +27,15 @@ export type ConnectedToolRow = {
   slash: string;
   label: string;
   kind: "catalog" | "mcp";
+  /** Individual tools under this row (per-tool session toggles). */
+  tools?: ReadonlyArray<{ id: string; label?: string }>;
 };
 
-type CatalogRef = { id: string; label?: string };
+type CatalogRef = {
+  id: string;
+  label?: string;
+  tools?: ReadonlyArray<{ id: string; label?: string }>;
+};
 
 export function emptyMcpConfig(): SessionMcpConfig {
   return {
@@ -198,6 +204,12 @@ export function connectedTools(input: {
   const mcpIds = new Set(mcp.map((s) => s.id));
   const labelOf = (id: string, fallback: string) =>
     input.catalogTools.find((t) => t.id === id)?.label?.trim() || fallback;
+  const subsOf = (id: string) => {
+    const hit =
+      input.catalogTools.find((t) => t.id === id)?.tools ??
+      input.mcpServers.find((t) => t.id === id)?.tools;
+    return hit?.length ? { tools: hit } : {};
+  };
   const rows: ConnectedToolRow[] = [];
   if (input.hasDigisearch) {
     rows.push({
@@ -205,6 +217,7 @@ export function connectedTools(input: {
       slash: "digisearch",
       label: labelOf("digisearch", "Search"),
       kind: "catalog",
+      ...subsOf("digisearch"),
     });
   }
   if (input.hasVault) {
@@ -213,6 +226,7 @@ export function connectedTools(input: {
       slash: "digivault",
       label: labelOf("digivault", "Vault"),
       kind: "catalog",
+      ...subsOf("digivault"),
     });
   }
   if (input.tenantAllowsWeb) {
@@ -239,6 +253,7 @@ export function connectedTools(input: {
       slash: catalogSlashId(id),
       label: t.label?.trim() || id,
       kind: "catalog",
+      ...subsOf(id),
     });
   }
   for (const s of mcp) {
@@ -247,6 +262,7 @@ export function connectedTools(input: {
       slash: s.id,
       label: s.label || s.id,
       kind: "mcp",
+      ...subsOf(s.id),
     });
   }
   return rows;

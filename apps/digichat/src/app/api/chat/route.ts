@@ -383,6 +383,9 @@ export async function POST(req: Request) {
   // provider models — the CI picker must not reject those ids (#3829).
   let modelId = digigraphModelName();
   const requestedModel = req.headers.get("x-digi-model")?.trim() || undefined;
+  // House-path session model (non-BYOK, allowlisted). digigraph only binds it
+  // when the slug is also on its own DIGI_SESSION_MODEL_ALLOWLIST.
+  let houseSessionModel: string | undefined;
   try {
     const { allowlistModelId } = await import("@/lib/deploy-config");
     if (byokKey) {
@@ -400,6 +403,7 @@ export async function POST(req: Request) {
         );
       }
       if (allowed) modelId = allowed;
+      if (requestedModel && allowed) houseSessionModel = allowed;
     } else if (configFailed && requestedModel) {
       // The deployment config could not be read, so we cannot prove the model
       // is allowed → fail closed rather than forward an unverified id.
@@ -677,6 +681,9 @@ export async function POST(req: Request) {
   }
 
   // BYOK: forward per-request key to digigraph; never log or persist.
+  if (!byokKey && houseSessionModel) {
+    upstreamHeaders["X-Digi-House-Model"] = houseSessionModel;
+  }
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;
     if (byokProvider) {
