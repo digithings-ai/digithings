@@ -30,7 +30,7 @@ Locked for this plan. An implementation PR that violates it is out of scope.
 |---|---|
 | Container class | `DigiQuantRunnerContainer` only. `wrangler.toml` keeps a single `[[containers]]` entry. |
 | Instance type | `instance_type = "standard-2"` (1 vCPU, 6 GiB memory, 12 GB disk). |
-| Image | The existing `Dockerfile.digiquant-runner`. Add two script `COPY` lines. Do not change the `uv sync` line. |
+| Image | The existing `infra/docker/Dockerfile.digiquant-runner`. Add two script `COPY` lines. Do not change the `uv sync` line. |
 | Instances | `max_instances = 1`. Durable Object id stays `runner-v1`. |
 | Idle | `sleepAfter = "2m"` when the ledger has no lock and no queue. |
 | Smokes | Worker `fetch` inside digithings-cron. Zero container seconds. |
@@ -94,7 +94,7 @@ House-candidate image size on this SHA is 1344917045 bytes (~1.253 GiB), recorde
 | Surface | What is true today |
 |---|---|
 | Class | `apps/digiquant-runner/wrangler.toml` — one `[[containers]]`, `class_name = "DigiQuantRunnerContainer"`, `instance_type = "standard-2"`, `max_instances = 1`. |
-| Image | `Dockerfile.digiquant-runner` — `uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus`, then `uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres`. House-candidate Size=1344917045. Copies the refresh, backfill, and execution-cron scripts. Does **not** copy `scripts/digiquant_archive_checkpoints.py` or `scripts/digiquant_checkpoint_size_gate.py`. Root `.dockerignore` ignores `scripts/` except the re-includes already listed. |
+| Image | `infra/docker/Dockerfile.digiquant-runner` — `uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus`, then `uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres`. House-candidate Size=1344917045. Copies the refresh, backfill, and execution-cron scripts. Does **not** copy `scripts/digiquant_archive_checkpoints.py` or `scripts/digiquant_checkpoint_size_gate.py`. Root `.dockerignore` ignores `scripts/` except the re-includes already listed. |
 | Catalog | `apps/digiquant-runner/commands.json` has market-data, prices, onchain, execution, research-metrics, tearsheets, `house-run`, `allocation-shadow`. No `checkpoint-archive`. |
 | Cron | `apps/digithings-cron/src/jobs.ts` — prices, market-data, tearsheets, onchain, metrics, execution probe are `kind: "container"`. House-run is still `repository_dispatch` until #4897. `smoke-stack` (`27 7 * * *`) and `smoke-site` (`17 6 * * *`) are `workflow_dispatch`. No `checkpoint-archive` job. `wrangler.toml` `[triggers].crons` has no `30 13 * * *`. |
 | Checkpoint workflow | `.github/workflows/pipeline-checkpoint-archive.yml` name `Pipeline: checkpoint archive`. `schedule: cron: "30 13 * * *"`. `workflow_dispatch`. Concurrency `checkpoint-archive`, `cancel-in-progress: false`. `timeout-minutes: 60`. Steps: advisory `scripts/digiquant_checkpoint_size_gate.py --snapshot-out /tmp/checkpoint-size-pre.json` (`continue-on-error: true`), then `scripts/digiquant_archive_checkpoints.py --retain-days 1 --manifest-out /tmp/checkpoint-archive-manifests.json`. Artifacts via `actions/upload-artifact` (manifest retention 90 days; snapshot `if-no-files-found: ignore`). |
@@ -302,7 +302,7 @@ This plan PR touches only the two docs rows. The rest are implementation.
 | `apps/digiquant-runner/src/commands.test.ts` | CHR-A. |
 | `apps/digiquant-runner/container/exec_job.py` | CHR-A. Skip missing `publish_if_present` paths. Required `publish` stays strict. |
 | `apps/digiquant-runner/container/exec_job_test.py` | CHR-A. |
-| `Dockerfile.digiquant-runner` | CHR-C. Two `COPY` lines. Header records the new Size. No `uv sync` change. |
+| `infra/docker/Dockerfile.digiquant-runner` | CHR-C. Two `COPY` lines. Header records the new Size. No `uv sync` change. |
 | `.dockerignore` | CHR-C. Re-include the two scripts. |
 | `apps/digithings-cron/src/jobs.ts` | CHR-E replaces the two `wd(...)` smoke rows with `pj(...)`. CHR-B adds `cj(...)` for checkpoint-archive. |
 | `apps/digithings-cron/src/dispatch.ts` | CHR-E. `kind: "probe"` branch. Override list still wins. |
@@ -428,7 +428,7 @@ Keep the existing checks that cover 409 `_running_command` and the 120s publish 
 
 ### Task 3 — CHR-C image
 
-**Files:** `Dockerfile.digiquant-runner`, `.dockerignore`.
+**Files:** `infra/docker/Dockerfile.digiquant-runner`, `.dockerignore`.
 
 - [ ] **Step 1:** Re-include and `COPY` only:
 
@@ -447,7 +447,7 @@ COPY scripts/digiquant_checkpoint_size_gate.py ./scripts/digiquant_checkpoint_si
 - [ ] **Step 3:** Local image check, no prod credentials:
 
 ```bash
-docker build -f Dockerfile.digiquant-runner -t digiquant-runner:phase4 .
+docker build -f infra/docker/Dockerfile.digiquant-runner -t digiquant-runner:phase4 .
 docker image inspect digiquant-runner:phase4 --format 'Size={{.Size}}'
 docker run --rm digiquant-runner:phase4 python -c "import digiquant.ops.checkpoint_archive; print('archive import ok')"
 docker run --rm digiquant-runner:phase4 python scripts/digiquant_archive_checkpoints.py --help

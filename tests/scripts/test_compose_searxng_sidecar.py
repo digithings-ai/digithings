@@ -7,7 +7,7 @@ container never becomes healthy.
 Upstream tags are `latest` or `YYYY.M.D-<hash>`; a bare `YYYY.M.D` tag does
 not exist, so `compose pull` fails on it. Since #3239 compose no longer floats:
 it pins the release tag for the same searxng commit
-`Dockerfile.digithings-stack-cloudflare` builds from, and this test derives that
+`infra/docker/Dockerfile.digithings-stack-cloudflare` builds from, and this test derives that
 expected tag from the Dockerfile instead of restating it, so a bump of
 SEARXNG_COMMIT cannot leave compose on a stale engine. The image digest is still
 unpinned by decision (digisearch/ARCHITECTURE.md, #3871); that is not asserted
@@ -26,7 +26,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = REPO_ROOT / "docker-compose.yml"
-PROD_DOCKERFILE = REPO_ROOT / "Dockerfile.digithings-stack-cloudflare"
+PROD_DOCKERFILE = REPO_ROOT / "infra/docker/Dockerfile.digithings-stack-cloudflare"
 TAG_RE = re.compile(r"\d{4}\.\d{1,2}\.\d{1,2}-[0-9a-f]+")
 COMMIT_RE = re.compile(r"^ARG SEARXNG_COMMIT=([0-9a-f]{40})", re.MULTILINE)
 VERSION_RE = re.compile(r'VERSION_STRING = "([^"]+)"')

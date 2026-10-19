@@ -336,7 +336,7 @@ Leave Supabase / other projects alone if you still need them.
 From **repo root**:
 
 ```bash
-docker build -f Dockerfile.digithings-stack-cloudflare -t digithings-stack:local .
+docker build -f infra/docker/Dockerfile.digithings-stack-cloudflare -t digithings-stack:local .
 
 docker run --rm -d --name digithings-stack \
   -p 127.0.0.1:8000:8000 -p 127.0.0.1:8005:8005 \

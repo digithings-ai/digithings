@@ -143,7 +143,7 @@ web:
   # because it already installs the root npm workspaces.
   - apps/digithings-cron/**
   - apps/digiquant-runner/**
-  - Dockerfile.digiquant-runner
+  - infra/docker/Dockerfile.digiquant-runner
   # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
   # session.css + cursor.css, so a change there is a change to this app.
   - packages/digichat-ui/**
@@ -190,8 +190,8 @@ web:
   - apps/digithings-stack-cloudflare/**
   # digitrace Langfuse Web+Worker Containers (#4930 Phase 1).
   - apps/digitrace-langfuse/**
-  - Dockerfile.digitrace-langfuse-web
-  - Dockerfile.digitrace-langfuse-worker
+  - infra/docker/Dockerfile.digitrace-langfuse-web
+  - infra/docker/Dockerfile.digitrace-langfuse-worker
   # Central read-only dashboard API worker (workspace `dashboard-api`, #4651).
   # Same lane, same reason, as the Cloudflare Workers above: Pages does not build
   # it, its vitest/wrangler live in that package, and this lane already pays the

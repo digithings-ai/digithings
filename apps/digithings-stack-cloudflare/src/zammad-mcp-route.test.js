@@ -94,7 +94,7 @@ describe("in-container MCP program binds", () => {
 
   it("runs no zammad-mcp program: the OCC MCP lives in the digichat image now", () => {
     // Removed from the base platform: the zammad MCP is built into the digichat
-    // image (Dockerfile.digichat-cloudflare) and served at
+    // image (infra/docker/Dockerfile.digichat-cloudflare) and served at
     // https://digithings.ai/api/mcp/zammad/mcp. A re-added supervisord program
     // is a regression.
     expect(supervisor).not.toContain("[program:zammad-mcp]");

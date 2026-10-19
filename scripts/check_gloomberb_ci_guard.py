@@ -194,8 +194,8 @@ DEPLOYED_PATTERNS: tuple[str, ...] = (
 # Families matched against the BASENAME at any depth, because the repo's own
 # naming defeats path globs on both axes:
 #
-#   * depth — five root deploy images (`Dockerfile.digithings-stack-cloudflare`,
-#     `Dockerfile.digitrace-langfuse-web`, ...) have no `/` for a path glob to
+#   * depth — five root deploy images (`infra/docker/Dockerfile.digithings-stack-cloudflare`,
+#     `infra/docker/Dockerfile.digitrace-langfuse-web`, ...) have no `/` for a path glob to
 #     anchor on at all, and `*/*/Dockerfile` cannot reach three-deep recipes;
 #   * name  — this repo does not call a build recipe `Dockerfile`. Of the 20
 #     tracked Dockerfiles, 12 are `Dockerfile.<target>`.
