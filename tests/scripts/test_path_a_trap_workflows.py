@@ -52,5 +52,19 @@ def test_wrangler_lists_path_a_trap_crons() -> None:
         / "digithings-cron"
         / "wrangler.toml"
     ).read_text(encoding="utf-8")
-    for cron in ("11 7 * * *", "13 6 * * MON", "10 6 * * MON", "23 9 * * *"):
+    for cron in ("13 6 * * MON", "10 6 * * MON", "23 9 * * *"):
         assert f'"{cron}"' in wrangler, cron
+
+
+def test_wrangler_drops_the_github_locked_trap_cron() -> None:
+    """DIG-4364: agent-pr-finalizer is disabled_manually on GitHub since the
+    2026-10-14 cost lock, so its clock line must be gone from wrangler.toml —
+    the trigger would answer 422 on every tick. The JOBS row keeps its cron so
+    restoring the lane is a one-flag edit once the workflow is re-enabled."""
+    wrangler = (
+        Path(__file__).resolve().parents[2]
+        / "apps"
+        / "digithings-cron"
+        / "wrangler.toml"
+    ).read_text(encoding="utf-8")
+    assert '"11 7 * * *"' not in wrangler

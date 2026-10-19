@@ -369,11 +369,23 @@ export const JOBS: readonly Job[] = [
   // Path A traps restored after #4967 (Approve-full). YAML is workflow_dispatch
   // only; clocks live here. dry_run must be false: workflow defaults dispatch
   // to dry_run=true and only forced live on the old GHA schedule event.
+  //
+  // DIG-4364 (2026-10-19): the 2026-10-14 GitHub-exit cost lock set this workflow
+  // to `disabled_manually` on GitHub. A dispatch to a disabled workflow is a 422
+  // ("Cannot trigger a 'workflow_dispatch' on a disabled workflow") that
+  // `isBenign422` deliberately does not match, so every 07:11 tick surfaced as a
+  // `scheduled` exception. The row keeps its cron and inputs so lifting the lock is
+  // one flag, not a re-registration; the trigger line is gone from wrangler.toml,
+  // so the tick no longer fires at all. Restoring the lane is a GitHub settings
+  // decision, not this seat's.
   wd("agent-pr-finalizer", "11 7 * * *", MONOREPO, "agent-pr-finalizer.yml", {
     inputs: { dry_run: "false" },
+    enabled: false,
   }),
   wd("agent-backlog-snapshot", "13 6 * * MON", MONOREPO, "agent-backlog-snapshot.yml"),
-  wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml"),
+  // DIG-4364: disabled_manually on GitHub since the 2026-10-14 cost lock; the
+  // daily 06:21 tick answered 422 every day. See agent-pr-finalizer above.
+  wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml", { enabled: false }),
   // DIG-1578: daily census of remote branches carrying no open PR whose head is
   // over 10 days old (docs/ops/branch-hygiene-policy.md §6.2 item 2). Report only —
   // it never deletes and never gates CI; deletion is the tiered run on DIG-1575 and
@@ -388,8 +400,15 @@ export const JOBS: readonly Job[] = [
     "project-enforce-assignment.yml",
   ),
   pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"),
-  wd("security-pip-audit", "33 6 * * MON", MONOREPO, "security-pip-audit.yml"),
-  wd("security-npm-audit", "37 6 * * MON", MONOREPO, "security-npm-audit.yml"),
+  // DIG-4364: both audits are `disabled_manually` on GitHub since the 2026-10-14
+  // cost lock; the Monday 06:33 / 06:37 ticks answered 422. See agent-pr-finalizer
+  // above. The audits still run on PR and `workflow_call` from ci.yml.
+  wd("security-pip-audit", "33 6 * * MON", MONOREPO, "security-pip-audit.yml", {
+    enabled: false,
+  }),
+  wd("security-npm-audit", "37 6 * * MON", MONOREPO, "security-npm-audit.yml", {
+    enabled: false,
+  }),
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
   wd("token-canary", "41 6 * * *", MONOREPO, "token-canary.yml"),
