@@ -33,6 +33,21 @@ against the live schema — `digithings_schema_migrations` is what records what 
 actually applied. A duplicate prefix is now a **hard failure with no exemptions**,
 in both this guard and `db-migrate.yml`.
 
+**The local stack applies the chain through a generated flat view (#DIG-4449).**
+The Supabase CLI does not recurse: `supabase start` and `supabase db reset` read
+only the top level of `<project>/supabase/migrations/*.sql`. After the D-Q6′ move
+into `engine/` and `prod/` a clean bring-up therefore applied **nothing** and the
+seed then died on the missing `public.workspaces`. `dt up` / `dt reset` now run
+[`scripts/localstack/supabase_flat.py`](../../scripts/localstack/supabase_flat.py)
+first (the `supabase-workdir` plan step). It materializes an order-preserving flat
+view — one symlink per layered file, `engine/` first then `prod/`, each in
+filename order — at the git-ignored `digiquant/.supabase-local/`, and every
+supabase command runs with `--workdir digiquant/.supabase-local`. The flat view is
+derived and safe to delete; the checked-in chain keeps its layering and this
+guard keeps rejecting a stray top-level `*.sql`. The order the CLI now applies is
+exactly the order `scripts/self_host_migrations_check.sh` and
+`scripts/rls_proof/run.sh` use.
+
 **The `025` collision is resolved (#3923).** `025_thesis_daily_fields.sql` and
 `025_trading_calendar.sql` were both applied on 2026-06-26 and both recorded in
 `digithings_schema_migrations` under those names. `db-migrate.yml` keys the ledger on

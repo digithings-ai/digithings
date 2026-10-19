@@ -20,9 +20,13 @@ pytestmark = pytest.mark.unit
 
 
 def test_up_plan_covers_the_eight_step_shape():
+    # `supabase-workdir` is not one of the plan's eight steps: it materializes
+    # the flat view the Supabase CLI needs (DIG-4449) and must run before the
+    # first supabase command.
     names = [s.name for s in orchestrate.plan_up("core", {})]
     assert names == [
         "secrets-render",
+        "supabase-workdir",
         "supabase-start",
         "supabase-db-reset",
         "compose-up",
@@ -81,11 +85,14 @@ def test_every_profile_produces_a_compose_profile(profile):
 
 
 def test_reset_is_marked_destructive_and_runs_before_seeding():
-    """The destructive step runs first, and the operator can see that it is."""
+    """The destructive step runs after the flat view is built, and before seeding."""
     steps = orchestrate.plan_reset({}, seed="42")
-    assert [s.name for s in steps][0] == "supabase-db-reset"
-    assert "DESTRUCTIVE" in steps[0].note.upper()
-    assert "db reset" in " ".join(steps[0].argv)
+    names = [s.name for s in steps]
+    reset = next(s for s in steps if s.name == "supabase-db-reset")
+    assert names.index("supabase-workdir") < names.index("supabase-db-reset")
+    assert names.index("supabase-db-reset") < names.index("seed-all")
+    assert "DESTRUCTIVE" in reset.note.upper()
+    assert "db reset" in " ".join(reset.argv)
 
 
 def test_reset_passes_the_seed_through():
@@ -104,6 +111,45 @@ def test_down_plan_keeps_volumes():
     step = orchestrate.plan_down("core", {})[0]
     assert "-v" not in step.argv
     assert "--volumes" not in step.argv
+
+
+# --- the Supabase CLI needs a flat view of the layered chain (DIG-4449) ------
+#
+# `supabase start` / `db reset` read only the top level of supabase/migrations
+# (the CLI does not recurse), so the engine/ + prod/ split leaves a clean stack
+# with no schema. Every supabase command therefore runs against a generated flat
+# view, built by `supabase-workdir` before the first supabase step.
+
+_SUPABASE_CLI_STEPS = {"supabase-start", "supabase-db-reset", "supabase-stop"}
+_PLANS = {
+    "up": lambda: orchestrate.plan_up("core", {}),
+    "down": lambda: orchestrate.plan_down("core", {}),
+    "reset": lambda: orchestrate.plan_reset({}, seed="42"),
+}
+
+
+@pytest.mark.parametrize("plan", sorted(_PLANS))
+def test_every_supabase_command_targets_the_generated_flat_view(plan):
+    steps = _PLANS[plan]()
+    cli_steps = [s for s in steps if s.name in _SUPABASE_CLI_STEPS]
+    assert cli_steps, "premise: this plan drives the supabase CLI"
+    for step in cli_steps:
+        assert step.argv[:2] == ("supabase", "--workdir"), step.argv
+        assert step.argv[2] == orchestrate.SUPABASE_WORKDIR
+
+
+@pytest.mark.parametrize("plan", sorted(_PLANS))
+def test_the_flat_view_is_built_before_the_first_supabase_command(plan):
+    steps = _PLANS[plan]()
+    names = [s.name for s in steps]
+    assert "supabase-workdir" in names
+    first_cli = min(names.index(n) for n in names if n in _SUPABASE_CLI_STEPS)
+    assert names.index("supabase-workdir") < first_cli
+
+
+def test_the_flat_view_step_runs_the_materializer():
+    step = next(s for s in orchestrate.plan_up("core", {}) if s.name == "supabase-workdir")
+    assert any(orchestrate.FLATTEN_SCRIPT in tok for tok in step.argv)
 
 
 def test_unknown_command_is_rejected():

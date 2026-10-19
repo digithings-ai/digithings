@@ -19,6 +19,12 @@ the slice that owns the missing artefact so the gap is actionable.
 
 Every command is overridable through a ``DT_*_CMD`` environment variable so a
 host with different tool paths can drive the same plan.
+
+The plan also carries one step that is not in the plan document: ``supabase-workdir``
+materializes the layered ``engine/`` / ``prod/`` migration chain as the flat view
+the Supabase CLI reads, because the CLI does not recurse into
+``supabase/migrations`` (DIG-4449). Every supabase command runs with
+``--workdir`` pointed at that generated tree.
 """
 
 from __future__ import annotations
@@ -46,6 +52,18 @@ COMMAND_ENV = {
 }
 
 COMMANDS = ("up", "down", "seed", "reset")
+
+#: The Supabase project root every supabase CLI step runs against.
+#:
+#: `supabase start` / `db reset` read only <project>/supabase/migrations/*.sql at
+#: the top level; the CLI does not recurse. The chain is layered into engine/ and
+#: prod/ (D-Q6', DIG-3694), so the CLI needs a generated flat view of it:
+#: scripts/localstack/supabase_flat.py builds one at this path and every supabase
+#: step passes it as --workdir (DIG-4449).
+SUPABASE_WORKDIR = "digiquant/.supabase-local"
+#: The generator that materializes SUPABASE_WORKDIR, run as its own plan step so
+#: the flat view is built (or refused) before any supabase command starts.
+FLATTEN_SCRIPT = "scripts/localstack/supabase_flat.py"
 
 
 @dataclass(frozen=True)
@@ -161,6 +179,25 @@ def _tool(env: Mapping[str, str], key: str, default: Sequence[str]) -> tuple[str
     return tuple(default)
 
 
+def _supabase(env: Mapping[str, str]) -> tuple[str, ...]:
+    """The Supabase CLI argv, pointed at the generated flat view of the chain."""
+    return (*_tool(env, "supabase", ("supabase",)), "--workdir", SUPABASE_WORKDIR)
+
+
+def _flatten_step(python: Sequence[str]) -> Step:
+    """The step that materializes the flat view the Supabase CLI reads.
+
+    A required step, not optional: a supabase command pointed at a workdir that
+    was never built fails on a missing config, and stopping with the generator's
+    own error is the honest report.
+    """
+    return Step(
+        "supabase-workdir",
+        (*python, FLATTEN_SCRIPT),
+        note="materializes the layered engine/ then prod/ chain as the flat view the CLI reads",
+    )
+
+
 def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
     """Plan section 3, steps 2-7.  Steps 1 and 8 belong to the caller."""
     python = _tool(env, "python", ("python3",))
@@ -179,7 +216,7 @@ def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
         "--force",
         "--no-prompt",
     )
-    supabase = _tool(env, "supabase", ("supabase",))
+    supabase = _supabase(env)
     compose = _tool(env, "compose", ("docker", "compose"))
     # One multi-config session, because a service binding only resolves between
     # workers started in the same session. -c is repeatable; with none, wrangler
@@ -216,11 +253,12 @@ def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
             note="renders .dev.vars / .env.local, mode 600, never echoes",
             owner="S5 (DIG-2773, PR #5360)",
         ),
+        _flatten_step(python),
         Step("supabase-start", (*supabase, "start"), note="plan step 3"),
         Step(
             "supabase-db-reset",
             (*supabase, "db", "reset"),
-            note="replays digiquant/supabase/migrations then seed.sql",
+            note="replays the layered engine/prod chain then seed.sql",
         ),
         Step("compose-up", (*compose, "--profile", profile, "up", "-d"), note="plan step 4"),
         Step(
@@ -254,7 +292,8 @@ def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
 
 def plan_down(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
     """Stop everything ``dt up`` started, leaving data on disk."""
-    supabase = _tool(env, "supabase", ("supabase",))
+    python = _tool(env, "python", ("python3",))
+    supabase = _supabase(env)
     compose = _tool(env, "compose", ("docker", "compose"))
     return (
         Step(
@@ -262,6 +301,7 @@ def plan_down(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
             (*compose, "--profile", profile, "down", "--remove-orphans"),
             note="volumes are kept; dt reset is the destructive path",
         ),
+        _flatten_step(python),
         Step("supabase-stop", (*supabase, "stop"), optional=True, note="plan step 3 teardown"),
         Step(
             "stop-legacy-stack",
@@ -288,8 +328,10 @@ def plan_seed(env: Mapping[str, str], seed: str = "42") -> tuple[Step, ...]:
 
 def plan_reset(env: Mapping[str, str], seed: str = "42") -> tuple[Step, ...]:
     """Destructive path: reload the local database from migrations, then seed."""
-    supabase = _tool(env, "supabase", ("supabase",))
+    python = _tool(env, "python", ("python3",))
+    supabase = _supabase(env)
     return (
+        _flatten_step(python),
         Step(
             "supabase-db-reset",
             (*supabase, "db", "reset"),
