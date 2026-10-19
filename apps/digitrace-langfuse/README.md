@@ -9,7 +9,7 @@ Phase 1 stand-up for **self-hosted Langfuse** behind digitrace (#4930).
 - **ClickHouse + Redis** — **external** managed/VM only (never a lite CF Container for CH)
 
 Images are pinned: `langfuse/langfuse:4.49.0` and `langfuse/langfuse-worker:4.49.0`
-(`Dockerfile.digitrace-langfuse-web` / `Dockerfile.digitrace-langfuse-worker` at repo root).
+(`infra/docker/Dockerfile.digitrace-langfuse-web` / `infra/docker/Dockerfile.digitrace-langfuse-worker` at repo root).
 
 Full operator runbook: [`docs/ops/digitrace-langfuse.md`](../../docs/ops/digitrace-langfuse.md).  
 Lab swap memo: [`docs/plans/digitrace-langfuse-swap-2026-10-01.md`](../../docs/plans/digitrace-langfuse-swap-2026-10-01.md).

@@ -12,9 +12,9 @@
  *
  * ## Storage keys
  *
- * `backfill:<date>`. The `backfill:` prefix is disjoint from the `counts:` and
- * `claim:` keys StartCounter owns, so the two objects can never collide on a key
- * even if they are ever pointed at the same storage.
+ * `backfill:<date>`. The `backfill:` prefix is disjoint from the `counts:`,
+ * `slots:` and `slotDay:` keys StartCounter owns, so the two objects can never
+ * collide on a key even if they are ever pointed at the same storage.
  */
 
 import type { Env } from "./env";

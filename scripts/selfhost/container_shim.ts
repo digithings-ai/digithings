@@ -93,7 +93,7 @@ export const SELF_HOST_CLASSES: Readonly<
 	DigiQuantRunnerContainer: {
 		ports: {},
 		neededService: "digiquant-runner",
-		note: "Dockerfile.digiquant-runner exposes 8080 in-container; compose publishes no 8080.",
+		note: "infra/docker/Dockerfile.digiquant-runner exposes 8080 in-container; compose publishes no 8080.",
 	},
 	LangfuseWebContainer: {
 		ports: {},

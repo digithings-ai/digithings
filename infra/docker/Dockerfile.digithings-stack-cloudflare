@@ -104,7 +104,7 @@ ENV DIGISEARCH_MULTILINGUAL_MODEL_DIR=/models/multilingual \
     HF_HUB_OFFLINE=1
 
 # LiteLLM proxy from the pinned PyPI wheel (DIG-1780). Same version as
-# Dockerfile.digillm (enforced by tests/scripts/test_compose_litellm_pinned.py).
+# infra/docker/Dockerfile.digillm (enforced by tests/scripts/test_compose_litellm_pinned.py).
 # 1.83.x no longer imports fastapi's removed get_flat_dependant, so the old
 # "fastapi<0.116" cap is gone; litellm pins its own compatible fastapi.
 RUN uv pip install --system "litellm[proxy]==1.83.14"

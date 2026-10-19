@@ -28,7 +28,7 @@ STACK_DIR = REPO_ROOT / "apps" / "digithings-stack-cloudflare"
 SUPERVISORD = STACK_DIR / "container" / "supervisor" / "supervisord.conf"
 ENTRYPOINT = STACK_DIR / "container" / "entrypoint.sh"
 STACK_INDEX = STACK_DIR / "src" / "index.ts"
-STACK_DOCKERFILE = REPO_ROOT / "Dockerfile.digithings-stack-cloudflare"
+STACK_DOCKERFILE = REPO_ROOT / "infra/docker/Dockerfile.digithings-stack-cloudflare"
 WRANGLER = STACK_DIR / "wrangler.toml"
 DOCKERIGNORE = REPO_ROOT / ".dockerignore"
 
@@ -93,7 +93,7 @@ def test_dockerignore_still_reincludes_the_mcp_package():
     """The digichat image builds from the repo root and needs the package.
 
     Removing the COPY from the stack Dockerfile must NOT strip the re-include:
-    Dockerfile.digichat-cloudflare still does `COPY scripts/zammad_mcp`, so a
+    infra/docker/Dockerfile.digichat-cloudflare still does `COPY scripts/zammad_mcp`, so a
     dropped re-include would silently break the digichat OCC MCP build.
     """
     assert "!scripts/zammad_mcp" in _code_lines(DOCKERIGNORE)

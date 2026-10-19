@@ -53,9 +53,21 @@ service = "twelvex-runner"
 name = "BACKFILL_LEDGER"
 class_name = "BackfillLedger"
 
+# Cron-tick claim ledger (DIG-4384). One instance, `cron-ticks`. Cloudflare
+# delivers a Cron Trigger at least once, and on 14-17 Oct 2026 every tick of
+# this Worker arrived twice with a different scheduledTime each copy, so each
+# job claimed its own slot before dispatching. No cron trigger attaches to it.
+[[durable_objects.bindings]]
+name = "START_COUNTER"
+class_name = "StartCounter"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["BackfillLedger"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["StartCounter"]
 
 [triggers]
 crons = [

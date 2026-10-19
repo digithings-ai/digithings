@@ -41,7 +41,7 @@ function ledger() {
 }
 
 describe("BackfillLedger", () => {
-  it("uses a key prefix disjoint from StartCounter's counts: and claim:", () => {
+  it("uses a key prefix disjoint from StartCounter's counts:, slots: and slotDay:", () => {
     expect(ledgerKey("2026-06-02")).toBe("backfill:2026-06-02");
   });
 
@@ -302,7 +302,8 @@ describe("BackfillLedger", () => {
     await l.claim(["2026-06-02"], T0, false);
     expect([...store.keys()].every((k) => k.startsWith("backfill:"))).toBe(true);
     expect(store.has("counts:prices-at-open-13:2026-10-05")).toBe(false);
-    expect(store.has("claim:prices-at-open-13:2026-10-05T13:40:00Z")).toBe(false);
+    expect(store.has("slots:41 6 * * *\ntoken-canary:2026-10-05")).toBe(false);
+    expect(store.has("slotDay:41 6 * * *\ntoken-canary")).toBe(false);
   });
 });
 

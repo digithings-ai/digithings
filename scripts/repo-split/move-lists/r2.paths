@@ -14,7 +14,7 @@ config/byok-providers.json
 config/model-policy.json
 config/digiquant-model-prices.json
 config/digiquant_models.yaml
-Dockerfile.digiquant-runner
+infra/docker/Dockerfile.digiquant-runner
 scripts/rls_proof
 scripts/supabase_exit
 scripts/backfill_market_data_r2.py

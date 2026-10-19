@@ -377,7 +377,7 @@ def _check_phase2(commands: dict[str, Any]) -> None:
         raise SystemExit("later failure must keep the first exit code")
 
     root = repo
-    dockerfile = (root / "Dockerfile.digiquant-runner").read_text(encoding="utf-8")
+    dockerfile = (root / "infra/docker/Dockerfile.digiquant-runner").read_text(encoding="utf-8")
     wrangler = (root / "apps/digiquant-runner/wrangler.toml").read_text(encoding="utf-8")
     ignore = (root / ".dockerignore").read_text(encoding="utf-8")
     sync = "uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus"
