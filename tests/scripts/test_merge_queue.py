@@ -583,6 +583,35 @@ def test_a_bots_approval_is_not_a_review() -> None:
     assert any("review coverage" in r for r in verdict.reasons), verdict.reasons
 
 
+def test_review_evidence_alone_is_enough_at_the_production_setting() -> None:
+    """The configuration production actually runs: `attest_role` is None and no seat
+    can approve its own PR, so review EVIDENCE alone must make a PR eligible.
+
+    Every other `attest_role=None` case in this file asserts a REFUSAL, so before this
+    test the queue's happy path was only exercised with an approval or an attestation —
+    neither of which production can supply. Without this, the queue could be re-broken
+    (stalled as it was from 2026-10-17) with the suite still green.
+    """
+    pr = _pr(
+        1,
+        comments=[
+            {
+                "id": "IC_kwDOreview_1",
+                "author": {"login": "chrizefan"},
+                "authorAssociation": "MEMBER",
+                "createdAt": "2026-10-19T00:00:00Z",
+                "body": (
+                    "<!-- in-session-review -->\n\n"
+                    "## Verdict: approve-with-nits\n\n0 blockers, 2 majors filed.\n"
+                ),
+            }
+        ],
+    )
+    pr["labels"] = ["reviewed:agent"]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
+    assert verdict.eligible, verdict.reasons
+
+
 def test_a_commit_status_cannot_stand_in_for_the_build() -> None:
     """A green commit status is not evidence that anything ran.
 

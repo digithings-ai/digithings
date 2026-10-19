@@ -482,9 +482,9 @@ def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
     this hatch is the review gate, so it must not be satisfiable by a review that
     proves nothing:
 
-      * an APPROVED review by the PR's own author - GitHub refuses a self-approval in
-        production, so this is a fixture shape rather than a live one, and either way
-        it is not evidence that anyone else read the change;
+      * any review by the PR's own author - GitHub refuses a self-approval in
+        production, so the APPROVED shape is a fixture rather than a live one, and
+        an author's own review is not evidence that anyone else read the change;
       * an APPROVED review whose login is a `[bot]` - a linter saying it found no
         problems. A real bot review pass is still accepted: `check_review_coverage`
         counts it through its own REVIEW_BOTS hatch or a REVIEW_BOT_CHECK_NAMES check.
@@ -533,8 +533,9 @@ def _gate_review(pr: dict[str, Any], acting_role: str, attest_role: str | None) 
     # tested and green. Review EVIDENCE is what this queue requires, and
     # `_gate_review_coverage` is where it is enforced (an in-session findings comment
     # marked `<!-- in-session-review -->`, a completed Bot review, a real approval, or
-    # `reviewed:owner`). `acting_role`/`attest_role` stay in the signature because the
-    # driver introspects it.
+    # `reviewed:owner`). `acting_role`/`attest_role` stay in the signature, and
+    # `--attest-review` stays on the CLI, only so existing callers keep working: the
+    # flag now gates nothing.
     return reasons
 
 
@@ -582,9 +583,9 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
     * `--attest-review` no longer substitutes for review evidence. Both
       reopen cases merged attested by `qa` with zero reviews and zero
       comments; attestation is an assertion, and an assertion with no artifact
-      is exactly what the promotion gate refuses. The attestation mechanism
-      itself is unchanged — it still satisfies `_gate_review` — but it does
-      not satisfy this gate.
+      is exactly what the promotion gate refuses. The demand it used to satisfy
+      was retired at `_gate_review` too (2026-10-18): the flag is still accepted
+      for caller compatibility, but it no longer gates anything.
     * Comments are fetched lazily and only when a `reviewed:agent` label makes
       them load-bearing (`fetch_queue` carries labels but not comments). An
       unreadable comments read fails closed, for the same reason an absent
@@ -717,7 +718,12 @@ def _audit_body(
     verdict: Verdict, authority: Authority, policy: Policy, attest_role: str | None
 ) -> str:
     checks = "\n".join(f"- `{c}`" for c in verdict.checks) or "- (no checks reported)"
-    review = f"attested by `{attest_role}`" if attest_role else "approving review from a non-author"
+    # The non-author-approval demand was retired on 2026-10-18, so this line must name
+    # the evidence the queue actually accepted rather than an approval no seat could
+    # give. Every merged PR's audit comment is permanent; it must not assert one.
+    review = "review evidence via the coverage gate (`_gate_review_coverage`)"
+    if attest_role:
+        review += f"; attested by `{attest_role}`"
     return (
         "Merged through the `develop` merge queue — no decision card required.\n\n"
         f"- merging role: `{authority.role}` ({authority.title})\n"
