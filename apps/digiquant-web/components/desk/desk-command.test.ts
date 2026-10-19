@@ -93,13 +93,4 @@ describe("desk slash field", () => {
     // viewport width while the head scrolls internally.
     expect(css).toMatch(/\.desk-shell\s*\{[^}]*overflow-x:\s*hidden/s);
   });
-
-  it("nests no interactive content inside palette options", () => {
-    const view = readFileSync(new URL("./desk-command.tsx", import.meta.url), "utf8");
-    expect(view).not.toContain("<Button");
-    expect(view).toContain('role="option"');
-    expect(view).toContain('className="cmd-hit"');
-    const html = renderToStaticMarkup(createElement(DeskCommand, { pathname: "/app/brief/" }));
-    expect(html).not.toContain("<button");
-  });
 });

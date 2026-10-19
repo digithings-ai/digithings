@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@digithings/ui/ui";
 import { searchDeskPages } from "./desk-command-search";
 
 /**
@@ -89,21 +90,22 @@ export function DeskCommand({ pathname }: { pathname: string }) {
       {editing && hits.length > 0 ? (
         <ul id="cmd-list" role="listbox" className="cmd-list">
           {hits.map((hit, i) => (
-            <li
-              key={hit.path}
-              id={`cmd-opt-${i}`}
-              role="option"
-              aria-selected={i === sel}
-              className={i === sel ? "on" : undefined}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                go(hit.path);
-              }}
-            >
-              <span className="cmd-hit">
+            <li key={hit.path} role="presentation" className={i === sel ? "on" : undefined}>
+              <Button
+                type="button"
+                variant="ghost"
+                id={`cmd-opt-${i}`}
+                role="option"
+                aria-selected={i === sel}
+                className="cmd-hit"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  go(hit.path);
+                }}
+              >
                 <span>{hit.href}</span>
                 <span className="mute">{hit.label}</span>
-              </span>
+              </Button>
             </li>
           ))}
         </ul>
