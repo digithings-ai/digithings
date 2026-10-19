@@ -26,7 +26,7 @@ Use **New issue → Agent task** (`.github/ISSUE_TEMPLATE/agent_task.yml`) so ac
 
 ### Third-party data access
 
-> **No third-party data access merges without a [`docs/vendor-terms/<vendor>/INDEX.md`](../../docs/vendor-terms/INDEX.md) entry. The check runs when the integration is proposed, not at review time.**
+> **No third-party data access merges without a vendor terms record in the private vendor-records store (local only, never committed here). The check runs when the integration is proposed, not at review time.**
 
 If the issue adds, changes or documents a call to someone else's data, endpoint,
 authentication flow or vendor-specific constant, say so in the intake — name the
@@ -38,8 +38,7 @@ conversation.
 Two things worth knowing before you start: the boundary and the steps are in
 [`docs/VENDOR_CONTENT_BOUNDARY.md`](../../docs/VENDOR_CONTENT_BOUNDARY.md), and
 the vendor's terms do **not** have to be compatible with an open-source `LICENSE`
-in its repository — they are a different document about a different subject. See
-the [vendor terms index](../../docs/vendor-terms/INDEX.md).
+in its repository — they are a different document about a different subject.
 
 **Reading a vendor's public terms is not outreach.** Contacting a vendor is
 Chris's decision and does not follow from filing this issue.
@@ -51,7 +50,7 @@ Chris's decision and does not follow from filing this issue.
 - [ ] Relevant `DIGIxxx.md` (and [ARCHITECTURE.md](../../ARCHITECTURE.md) if interfaces/ports change) updated.
 - [ ] No secrets in commits; follow [SECURITY.md](../../SECURITY.md).
 - [ ] **Never** change live-trading execution paths without explicit human approval ([AGENTS.md](../../AGENTS.md)).
-- [ ] If this issue touches third-party data, a [`docs/vendor-terms/<vendor>/INDEX.md`](../../docs/vendor-terms/INDEX.md) entry exists with a signed Security classification.
+- [ ] If this issue touches third-party data, a vendor terms record in the private vendor-records store exists with a signed Security classification.
 
 ## Security gates
 
