@@ -302,7 +302,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-tenants.test.ts": {
-      "count": 50,
+      "count": 47,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-tenants.ts": {
