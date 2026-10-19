@@ -129,7 +129,7 @@ export async function handlePricesLive(
     try {
       quotes[symbol] = await fetchQuoteFn(symbol, finnhubKey);
     } catch (err) {
-      errors[symbol] = err instanceof Error ? err.message : String(err);
+      errors[symbol] = err instanceof Error ? err.message : "unknown error";
     }
   }
 
@@ -152,7 +152,7 @@ export async function handlePricesLive(
     try {
       published = await admin.upsertPrices(rows);
     } catch (err) {
-      published = err instanceof Error ? err.message : String(err);
+      published = err instanceof Error ? err.message : "unknown error";
     }
   }
   if (published !== "ok" && quoted > 0) {

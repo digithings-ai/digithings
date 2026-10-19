@@ -313,3 +313,34 @@ describe("execute", () => {
     expect(req.url.startsWith(`${BASE}/rest/v1/t`)).toBe(true);
   });
 });
+
+describe("rpc", () => {
+  // Call sites: settings `_shared/access.ts:94` rpc("my_access") and
+  // `_shared/supabase-admin.ts:113` rpc("ensure_personal_workspace", { p_user_id }).
+  // Both POST to /rest/v1/rpc/<fn> with the params object as the JSON body; there is
+  // no query string and no object Accept header (cardinality stays "many").
+  it("posts to /rest/v1/rpc/<fn> with the params object as the body", () => {
+    const req = client()
+      .rpc("ensure_personal_workspace", { p_user_id: "u-1" })
+      .buildRequest();
+    expect(req.method).toBe("POST");
+    expect(req.url.startsWith(`${BASE}/rest/v1/rpc/ensure_personal_workspace`)).toBe(true);
+    expect(new URL(req.url).search).toBe("");
+    expect(params(req.url)).toEqual({});
+    expect(req.headers.Prefer).toBe("return=representation");
+    expect(req.body).toEqual({ p_user_id: "u-1" });
+  });
+
+  it("sends an empty JSON object when no params are supplied", () => {
+    const req = client().rpc("my_access").buildRequest();
+    expect(req.method).toBe("POST");
+    expect(req.url.startsWith(`${BASE}/rest/v1/rpc/my_access`)).toBe(true);
+    expect(new URL(req.url).search).toBe("");
+    expect(req.headers["Content-Type"]).toBe("application/json");
+    expect(req.body).toEqual({});
+  });
+
+  it("fails closed when the function name is empty", () => {
+    expect(() => client().rpc("")).toThrow(/requires a function name/);
+  });
+});

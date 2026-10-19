@@ -193,12 +193,13 @@ class TestFetchBitviewMcp:
         )
         assert "dual-count" in payload["series"]["nupl"]["error"]
 
-    def test_allow_derived_bypasses_nupl_refusal(self) -> None:
+    def test_allow_derived_bypasses_nupl_refusal(self, tmp_path: Path) -> None:
         payload = json.loads(
             run_fetch_bitview_series(
                 series_ids_json='["nupl"]',
                 session=_FakeSession([_mvrv_slice()]),
                 allow_derived=True,
+                cache_dir=str(tmp_path),
             )
         )
         assert payload["series"]["nupl"]["error"] is None

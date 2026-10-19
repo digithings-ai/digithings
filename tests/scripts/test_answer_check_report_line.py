@@ -1,24 +1,24 @@
-"""Pin: `make datatap-answer-check` reports the script's exit code on a text line.
+"""Pin: `make <answer-check target>` reports the script's exit code on a text line.
 
 This line is an API contract with exactly one consumer and, until now, no test.
 
-`.github/workflows/datatap-answer-check.yml` runs `make datatap-answer-check`
-and then recovers the script's real status out of the captured log with
+The answer-check workflow (`.github/workflows/*-answer-check.yml`) runs
+`make <target>` and then recovers the script's real status out of the captured log with
 
-    real=$(awk '/^datatap-answer-check: exit [0-9]+$/ { code = $NF } END { print code }' "$LOG")
+    real=$(awk '/^<target>: exit [0-9]+$/ { code = $NF } END { print code }' "$LOG")
 
 It has to, and it should keep having to. GNU make returns 2 for *any* failing
 recipe and can never return 1 (a child exiting 1 and a child exiting 2 both
 surface as make exit 2), so make's own status cannot separate the two hours that
 mean opposite things: exit 1 is a fabrication found, exit 2 is a check that could
 not see the answer at all. The recipe echoes the real code on a
-`datatap-answer-check: exit N` line because that line is the only channel which
+`<target>: exit N` line because that line is the only channel which
 carries it.
 
 The failure this file exists to prevent: someone renames or rewords the echoed
 line, and every hourly dispatch of the check starts failing at exit 2 with
-`::error::make exited N without datatap-answer-check reporting a status` — which
-is indistinguishable from DataTap being unreachable, and points at the wrong
+`::error::make exited N without <target> reporting a status` — which
+is indistinguishable from the answer service being unreachable, and points at the wrong
 file. Nothing else in the suite noticed, because nothing else read the line.
 
 So the pin is deliberately two-sided. `test_the_recipe_echoes_the_exit_status_on_the_report_line`
@@ -29,7 +29,7 @@ two really do agree for every status the check can return. A coordinated change
 to both sides stays legal — the pair is the contract, not either half alone.
 
 Deliberately a `make -n` dry run: it pins the recipe's text without running the
-probe, so this file touches no network and DataTap production (the same reason
+probe, so this file touches no network and no production service (the same reason
 the workflow's own awk works on a log it has already captured).
 
 Two things about that spellings pin are deliberate, because both look like
@@ -59,15 +59,46 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = REPO_ROOT / "Makefile"
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "datatap-answer-check.yml"
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 
-TARGET = "datatap-answer-check"
+
+def _find_workflow() -> Path:
+    """The single answer-check workflow. Its name is read from disk, not pinned here."""
+    found = sorted(WORKFLOWS.glob("*-answer-check.yml"))
+    assert len(found) == 1, (
+        f"expected exactly one *-answer-check.yml workflow, found {[f.name for f in found]}"
+    )
+    return found[0]
+
+
+WORKFLOW = _find_workflow()
+
+
+def _find_target() -> str:
+    """The make target the workflow runs, read out of the workflow's live lines."""
+    live = [
+        line
+        for line in WORKFLOW.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    targets: set[str] = set()
+    for line in live:
+        found = re.search(r"\bmake\s+([\w-]+-answer-check)\b", line)
+        if found:
+            targets.add(found.group(1))
+    assert len(targets) == 1, (
+        f"{WORKFLOW.name} must run exactly one answer-check make target, found {sorted(targets)}"
+    )
+    return targets.pop()
+
+
+TARGET = _find_target()
 #: What the recipe prints, and the workflow's pattern over it. Both sides of the
 #: same contract; neither is allowed to drift from the other on its own.
-ECHOED = 'datatap-answer-check: exit $code'
-REPORT_PATTERN = r"/^datatap-answer-check: exit [0-9]+$/"
+ECHOED = f"{TARGET}: exit $code"
+REPORT_PATTERN = rf"/^{TARGET}: exit [0-9]+$/"
 
-#: The only three statuses the check can return. `test_datatap_answer_integrity_check.py`
+#: The only three statuses the check can return. The integrity script's own test
 #: pins each of them against the script's own `OK` / `FAIL` / `COULD_NOT_RUN`.
 STATUSES = (0, 1, 2)
 
@@ -99,9 +130,7 @@ def _awk_pattern() -> str:
     plain whole-file search would keep reading the comment and call it fine.
     """
     body = WORKFLOW.read_text(encoding="utf-8")
-    live = "\n".join(
-        line for line in body.splitlines() if not line.lstrip().startswith("#")
-    )
+    live = "\n".join(line for line in body.splitlines() if not line.lstrip().startswith("#"))
     found = re.search(r"awk\s+'/(?P<pattern>[^/]+)/", live)
     assert found, (
         "the workflow no longer recovers the status with an awk '/…/' pattern; "
@@ -129,7 +158,7 @@ def test_the_recipe_echoes_the_exit_status_on_the_report_line() -> None:
         f"the {TARGET} recipe no longer echoes `{ECHOED}` with double quotes, and the "
         f"workflow reads that line and nothing else carries the script's real status. "
         f"If the spelling changed deliberately, confirm the new spelling still prints "
-        f"`datatap-answer-check: exit N` and move this pin in the same commit. "
+        f"`{TARGET}: exit N` and move this pin in the same commit. "
         f"make -n said:\n{dry}"
     )
 
@@ -184,7 +213,7 @@ def test_both_sides_agree_on_the_line_for_every_status() -> None:
         assert compiled.match(printed), (
             f"the {TARGET} recipe prints `{printed}` for exit {code}, which the "
             "workflow's awk pattern does not match, so a real exit code would be "
-            "read as DataTap being unreachable"
+            "read as the answer service being unreachable"
         )
 
 
@@ -199,15 +228,15 @@ def test_a_reworded_report_line_is_invisible_to_the_workflow() -> None:
     """
     compiled = re.compile(_awk_pattern())
 
-    assert not compiled.match("datatap-answer-check: exited 2"), (
+    assert not compiled.match(f"{TARGET}: exited 2"), (
         "the workflow would accept a line the recipe no longer prints"
     )
-    assert not compiled.match("datatap-answer-check: exit two"), (
+    assert not compiled.match(f"{TARGET}: exit two"), (
         "the workflow would read a non-numeric status as a number"
     )
     assert not compiled.match("COULD NOT RUN: exit 2"), (
         "the workflow would accept a line with no target prefix"
     )
-    assert not compiled.match("datatap-answer-check: exit 2 (see log)"), (
+    assert not compiled.match(f"{TARGET}: exit 2 (see log)"), (
         "the workflow must reject trailing text, or a reworded line keeps matching"
     )

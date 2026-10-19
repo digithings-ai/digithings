@@ -7,7 +7,7 @@ from pathlib import Path
 
 import polars as pl
 
-from digiquant.paths import canonicalize_path
+from digiquant.paths import resolve_under_data_root
 
 # Standard column names for OHLCV (asset-agnostic contract).
 OHLCV_COLUMNS = ("timestamp", "open", "high", "low", "close", "volume", "symbol")
@@ -18,7 +18,7 @@ def load_ohlcv_csv(path: str | Path) -> pl.DataFrame:
     Load a single OHLCV CSV with Polars.
     Expected columns: timestamp (or datetime), open, high, low, close, volume; optional symbol.
     """
-    path = canonicalize_path(path)
+    path = resolve_under_data_root(path)
     if not path.exists():
         raise FileNotFoundError(str(path))
     df = pl.read_csv(path, try_parse_dates=True)
