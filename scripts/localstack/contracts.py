@@ -20,10 +20,24 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import urllib.parse
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
+
+try:  # imported as part of a package
+    from .supabase_ports import DEFAULT_API_PORT, PORT_ENV
+except ImportError:  # imported as a plain module
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from supabase_ports import DEFAULT_API_PORT, PORT_ENV
+
+#: The Supabase API port the local stack probes. The whole Supabase port set
+#: moves with it (see localstack.supabase_ports), so one knob keeps the gate
+#: and the instance the CLI started on the same port. Only the PORT is
+#: templated - the host stays 127.0.0.1, so the gate can never point off this
+#: machine.
+_SUPABASE_API_PORT = "${%s:-%d}" % (PORT_ENV, DEFAULT_API_PORT)
 
 PROFILES: tuple[str, ...] = ("core", "quant", "chat", "trace", "all")
 
@@ -90,21 +104,30 @@ _TRACE = ("core", "trace")
 
 BUILTIN_CHECKS: tuple[Check, ...] = (
     # ── supabase (plan section 6: REST + auth) ───────────────────────────────
-    # Supabase CLI local defaults, documented in the plan; overridable via the
-    # contract or DT_SUPABASE_URL / DT_SUPABASE_AUTH_URL.
+    # Supabase CLI local defaults, documented in the plan. The API port is a
+    # knob (DT_SUPABASE_PORT): the whole port set moves with it, because
+    # core-local already holds the canonical 54321-54324 set and the CLI has
+    # no port flags of its own. The host stays 127.0.0.1: the gate must never
+    # be able to point off this machine.
     Check(
         name="supabase-rest",
         kind="http",
-        url="http://127.0.0.1:54321/rest/v1/",
+        url="http://127.0.0.1:" + _SUPABASE_API_PORT + "/rest/v1/",
         profiles=_CORE,
-        source="supabase local default API_PORT 54321 (plan section 3, step 3)",
+        source=(
+            "localstack/supabase_ports.py: the API port of the Supabase set the "
+            "local stack starts (default %d)" % DEFAULT_API_PORT
+        ),
     ),
     Check(
         name="supabase-auth",
         kind="http",
-        url="http://127.0.0.1:54321/auth/v1/health",
+        url="http://127.0.0.1:" + _SUPABASE_API_PORT + "/auth/v1/health",
         profiles=_CORE,
-        source="supabase local default API_PORT 54321 (plan section 3, step 3)",
+        source=(
+            "localstack/supabase_ports.py: the API port of the Supabase set the "
+            "local stack starts (default %d)" % DEFAULT_API_PORT
+        ),
     ),
     # ── python services: every path below read out of the service source ────
     Check(
