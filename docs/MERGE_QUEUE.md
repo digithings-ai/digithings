@@ -89,7 +89,22 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested` still scoped to the branch, blocks. |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
 
-Two of these are deliberate choices worth stating plainly.
+Three of these are deliberate choices worth stating plainly.
+
+**An unreadable review record is not a clearance.** The verdict gate reads the PR's
+comments, so the row it is handed must carry them. The host tick is what fetches rows,
+so its `gh pr list --json` field list must include `comments` and `commits`; `fetch_queue`
+already does. If the key is absent the row is completed by one `gh pr view --json comments`
+*before* both review gates run: the coverage gate's own lazy fetch comes too late, because
+it runs after the verdict gate and so cannot repair a row the verdict gate has already read
+as verdict-free. If even that is impossible — no repo to read from, or a read that failed —
+the PR is refused, not queued. The same rule covers the ancestry question: a posted verdict
+blocks while the commit it names is on the branch, and a row with no `commits` list cannot
+check that, so the block stands. This is the sentence `_posted_verdict` already applies to a
+marker it cannot parse, one level up: *a missing signal, not a clearance.* `#5903` merged on
+2026-10-19 08:23 with four review passes on it and the newest a `changes_requested`, because
+its row arrived without comments — the coverage gate authorised the merge, and the queue's
+own audit comment names that gate.
 
 **`NEUTRAL` and `SKIPPED` fail a required check.** A required check that reports nothing
 is indistinguishable from a check that was never asked to run — which is exactly the hole
