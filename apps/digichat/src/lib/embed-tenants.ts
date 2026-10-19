@@ -164,6 +164,13 @@ export type EmbedTenantConfig = {
    */
   showLanguageSelector?: boolean;
   /**
+   * When true, this tenant pins the house default model and hides the
+   * per-session model/MCP/tool controls: the X-Digi-Model header is ignored
+   * (house default model) and digigraph hides session_set_model /
+   * session_*_mcp / session_toggle_tool.
+   */
+  lockSessionControls?: boolean;
+  /**
    * When true, this tenant offers web search (#3420, default-on #3859):
    * compat hydrate injects a default-on catalog entry and the user pref
    * defaults on. Omit or false for corpus-only tenants (e.g. datatap) —
@@ -592,6 +599,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showByok !== undefined && typeof v.showByok !== "boolean") {
     throw new Error(`${ctx}: showByok must be a boolean`);
   }
+  if (v.lockSessionControls !== undefined && typeof v.lockSessionControls !== "boolean") {
+    throw new Error(`${ctx}: lockSessionControls must be a boolean`);
+  }
   if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
     throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
   }
@@ -791,6 +801,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
+    ...(v.lockSessionControls === true ? { lockSessionControls: true } : {}),
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
     view: VIEW_MODES.includes(v.view as ViewMode) ? (v.view as ViewMode) : undefined,
     thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)

@@ -128,17 +128,11 @@ describe("page-layout embeds keep embed chrome (#3733)", () => {
 });
 
 describe("baseline embed models catalog (Cheaper Inference default)", () => {
-  it("ships the 4-slug catalog with deepseek default and an enabled picker", () => {
-    expect(DEFAULT_CLIENT_CONFIG.models).toEqual({
-      default: "deepseek/deepseek-v4-flash",
-      available: [
-        "deepseek/deepseek-v4-flash",
-        "deepseek/deepseek-v4-flash-0731",
-        "openai/gpt-oss-120b",
-        "z-ai/glm-5.3-flash",
-      ],
-      allowPicker: true,
-    });
+  it("ships the deploy catalog with the V4.1 Flash default and an enabled picker", () => {
+    expect(DEFAULT_CLIENT_CONFIG.models.default).toBe("deepseek/deepseek-v4.1-flash");
+    expect(DEFAULT_CLIENT_CONFIG.models.available).toHaveLength(14);
+    expect(DEFAULT_CLIENT_CONFIG.models.available).toContain("deepseek/deepseek-v4.1-flash");
+    expect(DEFAULT_CLIENT_CONFIG.models.allowPicker).toBe(true);
   });
 });
 
