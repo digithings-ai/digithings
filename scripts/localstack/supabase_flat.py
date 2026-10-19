@@ -14,12 +14,21 @@ clean bring-up applied nothing and the seed then failed on the missing
 ``public.workspaces`` (DIG-4449).
 
 This module builds a generated project root whose ``supabase/migrations/`` holds
-one symlink per layered file — engine first, prod second, each in filename order
-— and whose ``config.toml``, ``seed.sql``, ``roles.sql`` and ``functions/`` point
-at the real ones. ``dt`` runs the CLI with ``--workdir <generated root>``, so the
-CLI sees the same order the other harnesses apply while the checked-in chain
-keeps its layering and the migration guard keeps rejecting a stray top-level
-``*.sql``.
+one symlink per layered file, and whose ``config.toml``, ``seed.sql``,
+``roles.sql`` and ``functions/`` point at the real ones. ``dt`` runs the CLI
+with ``--workdir <generated root>``, so the CLI sees the same order the other
+harnesses apply while the checked-in chain keeps its layering and the
+migration guard keeps rejecting a stray top-level ``*.sql``.
+
+The CLI sorts that directory by file name, and the two layers share one
+numbering space (engine holds 001..131, prod holds 002..143), so a flat
+directory of canonical names would interleave the layers: prod/002 would be
+applied second instead of seventy-seventh. The generated links are therefore
+numbered ``001..N`` in the order the harnesses apply — engine first, then prod,
+each in filename order — and the canonical name is kept in the link stem, so
+``077_002_schema_hardening.sql`` points at ``prod/002_schema_hardening.sql``.
+The CLI records the generated version numbers in the local database; the
+canonical numbers stay in the chain and in every link target.
 
 Nothing here writes to ``digiquant/supabase/``. The generated tree is
 git-ignored and safe to delete at any time.
@@ -54,14 +63,48 @@ def ordered_migrations(project_dir: Path) -> List[Path]:
     """Every layered migration, engine first then prod, each in filename order.
 
     A plain filename sort within a layer is the ``LC_ALL=C`` sort the other
-    apply harnesses use (the names are ASCII ``NNN_name.sql``). The numeric
-    prefixes are globally unique, so the flattened view has no collisions.
+    apply harnesses use (the names are ASCII ``NNN_name.sql``).
     """
     migrations = project_dir / "migrations"
     ordered: List[Path] = []
     for layer in LAYERS:
         ordered.extend(sorted((migrations / layer).glob("*.sql"), key=lambda p: p.name))
     return ordered
+
+
+def flat_name(index: int, source: Path) -> str:
+    """The generated link name for the ``index``-th migration of the chain.
+
+    ``index`` is 1-based and follows the apply order (engine first, then prod),
+    so the CLI's own sort of the flat directory reproduces that order. The
+    canonical name is kept in the stem, so the link still says which file it is.
+    """
+    return f"{index:03d}_{source.stem}.sql"
+
+
+def assert_chain_is_flat_safe(project: Path) -> None:
+    """Refuse a chain the flat view cannot represent faithfully.
+
+    A stray top-level ``migrations/*.sql`` is not in either layer, so the flat
+    view would silently drop it — the chain's own guard rejects it too. A name
+    present in both layers would collapse into one link, dropping a migration.
+    """
+    migrations = project / "migrations"
+    strays = sorted(p.name for p in migrations.glob("*.sql"))
+    if strays:
+        raise ValueError(
+            "stray top-level migration file(s) in the chain: "
+            + ", ".join(strays)
+            + " (the chain must hold only engine/ and prod/)"
+        )
+    seen: dict = {}
+    for source in ordered_migrations(project):
+        if source.name in seen:
+            raise ValueError(
+                f"duplicate migration name {source.name} in {seen[source.name].parent.name}/ "
+                f"and {source.parent.name}/: the flat view would drop one"
+            )
+        seen[source.name] = source
 
 
 def _relink(link: Path, target: Path) -> None:
@@ -75,6 +118,14 @@ def _relink(link: Path, target: Path) -> None:
     link.symlink_to(os.path.relpath(target, link.parent))
 
 
+def _unlink(entry: Path) -> None:
+    """Remove a generated entry, whatever it is."""
+    if entry.is_symlink() or entry.is_file():
+        entry.unlink()
+    elif entry.is_dir():
+        shutil.rmtree(entry)
+
+
 def materialize(root: Optional[Path] = None, dest: Optional[Path] = None) -> Path:
     """Build the flat view and return the project root to hand to ``--workdir``.
 
@@ -83,14 +134,20 @@ def materialize(root: Optional[Path] = None, dest: Optional[Path] = None) -> Pat
     """
     root = (root or repo_root()).resolve()
     project = root / PROJECT_REL
-    dest = (dest or (root / DERIVED_REL)).resolve()
+    if dest is None:
+        dest = root / DERIVED_REL
+    elif not dest.is_absolute():
+        dest = root / dest
+    dest = dest.resolve()
 
     # This function deletes entries under <dest>/supabase/migrations, so refuse
-    # any destination that could be the checked-in project.
-    if dest == root or dest == project or project in dest.parents:
+    # any destination that could be the checked-in project — including an
+    # ancestor of it (`--dest digiquant` would land on the real project).
+    if dest == root or dest == project or project in dest.parents or dest in project.parents:
         raise ValueError(f"refusing to materialize into {dest}: not a generated directory")
     if not project.is_dir():
         raise FileNotFoundError(f"Supabase project dir not found: {project}")
+    assert_chain_is_flat_safe(project)
 
     supabase = dest / "supabase"
     migrations = supabase / "migrations"
@@ -100,14 +157,16 @@ def materialize(root: Optional[Path] = None, dest: Optional[Path] = None) -> Pat
         source = project / name
         if source.exists() or source.is_symlink():
             _relink(supabase / name, source)
+        else:
+            # the source is gone: drop the link so the CLI cannot read a stale file
+            stale = supabase / name
+            if stale.is_symlink() or stale.exists():
+                _unlink(stale)
 
     for entry in migrations.iterdir():
-        if entry.is_symlink() or entry.is_file():
-            entry.unlink()
-        else:
-            shutil.rmtree(entry)
-    for source in ordered_migrations(project):
-        _relink(migrations / source.name, source)
+        _unlink(entry)
+    for index, source in enumerate(ordered_migrations(project), start=1):
+        _relink(migrations / flat_name(index, source), source)
 
     return dest
 

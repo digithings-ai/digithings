@@ -39,14 +39,18 @@ only the top level of `<project>/supabase/migrations/*.sql`. After the D-Q6′ m
 into `engine/` and `prod/` a clean bring-up therefore applied **nothing** and the
 seed then died on the missing `public.workspaces`. `dt up` / `dt reset` now run
 [`scripts/localstack/supabase_flat.py`](../../scripts/localstack/supabase_flat.py)
-first (the `supabase-workdir` plan step). It materializes an order-preserving flat
-view — one symlink per layered file, `engine/` first then `prod/`, each in
-filename order — at the git-ignored `digiquant/.supabase-local/`, and every
-supabase command runs with `--workdir digiquant/.supabase-local`. The flat view is
-derived and safe to delete; the checked-in chain keeps its layering and this
-guard keeps rejecting a stray top-level `*.sql`. The order the CLI now applies is
-exactly the order `scripts/self_host_migrations_check.sh` and
-`scripts/rls_proof/run.sh` use.
+first (the `supabase-workdir` plan step). It materializes a flat view of the
+chain at the git-ignored `digiquant/.supabase-local/`, and every supabase
+command runs with `--workdir digiquant/.supabase-local`. The CLI sorts that
+directory by file name and the two layers share one numbering space (engine
+holds 001..131, prod 002..143), so the generated links are numbered `001..138`
+in the apply order — `engine/` first then `prod/`, each in filename order — with
+the canonical name kept in the link stem (`077_002_schema_hardening.sql` points
+at `prod/002_schema_hardening.sql`). The order the CLI now applies is
+therefore exactly the order `scripts/self_host_migrations_check.sh` and
+`scripts/rls_proof/run.sh` use. The flat view is derived and safe to delete;
+the checked-in chain keeps its layering and this guard keeps rejecting a stray
+top-level `*.sql`.
 
 **The `025` collision is resolved (#3923).** `025_thesis_daily_fields.sql` and
 `025_trading_calendar.sql` were both applied on 2026-06-26 and both recorded in

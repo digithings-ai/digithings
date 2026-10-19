@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from scripts.localstack import orchestrate
+from scripts.localstack import supabase_flat
 
 pytestmark = pytest.mark.unit
 
@@ -150,6 +151,24 @@ def test_the_flat_view_is_built_before_the_first_supabase_command(plan):
 def test_the_flat_view_step_runs_the_materializer():
     step = next(s for s in orchestrate.plan_up("core", {}) if s.name == "supabase-workdir")
     assert any(orchestrate.FLATTEN_SCRIPT in tok for tok in step.argv)
+
+
+def test_the_flat_view_is_written_where_the_cli_reads_it():
+    """The generator is pointed at the CLI's workdir, so the two paths cannot drift."""
+    step = next(s for s in orchestrate.plan_up("core", {}) if s.name == "supabase-workdir")
+    assert "--dest" in step.argv
+    assert step.argv[step.argv.index("--dest") + 1] == orchestrate.SUPABASE_WORKDIR
+
+
+def test_the_cli_workdir_and_the_generator_output_dir_are_the_same_path():
+    """Two copies of the path exist in production code: they must not drift."""
+    assert orchestrate.SUPABASE_WORKDIR == supabase_flat.DERIVED_REL
+
+
+def test_the_down_plan_does_not_depend_on_the_generator():
+    """A generator failure must not abort `dt down` before the teardown."""
+    step = next(s for s in orchestrate.plan_down("core", {}) if s.name == "supabase-workdir")
+    assert step.optional, "the down plan must survive a failed flat-view build"
 
 
 def test_unknown_command_is_rejected():

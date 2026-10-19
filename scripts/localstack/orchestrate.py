@@ -24,7 +24,8 @@ The plan also carries one step that is not in the plan document: ``supabase-work
 materializes the layered ``engine/`` / ``prod/`` migration chain as the flat view
 the Supabase CLI reads, because the CLI does not recurse into
 ``supabase/migrations`` (DIG-4449). Every supabase command runs with
-``--workdir`` pointed at that generated tree.
+``--workdir`` pointed at that generated tree, and the generator is pointed at the
+same path, so the tree the CLI reads is the tree the generator fills.
 """
 
 from __future__ import annotations
@@ -184,16 +185,21 @@ def _supabase(env: Mapping[str, str]) -> tuple[str, ...]:
     return (*_tool(env, "supabase", ("supabase",)), "--workdir", SUPABASE_WORKDIR)
 
 
-def _flatten_step(python: Sequence[str]) -> Step:
+def _flatten_step(python: Sequence[str], optional: bool = False) -> Step:
     """The step that materializes the flat view the Supabase CLI reads.
 
     A required step, not optional: a supabase command pointed at a workdir that
     was never built fails on a missing config, and stopping with the generator's
-    own error is the honest report.
+    own error is the honest report.  The generator is told where to write
+    (``--dest``), so the path it fills and the path the CLI reads cannot drift.
+
+    ``optional`` is for the teardown plan: there a generator failure must not
+    abort the plan before the containers are stopped.
     """
     return Step(
         "supabase-workdir",
-        (*python, FLATTEN_SCRIPT),
+        (*python, FLATTEN_SCRIPT, "--dest", SUPABASE_WORKDIR),
+        optional=optional,
         note="materializes the layered engine/ then prod/ chain as the flat view the CLI reads",
     )
 
@@ -301,7 +307,7 @@ def plan_down(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
             (*compose, "--profile", profile, "down", "--remove-orphans"),
             note="volumes are kept; dt reset is the destructive path",
         ),
-        _flatten_step(python),
+        _flatten_step(python, optional=True),
         Step("supabase-stop", (*supabase, "stop"), optional=True, note="plan step 3 teardown"),
         Step(
             "stop-legacy-stack",
