@@ -40,6 +40,56 @@ def _tool_json(out: object) -> dict:
     raise AssertionError(f"unexpected tool result: {out!r}")
 
 
+def _full_digivault_manifest() -> dict[str, dict]:
+    """The four tools digivault's ``build_orchestrator_tool_manifest`` advertises.
+
+    Descriptions carry a ``MANIFEST`` sentinel so a test can prove the schema came
+    from the manifest fetch rather than the built-in fallback text.
+    """
+    return {
+        "digivault_search_notes": {
+            "type": "function",
+            "function": {
+                "name": "digivault_search_notes",
+                "description": "MANIFEST search_notes",
+                "parameters": {"type": "object", "properties": {"query": {"type": "string"}}},
+            },
+        },
+        "digivault_get_note": {
+            "type": "function",
+            "function": {
+                "name": "digivault_get_note",
+                "description": "MANIFEST get_note",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        "digivault_search_tag": {
+            "type": "function",
+            "function": {
+                "name": "digivault_search_tag",
+                "description": "MANIFEST search_tag",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"tag": {"type": "string", "description": "Tag without '#'"}},
+                    "required": ["tag"],
+                },
+            },
+        },
+        "digivault_backlinks": {
+            "type": "function",
+            "function": {
+                "name": "digivault_backlinks",
+                "description": "MANIFEST backlinks",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string", "description": "Note name (stem)"}},
+                    "required": ["name"],
+                },
+            },
+        },
+    }
+
+
 @pytest.mark.unit
 def test_digivault_search_notes_is_registered() -> None:
     from digigraph.orchestration import builtin  # noqa: F401 - triggers registration
@@ -95,29 +145,16 @@ def test_digivault_skill_exposed_when_available(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv("DIGIVAULT_URL", "http://digivault:8004")
     with patch(
         "digigraph.orchestration.builtin.fetch_digivault_tool_dicts",
-        return_value={
-            "digivault_search_notes": {
-                "type": "function",
-                "function": {
-                    "name": "digivault_search_notes",
-                    "description": "search",
-                    "parameters": {"type": "object", "properties": {}},
-                },
-            },
-            "digivault_get_note": {
-                "type": "function",
-                "function": {
-                    "name": "digivault_get_note",
-                    "description": "get note",
-                    "parameters": {"type": "object", "properties": {}},
-                },
-            },
-        },
+        return_value=_full_digivault_manifest(),
     ):
         tools = get_tools(["digivault"], _ctx(), mode=ToolExposureMode.DETAILED)
+    # All four tools digivault's manifest advertises, in skill-bundle order — not
+    # only the two that used to be wired.
     assert [t["function"]["name"] for t in tools] == [
         "digivault_search_notes",
         "digivault_get_note",
+        "digivault_search_tag",
+        "digivault_backlinks",
     ]
 
 
@@ -1017,3 +1054,167 @@ def test_handle_digivault_get_note_blank_vault_path_alongside_vault_paths_is_fin
     assert isinstance(out, dict)
     payload = json.loads(out["content"])
     assert len(payload["notes"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# digivault_search_tag / digivault_backlinks — the two other tools digivault's
+# orchestrator manifest advertises and the OCC research prompt names. Registered
+# in builtin.py and exposed through the "digivault" skill.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_digivault_tag_and_backlinks_are_registered_by_exact_name() -> None:
+    """Both OCC-prompt tools are registered under their exact digivault ids.
+
+    Negative control for the matcher: a bogus vault name and near-misses must NOT
+    register, and dispatching a bogus name must return the unknown-tool sentinel.
+    A matcher that answered truthy for any ``digivault*`` string fails here.
+    """
+    from digigraph.orchestration import builtin  # noqa: F401 - triggers registration
+    from digigraph.orchestration.registry import execute, list_tool_names
+
+    assert has_tool("digivault_search_tag")
+    assert has_tool("digivault_backlinks")
+    assert {"digivault_search_tag", "digivault_backlinks"} <= set(list_tool_names())
+    for bogus in (
+        "digivault_search_tag_v2",
+        "digivault_backlink",
+        "digivault_search_tags",
+        "digivault_backlinks_all",
+    ):
+        assert not has_tool(bogus), bogus
+    assert execute("digivault_backlink", {}, _ctx()) == "Unknown tool: digivault_backlink"
+
+
+@pytest.mark.unit
+def test_digivault_skill_respects_subset_allowlist_for_new_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Constraint: the tools must work when ``allowed_tool_names`` is a subset.
+
+    ``get_tools`` filters on the schema's ``function.name``, so this also proves each
+    new tool's schema carries its own name — not the search_notes fallback name.
+    """
+    from digigraph.orchestration import builtin  # noqa: F401 - ensures skills are registered
+
+    monkeypatch.setenv("DIGIVAULT_URL", "http://digivault:8004")
+    with patch(
+        "digigraph.orchestration.builtin.fetch_digivault_tool_dicts",
+        return_value=_full_digivault_manifest(),
+    ):
+        tools = get_tools(
+            ["digivault"],
+            _ctx(allowed_tool_names=frozenset({"digivault_search_tag"})),
+            mode=ToolExposureMode.DETAILED,
+        )
+    assert [t["function"]["name"] for t in tools] == ["digivault_search_tag"]
+
+
+@pytest.mark.unit
+def test_handle_digivault_search_tag_dispatches_and_overwrites_prefix() -> None:
+    from digigraph.orchestration.builtin import _handle_digivault_search_tag
+
+    data = {"notes": [{"name": "returns", "rel_path": "clients/occ/returns.md"}]}
+    ctx = _ctx(vault_path_prefix="clients/online-compliance-center")
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": data},
+    ) as mock_invoke:
+        out = _handle_digivault_search_tag(
+            {"tag": "returns", "path_prefix": "clients/digithings"}, ctx
+        )
+
+    call = mock_invoke.call_args
+    assert call.args[1] == "digivault_search_tag"
+    # model-supplied path_prefix discarded; session prefix sent (#2265)
+    assert call.args[2] == {
+        "tag": "returns",
+        "path_prefix": "clients/online-compliance-center",
+    }
+    assert isinstance(out, dict)
+    assert json.loads(out["content"]) == data
+
+
+@pytest.mark.unit
+def test_handle_digivault_backlinks_dispatches() -> None:
+    from digigraph.orchestration.builtin import _handle_digivault_backlinks
+
+    data = {"name": "hub", "backlinks": ["a", "b"]}
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": data},
+    ) as mock_invoke:
+        out = _handle_digivault_backlinks(
+            {"name": "hub"}, _ctx(vault_path_prefix="clients/digithings")
+        )
+
+    call = mock_invoke.call_args
+    assert call.args[1] == "digivault_backlinks"
+    assert call.args[2] == {"name": "hub", "path_prefix": "clients/digithings"}
+    assert isinstance(out, dict)
+    assert json.loads(out["content"]) == data
+
+
+@pytest.mark.unit
+def test_handle_digivault_tag_ok_false_passes_error_through() -> None:
+    from digigraph.orchestration.builtin import _handle_digivault_search_tag
+
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": False, "error": "vault unavailable"},
+    ):
+        out = _handle_digivault_search_tag({"tag": "x"}, _ctx())
+    assert _tool_json(out)["error"] == "vault unavailable"
+
+
+@pytest.mark.unit
+def test_handle_digivault_tag_invoke_error_returns_message() -> None:
+    from digigraph.orchestration.builtin import _handle_digivault_search_tag
+
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        side_effect=httpx.ConnectError("connection refused"),
+    ):
+        out = _handle_digivault_search_tag({"tag": "x"}, _ctx())
+    assert "digivault orchestrator invoke failed" in out
+
+
+@pytest.mark.unit
+def test_schema_for_new_tools_comes_from_digivault_manifest() -> None:
+    from digigraph.orchestration.builtin import _schema_from_digivault_manifest
+
+    with patch(
+        "digigraph.orchestration.builtin.fetch_digivault_tool_dicts",
+        return_value=_full_digivault_manifest(),
+    ):
+        tag = _schema_from_digivault_manifest(_ctx(), "digivault_search_tag")
+        back = _schema_from_digivault_manifest(_ctx(), "digivault_backlinks")
+
+    assert tag["function"]["name"] == "digivault_search_tag"
+    assert tag["function"]["description"] == "MANIFEST search_tag"
+    assert back["function"]["name"] == "digivault_backlinks"
+    assert back["function"]["description"] == "MANIFEST backlinks"
+
+
+@pytest.mark.unit
+def test_schema_fallback_for_new_tools_is_not_misnamed_search_notes() -> None:
+    """On a manifest outage the fallback must still name each tool correctly.
+
+    Regression guard: before the new branches, any non-get_note name fell through to
+    the search_notes fallback, so a tag lookup would have been advertised to the
+    model (and filtered by the allowlist) under the wrong tool name.
+    """
+    from digigraph.orchestration.builtin import _schema_from_digivault_manifest
+
+    with patch(
+        "digigraph.orchestration.builtin.fetch_digivault_tool_dicts",
+        side_effect=httpx.ConnectError("boom"),
+    ):
+        tag = _schema_from_digivault_manifest(_ctx(), "digivault_search_tag")
+        back = _schema_from_digivault_manifest(_ctx(), "digivault_backlinks")
+
+    assert tag["function"]["name"] == "digivault_search_tag"
+    assert tag["function"]["parameters"]["required"] == ["tag"]
+    assert back["function"]["name"] == "digivault_backlinks"
+    assert back["function"]["parameters"]["required"] == ["name"]

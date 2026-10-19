@@ -225,6 +225,12 @@
       "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
       "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
     },
+    "/openwiki/digivoice/architecture.md": {
+      "pageVersion": "sha256:9a922b18ba754b4488621971f26c13fb596b65acc54c602624b80555f791b0e2"
+    },
+    "/openwiki/digivoice/quickstart.md": {
+      "pageVersion": "sha256:31f38aa1e54b60efaf829d6c451951e7f7d0942ba094abb8928b3809b5220e2f"
+    },
     "/openwiki/libraries/digifetch.md": {
       "pageVersion": "sha256:e005ba82afa386f312cf41828d0d1120f0a14b2bd582d291952940b8d1f3edc0",
       "completedBy": "openwiki/0.5.0",

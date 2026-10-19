@@ -37,7 +37,7 @@ bucket_name = "digithings-archive"
 # on APIs. Auth-exempt on each host is only the shared service allowlist
 # (/health, /healthz, /metrics, /docs, /redoc, /openapi.json, OPTIONS
 # preflights) plus the Worker-served /_stack/meta and /v1/market/tickers|closes,
-# and /_stack/key/* which proxies to digikey. /_stack/mcp/zammad/* is not
+# and /_stack/key/* which proxies to digikey. /_stack/mcp/* is not
 # auth-exempt: it is key-gated (x-digi-mcp-key vs the MCP_EDGE_KEY secret,
 # fail-closed 401).
 [[routes]]
@@ -78,36 +78,18 @@ custom_domain = true
 # zone_name = "digithings.ai"
 # custom_domain = true
 
-# DigiChat cutover (cost epic): zone routes moved here from digithings-digichat so the
-# folded DigiChatContainer serves them and the duplicate container goes idle.
-# DEPLOY ORDER: deploy digithings-digichat (routes removed) first, then this worker.
-# Precondition: the digichat secrets listed in apps/digichat-cloudflare/wrangler.toml
-# exist on this worker (wrangler secret list) before deploy.
-[[routes]]
-pattern = "digithings.ai/embed*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/chat*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/embed*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/byok*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/plan-proof*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/health"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/_dtchat*"
-zone_name = "digithings.ai"
-# DIG-3585: invite-gate the OCC Pages shell. Same pattern on the rollback worker.
-[[routes]]
-pattern = "digithings.ai/chat/occ*"
-zone_name = "digithings.ai"
+# The digichat product surface is deliberately NOT served from this Worker.
+# Decision (Chris, 2026-10-19): OCC is client work and must not ride the base
+# digithings platform. Every digithings.ai digichat path (embed, api/chat,
+# api/embed, api/byok, api/plan-proof, api/health, _dtchat, chat/occ) is owned
+# by apps/digichat-cloudflare / the `digithings-digichat` Worker and its own
+# container. The earlier fold (cost epic, #5411) moved those routes here to
+# idle a duplicate container; that mixed the client surface into the base tool,
+# so it was dropped. This Worker serves ONLY its own custom domains below.
+#
+# Consequence: a deploy of this Worker no longer claims any digithings.ai path,
+# which is what made every stack deploy fail with
+# `Can't deploy routes that are assigned to another worker`.
 
 [[containers]]
 class_name = "DigiStackContainer"
@@ -153,24 +135,13 @@ max_instances = 1
 # on standard-2 — re-check latency after deploy.
 instance_type = "standard-1"
 
-# Folded digichat (#4689). Same image as the standalone digichat worker
-# (Next standalone on :3000, one shared instance for digithings + OCC + future
-# tenants via the embed registry) — NOT part of the Profile A image above.
-# Auth stays in-container: the Worker applies no edge gating on digichat
-# paths. The standalone digichat worker stays deployed until cutover; no
-# DNS/Pages/route changes in this slice.
-[[containers]]
-class_name = "DigiChatContainer"
-# Build context MUST be the monorepo root (same #4046 lesson as above):
-# Dockerfile.digichat-cloudflare COPYs package.json, apps/digichat and
-# packages/* with repo-root-relative paths. Resolved relative to this config
-# file: ../.. is the repo root.
-image = "../../Dockerfile.digichat-cloudflare"
-image_build_context = "../.."
-max_instances = 1
-# Next standalone: basic = 1 GiB (lite = 256MiB is far too small). Typical Next
-# standalone RSS is 200-500 MiB; revert to standard-1 if OOM.
-instance_type = "basic"
+# The folded DigiChatContainer is GONE from this Worker (Chris, 2026-10-19):
+# the digichat product (and OCC, one of its tenants) runs only in
+# apps/digichat-cloudflare on the `digithings-digichat` Worker's own container.
+# The container app that used to back this class
+# (digithings-stack-digichatcontainer) is deleted; the class, its Durable
+# Object binding and the digichat image COPY/untar in
+# Dockerfile.digithings-stack-cloudflare are removed with it.
 
 # Ops SSH debug key removed (cost/hygiene epic). Re-add [[containers.authorized_keys]]
 # temporarily only for a live debugging session.
@@ -183,10 +154,9 @@ class_name = "DigiStackContainer"
 name = "MCP_STACK"
 class_name = "DigiQuantMcpContainer"
 
-[[durable_objects.bindings]]
-name = "DIGICHAT"
-class_name = "DigiChatContainer"
-
+# v3 (DigiChatContainer) is left in the migration history deliberately: the DO
+# namespace it created is unbound now, and rewriting an applied migration tag
+# is not a supported operation.
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["DigiStackContainer"]
@@ -214,7 +184,6 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   CHEAPERINFERENCE_API_BASE # optional; default https://api.cheaperinference.com/v1
 #   DIGI_HOUSE_UPSTREAM       # optional; set "openrouter" to force OpenRouter
 #   LITELLM_PROXY_API_KEY     # optional shared proxy key
-#   ZAMMAD_API_TOKEN          # read-only Zammad helpdesk MCP (zammad-mcp program, OCC tickets)
 #   GLOOMBERB_SESSION_COOKIE  # digiquant-mcp session-gated digifetch tools (#4260)
 #   R2_ACCOUNT_ID             # digiquant-mcp market-data history reads
 #   R2_BUCKET                 # digiquant-mcp (same digithings-archive bucket)

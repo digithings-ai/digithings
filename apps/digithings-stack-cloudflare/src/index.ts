@@ -13,8 +13,8 @@
  *   /healthz            → digigraph
  *   /_stack/key/*       → digikey (strip prefix)
  *
- * /_stack/mcp/{zammad,digisearch,digivault}/* → in-container MCP servers on
- * :8770/:8765/:8769 (secret-gated edge paths; require the x-digi-mcp-key header
+ * /_stack/mcp/{digisearch,digivault}/* → in-container MCP servers on
+ * :8765/:8769 (secret-gated edge paths; require the x-digi-mcp-key header
  * matching MCP_EDGE_KEY — fail-closed 401 otherwise).
  * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
  *
@@ -24,20 +24,15 @@
  * behind the dashboard-api isolation group. The standalone dashboard-api
  * worker stays deployed until cutover; no DNS/Pages changes in this slice.
  *
- * digichat paths (/embed*, /api/chat*, /api/embed/*, /api/byok/*,
- * /api/plan-proof*, /api/health, /_dtchat/*) → folded digichat routes (#4689)
- * proxied to the dedicated digichat Container (Next standalone :3000) behind
- * the digichat isolation group. Path predicate is the standalone worker's own
- * `shouldProxyToDigiChat`; auth stays in-container (no edge gating on these
- * paths). The standalone digichat worker stays deployed until cutover; no
- * DNS/Pages/route changes in this slice.
+ * digichat is NOT served here: the #4689 fold was dropped (Chris, 2026-10-19)
+ * and the product (plus OCC, one of its tenants) runs only in
+ * apps/digichat-cloudflare on the `digithings-digichat` Worker's own Container.
  *
- * zammad-mcp / digisearch-mcp / digivault-mcp bind 0.0.0.0 inside the Container
+ * digisearch-mcp / digivault-mcp bind 0.0.0.0 inside the Container
  * for those edge routes; LiteLLM stays loopback-only. digisearch also binds
  * 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can reach it at the
  * container network address for its public route; in-container callers keep
  * using DIGISEARCH_URL=http://127.0.0.1:8002 (0.0.0.0 includes loopback).
- * digichat Container calls these public URLs via DIGIGRAPH_INTERNAL_URL / DIGIKEY_URL.
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
@@ -48,10 +43,7 @@ import { getStackStatus, runIsolated } from "./route-modules";
 // the file is dependency-free constants, so it cannot fail independently of
 // the worker bundle. Every fetch() route group additionally lazy-loads it
 // through runIsolated (per-group import() + try/catch, #4685), so a future
-// load failure degrades only its own paths. digichat.ts is static-imported
-// for the same reason: the digichat branch predicate (`shouldProxyToDigiChat`)
-// and `DigiChatContainer.defaultPort` are needed synchronously, and the module
-// is one dependency-free re-export plus constants (see its docstring).
+// load failure degrades only its own paths.
 import {
   DIGIGRAPH_PORT,
   DIGIKEY_PORT,
@@ -64,12 +56,9 @@ import {
   stackContainerRev,
 } from "./ports";
 import {
-  DIGICHAT_PORT,
   digichatContainerRev,
   sharedDigichatContainerId,
-  shouldProxyToDigiChat,
 } from "./digichat";
-import { isOccShellPath, occGate } from "../../digichat-cloudflare/src/occ-gate";
 import {
   containerIsAwake,
   isHealthProbe,
@@ -152,15 +141,36 @@ export class DigiStackContainer extends Container {
     DIGI_HOUSE_UPSTREAM: env.DIGI_HOUSE_UPSTREAM ?? "",
     LITELLM_PROXY_API_KEY: env.LITELLM_PROXY_API_KEY ?? "",
     LITELLM_MASTER_KEY: env.LITELLM_MASTER_KEY ?? "",
-    // Read-only Zammad helpdesk MCP (supervisord [program:zammad-mcp], OCC demo)
-    ZAMMAD_API_TOKEN: env.ZAMMAD_API_TOKEN ?? "",
   };
+
+  /**
+   * A request waiting on a cold start must not have the container stopped under
+   * it. `startAndWaitForPorts` does NOT renew the activity timer, so with
+   * sleepAfter = "1m" the idle alarm fires mid-boot and SIGTERMs the container
+   * before its port opens; the port wait then fails with "The container is not
+   * running, consider calling start()" and every caller gets 503
+   * container_booting while the container itself logs a clean boot (no errors,
+   * every supervisord program RUNNING). Observed 2026-10-18: after the R5 wheel
+   * install (#5762) the boot takes ~60s at 0.5 vCPU, which is exactly the
+   * sleepAfter window. Holding the window open for the life of the request is
+   * the fix; the 1m idle tail itself is unchanged once requests stop.
+   */
+  private keepAwakeForRequest = false;
+
+  /** Sleep only when nothing is waiting on us (see keepAwakeForRequest). */
+  override async onActivityExpired(): Promise<void> {
+    if (this.keepAwakeForRequest) return;
+    await super.onActivityExpired();
+  }
 
   /**
    * Wait longer than the default ~20s portReadyTimeout while supervisord
    * brings up digigraph (and the requested service) under Firecracker.
    */
   override async fetch(request: Request): Promise<Response> {
+    // Hold the idle window open for as long as this request is waiting on a
+    // cold start (see keepAwakeForRequest).
+    this.keepAwakeForRequest = true;
     // switchPort sets cf-container-target-port; containerFetch(request) alone
     // ignores that header and always uses defaultPort (digigraph :8000) — which
     // made key.digithings.ai / JWKS / bff_session hit digigraph (smoke NO-GO).
@@ -199,6 +209,8 @@ export class DigiStackContainer extends Container {
         return containerEvictedResponse("stack", message);
       }
       return containerBootingResponse("stack", message);
+    } finally {
+      this.keepAwakeForRequest = false;
     }
     // An eviction can also land between start and fetch: map only the
     // confirmed-evicted signal to 410, rethrow everything else so the
@@ -253,7 +265,21 @@ export class DigiQuantMcpContainer extends Container {
     R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY ?? "",
   };
 
+  /**
+   * Do not let the idle alarm stop a container a request is waiting on — see
+   * the DigiStackContainer note: nothing renews the activity timer during
+   * `startAndWaitForPorts`, so a cold start longer than sleepAfter is killed
+   * mid-boot.
+   */
+  private keepAwakeForRequest = false;
+
+  override async onActivityExpired(): Promise<void> {
+    if (this.keepAwakeForRequest) return;
+    await super.onActivityExpired();
+  }
+
   override async fetch(request: Request): Promise<Response> {
+    this.keepAwakeForRequest = true;
     try {
       await this.startAndWaitForPorts({
         ports: [DIGIQUANT_MCP_PORT],
@@ -269,6 +295,8 @@ export class DigiQuantMcpContainer extends Container {
         return containerEvictedResponse("mcp", message);
       }
       return containerBootingResponse("mcp", message);
+    } finally {
+      this.keepAwakeForRequest = false;
     }
     try {
       return await this.containerFetch(request, DIGIQUANT_MCP_PORT);
@@ -276,103 +304,6 @@ export class DigiQuantMcpContainer extends Container {
       const message = err instanceof Error ? err.message : String(err);
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("mcp", message);
-      }
-      throw err;
-    }
-  }
-}
-
-/**
- * Folded digichat container (#4689).
- *
- * Same image as the standalone digichat worker
- * (Dockerfile.digichat-cloudflare: Next standalone on :3000, one shared
- * instance for digithings + OCC + future tenants via the embed registry) —
- * NOT part of the Profile A stack container above. Auth stays in-container:
- * the Worker applies no edge gating on digichat paths; the Next process
- * enforces its own embed-tenant auth exactly as on the standalone worker.
- */
-export class DigiChatContainer extends Container {
-  defaultPort = DIGICHAT_PORT;
-  requiredPorts = [DIGICHAT_PORT];
-  /** Short idle tail: each wake bills for the whole sleepAfter window. */
-  sleepAfter = "1m";
-
-  /**
-   * Runtime env for the digichat Next process. Mirrors the standalone
-   * worker's `DigiChatContainer.envVars` 1:1 with the same `??` defaults
-   * (see apps/digichat-cloudflare/src/index.ts). Secrets from
-   * `wrangler secret put`; plain vars from wrangler.toml `[vars]`.
-   *
-   * `DIGICHAT_EMBED_ENABLED` keeps the standalone worker's OR semantics
-   * (either `DIGICHAT_LEGACY_EMBED_ENABLED` or its deprecated alias set to
-   * "1" opts in; stock default "0") inline: the key must read
-   * `env.DIGICHAT_EMBED_ENABLED` first so the envVars key↔ref pin
-   * (src/env-vars-pin.test.js) still pairs it with its own entry. The
-   * canonical helper is `legacyEmbedEnabledValue`
-   * (apps/digichat-cloudflare/src/embed-flag.ts); behavior is pinned equal
-   * by src/digichat-mount.test.js.
-   */
-  envVars = {
-    DIGICHAT_EMBED_ENABLED:
-      env.DIGICHAT_EMBED_ENABLED === "1" || env.DIGICHAT_LEGACY_EMBED_ENABLED === "1"
-        ? "1"
-        : "0",
-    DIGICHAT_REQUIRE_ROOT_AUTH: env.DIGICHAT_REQUIRE_ROOT_AUTH ?? "0",
-    DIGICHAT_EMBED_HOSTS:
-      env.DIGICHAT_EMBED_HOSTS ??
-      "digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io",
-    DIGICHAT_AUTO_MIGRATE: env.DIGICHAT_AUTO_MIGRATE ?? "0",
-    DIGICHAT_TRUSTED_PROXIES: env.DIGICHAT_TRUSTED_PROXIES ?? "",
-    // Same profile default as the standalone worker: digisearch/digivault are
-    // loopback inside the stack container; digichat only talks to digigraph
-    // (+ digikey for bff_session).
-    DIGICHAT_ENABLED_SERVICES: env.DIGICHAT_ENABLED_SERVICES ?? "digigraph",
-    AUTH_SECRET: env.AUTH_SECRET ?? "",
-    DIGICHAT_EMBED_TENANTS: env.DIGICHAT_EMBED_TENANTS ?? "",
-    DIGIGRAPH_INTERNAL_URL: env.DIGIGRAPH_INTERNAL_URL ?? "",
-    DIGIKEY_URL: env.DIGIKEY_URL ?? "",
-    DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
-    DIGICHAT_PLAN_PROOF_SECRET: env.DIGICHAT_PLAN_PROOF_SECRET ?? "",
-    DIGICHAT_MONITOR_TOKENS: env.DIGICHAT_MONITOR_TOKENS ?? "",
-    // Canonical fallbacks (#4700): the DIGICHAT_DASHBOARD names are legacy
-    // duplicates of the canonical SUPABASE names. Old names still win when
-    // set, so this stays backward compatible across the manual deploy lag.
-    DIGICHAT_DASHBOARD_SUPABASE_URL:
-      env.DIGICHAT_DASHBOARD_SUPABASE_URL ?? env.SUPABASE_URL ?? "",
-    DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
-      env.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? env.SUPABASE_ANON_KEY ?? "",
-  };
-
-  override async fetch(request: Request): Promise<Response> {
-    // switchPort sets cf-container-target-port; containerFetch(request) alone
-    // ignores that header and always uses defaultPort — the digichat branch in
-    // the Worker fetch() below sets it explicitly to :3000, and this override
-    // honors it the same way DigiStackContainer.fetch does, after waiting for
-    // the Next standalone server to bind.
-    const targetPort = targetPortFromRequest(request);
-    try {
-      await this.startAndWaitForPorts({
-        ports: [DIGICHAT_PORT],
-        cancellationOptions: {
-          portReadyTimeoutMS: 180_000,
-          instanceGetTimeoutMS: 60_000,
-        },
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
-      if (isContainerEvictedError(message)) {
-        return containerEvictedResponse("digichat", message);
-      }
-      return containerBootingResponse("digichat", message);
-    }
-    try {
-      return await this.containerFetch(request, targetPort);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isContainerEvictedError(message)) {
-        return containerEvictedResponse("digichat", message);
       }
       throw err;
     }
@@ -428,7 +359,6 @@ export function containerBootingResponse(
 export interface Env {
   STACK: DurableObjectNamespace<DigiStackContainer>;
   MCP_STACK: DurableObjectNamespace<DigiQuantMcpContainer>;
-  DIGICHAT: DurableObjectNamespace<DigiChatContainer>;
   DIGIKEY_ISSUER?: string;
   DIGIKEY_AUDIENCE?: string;
   DIGIKEY_ALLOW_EPHEMERAL_KEY?: string;
@@ -470,7 +400,6 @@ export interface Env {
   DIGI_HOUSE_UPSTREAM?: string;
   LITELLM_PROXY_API_KEY?: string;
   LITELLM_MASTER_KEY?: string;
-  ZAMMAD_API_TOKEN?: string;
   MCP_EDGE_KEY?: string;
   /** Optional per-server edge keys (`{"digivault":"…"}`); falls back to MCP_EDGE_KEY. */
   MCP_EDGE_KEYS?: string;
@@ -493,18 +422,14 @@ export interface Env {
   // deployed until cutover; secrets land via `wrangler secret put` later.
   SUPABASE_URL?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
-  // Canonical dashboard anon key (#4700): fallback source for the legacy
-  // DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY forward above. Worker-scoped.
-  SUPABASE_ANON_KEY?: string;
   MARKET_DATA_URL?: string;
   DASHBOARD_API_ALLOWED_ORIGINS?: string;
-  // Folded digichat (#4689) env passthrough. All optional with the standalone
-  // worker's own `??` defaults (see DigiChatContainer.envVars above); unset
-  // secrets mean the container's stock behavior (embed closed, DB-less), never
-  // a silent synthesized fallback beyond what the standalone worker does. No
-  // values ship in this slice — the standalone worker stays deployed until
-  // cutover; secrets land via `wrangler secret put` later. DIGIKEY_BFF_TOKEN
-  // is already declared above (also forwarded to the stack container).
+  // Retired digichat fold (#4689, dropped 2026-10-19). These names are still
+  // declared in wrangler.toml [vars]/secrets for this Worker, but the
+  // DigiChatContainer that forwarded them is gone (digichat lives in
+  // apps/digichat-cloudflare) and no remaining envVars block reads them. They
+  // are typed here so the deployed config stays described; env-vars-pin.test.js
+  // pins that they are forwarded to no container.
   /** Documented opt-in for the legacy generic anonymous embed. */
   DIGICHAT_LEGACY_EMBED_ENABLED?: string;
   /** @deprecated Use DIGICHAT_LEGACY_EMBED_ENABLED. */
@@ -525,12 +450,13 @@ export interface Env {
   /** DIG-3585 /chat/occ shell gate. Worker-scoped; never forwarded to a container. */
   OCC_INVITE_KEY?: string;
   /**
-   * DIG-3814: short sha of the deploying commit, injected by
-   * `apps/digichat-cloudflare/scripts/deploy.mjs` via
-   * `wrangler deploy --var DIGICHAT_CONTAINER_REV:<sha12>`. It names the folded
-   * digichat Container (see `sharedDigichatContainerId`), so the Worker reads
-   * it and deliberately does NOT forward it into `DigiChatContainer.envVars` —
-   * the container process has no use for the commit that built it.
+   * DIG-3814: short sha of the deploying commit, injected by this Worker's own
+   * deploy wrapper (`scripts/deploy.mjs`, which shares the rev logic with the
+   * digichat wrapper) via `wrangler deploy --var DIGICHAT_CONTAINER_REV:<sha12>`.
+   * The Worker reads it to report the digichat Container id this commit derives
+   * (see `sharedDigichatContainerId`). It mounts no digichat container since the
+   * 2026-10-19 separation, so there is no `envVars` to forward it into;
+   * env-vars-pin.test.js pins that no container block reads it.
    */
   DIGICHAT_CONTAINER_REV?: string;
 }
@@ -538,7 +464,6 @@ export interface Env {
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
 const MCP_EDGE_PREFIX = "/_stack/mcp";
 const MCP_EDGE_SERVERS: Record<string, number> = {
-  zammad: 8770,
   digisearch: 8765,
   digivault: 8769,
 };
@@ -601,9 +526,10 @@ function stackContainer(workerEnv: Env): DurableObjectStub<DigiStackContainer> {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
-    if (isOccShellPath(url.pathname)) {
-      return occGate(request, workerEnv.OCC_INVITE_KEY);
-    }
+    // The OCC invite gate is NOT applied here: the invite-gated shell
+    // (`/chat/occ*`) belongs to apps/digichat-cloudflare, which owns that route
+    // and holds OCC_INVITE_KEY (Chris, 2026-10-19 — client surface off the base
+    // platform). This Worker serves only graph./key./search.digithings.ai.
     if (url.pathname === "/_stack/meta") {
       // containerId is derived from the deploying commit (DIG-3229), so it is
       // the operator's proof that the running instance came from this deploy
@@ -614,11 +540,13 @@ export default {
         service: "digithings-stack",
         containerId: sharedStackContainerId(workerEnv.STACK_CONTAINER_REV),
         stackRev: stackContainerRev(workerEnv.STACK_CONTAINER_REV),
-        // DIG-3814: the folded digichat Container id is derived from the
-        // deploying commit by the standalone worker's own paths.ts, the same
-        // derivation its own worker uses. Reporting it here is what makes the
-        // LIVE digichat surface verifiable: the zone routes moved here, so this
-        // is the route a deploy of the digichat id is actually observable on.
+        // DIG-3814: the digichat Container id for this same deploying commit,
+        // derived by the standalone worker's own paths.ts and re-exported
+        // through ./digichat, so one read-back verifies the rev reached both
+        // Workers. This Worker does not serve digichat paths since the
+        // 2026-10-19 separation and mounts no digichat container; the field is
+        // reported for the shared deploy path's verification, not as a route
+        // this Worker answers.
         digichatContainerId: sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV),
         digichatRev: digichatContainerRev(workerEnv.DIGICHAT_CONTAINER_REV),
         note: "Worker up; container ports may still be starting",
@@ -642,12 +570,11 @@ export default {
       });
     }
 
-    // Read-only Zammad MCP for the OCC embed, reached over a secret-gated edge
-    // path. The container-internal `zammad-mcp` name cannot be resolved in the
-    // Cloudflare runtime (/etc/hosts is read-only, so the entrypoint alias is
-    // skipped), so digigraph dials this public HTTPS path instead; the embed
-    // tenant entry carries the matching x-digi-mcp-key (#3841 authHeader).
-    // Fail closed: no secret configured -> 401.
+    // In-container MCP servers for the OCC embed, reached over secret-gated edge
+    // paths. The container-internal servers cannot be resolved from the
+    // Cloudflare runtime (/etc/hosts is read-only), so digigraph dials this
+    // public HTTPS path instead; the embed tenant entry carries the matching
+    // x-digi-mcp-key (#3841 authHeader). Fail closed: no secret -> 401.
     if (url.pathname.startsWith(`${MCP_EDGE_PREFIX}/`)) {
       const rest = url.pathname.slice(MCP_EDGE_PREFIX.length + 1);
       const slash = rest.indexOf("/");
@@ -708,26 +635,12 @@ export default {
       );
     }
 
-    // Folded digichat (#4689): the standalone worker's own paths
-    // (/embed*, /api/chat*, /api/embed/*, /api/byok/*, /api/plan-proof*,
-    // /api/health, /_dtchat/*) proxied to the dedicated digichat Container
-    // (Next standalone :3000). Path predicate is the standalone worker's own
-    // `shouldProxyToDigiChat`, so folded and standalone routing stay
-    // identical. Auth stays in-container — no edge gating here (no 401, no
-    // JWT check). A digichat failure degrades only these paths (503); the
-    // container-routes catch-all below is untouched.
-    if (shouldProxyToDigiChat(url.pathname)) {
-      // Lazy digichat import: the folded route predicate constants load on
-      // first use here.
-      return runIsolated(
-        "digichat",
-        () => import("./digichat"),
-        async ({ DIGICHAT_PORT, sharedDigichatContainerId }) => {
-          const container = getContainer(workerEnv.DIGICHAT, sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV));
-          return container.fetch(switchPort(request, DIGICHAT_PORT));
-        },
-      );
-    }
+    // The digichat product surface (and OCC, one of its tenants) is NOT served
+    // here (Chris, 2026-10-19): it belongs to apps/digichat-cloudflare on the
+    // `digithings-digichat` Worker and its own container. The folded-digichat
+    // branch (#4689) and its route declarations were removed so the client
+    // surface never rides the base platform, and so a deploy of this Worker
+    // stops fighting another Worker for the same digithings.ai routes.
 
     // Dedicated digiquant-mcp container (#3780 Task 8): reachable only via the
     // reserved mcp.digithings.ai hostname once its route is enabled (HUMAN GATE

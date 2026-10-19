@@ -97,28 +97,37 @@ The compose service name `zammad-mcp` is dotless, so digigraph's remote-MCP
 guard treats it as container-internal DNS; loopback URLs are never dialable
 (`orchestration/mcp_client.py`, #3879).
 
-### Production (digithings-stack container)
+### Production (digichat container)
 
-In production the server is **not** a separate container: it runs as the
-`zammad-mcp` program inside the `digithings-stack` Cloudflare Container
-(`apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf`),
-bound to `0.0.0.0:8770`. The image ships the package (`COPY scripts/zammad_mcp`
-in `Dockerfile.digithings-stack-cloudflare`) and the entrypoint aliases the
-dotless name `zammad-mcp` to the container's own address in `/etc/hosts`, so
-digigraph's remote-MCP guard can dial `http://zammad-mcp:8770/mcp` (dotless
-names may resolve to private space; loopback is never dialable, #3879). Set the
-token on the stack worker only — `wrangler secret put ZAMMAD_API_TOKEN` — with
-the same `Token token=<x>` value. The MCP port is not published publicly; its
-only external path is the key-gated route
-`https://graph.digithings.ai/_stack/mcp/zammad/*` (the Worker checks
-`x-digi-mcp-key` against the `MCP_EDGE_KEY` secret and fails closed with a 401).
-The prod occ tenant entry in `DIGICHAT_EMBED_TENANTS` therefore carries
-`url: https://graph.digithings.ai/_stack/mcp/zammad/mcp`, `authHeader:
-x-digi-mcp-key`, and a literal `token` holding the `MCP_EDGE_KEY` value
-(`tokenEnv` only resolves variables present in the digichat Container's own
-environment, and the Worker secret is deliberately not forwarded there); the
-server still authenticates to Zammad with its own environment (no Zammad token
-in the tenant entry).
+In production the server is **not** a program of the stack container: it runs
+**inside the digichat image**. `apps/digichat/scripts/trusted-proxy-server.mjs`
+(`startZammadMcp()`) spawns `python3 -m scripts.zammad_mcp.server` on
+`127.0.0.1:8770` (bound `0.0.0.0` in-container), and only when
+`ZAMMAD_API_TOKEN` is set — the image boots without one. The base stack no
+longer runs it: `scripts/zammad_mcp` is not COPYed into the stack image, the
+`[program:zammad-mcp]` supervisord entry and its `/etc/hosts` alias are gone,
+and the stack's `MCP_EDGE_SERVERS` map carries only `digisearch: 8765` and
+`digivault: 8769`.
+
+The MCP is reached through the Next route
+`apps/digichat/src/app/api/mcp/zammad/[[...path]]/route.ts`, which forwards to
+the in-image port. Its only external path is
+`https://digithings.ai/api/mcp/zammad/mcp`, served by the digichat Worker: the
+Worker gates that route on the `x-digi-mcp-key` header compared against the
+digichat worker's `ZAMMAD_EDGE_KEY` secret and fails closed with a 401 (the edge
+header is not forwarded to the MCP itself). The container port is never
+published.
+
+Set the Zammad credentials as Container secrets on the digichat worker —
+`ZAMMAD_API_TOKEN` (the same `Token token=<x>` value the server reads) and
+optionally `ZAMMAD_BASE_URL`. The prod occ tenant entry in
+`DIGICHAT_EMBED_TENANTS` therefore carries
+`url: https://digithings.ai/api/mcp/zammad/mcp`, `authHeader: x-digi-mcp-key`,
+and a literal `token` holding the `ZAMMAD_EDGE_KEY` value (`tokenEnv` only
+resolves variables present in the digichat Container's own environment, and the
+Worker secret is deliberately not forwarded there); the server still
+authenticates to Zammad with its own environment (no Zammad token in the tenant
+entry).
 
 ## Ticket search index (`occ_tickets`) — retired
 
@@ -211,8 +220,8 @@ The formatters are therefore explicit:
 
 The MCP transport itself carries no auth of its own: `tokenEnv` / `authHeader`
 carry the Zammad token outbound to Zammad, they are not an auth boundary for the
-MCP port. On the Cloudflare stack the only external ingress is the key-gated
-worker route (`x-digi-mcp-key` vs `MCP_EDGE_KEY`, fail-closed 401); the
+MCP port. In production the only external ingress is the key-gated digichat
+Worker route (`x-digi-mcp-key` vs `ZAMMAD_EDGE_KEY`, fail-closed 401); the
 container port stays unpublished. Compose deployments keep it on loopback or
 the compose network.
 

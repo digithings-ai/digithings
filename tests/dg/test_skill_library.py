@@ -48,6 +48,29 @@ FORBIDDEN_IN_DOCUMENTS = (
 )
 
 
+# A bare zammad tool name resolves to `Unknown tool`; only the prefixed form is
+# callable. `zammad_` prefixed names must not be caught by these.
+BARE_TOOL_NAMES = (
+    "list_tickets",
+    "aggregate_tickets",
+    "ticket_report",
+    "search_tickets",
+    "get_ticket",
+)
+
+
+def _bare_tool_names_in(text):
+    """Bare tool names in ``text``: not flanked by a word character.
+
+    The negative lookarounds keep ``zammad_list_tickets`` out of the hits.
+    """
+    return [
+        name
+        for name in BARE_TOOL_NAMES
+        if re.search(rf"(?<![_0-9A-Za-z]){name}(?![_0-9A-Za-z])", text)
+    ]
+
+
 def _docs():
     from digigraph.skill_library import list_skill_documents
 
@@ -162,21 +185,55 @@ def test_precedent_skill_cites_resolved_tickets():
     from digigraph.skill_library import load_skill_document
 
     body = load_skill_document("find-precedent-tickets").body
-    assert "digisearch_zammad_tickets" in body
+    assert "`zammad_search_tickets`" in body
     assert "Advise the fix first" in body
-    assert "get_ticket" in body
+    assert "`zammad_get_ticket`" in body
+    assert "digisearch_zammad_tickets" not in body
+    assert "digisearch_occ_help" not in body
+    assert _bare_tool_names_in(body) == []
 
 
 @pytest.mark.unit
-def test_topical_skill_keeps_counts_off_semantic_search():
-    """DIG-3355 (b): semantic search explores; counts come from Zammad metadata tools."""
+def test_topical_skill_keeps_counts_off_keyword_search():
+    """DIG-3355 (b): keyword search explores; counts come from Zammad metadata tools."""
     from digigraph.skill_library import load_skill_document
 
     body = " ".join(load_skill_document("summarize-tickets-by-topic").body.split())
-    assert "Semantic search (`digisearch_zammad_tickets`) is for exploration" in body
+    assert "Keyword search (`zammad_search_tickets`) is for exploration: finding" in body
     assert "Counts and precise metrics must come from the Zammad metadata" in body
-    assert "aggregate_tickets" in body
-    assert "Never report a count taken from semantic-search hits." in body
+    assert "`zammad_aggregate_tickets`" in body
+    assert "`zammad_ticket_report`" in body
+    assert "`zammad_list_tickets`" in body
+    assert "Never report a count taken from search hits." in body
+    assert "digisearch_zammad_tickets" not in body
+    assert _bare_tool_names_in(body) == []
+
+
+@pytest.mark.unit
+def test_ticket_skills_name_only_the_prefixed_tool_forms():
+    """A bare zammad name is `Unknown tool`; the three skills must use the prefix."""
+    from digigraph.skill_library import load_skill_document
+
+    # Positive control: the matcher fires on bare names, so a zero below is a
+    # pass and not a matcher that matches nothing.
+    assert _bare_tool_names_in("use `list_tickets` and `get_ticket`") == [
+        "list_tickets",
+        "get_ticket",
+    ]
+    # Positive control the other way: the prefixed forms are not bare names.
+    assert _bare_tool_names_in("call `zammad_list_tickets` then `zammad_get_ticket`") == []
+
+    for name in (
+        "find-precedent-tickets",
+        "summarize-tickets-by-topic",
+        "guide-help-docs",
+    ):
+        body = load_skill_document(name).body
+        hits = _bare_tool_names_in(body)
+        assert hits == [], f"{name} names a bare tool: {hits}"
+        assert "`zammad_search_tickets`" in body, name
+        assert "digisearch_zammad_tickets" not in body, name
+        assert "digisearch_occ_help" not in body, name
 
 
 @pytest.mark.unit
@@ -184,8 +241,11 @@ def test_help_docs_skill_carries_the_manual_map():
     from digigraph.skill_library import load_skill_document
 
     body = load_skill_document("guide-help-docs").body
+    assert "digisearch_occ_help" not in body
+    assert "digisearch_zammad_tickets" not in body
     for required in (
-        "digisearch_occ_help",
+        "`digisearch`",
+        "`zammad_search_tickets`",
         "Cloud Portal manual",
         "OCC Search manual",
         "6 Backup and Restore",

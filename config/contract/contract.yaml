@@ -1920,13 +1920,6 @@ bindings:
   instance_type: standard-2
   source: apps/digithings-stack-cloudflare/wrangler.toml
 - worker: digithings-stack
-  type: container
-  class_name: DigiChatContainer
-  image: ../../Dockerfile.digichat-cloudflare
-  max_instances: 5
-  instance_type: standard-2
-  source: apps/digithings-stack-cloudflare/wrangler.toml
-- worker: digithings-stack
   type: durable_object
   name: STACK
   class_name: DigiStackContainer
@@ -1935,11 +1928,6 @@ bindings:
   type: durable_object
   name: MCP_STACK
   class_name: DigiQuantMcpContainer
-  source: apps/digithings-stack-cloudflare/wrangler.toml
-- worker: digithings-stack
-  type: durable_object
-  name: DIGICHAT
-  class_name: DigiChatContainer
   source: apps/digithings-stack-cloudflare/wrangler.toml
 - worker: digithings-stack
   type: r2_bucket

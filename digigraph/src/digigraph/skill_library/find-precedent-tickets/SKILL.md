@@ -12,12 +12,13 @@ this came up".
 
 ## Where to look
 
-Search past tickets with semantic search (`digisearch_zammad_tickets`). Use it
+Search past tickets with keyword search (`zammad_search_tickets`). Use it
 to find similar cases and how they were resolved. It is not a count and it is
 not the live list. Read the closest matches before you advise a fix, and cite
 the ticket numbers that search returned. For the status, the articles, or the
-owner of one of those tickets, use the Zammad metadata tools (`get_ticket`,
-and `search_tickets` when you already have a number or a field filter).
+owner of one of those tickets, use the Zammad metadata tools (`zammad_get_ticket`
+for one ticket, and `zammad_search_tickets` when you already have a number or a
+field filter).
 
 ## Order of work
 

@@ -8,6 +8,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const publicPort = Number(process.env.PORT ?? "3000");
 const upstreamPort = Number(process.env.DIGICHAT_NEXT_INTERNAL_PORT ?? "3001");
 const upstreamHost = "127.0.0.1";
+// Read-only OCC helpdesk MCP (scripts/zammad_mcp): a second loopback listener
+// inside this image, reached only through the public listener below.
+const zammadPort = Number(process.env.ZAMMAD_MCP_PORT ?? "8770");
+const zammadPrefix = "/api/mcp/zammad";
+// Container/repo root: this script lives at <root>/apps/digichat/scripts/, and
+// `python3 -m scripts.zammad_mcp.server` needs the root on its path.
+const appRoot = fileURLToPath(new URL("../../..", import.meta.url));
+// Cap for the zammad-mcp restart backoff, and the uptime below which a run
+// counts as a crash rather than an ordinary exit.
+const zammadRestartCapMs = 30_000;
 const hopByHopHeaders = [
   "connection",
   "keep-alive",
@@ -99,6 +109,43 @@ function waitForNext() {
   });
 }
 
+/**
+ * Start the in-image zammad-mcp only when a token is configured — the digichat
+ * image must boot without one. Restarts use a bounded exponential backoff so a
+ * crash loop stays quiet instead of storming. stdio is inherited so the MCP
+ * server's own logs land in the container log.
+ */
+function startZammadMcp() {
+  if (!process.env.ZAMMAD_API_TOKEN?.trim()) return;
+  let failures = 0;
+  const launch = () => {
+    const startedAt = Date.now();
+    console.log(
+      `[zammad-mcp] starting: python3 -m scripts.zammad_mcp.server --port ${zammadPort}`,
+    );
+    const child = spawn(
+      "python3",
+      ["-m", "scripts.zammad_mcp.server", "--port", String(zammadPort)],
+      {
+        cwd: appRoot,
+        env: { ...process.env, ZAMMAD_MCP_HOST: "0.0.0.0" },
+        stdio: "inherit",
+      },
+    );
+    child.on("exit", (code, signal) => {
+      // A run that stayed up long enough is not a crash loop: reset the backoff.
+      if (Date.now() - startedAt >= zammadRestartCapMs) failures = 0;
+      const delay = Math.min(zammadRestartCapMs, 1_000 * 2 ** Math.min(failures, 5));
+      failures += 1;
+      console.log(
+        `[zammad-mcp] exited code=${code ?? "null"} signal=${signal ?? "null"}; restarting in ${delay}ms`,
+      );
+      setTimeout(launch, delay);
+    });
+  };
+  launch();
+}
+
 function start() {
   const bakedVersion = resolveDigichatVersion();
   if (bakedVersion) process.env.DIGICHAT_VERSION = bakedVersion;
@@ -113,17 +160,21 @@ function start() {
   });
 
   next.on("exit", (code) => process.exit(code ?? 1));
+  startZammadMcp();
   if (!capturePeer) return;
 
   const server = http.createServer((req, res) => {
     const peerIp = req.socket.remoteAddress ?? "";
+    // /api/mcp/zammad* is served by the in-image zammad-mcp, not Next: keep the
+    // method/headers/body and rewrite the path to the MCP endpoint.
+    const isZammadMcp = (req.url ?? "").startsWith(zammadPrefix);
     const upstream = http.request(
       {
         headers: forwardHeaders(req.headers, peerIp),
         host: upstreamHost,
         method: req.method,
-        path: req.url,
-        port: upstreamPort,
+        path: isZammadMcp ? "/mcp" : req.url,
+        port: isZammadMcp ? zammadPort : upstreamPort,
       },
       (upstreamResponse) => {
         res.writeHead(upstreamResponse.statusCode ?? 502, withoutHopByHopHeaders(upstreamResponse.headers));
