@@ -228,6 +228,7 @@ HTTP endpoint.
 | `hosts` | Embed-parent hostnames, non-empty list |
 | `services` | Hosted-service scopes (`digisearch-corpus`, `hosted-web-search`); omitted entirely when not passed — absent means entitled, not unentitled |
 | `kind` | `digichat-license` (discriminator on top of `aud`) |
+| `terms_version` | Terms version the licence is minted against (`--terms-version`); omitted entirely when not supplied or blank — absent means no versioned Terms document existed at mint |
 | `iat` / `exp` | Now / now + term (`term_days * 86400`; default 90d = 7776000s, max 180d) |
 | `scope` | `" ".join(services)` when services present, else omitted |
 
@@ -273,8 +274,11 @@ Composite indexes: `(api_key_id, exp)` for key revoke, `(subject, exp)` for BFF 
 
 ### License registry (`digikey_licenses` table)
 
-Allowlist of issued customer licenses. `init_db()` picks the table up via
-`create_all` on next startup — no migration module, no backfill.
+Allowlist of issued customer licenses. Fresh installs get the table from
+`create_all`; a database whose `digikey_licenses` predates DIG-4290 gets the
+nullable `terms_version` column added in place by
+`digikey.db_migrate.upgrade_licenses_table()` (called from `init_db()` before
+`create_all`). No backfill: pre-existing rows read `NULL`, the honest record.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -286,6 +290,7 @@ Allowlist of issued customer licenses. `init_db()` picks the table up via
 | `expires_at` | `INT` NOT NULL | Unix `exp`; allowlist reads report expired without parsing the JWT |
 | `revoked_at` | `TIMESTAMPTZ` nullable | NULL = live; set = revoked |
 | `label` | `VARCHAR(256)` nullable | Owner note, never in the JWT |
+| `terms_version` | `VARCHAR(64)` nullable | Terms version minted against; NULL = minted before a versioned Terms document existed (DIG-4290). Extension point only — no per-clause approval capture; "approved the terms as a whole" is not "approved the liability cap" |
 
 Allowlist read contract (normative for the heartbeat slice): `valid` = row
 exists, `revoked_at IS NULL`, `expires_at > now`; `expired` = live row with
