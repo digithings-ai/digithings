@@ -58,6 +58,11 @@ class TenantCorpusOverride(BaseModel):
     research_system_prompt: str | None = Field(
         default=None, description="Optional research system prompt override"
     )
+    lock_session_controls: bool = Field(
+        default=False,
+        description="Hide model/MCP/tool session controls (session_set_model, "
+        "session_upsert_mcp, session_remove_mcp, session_toggle_tool) from this tenant",
+    )
 
 
 def _normalize_prefix(raw: str) -> str:
@@ -97,11 +102,13 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
         idx = value.get("digisearchIndex") or value.get("digisearch_index")
         prefix = value.get("vaultPathPrefix") or value.get("vault_path_prefix")
         prompt = value.get("researchSystemPrompt") or value.get("research_system_prompt")
+        lock = value.get("lockSessionControls", value.get("lock_session_controls", False))
         try:
             out[normalized_slug] = TenantCorpusOverride(
                 digisearch_index=str(idx).strip() if idx else None,
                 vault_path_prefix=_normalize_prefix(str(prefix)) if prefix else None,
                 research_system_prompt=str(prompt).strip() if prompt else None,
+                lock_session_controls=lock is True,
             )
         except Exception as exc:
             logger.warning("%s[%s]: %s", _ENV_VAR, normalized_slug, exc)
@@ -197,6 +204,7 @@ def resolve_corpus_override(
             digisearch_index=index,
             vault_path_prefix=mapped.vault_path_prefix,
             research_system_prompt=mapped.research_system_prompt,
+            lock_session_controls=mapped.lock_session_controls,
         )
 
     # Single-tenant (map unset): headers may select corpus.
