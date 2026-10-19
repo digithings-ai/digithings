@@ -257,6 +257,7 @@ jobs:
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
               - 'apps/twelvex-runner/**'
+              - 'apps/corpus-index/**'
               - 'apps/**/wrangler.toml'
               - 'package.json'
               - 'package-lock.json'
@@ -670,6 +671,7 @@ jobs:
           - digichat-cloudflare
           - digithings-stack-cloudflare
           - twelvex-runner
+          - corpus-index
     steps:
       - uses: actions/checkout@v4
 

@@ -65,6 +65,7 @@ MAIN_RE = re.compile(r"^\s*main\s*=\s*\"([^\"]+)\"\s*$")
 WORKERS_DEV_RE = re.compile(r"^\s*workers_dev\s*=\s*(true|false)\s*$")
 NAME_RE = re.compile(r"^\s*name\s*=\s*\"([^\"]+)\"\s*$")
 NEW_SQLITE_RE = re.compile(r"^\s*new_sqlite_classes\s*=\s*\[")
+DELETED_CLASSES_RE = re.compile(r"^\s*deleted_classes\s*=\s*\[([^\]]*)\]", re.MULTILINE)
 
 
 class Worker:
@@ -275,7 +276,15 @@ def render_dev_toml(
 
     body = "".join(kept)
     if "new_sqlite_classes" in body:
-        body = _prune_sqlite_list(body, container_classes)
+        # A class a later migration deletes (a folded container) is not exported
+        # by the entry, so its create step must go too. The delete-only tag then
+        # names no new class and is dropped below with the rest.
+        deleted = [
+            name
+            for match in DELETED_CLASSES_RE.finditer(source_text)
+            for name in re.findall(r'"([^"]+)"', match.group(1))
+        ]
+        body = _prune_sqlite_list(body, [*container_classes, *deleted])
         # A migration tag that no longer names any class is dead weight; drop it.
         pruned_lines = body.splitlines(keepends=True)
         pruned: List[str] = []

@@ -419,7 +419,9 @@
         "DT_TARGET": "var",
         "DT_VARIANT": "var",
         "GITHUB_OVERRIDE_JOBS": "var",
-        "RUNNER": "service"
+        "RUNNER": "service",
+        "START_COUNTER": "durable_object_namespace",
+        "TWELVEX_RUNNER": "service"
       },
       "apps/digithings-stack-cloudflare/wrangler.toml": {
         "CHROMA_PATH": "var",
@@ -451,7 +453,8 @@
         "MCP_STACK": "durable_object_namespace",
         "OPENAI_API_BASE": "var",
         "STACK": "durable_object_namespace",
-        "SUPABASE_URL": "var"
+        "SUPABASE_URL": "var",
+        "TENANT_CONFIG": "kv_namespace"
       },
       "apps/digithings-web/wrangler.toml": {},
       "apps/digitrace-langfuse/wrangler.toml": {
@@ -468,6 +471,11 @@
         "LANGFUSE_WORKER": "durable_object_namespace",
         "LangfuseWebContainer": "container",
         "LangfuseWorkerContainer": "container"
+      },
+      "apps/twelvex-runner/wrangler.toml": {
+        "DRY_RUN": "var",
+        "TWELVEX_CONTAINER": "durable_object_namespace",
+        "TwelveXRunnerContainer": "container"
       }
     }
   }

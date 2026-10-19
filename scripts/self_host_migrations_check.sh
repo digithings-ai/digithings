@@ -92,8 +92,10 @@ fi
 # D-Q6′ layering (DIG-3694): engine/ applies first in filename order, then
 # prod/ in filename order. Entries carry the dir prefix (engine/001_...sql)
 # so the apply loop below needs no change beyond `-f "$migrations_dir/$m"`.
+# A missing layer is not an error here (`true` keeps pipefail from exiting
+# silently under set -e); an empty chain is, via the guard just below.
 # shellcheck disable=SC2012
-chain="$( { ls -1 "$migrations_dir"/engine/*.sql 2>/dev/null; ls -1 "$migrations_dir"/prod/*.sql 2>/dev/null; } | sed "s|^$migrations_dir/||" | LC_ALL=C sort -t/ -k1,1 -k2,2)"
+chain="$( { ls -1 "$migrations_dir"/engine/*.sql 2>/dev/null; ls -1 "$migrations_dir"/prod/*.sql 2>/dev/null; true; } | sed "s|^$migrations_dir/||" | LC_ALL=C sort -t/ -k1,1 -k2,2)"
 [ -n "$chain" ] || fail "no .sql files in $migrations_dir/engine or $migrations_dir/prod"
 count="$(printf '%s\n' "$chain" | wc -l | tr -d ' ')"
 names="$(printf '%s\n' "$chain" | sed 's|^[^/]*/||')"
@@ -110,7 +112,7 @@ dupes="$(printf '%s\n' "$names" | sed 's/_.*//' | LC_ALL=C sort | uniq -d || tru
 # Lexical order must equal numeric order within each layer, or "sort by name"
 # is not "apply in order" and the whole check would be a fiction.
 for layer in engine prod; do
-  layer_names="$(printf '%s\n' "$chain" | grep "^$layer/" | sed "s|^$layer/||")"
+  layer_names="$(printf '%s\n' "$chain" | { grep "^$layer/" || true; } | sed "s|^$layer/||")"
   if ! diff <(printf '%s\n' "$layer_names") \
             <(printf '%s\n' "$layer_names" | LC_ALL=C sort -t_ -k1,1n) >/dev/null; then
     fail "lexical and numeric order differ in $layer/; apply order is not filename order"

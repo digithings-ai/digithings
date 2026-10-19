@@ -233,6 +233,7 @@ def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
         "apps/dashboard-api/wrangler.toml",
         "apps/digithings-cron/wrangler.toml",
         "apps/digiquant-runner/wrangler.toml",
+        "apps/twelvex-runner/wrangler.toml",
     )
     wrangler_cfg_args = tuple(tok for cfg in wrangler_session for tok in ("-c", cfg))
     wrangler = _tool(

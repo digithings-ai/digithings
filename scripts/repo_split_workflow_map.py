@@ -46,7 +46,6 @@ ROWS: tuple[Row, ...] = (
         ".github/workflows/deploy-digiquant-runner.yml",
         "local-ci",
         anchor="scripts/deploy/runner.sh",
-        anchor_lands_later=True,
         note="Signed-tag Worker job (DIG-3697). Live deploy stays disarmed there.",
     ),
     Row(
@@ -196,7 +195,6 @@ ROWS: tuple[Row, ...] = (
         ".github/workflows/deploy-digithings-cron.yml",
         "local-ci",
         anchor="scripts/deploy/cron.sh",
-        anchor_lands_later=True,
         note="Signed-tag Worker job (DIG-3697). R5 rev 5 cron deploy.",
     ),
     Row(

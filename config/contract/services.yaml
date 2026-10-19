@@ -193,8 +193,8 @@ workers:
   - name: digithings-cron
     file: apps/digithings-cron/wrangler.toml
     workers_dev: true
-    services_binding: [RUNNER -> digiquant-runner]
-    durable_objects: [BACKFILL_LEDGER]
+    services_binding: [RUNNER -> digiquant-runner, TWELVEX_RUNNER -> twelvex-runner]
+    durable_objects: [BACKFILL_LEDGER, START_COUNTER]
     contract_vars: true
   - name: digiquant-runner
     file: apps/digiquant-runner/wrangler.toml
@@ -223,3 +223,11 @@ workers:
     note: Daily corpus index. Job URLs and index names live in KV, not in this
       file. Registry entry is the build surface only. No production deploy
       workflow is added here.
+  - name: twelvex-runner
+    file: apps/twelvex-runner/wrangler.toml
+    containers: [TwelveXRunnerContainer]
+    durable_objects: [TWELVEX_CONTAINER]
+    contract_vars: false # [vars] is DRY_RUN only; container-only worker, no public hostname.
+    note: twelve-x ingest + heartbeat container, reached only through
+      digithings-cron's TWELVEX_RUNNER service binding. Not deployed until the
+      DevOps Lead checks it off.

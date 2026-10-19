@@ -15,12 +15,12 @@ def _workflow() -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def test_workflow_has_weekly_schedule_and_dispatch() -> None:
+def test_workflow_is_dispatch_only() -> None:
+    """The weekly clock was dropped in DIG-4464: develop carries no GHA `schedule:`."""
     wf = _workflow()
     triggers = wf[True]  # PyYAML parses `on:` as boolean True
     assert "workflow_dispatch" in triggers
-    schedules = triggers["schedule"]
-    assert any("cron" in entry for entry in schedules)
+    assert "schedule" not in triggers
 
 
 def test_workflow_runs_refresh_script_offline_safe() -> None:

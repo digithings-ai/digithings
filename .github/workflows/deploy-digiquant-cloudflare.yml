@@ -14,6 +14,7 @@ on:
       - "apps/dashboard/**"
       - "packages/design/**"
       - "packages/surface-config/**"
+      - "packages/hero-banner/**"
       - "scripts/build-digiquant.sh"
       # The build script's callees. Watching the caller alone leaves the gap this
       # check exists to close, and the two files below fail in different places.
@@ -123,7 +124,12 @@ on:
       # digithings-stack-cloudflare is an install-input workspace (CF Profile A
       # Containers Worker). Pages does not build it; name the manifest so it is
       # not an orphan under tests/scripts/test_deploy_build_inputs.py.
+      # apps/digiquant-app and packages/contract are install-input workspaces for
+      # the same reason: the root `npm install` resolves them, this site does not
+      # build them.
+      - "apps/digiquant-app/package.json"
       - "apps/digithings-stack-cloudflare/package.json"
+      - "packages/contract/package.json"
       - "apps/reference/package.json"
   workflow_dispatch:
 

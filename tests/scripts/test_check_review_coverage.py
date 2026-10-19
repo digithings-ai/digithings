@@ -644,7 +644,7 @@ def test_the_baseline_is_a_real_commit_and_pinned() -> None:
     assert len(crc.BASELINE_SHA) >= 7
 
 
-def test_the_baseline_is_actually_an_ancestor_of_both_branch_tips() -> None:
+def test_the_baseline_is_actually_an_ancestor_of_develop() -> None:
     """A baseline that isn't on develop's own history skips nothing there.
 
     Caught a real mistake with this: an earlier attempt to advance
@@ -652,6 +652,11 @@ def test_the_baseline_is_actually_an_ancestor_of_both_branch_tips() -> None:
     origin/main but NOT of origin/develop, making the move a no-op for the
     develop -> main direction this gate actually checks. Pin the property
     directly instead of trusting a comment to describe it correctly.
+
+    Only develop is checked. Main now moves by release-branch merges (#5507),
+    so a baseline cut on develop after the release branch (b17877ac) is not on
+    main -- and need not be: the gate walks main..develop and exempts only the
+    baseline's ancestors inside that range, none of which are on main.
 
     Skips (rather than fails) when a ref can't be resolved at all -- e.g. a
     shallow or partial clone that never fetched one of these branches -- since
@@ -663,7 +668,7 @@ def test_the_baseline_is_actually_an_ancestor_of_both_branch_tips() -> None:
     A full clone with a bad pin still fails: the skip is gated on
     ``git rev-parse --is-shallow-repository``.
     """
-    for ref in ("origin/main", "origin/develop"):
+    for ref in ("origin/develop",):
         resolvable = subprocess.run(
             ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],
             cwd=crc.REPO_ROOT,

@@ -47,7 +47,7 @@ JOBS_SOURCE = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts"
 # because the house parity mirror in test_prices_cron_dst.py names them, and an
 # unused entry costs nothing: the guard fails on a builder present here and
 # absent from this tuple, never on the reverse.
-BUILDERS = ("wd", "rd", "cj", "pj", "wj", "tw")
+BUILDERS = ("wd", "rd", "cj", "pj", "wj", "tw", "tx")
 
 # workflow file -> job id(s) in jobs.ts that must carry its clock, enabled.
 MIGRATED_CLOCKS: dict[str, tuple[str, ...]] = {
@@ -110,13 +110,16 @@ def _job_rows() -> tuple[list[dict[str, object]], set[str], int]:
         targets += 1
         names.add(name)
         strings = re.findall(r'"([^"]*)"', args)
-        if name not in BUILDERS or len(strings) < 3 or not strings[2].endswith(".yml"):
+        # tx() carries a route string before its workflow, so take the first
+        # .yml after the cron rather than a fixed position.
+        workflow = next((s for s in strings[2:] if s.endswith(".yml")), None)
+        if name not in BUILDERS or workflow is None:
             continue
         rows.append(
             {
                 "id": strings[0],
                 "cron": strings[1],
-                "workflow": strings[2],
+                "workflow": workflow,
                 "enabled": "enabled: false" not in args,
             }
         )

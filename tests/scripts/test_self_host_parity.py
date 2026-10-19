@@ -399,9 +399,10 @@ def _run_runner(args, env_extra=None):
 def _expected_chain(migrations_dir=MIGRATIONS_DIR):
     """The chain the runner is expected to plan, derived from the tree.
 
-    This mirrors the runner's own ``ls -1 "$migrations_dir"/*.sql``: top level
-    only, LC_ALL=C order. ``cutover/`` is a subdirectory, so it is absent from
-    this list -- that is the staged-not-applied exclusion, not a second list.
+    This mirrors the runner's layered chain (DIG-3694): ``engine/*.sql`` then
+    ``prod/*.sql``, each LC_ALL=C order, entries carrying their layer prefix.
+    ``cutover/`` is neither layer, so it is absent from this list -- that is the
+    staged-not-applied exclusion, not a second list.
 
     The count is derived rather than written down because it is a census, not a
     ratchet: a hardcoded number turns every future migration into a red lane for
@@ -409,7 +410,11 @@ def _expected_chain(migrations_dir=MIGRATIONS_DIR):
     endpoints are asserted too, so the plan must name the real first and last
     file and cannot satisfy this by counting a different set.
     """
-    return sorted(p.name for p in migrations_dir.glob("*.sql"))
+    return [
+        f"{layer}/{p.name}"
+        for layer in ("engine", "prod")
+        for p in sorted(migrations_dir.glob(f"{layer}/*.sql"))
+    ]
 
 
 def _plan_chain_line(stdout):
@@ -447,18 +452,20 @@ def test_runner_plan_count_follows_the_migrations_directory(tmp_path):
     """The control for the derived count above: same assertion, a different
     directory, a different number. Without this the census could be satisfying
     the assertion by coincidence rather than by tracking the tree."""
+    (tmp_path / "engine").mkdir()
     names = ["001_first.sql", "002_second.sql", "003_third.sql"]
     for name in names:
-        (tmp_path / name).write_text("select 1;\n")
+        (tmp_path / "engine" / name).write_text("select 1;\n")
     proc = _run_runner(["--plan"], {"PARITY_MIGRATIONS_DIR": str(tmp_path)})
     assert proc.returncode == 0, proc.stderr
     assert _plan_chain_line(proc.stdout) is not None, proc.stdout
-    assert "3 migrations, 001_first.sql .. 003_third.sql" in proc.stdout, proc.stdout
+    assert "3 migrations, engine/001_first.sql .. engine/003_third.sql" in proc.stdout, proc.stdout
 
 
 def test_runner_plan_rejects_an_unparsable_migration_name(tmp_path, monkeypatch):
-    (tmp_path / "001_ok.sql").write_text("select 1;")
-    (tmp_path / "not-a-number.sql").write_text("select 1;")
+    (tmp_path / "engine").mkdir()
+    (tmp_path / "engine" / "001_ok.sql").write_text("select 1;")
+    (tmp_path / "engine" / "not-a-number.sql").write_text("select 1;")
     proc = _run_runner(["--plan"], {"PARITY_MIGRATIONS_DIR": str(tmp_path)})
     assert proc.returncode == 1
     assert "naming guard" in proc.stderr
@@ -502,10 +509,10 @@ def _stub_env(tmp_path, with_bad_file):
     """A stubbed runner environment: no server, no real database, no real
     migrations. Returns (env, json_path)."""
     mig = tmp_path / "migrations"
-    mig.mkdir(exist_ok=True)
-    (mig / "001_ok.sql").write_text("select 1;\n")
+    (mig / "engine").mkdir(parents=True, exist_ok=True)
+    (mig / "engine" / "001_ok.sql").write_text("select 1;\n")
     if with_bad_file:
-        (mig / "002_bad.sql").write_text("select * from public.nope;\n")
+        (mig / "engine" / "002_bad.sql").write_text("select * from public.nope;\n")
     stub = tmp_path / "psql"
     stub.write_text(_STUB_PSQL)
     stub.chmod(0o755)

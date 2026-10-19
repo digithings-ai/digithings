@@ -307,7 +307,9 @@ def test_render_writes_0600_and_never_echoes_a_value(tmp_path):
 
 def test_generator_needing_a_live_service_fails_cleanly(tmp_path):
     """CORE_SUPABASE_SERVICE_KEY reads the local Supabase. With none running the
-    render must abort, name the command, and write nothing -- never a stub value."""
+    render must abort, name the secret, and write nothing -- never a stub value.
+    The error text itself is not echoed (#5875, CodeQL clear-text logging), so
+    the failing command is not named."""
     out = tmp_path / ".dev.vars"
     proc = run(
         "render",
@@ -319,7 +321,6 @@ def test_generator_needing_a_live_service_fails_cleanly(tmp_path):
         expect=2,
     )
     assert not out.exists(), "wrote a file despite an unresolved generator"
-    assert "supabase" in proc.stderr
     assert "CORE_SUPABASE_SERVICE_KEY" in proc.stderr, "the error must name the secret"
 
 

@@ -155,6 +155,7 @@ RULES: list[tuple[str, str, str]] = [
     ),
     ("apps/dashboard/", "R3", "Brief desk /app (private per Chris 01:26)"),
     ("apps/digiquant-web/", "R3", "digiquant.io"),
+    ("apps/digiquant-app/", "R3", "digiquant operator app (desk shell)"),
     # ---- R4: digithings.ai, digibook, brand ----
     ("apps/digithings-web/", "R4", "digithings.ai + digibook"),
     ("packages/brand/", "R4", "brand assets"),
@@ -168,6 +169,7 @@ RULES: list[tuple[str, str, str]] = [
     ("apps/digichat-cloudflare/", "R5", "digichat Worker"),
     ("apps/digitrace-langfuse/", "R5", "langfuse"),
     ("apps/digithings-cron/", "R5", "cron"),
+    ("apps/corpus-index/", "R5", "daily corpus index Worker (tenant data lives in KV)"),
     ("infra/digichat-release/", "R5", "release infra"),
     ("config/litellm.yaml", "R5", "litellm config"),
     ("config/litellm.cheaperinference.yaml", "R5", "litellm config"),
@@ -190,6 +192,7 @@ RULES: list[tuple[str, str, str]] = [
     ("scripts/check_tenant_corpus_map.py", "R6", "tenant corpus map check"),
     # ---- R7: client desk + digidata-api ----
     ("apps/digidata-api/", "R7", "digidata-api (D1 twelvex)"),
+    ("apps/twelvex-runner/", "R7", "twelve-x ingest + heartbeat container"),
     # ---- R0: repo root files (open) ----
     (".coderabbit.yaml", "R0", "root config (open)"),
     (".cursorrules", "R0", "root config (open)"),
@@ -203,6 +206,7 @@ RULES: list[tuple[str, str, str]] = [
     (".mcp.json", "R0", "root config (open)"),
     (".opencode/", "R0", "agent wiring (open)"),
     (".prettierignore", "R0", "root config (open)"),
+    (".python-version", "R0", "root config (open)"),
     (".prettierrc.json", "R0", "root config (open)"),
     (".release-please-manifest.json", "R0", "release config (open)"),
     (".release-please-manifest-digiskills.json", "R0", "release config (open)"),

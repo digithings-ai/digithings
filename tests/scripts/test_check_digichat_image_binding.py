@@ -295,9 +295,12 @@ def test_dockerfile_revision_label_is_an_active_instruction(mod: Any) -> None:
     rather than deleting it, images keep building, and every one of them ships
     with no annotation -- the exact silent gap the checker exists to close.
     """
+    # Join `\` continuations first: the revision key sits on a continuation
+    # line of a multi-key LABEL, so the instruction is the unit, not the line.
+    instructions = _DOCKERFILE.read_text().replace("\\\n", " ").splitlines()
     active = [
         line
-        for line in _DOCKERFILE.read_text().splitlines()
+        for line in instructions
         if "org.opencontainers.image.revision" in line and not line.lstrip().startswith("#")
     ]
     assert active, "the revision LABEL is commented out or absent"
