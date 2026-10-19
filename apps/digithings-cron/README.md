@@ -22,6 +22,7 @@ workflow_dispatch and logs `github_override` at error.
 - src/et-open.ts — season-specific America/New_York 09:30 gate
 - src/backfill.ts — pure plan builder for POST /backfill (allowlist, date validation)
 - src/backfill-do.ts — BackfillLedger Durable Object, per-date idempotence
+- src/counter-do.ts — StartCounter Durable Object, per-slot cron-tick claims
 - src/index.ts — scheduled + GET /healthz + optional POST /kick, POST /backfill, GET /runs/:id
 
 ## Env
@@ -33,6 +34,7 @@ workflow_dispatch and logs `github_override` at error.
 - Var GITHUB_OVERRIDE_JOBS = "" (comma-separated job ids that stay on GitHub)
 - Var BACKFILL_ENABLED = "0" by default; "1" enables POST /backfill (404 `backfill_disabled` otherwise)
 - DO binding BACKFILL_LEDGER → class BackfillLedger (SQLite-backed; needs a migration tag)
+- DO binding START_COUNTER → class StartCounter (SQLite-backed; migration tag v2). Claims one cron slot per job so a duplicate delivery cannot dispatch twice — see `## One tick, one dispatch`.
 
 Set secrets from this directory with wrangler secret put (never echo values).
 
@@ -81,6 +83,40 @@ value must be a string.
 Every other failure keeps its previous shape. `dispatchGithub` throws, the
 error leaves the route, and the response is the Worker runtime's 500.
 
+
+## One tick, one dispatch (DIG-4384)
+
+Cloudflare delivers a Cron Trigger **at least once**. On 14-17 Oct 2026 every
+tick of this Worker arrived twice, 7-29s apart, and each copy carried its own
+`scheduledTime` (the `52 * * * MON-FRI` slot arrived as `00:52:48` and
+`00:52:55`). Both copies dispatched, so every affected workflow started twice.
+
+`scheduled()` now claims each job's slot in the `START_COUNTER` Durable Object
+before dispatching. The claim is keyed by cron plus job id and by the UTC
+minute, never by the exact delivery time, which is the only unit the two copies
+share. A cron expression fires at most once per minute, so one job owes at most
+one dispatch per slot and no legitimate start is collapsed; rows that share a
+workflow file have their own ids and their own claims. A duplicate delivery
+logs `skipped: "duplicate_tick"` and starts nothing.
+
+Two properties are deliberate:
+
+- **Fail open.** A missing `START_COUNTER` binding or an unreachable object
+  dispatches anyway (`start_counter_unbound` / `start_counter_unreachable`).
+  A duplicate run costs Actions minutes; a dropped tick costs a production
+  clock.
+- **Release on failure.** If the dispatch itself fails, nothing started
+  upstream, so the slot is released for the next delivery of the same tick to
+  retry. A claim is only ever kept for a dispatch that GitHub (or a runner)
+  accepted.
+
+Claims are kept per UTC day (`slots:<cron + job>:<day>`), and the claim
+transaction drops the previous day it wrote. A minute never recurs, so nothing
+needs to expire to avoid re-arming a duplicate, and an every-minute clock does
+not add a row a minute forever.
+
+`POST /kick` never claims: a human kicking a cron twice in a minute is not a
+duplicate delivery.
 
 ## Unique crons
 

@@ -4,7 +4,7 @@ import { StartCounter } from "./counter-do";
 
 /**
  * Fake DurableObjectState. `transaction` really serialises: callers are chained
- * so two overlapping claimKey() calls cannot both observe an absent key. Without
+ * so two overlapping claimSlot() calls cannot both observe an absent slot. Without
  * it this harness cannot distinguish an atomic claim from a get-then-put race,
  * which is the whole reason the Durable Object exists.
  */
@@ -56,22 +56,56 @@ describe("StartCounter", () => {
     expect((await c.get("twelve-x-session-catchup", "2026-09-29")).total).toBe(0);
   });
 
-  it("claims a key once and refuses it after", async () => {
+  it("claims a slot once and refuses it after", async () => {
     const c = counter();
-    expect(await c.claimKey("twelve-x-session-catchup:1788000000000")).toBe(true);
-    expect(await c.claimKey("twelve-x-session-catchup:1788000000000")).toBe(false);
+    const key = "41 6 * * *\ntoken-canary";
+    expect(await c.claimSlot(key, "2026-10-15T06:41")).toBe(true);
+    expect(await c.claimSlot(key, "2026-10-15T06:41")).toBe(false);
   });
 
-  it("releaseKey lets the key be claimed again", async () => {
+  it("hands the same row the next slot", async () => {
     const c = counter();
-    await c.claimKey("k");
-    await c.releaseKey("k");
-    expect(await c.claimKey("k")).toBe(true);
+    const key = "41 6 * * *\ntoken-canary";
+    expect(await c.claimSlot(key, "2026-10-15T06:41")).toBe(true);
+    expect(await c.claimSlot(key, "2026-10-16T06:41")).toBe(true);
   });
 
-  it("A.3 exactly one of two concurrent claims for the same key wins", async () => {
+  it("releaseSlot lets the slot be claimed again", async () => {
     const c = counter();
-    const results = await Promise.all([c.claimKey("race"), c.claimKey("race")]);
+    const key = "k";
+    await c.claimSlot(key, "2026-10-15T06:41");
+    await c.releaseSlot(key, "2026-10-15T06:41");
+    expect(await c.claimSlot(key, "2026-10-15T06:41")).toBe(true);
+  });
+
+  it("drops the previous day's slots, so an every-minute clock cannot grow forever", async () => {
+    const { state, store } = fakeState();
+    const c = new StartCounter(state, {} as Env);
+    await c.claimSlot("prices-fx-refresh", "2026-10-15T00:19");
+    const dayOne = [...store.keys()].filter((k) => k.startsWith("slots:"));
+    expect(dayOne).toHaveLength(1);
+
+    await c.claimSlot("prices-fx-refresh", "2026-10-16T00:19");
+    const dayTwo = [...store.keys()].filter((k) => k.startsWith("slots:"));
+    expect(dayTwo).toHaveLength(1);
+    expect(dayTwo[0]).toContain("2026-10-16");
+  });
+
+  it("keeps the newer day's slots when a 23:59 tick is delivered after midnight", async () => {
+    const { state } = fakeState();
+    const c = new StartCounter(state, {} as Env);
+    expect(await c.claimSlot("k", "2026-10-16T00:00")).toBe(true);
+    // Late delivery of the previous day's last slot must not forget today.
+    expect(await c.claimSlot("k", "2026-10-15T23:59")).toBe(true);
+    expect(await c.claimSlot("k", "2026-10-16T00:00")).toBe(false);
+  });
+
+  it("A.3 exactly one of two concurrent claims for the same slot wins", async () => {
+    const c = counter();
+    const results = await Promise.all([
+      c.claimSlot("race", "2026-10-15T06:41"),
+      c.claimSlot("race", "2026-10-15T06:41"),
+    ]);
     expect(results.filter(Boolean)).toHaveLength(1);
   });
 });

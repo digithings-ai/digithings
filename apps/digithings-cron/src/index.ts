@@ -15,6 +15,7 @@
  */
 import { buildPlan } from "./backfill";
 import { BackfillLedger, type RemediationState } from "./backfill-do";
+import { StartCounter } from "./counter-do";
 import { dispatch, dispatchWorkflow, type DispatchResult, UNDECLARED_INPUT } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
@@ -27,9 +28,9 @@ import { unrecognisedCronViolation } from "./trigger-contract";
  * only exists in a deployment if the entrypoint exports it as a value. A
  * type-only import satisfies tsc and satisfies nothing at deploy time:
  * `wrangler deploy` fails with "not exported in your entrypoint file", which no
- * test or typecheck in CI sees.
+ * test or typecheck in CI sees. START_COUNTER is the same contract.
  */
-export { BackfillLedger };
+export { BackfillLedger, StartCounter };
 
 export type StartedRun = {
   job_id: string;
@@ -51,6 +52,15 @@ type RunOptions = {
    * POST /kick leaves this off: a human typing a cron by hand is not drift.
    */
   alarmUnmapped?: boolean;
+  /**
+   * Claim each job's cron slot before dispatching. Only scheduled() sets this.
+   *
+   * Cloudflare delivers a Cron Trigger at least once: on 14-17 Oct 2026 every
+   * tick of this Worker arrived twice, 7-29s apart, and each copy dispatched.
+   * A second delivery of the same slot must not start a second run. /kick never
+   * claims, because a human may legitimately kick the same cron twice.
+   */
+  dedupeTick?: boolean;
 };
 
 export function houseArgs(
@@ -107,6 +117,130 @@ function startedRun(job: Job, result: DispatchResult): StartedRun {
   return run;
 }
 
+/** The one Durable Object instance every cron-tick claim goes through. */
+const START_COUNTER_NAME = "cron-ticks";
+
+/** The slice of StartCounter this Worker uses on the tick path. */
+type TickCounter = {
+  claimSlot(key: string, slot: string): Promise<boolean>;
+  releaseSlot(key: string, slot: string): Promise<void>;
+};
+
+/**
+ * The job a cron tick slot belongs to.
+ *
+ * The job id is in the key, not the workflow file: three rows dispatch
+ * market_context_ingest.yml and five share pipeline-digiquant.yml, and each of
+ * those is its own start.
+ */
+function tickKey(cron: string, job: Job): string {
+  return `${cron}\n${job.id}`;
+}
+
+/**
+ * The cron minute a tick is owed in, as `YYYY-MM-DDTHH:MM`.
+ *
+ * The two deliveries of one tick do NOT share `scheduledTime`: the 00:52 slot
+ * arrived as 00:52:48 and 00:52:55, so a claim on the exact time would claim
+ * twice and dedupe nothing. A cron expression fires at most once per minute, so
+ * one job owes at most one dispatch per (cron, minute) and no legitimate start
+ * is ever collapsed. Two rows on one workflow file still differ here, because
+ * the key carries the row.
+ */
+function tickSlot(scheduledTime: number): string {
+  return new Date(scheduledTime).toISOString().slice(0, 16);
+}
+
+function tickCounter(env: Env): TickCounter | undefined {
+  if (!env.START_COUNTER) return undefined;
+  return env.START_COUNTER.get(
+    env.START_COUNTER.idFromName(START_COUNTER_NAME),
+  ) as unknown as TickCounter;
+}
+
+/** One warning per isolate is enough for a binding that is missing entirely. */
+let warnedUnboundCounter = false;
+
+/**
+ * True when this delivery owns the slot, false when another delivery of the
+ * same tick already claimed it.
+ *
+ * Fails OPEN on every failure: a missing binding or an unreachable counter
+ * dispatches anyway. A duplicate run costs Actions minutes, a dropped tick
+ * costs a production clock, so the claim is only ever allowed to remove a
+ * duplicate, never a start.
+ */
+async function claimTick(
+  env: Env,
+  cron: string,
+  job: Job,
+  scheduledTime: number,
+): Promise<boolean> {
+  const counter = tickCounter(env);
+  if (!counter) {
+    if (!warnedUnboundCounter) {
+      warnedUnboundCounter = true;
+      console.error(JSON.stringify({ cron, job: job.id, error: "start_counter_unbound" }));
+    }
+    return true;
+  }
+  try {
+    return await counter.claimSlot(tickKey(cron, job), tickSlot(scheduledTime));
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        cron,
+        job: job.id,
+        error: "start_counter_unreachable",
+        detail: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return true;
+  }
+}
+
+/**
+ * Give the slot back after a failed dispatch, so the next delivery of the same
+ * tick can start the run. Nothing started upstream, so re-claiming cannot
+ * duplicate a run.
+ */
+async function releaseTick(
+  env: Env,
+  cron: string,
+  job: Job,
+  scheduledTime: number,
+): Promise<void> {
+  const counter = tickCounter(env);
+  if (!counter) return;
+  try {
+    await counter.releaseSlot(tickKey(cron, job), tickSlot(scheduledTime));
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        cron,
+        job: job.id,
+        error: "start_counter_release_failed",
+        detail: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
+}
+
+/**
+ * The claim, or an already-owned slot when this caller does not dedupe. /kick
+ * passes dedupeTick off: a human typing a cron by hand is not a duplicate
+ * delivery, and the same cron may be kicked twice on purpose.
+ */
+function claimTickIfAsked(
+  env: Env,
+  cron: string,
+  job: Job,
+  scheduledTime: number,
+  opts: RunOptions,
+): Promise<boolean> {
+  return opts.dedupeTick ? claimTick(env, cron, job, scheduledTime) : Promise.resolve(true);
+}
+
 async function runJobsForCron(
   cron: string,
   scheduledTime: number,
@@ -117,7 +251,7 @@ async function runJobsForCron(
   const jobs = jobsForCron(cron, { includeDisabled: opts.includeDisabled });
   const started: string[] = [];
   const skipped: string[] = [];
-  const pending: Promise<StartedRun>[] = [];
+  const pending: Promise<StartedRun | undefined>[] = [];
 
   if (jobs.length === 0) {
     const violation = unrecognisedCronViolation(cron);
@@ -165,12 +299,32 @@ async function runJobsForCron(
       args = backfillArgs(opts.args ?? {}, scheduledTime);
     }
     pending.push(
-      dispatch(env, job, cron, scheduledTime, { args, force: opts.force === true }).then((result) =>
-        startedRun(job, result),
-      ).catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(JSON.stringify({ cron, job: job.id, error: msg }));
-        throw err;
+      claimTickIfAsked(env, cron, job, scheduledTime, opts).then((owned) => {
+        if (!owned) {
+          // The tick already dispatched this job. Log instead of dispatching:
+          // one line per skipped duplicate keeps the double delivery visible
+          // without starting the workflow again.
+          console.log(
+            JSON.stringify({
+              cron,
+              repo: job.repo,
+              job: job.id,
+              skipped: "duplicate_tick",
+              scheduled_time: scheduledTime,
+            }),
+          );
+          return undefined;
+        }
+        return dispatch(env, job, cron, scheduledTime, { args, force: opts.force === true })
+          .then((result) => startedRun(job, result))
+          .catch(async (err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(JSON.stringify({ cron, job: job.id, error: msg }));
+            // Nothing started upstream, so the slot goes back for the next
+            // delivery of the same tick to try again.
+            if (opts.dedupeTick) await releaseTick(env, cron, job, scheduledTime);
+            throw err;
+          });
       }),
     );
   }
@@ -178,8 +332,12 @@ async function runJobsForCron(
     return { started, skipped, runs: [] };
   }
   if (opts.awaitDispatch) {
-    const runs = await Promise.all(pending);
-    return { started, skipped, runs };
+    const results = await Promise.all(pending);
+    return {
+      started,
+      skipped,
+      runs: results.filter((run): run is StartedRun => run !== undefined),
+    };
   }
   ctx.waitUntil(Promise.all(pending));
   return { started, skipped, runs: [] };
@@ -451,6 +609,7 @@ export default {
   ): Promise<void> {
     await runJobsForCron(controller.cron, controller.scheduledTime, env, ctx, {
       alarmUnmapped: true,
+      dedupeTick: true,
     });
   },
 
