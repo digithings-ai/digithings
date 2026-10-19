@@ -169,6 +169,15 @@ new_sqlite_classes = ["DigiQuantMcpContainer"]
 tag = "v3"
 new_sqlite_classes = ["DigiChatContainer"]
 
+# v4 deletes the class v3 created. Cloudflare refuses a deploy whose script no
+# longer exports a class an existing namespace depends on (error 10064), so the
+# namespace the split orphaned must be deleted explicitly. The class is unbound
+# and unreachable since the digichat product moved to its own Worker, so its
+# storage is dead weight rather than live conversation history.
+[[migrations]]
+tag = "v4"
+deleted_classes = ["DigiChatContainer"]
+
 # Secrets (wrangler secret put) — never commit values:
 #   DIGIKEY_BFF_TOKEN
 #   DIGIKEY_PRIVATE_KEY_PEM   # stable RS256; do not use ephemeral in prod
