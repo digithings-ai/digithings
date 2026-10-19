@@ -177,7 +177,7 @@ describe("alerts", () => {
 describe("image pin", () => {
   it("pins the same twelve-x ref in the Dockerfile", () => {
     const ref = readFileSync(path.join(root, "twelvex-ref.txt"), "utf8").trim();
-    const dockerfile = readFileSync(path.resolve(root, "../../Dockerfile.twelvex-runner"), "utf8");
+    const dockerfile = readFileSync(path.resolve(root, "../../infra/docker/Dockerfile.twelvex-runner"), "utf8");
     const toml = readFileSync(path.join(root, "wrangler.toml"), "utf8");
     expect(ref).toMatch(/^[0-9a-f]{40}$/);
     expect(dockerfile).toContain(ref);

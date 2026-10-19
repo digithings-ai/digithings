@@ -41,7 +41,7 @@ describe("twelve-x runner jobs", () => {
   });
 
   it("dispatch sends the daily row to the runner", async () => {
-    const runnerFetch = vi.fn(async () =>
+    const runnerFetch = vi.fn(async (_request: Request) =>
       Response.json({ ok: true, exit_code: 0, duration_ms: 4, alert: "none" }),
     );
     const env: Env = {
@@ -53,7 +53,7 @@ describe("twelve-x runner jobs", () => {
     if (!job) throw new Error("missing daily job");
     const result = await dispatch(env, job, job.cron);
     expect(result).toEqual({ ok: true, status: 200, dry_run: false });
-    const request = runnerFetch.mock.calls[0][0] as Request;
+    const request = runnerFetch.mock.calls[0][0];
     expect(request.url).toBe("https://twelvex-runner/run/ingest");
   });
 });
@@ -71,7 +71,7 @@ describe("dispatchTwelvex", () => {
   });
 
   it("POSTs /run/ingest with the bucket and treats exit 0 as success", async () => {
-    const runnerFetch = vi.fn(async () =>
+    const runnerFetch = vi.fn(async (_request: Request) =>
       Response.json({ ok: true, exit_code: 0, duration_ms: 40, alert: "none", log_tail: "token=supersecret" }),
     );
     const env: Env = {
@@ -82,7 +82,7 @@ describe("dispatchTwelvex", () => {
     const job = ingestJob();
     const result = await dispatchTwelvex(env, job, job.cron);
     expect(result).toEqual({ ok: true, status: 200, dry_run: false });
-    const request = runnerFetch.mock.calls[0][0] as Request;
+    const request = runnerFetch.mock.calls[0][0];
     expect(request.url).toBe("https://twelvex-runner/run/ingest");
     expect(request.headers.get("Authorization")).toBe("Bearer runner-token");
     expect(JSON.parse(await request.text())).toMatchObject({

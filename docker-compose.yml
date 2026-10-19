@@ -250,7 +250,7 @@ services:
   # via DIGISEARCH_SEARXNG_URL. ddgs remains the zero-infra fallback.
   searxng:
     # Tag pinned to the commit the production bundle builds from
-    # (Dockerfile.digithings-stack-cloudflare SEARXNG_COMMIT a1144dda…, #3239),
+    # (infra/docker/Dockerfile.digithings-stack-cloudflare SEARXNG_COMMIT a1144dda…, #3239),
     # so local search behaviour matches the container bundle. Upstream ships no
     # bare `YYYY.M.D` tag, only `YYYY.M.D-<hash>`. The digest is still not
     # enforced: see digisearch/ARCHITECTURE.md, owner decision #3871.
@@ -325,14 +325,14 @@ services:
       start_period: 10s
 
   # ─── digillm: digithings' LiteLLM proxy (DIG-1780) ───
-  # LiteLLM from the pinned PyPI wheel inside a digithings image (Dockerfile.digillm),
+  # LiteLLM from the pinned PyPI wheel inside a digithings image (infra/docker/Dockerfile.digillm),
   # never the vendor image. The `litellm` network alias and port 4000 keep every
   # existing OPENAI_API_BASE=http://litellm:4000/v1 caller working unchanged.
   digillm:
     image: ghcr.io/digithings-ai/digillm:0.1.0
     build:
       context: .
-      dockerfile: Dockerfile.digillm
+      dockerfile: infra/docker/Dockerfile.digillm
     container_name: digi-digillm
     networks:
       default:
@@ -497,7 +497,7 @@ services:
   # ─── digiquant runner (optional: run with docker compose --profile quant up) ───
   # Backs the DigiQuantRunnerContainer class in scripts/selfhost/container_shim.ts,
   # which answers 503 for that class until a compose service exists for it. The
-  # image is real today (Dockerfile.digiquant-runner: EXPOSE 8080, CMD
+  # image is real today (infra/docker/Dockerfile.digiquant-runner: EXPOSE 8080, CMD
   # `python /opt/runner/exec_job.py serve`) and serves HTTP on 8080
   # (exec_job.py `serve()` -> ThreadingHTTPServer).
   #
@@ -515,7 +515,7 @@ services:
   digiquant-runner:
     build:
       context: .
-      dockerfile: Dockerfile.digiquant-runner
+      dockerfile: infra/docker/Dockerfile.digiquant-runner
     image: digi-digiquant-runner:latest
     container_name: digi-digiquant-runner
     profiles: [quant, core, all]

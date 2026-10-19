@@ -37,7 +37,7 @@ The verdict branches pinned here, offline:
 
 Dockerfile coverage is asserted with **this repo's real names**
 (``digiquant/Dockerfile.mcp``, ``scripts/zammad_mcp/Dockerfile.mcp``,
-``Dockerfile.digithings-stack-cloudflare``, ...). The first version of this suite
+``infra/docker/Dockerfile.digithings-stack-cloudflare``, ...). The first version of this suite
 asserted only the bare ``Dockerfile`` name, which this repo does not use, so all of
 it passed while 12 of the 20 tracked Dockerfiles -- every root deploy image among
 them -- sat outside the guard. A synthetic ``apps/a/b/Dockerfile`` fixture cannot
@@ -174,7 +174,7 @@ def test_nested_wrangler_and_two_level_dockerfile(guard: Any) -> None:
 # ── Dockerfiles named the way this repo actually names them ───────────────────
 #
 # The review that blocked the first version of this PR appended an enabling
-# ``ENV`` to Dockerfile.digithings-stack-cloudflare and the guard passed: its
+# ``ENV`` to infra/docker/Dockerfile.digithings-stack-cloudflare and the guard passed: its
 # patterns were ``*/Dockerfile`` and ``*/*/Dockerfile``, a literal filename match
 # against a repo that names 12 of its 20 Dockerfiles ``Dockerfile.<target>``.
 # Every assertion below uses a path from ``git ls-files``, so the same class of
@@ -186,11 +186,11 @@ def test_nested_wrangler_and_two_level_dockerfile(guard: Any) -> None:
     [
         # The five root deploy images, which a `*/Dockerfile` glob cannot reach at
         # all: with no directory component there is no `/` to anchor the glob on.
-        "Dockerfile.digichat-cloudflare",
-        "Dockerfile.digiquant-runner",
-        "Dockerfile.digithings-stack-cloudflare",
-        "Dockerfile.digitrace-langfuse-web",
-        "Dockerfile.digitrace-langfuse-worker",
+        "infra/docker/Dockerfile.digichat-cloudflare",
+        "infra/docker/Dockerfile.digiquant-runner",
+        "infra/docker/Dockerfile.digithings-stack-cloudflare",
+        "infra/docker/Dockerfile.digitrace-langfuse-web",
+        "infra/docker/Dockerfile.digitrace-langfuse-worker",
         # Nested targets.
         "digiquant/Dockerfile.mcp",
         "digiquant/Dockerfile.sandbox",
@@ -517,11 +517,11 @@ def test_coverage_gaps_would_have_caught_the_bare_dockerfile_patterns(
     monkeypatch.setattr(guard, "NEVER_LOCAL_BASENAMES", ())
     gaps = {gap.path for gap in guard.coverage_gaps(guard.tracked_files(REPO_ROOT))}
     missed = {
-        "Dockerfile.digichat-cloudflare",
-        "Dockerfile.digiquant-runner",
-        "Dockerfile.digithings-stack-cloudflare",
-        "Dockerfile.digitrace-langfuse-web",
-        "Dockerfile.digitrace-langfuse-worker",
+        "infra/docker/Dockerfile.digichat-cloudflare",
+        "infra/docker/Dockerfile.digiquant-runner",
+        "infra/docker/Dockerfile.digithings-stack-cloudflare",
+        "infra/docker/Dockerfile.digitrace-langfuse-web",
+        "infra/docker/Dockerfile.digitrace-langfuse-worker",
         "digiquant/Dockerfile.mcp",
         "digiquant/Dockerfile.sandbox",
         "digivault/Dockerfile.mcp",
@@ -800,7 +800,7 @@ REAL_COOKIE = "gl-session=Kx9pQm2vT7wR4yU8nB1sD5gF0hJ3lZ6aCeJ"
     "path",
     [
         "apps/digichat-cloudflare/wrangler.toml",
-        "Dockerfile.digithings-stack-cloudflare",
+        "infra/docker/Dockerfile.digithings-stack-cloudflare",
         "docker-compose.yml",
         ".github/workflows/deploy-digithings-cloudflare.yml",
         ".env",
@@ -897,7 +897,7 @@ def test_a_shell_passthrough_is_not_a_secret_reference(guard: Any, line: str) ->
     reason is what a reader acts on.
     """
     assert guard.is_secret_reference(line.split("=", 1)[1].strip()) is False, line
-    findings = _scan(guard, "Dockerfile.digithings-stack-cloudflare", line + "\n")
+    findings = _scan(guard, "infra/docker/Dockerfile.digithings-stack-cloudflare", line + "\n")
     kinds = [f.kind for f in findings]
     assert kinds == ["advertised_without_secret"], f"{line!r} must fail; got {kinds}"
     assert guard.is_blocking(findings[0])
@@ -937,7 +937,7 @@ def test_a_deployed_plaintext_cookie_slot_fails_even_when_empty(guard: Any, line
     "path",
     [
         "apps/digichat-cloudflare/wrangler.toml",
-        "Dockerfile.digithings-stack-cloudflare",
+        "infra/docker/Dockerfile.digithings-stack-cloudflare",
         "docker-compose.yml",
         ".github/workflows/deploy-digithings-cloudflare.yml",
         ".env",
