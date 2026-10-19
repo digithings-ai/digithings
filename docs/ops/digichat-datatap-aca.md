@@ -339,8 +339,9 @@ The ACR is the ledger of record for what is deployed. Digests below are verified
 |---|---|---|---|
 | `v2.3.2` | `sha256:c5708729fea2` | 2026-09-21T11:47Z | **prod** (`digichat--0000007`) |
 | `v2.3.3` | `sha256:fc06e0a57902` | 2026-09-21T20:46Z | dev (`digichat--0000040`) |
+| `v2.5.0` | none published | — | **OCC prod** (Cloudflare container `shared-a9bf1b9117be`) |
 
-Nothing newer. No 2.4.0 image exists in any registry.
+`v2.5.0` is live on the Cloudflare OCC container `shared-a9bf1b9117be` (released from tag `digichat-v2.5.0` = `a9bf1b9117be`, deployed 2026-10-19T18:39Z; `GET https://digithings.ai/api/health` returns 200 with `version: 2.5.0`). **No 2.5.0 container image was published to any registry**: `apps/digichat/Dockerfile` does not carry the `packages/hero-banner` workspace package, so the image build fails (DIG-4489, tracked from DIG-4485). The Cloudflare path is unaffected — that worker builds its own image from the repo tree, which is why the OCC release is live while no published image exists. No 2.4.0 image exists in any registry either: 2.4.0 was never tagged.
 
 ---
 
