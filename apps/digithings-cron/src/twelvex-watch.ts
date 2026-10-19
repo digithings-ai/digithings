@@ -180,18 +180,42 @@ export type WatchOutcome = { ok: boolean; alarm: boolean; filed?: string; detail
 export const FEED_LOOKBACK_HOURS = 6;
 export const HEARTBEAT_TOLERANCE_HOURS = 18;
 
+/**
+ * Did the confirm actually confirm?
+ *
+ * `status === "completed"` is not the answer, and reading it as one is the defect
+ * DIG-4381 records. GitHub reports a billing-blocked run as
+ * `status=completed, conclusion=failure`: the run object completes while no job
+ * ever starts. A syntax error on develop, a runner lost before step 1, a
+ * cancelled run and an expired job token all land the same way — the run finishes
+ * without confirming anything, and nobody is told. The watchdog is the detector
+ * for "the feed check did not run", so it must read the conclusion, exactly as
+ * `evaluateCatchup` already does (`r.conclusion === "success"`).
+ *
+ * The rule is the whole window, not the newest run: one success anywhere in the
+ * lookback is a confirmed window. Only a window with no success at all alarms.
+ *
+ * Deliberately NOT narrowed to "alarm only when a failed run had zero jobs".
+ * That billing-block signature is precise, but it is blind to the cancelled run
+ * and to the runner lost before the alert step — both named in DIG-4381 as ways
+ * this outlives the billing block — because each of those leaves a job behind and
+ * files nothing. A window nobody confirmed is a window nobody confirmed, whatever
+ * the run list says about why. A run that failed *and* filed its own
+ * `feed-publication-gap` / `feed-confirm-unconfirmed` issue therefore also trips
+ * this alarm; the body says so, and `fileIssue`'s 24h window bounds the volume.
+ */
 export function evaluateFeedConfirm(nowMs: number, runs: Run[] | null): { alarm: boolean; detail: string } {
   if (runs === null) return { alarm: true, detail: "run history unreadable" };
   const since = nowMs - FEED_LOOKBACK_HOURS * 3_600_000;
   const recent = runs.filter((r) => Date.parse(r.created_at ?? "") >= since);
-  const completed = recent.filter((r) => r.status === "completed");
-  if (completed.length > 0) return { alarm: false, detail: `${completed.length} completed` };
+  const succeeded = recent.filter((r) => r.conclusion === "success");
+  if (succeeded.length > 0) return { alarm: false, detail: `${succeeded.length} succeeded` };
   return {
     alarm: true,
     detail:
       recent.length === 0
         ? "No confirm run was even started in the window."
-        : recent.map((r) => `- \`${r.status}\` — ${r.html_url}`).join("\n"),
+        : recent.map((r) => `- \`${r.status ?? "unknown"}\` / \`${r.conclusion ?? "none"}\` — ${r.html_url}`).join("\n"),
   };
 }
 
@@ -271,7 +295,12 @@ export async function runTwelvexWatch(
       const v = evaluateFeedConfirm(nowMs, runs);
       if (!v.alarm) return { ok: true, alarm: false, detail: v.detail };
       const body = [
-        "**The feed confirmation check did not run. Nothing is confirmed for the window that clock was supposed to cover.**",
+        "**No confirm run in the window concluded `success`, so nothing is confirmed for the window that clock was supposed to cover.**",
+        "",
+        "Two shapes reach this alarm, and the run list below says which one it is:",
+        "",
+        "- **No completed run at all** — the check never ran. The clock, the dispatch, or the workflow is the cause.",
+        "- **A completed run that did not succeed** — the run object finished without confirming anything. A billing-blocked run is reported as `completed` / `failure` with no job ever started; a syntax error, a cancelled run, a runner lost before step 1 and an expired job token land the same way. If it ran far enough to exit non-zero, `feed_published_confirm.yml` has already filed its own `feed-publication-gap` or `feed-confirm-unconfirmed` issue — read that one for the finding, and treat this issue as the second, independent signal that the window is unconfirmed.",
         "",
         "Do not assume the feed is fine. Run the confirmation by hand and treat its exit code as the finding:",
         "",
