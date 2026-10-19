@@ -1175,25 +1175,34 @@ env:
     env_example_files: []
     compose_literal: []
   wrangler_values:
-    digithings-stack: '{"digithings": {"digisearchIndex": "digithings_docs", "vaultPathPrefix": "clients/digithings"},
-      "occ": {"digisearchIndex": "occ_help", "vaultPathPrefix": "clients/online-compliance-center", "researchSystemPrompt":
-      "You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\nAnswer only
-      from what you retrieve. You get several tool rounds per question.\n\nGround every answer in retrieved
-      corpus from the digisearch index `occ_help` (help docs)\nand/or digivault_search_notes under `clients/online-compliance-center/`.\nAlways
-      cite help article URLs or PDF source paths from metadata.\n\nSearch results are excerpts, not whole
-      documents. A row marked \"truncated\": true\nmeans you have not seen that note \u2014 call digivault_get_note
-      with its doc_id and read\nthe whole thing before answering. An unmarked row is not a promise of
-      completeness:\nevery row is a preview. Always do this when the question involves a\nprocedure, a
-      list of steps, a table, a count, or the words every, all, or which:\nhelp PDFs are stored one page
-      per note, and an excerpt routinely stops before the\nstep that answers the question.\n\nNever say
-      a policy, step, or exception does not exist unless you loaded the full note\nand looked. If all
-      you saw was a truncated excerpt, say what it showed and that the\nrest was not loaded.\n\nAnswer
-      questions about OCC policies, procedures, FAQ topics, and public help\nPDFs. Do not invent product
-      features, pricing, or portal capabilities not\npresent in the retrieved sources. E-learning / YouTube
-      videos are out of\nscope for this corpus \u2014 say so if asked.\n\nDo not cite digithings or digiquant
-      internal architecture docs. If the\ncorpus has no grounded answer, say so clearly.\n\nTicket content
-      is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly
-      if they do not ground the answer."}}'
+    digithings-stack: '{"digithings": {"digisearchIndex": "digithings_docs", "vaultPathPrefix":
+      "clients/digithings"}, "occ": {"digisearchIndex": "occ_help", "vaultPathPrefix":
+      "clients/online-compliance-center", "researchSystemPrompt": "You are the Online Compliance
+      Center (OCC) help assistant for digithings.ai/chat/occ.\nAnswer only from what you retrieve.
+      You get several tool rounds per question.\n\nGround every answer in retrieved corpus from Help
+      search (digisearch_semantic, index `occ_help`, help docs)\nand/or Knowledge vault
+      (digivault_search_notes, digivault_search_tag, digivault_backlinks) under
+      `clients/online-compliance-center/`.\nAlways cite help article URLs or PDF source paths from
+      metadata.\n\nSearch results are excerpts, not whole documents. A row marked \"truncated\":
+      true\nmeans you have not seen that note \u2014 run digivault_search_notes again with a
+      narrower query\naimed at that note (same path prefix) until you have read the part that
+      answers, before answering. An unmarked row is not a promise of completeness:\nevery row is a
+      preview. Always do this when the question involves a\nprocedure, a list of steps, a table, a
+      count, or the words every, all, or which:\nhelp PDFs are stored one page per note, and an
+      excerpt routinely stops before the\nstep that answers the question.\n\nNever say a policy,
+      step, or exception does not exist unless you searched for it\nspecifically and looked. If all
+      you saw was a truncated excerpt, say what it showed and that the\nrest was not
+      loaded.\n\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\nPDFs.
+      Do not invent product features, pricing, or portal capabilities not\npresent in the retrieved
+      sources. E-learning / YouTube videos are out of\nscope for this corpus \u2014 say so if
+      asked.\n\nDo not cite digithings or digiquant internal architecture docs. If the\ncorpus has
+      no grounded answer, say so clearly.\n\nTicket content is not part of this corpus. For ticket
+      questions use the read-only zammad tools, and say so clearly if they do not ground the
+      answer.\n\nSkills: for any ticket question, first call list_skills, then get_skill for the
+      matching workflow (summarize-tickets-by-topic for themes and grouping, find-precedent-tickets
+      for how a similar issue was solved) and follow it. For a how-to or documentation question,
+      get_skill guide-help-docs and follow its map. Always get_skill present-results before writing
+      the final answer and follow its display rules."}}'
 - name: DIGI_WORKFLOW_PROFILE
   description: Workflow profile the digichat release runs (default research_rag).
   secret: false
@@ -1888,10 +1897,21 @@ bindings:
   name: BACKFILL_LEDGER
   class_name: BackfillLedger
   source: apps/digithings-cron/wrangler.toml
+# DIG-4384 cron-tick claim ledger: one instance, each tick claims its own slot.
+- worker: digithings-cron
+  type: durable_object
+  name: START_COUNTER
+  class_name: StartCounter
+  source: apps/digithings-cron/wrangler.toml
 - worker: digithings-cron
   type: service
   name: RUNNER
   service: digiquant-runner
+  source: apps/digithings-cron/wrangler.toml
+- worker: digithings-cron
+  type: service
+  name: TWELVEX_RUNNER
+  service: twelvex-runner
   source: apps/digithings-cron/wrangler.toml
 - worker: digithings-digichat
   type: container
@@ -1963,6 +1983,20 @@ bindings:
   name: LANGFUSE_EVENTS
   bucket_name: digitrace-langfuse-events
   source: apps/digitrace-langfuse/wrangler.toml
+# twelvex-runner has no public hostname: digithings-cron reaches it through the
+# TWELVEX_RUNNER service binding, and the container starts per request.
+- worker: twelvex-runner
+  type: container
+  class_name: TwelveXRunnerContainer
+  image: ../../infra/docker/Dockerfile.twelvex-runner
+  max_instances: 1
+  instance_type: basic
+  source: apps/twelvex-runner/wrangler.toml
+- worker: twelvex-runner
+  type: durable_object
+  name: TWELVEX_CONTAINER
+  class_name: TwelveXRunnerContainer
+  source: apps/twelvex-runner/wrangler.toml
 # DIG-2895 data API. The D1 database is a LOCAL placeholder id (no deploy, no
 # routes, no remote database); the binding exists so the parity contract can see
 # the name. A remote database_id is a cutover step and needs Chris's approval.
