@@ -126,10 +126,16 @@ ALLOWED_LIST_ITEM_KEYS = {
     "tools.catalog.tools": frozenset(["id", "label"]),
 }
 
-# The OCC corpus index. The retired OCC ticket corpus must never be routed
-# to (scripts/occ_invite_key_write.sh enforces the same rule).
+# The OCC tenant is a client tenant. Its corpus routing and vault path are
+# set by the rollout script (scripts/occ_invite_key_write.sh, DIG-4043) and
+# live in the host secret store, so a repository overlay may neither carry
+# nor change them. The corpus name itself stays in the private release-lane
+# paths: this public script states the rule without writing it down.
 OCC_HOST = "occ.digithings.ai"
-OCC_INDEX = "occ_help"
+# Backend keys the overlay may not set for the OCC tenant.
+OCC_LOCKED_BACKEND_KEYS = ("digisearchIndex", "vaultPathPrefix")
+# The retired OCC ticket corpus must never be routed to
+# (scripts/occ_invite_key_write.sh enforces the same rule).
 FORBIDDEN_INDEX = "occ_tickets"
 
 SECRET_NAME = "DIGICHAT_EMBED_TENANTS"
@@ -337,6 +343,14 @@ def compose_registry(live, overlay):
             )
 
     # Guard 5: corpus routing rules.
+    #   (a) No tenant may route to the retired corpus.
+    #   (b) The overlay may not set the OCC tenant's corpus routing or vault
+    #       path. Those live in the host secret store and are set by the
+    #       rollout script, never by a repository file, so the composed OCC
+    #       entry keeps the live registry's own routing.
+    #   (c) The live registry must route the OCC tenant to a corpus. If it
+    #       does not, the composed registry would leave that tenant without
+    #       one, which is the failure DIG-4488 exists to prevent.
     for host, entry in composed.items():
         backend = entry.get("backend") or {}
         index = backend.get("digisearchIndex")
@@ -344,8 +358,18 @@ def compose_registry(live, overlay):
             raise RegistryRefusal(
                 "tenant %r routes to the retired corpus %r" % (host, FORBIDDEN_INDEX)
             )
-        if host == OCC_HOST and index is not None and index != OCC_INDEX:
-            raise RegistryRefusal("tenant %r must route to %r, not %r" % (host, OCC_INDEX, index))
+    occ_overlay_backend = (overlay.get(OCC_HOST) or {}).get("backend") or {}
+    for key in sorted(set(occ_overlay_backend) & set(OCC_LOCKED_BACKEND_KEYS)):
+        raise RegistryRefusal(
+            "overlay entry %r may not set %s; the OCC tenant's corpus routing "
+            "lives in the host secret store, not in the repository" % (OCC_HOST, key)
+        )
+    occ_live_backend = (live.get(OCC_HOST) or {}).get("backend") or {}
+    if not occ_live_backend.get("digisearchIndex"):
+        raise RegistryRefusal(
+            "the live registry does not route %r to a corpus; restore the live "
+            "registry from the host secret store before composing" % OCC_HOST
+        )
 
     report = {
         "live_hosts": sorted(live),
@@ -583,8 +607,10 @@ def main(argv=None):
     wrangler_cmd = args.wrangler_cmd.split()
 
     if args.dry_run:
+        # The secret NAME is not printed and the command output is never
+        # echoed: both can carry secret-derived text into a log.
         print("dry run: no secret was written, the container was not recycled")
-        print("would write the secret %s to the worker %s" % (args.secret_name, args.worker))
+        print("would write the worker secret to the worker %s" % args.worker)
         print("would recycle the container with POST %s" % args.reset_url)
         return 0
 
@@ -598,13 +624,18 @@ def main(argv=None):
             sys.stderr.write("confirmation not given. Nothing was written.\n")
             return 2
 
-    code, out = secret_put(args.worker, args.secret_name, payload, wrangler_cmd, args.worker_dir)
+    code, _out = secret_put(args.worker, args.secret_name, payload, wrangler_cmd, args.worker_dir)
     if code != 0:
+        # The command output is not printed: the command was handed the
+        # registry on stdin, so its output may carry the secret. Re-run it
+        # in your own terminal to read the error.
         sys.stderr.write(
-            "the secret write failed (rc=%d). The container was not recycled.\n%s\n" % (code, out)
+            "the secret write failed (rc=%d). The container was not recycled. "
+            "The command output is not printed, so no secret can reach the "
+            "log; re-run the command in your own terminal to read it.\n" % code
         )
         return 1
-    print("secret %s written to the worker %s" % (args.secret_name, args.worker))
+    print("the worker secret was written to the worker %s" % args.worker)
 
     try:
         rcode, status, body = recycle_container(args.admin_key_file, args.reset_url)
