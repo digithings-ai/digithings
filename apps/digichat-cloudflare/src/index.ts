@@ -9,7 +9,9 @@
 import { Container, getContainer } from "@cloudflare/containers";
 import { env } from "cloudflare:workers";
 import {
-  SHARED_DIGICHAT_CONTAINER_ID,
+  DIGICHAT_CONTAINER_REV_VAR,
+  digichatContainerRev,
+  sharedDigichatContainerId,
   shouldProxyToDigiChat,
 } from "./paths";
 import { legacyEmbedEnabledValue } from "./embed-flag";
@@ -62,6 +64,14 @@ export interface Env {
   DIGICHAT: DurableObjectNamespace<DigiChatContainer>;
   /** DIG-1210 invite key gating the /chat/occ Pages shell. Worker-only. */
   OCC_INVITE_KEY?: string;
+  /**
+   * Short sha of the deploying commit, injected by `scripts/deploy.mjs` via
+   * `wrangler deploy --var DIGICHAT_CONTAINER_REV:<sha12>`. It names the
+   * Container (see `sharedDigichatContainerId`), so the Worker reads it and
+   * deliberately does NOT forward it — the container process has no use for the
+   * commit that built it.
+   */
+  DIGICHAT_CONTAINER_REV?: string;
   /** Documented opt-in for the legacy generic anonymous embed. */
   DIGICHAT_LEGACY_EMBED_ENABLED?: string;
   /** @deprecated Use DIGICHAT_LEGACY_EMBED_ENABLED. */
@@ -88,6 +98,24 @@ export default {
     if (isOccShellPath(url.pathname)) {
       return occGate(request, workerEnv.OCC_INVITE_KEY);
     }
+    // Served by the Worker itself, never proxied: the id a deploy derived is
+    // the only thing that makes a deploy verifiable rather than assumed, and
+    // `/api/health` + `/healthz` are both digichat paths (proxied into the
+    // container), so the Worker could not answer them.
+    if (url.pathname === "/_digichat/meta") {
+      return Response.json({
+        ok: true,
+        service: "digichat",
+        containerId: sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV),
+        rev: digichatContainerRev(workerEnv.DIGICHAT_CONTAINER_REV),
+        revVar: DIGICHAT_CONTAINER_REV_VAR,
+        note:
+          "Worker up; the container may still be starting. rev: null means " +
+          "this deploy carried no " +
+          DIGICHAT_CONTAINER_REV_VAR +
+          " and fell back to the legacy id.",
+      });
+    }
     if (!shouldProxyToDigiChat(url.pathname)) {
       return new Response(
         "digichat Worker: path not routed. Marketing /chat shells are on Pages.",
@@ -95,9 +123,12 @@ export default {
       );
     }
     // One shared instance — digithings, OCC, and future tenants via embed registry.
+    // The id is derived from the deploying commit, never hand-pinned: a warm
+    // instance keeps its boot env, so a forgotten bump silently serves the old
+    // image. See paths.ts.
     const container = getContainer(
       workerEnv.DIGICHAT,
-      SHARED_DIGICHAT_CONTAINER_ID,
+      sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV),
     );
     return container.fetch(request);
   },

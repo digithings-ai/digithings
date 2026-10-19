@@ -146,7 +146,7 @@ check "X-Embed-Host alone, no token, no origin" none none "$REFUSED_SLUG" \
 # 2. The key must work on its own, with no origin help. This is the check that proves the new
 #    value actually reached the live registry (i.e. the put + container recycle both landed).
 check "correct key, no origin" match none "$GRANTED_SLUG" \
-  "The key did not authorize. Either the secret put did not land, or the container was not recycled (SHARED_DIGICHAT_CONTAINER_ID bump)."
+  "The key did not authorize. Either the secret put did not land, or the container was not recycled (since DIG-3814 the id derives from the deploying commit, so this means the deploy did not carry DIGICHAT_CONTAINER_REV)."
 
 # 3 + 4. The two checks whose expected value flips at Act B2.
 if [ "$EXPECT_B2" = "1" ]; then
