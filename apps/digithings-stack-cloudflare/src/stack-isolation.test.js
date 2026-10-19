@@ -342,7 +342,7 @@ describe("index.ts isolation wiring", () => {
     expect(source).toContain('"digichat"');
     expect(source).toContain('() => import("./digichat")');
     expect(source).toContain("shouldProxyToDigiChat(url.pathname)");
-    expect(source).toContain("getContainer(workerEnv.DIGICHAT, SHARED_DIGICHAT_CONTAINER_ID)");
+    expect(source).toContain("getContainer(workerEnv.DIGICHAT, sharedDigichatContainerId(");
     expect(source).toContain("switchPort(request, DIGICHAT_PORT)");
     expect(source).toContain('runIsolated("container-routes", () => import("./ports")');
   });

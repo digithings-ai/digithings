@@ -1,32 +1,40 @@
 /**
- * Deploy the digithings-stack Worker with the Container id DERIVED FROM THE
- * DEPLOYING COMMIT (DIG-3229).
- *
- * Why this wrapper exists. `DigiStackContainer`'s Durable Object id used to be a
- * hand-edited string ("shared-v18") that every image-changing deploy had to
- * remember to bump, because `sleepAfter` alone does not evict a Container under
- * steady traffic and a code-only redeploy therefore leaves the old Firecracker
- * instance serving its old image. A forgotten bump ships no real fix while CI
- * stays green — and it had already cost two incidents (shared-v16 → v17, a
- * committed PII snapshot re-ingested on every cold start, DIG-1506/DIG-1500;
- * shared-v17 → v18, the digikey JWT scope-escalation build of #5283/#5010 still
- * in service). So the id is now built from the deploying commit inside
- * `src/ports.ts`, and this script is what feeds the commit in:
+ * Deploy the digithings-stack Worker with BOTH Container ids derived from the
+ * deploying commit:
  *
  *     git rev-parse --verify HEAD
  *       -> --var STACK_CONTAINER_REV:<sha12>
  *         -> ports.ts: sharedStackContainerId(env.STACK_CONTAINER_REV)
- *         -> "shared-<sha12>"
+ *         -> the stack's OWN Durable Object id (DIG-3229, landed by #5537)
+ *       -> --var DIGICHAT_CONTAINER_REV:<sha12>
+ *         -> digichat-mount -> digichat.ts: sharedDigichatContainerId(...)
+ *         -> the FOLDED DIGICHAT Container id (DIG-3814, this PR)
+ *       both -> "shared-<sha12>"
  *
- * Two properties are deliberate, and both are pinned by
- * `src/container-id-deploy.test.js`:
+ * WHY BOTH IN ONE DEPLOY. digithings-stack carries the zone routes and folds
+ * the digichat Container, so one worker deploy has to ship both derivations.
+ * A wrapper that carried only one rev would leave the other container id
+ * hand-pinned — a partial fix looks like the hole is closed while leaving the
+ * other half open.
+ *
+ * ONE IMPLEMENTATION, NOT A COPY. The rev resolution, the sha gate and the
+ * expected-id builder all come from the digichat wrapper by import. Two copies
+ * of "read the sha, refuse if it is not one" is exactly the drift this ticket
+ * exists to remove, and the cross-package import is what makes a future edit
+ * to the gate reach both deploy paths at once. The reuse is intentional, not a
+ * layering accident: `resolveDeployRev`'s default git cwd is the digichat
+ * package directory, which is in the same repository and therefore the same
+ * commit. Only `main` stays stack-specific, because it deploys THIS package's
+ * wrangler.toml and verifies THIS surface's meta route.
+ *
+ * Fail-closed and verify-afterwards carry over from DIG-3229 unchanged:
  *
  *  1. FAIL CLOSED. If the commit cannot be resolved, this script refuses to
  *     deploy. Deploying without a rev would silently pin the legacy id and
  *     reproduce exactly the defect it exists to remove, so the refusal is the
  *     correct failure: loud, at the desk, before anything is uploaded.
  *  2. VERIFY AFTERWARDS. After wrangler returns, `/_stack/meta` is read back
- *     from the live Worker and must report the id this commit implies. That
+ *     from the live Worker and must report BOTH ids this commit implies. That
  *     catches a deploy that landed somewhere else and — the case that matters —
  *     a bypassing deploy that produced the legacy fallback.
  *
@@ -35,17 +43,17 @@
  * 4.133.0: it rejects EVERY form, including the trivial `--define=FOO=bar`,
  * because wrangler passes the raw `KEY=VALUE` string to esbuild as an object
  * key and esbuild's `pushCommonFlags` throws `Invalid define: FOO=bar`. There
- * is no working substitution hook here, so the rev travels as a Worker var.
+ * is no working substitution hook here, so the revs travel as Worker vars.
  * `--var` was measured to MERGE with the `[vars]` in wrangler.toml rather than
  * replace them (a dry run with `--var STACK_CONTAINER_REV:<sha>` still listed
  * SUPABASE_URL, DIGIVAULT_ROOT and MARKET_DATA_URL), which is why it is safe
- * here; the var is deliberately absent from `[vars]` so it never becomes a
- * hand-maintained key that the config-contract and parity gates would pin.
+ * here; the vars are deliberately absent from `[vars]` so they never become
+ * hand-maintained keys that the config-contract and parity gates would pin.
  *
  * There is no CI deploy lane for this Worker (deleted 2026-10-01 by f54af7052,
  * #4919 Human Gate; see README "Deploy"), so this script plus `npm run deploy`
- * IS the deploy path. Keep it that way: the container id is a function of the
- * commit only for as long as every deploy goes through it.
+ * IS the deploy path. Keep it that way: the container ids are a function of
+ * the commit only for as long as every deploy goes through it.
  *
  * Usage: `npm run deploy [-- <extra wrangler args>]`, e.g.
  *   npm run deploy -- --containers-rollout=none
@@ -59,54 +67,40 @@ import { spawnSync } from "node:child_process";
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Worker var carrying the rev. Must match ports.ts / the Env interface. */
+import {
+  buildVarArg as buildDigichatVarArg,
+  expectedContainerId,
+  metaMatchesDeploy as metaFieldMatches,
+  resolveDeployRev,
+  SHA_RE,
+  REV_LEN,
+} from "../../digichat-cloudflare/scripts/deploy.mjs";
+
+/** Worker var carrying the stack's own rev (DIG-3229). Must match ports.ts / Env. */
 export const REV_VAR = "STACK_CONTAINER_REV";
 
-/** A git sha, short or full, lowercase hex. Anything else is refused. */
-export const SHA_RE = /^[0-9a-f]{7,40}$/;
+/** Worker var carrying the folded digichat rev (DIG-3814). Shared with the digichat wrapper. */
+export const DIGICHAT_REV_VAR = "DIGICHAT_CONTAINER_REV";
 
-/** Hex chars that go into the Container id. 12 is what git --short=12 gives. */
-export const REV_LEN = 12;
+export { expectedContainerId, resolveDeployRev, SHA_RE, REV_LEN };
 
 /** Live, auth-exempt Worker route that reports the running Container id. */
 export const META_URL = "https://graph.digithings.ai/_stack/meta";
 
+/**
+ * Which key of `/_stack/meta` carries the folded digichat id.
+ *
+ * It is NOT `containerId`: that key is the stack's OWN container, owned by
+ * DIG-3229 / #5537. Verifying the wrong key would make this wrapper pass while
+ * the folded digichat id stayed pinned — the exact failure this wrapper was
+ * added to prevent.
+ */
+export const META_FIELD = "digichatContainerId";
+
 const APP_DIR = resolvePath(dirname(fileURLToPath(import.meta.url)), "..");
 
-function defaultRunGit(args) {
-  return spawnSync("git", args, { encoding: "utf8", cwd: APP_DIR });
-}
-
 /**
- * The short commit sha this deploy ships, or a throw.
- *
- * `runGit` is injected so the tests can drive every failure arm without a
- * repository. Nothing is defaulted silently: a non-zero status, an empty
- * stdout, or a stdout that is not a sha all refuse the deploy.
- */
-export function resolveDeployRev(runGit = defaultRunGit) {
-  const result = runGit(["rev-parse", "--verify", "HEAD"]) ?? {};
-  const status = typeof result.status === "number" ? result.status : 1;
-  const stdout = String(result.stdout ?? "").trim();
-  const stderr = String(result.stderr ?? "").trim();
-
-  if (status !== 0 || !SHA_RE.test(stdout)) {
-    throw new Error(
-      "digithings-stack deploy REFUSED: cannot resolve the deploying commit " +
-        "with `git rev-parse --verify HEAD`.\n" +
-        "Deploying without it would ship the legacy pinned Container id and " +
-        "leave the previous instance serving its old image, which is the " +
-        "defect this script exists to remove (DIG-3229). Run the deploy from " +
-        "a checkout with a git history.\n" +
-        `git status: ${status}; git stdout: ${JSON.stringify(stdout)}; ` +
-        `git stderr: ${stderr || "<none>"}`,
-    );
-  }
-  return stdout.slice(0, REV_LEN);
-}
-
-/**
- * The wrangler flag that makes ports.ts derive the id from `rev`.
+ * The wrangler flag that makes ports.ts derive the stack id from `rev`.
  *
  * `--var` takes KEY:VALUE (a colon, not an equals) and the value is a plain
  * string — no quoting. The sha shape is still checked here rather than trusted:
@@ -123,30 +117,32 @@ export function buildVarArg(rev) {
   return `--var=${REV_VAR}:${rev}`;
 }
 
-/** The Container id this rev must produce. Mirrors ports.ts; a test pins the two together. */
-export function expectedContainerId(rev) {
-  return `shared-${rev}`;
-}
-
 /**
  * The argv for `npm exec -- wrangler deploy`, always carrying exactly one rev
- * var. There is deliberately no argv here that omits it, which is the property
- * the whole ticket rests on.
+ * value feeding BOTH container ids, then the operator's extras. There is
+ * deliberately no argv here that omits either var, which is the property the
+ * whole ticket rests on: one deploy, both ids derived from one commit.
  */
 export function buildWranglerArgs(rev, extra = []) {
-  return ["exec", "--", "wrangler", "deploy", buildVarArg(rev), ...extra];
+  return ["exec", "--", "wrangler", "deploy", buildVarArg(rev), buildDigichatVarArg(rev), ...extra];
 }
 
-/** Does /_stack/meta prove the deploy this script just made is the one running? */
+/** Does `/_stack/meta` .containerId (the stack's own) match this commit's id? */
 export function metaMatchesDeploy(meta, expected) {
-  return Boolean(meta) && meta.containerId === expected;
+  return metaFieldMatches(meta, expected, "containerId");
+}
+
+/** Does `/_stack/meta` .digichatContainerId (the fold) match this commit's id? */
+export function metaMatchesDigichat(meta, expected) {
+  return metaFieldMatches(meta, expected, META_FIELD);
 }
 
 async function main(extra) {
   const rev = resolveDeployRev();
   const expected = expectedContainerId(rev);
   process.stdout.write(
-    `digithings-stack deploy: commit ${rev} -> Container id ${expected}\n`,
+    `digithings-stack deploy: commit ${rev} -> stack Container id ${expected}, ` +
+      `folded digichat Container id ${expected}\n`,
   );
 
   const deployed = spawnSync("npm", buildWranglerArgs(rev, extra), {
@@ -170,12 +166,17 @@ async function main(extra) {
     readError = String(err && err.message ? err.message : err);
   }
 
-  if (!metaMatchesDeploy(meta, expected)) {
+  const stackMatch = metaMatchesDeploy(meta, expected);
+  const digichatMatch = metaMatchesDigichat(meta, expected);
+  if (!stackMatch || !digichatMatch) {
+    const missing = [];
+    if (!stackMatch) missing.push("containerId (the stack's own id)");
+    if (!digichatMatch) missing.push(`${META_FIELD} (the folded digichat id)`);
     process.stderr.write(
       "\ndigithings-stack deploy: DEPLOYED BUT UNVERIFIED\n" +
-        `  expected ${META_URL} to report containerId ${expected}\n` +
-        `  it reported ${JSON.stringify(meta && meta.containerId)} (stackRev ` +
-        `${JSON.stringify(meta && meta.stackRev)}; read: ${readError ?? "ok"})\n` +
+        `  expected ${META_URL} to report ${missing.join(" and ")}` +
+        ` ${expected} for every field, none of them a legacy id\n` +
+        `  it reported ${JSON.stringify(meta)} (read: ${readError ?? "ok"})\n` +
         "  A legacy id here means the bundle reached production without the rev, " +
         "so the running Container may still be the previous instance. Redeploy " +
         "with `npm run deploy` from a checkout (not a bare `npx wrangler deploy`).\n",
@@ -184,8 +185,9 @@ async function main(extra) {
   }
 
   process.stdout.write(
-    `digithings-stack deploy: ${META_URL} reports ${meta.containerId} ` +
-      `(stackRev ${meta.stackRev}) — a fresh instance is guaranteed\n`,
+    `digithings-stack deploy: ${META_URL} reports containerId ${meta.containerId} ` +
+      `(stackRev ${meta.stackRev}) and ${META_FIELD} ${meta[META_FIELD]} ` +
+      `(digichatRev ${meta.digichatRev}) — a fresh instance is guaranteed on both surfaces\n`,
   );
 }
 
