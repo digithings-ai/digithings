@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Env } from "./env";
-import { StartCounter } from "./counter-do";
+import { StartCounter, SLOT_LEASE_MS } from "./counter-do";
 
 /**
  * Fake DurableObjectState. `transaction` really serialises: callers are chained
@@ -76,6 +76,27 @@ describe("StartCounter", () => {
     await c.claimSlot(key, "2026-10-15T06:41");
     await c.releaseSlot(key, "2026-10-15T06:41");
     expect(await c.claimSlot(key, "2026-10-15T06:41")).toBe(true);
+  });
+
+  it("keeps a confirmed slot blocked past the lease", async () => {
+    const c = counter();
+    const key = "k";
+    const slot = "2026-10-15T06:41";
+    const base = 1_000_000;
+    expect(await c.claimSlot(key, slot, base)).toBe(true);
+    await c.confirmSlot(key, slot);
+    expect(await c.claimSlot(key, slot, base + SLOT_LEASE_MS * 1000)).toBe(false);
+  });
+
+  it("re-claims an unconfirmed slot after the lease, so a dead delivery does not lose the tick", async () => {
+    const c = counter();
+    const key = "k";
+    const slot = "2026-10-15T06:41";
+    const base = 1_000_000;
+    expect(await c.claimSlot(key, slot, base)).toBe(true);
+    expect(await c.claimSlot(key, slot, base + SLOT_LEASE_MS - 1)).toBe(false);
+    // The first delivery claimed and then died; the second may try the slot.
+    expect(await c.claimSlot(key, slot, base + SLOT_LEASE_MS)).toBe(true);
   });
 
   it("drops the previous day's slots, so an every-minute clock cannot grow forever", async () => {

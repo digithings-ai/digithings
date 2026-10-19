@@ -22,8 +22,31 @@ export interface StartCounts extends DayCounts {
   day: string;
 }
 
-/** One job's claimed cron slots on one UTC day, as stored. */
-type DaySlots = Record<string, 1>;
+/**
+ * One job's claimed cron slots on one UTC day, as stored.
+ *
+ * `CONFIRMED_SLOT` means a dispatch was accepted for the slot. A positive
+ * number is the claim time in epoch milliseconds, still in flight; see
+ * `SLOT_LEASE_MS`.
+ */
+type DaySlots = Record<string, number>;
+
+/** Stored value for a claim whose dispatch was accepted. Never expires. */
+const CONFIRMED_SLOT = -1;
+
+/**
+ * How long an unconfirmed claim blocks a second delivery.
+ *
+ * The claim is written before the dispatch and confirmed only after the
+ * dispatch is accepted, so the window exists to survive a runtime that dies
+ * between the two. A duplicate delivery arrives 7-29s after the first, so the
+ * lease has to be shorter than the shortest observed gap or the duplicate
+ * cannot recover a dead tick. A dispatch that itself takes longer than this
+ * can therefore be duplicated by a late delivery: the same fail-open trade the
+ * tick path already makes, because a duplicate costs Actions minutes and a
+ * dropped daily clock costs a day.
+ */
+export const SLOT_LEASE_MS = 5_000;
 
 /** Counts and claims carry different prefixes, so a claim never reads as a count. */
 const countsKey = (job: string, day: string): string => `counts:${job}:${day}`;
@@ -63,26 +86,38 @@ export class StartCounter {
 
   /**
    * `true` for the first caller of `key` on `slot`, `false` for every caller
-   * after it until `releaseSlot`.
+   * after it until `releaseSlot` or the lease expires.
    *
    * `slot` is `YYYY-MM-DDTHH:MM`, the cron minute the job is owed in. A minute
-   * does not recur, so a claim never has to expire to avoid re-arming a
-   * duplicate — but the rows would accumulate forever (an every-minute clock
+   * does not recur, so a confirmed claim never has to expire to avoid re-arming
+   * a duplicate — but the rows would accumulate forever (an every-minute clock
    * writes one a minute), so the same transaction that claims today deletes the
    * last other day this key wrote. One day of slots per key is all any caller
    * can still need: a tick is delivered within seconds, never days.
    *
+   * A claim that was never confirmed is handed out again after `SLOT_LEASE_MS`,
+   * so a delivery that died between the claim and the accepted dispatch does
+   * not lose the clock. `now` is injectable for the lease tests only.
+   *
    * Transactional, so two overlapping callers cannot both observe an absent
-   * slot.
+   * slot (or the same expired one).
    */
-  async claimSlot(key: string, slot: string): Promise<boolean> {
+  async claimSlot(key: string, slot: string, now: number = Date.now()): Promise<boolean> {
     const day = slot.slice(0, 10);
     const dayKey = slotsKey(key, day);
     const markerKey = slotDayKey(key);
     return this.state.storage.transaction(async (txn) => {
       const slots = (await txn.get<DaySlots>(dayKey)) ?? {};
-      if (slots[slot]) return false;
-      slots[slot] = 1;
+      const held = slots[slot];
+      // CONFIRMED_SLOT never expires. A timestamp is a claim still in flight,
+      // and only an expired one may be taken over.
+      if (
+        held !== undefined &&
+        (held === CONFIRMED_SLOT || now - held < SLOT_LEASE_MS)
+      ) {
+        return false;
+      }
+      slots[slot] = now;
       await txn.put(dayKey, slots);
       const previous = await txn.get<string>(markerKey);
       // Only ever move forward. A tick scheduled at 23:59 can be delivered just
@@ -93,6 +128,17 @@ export class StartCounter {
         await txn.put(markerKey, day);
       }
       return true;
+    });
+  }
+
+  /** Mark the slot's dispatch as accepted, so the claim no longer expires. */
+  async confirmSlot(key: string, slot: string): Promise<void> {
+    const dayKey = slotsKey(key, slot.slice(0, 10));
+    await this.state.storage.transaction(async (txn) => {
+      const slots = await txn.get<DaySlots>(dayKey);
+      if (!slots || slots[slot] === undefined) return;
+      slots[slot] = CONFIRMED_SLOT;
+      await txn.put(dayKey, slots);
     });
   }
 

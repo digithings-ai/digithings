@@ -123,6 +123,7 @@ const START_COUNTER_NAME = "cron-ticks";
 /** The slice of StartCounter this Worker uses on the tick path. */
 type TickCounter = {
   claimSlot(key: string, slot: string): Promise<boolean>;
+  confirmSlot(key: string, slot: string): Promise<void>;
   releaseSlot(key: string, slot: string): Promise<void>;
 };
 
@@ -176,15 +177,15 @@ async function claimTick(
   job: Job,
   scheduledTime: number,
 ): Promise<boolean> {
-  const counter = tickCounter(env);
-  if (!counter) {
-    if (!warnedUnboundCounter) {
-      warnedUnboundCounter = true;
-      console.error(JSON.stringify({ cron, job: job.id, error: "start_counter_unbound" }));
-    }
-    return true;
-  }
   try {
+    const counter = tickCounter(env);
+    if (!counter) {
+      if (!warnedUnboundCounter) {
+        warnedUnboundCounter = true;
+        console.error(JSON.stringify({ cron, job: job.id, error: "start_counter_unbound" }));
+      }
+      return true;
+    }
     return await counter.claimSlot(tickKey(cron, job), tickSlot(scheduledTime));
   } catch (err) {
     console.error(
@@ -200,6 +201,34 @@ async function claimTick(
 }
 
 /**
+ * Mark the claim as accepted once the dispatch resolved, so the lease can no
+ * longer hand the slot to a later delivery. A failure here is logged and
+ * swallowed: the run already started, and a claim that expires is a duplicate
+ * risk, not a lost clock.
+ */
+async function confirmTick(
+  env: Env,
+  cron: string,
+  job: Job,
+  scheduledTime: number,
+): Promise<void> {
+  try {
+    const counter = tickCounter(env);
+    if (!counter) return;
+    await counter.confirmSlot(tickKey(cron, job), tickSlot(scheduledTime));
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        cron,
+        job: job.id,
+        error: "start_counter_confirm_failed",
+        detail: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
+}
+
+/**
  * Give the slot back after a failed dispatch, so the next delivery of the same
  * tick can start the run. Nothing started upstream, so re-claiming cannot
  * duplicate a run.
@@ -210,9 +239,9 @@ async function releaseTick(
   job: Job,
   scheduledTime: number,
 ): Promise<void> {
-  const counter = tickCounter(env);
-  if (!counter) return;
   try {
+    const counter = tickCounter(env);
+    if (!counter) return;
     await counter.releaseSlot(tickKey(cron, job), tickSlot(scheduledTime));
   } catch (err) {
     console.error(
@@ -316,7 +345,12 @@ async function runJobsForCron(
           return undefined;
         }
         return dispatch(env, job, cron, scheduledTime, { args, force: opts.force === true })
-          .then((result) => startedRun(job, result))
+          .then(async (result) => {
+            // The dispatch was accepted, so this slot stays claimed for good.
+            // A confirm failure only shortens the claim to its lease.
+            if (opts.dedupeTick) await confirmTick(env, cron, job, scheduledTime);
+            return startedRun(job, result);
+          })
           .catch(async (err: unknown) => {
             const msg = err instanceof Error ? err.message : String(err);
             console.error(JSON.stringify({ cron, job: job.id, error: msg }));

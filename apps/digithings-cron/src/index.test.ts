@@ -226,6 +226,9 @@ function startCounter() {
       slots.add(slot);
       return true;
     },
+    async confirmSlot(key: string, slot: string) {
+      events.push(`confirm:${key}@${slot}`);
+    },
     async releaseSlot(key: string, slot: string) {
       events.push(`release:${key}@${slot}`);
       store.get(key)?.delete(slot);
@@ -271,6 +274,36 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
     expect(githubFetch).toHaveBeenCalledOnce();
   });
 
+  it("uses the cron minute, so a pair straddling a minute boundary is the known limit", async () => {
+    // 0 of 514 measured duplicate pairs straddled a minute. If that changes,
+    // the slot unit has to change with it: for an every-minute clock a copy at
+    // :00:05 cannot be told apart from the next legitimate tick, so this test
+    // records the limit instead of pretending it is covered.
+    const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", githubFetch);
+    const { namespace } = startCounter();
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      START_COUNTER: namespace,
+    };
+
+    for (const scheduledTime of [
+      Date.UTC(2026, 9, 15, 6, 41, 58),
+      Date.UTC(2026, 9, 15, 6, 42, 5),
+    ]) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        { cron: "41 6 * * *", scheduledTime } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+    }
+
+    expect(githubFetch).toHaveBeenCalledTimes(2);
+  });
+
   it("still dispatches the next tick of the same row", async () => {
     const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", githubFetch);
@@ -306,7 +339,7 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
     // dispatched by three rows with three ids.
     const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", githubFetch);
-    const { namespace } = startCounter();
+    const { namespace, events } = startCounter();
     const env: Env = {
       DRY_RUN: "0",
       GH_DISPATCH_TOKEN: "github-token",
@@ -324,6 +357,12 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
     }
 
     expect(githubFetch).toHaveBeenCalledTimes(2);
+    // Pin the key shape as well: the id is in the claim, so a row that shares
+    // a workflow file with another row still gets its own start.
+    expect(events).toContain(
+      "claim:17,47 * * * *\nproduction-deploy-gate-watchdog@2026-10-15T00:17",
+    );
+    expect(events).toContain("claim:17 * * * *\ndatatap-answer-check@2026-10-15T00:17");
   });
 
   it("releases the claim when the dispatch fails, so a retry can still start the run", async () => {
@@ -366,6 +405,35 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
     const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", githubFetch);
     const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "github-token" };
+
+    for (const second of [48, 55]) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        {
+          cron: "41 6 * * *",
+          scheduledTime: Date.UTC(2026, 9, 15, 6, 41, second),
+        } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+    }
+
+    expect(githubFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails open when the counter namespace throws, never dropping a tick", async () => {
+    const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", githubFetch);
+    // idFromName succeeds and get throws: the new Error path is synchronous,
+    // before the claim's own await, and must still be caught.
+    const namespace = {
+      idFromName: (name: string) => name,
+      get: () => {
+        throw new Error("namespace unavailable");
+      },
+    } as unknown as DurableObjectNamespace;
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "github-token", START_COUNTER: namespace };
 
     for (const second of [48, 55]) {
       const pending: Promise<unknown>[] = [];

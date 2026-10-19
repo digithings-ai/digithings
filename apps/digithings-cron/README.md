@@ -86,10 +86,11 @@ error leaves the route, and the response is the Worker runtime's 500.
 
 ## One tick, one dispatch (DIG-4384)
 
-Cloudflare delivers a Cron Trigger **at least once**. On 14-17 Oct 2026 every
-tick of this Worker arrived twice, 7-29s apart, and each copy carried its own
-`scheduledTime` (the `52 * * * MON-FRI` slot arrived as `00:52:48` and
-`00:52:55`). Both copies dispatched, so every affected workflow started twice.
+Cloudflare delivers a Cron Trigger **at least once**. On 14-17 Oct 2026 a large
+share of this Worker's ticks (all of them on 15 Oct) arrived twice, 7-29s apart,
+and each copy carried its own `scheduledTime` (the `52 * * * MON-FRI` slot
+arrived as `00:52:48` and `00:52:55`). Both copies dispatched, so every affected
+workflow started twice.
 
 `scheduled()` now claims each job's slot in the `START_COUNTER` Durable Object
 before dispatching. The claim is keyed by cron plus job id and by the UTC
@@ -109,6 +110,18 @@ Two properties are deliberate:
   upstream, so the slot is released for the next delivery of the same tick to
   retry. A claim is only ever kept for a dispatch that GitHub (or a runner)
   accepted.
+
+A claim is written before the dispatch and confirmed after it is accepted. An
+unconfirmed claim is handed out again after 5s, so a Worker that dies between
+the two does not lose the tick: the duplicate delivery 7-29s later can start it.
+The cost is that a dispatch that itself runs longer than 5s can be duplicated by
+a very late copy; that is the same trade as the fail-open rule.
+
+The slot is the UTC minute because that is the only unit the two copies share;
+0 of 514 measured pairs straddled a minute boundary. A pair that does straddle
+one gets two slots and would dispatch twice. That case cannot be collapsed
+safely for an every-minute clock: a copy at `:00:05` is indistinguishable from
+the next legitimate tick.
 
 Claims are kept per UTC day (`slots:<cron + job>:<day>`), and the claim
 transaction drops the previous day it wrote. A minute never recurs, so nothing
