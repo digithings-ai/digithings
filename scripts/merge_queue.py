@@ -824,6 +824,21 @@ def update_branch(repo: str, verdict: Verdict) -> None:
         text=True,
     )
     if proc.returncode != 0:
+        # A refusal arrives as 422 for two different reasons and the response does not
+        # separate them: a real one (a conflict, or a head that moved between the read
+        # and this call) and the benign "there are no new commits on the base branch",
+        # which a concurrent tick or a retry produces. Neither is an operational
+        # failure — the branch is left exactly as it was and the next tick tries again —
+        # and failing the run would report the tick as broken *after* its merges had
+        # already landed, which is worse than the refusal it is reporting. Anything else
+        # (a token that lost write access, a 5xx) is a real failure and stops the run.
+        if "HTTP 422" in proc.stderr:
+            print(
+                f"warning: update-branch of #{verdict.number} refused (422) — the branch "
+                f"is unchanged and the next tick retries: {proc.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return
         raise QueueError(f"update-branch of #{verdict.number} failed: {proc.stderr.strip()}")
 
 
@@ -1041,14 +1056,15 @@ def main(argv: list[str] | None = None) -> int:
 
         if not merged:
             print("nothing merged — no PR passed the queue gates")
-        if len(merged) < args.max_merges and not updated:
+        if len(merged) < args.max_merges:
             # The loop drained, so `verdicts` is the queue as it stands now and the
             # blocked list is worth showing. When --max-merges cut the run short,
             # `verdicts` still lists what we just merged, and printing it would
-            # report a landed PR as queued. The same goes for a branch just updated:
-            # it is not eligible on this read either, so the dump would list it under
-            # both headings and describe an action that has already been taken.
-            print_queue(verdicts, queued_only=False)
+            # report a landed PR as queued. A branch updated on this read is dropped
+            # for the same reason — it is no longer stale — but only that PR: losing
+            # the rest of the dump would hide the tick's "why is nothing else merging".
+            just_updated = {v.number for v in updated}
+            print_queue([v for v in verdicts if v.number not in just_updated], queued_only=False)
         else:
             print("`list` shows the current queue.")
         return EXIT_OK

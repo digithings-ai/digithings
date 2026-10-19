@@ -1474,6 +1474,78 @@ def test_a_failed_update_fails_the_run_instead_of_looking_like_success(
     assert "update-branch of #5 failed" in done.stderr
 
 
+@pytest.mark.parametrize("state", ["BLOCKED", "UNKNOWN", "DIRTY"])
+def test_only_behind_is_updated_not_another_stale_state(gh_stub: Any, state: str) -> None:
+    """`BLOCKED`, `UNKNOWN` and `DIRTY` are stale too, and an update clears none of them.
+
+    They are all in `STALE_MERGE_STATES`, so a predicate that widened to the whole set
+    would spend a CI run on a branch GitHub has not finished evaluating, or on one a
+    blocking check names — and updating does not make either queueable.
+    """
+    prs = [_pr(30, approved=True, merge_state=state)]
+    stub = _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("update-branch") == [], f"{state} must not be updated"
+
+
+def test_a_benign_422_is_reported_without_failing_the_tick(gh_stub: Any) -> None:
+    """The API refuses an update two ways and the response does not separate them.
+
+    A head that moved between the read and the call, and the benign "no new commits on
+    the base branch" a concurrent tick produces, both arrive as 422. The branch is
+    unchanged either way, so failing the run would report the tick as broken after its
+    merges had already landed.
+    """
+    prs = [_pr(5, approved=True, merge_state="BEHIND")]
+    _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"update-branch", stderr="gh: Validation Failed (HTTP 422)", exit_code=1),
+        ),
+        prs,
+    )
+    done = _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert "refused (422)" in done.stderr
+
+
+def test_max_updates_above_one_updates_that_many_oldest_first(gh_stub: Any) -> None:
+    """The cap is a cap, not a switch: `--max-updates N` is what the docs promise."""
+    prs = [
+        _pr(11, approved=True, merge_state="BEHIND"),
+        _pr(12, created="2026-10-02T00:00:00Z", approved=True, merge_state="BEHIND"),
+        _pr(13, created="2026-10-03T00:00:00Z", approved=True, merge_state="BEHIND"),
+    ]
+    stub = _queue_stub(
+        gh_stub(gh_rule(r"^pr list", stdout=prs), gh_rule(r"update-branch", stdout="")),
+        prs,
+    )
+    done = _run(
+        "run",
+        "--repo",
+        "digithings-ai/twelve-x",
+        "--acting-role",
+        "cto",
+        "--max-updates",
+        "2",
+    )
+    assert done.returncode == EXIT_OK, done.stderr
+    calls = [" ".join(c) for c in stub.matching("update-branch")]
+    assert len(calls) == 2
+    assert "/pulls/11/" in calls[0] and "/pulls/12/" in calls[1]
+
+
+def test_dry_run_does_not_update_a_stale_branch(gh_stub: Any) -> None:
+    """`--dry-run` has to stay read-only now that run mode has a second write path."""
+    prs = [_pr(5, approved=True, merge_state="BEHIND")]
+    stub = _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto", "--dry-run")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("update-branch") == []
+    assert stub.matching("pr merge") == []
+
+
 def test_dry_run_changes_nothing(gh_stub: Any) -> None:
     prs = [_pr(42, approved=True)]
     stub = _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
