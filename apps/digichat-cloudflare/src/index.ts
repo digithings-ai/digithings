@@ -97,6 +97,7 @@ export default {
     const url = new URL(request.url);
     if (isOccShellPath(url.pathname)) {
       return occGate(request, workerEnv.OCC_INVITE_KEY);
+    }
     // Served by the Worker itself, never proxied: the id a deploy derived is
     // the only thing that makes a deploy verifiable rather than assumed, and
     // `/api/health` + `/healthz` are both digichat paths (proxied into the
