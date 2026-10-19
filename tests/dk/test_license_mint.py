@@ -408,3 +408,114 @@ def test_mint_input_model_rejects_bad_services():
         LicenseMintInput(customer_slug="c", hosts=["h"], services=["nope"])
     with pytest.raises(ValidationError):
         LicenseMintInput(customer_slug="   ", hosts=["h"])
+
+
+# --- terms version (DIG-4290) ---
+
+
+def test_claims_terms_version_present_only_when_supplied(lic_env):
+    from digikey.jwt_issue import build_license_claims
+
+    with_tv, _ = build_license_claims(
+        customer_slug="c", hosts=["h"], terms_version="2026-01-01"
+    )
+    assert with_tv["terms_version"] == "2026-01-01"
+
+    # Absent means the claim is omitted entirely — never a literal JSON null,
+    # which a consumer cannot tell apart from "not supplied".
+    without, _ = build_license_claims(customer_slug="c", hosts=["h"])
+    assert "terms_version" not in without
+
+    blank, _ = build_license_claims(customer_slug="c", hosts=["h"], terms_version="   ")
+    assert "terms_version" not in blank
+
+
+def test_cli_mint_without_terms_version_leaves_claim_and_column_absent(monkeypatch, capsys, lic_env):
+    out = _run_cli(monkeypatch, capsys, "license-mint", "--customer", "c", "--hosts", "h")
+    license_id = out.out.strip().splitlines()[0].split("=", 1)[1]
+    token = out.out.strip().splitlines()[3].split("=", 1)[1]
+    assert "terms_version" not in _decode(token, lic_env)
+    row = _mint_row(license_id)
+    assert row.terms_version is None
+
+
+def test_cli_mint_with_terms_version_persists_claim_and_column(monkeypatch, capsys, lic_env):
+    out = _run_cli(
+        monkeypatch,
+        capsys,
+        "license-mint",
+        "--customer",
+        "c",
+        "--hosts",
+        "h",
+        "--terms-version",
+        "2026-01-01",
+    )
+    license_id = out.out.strip().splitlines()[0].split("=", 1)[1]
+    token = out.out.strip().splitlines()[3].split("=", 1)[1]
+    assert _decode(token, lic_env)["terms_version"] == "2026-01-01"
+    assert _mint_row(license_id).terms_version == "2026-01-01"
+
+
+def test_cli_mint_blank_terms_version_treated_as_absent(monkeypatch, capsys, lic_env):
+    out = _run_cli(
+        monkeypatch,
+        capsys,
+        "license-mint",
+        "--customer",
+        "c",
+        "--hosts",
+        "h",
+        "--terms-version",
+        "   ",
+    )
+    license_id = out.out.strip().splitlines()[0].split("=", 1)[1]
+    token = out.out.strip().splitlines()[3].split("=", 1)[1]
+    assert "terms_version" not in _decode(token, lic_env)
+    assert _mint_row(license_id).terms_version is None
+
+
+def test_cli_dry_run_includes_terms_version(monkeypatch, capsys, lic_env):
+    out = _run_cli(
+        monkeypatch,
+        capsys,
+        "license-mint",
+        "--customer",
+        "c",
+        "--hosts",
+        "h",
+        "--terms-version",
+        "2026-01-01",
+        "--dry-run",
+    )
+    assert json.loads(out.out)["terms_version"] == "2026-01-01"
+
+
+def test_term_cap_has_no_dev_global_bypass(monkeypatch, capsys, lic_env):
+    """The 180-day cap is absolute: even with dev-global keys enabled, a longer
+    term is refused, and the 180 boundary is accepted."""
+    monkeypatch.setenv("DIGIKEY_ALLOW_DEV_GLOBAL", "1")
+    from digikey.cli import main
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["digikey", "license-mint", "--customer", "c", "--hosts", "h", "--term-days", "181"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 2
+
+    out = _run_cli(
+        monkeypatch,
+        capsys,
+        "license-mint",
+        "--customer",
+        "c",
+        "--hosts",
+        "h",
+        "--term-days",
+        "180",
+        "--dry-run",
+    )
+    claims = json.loads(out.out)
+    assert claims["exp"] - claims["iat"] == 180 * 86400
