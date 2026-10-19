@@ -24,12 +24,18 @@ Catalog and image PRs (CHR-A, CHR-C) may merge before Task 7 because `deploy-dig
 
 ## Chris lock — one class, standard-2
 
+> **Amended 2026-10-19 (ADR-0034):** the instance class is now `standard-1` (4 GiB).
+> Chris kept the cheaper class instead of reverting the code, so the lock, the ops doc,
+> the contract and both guards moved with it. Every hazard recorded below still applies.
+> This supersedes the `Instance type` row in the table below, and the "Instance type is
+> not open" clause further down: both record the original lock.
+
 Locked for this plan. An implementation PR that violates it is out of scope.
 
 | Decision | Locked value |
 |---|---|
 | Container class | `DigiQuantRunnerContainer` only. `wrangler.toml` keeps a single `[[containers]]` entry. |
-| Instance type | `instance_type = "standard-2"` (1 vCPU, 6 GiB memory, 12 GB disk). |
+| Instance type | `instance_type = "standard-2"` *(now `standard-1` - ADR-0034)* (1 vCPU, 6 GiB memory, 12 GB disk). |
 | Image | The existing `infra/docker/Dockerfile.digiquant-runner`. Add two script `COPY` lines. Do not change the `uv sync` line. |
 | Instances | `max_instances = 1`. Durable Object id stays `runner-v1`. |
 | Idle | `sleepAfter = "2m"` when the ledger has no lock and no queue. |
@@ -662,7 +668,7 @@ Adapted from epic Phase 4. Sizing follows the Chris lock.
 
 ## Open questions
 
-Instance type is not open. It is `standard-2` on `DigiQuantRunnerContainer`.
+Instance type is not open. It is `standard-2` on `DigiQuantRunnerContainer`. *(Amended 2026-10-19: the class is now `standard-1` - ADR-0034.)*
 
 `smoke-langsmith` is not open. It stays manual.
 

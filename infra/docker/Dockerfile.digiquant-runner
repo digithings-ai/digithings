@@ -10,7 +10,8 @@
 # import langgraph-checkpoint-postgres. --inexact is required: the second
 # sync must not remove psycopg[binary] that the research extra installed.
 # The 1.230.0 cp312 manylinux x86_64
-# wheel is 182608916 bytes (uv.lock). One class, instance_type standard-2.
+# wheel is 182608916 bytes (uv.lock). One class, instance_type standard-1 (4 GiB; revert to standard-2 only if a house run
+# OOMs - ADR-0034).
 # No DigiQuantRunnerNautilusContainer. No DigiQuantHouseContainer.
 #
 # Task 0 probe (not a guess): phase2 Size=1274551802 (~1.187 GiB);
