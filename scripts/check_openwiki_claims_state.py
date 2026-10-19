@@ -2,30 +2,76 @@
 """Check that OpenWiki claim sidecars and the page manifest agree (DIG-4382).
 
 OpenWiki loads every ``openwiki/.claims/**/*.json`` sidecar during preflight and
-refuses to start when one has no ``pageVersion`` — a shape the two digivoice
-sidecars from commit 4b0f8ef05 had, because their pages were added without their
-``openwiki/.page-manifest.json`` entries. The scheduled ``OpenWiki Update`` then
-exits 1 before it writes a page or opens a PR. Separately, a sidecar with claims
-but no ``verification`` block makes the run's finish step fail, so that state
-must not merge either.
+validates each one against a strict zod schema, and refuses the run when one is
+rejected — a shape the two digivoice sidecars from commit 4b0f8ef05 hit, because
+their pages were added without ``pageVersion`` or their
+``openwiki/.page-manifest.json`` entries. Separately, a claim-bearing sidecar
+without a durable ``verification`` block fails the run again at page coverage,
+so neither state may merge.
 
 What it asserts
 ---------------
+The error rules mirror what OpenWiki 0.5.0 validates at preflight
+(``store.js`` ``PageClaimsSchema``/``VerificationSchema``, strict objects) and at
+manifest load (``page-manifest.js`` ``ManifestSchema``):
+
 Errors (exit 1):
-* every sidecar parses as a JSON object and carries a ``pageVersion`` of the
-  form ``sha256:<64 lowercase hex>``;
-* every sidecar names a page that exists;
-* every sidecar with a non-empty ``claims`` list carries a ``verification``
-  object with non-empty ``by`` and ``at``;
-* every manifest entry has a well-formed ``pageVersion``;
-* an unverified sidecar must also have a manifest entry with the same
-  ``pageVersion`` (the exact half-written state this check exists for).
+* every sidecar parses as a JSON object with exactly the ``schemaVersion``,
+  ``pageVersion``, ``claims`` and (optional) ``verification`` keys;
+* ``schemaVersion`` is the literal ``1`` (a JSON ``true`` is not);
+* ``pageVersion`` matches ``sha256:<64 lowercase hex>``;
+* ``claims`` is a list (possibly empty) of claim objects carrying non-empty
+  ``id`` and ``statement`` strings and a non-empty ``evidence`` list of objects
+  with non-empty ``resource``/``version`` strings;
+* a non-empty ``claims`` list carries a ``verification`` object with non-empty
+  ``by``/``at`` strings and no extra keys;
+* every sidecar maps to a page that exists on disk;
+* the manifest is an object with exactly ``schemaVersion`` and ``pages``,
+  entries match ``sha256:<64 lowercase hex>`` (plus only the known optional
+  provenance keys with well-formed values), and page keys are canonical
+  ``/openwiki/**`` Markdown paths that are not reserved;
+OpenWiki loads every ``openwiki/.claims/**/*.json`` sidecar during preflight and
+validates each one against a strict zod schema, and refuses the run when one is
+rejected — a shape the two digivoice sidecars from commit 4b0f8ef05 hit, because
+their pages were added without ``pageVersion`` or their
+``openwiki/.page-manifest.json`` entries. Separately, a claim-bearing sidecar
+without a durable ``verification`` block fails the run again at page coverage,
+so neither state may merge.
+
+What it asserts
+---------------
+The error rules mirror what OpenWiki 0.5.0 validates at preflight
+(``store.js`` ``PageClaimsSchema``/``VerificationSchema``, strict objects) and at
+manifest load (``page-manifest.js`` ``ManifestSchema``):
+
+Errors (exit 1):
+* every sidecar parses as a JSON object with exactly the ``schemaVersion``,
+  ``pageVersion``, ``claims`` and (optional) ``verification`` keys;
+* ``schemaVersion`` is the literal ``1`` (a JSON ``true`` is not);
+* ``pageVersion`` matches ``sha256:<64 lowercase hex>``;
+* ``claims`` is a list (possibly empty) of claim objects carrying non-empty
+  ``id`` and ``statement`` strings and a non-empty ``evidence`` list of objects
+  with non-empty ``resource``/``version`` strings;
+* a non-empty ``claims`` list carries a ``verification`` object with non-empty
+  ``by``/``at`` strings and no extra keys;
+* every sidecar maps to a page that exists on disk;
+* the manifest is an object with exactly ``schemaVersion`` and ``pages``,
+  entries match ``sha256:<64 lowercase hex>`` (plus only the known optional
+  provenance keys with well-formed values), and page keys are canonical
+  ``/openwiki/**`` Markdown paths that are not reserved;
+* a claim-bearing sidecar must also have a manifest entry with the same
+  ``pageVersion`` — the exact half-written state this check exists for.
 
 Warnings (reported, exit 0), because an interrupted run legitimately leaves
 them and the workflow turns that run into a mergeable partial PR:
 * a verified sidecar with no manifest entry, or one whose manifest entry has a
   different ``pageVersion`` (OpenWiki rebuilds the manifest at finish);
-* a manifest entry with no sidecar.
+* a manifest entry with no claim sidecar.
+
+The check is deliberately structural and does not re-hash the Markdown bytes:
+page bytes may lag the committed versions until the run's planner regenerates
+them, and OpenWiki's durability proof covers the pages the run processes, where
+it rewrites their sidecars itself.
 
 Usage
 -----
@@ -41,15 +87,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
 import re
 import sys
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 PAGE_VERSION_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 MANIFEST_SCHEMA_VERSION = 1
+# Strict key sets mirrored from openwiki 0.5.0 (PageClaimsSchema, VerificationSchema
+# and ManifestEntrySchema are all zod ``.strict()`` objects: extra keys are rejected).
+SIDECAR_KEYS = frozenset({"schemaVersion", "pageVersion", "claims", "verification"})
+VERIFICATION_KEYS = frozenset({"by", "at"})
+CLAIM_KEYS = frozenset({"id", "statement", "evidence"})
+EVIDENCE_KEYS = frozenset({"resource", "version"})
+MANIFEST_KEYS = frozenset({"schemaVersion", "pages"})
+MANIFEST_ENTRY_KEYS = frozenset({"gitHead", "sourceFingerprint", "pageVersion", "completedBy", "completedRunId"})
+# Reserved OpenWiki wiki files (``paths.js`` ``RESERVED_WIKI_FILES``).
+RESERVED_WIKI_FILES = frozenset({"index.md", "log.md", "instructions.md"})
 
 
 @dataclass(frozen=True)
@@ -58,6 +117,39 @@ class Finding:
     code: str
     path: str
     message: str
+
+
+def _nonempty_str(value: Any) -> bool:
+    """Whether ``value`` is a string with non-whitespace content."""
+    return isinstance(value, str) and value.strip() != ""
+
+
+def _canonical_page_path(value: Any) -> str | None:
+    """Mirror of openwiki 0.5.0 ``normalizeWikiPagePath`` for manifest page keys.
+
+    Returns the canonical ``/openwiki/**.md`` path, or ``None`` when the value is
+    not canonical (wrong root/format, traversal segments, ``.claims`` segment or
+    a reserved basename), which the tool rejects at manifest load.
+    """
+    if not isinstance(value, str):
+        return None
+    slashed = value.replace("\\", "/")
+    if any(segment in (".", "..") for segment in slashed.split("/")):
+        return None
+    unrooted = slashed.lstrip("/")
+    rooted = unrooted if unrooted == "openwiki" or unrooted.startswith("openwiki/") else f"openwiki/{unrooted}"
+    normalized = posixpath.normpath(f"/{rooted}")
+    segments = normalized.lower().split("/")
+    if (
+        not normalized.startswith("/openwiki/")
+        or not normalized.endswith(".md")
+        or ".claims" in segments
+        or normalized.rsplit("/", 1)[-1].lower() in RESERVED_WIKI_FILES
+    ):
+        return None
+    if normalized != value:
+        return None
+    return normalized
 
 
 def _sidecar_pages(root: Path) -> dict[str, Path]:
@@ -73,7 +165,7 @@ def _sidecar_pages(root: Path) -> dict[str, Path]:
 
 
 def _load_manifest(root: Path) -> tuple[dict[str, dict[str, object]], list[Finding]]:
-    """Return manifest page entries plus any load error."""
+    """Return manifest page entries plus load errors (empty pages on a fatal error)."""
     manifest_path = root / "openwiki" / ".page-manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -90,7 +182,9 @@ def _load_manifest(root: Path) -> tuple[dict[str, dict[str, object]], list[Findi
                 f"manifest is not valid JSON: {error}",
             )
         ]
-    if not isinstance(manifest, dict) or manifest.get("schemaVersion") != MANIFEST_SCHEMA_VERSION:
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("schemaVersion"), int) or isinstance(
+        manifest.get("schemaVersion"), bool
+    ) or manifest.get("schemaVersion") != MANIFEST_SCHEMA_VERSION:
         return {}, [
             Finding(
                 "error",
@@ -109,10 +203,70 @@ def _load_manifest(root: Path) -> tuple[dict[str, dict[str, object]], list[Findi
                 "manifest must carry a pages object",
             )
         ]
-    return pages, []
+    extras = sorted(set(manifest) - MANIFEST_KEYS)
+    finding = (
+        Finding(
+            "error",
+            "manifest_schema",
+            "openwiki/.page-manifest.json",
+            f"manifest has unknown key(s): {', '.join(extras)}",
+        )
+        if extras
+        else None
+    )
+    return pages, [finding] if finding else []
 
 
-def _verification_error(display: str, payload: dict[str, object]) -> Finding | None:
+def _manifest_entry_error(page: str, entry: Any) -> Finding | None:
+    """Mirror openwiki 0.5.0 ``ManifestEntrySchema`` (strict) for one manifest entry."""
+    if not isinstance(entry, dict):
+        return Finding(
+            "error",
+            "manifest_bad_entry",
+            "openwiki/.page-manifest.json",
+            f"entry {page} must be an object",
+        )
+    extras = sorted(set(entry) - MANIFEST_ENTRY_KEYS)
+    if extras:
+        return Finding(
+            "error",
+            "manifest_bad_entry",
+            "openwiki/.page-manifest.json",
+            f"entry {page} has unknown key(s): {', '.join(extras)}",
+        )
+    if not isinstance(entry.get("pageVersion"), str) or not PAGE_VERSION_RE.match(entry.get("pageVersion", "")):
+        return Finding(
+            "error",
+            "manifest_bad_page_version",
+            "openwiki/.page-manifest.json",
+            f"entry {page} has no valid pageVersion",
+        )
+    if "gitHead" in entry and not _nonempty_str(entry["gitHead"]):
+        return Finding("error", "manifest_bad_entry", "openwiki/.page-manifest.json", f"entry {page} has an empty gitHead")
+    if "sourceFingerprint" in entry and not (
+        isinstance(entry["sourceFingerprint"], str) and PAGE_VERSION_RE.match(entry["sourceFingerprint"])
+    ):
+        return Finding(
+            "error",
+            "manifest_bad_entry",
+            "openwiki/.page-manifest.json",
+            f"entry {page} has no valid sourceFingerprint",
+        )
+    if "completedBy" in entry and not _nonempty_str(entry["completedBy"]):
+        return Finding(
+            "error", "manifest_bad_entry", "openwiki/.page-manifest.json", f"entry {page} has an empty completedBy"
+        )
+    if "completedRunId" in entry:
+        try:
+            uuid.UUID(entry["completedRunId"])
+        except (ValueError, AttributeError, TypeError):
+            return Finding(
+                "error", "manifest_bad_entry", "openwiki/.page-manifest.json", f"entry {page} has no valid completedRunId"
+            )
+    return None
+
+
+def _verification_error(display: str, payload: dict[str, Any]) -> Finding | None:
     """Return the missing/invalid verification finding for a claim-bearing sidecar, if any."""
     claims = payload.get("claims")
     if not isinstance(claims, list) or not claims:
@@ -122,16 +276,76 @@ def _verification_error(display: str, payload: dict[str, object]) -> Finding | N
         return Finding(
             "error", "sidecar_missing_verification", display, "sidecar has claims but no verification"
         )
-    by = verification.get("by")
-    at = verification.get("at")
-    if not (isinstance(by, str) and by.strip()) or not (isinstance(at, str) and at.strip()):
+    if set(verification) - VERIFICATION_KEYS or not _nonempty_str(verification.get("by")) or not _nonempty_str(
+        verification.get("at")
+    ):
         return Finding(
             "error",
             "sidecar_bad_verification",
             display,
-            "verification must carry non-empty by and at",
+            "verification must hold exactly non-empty by and at",
         )
     return None
+
+
+def _sidecar_shape_errors(display: str, payload: dict[str, Any]) -> list[Finding]:
+    """Mirror openwiki 0.5.0 ``PageClaimsSchema`` (strict) rejects for one sidecar."""
+    errors: list[Finding] = []
+    extras = sorted(set(payload) - SIDECAR_KEYS)
+    if extras:
+        errors.append(
+            Finding(
+                "error",
+                "sidecar_schema",
+                display,
+                f"sidecar has unknown key(s): {', '.join(extras)}",
+            )
+        )
+    schema_version = payload.get("schemaVersion")
+    if isinstance(schema_version, bool) or schema_version != 1:
+        errors.append(
+            Finding("error", "sidecar_schema", display, "schemaVersion must be the literal 1")
+        )
+    claims = payload.get("claims")
+    if not isinstance(claims, list):
+        errors.append(
+            Finding("error", "sidecar_missing_claims", display, "sidecar has no claims array")
+        )
+        return errors
+    for claim in claims:
+        if (
+            not isinstance(claim, dict)
+            or set(claim) - CLAIM_KEYS
+            or not _nonempty_str(claim.get("id"))
+            or not _nonempty_str(claim.get("statement"))
+        ):
+            errors.append(
+                Finding(
+                    "error",
+                    "sidecar_bad_claim",
+                    display,
+                    "each claim must hold non-empty id and statement",
+                )
+            )
+            continue
+        evidence = claim.get("evidence")
+        valid_evidence = isinstance(evidence, list) and len(evidence) > 0 and all(
+            isinstance(item, dict)
+            and not (set(item) - EVIDENCE_KEYS)
+            and _nonempty_str(item.get("resource"))
+            and _nonempty_str(item.get("version"))
+            for item in evidence
+        )
+        if not valid_evidence:
+            errors.append(
+                Finding(
+                    "error",
+                    "sidecar_bad_claim",
+                    display,
+                    f"claim {claim.get('id')} needs non-empty evidence with resource and version",
+                )
+            )
+    return errors
 
 
 def _sidecar_findings(page: str, sidecar: Path, root: Path, manifest: dict[str, dict[str, object]]) -> list[Finding]:
@@ -143,6 +357,8 @@ def _sidecar_findings(page: str, sidecar: Path, root: Path, manifest: dict[str, 
         return [Finding("error", "sidecar_invalid_json", display, f"not valid JSON: {error}")]
     if not isinstance(payload, dict):
         return [Finding("error", "sidecar_schema", display, "sidecar must be a JSON object")]
+
+    findings = _sidecar_shape_errors(display, payload)
 
     page_version = payload.get("pageVersion")
     if page_version is None:
@@ -198,16 +414,18 @@ def check(root: Path = REPO_ROOT) -> list[Finding]:
         return findings
 
     for page, entry in sorted(manifest.items()):
-        entry_version = entry.get("pageVersion") if isinstance(entry, dict) else None
-        if not isinstance(entry_version, str) or not PAGE_VERSION_RE.match(entry_version):
+        if _canonical_page_path(page) is None:
             findings.append(
                 Finding(
                     "error",
-                    "manifest_bad_page_version",
+                    "manifest_bad_page_path",
                     "openwiki/.page-manifest.json",
-                    f"entry {page} has no valid pageVersion",
+                    f"page key {page} is not a canonical OpenWiki Markdown path",
                 )
             )
+        entry_error = _manifest_entry_error(page, entry)
+        if entry_error is not None:
+            findings.append(entry_error)
         if page not in sidecars:
             findings.append(
                 Finding(

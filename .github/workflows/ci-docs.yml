@@ -46,12 +46,13 @@ jobs:
         run: uv run --frozen --no-sync python scripts/check_doc_links.py
 
       - name: Check OpenWiki claim sidecars match the page manifest
-        # A sidecar with no pageVersion makes `openwiki code --update` fail in
-        # preflight, so the scheduled wiki update never opens its PR; a sidecar
-        # with claims but no verification makes it fail at finish. DIG-4382. The
-        # door is deliberately left open to the states an interrupted run
-        # produces (verified sidecar not yet in the manifest), which the workflow
-        # turns into a mergeable partial PR.
+        # Any claim sidecar openwiki 0.5.0 rejects at preflight (no pageVersion, no
+        # claims array, wrong schemaVersion, unknown keys, bad verification) makes
+        # `openwiki code --update` short-circuit into "Invalid claim sidecar ...",
+        # so the scheduled wiki update never opens its PR; a claim-bearing sidecar
+        # with no durable verification fails later at page coverage. DIG-4382.
+        # Structural only: page bytes may lag the manifest until the run's planner
+        # regenerates them, so the checker does not re-hash Markdown.
         run: uv run --frozen --no-sync python scripts/check_openwiki_claims_state.py
 
       - name: Check ADR numbering

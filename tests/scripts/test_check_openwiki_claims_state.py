@@ -5,7 +5,8 @@ that has no ``pageVersion`` and no ``openwiki/.page-manifest.json`` entry. That
 pair makes ``openwiki code --update`` fail during preflight, so the scheduled
 documentation update never opens its PR. These tests pin both halves: the
 start-up failure (``pageVersion``) and the finish failure (a sidecar with claims
-but no ``verification``), plus the clean tree the real repository must pass.
+but no ``verification``), the strict shapes OpenWiki 0.5.0 rejects the same way
+at preflight, and the clean tree the real repository must pass.
 """
 
 from __future__ import annotations
@@ -176,3 +177,119 @@ def test_cli_exit_code_follows_errors(tmp_path: Path) -> None:
     assert mod.main(["--root", str(clean)]) == 0
     assert mod.main(["--root", str(warned)]) == 0
     assert mod.main(["--root", str(broken)]) == 1
+
+
+def test_cli_json_formats_within_a_clean_tree(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    tree = _write(tmp_path, {"/openwiki/digivoice/architecture.md": {"pageVersion": VERSION}}, {"/openwiki/digivoice/architecture.md": _sidecar()})
+    assert _load().main(["--root", str(tree), "--format", "json"]) == 0
+    assert json.loads(capsys.readouterr().out) == []
+
+
+def test_sidecar_schema_version_bool_is_an_error(tmp_path: Path) -> None:
+    payload = _sidecar()
+    payload["schemaVersion"] = True
+    tree = _write(tmp_path, {"/openwiki/digivoice/architecture.md": {"pageVersion": VERSION}}, {"/openwiki/digivoice/architecture.md": payload})
+    findings = _load().check(tree)
+    assert "sidecar_schema" in _codes(findings, "error")
+
+
+def test_sidecar_schema_version_wrong_is_an_error(tmp_path: Path) -> None:
+    payload = _sidecar()
+    payload["schemaVersion"] = 2
+    tree = _write(tmp_path, {"/openwiki/digivoice/architecture.md": {"pageVersion": VERSION}}, {"/openwiki/digivoice/architecture.md": payload})
+    findings = _load().check(tree)
+    assert "sidecar_schema" in _codes(findings, "error")
+
+
+def test_sidecar_without_claims_array_is_an_error(tmp_path: Path) -> None:
+    payload = _sidecar()
+    del payload["claims"]
+    tree = _write(tmp_path, {"/openwiki/digivoice/architecture.md": {"pageVersion": VERSION}}, {"/openwiki/digivoice/architecture.md": payload})
+    findings = _load().check(tree)
+    assert "sidecar_missing_claims" in _codes(findings, "error")
+    # No verification requirement is charged on top of the absent claims array.
+    assert "sidecar_missing_verification" not in _codes(findings)
+
+
+def test_sidecar_with_unknown_key_is_an_error(tmp_path: Path) -> None:
+    payload = _sidecar()
+    payload["gitHead"] = "abc123"
+    tree = _write(tmp_path, {"/openwiki/digivoice/architecture.md": {"pageVersion": VERSION}}, {"/openwiki/digivoice/architecture.md": payload})
+    findings = _load().check(tree)
+    assert "sidecar_schema" in _codes(findings, "error")
+
+
+def test_sidecar_claim_without_evidence_is_an_error(tmp_path: Path) -> None:
+    payload = _sidecar()
+    payload["claims"] = [{"id": "claim_test", "statement": "s", "evidence": []}]
+    tree = _write(tmp_path, {"/openwiki/digivoice/architecture.md": {"pageVersion": VERSION}}, {"/openwiki/digivoice/architecture.md": payload})
+    findings = _load().check(tree)
+    assert "sidecar_bad_claim" in _codes(findings, "error")
+
+
+def test_sidecar_verification_with_extra_key_is_an_error(tmp_path: Path) -> None:
+    payload = _sidecar()
+    payload["verification"] = dict(VERIFICATION, by="x")
+    payload["verification"]["extra"] = "y"
+    tree = _write(tmp_path, {"/openwiki/digivoice/architecture.md": {"pageVersion": VERSION}}, {"/openwiki/digivoice/architecture.md": payload})
+    findings = _load().check(tree)
+    assert "sidecar_bad_verification" in _codes(findings, "error")
+
+
+def test_uppercase_page_version_hex_is_an_error(tmp_path: Path) -> None:
+    tree = _write(
+        tmp_path,
+        {"/openwiki/digivoice/architecture.md": {"pageVersion": "sha256:" + "A" * 64}},
+        {"/openwiki/digivoice/architecture.md": _sidecar(version="sha256:" + "A" * 64)},
+    )
+    findings = _load().check(tree)
+    assert "sidecar_bad_page_version" in _codes(findings, "error")
+    assert "manifest_bad_page_version" in _codes(findings, "error")
+
+
+def test_manifest_with_unknown_top_level_key_is_an_error(tmp_path: Path) -> None:
+    tree = _write(tmp_path, {}, {})
+    manifest = tree / "openwiki" / ".page-manifest.json"
+    manifest.write_text(json.dumps({"schemaVersion": 1, "pages": {}, "gitHead": "abc"}), encoding="utf-8")
+    findings = _load().check(tree)
+    assert "manifest_schema" in _codes(findings, "error")
+
+
+def test_manifest_schema_version_bool_is_an_error(tmp_path: Path) -> None:
+    tree = _write(tmp_path, {}, {})
+    manifest = tree / "openwiki" / ".page-manifest.json"
+    manifest.write_text(json.dumps({"schemaVersion": True, "pages": {}}), encoding="utf-8")
+    findings = _load().check(tree)
+    assert "manifest_schema" in _codes(findings, "error")
+
+
+def test_manifest_entry_with_unknown_key_is_an_error(tmp_path: Path) -> None:
+    tree = _write(tmp_path, {"/openwiki/digivoice/architecture.md": {"pageVersion": VERSION, "gitHand": "abc"}}, {"/openwiki/digivoice/architecture.md": _sidecar()})
+    findings = _load().check(tree)
+    assert "manifest_bad_entry" in _codes(findings, "error")
+
+
+def test_manifest_entry_with_bad_completed_run_id_is_an_error(tmp_path: Path) -> None:
+    tree = _write(tmp_path, {"/openwiki/digivoice/architecture.md": {"pageVersion": VERSION, "completedRunId": "nope"}}, {"/openwiki/digivoice/architecture.md": _sidecar()})
+    findings = _load().check(tree)
+    assert "manifest_bad_entry" in _codes(findings, "error")
+
+
+def test_manifest_entry_not_an_object_is_an_error(tmp_path: Path) -> None:
+    tree = _write(tmp_path, {}, {"/openwiki/digivoice/architecture.md": _sidecar()})
+    manifest = tree / "openwiki" / ".page-manifest.json"
+    manifest.write_text(json.dumps({"schemaVersion": 1, "pages": {"/openwiki/digivoice/architecture.md": "broken"}}), encoding="utf-8")
+    findings = _load().check(tree)
+    assert "manifest_bad_entry" in _codes(findings, "error")
+
+
+def test_manifest_with_non_canonical_page_key_is_an_error(tmp_path: Path) -> None:
+    tree = _write(tmp_path, {"/openwiki/digivoice/architecture": {"pageVersion": VERSION}}, {"/openwiki/digivoice/architecture.md": _sidecar()})
+    findings = _load().check(tree)
+    assert "manifest_bad_page_path" in _codes(findings, "error")
+
+
+def test_manifest_with_reserved_page_key_is_an_error(tmp_path: Path) -> None:
+    tree = _write(tmp_path, {"/openwiki/index.md": {"pageVersion": VERSION}}, {})
+    findings = _load().check(tree)
+    assert "manifest_bad_page_path" in _codes(findings, "error")
