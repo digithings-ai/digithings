@@ -532,12 +532,15 @@ export const JOBS: readonly Job[] = [
   // missed outright is caught the same day, not the next morning.
   // Runs in this Worker now (twelvex-watch.ts); GITHUB_OVERRIDE_JOBS falls back to GHA.
   tw("twelve-x-feed-confirm-watchdog", "23 16 * * MON-FRI", "feed_confirm_watchdog.yml", "feed-confirm"),
-  // Hourly lost-house-run watcher (DIG-3065). Appended last so the deploy-config
+  // Hourly house-run watcher (DIG-3065), plus the Monday dispatch-confirmation
+  // and never-landed arms (DIG-4416, DIG-3456). Appended last so the deploy-config
   // contract, which compares wrangler.toml [triggers].crons to uniqueEnabledCrons()
-  // in order, needs no reshuffle. Minute :23 is clear of the :17 cluster
+  // in order, needs no reshuffle. Minute :22 is five minutes after the Monday
+  // 09:17 house-run start, so a POST that never arrived is raised inside the
+  // grace DIG-4416 sets; it is also clear of the :17 cluster
   // (production-deploy-gate-watchdog, datatap-answer-check, smoke-site), :41
-  // (token-canary) and :47, and clear of the 09:17 house-run start it watches.
-  wj("digiquant-house-run-watch", "23 * * * *", "digiquant-runner"),
+  // (token-canary) and :47.
+  wj("digiquant-house-run-watch", "22 * * * *", "digiquant-runner"),
   // Was the GHA `schedule: 40 */6 * * *` on primarketet_heartbeat_watchdog.yml.
   tw(
     "twelve-x-session-heartbeat-watchdog",

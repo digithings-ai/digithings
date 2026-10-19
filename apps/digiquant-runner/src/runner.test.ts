@@ -896,6 +896,7 @@ describe("GET /v1/jobs/house-status landing check (DIG-3456)", () => {
       run_date: "2026-10-12",
       landed: true,
       open_house_runs: [],
+      dispatched: false,
       verifiable: true,
     });
   });
@@ -908,6 +909,7 @@ describe("GET /v1/jobs/house-status landing check (DIG-3456)", () => {
       run_date: "2026-10-12",
       landed: false,
       open_house_runs: [],
+      dispatched: false,
       verifiable: true,
     });
   });
@@ -929,6 +931,64 @@ describe("GET /v1/jobs/house-status landing check (DIG-3456)", () => {
       run_date: "2026-10-12",
       landed: false,
       open_house_runs: [accepted.run_id],
+      dispatched: true,
+      verifiable: true,
+    });
+  });
+
+  // DIG-4416. `open_house_runs` only lists locks. A house run accepted while
+  // another job holds a lock is QUEUED by mustQueue(), so it holds no lock and
+  // the field reads empty even though the POST reached the runner. A dispatch
+  // watchdog built on `open_house_runs` alone would call that Monday missing.
+  it("reports a dispatched house run that queued behind another job's lock", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    await session.accept(
+      job({
+        command: "market-data-refresh",
+        job_id: "market-data-refresh-morning",
+        concurrency: "market-data-refresh",
+        idempotency_key: "market-data-refresh-morning:1",
+      }),
+    );
+    await session.accept(
+      job({
+        command: "house-run",
+        job_id: "house-run-09",
+        concurrency: "digiquant-pipeline",
+        timeout_seconds: 14400,
+        idempotency_key: "house-run-09:queued",
+        args: { refresh_scope: "none", run_date: "2026-10-12" },
+      }),
+    );
+    const res = await get(session, "2026-10-12");
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [],
+      dispatched: true,
+      verifiable: true,
+    });
+  });
+
+  it("does not count a house run accepted for another run_date", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    await session.accept(
+      job({
+        command: "house-run",
+        job_id: "house-run-09",
+        concurrency: "digiquant-pipeline",
+        timeout_seconds: 14400,
+        idempotency_key: "house-run-09:prior",
+        args: { refresh_scope: "none", run_date: "2026-10-05" },
+      }),
+    );
+    const res = await get(session, "2026-10-12");
+    // The prior Monday's run still holds the lock, so open_house_runs is not
+    // empty; the dispatch answer must still be about 2026-10-12 alone.
+    expect(await res.json()).toMatchObject({
+      run_date: "2026-10-12",
+      landed: false,
+      dispatched: false,
       verifiable: true,
     });
   });
@@ -941,6 +1001,7 @@ describe("GET /v1/jobs/house-status landing check (DIG-3456)", () => {
       run_date: "2026-10-12",
       landed: false,
       open_house_runs: [],
+      dispatched: false,
       verifiable: false,
     });
   });

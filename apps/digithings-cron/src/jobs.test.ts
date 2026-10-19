@@ -396,14 +396,14 @@ describe("jobsForCron", () => {
     const job = JOBS.find((row) => row.id === "digiquant-house-run-watch");
     expect(job).toMatchObject({
       id: "digiquant-house-run-watch",
-      cron: "23 * * * *",
+      cron: "22 * * * *",
       repo: "digithings-ai/digithings",
       kind: "watch",
       watch: "digiquant-runner",
       ref: "develop",
       enabled: true,
     });
-    expect(jobsForCron("23 * * * *").map((row) => row.id)).toEqual([
+    expect(jobsForCron("22 * * * *").map((row) => row.id)).toEqual([
       "digiquant-house-run-watch",
     ]);
     // Read-only: a watch row carries no command, so index.ts's house-run arg

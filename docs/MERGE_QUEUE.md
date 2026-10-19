@@ -79,7 +79,7 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Gate | Rule |
 |---|---|
 | Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3), and a PR whose `baseRefName` is anything else is refused too. |
-| Required check | The names in `required_checks_by_repo` for this repo must each have **reported** and concluded `SUCCESS`. For `twelve-x` that is `test` (from a workflow run). For `digithings` it is `local-ci` — which arrives as a commit StatusContext, never as a workflow run, so the names in `status_context_checks` are exempt from the workflow-run evidence rule (DIG-3707). |
+| Required check | The names in `required_checks_by_repo` for this repo must each have **reported** and concluded `SUCCESS`. Both repos currently require `local-ci`: `digithings` because its branch protection names it, and `twelve-x` since 2026-10-19 because its Actions job `test` cannot start while billing is blocked (DIG-4454). `local-ci` arrives as a commit StatusContext, never as a workflow run, so the names in `status_context_checks` are exempt from the workflow-run evidence rule (DIG-3707) — see the cost stated below. |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
@@ -112,12 +112,22 @@ being closed. This has a real cost: Bugbot reports `neutral` when it is out of q
 required Bugbot check would block merges indefinitely. Do not put a metered third-party
 service on the required list. See `reviews/archive/CODE_REVIEW_BASELINE.md`.
 
-**A green commit status is not a passing build.** GitHub's commit status docs are explicit
-that "any person or integration with write permissions can set the state of any status
-check". So a required check only satisfies the gate if it arrived as a *check run* — one
-bound to an Actions workflow — not as a bare status anyone with write access can type. Every
-required check on both repos is a check run, so this costs nothing; it is here because the
-alternative is a queue that any agent holding a token could green-light its own PR.
+**A green commit status is not a passing build — except where the alternative is no gate at
+all.** GitHub's commit status docs are explicit that "any person or integration with write
+permissions can set the state of any status check". So a required check normally only
+satisfies the gate if it arrived as a *check run* — one bound to an Actions workflow — not as
+a bare status anyone with write access can type.
+
+Two names are exempt, and the exemptions are not free. `digithings` requires `local-ci`,
+posted by the host mirror rather than by a workflow, so the exemption is what makes the queue
+work there at all (DIG-3707). Since 2026-10-19 `twelve-x` requires the same name for a
+different reason: its only Actions job (`test`) cannot start while the org's billing is
+blocked (DIG-4454), so a commit status is the only verdict that can exist. The cost is real —
+**any write token can post `local-ci: success`, and `twelve-x` has no branch protection behind
+the queue**, so on that repo the queue is the only gate. What still stands between a forged
+status and an unreviewed merge is the review row: a status clears the check gate but not
+review coverage. The exemption is time-boxed — revert `twelve-x` to `test` when the minutes
+reset.
 
 **Required check names are per repo, and a name that matches nothing is called out
 separately.** The two repos in this org report different names for the same idea:
