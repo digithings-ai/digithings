@@ -121,7 +121,7 @@ export function DeskFrame({ current, children }: { current: string; children: Re
       >
         <header className="relative z-50 flex h-8 min-w-0 shrink-0 items-center gap-2 border-b border-hair px-2 text-[0.7rem] sm:gap-3 sm:px-3">
           <Link href="/" className="desk-mark inline-flex shrink-0 items-center text-ink">
-            <QuantWordmark className="block h-[14px] w-auto fill-current text-ink" />
+            <QuantWordmark className="block h-[14px] w-[98px] fill-current text-ink" />
           </Link>
           <Button
             type="button"
