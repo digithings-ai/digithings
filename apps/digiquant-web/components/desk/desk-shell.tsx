@@ -39,11 +39,14 @@ export function DeskShell({ children }: { children: ReactNode }) {
 
   return (
     <ChatDesk active={path === "/tools/chat"}>
+      {/* First in the DOM, so the skip link is the first Tab stop and bypasses
+          the header and the rail. The route h1 is the page's only h1; page
+          bodies use h2 when they carry their own visible title. */}
+      <a href="#desk-main" className="desk-skip">
+        Skip to desk content
+      </a>
+      <h1 className="desk-sr">{deskRouteLabel(path)}</h1>
       <DeskFrame current={path}>
-        <a href="#desk-main" className="desk-skip">
-          Skip to desk content
-        </a>
-        <h1 className="desk-sr">{deskRouteLabel(path)}</h1>
         <div
           key={path}
           id="desk-main"

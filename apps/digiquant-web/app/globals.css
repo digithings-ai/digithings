@@ -571,13 +571,18 @@ body {
 /* Radius canon across the Vela widget chrome (toolbar, dialogs,
    tooltips, inputs). The widget injects its stylesheet at mount, so it
    wins equal-specificity ties by order: `!important` is the only lever
-   that holds. Callout dots stay round: circles are geometry. */
+   that holds. Circles stay round: geometry. The vendor draws its dots,
+   knobs and avatars with inline `border-radius:50%`, and an `!important`
+   sheet rule beats an inline declaration, so those elements are excluded
+   by their inline style (plus the callout class). */
 .vela-host {
   --vela-radius-sm: 0;
   --vela-radius-md: 0;
   --vela-radius-lg: 0;
 }
-.vela-host *:not(.vela-callout) { border-radius: 0 !important; }
+.vela-host *:not(.vela-callout):not([style*="border-radius:50%"]):not([style*="border-radius: 50%"]) {
+  border-radius: 0 !important;
+}
 
 /* Every Vela control shows the same visible focus ring as the desk. */
 .vela-host button:focus-visible,

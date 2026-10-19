@@ -167,6 +167,14 @@ describe("desk chrome", () => {
     expect(shell).toContain("<h1");
     expect(shell).toContain('id="desk-main"');
     expect(shell).toContain("deskRouteLabel");
+    // The skip link is the first Tab stop: it precedes the frame (header/rail).
+    expect(shell.indexOf("desk-skip")).toBeLessThan(shell.indexOf("<DeskFrame"));
+    // Pages that carry their own visible title use h2; the shell h1 is the
+    // only h1 on the route.
+    for (const page of ["settings-page.tsx", "gloomberb-terminal.tsx"]) {
+      const body = readFileSync(new URL(`./${page}`, import.meta.url), "utf8");
+      expect(body).not.toContain("<h1");
+    }
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
     expect(css).toContain(".desk-skip:focus-visible");
     expect(css).toContain(".desk-sr {");
@@ -186,7 +194,8 @@ describe("desk chrome", () => {
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
     expect(css).toContain(".desk-pane-body:focus-visible");
     expect(css).toContain(".vela-host:focus-visible");
-    expect(css).toMatch(/\.vela-host \*:not\(\.vela-callout\)\s*\{\s*border-radius:\s*0\s*!important/s);
+    expect(css).toContain('.vela-host *:not(.vela-callout):not([style*="border-radius:50%"])');
+    expect(vela).toContain('role="group"');
     expect(css).toContain(".vela-host button:focus-visible");
   });
 });
