@@ -22,13 +22,29 @@ name: "CI: review coverage"
 on:
   pull_request:
     branches: [main]
+  # Re-gate a promotion without pushing a new commit. On 2026-10-14 this
+  # workflow was disabled by hand; the required check on main stayed green
+  # only because local-ci posted a commit status with a user token, which
+  # branch protection does not accept: the context is scoped to the Actions
+  # app (integration 15368). #5506 sat BLOCKED for a day with every visible
+  # check green. A dispatch entry point means the gate can always be re-run
+  # on the exact head being promoted.
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: "Base branch to compare against"
+        required: true
+        default: main
+      head_sha:
+        description: "Commit SHA to gate (the promotion head)"
+        required: true
 
 permissions:
   contents: read
   pull-requests: read
 
 concurrency:
-  group: review-coverage-${{ github.event.pull_request.number }}
+  group: review-coverage-${{ github.event.pull_request.number || inputs.head_sha }}
   cancel-in-progress: true
 
 jobs:
@@ -52,8 +68,8 @@ jobs:
       - name: Check review coverage of the promotion range
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ inputs.base_ref || github.base_ref }}
+          HEAD_SHA: ${{ inputs.head_sha || github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
