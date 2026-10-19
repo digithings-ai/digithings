@@ -419,13 +419,13 @@ def test_allowed_host_patterns_match_portless_and_ported_host():
     middleware = ts.TransportSecurityMiddleware(
         ts.TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
-            allowed_hosts=server._allowed_host_patterns("digithings.ai, zammad-mcp"),
+            allowed_hosts=server._allowed_host_patterns("digithings.ai, mcp-sidecar"),
         )
     )
 
     assert middleware._validate_host("digithings.ai")
     assert middleware._validate_host("digithings.ai:443")
-    assert middleware._validate_host("zammad-mcp:8770")
+    assert middleware._validate_host("mcp-sidecar:8770")
     assert not middleware._validate_host("evil.example")
     assert not middleware._validate_host("digithings.ai.evil.example")
 

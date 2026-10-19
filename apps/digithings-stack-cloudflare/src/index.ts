@@ -107,10 +107,9 @@ export class DigiStackContainer extends Container {
     OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
     DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
     // Session model picker (OCC settings): house-upstream slugs a visitor may
-    // pick per session. digigraph binds only slugs on this list.
-    DIGI_SESSION_MODEL_ALLOWLIST:
-      env.DIGI_SESSION_MODEL_ALLOWLIST ??
-      "deepseek/deepseek-v4-flash,google/gemini-3.1-flash-lite,z-ai/glm-5.3-flash,google/gemini-3.7-flash",
+    // pick per session, set in wrangler.toml [vars]. digigraph binds only slugs
+    // on this list, so the empty fallback disables the picker.
+    DIGI_SESSION_MODEL_ALLOWLIST: env.DIGI_SESSION_MODEL_ALLOWLIST ?? "",
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
     // Canonical shared Cloudflare credential pair (#2239 rename) -- one account +
     // token now authorizes both Vectorize and D1. VECTORIZE_*/D1_ACCOUNT_ID/

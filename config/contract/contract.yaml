@@ -1164,6 +1164,18 @@ env:
     - docker-compose.yml
     env_example_files: []
     compose_literal: []
+- name: DIGI_SESSION_MODEL_ALLOWLIST
+  description: House-upstream model slugs a visitor may pick per session (OCC model picker). digigraph
+    binds X-Digi-House-Model only for a slug on this list; empty disables the picker.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: deepseek/deepseek-v4-flash,google/gemini-3.1-flash-lite,z-ai/glm-5.3-flash,google/gemini-3.7-flash
 - name: DIGI_TENANT_CORPUS_MAP
   description: Per-tenant digisearch index and digivault prefix. Value copied verbatim from the stack
     Worker.
