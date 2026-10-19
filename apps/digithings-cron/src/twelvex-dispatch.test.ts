@@ -148,6 +148,37 @@ describe("dispatchTwelvex", () => {
     expect(shared.mock.calls[0][0].headers.get("Authorization")).toBe(
       "Bearer shared-token",
     );
+
+    // The production shape: only the dedicated secret is set.
+    const solo = makeRunner();
+    await dispatchTwelvex(
+      {
+        DRY_RUN: "0",
+        TWELVEX_RUNNER_AUTH: "twelvex-only",
+        TWELVEX_RUNNER: { fetch: solo } as unknown as Fetcher,
+      },
+      job,
+      job.cron,
+    );
+    expect(solo.mock.calls[0][0].headers.get("Authorization")).toBe(
+      "Bearer twelvex-only",
+    );
+
+    // An empty dedicated secret falls back rather than sending `Bearer `.
+    const empty = makeRunner();
+    await dispatchTwelvex(
+      {
+        DRY_RUN: "0",
+        TWELVEX_RUNNER_AUTH: "",
+        RUNNER_AUTH_TOKEN: "shared-token",
+        TWELVEX_RUNNER: { fetch: empty } as unknown as Fetcher,
+      },
+      job,
+      job.cron,
+    );
+    expect(empty.mock.calls[0][0].headers.get("Authorization")).toBe(
+      "Bearer shared-token",
+    );
   });
 
   it("requires the auth token and the binding", async () => {

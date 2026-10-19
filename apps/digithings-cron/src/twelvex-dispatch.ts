@@ -50,7 +50,9 @@ export async function dispatchTwelvex(
   // Dedicated secret first: rotating the twelve-x runner token must never touch
   // the RUNNER_AUTH_TOKEN that digiquant-runner validates. The fallback keeps a
   // single-secret deployment working during the transition.
-  const token = env.TWELVEX_RUNNER_AUTH ?? env.RUNNER_AUTH_TOKEN;
+  // `||`, not `??`: an empty secret is not a usable token, so it falls back
+  // rather than sending `Bearer ` to the runner.
+  const token = env.TWELVEX_RUNNER_AUTH || env.RUNNER_AUTH_TOKEN;
   if (!token) {
     throw new Error("TWELVEX_RUNNER_AUTH or RUNNER_AUTH_TOKEN is required");
   }
