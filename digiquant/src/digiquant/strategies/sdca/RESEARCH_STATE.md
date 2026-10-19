@@ -1692,3 +1692,52 @@ not misattribute them:
   held-cash outcome and carries no information — the result object's own field says so. The OOS
   columns above are the evidence; the holdout is not.
 
+### Why the live index fails the stability arm (2026-10-19)
+
+The RHODL trial showed the live index failing `sensitivity.stable` at **5.89** against the 2.0 cap.
+Diagnosis, because the gate names its own blocker and nobody had asked it who.
+
+**The mechanism.** `walk_forward.sensitivity_neighbors` bumps every numeric param by ±5% and each
+neighbour is re-scored through the full 3-fold walk-forward; `max_abs_delta_oos_pct` is the worst
+`|mean OOS − winner mean OOS|` over all of them, in **percentage points of cumulative return**
+(`SENSITIVITY_SPIKE_PCT = 2.0`, from #3174). 35 neighbours are generated, of which 14 are no-ops (a
+±5% bump of a weight that is exactly 0.0), leaving **21 that actually move something.**
+
+**Measured, live weights, no on-chain.** `worst_neighbor_key = buy_knee_risk:-5%` (35 → 33.25) at
+`max_abs_delta_oos_pct = 5.8909`. **19 of the 21 live neighbours stay within 1.85 points** — the index
+is not bumpy, it is one axis. The two that break the cap are both knee positions:
+
+| neighbour | Δ mean OOS |
+|---|---|
+| `buy_knee_risk:-5%` | **−5.89** |
+| `sell_knee_risk:-5%` | +2.38 |
+| all other 19 | ≤ ±1.77 |
+
+**The buy knee sits on a slope, not a spike.** Sweeping it with everything else fixed:
+
+| `buy_knee_risk` | 30 | 32 | 33.25 | **35** | 36.75 | 38 | 40 | 45 | 50 |
+|---|---|---|---|---|---|---|---|---|---|
+| mean OOS | +28.1 | +48.0 | +54.7 | **+60.6** | +62.5 | +63.1 | **+63.7** | +60.2 | +55.2 |
+
+A broad hill peaking at **38–40**, with the live value — the `SDCA_SHAPE_DEFAULTS` default, not a
+fitted optimum — sitting on its **left flank**. Moving onto the plateau improves OOS by ~3 points and
+halves the worst delta: at 38, `max|Δ| = 3.17`; at 40, `3.42`. **But the barrier then moves to
+`sell_knee_risk:-5%` and the gate still fails.** No single knee value passes.
+
+**This is not new and not caused by anything on this branch.** Across the recorded history the
+blocking axis is *always* a knee: `buy_knee_risk` at 5.62 (#58), `sell_knee_risk:+5%` at 7.84 (#113),
+now `buy_knee_risk:-5%` at 5.89. And **every one of the eight recorded candidate verdicts in this file
+carries `sensitivity.stable=False`** (#51, #58, #652, #672, #689, #739, #766, #1106). The single
+stable reading on record — **1.49** — belongs to the *naive `risk50_linear` reference curve*, not to a
+candidate. It was also `could not be computed` once (#1021).
+
+**Conclusion.** The stability arm is not a defect to repair but the *normal* state of every candidate
+this repo has ever measured, it is concentrated on the curve's knee positions, and on this data no
+tested value of one knee passes it. Two moves remain, and they are different in kind: (a) a **joint**
+re-fit of the knee/curvature axes through the sanctioned Stage-3 `curve_optimize.search_wide_knee_curve`
+— the only path with positive evidence, since the partial move already gains ~3 OOS points; and (b) a
+**governance** question — whether a flat 2.0 *percentage point* cap on a metric whose own level is
+~60 is the right yardstick, given nothing has ever cleared it. (b) is the operator's call, not this
+file's.
+
+
