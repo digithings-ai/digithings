@@ -21,5 +21,5 @@ manifests under `docs/projects/<client>/` (or private `projects/`). These are
 - Runbook: [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md)
 - Plan: `2026-08-09-digichat-corpus-ingest.md` (removed DIG-3399; git history keeps it)
 - Client #0 (dogfood): [`docs/projects/digithings/`](../projects/digithings/)
-- OCC chat plan: [`docs/superpowers/plans/2026-08-10-occ-client-chat.md`](../superpowers/plans/2026-08-10-occ-client-chat.md)
+- OCC chat plan: `2026-08-10-occ-client-chat.md` (removed DIG-3394; git history keeps it)
 - Fit: [`docs/architecture/digichat-self-host-picks-fit.md`](../architecture/digichat-self-host-picks-fit.md)

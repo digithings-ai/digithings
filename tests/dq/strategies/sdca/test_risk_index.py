@@ -149,7 +149,10 @@ class TestBuildRiskIndex:
 
 
 class TestWriteRiskIndex:
-    def test_round_trips_through_sdca_strategy_load(self, tmp_path: Path) -> None:
+    def test_round_trips_through_sdca_strategy_load(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path))
         pytest.importorskip("nautilus_trader")
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
         from nautilus_trader.model.data import BarSpecification, BarType
@@ -176,8 +179,9 @@ class TestWriteRiskIndex:
         assert index[date(2020, 1, 1)] == pytest.approx(frame["risk"][0])
 
     def test_null_risk_survives_parquet_round_trip_not_dropped_or_zero(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path))
         dates, price = _dates_and_price(n=4)
         frame = build_risk_index(dates, price, StaticRiskModel(null_row=0))
         path = write_risk_index(frame, tmp_path / "risk.parquet")
@@ -236,7 +240,10 @@ class TestBtcPowerLawChain:
 
 
 class TestNullRiskProducesNoTrade:
-    def test_loaded_null_day_skips_on_bar_submit(self, tmp_path: Path) -> None:
+    def test_loaded_null_day_skips_on_bar_submit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path))
         pytest.importorskip("nautilus_trader")
         from unittest.mock import Mock
 
@@ -275,3 +282,16 @@ class TestNullRiskProducesNoTrade:
 
         strategy.on_bar(_bar(date(2020, 1, 1)))  # cheap, risk 0 → buy
         strategy._submit_market.assert_called()
+
+
+class TestRiskPathContainment:
+    """DIG-4057 batch B: the risk_index parquet sink stays under DIGIQUANT_DATA_ROOT."""
+
+    def test_write_rejects_path_outside_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path / "root"))
+        dates, price = _dates_and_price(n=2)
+        frame = build_risk_index(dates, price, StaticRiskModel())
+        with pytest.raises(ValueError, match="DIGIQUANT_DATA_ROOT"):
+            write_risk_index(frame, tmp_path / "outside.parquet")

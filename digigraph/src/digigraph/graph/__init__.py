@@ -10,16 +10,8 @@ from digigraph.graph.product_graphs import (
     list_product_graphs,
     run_product_graph,
 )
-from digigraph.graph.research_spike_subgraph import (
-    ResearchState,
-    build_research_subgraph,
-    research_subgraph,
-)
 
 __all__ = [
-    "ResearchState",
-    "research_subgraph",
-    "build_research_subgraph",
     "build_workflow_graph",
     "ProductGraphSpec",
     "ProductGraphRunRequest",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -18,6 +19,7 @@ from digiquant.nautilus_runner import (
     _balance_path_metrics,
     _build_result,
     _extract_pnl,
+    _load_ohlcv_for_backtest,
     _max_drawdown_from_balance_path,
     _returns_series_from_balance_path,
     _run_multi_symbol_backtest,
@@ -1071,3 +1073,33 @@ class TestMultiSymbolHonestStatus:
         result = self._run({"AAA": _symbol_result("AAA"), "BBB": _symbol_result("BBB")})
         assert result is not None
         assert result.honest_rate_by_symbol == {}
+
+
+class TestBedPathContainment:
+    """DIG-4057 batch B: data_path/data_dir stay under DIGIQUANT_DATA_ROOT."""
+
+    def test_data_path_outside_root_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path / "root"))
+        with pytest.raises(ValueError, match="DIGIQUANT_DATA_ROOT"):
+            _load_ohlcv_for_backtest(data_path=str(tmp_path / "outside.csv"))
+
+    def test_data_dir_outside_root_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path / "root"))
+        with pytest.raises(ValueError, match="DIGIQUANT_DATA_ROOT"):
+            _load_ohlcv_for_backtest(data_dir=tmp_path, symbols=["AAPL"])
+
+    def test_unsafe_symbol_is_refused_as_file_segment(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        root = tmp_path / "root"
+        root.mkdir()
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(root))
+        # A traversal-bearing symbol must not build a path outside the dir.
+        assert _load_ohlcv_for_backtest(
+            data_dir=root, symbols=["../escape"]
+        ) is None
+        assert not (tmp_path / "escape.csv").exists()

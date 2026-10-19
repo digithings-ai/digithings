@@ -91,3 +91,20 @@ Assumptions [A] (slice A to confirm against live Origin behaviour):
 
 - D-G6 decided MANDATORY 23:18 (reflected in §2); D-G5 Worker-fallback detail is slice D (DIG-3561).
 - If Origin ever ships outbound mirroring, revisit §1 — until then the decision stands.
+
+## 8. R0 client-literal gate (local-ci, required)
+
+- `scripts/check_r0_no_client_literals.py` (DIG-3689, wired as required by
+  DIG-4043) scans every tracked path that stays public (R0) for client/tenant
+  literals and fails on any hit outside the explicit grandfather list. It runs
+  in the local-ci static gates, so a non-zero exit fails the required
+  `local-ci` status and the PR cannot merge.
+- Run it locally as `python3 scripts/check_r0_no_client_literals.py` (add
+  `--census` for per-path counts). The census reads the git index, so `git add`
+  new files before trusting a local green.
+- Grandfather list: `scripts/r0_client_literals_baseline.json` — every entry
+  names the owning ticket. Baseline refresh and literal removal belong to
+  DIG-3689 / the repo-split scrub, not to passing PRs.
+- Findings carry path + line + pattern name, never the matched value: CI logs
+  on this repo are public. Never print a matched literal in a log, comment,
+  or ticket.

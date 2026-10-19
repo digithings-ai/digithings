@@ -242,3 +242,12 @@ jobs:
 
       - name: Test digidata-api
         run: npm run test --workspace digidata-api
+
+      # corpus-index is the daily corpus Worker. Same reasoning as digidata-api
+      # above: the package declares test and typecheck, and this lane already
+      # paid for the root npm ci that installs the workspace.
+      - name: Typecheck corpus-index
+        run: npm run typecheck --workspace corpus-index
+
+      - name: Test corpus-index
+        run: npm run test --workspace corpus-index

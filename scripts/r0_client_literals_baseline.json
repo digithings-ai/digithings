@@ -37,6 +37,42 @@
       "count": 2,
       "ticket": "DIG-3689"
     },
+    "apps/corpus-index/src/clients.test.ts": {
+      "count": 5,
+      "ticket": "DIG-3895"
+    },
+    "apps/corpus-index/src/clients.ts": {
+      "count": 4,
+      "ticket": "DIG-3895"
+    },
+    "apps/corpus-index/src/config.test.ts": {
+      "count": 4,
+      "ticket": "DIG-3895"
+    },
+    "apps/corpus-index/src/config.ts": {
+      "count": 2,
+      "ticket": "DIG-3895"
+    },
+    "apps/corpus-index/src/env.ts": {
+      "count": 1,
+      "ticket": "DIG-3895"
+    },
+    "apps/corpus-index/src/run.ts": {
+      "count": 1,
+      "ticket": "DIG-3895"
+    },
+    "apps/corpus-index/src/sync.test.ts": {
+      "count": 1,
+      "ticket": "DIG-3895"
+    },
+    "apps/corpus-index/src/sync.ts": {
+      "count": 4,
+      "ticket": "DIG-3895"
+    },
+    "apps/corpus-index/wrangler.toml": {
+      "count": 1,
+      "ticket": "DIG-3895"
+    },
     "apps/digichat/.env.example": {
       "count": 4,
       "ticket": "DIG-3689"
@@ -658,7 +694,7 @@
       "ticket": "DIG-3689"
     },
     "scripts/r0_client_literals_baseline.json": {
-      "count": 20,
+      "count": 19,
       "ticket": "DIG-3689"
     },
     "scripts/repo-split/README.md": {
@@ -987,10 +1023,6 @@
     },
     "tests/dg/test_skill_library.py": {
       "count": 5,
-      "ticket": "DIG-4043"
-    },
-    "tests/scripts/test_datatap_answer_check_report_line.py": {
-      "count": 17,
       "ticket": "DIG-4043"
     }
   }

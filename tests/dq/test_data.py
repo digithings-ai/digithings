@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -46,50 +45,60 @@ class TestGenerateSyntheticOhlcv:
 class TestLoadOhlcvCsv:
     """load_ohlcv_csv reads CSV with Polars."""
 
-    def test_loads_valid_csv(self) -> None:
-        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
-            f.write(b"timestamp,open,high,low,close,volume\n")
-            f.write(b"2024-01-01,100,101,99,100.5,1000\n")
-            f.write(b"2024-01-02,100.5,102,100,101,1100\n")
-            path = f.name
-        try:
-            df = load_ohlcv_csv(path)
-            assert len(df) == 2
-            required = {"open", "high", "low", "close", "volume"}
-            assert required.issubset(set(df.columns)), (
-                f"Missing columns: {required - set(df.columns)}"
-            )
-            assert "close" in df.columns
-            assert df["close"][0] == 100.5
-        finally:
-            Path(path).unlink(missing_ok=True)
+    def test_loads_valid_csv(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path))
+        path = tmp_path / "AAPL.csv"
+        path.write_text(
+            "timestamp,open,high,low,close,volume\n"
+            "2024-01-01,100,101,99,100.5,1000\n"
+            "2024-01-02,100.5,102,100,101,1100\n"
+        )
+        df = load_ohlcv_csv(path)
+        assert len(df) == 2
+        required = {"open", "high", "low", "close", "volume"}
+        assert required.issubset(set(df.columns)), (
+            f"Missing columns: {required - set(df.columns)}"
+        )
+        assert "close" in df.columns
+        assert df["close"][0] == 100.5
+        assert df["symbol"].unique().to_list() == ["AAPL"]
 
-    def test_raises_on_missing_file(self) -> None:
+    def test_raises_on_missing_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path))
         with pytest.raises(FileNotFoundError):
-            load_ohlcv_csv("/nonexistent/path.csv")
+            load_ohlcv_csv(tmp_path / "nonexistent.csv")
 
-    def test_raises_on_missing_required_columns(self) -> None:
-        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
-            f.write(b"date,price\n")
-            f.write(b"2024-01-01,100\n")
-            path = f.name
-        try:
-            with pytest.raises(ValueError, match="missing columns"):
-                load_ohlcv_csv(path)
-        finally:
-            Path(path).unlink(missing_ok=True)
+    def test_rejects_path_outside_data_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # REM-055: load_ohlcv_csv refuses anything outside DIGIQUANT_DATA_ROOT.
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path / "data"))
+        with pytest.raises(ValueError, match="DIGIQUANT_DATA_ROOT"):
+            load_ohlcv_csv(str(tmp_path / "escape.csv"))
+
+    def test_raises_on_missing_required_columns(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(tmp_path))
+        path = tmp_path / "bad.csv"
+        path.write_text("date,price\n2024-01-01,100\n")
+        with pytest.raises(ValueError, match="missing columns"):
+            load_ohlcv_csv(path)
 
 
 @pytest.mark.unit
 class TestListSymbolsFromDir:
     """list_symbols_from_dir lists symbols from CSV filenames."""
 
-    def test_returns_symbols_from_csv_stems(self) -> None:
-        with tempfile.TemporaryDirectory() as d:
-            Path(d, "AAPL.csv").write_text("x")
-            Path(d, "MSFT.csv").write_text("x")
-            Path(d, "GOOGL_ohlcv.csv").write_text("x")
-            syms = list_symbols_from_dir(d)
+    def test_returns_symbols_from_csv_stems(self, tmp_path: Path) -> None:
+        (tmp_path / "AAPL.csv").write_text("x")
+        (tmp_path / "MSFT.csv").write_text("x")
+        (tmp_path / "GOOGL_ohlcv.csv").write_text("x")
+        syms = list_symbols_from_dir(tmp_path)
         assert set(syms) == {"AAPL", "MSFT", "GOOGL"}
 
     def test_returns_empty_for_nonexistent_dir(self) -> None:
