@@ -138,6 +138,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       lockedContact: cfg.lockedContact,
       showByok: cfg.showByok,
       showLanguageSelector: cfg.showLanguageSelector,
+      lockSessionControls: cfg.lockSessionControls,
       webSearch: cfg.webSearch,
       requiredPlanTier: cfg.requiredPlanTier,
     },
@@ -165,6 +166,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     activityDetail: dep.gate.activityDetail,
     showByok: dep.gate.showByok,
     showLanguageSelector: dep.gate.showLanguageSelector,
+    lockSessionControls: dep.gate.lockSessionControls,
     attachments: dep.features.attachments === true,
     // Feature parity (#4532): the reverse direction must carry the same flags,
     // or the /embed first paint loses what the tenant set. Only non-default

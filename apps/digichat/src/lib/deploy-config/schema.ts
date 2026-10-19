@@ -528,6 +528,7 @@ export const GateSchema = z
     lockedContact: z.string().optional(),
     showByok: z.boolean().optional(),
     showLanguageSelector: z.boolean().optional(),
+    lockSessionControls: z.boolean().optional(),
     /** Legacy embed field — also implies tools.catalog web_search when true */
     webSearch: z.boolean().optional(),
     /** Default web_search engine for this tenant (projected to the browser as
