@@ -13,6 +13,12 @@ export interface Env {
   /** Bearer for POST /v1/jobs on digiquant-runner. Required for kind "container". */
   RUNNER_AUTH_TOKEN?: string;
   /**
+   * Bearer for POST /run/* on twelvex-runner. Kept separate from RUNNER_AUTH_TOKEN
+   * so rotating it can never break digiquant-runner. Falls back to
+   * RUNNER_AUTH_TOKEN when only one secret is deployed.
+   */
+  TWELVEX_RUNNER_AUTH?: string;
+  /**
    * Comma-separated job ids that still workflow_dispatch GitHub Actions.
    * Default empty. Non-empty burns Actions minutes.
    */
@@ -44,6 +50,7 @@ declare namespace Cloudflare {
     RUNNER?: Fetcher;
     TWELVEX_RUNNER?: Fetcher;
     RUNNER_AUTH_TOKEN?: string;
+    TWELVEX_RUNNER_AUTH?: string;
     GITHUB_OVERRIDE_JOBS?: string;
     BACKFILL_LEDGER?: DurableObjectNamespace;
     BACKFILL_ENABLED?: string;

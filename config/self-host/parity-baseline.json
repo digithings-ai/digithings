@@ -439,6 +439,7 @@
         "DIGIVAULT_ROOT": "var",
         "DIGIVAULT_URL": "var",
         "DIGI_LLM_MODE": "var",
+        "DIGI_SESSION_MODEL_ALLOWLIST": "var",
         "DIGI_TENANT_CORPUS_MAP": "var",
         "DT_BASE_URL": "var",
         "DT_TARGET": "var",

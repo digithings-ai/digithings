@@ -30,6 +30,7 @@ workflow_dispatch and logs `github_override` at error.
 - Secret GH_DISPATCH_TOKEN (required for real GitHub dispatch)
 - Optional secret CRON_KICK_SECRET (enables POST /kick, POST /backfill, GET /runs/:id)
 - Secret RUNNER_AUTH_TOKEN (Bearer for kind `container`; required outside dry-run)
+- Secret TWELVEX_RUNNER_AUTH (Bearer sent to twelvex-runner for kind `twelvex`; must equal that Worker's `RUNNER_AUTH_TOKEN`; empty falls back to `RUNNER_AUTH_TOKEN`)
 - Var DRY_RUN = "0" by default; "1" logs intended POST only
 - Var GITHUB_OVERRIDE_JOBS = "" (comma-separated job ids that stay on GitHub)
 - Var BACKFILL_ENABLED = "0" by default; "1" enables POST /backfill (404 `backfill_disabled` otherwise)

@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.5.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.2...digichat-v2.5.0) (2026-10-19)
+
+The first tagged digichat release after `digichat-v2.3.2`. It carries the OCC
+chat work: the OCC surface now lives on its own
+Cloudflare worker, and the improvements that were sitting behind that split are
+in this image. digichat 2.4.0 was never tagged.
+
+### Features
+
+* **digichat:** OCC chat on its own worker - `/chat/occ*`, the ticket-system MCP bridge and the
+  digichat admin surface move to `digithings-digichat` instead of the base stack ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** edit-in-composer - an answer can be edited and re-sent ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** per-tool toggles - a visitor can switch individual tools off for a session ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** session model picker, gated by the tenant allowlist ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** prompt translation, inline citations and identity paragraphs in the OCC system
+  prompt ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **ticket-mcp:** the transport security guard now matches a bare `Host` as well as `host:*` ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+
+### Bug Fixes
+
+* **digichat:** the grounding tool is advertised as `digisearch`, not `digisearch_semantic` ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digigraph:** a per-tool toggle now also matches a tool whose registered name keeps its
+  camelCase ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+
 ## [2.4.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.2...digichat-v2.4.0) (2026-09-29)
 
 
