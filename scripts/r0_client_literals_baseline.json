@@ -61,6 +61,14 @@
       "count": 1,
       "ticket": "DIG-3895"
     },
+    "apps/corpus-index/src/http.test.ts": {
+      "count": 1,
+      "ticket": "DIG-3895"
+    },
+    "apps/corpus-index/src/run.test.ts": {
+      "count": 2,
+      "ticket": "DIG-3895"
+    },
     "apps/corpus-index/src/run.ts": {
       "count": 1,
       "ticket": "DIG-3895"
