@@ -1508,6 +1508,8 @@ def test_a_benign_422_is_reported_without_failing_the_tick(gh_stub: Any) -> None
     done = _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
     assert done.returncode == EXIT_OK, done.stderr
     assert "refused (422)" in done.stderr
+    # A refusal leaves the branch as it was, so it must not be announced as an update.
+    assert "updated #5" not in done.stdout
 
 
 def test_max_updates_above_one_updates_that_many_oldest_first(gh_stub: Any) -> None:

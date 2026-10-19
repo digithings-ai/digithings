@@ -790,7 +790,7 @@ def merge_one(repo: str, verdict: Verdict, authority: Authority, policy: Policy)
         raise QueueError(f"merge of #{verdict.number} failed: {proc.stderr.strip()}")
 
 
-def update_branch(repo: str, verdict: Verdict) -> None:
+def update_branch(repo: str, verdict: Verdict) -> bool:
     """Bring a stale PR's branch onto the base, so its checks run against it.
 
     `mergeStateStatus=BEHIND` means the checks on this PR ran against a base that has
@@ -809,6 +809,9 @@ def update_branch(repo: str, verdict: Verdict) -> None:
     the gates were read from, so a push landing in between is reported rather than
     silently merged under. The PR is re-evaluated on a later tick, never merged on the
     read that prompted the update.
+
+    Returns `False` when GitHub refused the update, which leaves the branch exactly as
+    it was: the caller must not report a refusal as an update.
     """
     proc = subprocess.run(
         [
@@ -832,14 +835,18 @@ def update_branch(repo: str, verdict: Verdict) -> None:
         # and failing the run would report the tick as broken *after* its merges had
         # already landed, which is worse than the refusal it is reporting. Anything else
         # (a token that lost write access, a 5xx) is a real failure and stops the run.
+        # The status is read out of `gh`'s own rendering of a REST error, which is
+        # `<message> (HTTP 422)`. If that format ever changes this raises instead, which
+        # is the safe direction: a refused update is never reported as a done one.
         if "HTTP 422" in proc.stderr:
             print(
                 f"warning: update-branch of #{verdict.number} refused (422) — the branch "
                 f"is unchanged and the next tick retries: {proc.stderr.strip()}",
                 file=sys.stderr,
             )
-            return
+            return False
         raise QueueError(f"update-branch of #{verdict.number} failed: {proc.stderr.strip()}")
+    return True
 
 
 def comment_audit(repo: str, verdict: Verdict, body: str) -> None:
@@ -1047,7 +1054,12 @@ def main(argv: list[str] | None = None) -> int:
             # *because* of this tick's merge is not in it — it still read CLEAN — so it is
             # picked up on the next tick instead of being updated twice.
             for candidate in [v for v in verdicts if v.stale_base_only][: args.max_updates]:
-                update_branch(args.repo, candidate)
+                if not update_branch(args.repo, candidate):
+                    # Refused: the branch is exactly as it was, so this is not an update
+                    # and must not be reported, counted or dropped from the dump as one.
+                    # The queue is FIFO, so a refusal stops the tick rather than skipping
+                    # past the oldest PR to a younger one.
+                    break
                 updated.append(candidate)
                 print(
                     f"updated #{candidate.number} {candidate.head_ref} onto {args.base} — "
