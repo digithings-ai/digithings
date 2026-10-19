@@ -378,7 +378,7 @@
       "ticket": "DIG-3689"
     },
     "config/contract/contract.yaml": {
-      "count": 22,
+      "count": 25,
       "ticket": "DIG-3689"
     },
     "config/contract/generated/compose.env": {
@@ -1022,7 +1022,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_zammad_mcp.py": {
-      "count": 134,
+      "count": 135,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_zammad_mcp_exports.py": {
