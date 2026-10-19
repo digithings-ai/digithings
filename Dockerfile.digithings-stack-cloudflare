@@ -122,9 +122,6 @@ ENV DIGI_CONFIG_PATH=/app/config
 # House Cheaper Inference overlay + merge script (boot-time merge when key set)
 COPY config/litellm.cheaperinference.yaml /app/config/litellm.cheaperinference.yaml
 COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheaperinference.py
-# Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
-# deps `mcp` + `httpx` already present via digigraph[mcp]).
-COPY scripts/zammad_mcp ./scripts/zammad_mcp
 # scripts/index_occ_tickets.py is deliberately NOT copied into the image
 # (DIG-1438). It was only there for [program:seed_occ_tickets], the boot step
 # that backfilled occ_tickets from the live Zammad API with unmasked ticket

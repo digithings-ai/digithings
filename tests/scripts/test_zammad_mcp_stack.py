@@ -1,4 +1,18 @@
-"""Pins for the zammad-mcp program inside the digithings-stack container."""
+"""Pins that the digithings-stack base platform no longer carries zammad-mcp.
+
+The OCC Zammad MCP now runs inside the digichat image and is served by the
+digichat worker at ``https://digithings.ai/api/mcp/zammad/mcp`` (commits
+e855b6c3be + a412e07b46). It was removed from the base stack (supervisord
+program, entrypoint /etc/hosts alias, Dockerfile COPY, container env). These
+pins are deliberately inverted from the "stack carries zammad" form so a stale
+re-add fails here — the removal's whole point is that the base platform must
+not run it again.
+
+Assertions that were never about the stack's copy are kept as-is: the guard
+semantics of the remaining /etc/hosts write, the digiproject allowlist, the
+entrypoint tools fallback, and the MCP module's own aggregate tool (which the
+digichat image still serves).
+"""
 
 from __future__ import annotations
 
@@ -16,6 +30,7 @@ ENTRYPOINT = STACK_DIR / "container" / "entrypoint.sh"
 STACK_INDEX = STACK_DIR / "src" / "index.ts"
 STACK_DOCKERFILE = REPO_ROOT / "Dockerfile.digithings-stack-cloudflare"
 WRANGLER = STACK_DIR / "wrangler.toml"
+DOCKERIGNORE = REPO_ROOT / ".dockerignore"
 
 
 def _code_lines(path: Path) -> str:
@@ -24,25 +39,26 @@ def _code_lines(path: Path) -> str:
     return "\n".join(lines)
 
 
-def test_supervisord_runs_zammad_mcp():
+def test_supervisord_no_longer_runs_zammad_mcp():
     body = _code_lines(SUPERVISORD)
-    assert "[program:zammad-mcp]" in body
-    assert "python -m scripts.zammad_mcp.server --port 8770" in body
-    assert 'ZAMMAD_MCP_HOST="0.0.0.0"' in body
-    assert 'ZAMMAD_MCP_ALLOWED_HOSTS="zammad-mcp"' in body
-    assert "/var/log/supervisor/zammad-mcp.log" in body
+    assert "[program:zammad-mcp]" not in body
+    assert "scripts.zammad_mcp.server" not in body
+    assert "ZAMMAD_MCP_HOST" not in body
+    assert "ZAMMAD_MCP_ALLOWED_HOSTS" not in body
+    assert "zammad-mcp.log" not in body
 
 
-def test_entrypoint_aliases_the_dotless_mcp_host():
+def test_entrypoint_no_longer_aliases_the_dotless_mcp_host():
     body = _code_lines(ENTRYPOINT)
-    assert "zammad-mcp" in body
-    assert "/etc/hosts" in body
+    assert "zammad-mcp" not in body
+    assert "zammad_mcp" not in body
 
 
 def test_entrypoint_guards_the_etc_hosts_write():
-    """The alias write must be best-effort (#4149).
+    """Every /etc/hosts alias write must be best-effort (#4149).
 
-    It runs under `set -eu` immediately before `exec supervisord`, so an
+    The remaining alias is the `valkey` one (searxng limiter DB, #4297). It
+    runs under `set -eu` immediately before `exec supervisord`, so an
     unguarded redirect aborts PID 1: `:8000` never opens and the Worker 503s
     every request.
     """
@@ -68,19 +84,34 @@ def test_a_failing_redirect_aborts_set_e_unless_guarded(tmp_path):
     assert aborted.returncode != 0 and "REACHED" not in aborted.stdout
 
 
-def test_stack_dockerfile_ships_the_mcp_package():
+def test_stack_dockerfile_no_longer_ships_the_mcp_package():
     body = _code_lines(STACK_DOCKERFILE)
-    assert "COPY scripts/zammad_mcp ./scripts/zammad_mcp" in body
+    assert "COPY scripts/zammad_mcp" not in body
 
 
-def test_stack_container_env_passes_the_zammad_token():
+def test_dockerignore_still_reincludes_the_mcp_package():
+    """The digichat image builds from the repo root and needs the package.
+
+    Removing the COPY from the stack Dockerfile must NOT strip the re-include:
+    Dockerfile.digichat-cloudflare still does `COPY scripts/zammad_mcp`, so a
+    dropped re-include would silently break the digichat OCC MCP build.
+    """
+    assert "!scripts/zammad_mcp" in _code_lines(DOCKERIGNORE)
+
+
+def test_stack_container_env_no_longer_passes_the_zammad_token():
     source = STACK_INDEX.read_text()
-    assert 'ZAMMAD_API_TOKEN: env.ZAMMAD_API_TOKEN ?? ""' in source
-    assert "ZAMMAD_API_TOKEN?: string;" in source
+    assert "ZAMMAD_API_TOKEN" not in source
 
 
-def test_wrangler_documents_the_zammad_secret():
-    assert "ZAMMAD_API_TOKEN" in WRANGLER.read_text()
+def test_wrangler_no_longer_documents_the_zammad_secret():
+    """The in-repo secret checklist must not send an operator to ZAMMAD_API_TOKEN.
+
+    The secret may still exist on the deployed worker (this slice does not
+    touch Cloudflare), but nothing in the stack reads it, so the wrangler
+    comment is a stale pointer to a removed program.
+    """
+    assert "ZAMMAD_API_TOKEN" not in WRANGLER.read_text()
 
 
 def test_digiproject_allowlist_excludes_zammad():
@@ -106,7 +137,9 @@ def test_entrypoint_allowed_tools_fallback_excludes_zammad():
 
 
 def test_mcp_registers_aggregate_tool():
-    """The stack's zammad-mcp serves the analytics ranking tool (#4717).
+    """The zammad-mcp module still serves the analytics ranking tool (#4717).
+
+    It is the digichat image that runs it now; the module itself is unchanged.
 
     ``ToolManager.list_tools()`` (public sync API) rather than the private
     ``_tools`` dict — same names either way, robust across mcp builds.

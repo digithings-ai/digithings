@@ -87,7 +87,11 @@ describe("digichat mount (same predicate as the standalone worker)", () => {
     expect(SHARED_DIGICHAT_CONTAINER_ID).toBe(standaloneContainerId);
     // Bumped v10 -> v11 on 2026-10-18 to recycle the warm container so the
     // rebuilt DIGICHAT_EMBED_TENANTS (OCC tenant) reached its process env.
-    expect(SHARED_DIGICHAT_CONTAINER_ID).toBe("shared-v12");
+    // Bumped v12 -> v13 on 2026-10-19: the OCC zammad MCP moved out of the
+    // base platform into the digichat image, so the re-pointed OCC tenant
+    // registry (https://digithings.ai/api/mcp/zammad/mcp) must reach a fresh
+    // container instance; a warm one keeps its start-time env.
+    expect(SHARED_DIGICHAT_CONTAINER_ID).toBe("shared-v13");
   });
 });
 

@@ -13,8 +13,8 @@
  *   /healthz            → digigraph
  *   /_stack/key/*       → digikey (strip prefix)
  *
- * /_stack/mcp/{zammad,digisearch,digivault}/* → in-container MCP servers on
- * :8770/:8765/:8769 (secret-gated edge paths; require the x-digi-mcp-key header
+ * /_stack/mcp/{digisearch,digivault}/* → in-container MCP servers on
+ * :8765/:8769 (secret-gated edge paths; require the x-digi-mcp-key header
  * matching MCP_EDGE_KEY — fail-closed 401 otherwise).
  * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
  *
@@ -32,7 +32,7 @@
  * paths). The standalone digichat worker stays deployed until cutover; no
  * DNS/Pages/route changes in this slice.
  *
- * zammad-mcp / digisearch-mcp / digivault-mcp bind 0.0.0.0 inside the Container
+ * digisearch-mcp / digivault-mcp bind 0.0.0.0 inside the Container
  * for those edge routes; LiteLLM stays loopback-only. digisearch also binds
  * 0.0.0.0:8002 (container/start_digisearch.sh) so the Worker can reach it at the
  * container network address for its public route; in-container callers keep
@@ -150,8 +150,6 @@ export class DigiStackContainer extends Container {
     DIGI_HOUSE_UPSTREAM: env.DIGI_HOUSE_UPSTREAM ?? "",
     LITELLM_PROXY_API_KEY: env.LITELLM_PROXY_API_KEY ?? "",
     LITELLM_MASTER_KEY: env.LITELLM_MASTER_KEY ?? "",
-    // Read-only Zammad helpdesk MCP (supervisord [program:zammad-mcp], OCC demo)
-    ZAMMAD_API_TOKEN: env.ZAMMAD_API_TOKEN ?? "",
   };
 
   /**
@@ -526,7 +524,6 @@ export interface Env {
   DIGI_HOUSE_UPSTREAM?: string;
   LITELLM_PROXY_API_KEY?: string;
   LITELLM_MASTER_KEY?: string;
-  ZAMMAD_API_TOKEN?: string;
   MCP_EDGE_KEY?: string;
   /** Optional per-server edge keys (`{"digivault":"…"}`); falls back to MCP_EDGE_KEY. */
   MCP_EDGE_KEYS?: string;
@@ -585,7 +582,6 @@ export interface Env {
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
 const MCP_EDGE_PREFIX = "/_stack/mcp";
 const MCP_EDGE_SERVERS: Record<string, number> = {
-  zammad: 8770,
   digisearch: 8765,
   digivault: 8769,
 };
@@ -683,12 +679,11 @@ export default {
       });
     }
 
-    // Read-only Zammad MCP for the OCC embed, reached over a secret-gated edge
-    // path. The container-internal `zammad-mcp` name cannot be resolved in the
-    // Cloudflare runtime (/etc/hosts is read-only, so the entrypoint alias is
-    // skipped), so digigraph dials this public HTTPS path instead; the embed
-    // tenant entry carries the matching x-digi-mcp-key (#3841 authHeader).
-    // Fail closed: no secret configured -> 401.
+    // In-container MCP servers for the OCC embed, reached over secret-gated edge
+    // paths. The container-internal servers cannot be resolved from the
+    // Cloudflare runtime (/etc/hosts is read-only), so digigraph dials this
+    // public HTTPS path instead; the embed tenant entry carries the matching
+    // x-digi-mcp-key (#3841 authHeader). Fail closed: no secret -> 401.
     if (url.pathname.startsWith(`${MCP_EDGE_PREFIX}/`)) {
       const rest = url.pathname.slice(MCP_EDGE_PREFIX.length + 1);
       const slash = rest.indexOf("/");

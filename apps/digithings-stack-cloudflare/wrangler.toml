@@ -37,7 +37,7 @@ bucket_name = "digithings-archive"
 # on APIs. Auth-exempt on each host is only the shared service allowlist
 # (/health, /healthz, /metrics, /docs, /redoc, /openapi.json, OPTIONS
 # preflights) plus the Worker-served /_stack/meta and /v1/market/tickers|closes,
-# and /_stack/key/* which proxies to digikey. /_stack/mcp/zammad/* is not
+# and /_stack/key/* which proxies to digikey. /_stack/mcp/* is not
 # auth-exempt: it is key-gated (x-digi-mcp-key vs the MCP_EDGE_KEY secret,
 # fail-closed 401).
 [[routes]]
@@ -184,7 +184,6 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   CHEAPERINFERENCE_API_BASE # optional; default https://api.cheaperinference.com/v1
 #   DIGI_HOUSE_UPSTREAM       # optional; set "openrouter" to force OpenRouter
 #   LITELLM_PROXY_API_KEY     # optional shared proxy key
-#   ZAMMAD_API_TOKEN          # read-only Zammad helpdesk MCP (zammad-mcp program, OCC tickets)
 #   GLOOMBERB_SESSION_COOKIE  # digiquant-mcp session-gated digifetch tools (#4260)
 #   R2_ACCOUNT_ID             # digiquant-mcp market-data history reads
 #   R2_BUCKET                 # digiquant-mcp (same digithings-archive bucket)

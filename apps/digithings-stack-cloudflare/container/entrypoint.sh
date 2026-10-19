@@ -194,44 +194,12 @@ for client_dir in /seed/vault/clients/*; do
   done
 done
 
-# Alias the dotless name `zammad-mcp` to this container's own non-loopback
-# IPv4 so digigraph's remote-MCP client can dial `http://zammad-mcp:8770/mcp`
-# (its SSRF guard always blocks loopback, #3879, and there is no Docker DNS
-# under Firecracker). Warn and continue if no usable address is found.
-if ! getent hosts zammad-mcp >/dev/null 2>&1; then
-  # Bounded and non-fatal by design: a resolver probe must never stall
-  # startup, and a failed write must never trip `set -eu` (an entrypoint
-  # that exits takes the whole stack container with it).
-  zammad_mcp_ip=$(timeout 5 python3 -c '
-import socket
-
-probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-try:
-    probe.connect(("192.0.2.1", 80))
-    print(probe.getsockname()[0])
-finally:
-    probe.close()
-' 2>/dev/null || true)
-  case "${zammad_mcp_ip:-}" in
-    127.* | 169.254.*) zammad_mcp_ip="" ;;
-  esac
-  if [ -n "${zammad_mcp_ip:-}" ]; then
-    if printf '%s zammad-mcp\n' "$zammad_mcp_ip" >> /etc/hosts 2>/dev/null; then
-      echo "digithings-stack: aliased zammad-mcp -> $zammad_mcp_ip"
-    else
-      echo "digithings-stack: WARN could not write the zammad-mcp host alias" >&2
-    fi
-  else
-    echo "digithings-stack: WARN no zammad-mcp host alias; Zammad MCP will be unreachable" >&2
-  fi
-fi
-
 # The copied config/searxng/settings.yml names its limiter DB as
 # `redis://valkey:6379/0` — the dedicated sidecar host in dev compose. This
 # container runs the single [program:redis] on 127.0.0.1:6379 instead, so alias
 # the dotless name `valkey` to loopback and the file works unchanged (#4297).
-# Best-effort and non-fatal, same shape as the zammad-mcp alias above: searxng
-# starts either way, and a missing alias only degrades its limiter DB.
+# Best-effort and non-fatal: searxng starts either way, and a missing alias
+# only degrades its limiter DB.
 if ! getent hosts valkey >/dev/null 2>&1; then
   if printf '127.0.0.1 valkey\n' >> /etc/hosts 2>/dev/null; then
     echo "digithings-stack: aliased valkey -> 127.0.0.1 (searxng limiter redis)"
