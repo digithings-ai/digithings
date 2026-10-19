@@ -151,8 +151,8 @@ def _embedding_provider_for(index_name: str, account_id: str, api_token: str) ->
     if index_name in _workers_ai_indexes():
         from digisearch.embedding.providers.workers_ai import WorkersAiEmbedder
 
-        # Prefer the corpus-index worker's /embed (Workers AI binding) when set,
-        # so the Vectorize token does not also need Workers AI permission.
+        # Prefer a dedicated embed endpoint when set, so the Vectorize token does
+        # not also need Workers AI permission.
         embed_url = os.environ.get("DIGISEARCH_BGE_M3_EMBED_URL", "").strip()
         embed_token = os.environ.get("DIGISEARCH_BGE_M3_EMBED_TOKEN", "").strip()
         if embed_url and embed_token:
