@@ -41,8 +41,24 @@ const AGE_CLASS: Record<DigestAge['tone'], string> = {
   stale: 'border-danger/40 text-danger',
 };
 
-/** No external store to follow: the reader's calendar day is read on demand. */
-const subscribeNoop = () => () => {};
+/**
+ * The reader's calendar day can turn while the tab stays open. Re-read it on
+ * the minute (React compares the string and skips the render unless the day
+ * moved) and when a hidden tab becomes visible again, so an idle FX Hub cannot
+ * keep serving the age it computed at load. Never called on the server.
+ */
+function subscribeToday(onChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const timer = window.setInterval(onChange, 60_000);
+  const onVisibility = () => {
+    if (!document.hidden) onChange();
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+  return () => {
+    window.clearInterval(timer);
+    document.removeEventListener('visibilitychange', onVisibility);
+  };
+}
 
 export default function DigestBrief({
   digest,
@@ -56,7 +72,7 @@ export default function DigestBrief({
   // The browser's today, read client-side only: the static export's server
   // snapshot is null, so the build date is never baked into the age.
   const today = useSyncExternalStore(
-    subscribeNoop,
+    subscribeToday,
     () => now ?? todayYmd(),
     () => now ?? null,
   );

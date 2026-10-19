@@ -67,9 +67,22 @@ describe('DigestBrief — digest summary markdown', () => {
  */
 describe('DigestBrief — run date and trading-session age', () => {
   it('always shows the run date, and the date alone at 0-1 sessions', () => {
+    // Same session: no session has come between the run and the read.
+    const sameDay = render({ ...baseDigest, run_date: '2026-10-19' }, '2026-10-19');
+    expect(sameDay).toContain('as of 2026-10-19');
+    expect(sameDay).not.toContain('data-digest-age');
     // Friday's digest read on Monday: one session (Monday) has come.
     const html = render({ ...baseDigest, run_date: '2026-10-16' }, '2026-10-19');
     expect(html).toContain('as of 2026-10-16');
+    expect(html).not.toContain('data-digest-age');
+  });
+
+  it('never bakes the build date into the age on the server snapshot', () => {
+    // Without an injected `now`, static SSR renders the date only. A digest old
+    // enough to be stale against any plausible build date still gets no badge,
+    // so the static export cannot serve its own build day as the reader's.
+    const html = render({ ...baseDigest, run_date: '2020-01-02' });
+    expect(html).toContain('as of 2020-01-02');
     expect(html).not.toContain('data-digest-age');
   });
 
