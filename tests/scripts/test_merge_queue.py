@@ -192,10 +192,25 @@ def _queue_stub(stub: GhStub, prs: list[dict[str, Any]]) -> GhStub:
 # --- the untested-PR hole: a required check that never reported ----------------
 
 
+def test_a_twelve_x_pr_with_no_local_ci_status_cannot_merge(gh_stub: Any) -> None:
+    """The replacement gate is fail-closed: no mirror verdict means no merge.
+
+    twelve-x's gate moved from the Actions job `test` to the host-posted `local-ci`
+    status (DIG-4454). Absence must behave exactly as absence of `test` did - the
+    status is the evidence, and an unposted status is not a pass.
+    """
+    prs = [_pr(1, local_ci_state=None)]
+    _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run("list", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == 0, done.stderr
+    assert "required check 'local-ci' has not reported" in done.stdout
+
+
 def test_required_check_that_never_reported_blocks_the_merge() -> None:
     """A PR with no `test` check at all must not merge.
 
-    This is twelve-x PR #237's real shape, and it is the failure the queue is for:
+    This was twelve-x PR #237's real shape before 2026-10-19, when its gate was the
+    Actions job `test`; the mechanism is the same whichever name is required:
     the branch looks mergeable, the base's only job never reported, and the change
     lands untested. Treating "check absent" as "check passed" is the bug.
     """
@@ -533,7 +548,8 @@ def test_the_warning_cannot_repeat_because_nothing_can_merge_while_it_fires(
 def test_a_matching_gate_announces_nothing(gh_stub: Any) -> None:
     """The negative case, pinned so the detector cannot be "fixed" into noise.
 
-    twelve-x is the repo where a bare `test` is correct. If the announcement fired
+    twelve-x used to be the repo where a bare `test` was correct; since DIG-4454 its
+    gate is `local-ci`, and the announcement must stay silent for that name too. If it fired
     there, the fix would have swapped a hard block for a permanent warning, which is
     the same failure wearing a different hat.
     """
