@@ -3,6 +3,7 @@ import {
   evaluateCatchup,
   evaluateFeedConfirm,
   evaluateHeartbeat,
+  FEED_LOOKBACK_HOURS,
   runTwelvexWatch,
   sessionCatchupDue,
 } from "./twelvex-watch";
@@ -81,8 +82,36 @@ describe("watchdogs", () => {
       },
     ]);
     expect(v.alarm).toBe(true);
-    expect(v.detail).toContain("completed");
-    expect(v.detail).toContain("failure");
+    expect(v.reason).toBe("unsuccessful");
+    // The detail must name the observed run, not just describe the rule: this is
+    // the line an operator reads to see which run failed and why.
+    expect(v.detail).toContain("`completed` / `failure`");
+    expect(v.detail).toContain("https://github.com/digithings-ai/twelve-x/actions/runs/1");
+  });
+  it("feed confirm: reason separates none, unsuccessful and unreadable", () => {
+    expect(evaluateFeedConfirm(now, []).reason).toBe("none");
+    expect(evaluateFeedConfirm(now, [{ status: "completed", conclusion: "failure", created_at: "2026-10-13T14:41:30Z" }]).reason).toBe("unsuccessful");
+    expect(evaluateFeedConfirm(now, null).reason).toBe("unreadable");
+    expect(evaluateFeedConfirm(now, [{ status: "completed", conclusion: "success", created_at: "2026-10-13T14:41:30Z" }]).reason).toBe("confirmed");
+  });
+  it("feed confirm: the lookback boundary is inclusive", () => {
+    const edge = "2026-10-13T10:23:00Z"; // exactly FEED_LOOKBACK_HOURS before `now`
+    const justOutside = "2026-10-13T10:22:59Z";
+    expect(FEED_LOOKBACK_HOURS).toBe(6);
+    expect(evaluateFeedConfirm(now, [{ status: "completed", conclusion: "failure", created_at: edge }]).reason).toBe(
+      "unsuccessful",
+    );
+    expect(evaluateFeedConfirm(now, [{ status: "completed", conclusion: "failure", created_at: justOutside }]).reason).toBe(
+      "none",
+    );
+  });
+  it("feed confirm: an unparseable created_at is not silently inside the window", () => {
+    // A malformed timestamp must not read as confirmed, and must not count as a
+    // run that started: an unreadable record is not evidence either way, so the
+    // window alarms as "none" rather than passing.
+    expect(evaluateFeedConfirm(now, [{ status: "completed", conclusion: "success", created_at: "not-a-date" }]).alarm).toBe(
+      true,
+    );
   });
   it("feed confirm: completed + failure beside a success in the window is silent", () => {
     expect(
@@ -126,7 +155,13 @@ describe("watchdogs", () => {
       if (input.includes("/actions/workflows/feed_published_confirm.yml/runs")) {
         return Response.json({
           workflow_runs: [
-            { status: "completed", conclusion: "failure", created_at: "2026-10-13T14:41:30Z", id: 7 },
+            {
+              status: "completed",
+              conclusion: "failure",
+              created_at: "2026-10-13T14:41:30Z",
+              id: 7,
+              html_url: "https://github.com/digithings-ai/twelve-x/actions/runs/7",
+            },
           ],
         });
       }
@@ -150,8 +185,13 @@ describe("watchdogs", () => {
     expect(outcome.alarm).toBe(true);
     expect(outcome.ok).toBe(true);
     expect(posted).toHaveLength(1);
-    expect(posted[0]).toContain("completed");
-    expect(posted[0]).toContain("failure");
+    // The body must carry the *observed* run (from the fake API response), not
+    // only the template's own words, or this test would pass on a stale template.
+    expect(posted[0]).toContain("https://github.com/digithings-ai/twelve-x/actions/runs/7");
+    expect(posted[0]).toContain("`completed` / `failure`");
+    // A run that ran and failed must not be filed as one that never ran.
+    expect(posted[0]).toContain("did not succeed");
+    expect(posted[0]).not.toContain("did not run —");
   });
   it("heartbeat: 10h old is fine, 19h old alarms", () => {
     expect(evaluateHeartbeat(now, [{ created_at: "2026-10-13T06:03:00Z" }]).alarm).toBe(false);

@@ -10,8 +10,13 @@
  *    3-day repair window. It is deliberately a superset: any doubt (read
  *    error, missing data) dispatches, so it can only remove no-op runs.
  *  - feed-confirm watchdog and desk session heartbeat watchdog: ports of
- *    feed_confirm_watchdog.yml and primarketet_heartbeat_watchdog.yml. Same
- *    labels, same thresholds, issues filed on digithings-ai/twelve-x.
+ *    feed_confirm_watchdog.yml and primarketet_heartbeat_watchdog.yml, filing
+ *    the same labels on digithings-ai/twelve-x. The heartbeat keeps the port's
+ *    thresholds. The feed watchdog deliberately does not: the port read
+ *    `status === "completed"`, which reads a billing-blocked run as healthy
+ *    (DIG-4381), so this one reads the conclusion instead. That rule supersedes
+ *    the twelve-x workflow and its twelve-x tests, which still encode the old
+ *    status-only check.
  */
 import { ghHeaders } from "./house-run-watch";
 import { JOBS } from "./jobs";
@@ -181,6 +186,12 @@ export const FEED_LOOKBACK_HOURS = 6;
 export const HEARTBEAT_TOLERANCE_HOURS = 18;
 
 /**
+ * Why a feed alarm fired. `unreadable` is not `none`: a failed read is not
+ * evidence the check never ran, and the filed title must not say that it is.
+ */
+export type FeedConfirmReason = "confirmed" | "unreadable" | "none" | "unsuccessful";
+
+/**
  * Did the confirm actually confirm?
  *
  * `status === "completed"` is not the answer, and reading it as one is the defect
@@ -203,15 +214,22 @@ export const HEARTBEAT_TOLERANCE_HOURS = 18;
  * the run list says about why. A run that failed *and* filed its own
  * `feed-publication-gap` / `feed-confirm-unconfirmed` issue therefore also trips
  * this alarm; the body says so, and `fileIssue`'s 24h window bounds the volume.
+ *
+ * `reason` carries *why* the window is unconfirmed, so the filed title never
+ * calls a failed run one that never ran; `unreadable` is not `none`.
  */
-export function evaluateFeedConfirm(nowMs: number, runs: Run[] | null): { alarm: boolean; detail: string } {
-  if (runs === null) return { alarm: true, detail: "run history unreadable" };
+export function evaluateFeedConfirm(
+  nowMs: number,
+  runs: Run[] | null,
+): { alarm: boolean; detail: string; reason: FeedConfirmReason } {
+  if (runs === null) return { alarm: true, detail: "run history unreadable", reason: "unreadable" };
   const since = nowMs - FEED_LOOKBACK_HOURS * 3_600_000;
   const recent = runs.filter((r) => Date.parse(r.created_at ?? "") >= since);
   const succeeded = recent.filter((r) => r.conclusion === "success");
-  if (succeeded.length > 0) return { alarm: false, detail: `${succeeded.length} succeeded` };
+  if (succeeded.length > 0) return { alarm: false, detail: `${succeeded.length} succeeded`, reason: "confirmed" };
   return {
     alarm: true,
+    reason: recent.length === 0 ? "none" : "unsuccessful",
     detail:
       recent.length === 0
         ? "No confirm run was even started in the window."
@@ -230,6 +248,18 @@ export function evaluateHeartbeat(nowMs: number, runs: Run[] | null): { alarm: b
 
 const FEED_LABEL = "feed-confirm-silent";
 const HB_LABEL = "primarketet-heartbeat-missing";
+
+/**
+ * The title tracks *why* the window is unconfirmed: a run that failed to confirm
+ * (or never started) must not be filed as "did not run", and a read that failed
+ * must not be filed as either.
+ */
+const FEED_TITLE: Record<FeedConfirmReason, string> = {
+  confirmed: "", // never filed
+  unreadable: "FX feed confirmation state unknown — a trading date is unconfirmed",
+  none: "FX feed confirmation did not run — a trading date is unconfirmed",
+  unsuccessful: "FX feed confirmation did not succeed — a trading date is unconfirmed",
+};
 
 async function fileIssue(
   fetcher: GhFetch,
@@ -317,8 +347,7 @@ export async function runTwelvexWatch(
         v.detail,
       ].join("\n");
       const url = await fileIssue(
-        fetcher, token, FEED_LABEL, "d73a4a",
-        "FX feed confirmation did not run — a trading date is unconfirmed", body, 86_400_000,
+        fetcher, token, FEED_LABEL, "d73a4a", FEED_TITLE[v.reason], body, 86_400_000,
       );
       return { ok: url !== undefined, alarm: true, filed: url, detail: v.detail };
     }

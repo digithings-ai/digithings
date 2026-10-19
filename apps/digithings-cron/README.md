@@ -295,7 +295,9 @@ cannot occur while the workflow is disabled.
 
 `src/twelvex-watch.ts` holds the two detectors that ask, from this Worker,
 whether a twelve-x check *ran*. They file against `digithings-ai/twelve-x` with
-`GH_DISPATCH_TOKEN`, one label per class, one issue per 24h window.
+`GH_DISPATCH_TOKEN`, one label per class. The feed detector files at most one
+issue per 24h window (an occurrence inside the window comments on the open
+issue instead); the heartbeat detector files one per occurrence.
 
 - `twelve-x-feed-confirm-watchdog` (`23 16 * * MON-FRI`) reads
   `feed_published_confirm.yml` run history over a 6h lookback. Label
@@ -314,10 +316,14 @@ cancelled run, a runner lost before step 1 and an expired job token, none of
 which start the workflow's own alert steps. A run that failed far enough to exit
 non-zero already filed its `feed-publication-gap` / `feed-confirm-unconfirmed`
 issue; the alarm body says so, so the reader is not looking at two unrelated
-findings.
+findings. The filed title tracks which case it is — "did not run", "did not
+succeed", or "state unknown" for an unreadable run history — so a failed run is
+never filed as one that never happened.
 
-`evaluateCatchup` (`sessionCatchupDue`) reads `conclusion` for the same reason —
-it is the pre-existing correct shape this defect deviated from.
+`evaluateCatchup` (`sessionCatchupDue`) also reads `conclusion` — it treats a
+pending run as covering today's slot, but for a past day it needs
+`conclusion === "success"` exactly as this watchdog does. It is the pre-existing
+correct shape this defect deviated from.
 
 ## Required trigger contract (DIG-732)
 
