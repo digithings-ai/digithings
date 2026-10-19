@@ -96,7 +96,7 @@ fi
 # so the gate costs seconds.
 # NOTE: this must be `docker build`, NOT `wrangler containers build` -- that command
 # requires a file literally named `Dockerfile` inside its PATH argument, and these
-# images live at the repo root as `Dockerfile.<app>`.
+# images live under `infra/docker/` as `Dockerfile.<app>`.
 if grep -q '^\[\[containers\]\]' "apps/$APP/wrangler.toml"; then
   img=$(sed -n 's/^[[:space:]]*image[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "apps/$APP/wrangler.toml" | head -1)
   ctx=$(sed -n 's/^[[:space:]]*image_build_context[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "apps/$APP/wrangler.toml" | head -1)

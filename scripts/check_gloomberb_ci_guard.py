@@ -194,14 +194,15 @@ DEPLOYED_PATTERNS: tuple[str, ...] = (
 # Families matched against the BASENAME at any depth, because the repo's own
 # naming defeats path globs on both axes:
 #
-#   * depth — five root deploy images (`infra/docker/Dockerfile.digithings-stack-cloudflare`,
-#     `infra/docker/Dockerfile.digitrace-langfuse-web`, ...) have no `/` for a path glob to
-#     anchor on at all, and `*/*/Dockerfile` cannot reach three-deep recipes;
+#   * depth — the deploy images live under `infra/docker/` as
+#     `Dockerfile.digithings-stack-cloudflare`, `Dockerfile.digitrace-langfuse-web`, ...,
+#     so a glob anchored at the repo root (`*/Dockerfile`) cannot reach them, and
+#     `*/*/Dockerfile` is pinned to exactly one depth;
 #   * name  — this repo does not call a build recipe `Dockerfile`. Of the 20
 #     tracked Dockerfiles, 12 are `Dockerfile.<target>`.
 #
 # A glob like `*/Dockerfile` therefore matched 8 of the 20 tracked Dockerfiles and
-# let the other 12 through, every root deploy image among them -- the exact vector
+# let the other 12 through, every deploy image among them -- the exact vector
 # the guard exists to catch. Basename matching makes depth irrelevant and follows
 # the repo's real convention instead of an invented one.
 DEPLOYED_BASENAMES: tuple[str, ...] = (
