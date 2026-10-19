@@ -19,16 +19,28 @@
  *     through to its generic start failure.
  * Both are the same condition, so both are recognised here.
  *
+ * A deploy also kills the container UNDER a request: the platform resets the
+ * Durable Object and signals the instance to exit, so the in-flight request
+ * fails. The package surfaces that as a 500 in two shapes:
+ *   - "Error proxying request to container: <cause>" — its proxy catch.
+ *   - "Container suddenly disconnected, try again" — its own answer when the
+ *     connection was lost rather than the instance being replaced.
+ * That is a second condition (the container died, rather than the slot being
+ * busy), so it is recognised separately, but it is handled the same way: the
+ * request is retried when it can be replayed, and otherwise the client is
+ * told to come back.
+ *
  * What this module does:
  *   1. recognises the condition,
  *   2. waits briefly and retries, but ONLY for a request whose body can be
  *      replayed safely (a request with no body). A body is never replayed.
- *   3. and if the slot is still busy, returns the failure as a retryable 503
- *      with a `Retry-After` header, so the client backs off instead of
+ *   3. and if the condition is still there, returns the failure as a retryable
+ *      503 with a `Retry-After` header, so the client backs off instead of
  *      hammering the Worker.
  *
- * The 503 is deliberate: the Worker is not broken, the container slot is busy.
- * A client that honours Retry-After survives the rollout window.
+ * The 503 is deliberate: the Worker is not broken, the container behind it
+ * could not serve the request right now. A client that honours Retry-After
+ * survives the rollout window.
  */
 
 /** Status the package returns for its own no-instance path. */
@@ -43,6 +55,18 @@ export const NO_INSTANCE_BODY_MARKER = "no container instance available";
  * instances exceeded").
  */
 export const INSTANCE_LIMIT_BODY_MARKER = "maximum number of running container instances exceeded";
+
+/**
+ * Marker for the package's proxy catch, which it uses when the container
+ * died under the request ("Error proxying request to container: <cause>").
+ */
+export const CONTAINER_DEATH_BODY_MARKER = "error proxying request to container:";
+
+/**
+ * Marker for the package's own answer when the connection to the container
+ * was lost mid-request ("Container suddenly disconnected, try again").
+ */
+export const CONTAINER_DISCONNECTED_BODY_MARKER = "container suddenly disconnected";
 
 /** Seconds the client should wait before repeating the request. */
 export const RETRY_AFTER_SECONDS = 5;
@@ -74,6 +98,26 @@ export function isInstanceLimitResponse(status: number, body: string): boolean {
   return false;
 }
 
+/**
+ * True only for a container that died under the request, which is what a
+ * deploy does to the instance the Worker is talking to.
+ *
+ * The package surfaces that as a 500 in exactly two shapes: its proxy catch
+ * ("Error proxying request to container: <cause>") and its own answer when
+ * the connection was lost ("Container suddenly disconnected, try again").
+ * Both are recognised by the body they start with, so a 500 raised by the
+ * application inside the container — which carries neither marker — passes
+ * through untouched.
+ */
+export function isContainerDeathResponse(status: number, body: string): boolean {
+  if (status !== 500) return false;
+  const text = body.toLowerCase();
+  return (
+    text.startsWith(CONTAINER_DEATH_BODY_MARKER) ||
+    text.startsWith(CONTAINER_DISCONNECTED_BODY_MARKER)
+  );
+}
+
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -86,9 +130,10 @@ function headersWithRetryAfter(headers: Headers): Headers {
 }
 
 /**
- * Calls the container once per attempt and turns a busy instance slot into a
- * retryable 503. `fetchOnce` is the container proxy call (the single
- * `container.fetch(request)` call site in index.ts).
+ * Calls the container once per attempt and turns a container that could not
+ * serve the request right now — a busy instance slot, or an instance that
+ * died under the request — into a retryable 503. `fetchOnce` is the container
+ * proxy call (the single `container.fetch(request)` call site in index.ts).
  */
 export async function fetchContainerWithRetry(
   request: Request,
@@ -106,10 +151,14 @@ export async function fetchContainerWithRetry(
     const res = await fetchOnce(request);
     if (res.status !== NO_INSTANCE_STATUS && res.status !== 500) return res;
     // Read a copy: the original response is handed back untouched when the
-    // failure is not the instance limit.
+    // failure is neither the instance limit nor a container that died.
     const body = await res.clone().text();
-    if (!isInstanceLimitResponse(res.status, body)) return res;
+    const transient =
+      isInstanceLimitResponse(res.status, body) || isContainerDeathResponse(res.status, body);
+    if (!transient) return res;
     if (attempt >= attempts || !replayable) {
+      // The body stays in the answer, so the client can log why it was told
+      // to wait, and the status becomes the retryable one.
       return new Response(body, {
         status: NO_INSTANCE_STATUS,
         statusText: res.statusText,

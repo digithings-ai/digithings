@@ -3,6 +3,7 @@ import {
   DEFAULT_ATTEMPTS,
   RETRY_AFTER_SECONDS,
   fetchContainerWithRetry,
+  isContainerDeathResponse,
   isInstanceLimitResponse,
 } from "./container-retry";
 
@@ -24,6 +25,19 @@ const PACKAGE_503 =
  */
 const PACKAGE_500 = "Failed to start container: Maximum number of running container instances exceeded";
 
+/**
+ * The package's proxy catch, verbatim (@cloudflare/containers 0.3.7,
+ * dist/lib/container.js): the container died under the request.
+ */
+const PROXY_DEATH_500 =
+  "Error proxying request to container: Connection closed: this Durable Object instance is no longer active.";
+
+/**
+ * The package's own answer when the connection to the container was lost
+ * mid-request (same file, same catch).
+ */
+const DISCONNECTED_500 = "Container suddenly disconnected, try again";
+
 const URL_ = "https://digithings.ai/api/health";
 
 function noInstance503(): Response {
@@ -32,6 +46,14 @@ function noInstance503(): Response {
 
 function instanceLimit500(): Response {
   return new Response(PACKAGE_500, { status: 500 });
+}
+
+function proxyDeath500(): Response {
+  return new Response(PROXY_DEATH_500, { status: 500 });
+}
+
+function disconnected500(): Response {
+  return new Response(DISCONNECTED_500, { status: 500 });
 }
 
 /** A sleep stub that records the requested delay and never waits. */
@@ -58,6 +80,30 @@ describe("isInstanceLimitResponse", () => {
     expect(isInstanceLimitResponse(500, "boom")).toBe(false);
     expect(isInstanceLimitResponse(200, PACKAGE_503)).toBe(false);
     expect(isInstanceLimitResponse(503, "")).toBe(false);
+  });
+});
+
+describe("isContainerDeathResponse", () => {
+  it("recognises the package's proxy-catch body", () => {
+    expect(isContainerDeathResponse(500, PROXY_DEATH_500)).toBe(true);
+  });
+
+  it("recognises the package's disconnected body", () => {
+    expect(isContainerDeathResponse(500, DISCONNECTED_500)).toBe(true);
+  });
+
+  it("does NOT recognise a 500 raised by the application inside the container", () => {
+    // The application answers with its own body, which carries neither
+    // marker, so a real application error is not turned into a retry.
+    expect(isContainerDeathResponse(500, "boom")).toBe(false);
+    expect(isContainerDeathResponse(500, JSON.stringify({ error: "boom" }))).toBe(false);
+  });
+
+  it("does NOT recognise a death marker on a status other than 500", () => {
+    // The package only ever surfaces a container death as a 500, so the
+    // status is part of the contract.
+    expect(isContainerDeathResponse(503, PROXY_DEATH_500)).toBe(false);
+    expect(isContainerDeathResponse(200, DISCONNECTED_500)).toBe(false);
   });
 });
 
@@ -129,6 +175,55 @@ describe("fetchContainerWithRetry", () => {
     // The body was already sent once; it is not sent again.
     expect(fetchOnce).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("retries a bodyless request once when the container died under it", async () => {
+    const fetchOnce = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(proxyDeath500())
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+    const sleep = sleepStub();
+    const res = await fetchContainerWithRetry(new Request(URL_), fetchOnce, { sleep });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("ok");
+    expect(fetchOnce).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a bodyless request once when the connection was lost", async () => {
+    const fetchOnce = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(disconnected500())
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+    const sleep = sleepStub();
+    const res = await fetchContainerWithRetry(new Request(URL_), fetchOnce, { sleep });
+    expect(res.status).toBe(200);
+    expect(fetchOnce).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it("never replays a request that carries a body when the container died", async () => {
+    const fetchOnce = vi.fn(async () => proxyDeath500());
+    const sleep = sleepStub();
+    const request = new Request(URL_, { method: "POST", body: "hello" });
+    const res = await fetchContainerWithRetry(request, fetchOnce, { sleep });
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe(String(RETRY_AFTER_SECONDS));
+    // The cause stays in the body, so the client can log it.
+    expect(await res.text()).toBe(PROXY_DEATH_500);
+    expect(fetchOnce).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("returns a retryable 503 when the container keeps dying", async () => {
+    const fetchOnce = vi.fn(async () => proxyDeath500());
+    const sleep = sleepStub();
+    const res = await fetchContainerWithRetry(new Request(URL_), fetchOnce, { sleep });
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe(String(RETRY_AFTER_SECONDS));
+    expect(await res.text()).toBe(PROXY_DEATH_500);
+    expect(fetchOnce).toHaveBeenCalledTimes(DEFAULT_ATTEMPTS);
+    expect(sleep).toHaveBeenCalledTimes(DEFAULT_ATTEMPTS - 1);
   });
 
   it("honours an explicit attempt budget", async () => {

@@ -19,8 +19,12 @@ Two things that are **not** signals, measured on 2026-10-19:
   normal steady state while running — it reported exactly that after a
   perfectly successful cold start. It reports `healthy: 1` only while
   stopped/inactive. Do not page on this field.
-- **A 5xx within ~90 seconds of a deploy.** That is a rollout artefact. Wait it
-  out; do not reset a container that is still starting.
+- **A 5xx within ~90 seconds of a deploy.** That is a rollout artefact. The
+  deploy resets the Durable Object and signals the instance to exit, so the
+  request in flight fails. The Worker now answers that with a retryable 503
+  and a `Retry-After` header, and retries a request without a body once
+  itself. Back off and repeat the request; do not reset a container that is
+  still starting.
 
 ## Application ids
 
