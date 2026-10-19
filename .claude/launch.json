@@ -69,11 +69,11 @@
       "port": 4012
     },
     {
-      "name": "design-reference",
+      "name": "@digithings/reference",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",
-        "design-reference",
+        "@digithings/reference",
         "run",
         "dev"
       ],

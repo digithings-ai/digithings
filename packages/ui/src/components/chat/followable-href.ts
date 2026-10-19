@@ -7,4 +7,3 @@ export function isFollowableHref(href: string | undefined): boolean {
   if (!href) return false;
   return /^(https?:|mailto:|#|\/(?!\/))/i.test(href.trim());
 }
-

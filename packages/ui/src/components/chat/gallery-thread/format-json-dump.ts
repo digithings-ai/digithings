@@ -36,6 +36,7 @@ export function formatToolDurationMs(ms: number): string {
 }
 
 export function humanizeToolName(toolName: string, _argsText?: string): string {
+  void _argsText;
   return toolName.trim() || "tool";
 }
 

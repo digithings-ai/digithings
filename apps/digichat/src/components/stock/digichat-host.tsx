@@ -40,6 +40,7 @@ import {
 } from "@digithings/ui/chat/boot-lab";
 import { DigichatBootLoader } from "@digithings/ui/chat/boot-loader";
 import type { DigichatHandoff } from "@digithings/ui/chat/boot-signal";
+import { useDigichatWarmupPhase } from "@digithings/ui/chat/use-warmup-phase";
 import type {
   DigichatClientConfig,
   DigichatClientFeatures,

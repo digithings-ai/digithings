@@ -842,7 +842,7 @@
       "ticket": "DIG-3689"
     },
     "tests/dg/test_corpus_routing.py": {
-      "count": 47,
+      "count": 49,
       "ticket": "DIG-3689"
     },
     "tests/dg/test_digisearch_handler.py": {

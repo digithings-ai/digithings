@@ -1133,14 +1133,27 @@ describe("isPlanTierSatisfied", () => {
 });
 
 describe("lockSessionControls (DIG-1210)", () => {
-  const withLock = (lock: unknown) => {
-    const base = JSON.parse(VALID);
-    base["datatapstream.com"].lockSessionControls = lock;
-    return JSON.stringify(base);
-  };
-  it("parses true and rejects non-boolean", () => {
-    expect(parseEmbedTenants(withLock(true)).get("datatapstream.com")?.lockSessionControls).toBe(true);
-    expect(parseEmbedTenants(VALID).get("datatapstream.com")?.lockSessionControls).toBeUndefined();
-    expect(() => parseEmbedTenants(withLock("yes"))).toThrow(/lockSessionControls/);
+  const entry = (lock: unknown) => ({
+    "example.com": {
+      slug: "example",
+      backend: { type: "digigraph" as const },
+      gateMode: "ungated" as const,
+      token: "t",
+      ...(lock === undefined ? {} : { lockSessionControls: lock }),
+    },
+  });
+
+  it("parses true and keeps it out of the client projection", () => {
+    const registry = parseEmbedTenants(JSON.stringify(entry(true)));
+    expect(registry.get("example.com")?.lockSessionControls).toBe(true);
+  });
+
+  it("leaves the flag unset when absent or false", () => {
+    expect(parseEmbedTenants(JSON.stringify(entry(undefined))).get("example.com")?.lockSessionControls).toBeUndefined();
+    expect(parseEmbedTenants(JSON.stringify(entry(false))).get("example.com")?.lockSessionControls).toBeUndefined();
+  });
+
+  it("rejects a non-boolean value", () => {
+    expect(() => parseEmbedTenants(JSON.stringify(entry("yes")))).toThrow(/lockSessionControls/);
   });
 });

@@ -10,6 +10,7 @@ import {
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
 import { isFollowableHref } from "../followable-href";
+import { remarkStripModelBoilerplate } from "../strip-model-boilerplate";
 import { type FC, memo, useMemo, useRef } from "react";
 import type { TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
@@ -51,7 +52,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
 
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkStripModelBoilerplate]}
       className="aui-md"
       components={markdownComponents}
       defer
@@ -152,9 +153,6 @@ export const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  // A session artifact link is the one href that cannot be followed plainly:
-  // a dead token answers 410 session_expired, which would dump a raw JSON
-  // error at the reader. Every other href takes the anchor below unchanged.
   // A citation to a non-web source (repo://, vault paths) arrives with its href
   // emptied by the sanitizer; an <a href=""> would reload the embed itself
   // (carrying its query string). Show the label as plain text instead.

@@ -41,8 +41,7 @@ const ThreadSourceImpl: SourceMessagePartComponent = (props) => {
   const inner = (
     <>
       <DotMatrix
-        // Static mark: a completed citation must not look like a running
-        // tool (the animated "searching" pattern read as a stuck spinner).
+        // Static mark: a completed citation must not look like a running tool.
         state="idle"
         label="Source"
         className="aui-source-mark size-3.5 shrink-0"

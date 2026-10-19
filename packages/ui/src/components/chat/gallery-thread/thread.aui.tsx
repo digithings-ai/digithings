@@ -1163,9 +1163,9 @@ const AssistantMessage: FC = () => {
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "source":
-                // No auto-rendered source list (DIG-1210): a row per hit split
-                // the tool groups and repeated the same hit per retrieve span.
-                // The model cites inline with markdown links in its answer.
+                // Citations are inline markdown links in the answer (DIG-1210);
+                // rendering source parts here stacked duplicate rows between
+                // tool groups on every retrieve span.
                 return null;
               default:
                 return null;
