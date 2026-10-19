@@ -85,6 +85,7 @@ def _pr(
     title: str = "",
     comments: list[dict[str, Any]] | None = None,
     commits: list[dict[str, Any]] | None = None,
+    omit: tuple[str, ...] = (),
     approved: bool = False,
 ) -> dict[str, Any]:
     rollup: list[dict[str, Any]] = list(extra_checks or [])
@@ -118,13 +119,21 @@ def _pr(
         "createdAt": created,
         "reviews": resolved_reviews,
     }
-    # `comments` and `commits` are fetched from GitHub but are absent from every
-    # hand-built PR that does not ask for them, so the gates stay exercised on the
-    # shape they will really meet when a key is missing.
-    if comments is not None:
-        pr["comments"] = comments
-    if commits is not None:
-        pr["commits"] = commits
+    # A correct fetch carries both keys, so the fixture carries them too: `comments`
+    # empty unless the test is about the review record, and `commits` naming this head
+    # unless the test is about a rewritten branch. `omit` models the row that is
+    # MISSING a key — the shape `#5903` merged on, and the one the queue now refuses
+    # rather than reads as "nothing was posted (#5903 post-mortem).
+    #
+    # This used to be the other way round, on the theory that the gates should stay
+    # exercised on the shape they meet when a key is missing. What that theory missed
+    # is that a gate reading an absent key is not exercised, it is blind, and the
+    # blindness was the outage: `test_a_pr_without_a_comments_key_does_not_crash_the_gate`
+    # asserted a missing comment list was *eligible*.
+    pr["comments"] = list(comments) if comments is not None else []
+    pr["commits"] = list(commits) if commits is not None else [{"oid": head_sha}]
+    for key in omit:
+        pr.pop(key, None)
     return pr
 
 
@@ -934,15 +943,84 @@ def test_a_comment_without_the_marker_is_ignored() -> None:
     assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
-def test_a_pr_without_a_comments_key_does_not_crash_the_gate() -> None:
-    """A missing key is a missing signal. It must not be an exception.
+def test_a_pr_without_a_comments_key_is_not_a_clearance() -> None:
+    """A missing key is a missing signal: not an exception, and not a clearance.
 
-    `comments` is fetched conditionally and the gates run on whatever the fetch
-    returned, so the shape with the key absent is one the gate will really meet.
+    This is the `#5903` post-mortem, and the version of this test that stood here
+    asserted the opposite. The host tick fetched its rows with a field list that left
+    `comments` out, so `_posted_verdict_reason` read nothing and `_gate_review` stayed
+    silent — while four review passes sat on that PR, the newest a
+    `changes_requested`. It merged on the coverage gate; the queue's own audit comment
+    names it (`review: review evidence via the coverage gate`).
+
+    With no repo there is nothing to read from, so the refusal has to be the verdict.
+    """
+    pr = _pr(347, approved=True, omit=("comments",))
+    assert "comments" not in pr
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("review record could not be read" in r for r in verdict.reasons)
+
+
+def test_the_review_record_is_fetched_before_the_verdict_gate(gh_stub: Any) -> None:
+    """The `#5903` repair: one read, before both review gates.
+
+    `_review_coverage` does fetch comments lazily, but it runs *after* `_gate_review`,
+    so on its own it cannot repair a row `_gate_review` has already read as
+    verdict-free. Here the row carries no comments and a `changes_requested` verdict
+    is waiting behind the fetch.
+    """
+    gh_stub(
+        gh_rule(
+            r"^pr view",
+            stdout={"comments": [_review_comment(verdict="changes_requested")]},
+        ),
+        gh_rule(r"^api graphql", stdout=NO_THREADS),
+    )
+    pr = _pr(347, approved=True, omit=("comments",))
+    verdict = mq.evaluate(
+        pr,
+        mq.load_policy(),
+        acting_role="em",
+        base="develop",
+        repo="digithings-ai/digithings",
+    )
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+    # The fetch completes the row rather than standing in for it, so the coverage gate
+    # downstream reads the same comments instead of fetching them a second time.
+    assert pr["comments"]
+
+
+def test_a_fetched_empty_comment_list_is_still_a_clearance() -> None:
+    """Positive control: the repair must not touch an ordinary green PR.
+
+    `comments=[]` is what the runner's own fetch produces for a PR nobody has
+    commented on. It is a read that came back empty, which is not the same thing as a
+    read that could not happen.
     """
     pr = _pr(347, approved=True)
-    assert "comments" not in pr
+    assert pr["comments"] == []
     assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+
+
+def test_a_missing_commits_key_does_not_clear_a_posted_block() -> None:
+    """The second leg of `#5903`: unverifiable ancestry must not spend a block.
+
+    `_on_pr_history` answers "is the verdict's commit still on this branch?" from
+    `pr["commits"]`. With no commit list the question is unanswerable, and the shape
+    that answered "no" retired a verdict whose commit was still on the branch.
+    """
+    pr = _pr(
+        347,
+        head_sha="c" * 40,
+        approved=True,
+        comments=[_review_comment(verdict="changes_requested", head_sha="b" * 40)],
+        omit=("commits",),
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r and "no commit list" in r for r in verdict.reasons)
 
 
 def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
@@ -1807,7 +1885,14 @@ _MARKER = "<!-- in-session-review -->"
 
 
 def _labeled_pr(number: int, comments: list[dict[str, Any]] | None) -> dict[str, Any]:
-    pr = _pr(number)
+    """A `reviewed:agent` PR.
+
+    `comments=None` means the row was fetched WITHOUT the comment list — the shape the
+    coverage gate fetches lazily, and, since `#5903`, the shape `_ensure_comments`
+    refuses when it has no repo to read from. A read that came back empty is
+    `comments=[]`, which is a different row.
+    """
+    pr = _pr(number, omit=("comments",))
     pr["labels"] = [{"name": "reviewed:agent"}]
     if comments is not None:
         pr["comments"] = comments

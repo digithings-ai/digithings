@@ -481,24 +481,41 @@ def _latest_readable_verdict(pr: dict[str, Any]) -> tuple[dict[str, Any], str, s
 
 
 def _posted_verdict_reason(pr: dict[str, Any]) -> list[str]:
-    """A refusal when the newest readable posted verdict blocks this exact head."""
+    """A refusal when the newest readable posted verdict blocks this PR.
+
+    A block stands while the commit it names is still on the branch, which is what
+    `_on_pr_history` answers from `pr["commits"]`. When the row carries no commit
+    list that question cannot be answered at all, and answering "gone" would retire a
+    live block — the second leg of the `#5903` hole, where a verdict scoped to a
+    commit that was still on the branch was cleared by a row that never said which
+    commits the branch had. Unverifiable blocks; only a branch that is *known* not to
+    carry the commit spends the verdict.
+    """
     latest = _latest_readable_verdict(pr)
     if latest is None:
         return []
     comment, verdict, scope_sha = latest
     if verdict not in BLOCKING_VERDICTS:
         return []
-    if not _on_pr_history(pr, scope_sha):
+    on_history = _on_pr_history(pr, scope_sha)
+    if not on_history and pr.get("commits") is not None:
         return []
     login = str((comment.get("author") or {}).get("login") or "?")
     where = (
         f"comment {comment.get('id') or '?'}" if comment.get("id") else f"a comment from {login}"
     )
     scope = scope_sha[:12] if scope_sha else "an unstated commit"
+    still = (
+        "and that commit is still on this branch"
+        if on_history
+        else (
+            "and this row carries no commit list, so that commit could not be "
+            "checked against the branch"
+        )
+    )
     return [
         f"a code-review verdict of '{verdict}' was posted on this PR by {login} "
-        f"({where}) against {scope}, and that commit is still on this branch; "
-        "a new review must clear it"
+        f"({where}) against {scope}, {still}; a new review must clear it"
     ]
 
 
@@ -529,6 +546,54 @@ def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         kept.append(review)
     return kept
+
+
+def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
+    """Give the row its comments, or say why it cannot. Returns a refusal, or None.
+
+    `_posted_verdict_reason` reads `pr["comments"]`, and a PR can carry a
+    `changes_requested` verdict with **no label at all** — so this is not the
+    `reviewed:agent` lazy fetch's client, and it runs before both review gates rather
+    than inside the coverage one.
+
+    `#5903` merged on 2026-10-19T08:23:06Z with four review passes on it and the
+    newest a `changes_requested` verdict. The gate was not wrong: run against the
+    real payload it refuses. The *row* was wrong — the host tick fetched it with a
+    field list that left `comments` out, so `_posted_verdict_reason` read nothing,
+    `_gate_review` stayed silent, and `_gate_review_coverage` authorised the merge on
+    a label. The queue's own audit comment says which gate carried it:
+    `review: review evidence via the coverage gate (_gate_review_coverage)`.
+
+    An absent comment list is a missing signal, not a clearance — the sentence
+    `_posted_verdict` already applies to a marker it cannot parse. So the row is
+    completed here when it can be, and refused when it cannot: with no repo there is
+    nothing to read, and a failed read is not an empty one.
+    """
+    if pr.get("comments") is not None:
+        return None
+    if repo is None:
+        return (
+            "the review record could not be read: this row carries no comments and "
+            "no repo was given to fetch them from, so a posted code-review verdict "
+            "cannot be ruled out"
+        )
+    try:
+        data = _gh_json(
+            "pr",
+            "view",
+            str(pr.get("number")),
+            "--repo",
+            repo,
+            "--json",
+            "comments",
+        )
+    except QueueError:
+        return (
+            "the review record could not be read: fetching this PR's comments "
+            "failed, so a posted code-review verdict cannot be ruled out"
+        )
+    pr["comments"] = (data or {}).get("comments") or []
+    return None
 
 
 def _gate_review(pr: dict[str, Any]) -> list[str]:
@@ -785,6 +850,14 @@ def evaluate(
         reasons.append(stale_reason)
 
     reasons.extend(_gate_checks(pr, policy))
+    # The verdict gate reads the review record, so the row is completed before either
+    # review gate runs. `_review_coverage`'s own lazy fetch is not enough on its own:
+    # it runs *after* `_gate_review` and so cannot repair a row that `_gate_review`
+    # has already read as verdict-free — which is how #5903 was authorised on a
+    # label while a `changes_requested` verdict stood (#5903 post-mortem).
+    unreadable = _ensure_comments(pr, repo)
+    if unreadable:
+        reasons.append(unreadable)
     reasons.extend(_gate_review(pr))
     coverage_reasons, review_evidence = _review_coverage(pr, repo)
     reasons.extend(coverage_reasons)
