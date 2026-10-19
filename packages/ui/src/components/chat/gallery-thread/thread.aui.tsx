@@ -826,16 +826,13 @@ const Composer: FC<{
             </div>
           ) : null}
           <ComposerAttachments />
-          <div
-            className={cn(
-              "aui-composer-main",
-              compact && "flex min-w-0 items-center gap-1",
-            )}
-          >
-            {compact ? <ComposerAddAttachment /> : null}
+          {/* One row: attach, input, send. The toolbar used to sit on a second
+              row inside the same border, which read as a two-line text box. */}
+          <div className="aui-composer-main flex min-w-0 items-end gap-1">
+            <ComposerAddAttachment />
             <div
               ref={inputWrapRef}
-              className={cn("aui-composer-input-wrap relative min-w-0", compact && "flex-1")}
+              className="aui-composer-input-wrap relative min-w-0 flex-1"
             >
               <ComposerPrimitive.Input
                 placeholder={placeholder}
@@ -854,9 +851,8 @@ const Composer: FC<{
               />
               <ComposerBlockCaret containerRef={inputWrapRef} />
             </div>
-            {compact ? <ComposerSendControls /> : null}
+            <ComposerSendControls />
           </div>
-          {compact ? null : <ComposerAction />}
         </div>
       </ComposerPrimitive.AttachmentDropzone>
       {slash ? (
@@ -994,18 +990,6 @@ const ComposerSendControls: FC = () => {
           </Button>
         </ComposerPrimitive.Cancel>
       </AuiIf>
-    </div>
-  );
-};
-
-const ComposerAction: FC = () => {
-  // Send controls pin themselves right with ml-auto (not just this
-  // justify-between): when the deployment disables attachments,
-  // AddAttachment renders null and a lone child would collapse left.
-  return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
-      <ComposerSendControls />
     </div>
   );
 };
