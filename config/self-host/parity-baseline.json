@@ -423,7 +423,6 @@
       },
       "apps/digithings-stack-cloudflare/wrangler.toml": {
         "CHROMA_PATH": "var",
-        "DIGICHAT": "durable_object_namespace",
         "DIGICHAT_EMBED_HOSTS": "var",
         "DIGICHAT_ENABLED_SERVICES": "var",
         "DIGICHAT_REQUIRE_ROOT_AUTH": "var",
@@ -444,7 +443,6 @@
         "DT_BASE_URL": "var",
         "DT_TARGET": "var",
         "DT_VARIANT": "var",
-        "DigiChatContainer": "container",
         "DigiQuantMcpContainer": "container",
         "DigiStackContainer": "container",
         "MARKET_DATA": "r2_bucket",

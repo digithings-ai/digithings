@@ -21,8 +21,12 @@
       "count": 3,
       "ticket": "DIG-3689"
     },
+    "Dockerfile.digichat-cloudflare": {
+      "count": 4,
+      "ticket": "DIG-2912"
+    },
     "Dockerfile.digithings-stack-cloudflare": {
-      "count": 11,
+      "count": 9,
       "ticket": "DIG-3689"
     },
     "Makefile": {
@@ -77,6 +81,10 @@
       "count": 4,
       "ticket": "DIG-3689"
     },
+    "apps/digichat/AGENTS.md": {
+      "count": 1,
+      "ticket": "DIG-4043"
+    },
     "apps/digichat/ARCHITECTURE.md": {
       "count": 15,
       "ticket": "DIG-3689"
@@ -96,6 +104,10 @@
     "apps/digichat/embed-hosts.txt": {
       "count": 7,
       "ticket": "DIG-3689"
+    },
+    "apps/digichat/scripts/trusted-proxy-server.mjs": {
+      "count": 20,
+      "ticket": "DIG-2912"
     },
     "apps/digichat/src/app/(devkit)/devkit/devkit-client.tsx": {
       "count": 1,
@@ -144,6 +156,14 @@
     "apps/digichat/src/app/api/embed/tenant-config/route.test.ts": {
       "count": 10,
       "ticket": "DIG-3689"
+    },
+    "apps/digichat/src/app/api/mcp/zammad/[[...path]]/route.ts": {
+      "count": 9,
+      "ticket": "DIG-2912"
+    },
+    "apps/digichat/src/app/api/mcp/zammad/route.test.ts": {
+      "count": 15,
+      "ticket": "DIG-2912"
     },
     "apps/digichat/src/components/assistant-ui/skins/digichat-force-web.test.tsx": {
       "count": 2,
@@ -222,7 +242,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/deploy-config/loader.test.ts": {
-      "count": 19,
+      "count": 25,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/deploy-config/mcp-servers.test.ts": {
@@ -282,11 +302,11 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-tenants.test.ts": {
-      "count": 40,
+      "count": 47,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-tenants.ts": {
-      "count": 4,
+      "count": 5,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-trial-messages.test.ts": {
@@ -409,6 +429,22 @@
       "count": 3,
       "ticket": "DIG-3689"
     },
+    "digigraph/src/digigraph/skill_library/find-precedent-tickets/SKILL.md": {
+      "count": 3,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/guide-help-docs/SKILL.md": {
+      "count": 3,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/loader.py": {
+      "count": 1,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/summarize-tickets-by-topic/SKILL.md": {
+      "count": 5,
+      "ticket": "DIG-4043"
+    },
     "digikey/src/digikey/cli.py": {
       "count": 1,
       "ticket": "DIG-3689"
@@ -420,6 +456,10 @@
     "digiquant/pyproject.toml": {
       "count": 1,
       "ticket": "DIG-3689"
+    },
+    "digisearch/AGENTS.md": {
+      "count": 1,
+      "ticket": "DIG-4043"
     },
     "digisearch/ARCHITECTURE.md": {
       "count": 18,
@@ -542,7 +582,7 @@
       "ticket": "DIG-3689"
     },
     "docs/ops/SECRETS_ROTATION.md": {
-      "count": 10,
+      "count": 11,
       "ticket": "DIG-3689"
     },
     "docs/ops/credential-ownership.md": {
@@ -576,6 +616,10 @@
     "docs/ops/vectorize-cutover.md": {
       "count": 12,
       "ticket": "DIG-3689"
+    },
+    "docs/release/supabase-exit/caller-inventory.md": {
+      "count": 10,
+      "ticket": "DIG-4043"
     },
     "docs/repo-split/cloudflare-deploy-map.md": {
       "count": 1,
@@ -693,8 +737,12 @@
       "count": 1,
       "ticket": "DIG-3689"
     },
+    "scripts/occ_invite_key_write.sh": {
+      "count": 11,
+      "ticket": "DIG-4043"
+    },
     "scripts/r0_client_literals_baseline.json": {
-      "count": 19,
+      "count": 21,
       "ticket": "DIG-3689"
     },
     "scripts/repo-split/README.md": {
@@ -725,6 +773,10 @@
       "count": 1,
       "ticket": "DIG-3689"
     },
+    "scripts/smoke_occ_invite_gate.sh": {
+      "count": 1,
+      "ticket": "DIG-4043"
+    },
     "scripts/split/manifest.py": {
       "count": 2,
       "ticket": "DIG-3895"
@@ -750,7 +802,7 @@
       "ticket": "DIG-3689"
     },
     "scripts/zammad_mcp/README.md": {
-      "count": 50,
+      "count": 56,
       "ticket": "DIG-3689"
     },
     "scripts/zammad_mcp/__init__.py": {
@@ -781,6 +833,10 @@
       "count": 54,
       "ticket": "DIG-3689"
     },
+    "tests/db/test_art9_false_positives.py": {
+      "count": 1,
+      "ticket": "DIG-4043"
+    },
     "tests/dg/test_api.py": {
       "count": 8,
       "ticket": "DIG-3689"
@@ -794,7 +850,7 @@
       "ticket": "DIG-3689"
     },
     "tests/dg/test_digivault_tool.py": {
-      "count": 5,
+      "count": 7,
       "ticket": "DIG-3689"
     },
     "tests/dg/test_languages.py": {
@@ -824,6 +880,10 @@
     "tests/dg/test_occ_ticket_payload_retired.py": {
       "count": 25,
       "ticket": "DIG-3689"
+    },
+    "tests/dg/test_skill_library.py": {
+      "count": 22,
+      "ticket": "DIG-4043"
     },
     "tests/dg/test_tool_allowlist.py": {
       "count": 1,
@@ -974,56 +1034,12 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_zammad_mcp_stack.py": {
-      "count": 23,
+      "count": 29,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_zammad_semantic_eval.py": {
       "count": 3,
       "ticket": "DIG-3689"
-    },
-    "apps/digichat/AGENTS.md": {
-      "count": 1,
-      "ticket": "DIG-4043"
-    },
-    "digigraph/src/digigraph/skill_library/find-precedent-tickets/SKILL.md": {
-      "count": 2,
-      "ticket": "DIG-4043"
-    },
-    "digigraph/src/digigraph/skill_library/guide-help-docs/SKILL.md": {
-      "count": 5,
-      "ticket": "DIG-4043"
-    },
-    "digigraph/src/digigraph/skill_library/loader.py": {
-      "count": 1,
-      "ticket": "DIG-4043"
-    },
-    "digigraph/src/digigraph/skill_library/summarize-tickets-by-topic/SKILL.md": {
-      "count": 3,
-      "ticket": "DIG-4043"
-    },
-    "digisearch/AGENTS.md": {
-      "count": 1,
-      "ticket": "DIG-4043"
-    },
-    "docs/release/supabase-exit/caller-inventory.md": {
-      "count": 10,
-      "ticket": "DIG-4043"
-    },
-    "scripts/occ_invite_key_write.sh": {
-      "count": 11,
-      "ticket": "DIG-4043"
-    },
-    "scripts/smoke_occ_invite_gate.sh": {
-      "count": 1,
-      "ticket": "DIG-4043"
-    },
-    "tests/db/test_art9_false_positives.py": {
-      "count": 1,
-      "ticket": "DIG-4043"
-    },
-    "tests/dg/test_skill_library.py": {
-      "count": 5,
-      "ticket": "DIG-4043"
     }
   }
 }

@@ -86,6 +86,27 @@ if grep -q '^\[\[containers\]\]' "apps/$APP/wrangler.toml"; then
   fi
 fi
 
+# Local Docker gate (Chris, 2026-10-18): build the container image HERE first, so
+# a broken image -- a missing packaged dependency, a bad COPY -- fails in a minute
+# locally instead of after a full Cloudflare deploy attempt. This is not theoretical:
+# on 2026-10-18 the digichat dry run passed (28 tests, clean typecheck) and the live
+# deploy then died inside `next build` because packages/ui had gained an import of
+# @digithings/hero-banner that the image never packaged.
+# The deploy then rebuilds the same Dockerfile and Docker reuses these layers,
+# so the gate costs seconds.
+# NOTE: this must be `docker build`, NOT `wrangler containers build` -- that command
+# requires a file literally named `Dockerfile` inside its PATH argument, and these
+# images live at the repo root as `Dockerfile.<app>`.
+if grep -q '^\[\[containers\]\]' "apps/$APP/wrangler.toml"; then
+  img=$(sed -n 's/^[[:space:]]*image[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "apps/$APP/wrangler.toml" | head -1)
+  ctx=$(sed -n 's/^[[:space:]]*image_build_context[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "apps/$APP/wrangler.toml" | head -1)
+  [ -n "$img" ] || { echo "ABORT: [[containers]] declared but no image path in apps/$APP/wrangler.toml"; exit 1; }
+  [ -n "$ctx" ] || ctx=$(dirname "$img")
+  echo "--- local image build gate: docker build -f $img $ctx (from apps/$APP) ---"
+  ( cd "apps/$APP" && "${DOCKER_BIN:-/usr/local/bin/docker}" build -f "$img" -t "local-gate-$APP:latest" "$ctx" )
+  echo "--- local image build gate PASSED ($APP) ---"
+fi
+
 # DIG-3229: prefer the app's OWN deploy script when it defines one.
 # digithings-stack-cloudflare deploys via `node scripts/deploy.mjs`, which injects
 # --var STACK_CONTAINER_REV:<commit> and then verifies /_stack/meta reports the id

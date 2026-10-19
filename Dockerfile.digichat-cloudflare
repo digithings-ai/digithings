@@ -19,6 +19,7 @@ COPY image-packages/digichat/manifests/design/package.json packages/design/packa
 COPY image-packages/digichat/manifests/ui/package.json packages/ui/package.json
 COPY image-packages/digichat/manifests/digichat-ui/package.json packages/digichat-ui/package.json
 COPY image-packages/digichat/manifests/dashboard/package.json apps/dashboard/package.json
+COPY image-packages/digichat/manifests/hero-banner/package.json packages/hero-banner/package.json
 RUN npm ci --workspace apps/digichat --include-workspace-root
 
 FROM node:22-alpine AS builder
@@ -34,7 +35,8 @@ COPY image-packages/digichat/npm/ /tmp/digi-npm/
 # packages/ui, so no gallery COPY is needed anymore (#3717 closed).
 RUN tar -xzf /tmp/digi-npm/digithings-design-*.tgz -C packages/design --strip-components=1 \
  && tar -xzf /tmp/digi-npm/digithings-ui-*.tgz -C packages/ui --strip-components=1 \
- && tar -xzf /tmp/digi-npm/digithings-digichat-ui-*.tgz -C packages/digichat-ui --strip-components=1
+ && tar -xzf /tmp/digi-npm/digithings-digichat-ui-*.tgz -C packages/digichat-ui --strip-components=1 \
+ && tar -xzf /tmp/digi-npm/digithings-hero-banner-*.tgz -C packages/hero-banner --strip-components=1
 COPY apps/digichat ./apps/digichat
 COPY tsconfig.base.json ./tsconfig.base.json
 # BYOK provider pins are imported from the repo-root config (#5020).
@@ -70,12 +72,17 @@ LABEL org.digithings.image.registry="${IMAGE_PUSH_REGISTRY}" \
       org.digithings.image.repository="${IMAGE_PUSH_REPOSITORY}"
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN apk add --no-cache curl
+# zammad-mcp (read-only OCC helpdesk MCP) runs beside the Node process: the
+# trusted proxy spawns `python3 -m scripts.zammad_mcp.server` and routes
+# /api/mcp/zammad* to it. Same dep pin as scripts/zammad_mcp/Dockerfile.mcp.
+RUN apk add --no-cache curl python3 py3-pip \
+ && python3 -m pip install --no-cache-dir --break-system-packages "mcp>=1.26,<2" "httpx>=0.28,<1"
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/.next/static ./apps/digichat/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/public ./apps/digichat/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/scripts/trusted-proxy-server.mjs ./apps/digichat/scripts/trusted-proxy-server.mjs
+COPY --chown=nextjs:nodejs scripts/zammad_mcp ./scripts/zammad_mcp
 COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/drizzle ./apps/digichat/drizzle
 COPY --from=builder /tmp/digichat-version /etc/digichat-version
 # Empty when image_vars/--build-arg is omitted; trusted-proxy then reads /etc/digichat-version.
