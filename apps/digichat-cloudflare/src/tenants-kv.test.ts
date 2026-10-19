@@ -51,6 +51,18 @@ describe("mergeTenants", () => {
     expect(JSON.parse(r.json)["digiquant.io"].slug).toBe("digiquant");
   });
 
+  it("invalid legacy secret does not throw and the KV config still serves", () => {
+    const r = mergeTenants(JSON.stringify(kvCfg), "not json", env);
+    expect(r.source).toBe("kv");
+    expect(JSON.parse(r.json)["occ.digithings.ai"].token).toBe("invite-123");
+  });
+
+  it("invalid legacy secret with no usable KV fails closed to no tenants", () => {
+    const r = mergeTenants("not json", "not json", env);
+    expect(r.json).toBe("");
+    expect(r.source).toBe("none");
+  });
+
   it("ignores non-secret-shaped env names", () => {
     const bad = { h: { tokenEnv: "lower_case" } };
     const r = mergeTenants(JSON.stringify(bad), undefined, { lower_case: "v" });
@@ -65,5 +77,11 @@ describe("resolveEmbedTenants", () => {
     const broken = { get: async () => { throw new Error("down"); } };
     expect((await resolveEmbedTenants(broken, JSON.stringify(legacy), env)).source).toBe("legacy");
     expect((await resolveEmbedTenants(undefined, undefined, env)).source).toBe("none");
+  });
+
+  it("survives an invalid legacy secret", async () => {
+    const kv = { get: async (k: string) => (k === TENANTS_KV_KEY ? JSON.stringify(kvCfg) : null) };
+    expect((await resolveEmbedTenants(kv, "not json", env)).source).toBe("kv");
+    expect((await resolveEmbedTenants(undefined, "not json", env)).source).toBe("none");
   });
 });

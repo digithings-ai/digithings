@@ -85,7 +85,14 @@ export function mergeTenants(
     // Invalid KV must not take chat down: fall back to the legacy secret.
     console.error(`[tenants-kv] ignoring invalid KV config: ${(e as Error).message}`);
   }
-  const legacy = parseObj(legacyRaw, "DIGICHAT_EMBED_TENANTS");
+  let legacy: Json | null = null;
+  try {
+    legacy = parseObj(legacyRaw, "DIGICHAT_EMBED_TENANTS");
+  } catch (e) {
+    // A malformed legacy secret must not take the Worker down either: a
+    // readable KV config still serves, otherwise no tenant is served at all.
+    console.error(`[tenants-kv] ignoring invalid DIGICHAT_EMBED_TENANTS: ${(e as Error).message}`);
+  }
   const unresolved: Record<string, string[]> = {};
   if (!kv) {
     return { json: legacy ? JSON.stringify(legacy) : "", source: legacy ? "legacy" : "none", unresolved };

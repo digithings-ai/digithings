@@ -86,14 +86,22 @@ export class DigiChatContainer extends Container {
    */
   override async fetch(request: Request): Promise<Response> {
     if (!this.tenantsResolved) {
-      const { json, source } = await resolveEmbedTenants(
-        workerVars.DIGICHAT_TENANTS_KV,
-        workerVars.DIGICHAT_EMBED_TENANTS,
-        workerVars as unknown as Record<string, unknown>,
-      );
-      this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: json };
+      try {
+        const { json, source } = await resolveEmbedTenants(
+          workerVars.DIGICHAT_TENANTS_KV,
+          workerVars.DIGICHAT_EMBED_TENANTS,
+          workerVars as unknown as Record<string, unknown>,
+        );
+        this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: json };
+        console.log(`[tenants-kv] embed tenants source=${source}`);
+      } catch (e) {
+        // A tenant-config failure must not 500 every proxied request (embed,
+        // chat, assets, /healthz). Fail closed to no tenants for this boot;
+        // onStop() re-arms the resolution for the next boot.
+        console.error(`[tenants-kv] tenant config unavailable, serving no tenants: ${(e as Error).message}`);
+        this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: "" };
+      }
       this.tenantsResolved = true;
-      console.log(`[tenants-kv] embed tenants source=${source}`);
     }
     return super.fetch(request);
   }
