@@ -26,7 +26,7 @@ are gone from the tables below.
 | Stale issues (>90d no activity) | `pipeline-maintenance.yml` — `stale-issues` job | weekly Mon 08:00 UTC | Adds `stale` label + a reminder comment. Not auto-closed. Blocked issues use a 7d threshold |
 | Stale PRs (>14d no activity) | `pipeline-maintenance.yml` — `stale-prs` job | weekly Mon 08:00 UTC | Posts an escalation comment on task/cursor/claude/module branches |
 | Label coverage drift | `pipeline-maintenance.yml` — `label-coverage` job | weekly Mon 08:00 UTC | One tracker issue listing every open issue missing `priority:*` or `component:*` |
-| Project-field coverage | the `coverage` job in `ci-pr-hygiene.yml` | daily 06:00 UTC + on PR | Runs `scripts/check_project_fields_coverage.py`: every agent-task issue in the TSV with a real phase and a valid model |
+| Project-field coverage | the `coverage` job in `ci-pr-hygiene.yml` | daily 06:00 UTC + on PR (CF clock held off since 2026-10-14, DIG-4364) | Runs `scripts/check_project_fields_coverage.py`: every agent-task issue in the TSV with a real phase and a valid model |
 | Agent backlog snapshot | `agent-backlog-snapshot.yml` | weekly Mon 06:13 UTC (digithings-cron) | Regenerates `docs/agent-backlog/generated-snapshot.md` |
 
 ## Documentation hygiene
@@ -43,8 +43,8 @@ are gone from the tables below.
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
-| Python dependency CVEs | `pipeline-maintenance.yml` — `dependency-audit` job + `security-pip-audit.yml` | weekly + on PR | Runs `pip-audit`, files one batched tracker issue (`security:finding`, dispatched at the cursor tier) |
-| npm dependency CVEs | `security-npm-audit.yml` (dispatched weekly by the cron Worker) + `ci.yml` — `npm-audit` lane | weekly Mon 06:37 UTC + on PR | Runs `npm audit` on the root `apps/*` + `packages/*` workspace closure, blocks HIGH/CRITICAL, surfaces lower severities (accepted advisories in `npm-audit-ignore.txt`) |
+| Python dependency CVEs | `pipeline-maintenance.yml` — `dependency-audit` job + `security-pip-audit.yml` | weekly + on PR (audit workflow disabled 2026-10-14, DIG-4364) | Runs `pip-audit`, files one batched tracker issue (`security:finding`, dispatched at the cursor tier) |
+| npm dependency CVEs | `security-npm-audit.yml` (dispatched weekly by the cron Worker) + `ci.yml` — `npm-audit` lane | weekly Mon 06:37 UTC + on PR (audit workflow disabled 2026-10-14, DIG-4364) | Runs `npm audit` on the root `apps/*` + `packages/*` workspace closure, blocks HIGH/CRITICAL, surfaces lower severities (accepted advisories in `npm-audit-ignore.txt`) |
 | Secret leaks | `security-gitleaks.yml` | on push / PR | Scans for hard-coded secrets, fails CI if any found |
 | Protected-path edits | `scripts/claude-hooks/protected-path-guard.sh` | PreToolUse hook | Blocks `.github/workflows/`, `SECURITY.md`, `docs/scoring/`, `config/litellm.yaml`, `projects/` edits outside properly-named branches — in both the current checkout and the primary tree when the session is rooted in a linked worktree |
 | Live-trading path edits | `scripts/hooks/pre-push.sh` | pre-push | Requires `Human-Approved-By:` trailer on commits touching live-trading paths |
@@ -71,7 +71,7 @@ are gone from the tables below.
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
-| Agent PR finalizer | `agent-pr-finalizer.yml` | daily 07:11 UTC (digithings-cron) + manual | Backstop for agent PRs; triage, fix dispatch, automerge when eligible |
+| Agent PR finalizer | `agent-pr-finalizer.yml` | daily 07:11 UTC (digithings-cron; held off since 2026-10-14, DIG-4364) + manual | Backstop for agent PRs; triage, fix dispatch, automerge when eligible |
 | PR quality gate | **removed** | — | A `/simplify` + `/review` checkbox gate on `task/*` merges existed as `pr-quality-gate.yml` from #131 (`abc7e541`) until #378 (`5abc4f41`) replaced it with the finish-task skill. Nothing enforces it in CI today. Listed rather than deleted so the gap is visible instead of assumed-covered. |
 | PR issue linkage | removed 2026-08 per `docs/adr/0024-drop-pr-linkage-enforcement.md` (was `check-linkage` in `ci-pr-hygiene.yml`) | — | Convention only: `task/<N>-slug` branch or `Fixes #N` in PR body; nothing enforces it |
 

@@ -13,6 +13,8 @@
 #
 # Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron)
 # dispatches this weekly; the GHA schedule was removed in #3579.
+# DIG-4364: `disabled_manually` since the 2026-10-14 GitHub cost lock; the Worker's Monday 06:37 UTC
+# clock is held off (`enabled: false` in jobs.ts) until the workflow is re-enabled on GitHub.
 name: "Security: npm audit"
 
 on:
