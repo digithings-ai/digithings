@@ -26,7 +26,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "image-packages"
-PROVENANCE = OUT / "PROVENANCE.json"
+#: Written last by ``main()``. The path is resolved from ``OUT`` at call time, not
+#: frozen here, so monkeypatching ``OUT`` in a test exercises the whole round trip.
+PROVENANCE_NAME = "PROVENANCE.json"
+PROVENANCE = OUT / PROVENANCE_NAME
 PROVENANCE_VERSION = 1
 
 # Extras match the install lines these Dockerfiles had when they copied source.
@@ -91,9 +94,10 @@ RUNNER_OPT = (
     "apps/digiquant-runner/commands.json",
 )
 
-#: Directories a content digest never descends into. Every one of them is written
-#: by a build or a local run and none is an input to a wheel or an npm tarball, so
-#: including them would make a digest depend on whether someone had run the tests.
+#: Directories the fallback digest never descends into. Only used when git cannot
+#: answer: with git, ``ls-files --exclude-standard`` excludes these — and everything
+#: else the repo ignores, ``digiquant/results/`` included — by construction. A list
+#: kept by hand cannot win that race, which is why it is not the primary path.
 EXCLUDED_DIRS = frozenset(
     {
         "__pycache__",
@@ -116,29 +120,91 @@ def _excluded(name: str) -> bool:
     return name in EXCLUDED_DIRS or name.endswith(".egg-info")
 
 
-def content_digest(root: Path) -> str:
-    """sha256 over (relative POSIX path, file bytes) for everything under ``root``.
+def _git_listed_files(root: Path) -> list[Path] | None:
+    """Git's answer for "which files under ``root`` are source", or None if it cannot say.
 
-    mtimes are deliberately absent. Git checkout stamps every source file with the
-    moment of checkout, so an mtime rule would call a freshly cloned tree stale,
-    force a repackage, and rewriting the inputs changes container layer digests —
-    re-uploading ~8 layers against the registry. Only real content drift refuses.
+    ``--cached`` adds tracked files and ``--others --exclude-standard`` adds untracked,
+    not-ignored ones — the second half matters because a brand-new source file that has
+    never been ``git add``ed is still packaged by the build, and a plain ``git ls-files``
+    would miss it. Git already knows what the repository ignores, so
+    ``digiquant/results/``, ``__pycache__``, ``.venv``, ``node_modules``, ``dist``,
+    ``build`` and ``*.egg-info`` are excluded by construction: a local backtest writing
+    into ``digiquant/results/`` can no longer drift the digest and force a repackage of
+    sources that did not change.
+
+    Paths come back relative to ``root``, because git lists relative to its working
+    directory. None sends the caller to the filesystem walk — git missing, or ``root``
+    outside any repository.
     """
-    digest = hashlib.sha256()
-    if root.is_file():
-        digest.update(b"file\0")
-        digest.update(root.read_bytes())
-        return digest.hexdigest()
+    try:
+        completed = subprocess.run(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."],
+            cwd=root,
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    listed = [
+        Path(chunk.decode("utf-8", "surrogateescape"))
+        for chunk in completed.stdout.split(b"\0")
+        if chunk
+    ]
+    return [path for path in listed if (root / path).is_file()]
+
+
+def _walked_files(root: Path) -> list[Path]:
+    """The fallback enumeration: a filesystem walk, minus ``EXCLUDED_DIRS``."""
+    found: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(name for name in dirnames if not _excluded(name))
         for filename in sorted(filenames):
             path = Path(dirpath) / filename
             if not path.is_file():  # a dangling symlink or a socket, not a file
                 continue
-            digest.update(path.relative_to(root).as_posix().encode("utf-8"))
-            digest.update(b"\0")
-            digest.update(path.read_bytes())
-            digest.update(b"\0")
+            found.append(path.relative_to(root))
+    return found
+
+
+def content_digest(root: Path) -> str:
+    """sha256 over (relative POSIX path, working-tree bytes) for an input's sources.
+
+    mtimes are deliberately absent. Git checkout stamps every source file with the
+    moment of checkout, so an mtime rule would call a freshly cloned tree stale,
+    force a repackage, and rewriting the inputs changes container layer digests —
+    re-uploading ~8 layers against the registry. Only real content drift refuses.
+
+    The file set is git's (see ``_git_listed_files``) and the bytes are the working
+    tree's, never the index blob's: ``uv build`` packages a dirty edit, so reading the
+    index would pass a tree the wheel was not built from.
+
+    Without git this degrades to the old filesystem walk and says so on stderr, rather
+    than returning an empty digest that reads as "unchanged".
+    """
+    digest = hashlib.sha256()
+    if root.is_file():
+        digest.update(b"file\0")
+        digest.update(root.read_bytes())
+        return digest.hexdigest()
+
+    listed = _git_listed_files(root)
+    if listed is None or not listed:
+        walked = _walked_files(root)
+        # listed is None: git could not answer. listed == [] over a non-empty tree:
+        # every file is ignored, which is not something to trust silently.
+        if listed is None or walked:
+            print(
+                f"warning: provenance for {root} was computed without git "
+                "(filesystem walk); gitignored build output under it is not detected.",
+                file=sys.stderr,
+            )
+            listed = walked
+
+    for relative in sorted(listed, key=lambda path: path.as_posix()):
+        digest.update(relative.as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update((root / relative).read_bytes())
+        digest.update(b"\0")
     return digest.hexdigest()
 
 
@@ -206,9 +272,18 @@ def provenance_document(paths: dict[str, Path] | None = None) -> dict[str, objec
     }
 
 
+def _provenance_path() -> Path:
+    """Where the record lives, resolved from ``OUT`` at call time.
+
+    Not the module constant: a test points ``OUT`` at a temp dir and expects both the
+    writer and ``check_only()`` to follow it.
+    """
+    return OUT / PROVENANCE_NAME
+
+
 def _write_provenance() -> None:
     document = provenance_document()
-    PROVENANCE.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    _provenance_path().write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
 
 def check_only(paths: dict[str, Path] | None = None, provenance: Path | None = None) -> int:
@@ -217,7 +292,7 @@ def check_only(paths: dict[str, Path] | None = None, provenance: Path | None = N
     ``head`` is informational only: the decision rests on content, so a different
     commit with identical inputs still passes.
     """
-    target = PROVENANCE if provenance is None else provenance
+    target = _provenance_path() if provenance is None else provenance
     selected = input_paths() if paths is None else paths
     try:
         document = json.loads(target.read_text(encoding="utf-8"))
