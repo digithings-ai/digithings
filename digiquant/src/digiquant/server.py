@@ -650,7 +650,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         if args.get("constraints"):
             try:
                 constraints = OptimizationConstraints.model_validate(args["constraints"])
-            except ValidationError as e:
+            except ValidationError:
                 return {"ok": False, "error": "invalid constraints"}
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:
@@ -747,7 +747,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         if args.get("constraints"):
             try:
                 constraints = OptimizationConstraints.model_validate(args["constraints"])
-            except ValidationError as e:
+            except ValidationError:
                 return {"ok": False, "error": "invalid constraints"}
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:
