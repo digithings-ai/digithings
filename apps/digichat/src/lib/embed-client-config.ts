@@ -1,3 +1,4 @@
+import { mcpSubTools } from "@/lib/deploy-config/client-projection";
 /**
  * The client-safe projection of an embed tenant, and the two ways to obtain it.
  *
@@ -75,10 +76,22 @@ export type EmbedTenantClientConfig = {
   /** Reasoning-only override on top of `view`. Omit = deploy default. */
   thinking?: ThinkingMode;
   /** Catalog entries — no MCP URLs */
-  tools?: { catalog: Array<{ id: string; default?: boolean; label?: string }> };
-  /** Operator MCP ids/labels only */
+  tools?: {
+    catalog: Array<{
+      id: string;
+      default?: boolean;
+      label?: string;
+      tools?: Array<{ id: string; label?: string }>;
+    }>;
+  };
+  /** Operator MCP ids/labels only (+ per-tool ids from the allowlist) */
   mcp?: {
-    servers: Array<{ id: string; label?: string; default?: boolean }>;
+    servers: Array<{
+      id: string;
+      label?: string;
+      default?: boolean;
+      tools?: Array<{ id: string; label?: string }>;
+    }>;
     allowUserServers?: boolean;
     allowAddForm?: boolean;
   };
@@ -161,11 +174,15 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     tools: cfg.tools,
     mcp: cfg.mcp
       ? {
-          servers: cfg.mcp.servers.map((s) => ({
-            id: s.id,
-            ...(s.label ? { label: s.label } : {}),
-            ...(typeof s.default === "boolean" ? { default: s.default } : {}),
-          })),
+          servers: cfg.mcp.servers.map((s) => {
+            const tools = mcpSubTools(s.id, s.allowedTools);
+            return {
+              id: s.id,
+              ...(s.label ? { label: s.label } : {}),
+              ...(typeof s.default === "boolean" ? { default: s.default } : {}),
+              ...(tools ? { tools } : {}),
+            };
+          }),
           allowUserServers: cfg.mcp.allowUserServers === true,
           allowAddForm: cfg.mcp.allowUserServers === true && cfg.mcp.allowAddForm === true,
         }

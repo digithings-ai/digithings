@@ -4,15 +4,21 @@ DIG-2769. The acceptance criterion is "every wrangler binding/var and every
 compose env maps to the contract". ``config/contract/check_contract.py`` is the
 mechanism; this test is what keeps it honest in CI, because a checker nobody
 runs is not a check.
+
+The contract also *transcribes* live values (``wrangler_values``). Coverage alone
+does not notice a transcription that has gone stale, so the last test compares
+each transcribed value against the live worker it copies (DIG-3232).
 """
 
 from __future__ import annotations
 
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.unit
 
@@ -78,3 +84,49 @@ def test_generated_artefacts_are_current() -> None:
     }
     changed = sorted(str(p.relative_to(REPO_ROOT)) for p in after if before.get(p) != after[p])
     assert not changed, f"generated artefacts are stale, re-run generate.py: {changed}"
+
+
+def _live_wrangler_vars() -> dict[str, dict[str, object]]:
+    """``{worker name: [vars]}`` read from every live ``apps/*/wrangler.toml``."""
+    live: dict[str, dict[str, object]] = {}
+    for path in sorted((REPO_ROOT / "apps").glob("*/wrangler.toml")):
+        doc = tomllib.loads(path.read_text(encoding="utf-8"))
+        worker = str(doc.get("name") or path.parent.name)
+        live.setdefault(worker, {}).update(doc.get("vars") or {})
+    return live
+
+
+@pytest.mark.skipif(not CONTRACT.exists(), reason="config/contract/ not present")
+def test_contract_wrangler_values_mirror_the_live_workers() -> None:
+    """Every transcribed ``wrangler_values`` row must equal the live var it copies.
+
+    ``contract.yaml`` is the source of truth for the schema, but each row also
+    transcribes the live value ("copied verbatim from the stack Worker"). An
+    unchecked transcription is a copy that can rot: the OCC grounding prompt sat
+    at an older revision in the contract than in ``wrangler.toml`` until this
+    test existed (DIG-3232).
+    """
+    contract = yaml.safe_load(CONTRACT.read_text(encoding="utf-8"))
+    live = _live_wrangler_vars()
+    mismatched: list[str] = []
+    compared = 0
+    for entry in contract["env"]:
+        name = entry["name"]
+        for worker in entry["sources"]["wrangler_workers"]:
+            declared = live.get(worker)
+            if not declared or name not in declared:
+                continue
+            transcribed = (entry.get("wrangler_values") or {}).get(worker)
+            if transcribed is None:
+                continue
+            compared += 1
+            if transcribed != declared[name]:
+                mismatched.append(
+                    f"{worker}.{name}: contract {str(transcribed)[:60]!r} "
+                    f"!= live {str(declared[name])[:60]!r}"
+                )
+    # A comparison that looked at nothing must not pass (DIG-2769 self-test rule).
+    assert compared >= 20, f"only {compared} contract values compared; the scan found no work"
+    assert not mismatched, "contract values drifted from the live wrangler.toml: " + "; ".join(
+        mismatched
+    )

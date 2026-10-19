@@ -31,6 +31,10 @@ BACKFILL_ENABLED = "0"
 #                         defaultBranchRef) fails with it. See docs/ops/SECRETS_INVENTORY.md.
 #   CRON_KICK_SECRET    — optional; enables POST /kick and GET /runs/:id
 #   RUNNER_AUTH_TOKEN   — Bearer for the digiquant-runner service binding
+#   TWELVEX_RUNNER_AUTH — Bearer cron sends to twelvex-runner; must equal that
+#                         Worker's RUNNER_AUTH_TOKEN. Separate from
+#                         RUNNER_AUTH_TOKEN so rotating one cannot break the other.
+#                         Empty falls back to RUNNER_AUTH_TOKEN.
 #
 # printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
 

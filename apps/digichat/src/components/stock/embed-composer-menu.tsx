@@ -622,17 +622,32 @@ export function EmbedComposerMenu({
         },
       ];
     }
-    return toolRows.map((t) => {
+    // Each group row is followed by its individual tools (per-tool toggles).
+    return toolRows.flatMap((t): MenuRow[] => {
       const on = connectedToolIsOn(t.id, toolOnInput);
-      return {
+      const group: MenuRow = {
         id: t.id,
         label: slashName(t.slash),
         value: on ? "On" : "Off",
         checked: on,
         activate: () => toggleTool(t.id),
       };
+      const subs = (t.tools ?? []).map((sub): MenuRow => {
+        const subOn = on && api.extraToolOn(sub.id);
+        return {
+          id: `${t.id}::${sub.id}`,
+          label: `  ↳ ${sub.label?.trim() || sub.id}`,
+          value: subOn ? "On" : "Off",
+          checked: subOn,
+          activate: () => {
+            if (!on) return;
+            api.setExtraTool(sub.id, !api.extraToolOn(sub.id));
+          },
+        };
+      });
+      return [group, ...subs];
     });
-  }, [kind, onClose, toggleTool, toolOnInput, toolRows]);
+  }, [api, kind, onClose, toggleTool, toolOnInput, toolRows]);
 
   const mcpRows = useMemo((): MenuRow[] => {
     const rows: MenuRow[] = mcpConfigs.map((s) => {
