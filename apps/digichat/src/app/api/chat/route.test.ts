@@ -319,6 +319,43 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-BYOK-Model"]).toBe("openai/gpt-4o-mini");
   });
 
+  it("runs the first turn on the tenant's curated models.default", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "local",
+          backend: { type: "digigraph" },
+          models: {
+            default: "deepseek/deepseek-v4.1-flash",
+            available: ["deepseek/deepseek-v4.1-flash", "z-ai/glm-5.3-flash"],
+            allowPicker: true,
+          },
+        },
+      }),
+    );
+    try {
+      // Force the trace adapter (the live path) so the request body model is observable.
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-digichat-trace": "1" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+      };
+      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("rejects a house X-Digi-Model that is not on the CI picker allowlist", async () => {
     setDigichatConfigForTests(
       parseDigichatConfig({

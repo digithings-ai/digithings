@@ -381,7 +381,19 @@ export async function POST(req: Request) {
   // before the backend branch so it applies to foundry too, not just digigraph.
   // Prefer X-Digi-Model on the house path. Bound BYOK spends the visitor's
   // provider models — the CI picker must not reject those ids (#3829).
-  let modelId = digigraphModelName();
+  // The tenant's curated default wins over the deployment-wide fallback:
+  // `models.default` is what the picker shows as selected, so using it here
+  // keeps the first turn on the same model the visitor sees (v4.1-flash for
+  // OCC) instead of the digigraph operator default. Only a slug the tenant
+  // actually offers is trusted; anything else falls back.
+  const curatedDefault = dep?.models?.default?.trim();
+  const tenantDefaultModel =
+    curatedDefault &&
+    ((dep?.models?.available?.length ?? 0) === 0 ||
+      dep!.models!.available!.includes(curatedDefault))
+      ? curatedDefault
+      : undefined;
+  let modelId = tenantDefaultModel || digigraphModelName();
   // A tenant with lockSessionControls pins the house default model (DIG-1210):
   // a visitor's /model pick or session_set_model result is never forwarded.
   // Exception: a locked tenant that curates its own `models.available` list
@@ -720,6 +732,9 @@ export async function POST(req: Request) {
           upstreamHeaders,
           responseHeaders,
           activityDetail,
+          // BYOK models travel in their own header; only the house default
+          // belongs in the request body.
+          model: byokKey ? undefined : tenantDefaultModel,
           signal: req.signal,
         }),
       );
