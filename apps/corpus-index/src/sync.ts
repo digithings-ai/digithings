@@ -1,4 +1,5 @@
 import { JOBS_KEY, parseJobs, type CorpusJob } from "./config";
+import { ticketStateKey, type TicketSyncState } from "./freshness";
 import { EMBED_DIMENSIONS, isWeeklyReconcile, overlapCursor } from "./model";
 import {
   buildDocVectors,
@@ -165,6 +166,18 @@ export async function syncTickets(
   }
 
   if (!dryRun && newest) await kv.put(cursorKey(job.id), newest);
+  if (!dryRun) {
+    // Freshness state is written on every successful pass, even a no-op one,
+    // so a quiet day is distinguishable from a day the clock did not run.
+    const state: TicketSyncState = {
+      lastSuccessAt: now.toISOString(),
+      newestTicketAt: newest || null,
+      tickets,
+      vectors: written,
+      deleted,
+    };
+    await kv.put(ticketStateKey(job.id), JSON.stringify(state));
+  }
   return { tickets, vectors: written, deleted };
 }
 

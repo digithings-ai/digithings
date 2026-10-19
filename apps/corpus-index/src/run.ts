@@ -1,5 +1,6 @@
 import { createEmbedder, createPageFetcher, createTicketSource, createVectorStore } from "./clients";
 import type { Env } from "./env";
+import { readTicketState, ticketFreshness } from "./freshness";
 import { loadJobs, syncDocs, syncTickets } from "./sync";
 
 export type RunCounts = {
@@ -24,6 +25,27 @@ export async function runIndex(env: Env, now = new Date()): Promise<RunCounts> {
   const embedder = createEmbedder(env.AI);
   const pages = createPageFetcher();
   for (const job of jobs) {
+    // Freshness is measured against the state left by the PREVIOUS run: a daily
+    // clock that silently stopped shows here as an age past the threshold, even
+    // on a run that then succeeds. Reading it after the sync would always be fresh.
+    const freshness = ticketFreshness(
+      job.id,
+      await readTicketState(env.CORPUS_INDEX_KV, job.id),
+      now.getTime(),
+    );
+    console.log(JSON.stringify({ event: "corpus_index_freshness", ...freshness }));
+    if (freshness.alert) {
+      console.log(
+        JSON.stringify({
+          event: "corpus_index_stale",
+          job: job.id,
+          reason: freshness.reason,
+          last_success_at: freshness.lastSuccessAt,
+          newest_ticket_at: freshness.newestTicketAt,
+          age_hours: freshness.ageHours,
+        }),
+      );
+    }
     const tickets = await syncTickets(job, env.CORPUS_INDEX_KV, source, store, embedder, now, dryRun);
     const docs = await syncDocs(job, env.CORPUS_INDEX_KV, pages, store, embedder, dryRun);
     counts.tickets += tickets.tickets;
