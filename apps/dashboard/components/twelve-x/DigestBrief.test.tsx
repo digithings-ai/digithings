@@ -23,8 +23,8 @@ const baseDigest: NonNullable<Digest> = {
   broker_count: 7,
 };
 
-function render(digest: Digest): string {
-  return renderToStaticMarkup(createElement(DigestBrief, { digest }));
+function render(digest: Digest, now?: string): string {
+  return renderToStaticMarkup(createElement(DigestBrief, { digest, now }));
 }
 
 describe('DigestBrief — digest summary markdown', () => {
@@ -57,5 +57,44 @@ describe('DigestBrief — digest summary markdown', () => {
     expect(html).toContain('7 brokers');
     expect(html).toContain('USD');
     expect(html).toContain('rate cuts');
+  });
+});
+
+/**
+ * The digest is whatever the freshest covered session is (getLatestDigest has
+ * no today gate), so the card must name the run date and age it in weekday
+ * trading sessions — never calendar days, or every weekend reads as stale.
+ */
+describe('DigestBrief — run date and trading-session age', () => {
+  it('always shows the run date, and the date alone at 0-1 sessions', () => {
+    // Friday's digest read on Monday: one session (Monday) has come.
+    const html = render({ ...baseDigest, run_date: '2026-10-16' }, '2026-10-19');
+    expect(html).toContain('as of 2026-10-16');
+    expect(html).not.toContain('data-digest-age');
+  });
+
+  it('does not age a Friday digest over the weekend', () => {
+    const html = render({ ...baseDigest, run_date: '2026-10-16' }, '2026-10-18');
+    expect(html).toContain('as of 2026-10-16');
+    expect(html).not.toContain('data-digest-age');
+    expect(html).not.toContain('warn');
+    expect(html).not.toContain('stale');
+  });
+
+  it('warns at 2 trading sessions', () => {
+    // Thursday's digest read on Monday: Friday and Monday are two sessions.
+    const html = render({ ...baseDigest, run_date: '2026-10-15' }, '2026-10-19');
+    expect(html).toContain('as of 2026-10-15');
+    expect(html).toContain('data-digest-age="warn"');
+    expect(html).toContain('warn');
+    expect(html).not.toContain('stale');
+  });
+
+  it('marks the digest stale at 3+ trading sessions', () => {
+    // The measured defect: Wednesday 14 Oct read on Monday 19 Oct.
+    const html = render({ ...baseDigest, run_date: '2026-10-14' }, '2026-10-19');
+    expect(html).toContain('as of 2026-10-14');
+    expect(html).toContain('data-digest-age="stale"');
+    expect(html).toContain('stale');
   });
 });
