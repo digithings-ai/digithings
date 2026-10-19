@@ -1651,3 +1651,44 @@ walk-forward + holdout, `beats_baseline_oos` versus `risk50_linear`, `sensitivit
 (`sources_from_optional_paths` hardcodes `onchain_addr_ratio` to `None, None`), and Fear & Greed plus
 Coinmetrics `AdrActCnt` remain unfetched — the local proxy blackholes both, so a fetch needs
 `--noproxy '*'` or `NO_PROXY` extended.
+
+### The accept-gate trial: RHODL does not earn a weight (2026-10-19)
+
+*(The trial named just above has run. It is a negative result, and it closes the question.)*
+
+The study above ranked **RHODL** highest among the on-chain inputs — the only series whose cycle-fit
+(JIT **+2.27**) clearly beats BTC log-price alone (**+1.71**). So the acceptance question was exactly
+this: does the best input on cycle-fit survive the walk-forward accept gate?
+
+Trial: the **live** weight set (valuation 1.0, m2 0.5, dxy 0.5, weekly_rsi 0.25, weekly_macd 0.5)
+plus `onchain_rhodl` at **0.0 / 0.1 / 1.0** — the only two non-zero values this repo's research has
+ever used — with the on-chain series at the shipped **expanding z** (`window=None`). Every arm ran
+the same 3-fold walk-forward through **both** evaluator lanes (`curve_sim` and `nautilus`), routed
+through one code path so the lanes are a control on each other.
+
+| `onchain_rhodl` | mean IS vs flat DCA | **mean OOS vs flat DCA** | per-fold OOS | beats flat DCA | vs `risk50_linear` |
+|---|---|---|---|---|---|
+| **0.0 (live)** | +247.4% | **+60.6%** | +56.2 / +81.4 / +44.2 | True | True, +5.6% |
+| **0.1** | +207.5% | **+59.3%** | +63.7 / +70.7 / +43.5 | True | True, +4.7% |
+| **1.0** | −72.1% | **+41.2%** | +81.9 / +3.5 / +38.2 | True | **False, −10.2%** |
+
+(Nautilus lane reproduced every figure to within **0.11 points**, so the verdict is not an evaluator
+artefact.)
+
+**Verdict: RHODL does not earn a non-zero weight.** At 0.1 it is marginally *worse* than the
+incumbent (mean OOS −1.3 points, baseline delta −1.0). At 1.0 it is decisively worse: mean OOS
+−19 points and the baseline comparison flips to False, with the in-sample fit collapsing to −72% —
+a strongly cycle-shaped series fighting the rails' shape. Nothing was promoted; `settings.json` is
+untouched. **The study ranks inputs; its top-ranked input does not survive the gate, which is the
+gate working.**
+
+Two further readings, both pre-existing and neither caused by RHODL — recorded so the next run does
+not misattribute them:
+
+* **The live index already fails the stability arm** under this evaluator (5.88% vs the 2.0% cap), at
+  every arm *including the baseline*. This is the same stability gate that blocked the round-8 pool
+  (4.25 vs 2.0) and it is a property of the current index, not of any on-chain series.
+* **The holdout never traded** (`holdout_traded: False` on every arm), so every holdout metric is the
+  held-cash outcome and carries no information — the result object's own field says so. The OOS
+  columns above are the evidence; the holdout is not.
+
