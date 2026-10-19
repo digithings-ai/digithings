@@ -230,7 +230,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-occ-invite-key.test.ts": {
-      "count": 5,
+      "count": 4,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-seed-messages.test.ts": {
@@ -350,7 +350,7 @@
       "ticket": "DIG-3689"
     },
     "digigraph/AGENTS.md": {
-      "count": 1,
+      "count": 2,
       "ticket": "DIG-3689"
     },
     "digigraph/ARCHITECTURE.md": {
@@ -462,7 +462,7 @@
       "ticket": "DIG-3689"
     },
     "docs/adr/0031-occ-tickets-corpus-retrieval.md": {
-      "count": 9,
+      "count": 10,
       "ticket": "DIG-3689"
     },
     "docs/agents/CI_CONVENTIONS.md": {
@@ -498,7 +498,7 @@
       "ticket": "DIG-3689"
     },
     "docs/ops/OCC_INVITE_KEY.md": {
-      "count": 8,
+      "count": 9,
       "ticket": "DIG-3689"
     },
     "docs/ops/SECRETS_INVENTORY.md": {
@@ -657,12 +657,8 @@
       "count": 1,
       "ticket": "DIG-3689"
     },
-    "scripts/occ_invite_key_rollout.sh": {
-      "count": 12,
-      "ticket": "DIG-3689"
-    },
     "scripts/r0_client_literals_baseline.json": {
-      "count": 19,
+      "count": 20,
       "ticket": "DIG-3689"
     },
     "scripts/repo-split/README.md": {
@@ -948,6 +944,54 @@
     "tests/scripts/test_zammad_semantic_eval.py": {
       "count": 3,
       "ticket": "DIG-3689"
+    },
+    "apps/digichat/AGENTS.md": {
+      "count": 1,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/find-precedent-tickets/SKILL.md": {
+      "count": 2,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/guide-help-docs/SKILL.md": {
+      "count": 5,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/loader.py": {
+      "count": 1,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/summarize-tickets-by-topic/SKILL.md": {
+      "count": 3,
+      "ticket": "DIG-4043"
+    },
+    "digisearch/AGENTS.md": {
+      "count": 1,
+      "ticket": "DIG-4043"
+    },
+    "docs/release/supabase-exit/caller-inventory.md": {
+      "count": 10,
+      "ticket": "DIG-4043"
+    },
+    "scripts/occ_invite_key_write.sh": {
+      "count": 11,
+      "ticket": "DIG-4043"
+    },
+    "scripts/smoke_occ_invite_gate.sh": {
+      "count": 1,
+      "ticket": "DIG-4043"
+    },
+    "tests/db/test_art9_false_positives.py": {
+      "count": 1,
+      "ticket": "DIG-4043"
+    },
+    "tests/dg/test_skill_library.py": {
+      "count": 5,
+      "ticket": "DIG-4043"
+    },
+    "tests/scripts/test_datatap_answer_check_report_line.py": {
+      "count": 17,
+      "ticket": "DIG-4043"
     }
   }
 }
