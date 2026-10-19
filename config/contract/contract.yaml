@@ -1871,7 +1871,7 @@ bindings:
   class_name: DigiQuantRunnerContainer
   image: ../../infra/docker/Dockerfile.digiquant-runner
   max_instances: 1
-  instance_type: standard-2
+  instance_type: standard-1
   source: apps/digiquant-runner/wrangler.toml
 - worker: digiquant-runner
   type: durable_object

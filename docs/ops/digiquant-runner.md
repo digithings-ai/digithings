@@ -27,7 +27,7 @@ never sends `run_writers`. A kick can pass `args`.
 
 ## Phase 2 commands
 
-Same container class (`DigiQuantRunnerContainer`, `standard-2`). The image
+Same container class (`DigiQuantRunnerContainer`, `standard-1`). The image
 sync adds `--extra nautilus` for tearsheets and research-metrics. The
 nautilus 1.230.0 cp312 manylinux x86_64 wheel is 182608916 bytes, under the
 ~8 GB split, so there is no `DigiQuantRunnerNautilusContainer`. `ccxt` stays
@@ -138,7 +138,7 @@ module trees. The default push host is `registry.cloudflare.com` (build-arg
 `IMAGE_PUSH_REGISTRY`); this build does not push.
 
 One pinned Durable Object id: `runner-v1`. `max_instances = 1`,
-`instance_type = standard-2`. Idle `sleepAfter` is 1m; a held lock extends
+`instance_type = standard-1`. Idle `sleepAfter` is 1m; a held lock extends
 it to 30m. The heartbeat calls container `GET /status` about every 60s.
 
 Concurrency: the Durable Object ledger is primary (one lock per concurrency
@@ -242,7 +242,7 @@ The same shape covers `12 0 * * *` (tearsheets), `5 22 * * *`
 
 ## Phase 3 note
 
-The house-run image stays on `DigiQuantRunnerContainer` (`standard-2`,
+The house-run image stays on `DigiQuantRunnerContainer` (`standard-1`,
 `max_instances = 1`). Task 0 probe: phase2 Size=1274551802 (~1.187 GiB),
 house-candidate Size=1344917045 (~1.253 GiB). The bake keeps the frozen
 digiquant extras `prices` / `research` / `nautilus` and adds
@@ -258,7 +258,7 @@ A same-day GitHub Actions manual house success does not write
 
 The implementation plan is
 [docs/superpowers/plans/2026-09-30-digiquant-house-run-phase3.md](../superpowers/plans/2026-09-30-digiquant-house-run-phase3.md).
-Chris lock: one class, `DigiQuantRunnerContainer`, `instance_type = "standard-2"`.
+Chris lock (2026-10-19: moved to `standard-1` and kept there - ADR-0034): one class, `DigiQuantRunnerContainer`, `instance_type = "standard-1"`.
 This note does not flip cron and does not deploy.
 
 ## Phase 4 note
@@ -269,7 +269,7 @@ Checkpoint archive still runs on the GitHub Actions schedule in
 those clocks have moved. This note does not flip cron, delete a `schedule:`
 key, or deploy.
 
-The cutover plan (same class, `standard-2`, `max_instances = 1`) is
+The cutover plan (same class, `standard-1`, `max_instances = 1`) is
 [docs/superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md](../superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md).
 Phase 3 Task 7 (secrets, deploy, house-run proof) stays a prerequisite and
 is not part of Phase 4.

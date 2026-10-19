@@ -14,6 +14,10 @@
 
 ## Chris lock — one class, standard-2
 
+> **Amended 2026-10-19 (ADR-0034):** the instance class is now `standard-1` (4 GiB).
+> Chris kept the cheaper class instead of reverting the code, so the lock, the ops doc,
+> the contract and both guards moved with it. Every hazard recorded below still applies.
+
 Locked for this plan. An implementation PR that violates it is out of scope.
 
 | Decision | Locked value |

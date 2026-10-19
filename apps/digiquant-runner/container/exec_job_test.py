@@ -380,33 +380,50 @@ def _check_phase2(commands: dict[str, Any]) -> None:
     dockerfile = (root / "infra/docker/Dockerfile.digiquant-runner").read_text(encoding="utf-8")
     wrangler = (root / "apps/digiquant-runner/wrangler.toml").read_text(encoding="utf-8")
     ignore = (root / ".dockerignore").read_text(encoding="utf-8")
-    sync = "uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus"
-    if sync not in dockerfile or "scripts/execution_cron_check.py" not in dockerfile:
+    # DIG-3701 / #5762 moved the image off sibling source to a generated project:
+    # the extras are baked by scripts/package_r5_image_inputs.py and installed with a
+    # single `uv sync --frozen --no-install-project --no-dev`. Assert the mechanism and
+    # the extras where they now live, not the retired --extra flag spelling.
+    generated = (
+        "COPY image-packages/runner/project/pyproject.toml "
+        "image-packages/runner/project/uv.lock ./"
+    )
+    sync = "uv sync --frozen --no-install-project --no-dev"
+    if generated not in dockerfile or sync not in dockerfile:
+        raise SystemExit("image must install the generated project")
+    exporter = (root / "scripts/package_r5_image_inputs.py").read_text(encoding="utf-8")
+    if '("digiquant", ("prices", "research", "nautilus"))' not in exporter:
         raise SystemExit("image must install nautilus and copy the probe wrapper")
-    house_sync = "uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres"
-    if house_sync not in dockerfile:
+    if "COPY image-packages/runner/payload/scripts ./scripts" not in dockerfile:
+        raise SystemExit("image must copy the probe wrapper")
+    if "checkpoint-postgres" not in exporter:
         raise SystemExit("house image must inexact-sync digigraph checkpoint-postgres")
+    # DIG-3701 / #5762 replaced the sibling-tree COPYs with a generated payload:
+    # `package_r5_image_inputs.py` declares what ships (RUNNER_FILES, RUNNER_OPT and
+    # the module wheels) and the Dockerfile copies `image-packages/runner/payload`.
+    # Pin that source of truth rather than the retired COPY spelling.
     for needle in (
-        "COPY digigraph ./digigraph",
-        "COPY digillm ./digillm",
-        "COPY digitrace ./digitrace",
+        # The house chain imports these in-process; a missing module crash-loops it.
+        "digigraph",
+        "digillm",
+        "digitrace",
         # Both are loaded fail-loud at import by digigraph (llm_auth / model_config);
         # the house chain steps run it in-process, so omitting either crash-loops the
         # house image. Pinned because the failure only shows up in production.
-        "COPY config/byok-providers.json",
-        "COPY config/model-policy.json",
+        "config/byok-providers.json",
+        "config/model-policy.json",
         # Loaded *softly*, so its absence is silent rather than a crash-loop:
         # /app/config/ already exists here, so pricing.py finds the directory
         # and returns an empty table. Pinned for that reason.
-        "COPY config/digiquant-model-prices.json",
-        "COPY .github/digiquant-pipeline.yml",
-        "COPY .github/workflows/pipeline-digiquant-allocation-shadow.yml",
-        "/opt/runner/house_chain_step.py",
-        "/opt/runner/wake_stack.py",
-        "/opt/runner/web_search_preflight.py",
+        "config/digiquant-model-prices.json",
+        ".github/digiquant-pipeline.yml",
+        ".github/workflows/pipeline-digiquant-allocation-shadow.yml",
+        "house_chain_step.py",
+        "wake_stack.py",
+        "web_search_preflight.py",
     ):
-        if needle not in dockerfile:
-            raise SystemExit(f"house image missing {needle}")
+        if needle not in exporter:
+            raise SystemExit(f"payload must carry {needle}")
     github_at = ignore.find("\n.github\n")
     pipeline_at = ignore.find("!.github/digiquant-pipeline.yml")
     shadow_at = ignore.find("!.github/workflows/pipeline-digiquant-allocation-shadow.yml")
@@ -428,9 +445,11 @@ def _check_phase2(commands: dict[str, Any]) -> None:
     if ignore.count("!scripts/execution_cron_check.py") != 1:
         raise SystemExit("probe wrapper must be re-included in .dockerignore")
     scripts_at = ignore.find("\nscripts\n")
-    archive_copy = "COPY scripts/digiquant_archive_checkpoints.py"
-    gate_copy = "COPY scripts/digiquant_checkpoint_size_gate.py"
-    if archive_copy not in dockerfile or gate_copy not in dockerfile:
+    # DIG-3701 / #5762: the two checkpoint-archive scripts ship inside the generated
+    # payload (RUNNER_FILES), not as a COPY line after uv sync.
+    archive_ship = "scripts/digiquant_archive_checkpoints.py"
+    gate_ship = "scripts/digiquant_checkpoint_size_gate.py"
+    if archive_ship not in exporter or gate_ship not in exporter:
         raise SystemExit("image must copy the checkpoint-archive scripts")
     archive_at = ignore.find("!scripts/digiquant_archive_checkpoints.py")
     gate_at = ignore.find("!scripts/digiquant_checkpoint_size_gate.py")
