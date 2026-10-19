@@ -13,7 +13,7 @@ import { filterForceToolHeader } from "./force-tool";
 import { clientConfigFromEmbedTenant } from "./embed-bridge";
 import { toEmbedClientConfig } from "@/lib/embed-client-config";
 import { BASELINE_EMBED_SUGGESTIONS } from "@/lib/baseline-embed";
-import type { EmbedTenantConfig } from "@/lib/embed-tenants";
+import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -542,6 +542,64 @@ describe("embed tenant round-trip", () => {
     expect(back.gate).toBeUndefined();
     expect(back.showByok).toBe(true);
     expect(back.llmAccess).toBe("operator");
+  });
+
+  it("carries the MCP tool allowlist into the deployment server row (DIG-284)", () => {
+    const dep = embedTenantToDeployment({
+      slug: "occ",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: true,
+      activityDetail: "labels",
+      mcp: {
+        servers: [
+          {
+            id: "zammad",
+            url: "http://zammad-mcp:8770/mcp",
+            // RAW MCP names — bare, never zammad_-prefixed.
+            allowedTools: ["list_tickets", "get_ticket"],
+            mutatingTools: [],
+          },
+          { id: "digivault", url: "http://digivault-mcp:8769/mcp" },
+        ],
+      },
+    });
+    // Exact values, not truthiness: both rows survive even if the keys were dropped.
+    expect(dep.mcp?.servers[0].allowedTools).toEqual(["list_tickets", "get_ticket"]);
+    expect(dep.mcp?.servers[0].mutatingTools).toEqual([]);
+    expect(dep.mcp?.servers[1]).not.toHaveProperty("allowedTools");
+    expect(dep.mcp?.servers[1]).not.toHaveProperty("mutatingTools");
+  });
+
+  it("round-trips the MCP tool allowlist from registry JSON to the deployment row", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp: {
+            servers: [
+              {
+                id: "zammad",
+                url: "http://zammad-mcp:8770/mcp",
+                allowedTools: ["list_tickets", "get_ticket"],
+                mutatingTools: ["create_ticket"],
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const cfg = reg.get("occ.digithings.ai");
+    if (!cfg) throw new Error("occ tenant missing from registry");
+    const dep = embedTenantToDeployment(cfg);
+    expect(dep.mcp?.servers[0].id).toBe("zammad");
+    expect(dep.mcp?.servers[0].allowedTools).toEqual(["list_tickets", "get_ticket"]);
+    expect(dep.mcp?.servers[0].mutatingTools).toEqual(["create_ticket"]);
   });
 
   it("projects a tokenless YAML deployment (client container)", () => {

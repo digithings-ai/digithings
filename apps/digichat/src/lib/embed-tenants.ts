@@ -14,6 +14,10 @@
 
 import type { ActivityDetail } from "@/lib/chat-activity";
 import type { PageContextMode } from "@/lib/deploy-config/schema";
+import {
+  MAX_MCP_TOOL_ENTRIES,
+  MAX_MCP_TOOL_NAME_LENGTH,
+} from "@/lib/deploy-config/mcp-servers";
 import { HEX_COLOR } from "@/lib/hex-color";
 import { LANGUAGES } from "@/lib/languages";
 import {
@@ -199,6 +203,19 @@ export type EmbedTenantConfig = {
        */
       setup?: Record<string, string>;
       authHeader?: string;
+      /**
+       * Operator tool allowlist for this row (DIG-284). RAW MCP tool names,
+       * matched exactly by digigraph — bare `list_tickets`, never the
+       * `zammad_`-prefixed form. Omit to deny every tool on this row; the same
+       * bounds as the YAML `mcp.servers[].allowedTools` apply.
+       */
+      allowedTools?: string[];
+      /**
+       * Subset of `allowedTools` whose tools mutate remote state (DIG-284). An
+       * explicit `[]` is preserved and means "nothing on this row mutates";
+       * absent stays absent (every allowed tool then needs approval).
+       */
+      mutatingTools?: string[];
     }>;
     allowUserServers?: boolean;
     allowAddForm?: boolean;
@@ -262,6 +279,30 @@ export type EmbedTenantConfig = {
 };
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * Embed-path mirror of `boundedToolAllowlist` / `boundedMutatingList` in
+ * `deploy-config/mcp-servers` (those helpers are module-private, so the logic is
+ * mirrored here against the same exported constants — the bounds cannot drift).
+ * An out-of-bounds list is dropped WHOLE rather than truncated: a partial
+ * allowlist would quietly deny tools the operator asked for while still looking
+ * configured. Dropped means the key is omitted, and digigraph reads an absent
+ * allowlist as zero tools for that server.
+ */
+function boundedToolAllowlist(value: readonly string[] | undefined): string[] | undefined {
+  if (!value || value.length === 0) return undefined;
+  if (value.length > MAX_MCP_TOOL_ENTRIES) return undefined;
+  if (value.some((name) => typeof name !== "string" || name.length > MAX_MCP_TOOL_NAME_LENGTH)) {
+    return undefined;
+  }
+  return [...value];
+}
+
+/** `mutatingTools` keeps an explicit `[]` ("nothing on this row mutates"). */
+function boundedMutatingList(value: readonly string[] | undefined): string[] | undefined {
+  if (Array.isArray(value) && value.length === 0) return [];
+  return boundedToolAllowlist(value);
+}
 
 export function normalizeEmbedHost(input: string | null | undefined): string | null {
   if (!input) return null;
@@ -654,6 +695,21 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
           `embed tenant "${hostKey}": mcp.servers[${index}].authHeader must be a string`,
         );
       }
+      if (server.allowedTools !== undefined && !Array.isArray(server.allowedTools)) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].allowedTools must be an array`,
+        );
+      }
+      if (server.mutatingTools !== undefined && !Array.isArray(server.mutatingTools)) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].mutatingTools must be an array`,
+        );
+      }
+      // Bounds are enforced by dropping the whole list, never truncating it —
+      // an over-long or non-string entry fails closed (zero tools) rather than
+      // looking configured while denying tools the operator asked for (DIG-284).
+      const allowedTools = boundedToolAllowlist(server.allowedTools as string[] | undefined);
+      const mutatingTools = boundedMutatingList(server.mutatingTools as string[] | undefined);
       let setup: Record<string, string> | undefined;
       const rawSetup = server.setup;
       if (rawSetup !== undefined) {
@@ -682,6 +738,8 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
         ...(setup ? { setup } : {}),
         ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
+        ...(allowedTools ? { allowedTools } : {}),
+        ...(mutatingTools ? { mutatingTools } : {}),
       };
     });
     const rawMcpRecord = rawMcp as Record<string, unknown>;
