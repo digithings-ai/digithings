@@ -1740,4 +1740,26 @@ re-fit of the knee/curvature axes through the sanctioned Stage-3 `curve_optimize
 ~60 is the right yardstick, given nothing has ever cleared it. (b) is the operator's call, not this
 file's.
 
+**Both knees are off-optimum, not just the buy one.** Sweeping `sell_knee_risk` with the live buy knee:
+
+| `sell_knee_risk` | 60 | 70 | 76 | **80** | 84 | 90 | 100 |
+|---|---|---|---|---|---|---|---|
+| mean OOS | **+76.4** | +69.2 | +63.0 | **+60.6** | +60.4 | +60.3 | *invalid shape* |
+| Δ | **+15.7** | +8.5 | +2.4 | 0 | −0.3 | −0.3 | — |
+
+Lowering the sell knee *raises* OOS, by up to 15.7 points at 60 (past which `SdcaCurveShape` stops
+validating). So the neighbour that trips the cap — `sell_knee_risk:-5%`, Δ +2.38 — is a **gain**, and
+that is the general shape of this failure: `max_abs_delta_oos_pct` is **two-sided**, so a winner
+sitting off its optimum reads as *unstable* rather than *under-fit*. Both knee axes slope upward
+toward better OOS, which is exactly why no single knee value passes: moving onto one axis's plateau
+exposes the other.
+
+That strengthens move (a) — a **joint** re-fit of the knee/curvature axes is what the evidence points
+at, and the prize is not small (a 15-point OOS slope on one axis alone). It also sharpens move (b):
+the metric cannot distinguish "brittle" from "not yet fitted", and the operator should decide which
+they want it to mean. **Caveat on both sweeps above: they are OOS-based, so choosing 38 or 60 from
+them would be exactly the overfit the gate exists to prevent — the sanctioned route searches the shape
+on the in-sample span and lets the walk-forward judge the result.**
+
+
 
