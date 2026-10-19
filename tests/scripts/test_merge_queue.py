@@ -75,6 +75,7 @@ def _pr(
     created: str = "2026-10-01T00:00:00Z",
     head_sha: str = "a" * 40,
     test_conclusion: str | None = "SUCCESS",
+    local_ci_state: str | None = "SUCCESS",
     test_status: str = "COMPLETED",
     reviews: list[dict[str, Any]] | None = None,
     author: str = "chrizefan",
@@ -89,6 +90,13 @@ def _pr(
     approved: bool = False,
 ) -> dict[str, Any]:
     rollup: list[dict[str, Any]] = list(extra_checks or [])
+    # `local-ci` is the host mirror's commit status, and it is a REQUIRED check on both
+    # repos now (digithings always; twelve-x since DIG-4454, while GitHub Actions cannot
+    # start). It is a StatusContext, not a CheckRun, which `status_context_checks` allows.
+    if local_ci_state is not None:
+        rollup.append(
+            {"__typename": "StatusContext", "context": "local-ci", "state": local_ci_state}
+        )
     if test_conclusion is not None:
         rollup.append(
             {
@@ -184,10 +192,25 @@ def _queue_stub(stub: GhStub, prs: list[dict[str, Any]]) -> GhStub:
 # --- the untested-PR hole: a required check that never reported ----------------
 
 
+def test_a_twelve_x_pr_with_no_local_ci_status_cannot_merge(gh_stub: Any) -> None:
+    """The replacement gate is fail-closed: no mirror verdict means no merge.
+
+    twelve-x's gate moved from the Actions job `test` to the host-posted `local-ci`
+    status (DIG-4454). Absence must behave exactly as absence of `test` did - the
+    status is the evidence, and an unposted status is not a pass.
+    """
+    prs = [_pr(1, local_ci_state=None)]
+    _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run("list", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == 0, done.stderr
+    assert "required check 'local-ci' has not reported" in done.stdout
+
+
 def test_required_check_that_never_reported_blocks_the_merge() -> None:
     """A PR with no `test` check at all must not merge.
 
-    This is twelve-x PR #237's real shape, and it is the failure the queue is for:
+    This was twelve-x PR #237's real shape before 2026-10-19, when its gate was the
+    Actions job `test`; the mechanism is the same whichever name is required:
     the branch looks mergeable, the base's only job never reported, and the change
     lands untested. Treating "check absent" as "check passed" is the bug.
     """
@@ -303,9 +326,16 @@ def test_required_checks_are_resolved_per_repo() -> None:
     A single hardcoded list is therefore wrong for one of them, and DIG-690 measured
     which: 28 PRs blocked, every one of them on `required check 'test' has not
     reported`, in a repo where no PR has ever reported it.
+
+    `twelve-x` is named explicitly as of DIG-4454 for a different reason: its Actions
+    billing is blocked, so the `test` job cannot start and every PR reads as a red
+    build. The host mirror `twelvex_ci.py` posts the same work as a `local-ci` status,
+    so the queue requires that name until the minutes reset. Both repos therefore
+    resolve to `local-ci` today, for two unrelated reasons — which is precisely why
+    the list is per-repo rather than one global name.
     """
     policy = mq.load_policy()
-    assert policy.required_for("digithings-ai/twelve-x") == ("test",)
+    assert policy.required_for("digithings-ai/twelve-x") == ("local-ci",)
     digithings = policy.required_for("digithings-ai/digithings")
     assert digithings == ("local-ci",), digithings
     # An unlisted repo still gets a gate rather than none: the failure that matters
@@ -342,7 +372,9 @@ def test_a_required_check_that_no_pr_in_the_queue_ever_reports_is_a_misconfigura
     assert "digibase / test" in reported and "Required checks passed" in reported
     # Nothing reported anywhere is a different problem — CI never ran — and must not
     # be reported as a naming problem.
-    assert mq.unmatched_required_checks([_pr(2, test_conclusion=None)], ("test",)) == ((), ())
+    assert mq.unmatched_required_checks(
+        [_pr(2, test_conclusion=None, local_ci_state=None)], ("test",)
+    ) == ((), ())
 
 
 def test_a_required_check_that_any_pr_reports_is_not_called_a_misconfiguration() -> None:
@@ -516,7 +548,8 @@ def test_the_warning_cannot_repeat_because_nothing_can_merge_while_it_fires(
 def test_a_matching_gate_announces_nothing(gh_stub: Any) -> None:
     """The negative case, pinned so the detector cannot be "fixed" into noise.
 
-    twelve-x is the repo where a bare `test` is correct. If the announcement fired
+    twelve-x used to be the repo where a bare `test` was correct; since DIG-4454 its
+    gate is `local-ci`, and the announcement must stay silent for that name too. If it fired
     there, the fix would have swapped a hard block for a permanent warning, which is
     the same failure wearing a different hat.
     """
