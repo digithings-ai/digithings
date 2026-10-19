@@ -45,6 +45,15 @@ jobs:
       - name: Check internal markdown links
         run: uv run --frozen --no-sync python scripts/check_doc_links.py
 
+      - name: Check OpenWiki claim sidecars match the page manifest
+        # A sidecar with no pageVersion makes `openwiki code --update` fail in
+        # preflight, so the scheduled wiki update never opens its PR; a sidecar
+        # with claims but no verification makes it fail at finish. DIG-4382. The
+        # door is deliberately left open to the states an interrupted run
+        # produces (verified sidecar not yet in the manifest), which the workflow
+        # turns into a mergeable partial PR.
+        run: uv run --frozen --no-sync python scripts/check_openwiki_claims_state.py
+
       - name: Check ADR numbering
         # docs/adr/NNNN-*.md must stay zero-padded, unique and gap-free (#3524).
         run: uv run --frozen --no-sync python scripts/check_adr_numbering.py
