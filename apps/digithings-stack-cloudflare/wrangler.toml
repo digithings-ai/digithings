@@ -169,6 +169,14 @@ new_sqlite_classes = ["DigiQuantMcpContainer"]
 tag = "v3"
 new_sqlite_classes = ["DigiChatContainer"]
 
+# v4 completes the fold: the live Worker still holds a Durable Object instance of
+# the folded class, and Cloudflare refuses a script that no longer exports it
+# (error 10064). The namespace was unbound by the fold, so those instances are
+# orphans; deleting them is what the fold means. Tags are never rewritten.
+[[migrations]]
+tag = "v4"
+deleted_classes = ["DigiChatContainer"]
+
 # Secrets (wrangler secret put) — never commit values:
 #   DIGIKEY_BFF_TOKEN
 #   DIGIKEY_PRIVATE_KEY_PEM   # stable RS256; do not use ephemeral in prod
