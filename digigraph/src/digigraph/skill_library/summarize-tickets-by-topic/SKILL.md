@@ -11,17 +11,17 @@ open tickets", "what are these tickets about", "group these by theme".
 
 ## What each lookup is for
 
-Semantic search (`digisearch_zammad_tickets`) is for exploration: finding
-themes and similar subjects. It does not count tickets and it is not a
+Keyword search (`zammad_search_tickets`) is for exploration: finding tickets
+by words in the subject and body. It does not count tickets and it is not a
 complete set. Counts and precise metrics must come from the Zammad metadata
-tools (`aggregate_tickets` for counts and rankings, `ticket_report` for a
-status report, `list_tickets` for a paged live list). Never report a count
-taken from semantic-search hits.
+tools (`zammad_aggregate_tickets` for counts and rankings, `zammad_ticket_report`
+for a status report, `zammad_list_tickets` for a paged live list). Never report
+a count taken from search hits.
 
 ## Order of work
 
 1. **Retrieve first.** Every ticket you report must come from a result you
-   observed this turn. Retrieve before you write a word. Use semantic search
+   observed this turn. Retrieve before you write a word. Use keyword search
    to explore themes. Use the Zammad metadata tools when the question asks
    how many, a ranking, or a precise list.
 2. **Propose the topics yourself** from what the retrieved titles and text

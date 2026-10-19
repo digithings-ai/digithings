@@ -12,9 +12,9 @@ not rediscover the structure from scratch on every question.
 
 ## Where to look
 
-Search the help docs with `digisearch_occ_help`. Aim the query at the section
+Search the help docs with `digisearch`. Aim the query at the section
 this map names, in the reader's words. Past tickets are a different lookup
-(`digisearch_zammad_tickets`); use them only when the question is about a
+(`zammad_search_tickets`); use them only when the question is about a
 problem someone already reported, and then follow `find-precedent-tickets`.
 
 Excerpts are not the whole page. Keep searching until the step that answers
@@ -84,7 +84,7 @@ delivered through portal.netmail.cloud rather than the portal screens above.
 ## Order of work
 
 1. **Pick the manual and the section from the map** before you search.
-2. **Search that section** with `digisearch_occ_help`, using the reader's
+2. **Search that section** with `digisearch`, using the reader's
    words plus the section's subject.
 3. **Read past the excerpt** when the question needs a procedure, a list, a
    table, or the words every, all, or which.
