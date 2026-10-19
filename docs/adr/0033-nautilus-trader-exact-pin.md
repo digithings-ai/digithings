@@ -1,6 +1,6 @@
 # ADR-0033 — nautilus_trader is pinned exactly, and the root `uv.lock` is the only lock
 
-**Status:** Accepted (2026-10-08)
+**Status:** Accepted (2026-10-08). **Amended by DIG-2303 (2026-10-16):** follow-up 4 below is done — `digiquant/Dockerfile` now installs frozen from the root lock. The pin stays the engine-version control; the lock is now the image-reproducibility control.
 **Date:** 2026-10-08
 **Author:** Architect
 **Raised by:** DIG-938 (Paperclip), itself raised by the duplicate-realized-PnL defect in DIG-920; gates the analyzer-shape matrix in DIG-937.
@@ -213,22 +213,13 @@ reproduce a CI-only defect class locally until they do.
 2. **Re-sync local venvs** to 1.230.0.
 3. Consider a repo-level test asserting no module ships a `uv.lock`, so this class of
    stale second-lock cannot reappear silently.
-4. **Make the digiquant image reproducible.** The pin fixed the engine inside the
-   container; nothing pins the rest of it. The options, in the order I would take
-   them:
-   - **Copy the root `uv.lock` into the image and install from it** — the one true
-     lock, already authoritative for CI, so the container matches CI by
-     construction. Needs a `COPY uv.lock` plus switching `uv pip install` to a
-     frozen/`--requirement` form; it also means the workspace members installed
-     as `-e` paths must stay consistent with the lock.
-   - **`uv pip compile` the service's dependency set into a committed
-     `requirements.txt`** and install with `-r`. Smaller change, but that file
-     becomes a second lock and can drift — which is exactly the failure mode this
-     ADR just deleted in `digiquant/uv.lock`. Prefer the first option.
-   - **Stop publishing `:v<pyproject-version>` for digiquant, or bump that version
-     per release.** Moot as written: nothing publishes it any more (see *Scope of the
-     fix*). It matters the moment a publisher returns, because `digiquant`'s static
-     `pyproject.toml` version `0.1.0` can never identify a distinct build.
+4. **Make the digiquant image reproducible — DONE by DIG-2303 (2026-10-16).** `digiquant/Dockerfile` copies the root `uv.lock` plus the workspace root metadata and the four member trees it installs, renders `digiquant[nautilus,mcp]` with `uv export --frozen` (no lock update, no network, byte-identical across runs), and installs the rendered requirements hash-verified with `uv pip install --system -r`. Verified: image build green, all 10 sampled pins (incl. `nautilus_trader==1.230.0`, underscore in `pip freeze`) match the export. This took the first option. The `requirements.txt` second-lock option was declined for the drift reason stated here. The `:v<pyproject-version>` option stays moot: nothing publishes it (see *Scope of the fix*).
+   Decision record: took the first option (root lock + frozen `--requirement`
+   form) as built above. The committed-`requirements.txt` option was declined —
+   a second lock reintroduces the drift mode this ADR deleted. The
+   `:v<pyproject-version>` option stays moot while nothing publishes
+   (`digiquant` static `0.1.0` still cannot identify a build the day a
+   publisher returns).
 5. **Re-point the self-host pull path at something that exists.** This is the live
    consequence of the publisher's removal and is more urgent than the reproducibility
    work in follow-up 4: `infra/self-host/compose.ghcr.yml:34-36` pulls

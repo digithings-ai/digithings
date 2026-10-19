@@ -278,6 +278,18 @@ new_sqlite_classes = ["DigiChatContainer"]
 # (DIGICHAT_DATABASE_URL stays intentionally unset: the Cloudflare deployment
 # is DB-less, same as the standalone worker — see apps/digichat-cloudflare/wrangler.toml.)
 
+# Tenant/client configuration. Chris ruling 2026-10-15 01:26: tenant configs live in
+# Cloudflare KV only, never as repo files. The namespace already exists, so this adds
+# no Cloudflare resource and needs no new binding grant; key layout is Counsel's
+# (DIG-3567).
+# BOUND BUT INERT: readTenantConfig() is not yet called from src/index.ts, so nothing
+# reads this binding at runtime today. See src/tenant-config.ts and DIG-3699.
+# The account resource id lives HERE and never in config/contract/ -- an account id is
+# not a reproducible config value (DIG-3699 ruling element 1).
+[[kv_namespaces]]
+binding = "TENANT_CONFIG"
+id = "361b710bee56466097053275404535ba"
+
 [vars]
 # Canonical Supabase project ref (#4700): public value, same as the standalone
 # dashboard-api worker's [vars]; doubles as the fallback source for the legacy

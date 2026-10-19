@@ -287,6 +287,11 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 
 ## Rotation cadence
 
+**Standing baseline: 90 days** — the default interval for any credential an agent or a scheduled
+job can rotate on its own. A row below that cannot meet it names its own bound in the cell and
+carries a dated [exemption](#exemptions-from-the-baseline) here. (The baseline is the company
+default; before this line it was written down only in the Security & Risk Lead's agent brief.)
+
 | Target | Recommended interval | Trigger | Owner role |
 |---|---|---|---|
 | `DIGIKEY_PRIVATE_KEY_PEM` | 12 months (no overlap path — §6) | expiry plan; any suspected key exposure | digikey / security owner |
@@ -294,7 +299,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 | `DIGIKEY_DATABASE_URL` | 12 months, with the DB role | DB incident; role audit | data platform |
 | `MCP_EDGE_KEY` + tenant JSON | 12 months | edge 401 incident; tenant offboarding | Cloudflare / platform operator |
 | OCC tenant `token` in `DIGICHAT_EMBED_TENANTS` | on every staff off-handoff, and 12 months otherwise — **rotation is the only revocation** ([OCC_INVITE_KEY.md](OCC_INVITE_KEY.md)); before Act B2 it grants nothing, after Act B2 it is the whole perimeter | invite link leaked; staff offboarding | Cloudflare / platform operator, custody with security |
-| `GH_DISPATCH_TOKEN` | 12 months | CI PAT expiry (GitHub notifies); offboarding | CI / platform operator |
+| `GH_DISPATCH_TOKEN` | 12 months — **not a chosen cadence**: the provider ceiling for a fine-grained PAT, which expires 2027-09-15 and is not agent-rotatable. Dated exemption below | CI PAT expiry (GitHub notifies); offboarding | CI / platform operator |
 | `CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN` | 12 months | token expiry; leaked-scope audit | Cloudflare / platform operator |
 | `AUTH_SECRET` | 12 months | auth incident; expected session reset | digichat owner |
 | `DIGICHAT_PLAN_PROOF_SECRET` | 12 months | proof forgery suspicion | digichat owner |
@@ -305,6 +310,25 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 | `NEXT_PUBLIC_*_SUPABASE_ANON_KEY` (twelve-x publishable key) | 12 months — but rotation only takes effect on the next production build | bundle-scraped key notice; Supabase deprecation of `anon` by end of 2026 | digiquant / dashboard owner. **Never rotate the core `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a twelve-x fix** — the fallback in `apps/dashboard/lib/twelve-x/supabase.ts:23-26` makes that a platform-wide action |
 | `DIGIQUANT_VAULT_MASTER_KEY` | **do not rotate** until a re-seal job exists (§8) | only on confirmed compromise | digiquant / security owner |
 | Any secret | immediately | incident, public exposure, offboarding | the owning role above |
+
+### Exemptions from the baseline
+
+Every departure from the 90-day baseline above is recorded here with its date, the reason, and the
+bound that replaces the cadence. Do not shorten or lengthen an exempted row without adding a dated
+entry here.
+
+- **`GH_DISPATCH_TOKEN` — exempted 2026-10-19** (CTO ruling on DIG-562). Departs from the **90-day
+  baseline**. *Why:* the credential is a fine-grained **personal** access token, so renewal is a
+  dashboard action on a human's GitHub account (§4 pre-flight and step 1) — no agent and no
+  scheduled job can meet a 90-day cell, and a cell nobody can deliver is a false record of exactly
+  the kind this entry exists to replace. Minting four times a year buys no compensating control
+  either: the token is live for its whole life either way, so the extra mints are recurring manual
+  toil and nothing else. *Bound that replaces the cadence:* the PAT's own expiry, **2027-09-15**
+  (`digithings-cron-dispatch`, settings id 19179726 — [SECRETS_INVENTORY.md](SECRETS_INVENTORY.md)
+  inventory row and [R14](SECRETS_INVENTORY.md#risk-register)). A fine-grained PAT dies on expiry
+  whether or not anyone remembers, so the provider's ceiling is the hard bound here, not a
+  soft target. Renew before that date through §4, or the clocks and the DIG-71 alarm that reports
+  on them stop together.
 
 ## Cannot verify from here
 
