@@ -21,11 +21,18 @@
  * `{url, method, headers, body}` — which is why this slice ships with the
  * emission tests and leaves execution to a thin `fetch` seam.
  *
- * WHAT IS DELIBERATELY NOT HERE. `rpc()`, `count`, storage, auth, and realtime
- * are absent on purpose: the census did not find them, so an absent method
- * throws rather than silently doing something wrong. Fail-closed beats
- * plausible. Supabase stays live and untouched (2-week rollback); nothing here
- * is mounted, no `wrangler.toml` key, no secret, no deploy.
+ * WHAT IS PORTED FROM THE SETTINGS CENSUS. `rpc()` is the one method the
+ * `prices-live` census did not find and the settings closure does: `access.ts`
+ * calls `rpc("my_access")` and `supabase-admin.ts` calls
+ * `rpc("ensure_personal_workspace", { p_user_id })`. It is a client-level method
+ * that reuses the builder's write seam, so it POSTs to `/rest/v1/rpc/<fn>` with
+ * the params object as the JSON body.
+ *
+ * WHAT IS DELIBERATELY NOT HERE. `count`, storage, auth, and realtime are
+ * absent on purpose: the census did not find them, so an absent method throws
+ * rather than silently doing something wrong. Fail-closed beats plausible.
+ * Supabase stays live and untouched (2-week rollback); nothing here is mounted,
+ * no `wrangler.toml` key, no secret, no deploy.
  */
 
 export interface PostgrestError {
@@ -356,6 +363,7 @@ function makeError(
 
 export interface PostgrestClient {
   from<T = unknown>(table: string): PostgrestBuilder<T>;
+  rpc(fn: string, params?: Record<string, unknown>): PostgrestBuilder<unknown>;
 }
 
 /** Build a client. Mirrors `createAdminClient` from the edge function. */
@@ -369,6 +377,15 @@ export function createPostgrestClient(options: PostgrestClientOptions): Postgres
     from<T>(table: string) {
       if (!table) throw new Error("postgrest: from() requires a table");
       return new PostgrestBuilder<T>(base, options.apiKey, fetchImpl, table);
+    },
+    rpc(fn: string, params?: Record<string, unknown>) {
+      if (!fn) throw new Error("postgrest: rpc() requires a function name");
+      return new PostgrestBuilder<unknown>(
+        base,
+        options.apiKey,
+        fetchImpl,
+        `rpc/${fn}`,
+      ).insert(params ?? {});
     },
   };
 }
