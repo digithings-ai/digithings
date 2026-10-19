@@ -1,8 +1,14 @@
 {
-  "generatedAt": "2026-10-12T19:45:12Z",
+  "generatedAt": "2026-10-19T06:10:40Z",
   "windowDays": 30,
-  "commits": 1542,
+  "commits": 566,
   "features": [
+    {
+      "scope": "digithings-stack-cloudflare",
+      "summary": "seed the two OCC manuals into occ_help for production how-to answers (DIG-3089)",
+      "pr": 5507,
+      "date": "2026-10-12T23:02:05Z"
+    },
     {
       "scope": "occ",
       "summary": "carve multilingual ticket search out to main",
@@ -32,145 +38,90 @@
       "summary": "license heartbeat receiver + edge scope checks (slice 3)",
       "pr": 4720,
       "date": "2026-09-28T22:22:48Z"
-    },
-    {
-      "scope": "digiquant",
-      "summary": "provider option for web grounding",
-      "pr": 4728,
-      "date": "2026-09-28T22:15:32Z"
     }
   ],
-  "pullsMerged": 950,
-  "issuesClosed": 334,
-  "pullsOpen": 100,
-  "issuesOpen": 214,
+  "pullsMerged": 821,
+  "issuesClosed": 174,
+  "pullsOpen": 24,
+  "issuesOpen": 217,
   "mergedPulls": [
     {
-      "number": 5504,
-      "title": "fix(web): read repo-activity issue figures from the issue list, not Search",
-      "url": "https://github.com/digithings-ai/digithings/pull/5504",
-      "mergedAt": "2026-10-12T19:42:01Z"
+      "number": 5911,
+      "title": "fix(digiquant): confine CodeQL py/path-injection path sinks at each sink (DIG-4057)",
+      "url": "https://github.com/digithings-ai/digithings/pull/5911",
+      "mergedAt": "2026-10-19T05:22:34Z"
     },
     {
-      "number": 5490,
-      "title": "feat(root): notice digiquant house runs that never landed (DIG-3065)",
-      "url": "https://github.com/digithings-ai/digithings/pull/5490",
-      "mergedAt": "2026-10-12T19:30:28Z"
+      "number": 5902,
+      "title": "fix(root): close in-scope CodeQL alerts on develop",
+      "url": "https://github.com/digithings-ai/digithings/pull/5902",
+      "mergedAt": "2026-10-19T05:14:13Z"
     },
     {
-      "number": 5485,
-      "title": "fix(root): wrangler dev names the configs it requires (dt up entry-point)",
-      "url": "https://github.com/digithings-ai/digithings/pull/5485",
-      "mergedAt": "2026-10-12T19:20:05Z"
+      "number": 5899,
+      "title": "docs(root): retire the OCC client chat plan and repair inbound links",
+      "url": "https://github.com/digithings-ai/digithings/pull/5899",
+      "mergedAt": "2026-10-19T05:01:47Z"
     },
     {
-      "number": 5488,
-      "title": "fix(digiquant): re-arm the runner heartbeat and fail lost house runs",
-      "url": "https://github.com/digithings-ai/digithings/pull/5488",
-      "mergedAt": "2026-10-12T19:18:28Z"
+      "number": 5894,
+      "title": "test(root): neutralize test fixtures in the answer-check report-line pin",
+      "url": "https://github.com/digithings-ai/digithings/pull/5894",
+      "mergedAt": "2026-10-19T04:57:38Z"
     },
     {
-      "number": 5413,
-      "title": "chore(root): smoke-stack probes worker-only /_stack/status (no container wake)",
-      "url": "https://github.com/digithings-ai/digithings/pull/5413",
-      "mergedAt": "2026-10-12T19:06:17Z"
+      "number": 5881,
+      "title": "refactor(digigraph): delete the superseded research_spike_subgraph stub",
+      "url": "https://github.com/digithings-ai/digithings/pull/5881",
+      "mergedAt": "2026-10-19T04:53:27Z"
     },
     {
-      "number": 5412,
-      "title": "chore(digiquant): runner idle sleepAfter 2m -> 1m",
-      "url": "https://github.com/digithings-ai/digithings/pull/5412",
-      "mergedAt": "2026-10-12T18:54:02Z"
+      "number": 5870,
+      "title": "feat(stack): fold the digichat container id from the deploying commit",
+      "url": "https://github.com/digithings-ai/digithings/pull/5870",
+      "mergedAt": "2026-10-19T04:49:16Z"
     }
   ],
   "openIssues": [
+    {
+      "number": 5890,
+      "title": "docs(root): remove confidential vendor docs from the repository",
+      "url": "https://github.com/digithings-ai/digithings/issues/5890",
+      "updatedAt": "2026-10-18T09:23:58Z"
+    },
+    {
+      "number": 5897,
+      "title": "[provider-review] mistral: Mistral probe hit 429 rate limit",
+      "url": "https://github.com/digithings-ai/digithings/issues/5897",
+      "updatedAt": "2026-10-18T09:23:56Z"
+    },
+    {
+      "number": 5898,
+      "title": "[provider-review] gemini: Gemini 2.5 Flash free limits possibly lower than recorded",
+      "url": "https://github.com/digithings-ai/digithings/issues/5898",
+      "updatedAt": "2026-10-18T09:23:55Z"
+    },
+    {
+      "number": 5901,
+      "title": "[housekeeping] scheduled-workflow credential expired \u2014 2026-10-18",
+      "url": "https://github.com/digithings-ai/digithings/issues/5901",
+      "updatedAt": "2026-10-18T06:41:21Z"
+    },
+    {
+      "number": 5524,
+      "title": "In-session review: direct-push tool-refusal commits 8f0aaf42 9eaabaae 47f02626",
+      "url": "https://github.com/digithings-ai/digithings/issues/5524",
+      "updatedAt": "2026-10-13T09:24:46Z"
+    },
     {
       "number": 643,
       "title": "[housekeeping-auto] label coverage drift",
       "url": "https://github.com/digithings-ai/digithings/issues/643",
       "updatedAt": "2026-10-12T08:08:58Z"
-    },
-    {
-      "number": 642,
-      "title": "[housekeeping-auto] scheduled-workflow failures (weekly)",
-      "url": "https://github.com/digithings-ai/digithings/issues/642",
-      "updatedAt": "2026-10-12T08:08:57Z"
-    },
-    {
-      "number": 5407,
-      "title": "[provider-review] groq: Free TPM down 12K to ~8K; llama-3.3-70b still 404",
-      "url": "https://github.com/digithings-ai/digithings/issues/5407",
-      "updatedAt": "2026-10-11T09:32:45Z"
-    },
-    {
-      "number": 4396,
-      "title": "chore(deps): upgrade to next@16.3.5 (+ fix ~79 TS build errors) to clear residual npm-audit HIGH/CRITICAL",
-      "url": "https://github.com/digithings-ai/digithings/issues/4396",
-      "updatedAt": "2026-10-09T20:41:26Z"
-    },
-    {
-      "number": 5150,
-      "title": "Free text in OCC tickets is not scrubbed: titles, bodies, Note: and jira_assignee still reach the model",
-      "url": "https://github.com/digithings-ai/digithings/issues/5150",
-      "updatedAt": "2026-10-08T12:44:24Z"
-    },
-    {
-      "number": 5149,
-      "title": "occ_tickets digisearch index carries OCC customer names, emails and internal notes unmasked",
-      "url": "https://github.com/digithings-ai/digithings/issues/5149",
-      "updatedAt": "2026-10-08T12:44:24Z"
     }
   ],
   "branch": "main",
   "dailyContributions": [
-    {
-      "date": "2025-10-07",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-08",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-09",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-10",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-11",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-12",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-13",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
     {
       "date": "2025-10-14",
       "count": 0,
@@ -2707,17 +2658,66 @@
     },
     {
       "date": "2026-10-11",
-      "count": 51,
-      "commits": 0,
+      "count": 65,
+      "commits": 14,
       "pulls": 51,
       "issues": 0
     },
     {
       "date": "2026-10-12",
+      "count": 55,
+      "commits": 21,
+      "pulls": 34,
+      "issues": 0
+    },
+    {
+      "date": "2026-10-13",
+      "count": 47,
+      "commits": 2,
+      "pulls": 44,
+      "issues": 1
+    },
+    {
+      "date": "2026-10-14",
+      "count": 33,
+      "commits": 0,
+      "pulls": 32,
+      "issues": 1
+    },
+    {
+      "date": "2026-10-15",
+      "count": 22,
+      "commits": 0,
+      "pulls": 22,
+      "issues": 0
+    },
+    {
+      "date": "2026-10-16",
+      "count": 42,
+      "commits": 0,
+      "pulls": 41,
+      "issues": 1
+    },
+    {
+      "date": "2026-10-17",
+      "count": 1,
+      "commits": 0,
+      "pulls": 1,
+      "issues": 0
+    },
+    {
+      "date": "2026-10-18",
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
+    },
+    {
+      "date": "2026-10-19",
       "count": 18,
       "commits": 0,
-      "pulls": 18,
-      "issues": 0
+      "pulls": 16,
+      "issues": 2
     }
   ],
   "latestRelease": {
@@ -2729,57 +2729,57 @@
   "modules": {
     "digigraph": {
       "path": "digigraph",
-      "lastCommit": "2026-10-02T14:55:30Z",
+      "lastCommit": "2026-10-12T22:42:51Z",
       "files": 161,
-      "lines": 25276
+      "lines": 25931
     },
     "digiquant": {
       "path": "digiquant",
       "lastCommit": "2026-10-06T13:11:04Z",
-      "files": 875,
-      "lines": 214627
+      "files": 1005,
+      "lines": 238267
     },
     "digisearch": {
       "path": "digisearch",
-      "lastCommit": "2026-10-02T17:10:27Z",
-      "files": 178,
-      "lines": 32486
+      "lastCommit": "2026-10-12T23:46:37Z",
+      "files": 183,
+      "lines": 33343
     },
     "digichat": {
       "path": "apps/digichat",
-      "lastCommit": "2026-10-06T03:41:25Z",
-      "files": 723,
-      "lines": 116363
+      "lastCommit": "2026-10-13T00:08:30Z",
+      "files": 708,
+      "lines": 118304
     },
     "digikey": {
       "path": "digikey",
       "lastCommit": "2026-10-08T11:48:18Z",
       "files": 30,
-      "lines": 4081
+      "lines": 4164
     },
     "digitrace": {
       "path": "digitrace",
       "lastCommit": null,
       "files": 10,
-      "lines": 1193
+      "lines": 1199
     },
     "digiclaw": {
       "path": "digiclaw",
       "lastCommit": "2026-09-15T19:05:55Z",
       "files": 20,
-      "lines": 2060
+      "lines": 2091
     },
     "digibase": {
       "path": "digibase",
       "lastCommit": "2026-09-15T14:21:42Z",
-      "files": 17,
-      "lines": 3030
+      "files": 19,
+      "lines": 3942
     },
     "digivault": {
       "path": "digivault",
-      "lastCommit": "2026-09-19T02:33:58Z",
+      "lastCommit": "2026-10-12T23:46:37Z",
       "files": 24,
-      "lines": 5238
+      "lines": 5302
     }
   }
 }
