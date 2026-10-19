@@ -6,7 +6,7 @@
 # digillm package. It adds no routing or hook features yet: the full DigiLLM
 # service (callbacks, digikey auth, telemetry) is a post-release follow-up.
 #
-# The litellm version MUST match Dockerfile.digithings-stack-cloudflare;
+# The litellm version MUST match infra/docker/Dockerfile.digithings-stack-cloudflare;
 # tests/scripts/test_compose_litellm_pinned.py enforces that.
 #
 # Build context: monorepo root.

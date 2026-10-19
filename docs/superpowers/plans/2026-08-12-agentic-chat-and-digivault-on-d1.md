@@ -1470,7 +1470,7 @@ git commit -m "feat(digigraph): let the model drive retrieval — remove the pre
 
 In each file's `agents.allowed_tools`, add `digivault_get_note` alongside `digisearch`
 and `digivault_search_notes`. `infra/digichat-release/config/digiproject.yaml` is the one
-**baked into the container image** (`Dockerfile.digithings-stack-cloudflare:59`) — missing
+**baked into the container image** (`infra/docker/Dockerfile.digithings-stack-cloudflare:59`) — missing
 it there means the tool is invisible in production however the others are set.
 
 - [ ] **Step 2: Remove `always_retrieve_tools` from every file**

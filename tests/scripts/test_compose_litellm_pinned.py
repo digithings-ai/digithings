@@ -6,7 +6,7 @@ only, never the vendor (berriai) Docker image. So:
 * every compose file runs a `digillm` service from ghcr.io/digithings-ai/digillm at
   an exact version tag (never a floating tag), with the `litellm` network alias
   and port 4000 so existing OPENAI_API_BASE callers keep working;
-* Dockerfile.digillm and the Cloudflare stack Dockerfile install the SAME exact
+* infra/docker/Dockerfile.digillm and the Cloudflare stack Dockerfile install the SAME exact
   litellm[proxy] version (hosted and local must not drift);
 * no tracked compose file, Dockerfile, contract or workflow names berriai.
 """
@@ -27,8 +27,8 @@ COMPOSE_FILES = (
     REPO_ROOT / "docker-compose.yml",
     REPO_ROOT / "infra" / "digichat-release" / "compose.profile-a.yml",
 )
-DIGILLM_DOCKERFILE = REPO_ROOT / "Dockerfile.digillm"
-STACK_DOCKERFILE = REPO_ROOT / "Dockerfile.digithings-stack-cloudflare"
+DIGILLM_DOCKERFILE = REPO_ROOT / "infra/docker/Dockerfile.digillm"
+STACK_DOCKERFILE = REPO_ROOT / "infra/docker/Dockerfile.digithings-stack-cloudflare"
 PINNED = re.compile(r"^ghcr\.io/digithings-ai/digillm:\d+\.\d+\.\d+(@sha256:[0-9a-f]{64})?$")
 EXACT = re.compile(r"^\d+\.\d+\.\d+$")
 
@@ -60,7 +60,7 @@ def test_digillm_pin_consistent() -> None:
 
 def _digillm_litellm_version() -> str:
     m = re.search(r"^ARG LITELLM_VERSION=(\S+)$", DIGILLM_DOCKERFILE.read_text(), re.M)
-    assert m, "Dockerfile.digillm must declare ARG LITELLM_VERSION=<exact>"
+    assert m, "infra/docker/Dockerfile.digillm must declare ARG LITELLM_VERSION=<exact>"
     return m.group(1)
 
 

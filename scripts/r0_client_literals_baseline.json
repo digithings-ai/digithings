@@ -21,11 +21,11 @@
       "count": 3,
       "ticket": "DIG-3689"
     },
-    "Dockerfile.digichat-cloudflare": {
+    "infra/docker/Dockerfile.digichat-cloudflare": {
       "count": 4,
       "ticket": "DIG-2912"
     },
-    "Dockerfile.digithings-stack-cloudflare": {
+    "infra/docker/Dockerfile.digithings-stack-cloudflare": {
       "count": 9,
       "ticket": "DIG-3689"
     },

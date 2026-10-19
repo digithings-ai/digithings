@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.unit
 def test_stack_dockerfile_installs_web_search_extra():
-    text = (ROOT / "Dockerfile.digithings-stack-cloudflare").read_text()
+    text = (ROOT / "infra/docker/Dockerfile.digithings-stack-cloudflare").read_text()
     line = next(
         (line for line in text.splitlines() if "digisearch[" in line and "uv pip install" in line),
         None,

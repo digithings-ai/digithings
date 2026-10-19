@@ -9,7 +9,7 @@
 #
 #   DOCKER_BUILDKIT=1 docker build \
 #     --secret id=github_token,env=GITHUB_TOKEN \
-#     -f Dockerfile.twelvex-runner .
+#     -f infra/docker/Dockerfile.twelvex-runner .
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
