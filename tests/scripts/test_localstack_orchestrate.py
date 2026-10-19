@@ -11,8 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.localstack import orchestrate
-from scripts.localstack import supabase_flat
+from scripts.localstack import orchestrate, supabase_flat
 
 pytestmark = pytest.mark.unit
 
