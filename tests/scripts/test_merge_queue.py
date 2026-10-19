@@ -1291,6 +1291,189 @@ def test_run_stops_when_a_merge_makes_the_next_pr_ineligible(gh_stub: Any) -> No
     assert "mergeable=CONFLICTING" in done.stdout
 
 
+# --- a stale branch is brought up to date, not dead-ended ---------------------
+#
+# `strict` protection plus `STALE_MERGE_STATES` means every merge this queue lands makes
+# every *other* PR `BEHIND` — a state the queue then refuses. Nothing else in the script
+# could clear it, so the queue drained one PR per operator and then dead-ended: measured
+# on digithings on 2026-10-19, a single merge left 23 PRs blocked and the next one needed
+# a hand-run `gh pr update-branch` before it could queue at all.
+#
+# The step is deliberately narrow. It touches only a PR whose *sole* reason is `BEHIND`,
+# and only one per run, because an update spends a full CI run and the next merge
+# invalidates it. Each of those bounds has a test.
+
+
+def test_a_merge_that_leaves_the_next_pr_behind_does_not_dead_end_the_queue(
+    gh_stub: Any,
+) -> None:
+    """The queue's own merge must not be the reason the queue stops.
+
+    #1 is clean; #2 is `BEHIND` with everything else green. After #1 lands, #2's branch
+    has to be brought up to date or nothing can queue until a human intervenes.
+    """
+    prs = [
+        _pr(1, approved=True),
+        _pr(
+            2,
+            created="2026-10-02T00:00:00Z",
+            head_sha="b" * 40,
+            approved=True,
+            merge_state="BEHIND",
+        ),
+    ]
+    stub = _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^pr merge", stdout=""),
+            gh_rule(r"^pr comment", stdout=""),
+            gh_rule(r"update-branch", stdout=""),
+        ),
+        prs,
+    )
+    done = _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert [c[2] for c in stub.matching("pr merge")] == ["1"]
+    updates = stub.matching("update-branch")
+    assert len(updates) == 1, "the stale PR's branch must be brought up to date"
+    call = " ".join(updates[0])
+    assert "/pulls/2/update-branch" in call
+    # Pinned to the head the verdict was read from, exactly as a merge is: a push
+    # landing in between must be reported, never merged under.
+    assert f"expected_head_sha={'b' * 40}" in call
+    assert "#2" in done.stdout
+
+
+def test_a_stale_pr_is_never_merged_on_the_read_that_updated_it(gh_stub: Any) -> None:
+    """The update re-runs the checks, so until they report there is no verdict to merge."""
+    prs = [_pr(7, approved=True, merge_state="BEHIND")]
+    stub = _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^pr merge", stdout=""),
+            gh_rule(r"update-branch", stdout=""),
+        ),
+        prs,
+    )
+    done = _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("pr merge") == []
+    assert len(stub.matching("update-branch")) == 1
+
+
+def test_list_names_the_stale_branches_and_updates_nothing(gh_stub: Any) -> None:
+    """`list` is the read-only view: it shows the stale set and touches nothing."""
+    prs = [
+        _pr(7, approved=True, merge_state="BEHIND"),
+        _pr(8, created="2026-10-02T00:00:00Z", approved=True, merge_state="BEHIND"),
+    ]
+    stub = _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run("list", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK
+    assert "stale (2)" in done.stdout
+    assert "#7" in done.stdout and "#8" in done.stdout
+    assert stub.matching("update-branch") == [], "list must not write"
+
+
+def test_a_pr_blocked_for_a_real_reason_is_not_updated(gh_stub: Any) -> None:
+    """An update is only worth a CI run when it makes the PR queueable.
+
+    `BEHIND` *plus* a red check is a PR someone has to fix; updating its branch would
+    re-run every check and land on the same verdict.
+    """
+    prs = [
+        _pr(
+            9,
+            approved=True,
+            merge_state="BEHIND",
+            extra_checks=[
+                {
+                    "__typename": "CheckRun",
+                    "name": "lint",
+                    "status": "COMPLETED",
+                    "conclusion": "FAILURE",
+                }
+            ],
+        )
+    ]
+    stub = _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("update-branch") == []
+
+
+def test_only_one_stale_branch_is_updated_per_run_by_default(gh_stub: Any) -> None:
+    """More than one is wasted: the next merge invalidates every other update's CI."""
+    prs = [
+        _pr(11, approved=True, merge_state="BEHIND"),
+        _pr(12, created="2026-10-02T00:00:00Z", approved=True, merge_state="BEHIND"),
+        _pr(13, created="2026-10-03T00:00:00Z", approved=True, merge_state="BEHIND"),
+    ]
+    stub = _queue_stub(
+        gh_stub(gh_rule(r"^pr list", stdout=prs), gh_rule(r"update-branch", stdout="")),
+        prs,
+    )
+    done = _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert len(stub.matching("update-branch")) == 1
+
+
+def test_the_oldest_stale_branch_is_the_one_updated(gh_stub: Any) -> None:
+    """The same FIFO rule as the merge order: oldest first, not whatever is cheapest."""
+    prs = [
+        _pr(20, created="2026-10-05T00:00:00Z", approved=True, merge_state="BEHIND"),
+        _pr(19, created="2026-10-01T00:00:00Z", approved=True, merge_state="BEHIND"),
+    ]
+    stub = _queue_stub(
+        gh_stub(gh_rule(r"^pr list", stdout=prs), gh_rule(r"update-branch", stdout="")),
+        prs,
+    )
+    done = _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    updates = stub.matching("update-branch")
+    assert len(updates) == 1
+    assert "/pulls/19/update-branch" in " ".join(updates[0])
+
+
+def test_max_updates_zero_turns_the_stale_step_off(gh_stub: Any) -> None:
+    """An operator who wants the head-of-queue merge only must still be able to ask."""
+    prs = [_pr(5, approved=True, merge_state="BEHIND")]
+    stub = _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run(
+        "run",
+        "--repo",
+        "digithings-ai/twelve-x",
+        "--acting-role",
+        "cto",
+        "--max-updates",
+        "0",
+    )
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("update-branch") == []
+    assert "mergeStateStatus=BEHIND" in done.stdout
+
+
+def test_a_failed_update_fails_the_run_instead_of_looking_like_success(
+    gh_stub: Any,
+) -> None:
+    """A refused update — a conflict, a moved head — is an answer, not a no-op.
+
+    The alternative is the mode this queue exists to avoid: reporting a clean tick
+    when the thing that was supposed to happen did not.
+    """
+    prs = [_pr(5, approved=True, merge_state="BEHIND")]
+    _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"update-branch", stderr="gh: update branch failed", exit_code=1),
+        ),
+        prs,
+    )
+    done = _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OPERATIONAL
+    assert "update-branch of #5 failed" in done.stderr
+
+
 def test_dry_run_changes_nothing(gh_stub: Any) -> None:
     prs = [_pr(42, approved=True)]
     stub = _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
