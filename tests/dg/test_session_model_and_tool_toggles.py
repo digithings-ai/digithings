@@ -34,7 +34,10 @@ def test_house_model_refused_in_free_mode_when_paid(monkeypatch) -> None:
     ):
         tok = model_config.push_house_model("a/paid")
         try:
-            with pytest.raises(ValueError, match="llm_mode=free"):
+            # The override arm's refusal NAMES the model; the free-mode fallback
+            # refuses with "requires an explicit model". Matching only "llm_mode=free"
+            # would also pass when the whole override arm is deleted.
+            with pytest.raises(ValueError, match="refused paid/non-free model"):
                 model_config.get_model_for_mode()
         finally:
             model_config.pop_house_model(tok)
