@@ -38,6 +38,7 @@ import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
 import { containerEvictedResponse, isContainerEvictedError } from "./container-errors";
 import { getStackStatus, runIsolated } from "./route-modules";
+import { SESSION_MODEL_ALLOWLIST_DEFAULT } from "./session-model-allowlist";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
 // the file is dependency-free constants, so it cannot fail independently of
@@ -112,10 +113,10 @@ export class DigiStackContainer extends Container {
     OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
     DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
     // Session model picker (OCC settings): house-upstream slugs a visitor may
-    // pick per session. digigraph binds only slugs on this list.
+    // pick per session. digigraph binds only slugs on this list, so the default
+    // is exactly the set the deployment publishes — see ./session-model-allowlist.
     DIGI_SESSION_MODEL_ALLOWLIST:
-      env.DIGI_SESSION_MODEL_ALLOWLIST ??
-      "deepseek/deepseek-v4.1-flash,z-ai/glm-5.3-flash,qwen/qwen3.8-flash,google/gemma-4-31b-it,xiaomi/mimo-v2.6-flash,z-ai/glm-4.7-flash",
+      env.DIGI_SESSION_MODEL_ALLOWLIST ?? SESSION_MODEL_ALLOWLIST_DEFAULT,
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
     // Canonical shared Cloudflare credential pair (#2239 rename) -- one account +
     // token now authorizes both Vectorize and D1. VECTORIZE_*/D1_ACCOUNT_ID/
@@ -156,14 +157,15 @@ export class DigiStackContainer extends Container {
   /**
    * A request waiting on a cold start must not have the container stopped under
    * it. `startAndWaitForPorts` does NOT renew the activity timer, so with
-   * sleepAfter = "1m" the idle alarm fires mid-boot and SIGTERMs the container
+   * sleepAfter = "5m" the idle alarm fires mid-boot and SIGTERMs the container
    * before its port opens; the port wait then fails with "The container is not
    * running, consider calling start()" and every caller gets 503
    * container_booting while the container itself logs a clean boot (no errors,
-   * every supervisord program RUNNING). Observed 2026-10-18: after the R5 wheel
-   * install (#5762) the boot takes ~60s at 0.5 vCPU, which is exactly the
-   * sleepAfter window. Holding the window open for the life of the request is
-   * the fix; the 1m idle tail itself is unchanged once requests stop.
+   * every supervisord program RUNNING). Observed 2026-10-18 with the previous
+   * 1m window: after the R5 wheel install (#5762) the boot takes ~60s at 0.5
+   * vCPU, which is exactly that window. Holding the window open for the life of
+   * the request is the fix; the idle tail itself is unchanged once requests
+   * stop.
    */
   private keepAwakeForRequest = false;
 

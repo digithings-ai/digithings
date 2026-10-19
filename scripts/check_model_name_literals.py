@@ -569,7 +569,6 @@ KNOWN_REMAINING: dict[str, _Allowance] = {
     # digigraph binds against per session when the var is unset. The live worker
     # carries no such var, so this literal *is* the served value. Registered for
     # #5029 phase 2, which moves model names into config/.
-    "apps/digithings-stack-cloudflare/src/index.ts": _Allowance(1, 1),
     # A JSON-schema description for SESSION_SET_MODEL_TOOL ("Model id, e.g. ...").
     # Prose, not a routing table -- same class as the refusal message below.
     "digigraph/src/digigraph/orchestration/session_prefs_tools.py": _Allowance(1, 1),
