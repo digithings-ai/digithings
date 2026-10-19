@@ -29,9 +29,7 @@
       "gateMode": "ungated",
       "webSearch": false,
       "backend": {
-        "type": "digigraph",
-        "digisearchIndex": "occ_help",
-        "vaultPathPrefix": "clients/online-compliance-center"
+        "type": "digigraph"
       }
     }
   }

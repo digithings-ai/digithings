@@ -44,8 +44,11 @@ LIVE = {
         "token": "tok-occ",
         "backend": {
             "type": "digigraph",
-            "digisearchIndex": "occ_help",
-            "vaultPathPrefix": "clients/online-compliance-center",
+            # Synthetic corpus routing. The real corpus name is a client
+            # literal and lives in the private release-lane paths, so this
+            # fixture never writes it down.
+            "digisearchIndex": "tenant_corpus",
+            "vaultPathPrefix": "clients/tenant-vault",
         },
     },
     "digiquant.io": {
@@ -77,10 +80,14 @@ def test_compose_keeps_live_backend_keys_the_overlay_omits():
     composed, _ = registry.compose_registry(
         LIVE, {"occ.digithings.ai": {"backend": {"type": "digigraph"}}}
     )
-    assert composed["occ.digithings.ai"]["backend"]["digisearchIndex"] == "occ_help"
+    live_backend = LIVE["occ.digithings.ai"]["backend"]
+    assert (
+        composed["occ.digithings.ai"]["backend"]["digisearchIndex"]
+        == live_backend["digisearchIndex"]
+    )
     assert (
         composed["occ.digithings.ai"]["backend"]["vaultPathPrefix"]
-        == "clients/online-compliance-center"
+        == live_backend["vaultPathPrefix"]
     )
 
 
@@ -97,7 +104,10 @@ def test_the_repo_overlay_composes_onto_the_live_registry():
     composed, _ = registry.compose_registry(LIVE, overlay)
     assert sorted(composed) == sorted(LIVE)
     assert composed["occ.digithings.ai"]["token"] == LIVE["occ.digithings.ai"]["token"]
-    assert composed["occ.digithings.ai"]["backend"]["digisearchIndex"] == "occ_help"
+    assert (
+        composed["occ.digithings.ai"]["backend"]["digisearchIndex"]
+        == LIVE["occ.digithings.ai"]["backend"]["digisearchIndex"]
+    )
 
 
 def test_the_repo_overlay_carries_the_occ_tenant():
@@ -152,12 +162,30 @@ def test_the_retired_occ_corpus_is_refused():
     assert "occ_tickets" in str(refusal.value)
 
 
-def test_the_occ_tenant_must_route_to_occ_help():
+def test_the_overlay_may_not_set_the_occ_tenant_corpus():
+    """The overlay may not repoint a client tenant's corpus routing."""
     with pytest.raises(registry.RegistryRefusal) as refusal:
         registry.compose_registry(
             LIVE, {"occ.digithings.ai": {"backend": {"digisearchIndex": "other_index"}}}
         )
-    assert "occ_help" in str(refusal.value)
+    assert "may not set digisearchIndex" in str(refusal.value)
+
+
+def test_the_overlay_may_not_set_the_occ_tenant_vault_path():
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_registry(
+            LIVE, {"occ.digithings.ai": {"backend": {"vaultPathPrefix": "clients/other"}}}
+        )
+    assert "may not set vaultPathPrefix" in str(refusal.value)
+
+
+def test_a_live_registry_without_a_corpus_for_the_occ_tenant_is_refused():
+    """The composed registry must never drop the OCC corpus."""
+    broken = json.loads(json.dumps(LIVE))
+    del broken["occ.digithings.ai"]["backend"]["digisearchIndex"]
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_registry(broken, {})
+    assert "does not route" in str(refusal.value)
 
 
 def test_a_live_registry_without_a_token_is_refused():
