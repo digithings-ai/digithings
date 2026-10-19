@@ -102,8 +102,10 @@ export function digichatContainerRev(rev?: string | null): string | null {
  * deploy costs one extra Container cold start. The rollback is symmetric —
  * redeploy the previous commit and the id follows it back.
  *
- * Verify with:
- *   curl -s https://digithings.ai/_stack/meta | jq .digichatContainerId
+ * Verify with the Worker's own, auth-exempt meta route (it reports both the id
+ * and the rev; it needs its zone route `digithings.ai/_digichat/meta` enabled
+ * to be reachable from outside — see wrangler.toml):
+ *   curl -s https://digithings.ai/_digichat/meta | jq -r .containerId
  */
 export function sharedDigichatContainerId(rev?: string | null): string {
   const normalised = normaliseRev(rev);

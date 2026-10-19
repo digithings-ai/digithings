@@ -89,6 +89,39 @@ def _schema_from_digivault_manifest(ctx: ToolContext, tool_name: str) -> dict[st
                 },
             },
         }
+    if tool_name == "digivault_search_tag":
+        # Mirrors digivault's own orchestrator manifest text
+        # (digivault/src/digivault/orchestrator_tools.py). Only reached when the
+        # manifest fetch above failed; the live manifest is authoritative.
+        return {
+            "type": "function",
+            "function": {
+                "name": "digivault_search_tag",
+                "description": "Find vault notes carrying a given tag. Use to locate documentation by topic.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tag": {"type": "string", "description": "Tag without '#'"},
+                    },
+                    "required": ["tag"],
+                },
+            },
+        }
+    if tool_name == "digivault_backlinks":
+        return {
+            "type": "function",
+            "function": {
+                "name": "digivault_backlinks",
+                "description": "List notes that link to a given note (its backlinks).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Note name (stem)"},
+                    },
+                    "required": ["name"],
+                },
+            },
+        }
     return {
         "type": "function",
         "function": {
@@ -391,3 +424,60 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
         # Full note body for digichat DocumentPane (#3419); locate paths stay snippet-only.
         "rag_sources": rag_sources_from_results(results, include_body=True),
     }
+
+
+def _dispatch_digivault_read(
+    tool_name: str, args: dict[str, Any], context: ToolContext
+) -> str | dict[str, Any]:
+    """Invoke one read-only digivault tool by name through the shared hub path.
+
+    The two locate tools above shape their own results (excerpts, note bodies), so
+    they call ``_invoke_dv`` directly. ``digivault_search_tag`` and
+    ``digivault_backlinks`` return digivault's own payload unchanged and differ only
+    in the tool name, so they share this one body rather than a second copy of the
+    invoke/error handling (and no HTTP/transport code is duplicated).
+    """
+    args_eff = dict(args)
+    # Security (#2265): overwrite unconditionally, never default-if-missing — a
+    # model-supplied path_prefix must not select another tenant's corpus. Mirrors
+    # _handle_digivault_search. digivault's vault-local handlers treat a blank/None
+    # prefix as "no scoping requested" (whole vault for a direct caller), matching
+    # the MCP surface; only the session's own prefix is ever authoritative here.
+    args_eff["path_prefix"] = context.vault_path_prefix
+    try:
+        inv = _invoke_dv(
+            _digivault_service_base(),
+            tool_name,
+            args_eff,
+            bearer_token=_digi_bearer_from_context(context),
+            request_id=context.request_id,
+        )
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
+        return f"digivault orchestrator invoke failed: {e}"
+    if not inv.get("ok"):
+        err = inv.get("error")
+        if isinstance(err, str) and err.strip():
+            return _failed_invoke_result(
+                err.strip(), extra={k: v for k, v in inv.items() if k != "error"}
+            )
+        return _failed_invoke_result(f"{tool_name} failed")
+    data = inv.get("data")
+    if not isinstance(data, dict):
+        return {"content": "No results found.", "results": [], "rag_sources": []}
+    # Pass digivault's payload through as the model-facing content. No rag_sources:
+    # these are tag/backlink listings, not note excerpts, and the empty lists keep
+    # the same dict shape _handle_digivault_search returns so execute_one can attach
+    # hit_count/query without special-casing.
+    return {"content": json.dumps(data), "results": [], "rag_sources": []}
+
+
+def _handle_digivault_search_tag(
+    args: dict[str, Any], context: ToolContext
+) -> str | dict[str, Any]:
+    """Find vault notes carrying a given tag (read-only; OCC grounding prompt)."""
+    return _dispatch_digivault_read("digivault_search_tag", args, context)
+
+
+def _handle_digivault_backlinks(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
+    """List notes that link to a given note (read-only; OCC grounding prompt)."""
+    return _dispatch_digivault_read("digivault_backlinks", args, context)

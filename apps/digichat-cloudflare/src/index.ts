@@ -16,12 +16,26 @@ import {
 } from "./paths";
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { isOccShellPath, occGate } from "./occ-gate";
+import { digichatContainerReset } from "./admin-reset";
 
 /**
  * `env` from `cloudflare:workers` is untyped until `wrangler types` generates
  * `worker-configuration.d.ts`; the local `Env` interface is the intended shape.
  */
 const workerVars = env as unknown as Env;
+
+/**
+ * OCC helpdesk MCP: the secret-gated edge path served by the in-container
+ * zammad-mcp (python) through the trusted proxy, not by Next.
+ */
+const ZAMMAD_MCP_PREFIX = "/api/mcp/zammad";
+
+/**
+ * Worker-owned, secret-gated recovery lever for the shared Container. Handled
+ * here (never proxied to the container) so `destroy()` can reclaim an instance
+ * that outlived its idle tail while `max_instances = 1` blocks every cold start.
+ */
+const DIGICHAT_ADMIN_RESET_PATH = "/_digichat-admin/container/reset";
 
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
@@ -57,6 +71,9 @@ export class DigiChatContainer extends Container {
     DIGICHAT_DASHBOARD_SUPABASE_URL: workerVars.DIGICHAT_DASHBOARD_SUPABASE_URL ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
       workerVars.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? "",
+    // Read-only Zammad helpdesk MCP (in-container zammad-mcp, OCC tickets).
+    ZAMMAD_API_TOKEN: workerVars.ZAMMAD_API_TOKEN ?? "",
+    ZAMMAD_BASE_URL: workerVars.ZAMMAD_BASE_URL ?? "",
   };
 }
 
@@ -90,6 +107,16 @@ export interface Env {
   DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
+  /** Read-only Zammad helpdesk MCP: base URL + API token, forwarded to the container. */
+  ZAMMAD_API_TOKEN?: string;
+  ZAMMAD_BASE_URL?: string;
+  /** Worker-only gate for /api/mcp/zammad*; never forwarded to the container. */
+  ZAMMAD_EDGE_KEY?: string;
+  /**
+   * Worker-only key for the container reset lever; never forwarded to the
+   * container. Unset means the lever is off (the route answers 404).
+   */
+  DIGICHAT_ADMIN_KEY?: string;
 }
 
 export default {
@@ -97,6 +124,19 @@ export default {
     const url = new URL(request.url);
     if (isOccShellPath(url.pathname)) {
       return occGate(request, workerEnv.OCC_INVITE_KEY);
+    }
+    // Worker-owned reset lever: intercepted here, before any container proxy,
+    // and fail-closed with a 404 that never discloses the route. The instance
+    // it destroys is the same derived id the proxy below addresses, computed
+    // once here from the deploy's rev.
+    const containerId = sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV);
+    if (url.pathname === DIGICHAT_ADMIN_RESET_PATH) {
+      return digichatContainerReset(
+        request,
+        workerEnv.DIGICHAT_ADMIN_KEY,
+        containerId,
+        () => getContainer(workerEnv.DIGICHAT, containerId).destroy(),
+      );
     }
     // Served by the Worker itself, never proxied: the id a deploy derived is
     // the only thing that makes a deploy verifiable rather than assumed, and
@@ -106,7 +146,7 @@ export default {
       return Response.json({
         ok: true,
         service: "digichat",
-        containerId: sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV),
+        containerId,
         rev: digichatContainerRev(workerEnv.DIGICHAT_CONTAINER_REV),
         revVar: DIGICHAT_CONTAINER_REV_VAR,
         note:
@@ -116,7 +156,17 @@ export default {
           " and fell back to the legacy id.",
       });
     }
-    if (!shouldProxyToDigiChat(url.pathname)) {
+    // OCC helpdesk MCP: /api/mcp/zammad* is served by the in-container
+    // zammad-mcp through the trusted proxy, not by Next. Gate it here with the
+    // edge key this Worker holds; the container never sees the key. Fail closed.
+    const isZammadMcp = url.pathname.startsWith(ZAMMAD_MCP_PREFIX);
+    if (isZammadMcp) {
+      const expected = workerEnv.ZAMMAD_EDGE_KEY?.trim();
+      const provided = request.headers.get("x-digi-mcp-key")?.trim();
+      if (!expected || !provided || provided !== expected) {
+        return new Response("digithings-digichat: unauthorized", { status: 401 });
+      }
+    } else if (!shouldProxyToDigiChat(url.pathname)) {
       return new Response(
         "digichat Worker: path not routed. Marketing /chat shells are on Pages.",
         { status: 404 },
@@ -125,11 +175,8 @@ export default {
     // One shared instance — digithings, OCC, and future tenants via embed registry.
     // The id is derived from the deploying commit, never hand-pinned: a warm
     // instance keeps its boot env, so a forgotten bump silently serves the old
-    // image. See paths.ts.
-    const container = getContainer(
-      workerEnv.DIGICHAT,
-      sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV),
-    );
+    // image. See paths.ts. Same `containerId` the reset lever above destroys.
+    const container = getContainer(workerEnv.DIGICHAT, containerId);
     return container.fetch(request);
   },
 };

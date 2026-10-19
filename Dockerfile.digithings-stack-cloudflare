@@ -122,9 +122,6 @@ ENV DIGI_CONFIG_PATH=/app/config
 # House Cheaper Inference overlay + merge script (boot-time merge when key set)
 COPY config/litellm.cheaperinference.yaml /app/config/litellm.cheaperinference.yaml
 COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheaperinference.py
-# Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
-# deps `mcp` + `httpx` already present via digigraph[mcp]).
-COPY scripts/zammad_mcp ./scripts/zammad_mcp
 # scripts/index_occ_tickets.py is deliberately NOT copied into the image
 # (DIG-1438). It was only there for [program:seed_occ_tickets], the boot step
 # that backfilled occ_tickets from the live Zammad API with unmasked ticket
@@ -195,6 +192,12 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
 # :8080, granian/wsgi) and wires digisearch's DIGISEARCH_SEARXNG_URL at it, so
 # the hosted container no longer depends on a single throttled ddgs scrape
 # (#4297). Ships config/searxng/settings.yml + the entrypoint `valkey` alias.
+# Rebuild marker v10 (2026-10-19): ships digigraph/src-only changes by forcing a
+# fresh wheel install -- registers digivault_search_tag + digivault_backlinks and
+# carries the rewritten ticket/help skill text. deploy_worker.sh reuses the wheels
+# under image-packages/ unless that directory is deleted first, so a src-only edit
+# deploys green while changing nothing in the container. Delete image-packages/ AND
+# bump this marker together, or the layers stay cached.
 # Rebuild marker v9 (2026-09-17): drops zammad__* from the digiproject allowlist
 # and the entrypoint DIGI_ALLOWED_TOOLS fallback so the website digichat no
 # longer offers Zammad; OCC keeps it via its per-request live MCP union.

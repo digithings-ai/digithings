@@ -16,8 +16,8 @@ OPTIONS preflights (CORS is enforced separately) — and the Worker-served paths
 digikey). `/_stack/status` reports per-module health (`loaded` / `degraded` +
 last error, never secrets) for the fault-isolated route groups (#4685); like
 `/_stack/meta` it never touches a module loader, so it stays up when groups
-degrade. `/_stack/mcp/zammad/*` (the read-only OCC Zammad MCP, proxied to
-the stack container's :8770) is **not** auth-exempt: it requires `x-digi-mcp-key`
+degrade. `/_stack/mcp/*` (the digisearch + digivault MCP servers, proxied to
+their in-container ports) is **not** auth-exempt: it requires `x-digi-mcp-key`
 matching the `MCP_EDGE_KEY` secret or returns a fail-closed 401.
 Secrets only via `npx wrangler secret put` — never commit values. Operator
 secrets currently required: `MCP_EDGE_KEY` (edge key for the OCC MCP path; set
@@ -48,7 +48,6 @@ One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 | _(key-gated edge)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate); edge route `/_stack/mcp/digisearch/*` (x-digi-mcp-key) |
 | _(key-gated edge)_ | digivault-mcp `:8769` | vault MCP (search_notes/search_tag/backlinks/lint; write `create_note` needs `DIGIVAULT_MCP_WRITE=1`) |
 | _(loopback only)_ | digigraph-mcp `:8766` | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
-| _(container only)_ | zammad-mcp `:8770` | read-only OCC Zammad MCP; external paths are the key-gated `/_stack/mcp/*` edge routes |
 
 ```text
 Pages digithings.ai/chat[/occ]
@@ -303,13 +302,16 @@ digigraph chat-only env (entrypoint / bundle compose; `DIGIQUANT_URL` is a `wran
 
 - `DIGI_PROJECT_CONFIG=/app/config/digiproject.yaml` — `research_rag`, research only,
   tools `digisearch` + `digisearch_semantic` + `digisearch_web_search` +
-  `digivault_search_notes` + `digivault_get_note` + `web_search` (request opt-in; #3420)
+  `digivault_search_notes` + `digivault_get_note` + `digivault_search_tag` +
+  `digivault_backlinks` + `web_search` (request opt-in; #3420)
   (this stack has D1)
 - `DIGI_WORKFLOW_PROFILE=research_rag`
-- `DIGI_ALLOWED_TOOLS=digisearch,digisearch_semantic,digisearch_web_search,digivault_search_notes,digivault_get_note` — fallback
+- `DIGI_ALLOWED_TOOLS=digisearch,digisearch_semantic,digisearch_web_search,digivault_search_notes,digivault_get_note,digivault_search_tag,digivault_backlinks` — fallback
   only, read solely when `digiproject.yaml` fails to load; kept in sync with it
 - Zammad ticket tools are not in the shared allowlist; the OCC tenant reaches them per
-  request via its `mcp.servers` entry (`X-Digi-Mcp-Servers`)
+  request via its `mcp.servers` entry (`X-Digi-Mcp-Servers`), which now points at the
+  digichat-served MCP (`https://digithings.ai/api/mcp/zammad/mcp`) — the stack no longer
+  runs a zammad-mcp program
 - `DIGIQUANT_URL=` (empty) — never route to `backtest_node`
 
 digichat: `DIGICHAT_ENABLED_SERVICES=digigraph` (do not probe digiquant).

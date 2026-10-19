@@ -7,15 +7,18 @@
  *         -> ports.ts: sharedStackContainerId(env.STACK_CONTAINER_REV)
  *         -> the stack's OWN Durable Object id (DIG-3229, landed by #5537)
  *       -> --var DIGICHAT_CONTAINER_REV:<sha12>
- *         -> digichat-mount -> digichat.ts: sharedDigichatContainerId(...)
- *         -> the FOLDED DIGICHAT Container id (DIG-3814, this PR)
+ *         -> digichat.ts: sharedDigichatContainerId(...)
+ *         -> the DIGICHAT Container id for the same commit (DIG-3814)
  *       both -> "shared-<sha12>"
  *
- * WHY BOTH IN ONE DEPLOY. digithings-stack carries the zone routes and folds
- * the digichat Container, so one worker deploy has to ship both derivations.
- * A wrapper that carried only one rev would leave the other container id
- * hand-pinned — a partial fix looks like the hole is closed while leaving the
- * other half open.
+ * WHY BOTH IN ONE DEPLOY. Both Workers derive their Container id from the same
+ * commit, and this wrapper injects and verifies both revs so neither id can be
+ * left hand-pinned. Since the 2026-10-19 separation this Worker does not serve
+ * digichat paths and mounts no digichat container: the DIGICHAT_CONTAINER_REV it
+ * injects is used only to report `digichatContainerId` in /_stack/meta, which is
+ * the read-back that proves the rev reached the built bundle. A wrapper that
+ * carried only one rev would leave the other container id hand-pinned — a
+ * partial fix looks like the hole is closed while leaving the other half open.
  *
  * ONE IMPLEMENTATION, NOT A COPY. The rev resolution, the sha gate and the
  * expected-id builder all come from the digichat wrapper by import. Two copies
@@ -79,7 +82,7 @@ import {
 /** Worker var carrying the stack's own rev (DIG-3229). Must match ports.ts / Env. */
 export const REV_VAR = "STACK_CONTAINER_REV";
 
-/** Worker var carrying the folded digichat rev (DIG-3814). Shared with the digichat wrapper. */
+/** Worker var carrying the digichat rev (DIG-3814). Shared with the digichat wrapper. */
 export const DIGICHAT_REV_VAR = "DIGICHAT_CONTAINER_REV";
 
 export { expectedContainerId, resolveDeployRev, SHA_RE, REV_LEN };
@@ -88,11 +91,11 @@ export { expectedContainerId, resolveDeployRev, SHA_RE, REV_LEN };
 export const META_URL = "https://graph.digithings.ai/_stack/meta";
 
 /**
- * Which key of `/_stack/meta` carries the folded digichat id.
+ * Which key of `/_stack/meta` carries the digichat id.
  *
  * It is NOT `containerId`: that key is the stack's OWN container, owned by
  * DIG-3229 / #5537. Verifying the wrong key would make this wrapper pass while
- * the folded digichat id stayed pinned — the exact failure this wrapper was
+ * the digichat id stayed pinned — the exact failure this wrapper was
  * added to prevent.
  */
 export const META_FIELD = "digichatContainerId";
@@ -132,7 +135,7 @@ export function metaMatchesDeploy(meta, expected) {
   return metaFieldMatches(meta, expected, "containerId");
 }
 
-/** Does `/_stack/meta` .digichatContainerId (the fold) match this commit's id? */
+/** Does `/_stack/meta` .digichatContainerId match the digichat id this commit derives? */
 export function metaMatchesDigichat(meta, expected) {
   return metaFieldMatches(meta, expected, META_FIELD);
 }
@@ -142,7 +145,7 @@ async function main(extra) {
   const expected = expectedContainerId(rev);
   process.stdout.write(
     `digithings-stack deploy: commit ${rev} -> stack Container id ${expected}, ` +
-      `folded digichat Container id ${expected}\n`,
+      `digichat Container id ${expected}\n`,
   );
 
   const deployed = spawnSync("npm", buildWranglerArgs(rev, extra), {
@@ -171,7 +174,7 @@ async function main(extra) {
   if (!stackMatch || !digichatMatch) {
     const missing = [];
     if (!stackMatch) missing.push("containerId (the stack's own id)");
-    if (!digichatMatch) missing.push(`${META_FIELD} (the folded digichat id)`);
+    if (!digichatMatch) missing.push(`${META_FIELD} (the digichat id)`);
     process.stderr.write(
       "\ndigithings-stack deploy: DEPLOYED BUT UNVERIFIED\n" +
         `  expected ${META_URL} to report ${missing.join(" and ")}` +

@@ -51,11 +51,17 @@ RUNNER_WHEEL_EXTRAS: dict[str, tuple[str, ...]] = {
     "digiquant": ("prices", "research", "nautilus"),
     "digigraph": ("checkpoint-postgres",),
 }
-NPM_PACKAGES = ("@digithings/design", "@digithings/ui", "@digithings/digichat-ui")
+NPM_PACKAGES = (
+    "@digithings/design",
+    "@digithings/ui",
+    "@digithings/digichat-ui",
+    "@digithings/hero-banner",
+)
 NPM_MANIFESTS = {
     "design": REPO / "packages" / "design" / "package.json",
     "ui": REPO / "packages" / "ui" / "package.json",
     "digichat-ui": REPO / "packages" / "digichat-ui" / "package.json",
+    "hero-banner": REPO / "packages" / "hero-banner" / "package.json",
     "dashboard": REPO / "apps" / "dashboard" / "package.json",
 }
 RUNNER_FILES = (

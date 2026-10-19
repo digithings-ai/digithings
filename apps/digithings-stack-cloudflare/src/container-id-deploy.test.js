@@ -27,23 +27,28 @@ import { sharedDigichatContainerId } from "./digichat";
 
 /**
  * DIG-3229 + DIG-3814, merged: the stack deploy path carries BOTH revs now —
- * the stack's OWN Durable Object id (ports.ts) and the folded digichat
- * id (digichat-mount via digichat.ts). A derivation is only worth anything if
- * every deploy actually carries its rev, because a deploy without it silently
- * falls back to the pinned legacy id. That is a property of the DEPLOY PATH,
- * not of the derivation, so it is pinned here: the rev resolution (shared by
- * import with the digichat wrapper), the wrangler argv, the package script
- * operators run, and the post-deploy read-back of BOTH /_stack/meta fields.
+ * the stack's OWN Durable Object id (ports.ts) and the digichat Container id
+ * derived from the same commit (re-exported through digichat.ts). A derivation
+ * is only worth anything if every deploy actually carries its rev, because a
+ * deploy without it silently falls back to the pinned legacy id. That is a
+ * property of the DEPLOY PATH, not of the derivation, so it is pinned here: the
+ * rev resolution (shared by import with the digichat wrapper), the wrangler
+ * argv, the package script operators run, and the post-deploy read-back of BOTH
+ * /_stack/meta fields.
  *
  * The property that matters most is not "the wrapper carries a rev" — it is
  * that the wrapper verifies BOTH meta fields, each under its own key.
  * `/_stack/meta` publishes two different container ids: `containerId` is the
- * stack's own and `digichatContainerId` is the folded digichat one. A wrapper
- * pointed at the wrong key would either fail forever or, worse, pass while the
- * folded id stayed pinned. Every folded-id assertion below is built around
- * that distinction, and the discriminating arm is a meta payload carrying ONLY
- * the stack's own id: the folded check must refuse it rather than call it
- * verified.
+ * stack's own and `digichatContainerId` is the digichat one this commit derives.
+ * A wrapper pointed at the wrong key would either fail forever or, worse, pass
+ * while the digichat id stayed pinned. Every digichat-id assertion below is
+ * built around that distinction, and the discriminating arm is a meta payload
+ * carrying ONLY the stack's own id: the digichat check must refuse it rather
+ * than call it verified.
+ *
+ * Since the 2026-10-19 separation this Worker does not serve digichat paths and
+ * mounts no digichat container; the `digichatContainerId` field is reported for
+ * this one read-back, not because a route here answers to it.
  *
  * Deliberately plain `.js` (same reason as container-bind.test.js /
  * env-vars-pin.test.js): tsconfig.json scopes `types` to
@@ -132,7 +137,7 @@ describe("buildWranglerArgs", () => {
     ]);
   });
 
-  it("builds the folded digichat var through the shared wrapper's own builder", () => {
+  it("builds the digichat rev var through the shared wrapper's own builder", () => {
     // Same identity proof as resolveDeployRev, one level up: the digichat-side
     // --var string is built by the digichat module, not re-spelled here.
     expect(buildDigichatVarArg(SHORT_REV)).toBe(`--var=${DIGICHAT_REV_VAR}:${SHORT_REV}`);
@@ -252,13 +257,18 @@ describe("the deploy path carries both revs", () => {
     expect(helper[0]).toMatch(/getContainer\(\s*workerEnv\.STACK,\s*sharedStackContainerId\(/);
   });
 
-  it("the folded digichat container is fetched through the derived id too", () => {
-    // DIG-3814's stack half: the fold must not keep a second hand-pinned id.
+  it("the stack reports the derived digichat id but fetches no digichat container", () => {
+    // DIG-3814's stack half, after the 2026-10-19 separation: the
+    // container is gone (the client surface lives on the digithings-digichat
+    // Worker), and what remains here is the derived-id report in /_stack/meta
+    // that the shared deploy wrapper verifies. No hand-pinned literal either.
     const index = readFileSync(join(appDir, "src", "index.ts"), "utf-8");
     expect(index).not.toContain("SHARED_DIGICHAT_CONTAINER_ID");
     expect(index).not.toContain("SHARED_STACK_CONTAINER_ID");
+    expect(index).not.toContain("getContainer(workerEnv.DIGICHAT");
+    expect(index).not.toContain("switchPort(request, DIGICHAT_PORT)");
     expect(index).toContain(
-      "getContainer(workerEnv.DIGICHAT, sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV))",
+      "digichatContainerId: sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV)",
     );
   });
 
@@ -328,7 +338,7 @@ describe("metaMatchesDeploy (the stack's own field)", () => {
   });
 });
 
-describe("metaMatchesDigichat (the folded id field)", () => {
+describe("metaMatchesDigichat (the digichat id field)", () => {
   it("names the digichat field explicitly and reuses the shared field-aware matcher", () => {
     // Control that makes the wrong-field arms meaningful: the two fields are
     // different keys and the matcher is the shared module's, parameterised on
@@ -342,7 +352,7 @@ describe("metaMatchesDigichat (the folded id field)", () => {
   });
 
   it("passes only when digichatContainerId matches, even though containerId does not", () => {
-    // A realistic `/_stack/meta`: the folded digichat id is right, the stack's
+    // A realistic `/_stack/meta`: the digichat id is right, the stack's
     // own value is deliberately different. A wrapper that read the wrong key
     // would report failure here.
     const meta = {
@@ -360,7 +370,7 @@ describe("metaMatchesDigichat (the folded id field)", () => {
     expect(metaMatchesDigichat(meta, sharedDigichatContainerId(SHORT_REV))).toBe(false);
   });
 
-  it("refuses when the folded id is stale", () => {
+  it("refuses when the digichat id is stale", () => {
     const meta = {
       containerId: sharedStackContainerId(SHORT_REV),
       digichatContainerId: "shared-v10",
@@ -377,7 +387,7 @@ describe("metaMatchesDigichat (the folded id field)", () => {
 
   it("both fields together are required: one match alone is not a deploy proof", () => {
     const expected = expectedContainerId(SHORT_REV);
-    const partial = { containerId: expected }; // folded id missing
+    const partial = { containerId: expected }; // digichat id missing
     expect(metaMatchesDeploy(partial, expected)).toBe(true);
     expect(metaMatchesDigichat(partial, expected)).toBe(false);
   });

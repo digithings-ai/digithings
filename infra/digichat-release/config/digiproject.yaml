@@ -35,6 +35,14 @@ agents:
     - digisearch_web_search
     - digivault_search_notes
     - digivault_get_note
+    # Read-only vault lookups the OCC prompt tells the model to ground answers
+    # in (digivault_search_tag, digivault_backlinks). They must be listed here
+    # rather than arriving per request: digivault is a builtin of the stack, not
+    # a per-request MCP server, so the live-union path that carries the OCC
+    # zammad row cannot carry these. Reach stays bounded by each tenant's own
+    # vaultPathPrefix — this permits the call, it does not widen the corpus.
+    - digivault_search_tag
+    - digivault_backlinks
     # Zammad tools are deliberately NOT in this shared allowlist: the digithings
     # website chat must not offer them. OCC reaches them per request through the
     # live MCP union (X-Digi-Mcp-Servers carries the occ tenant's zammad server).
