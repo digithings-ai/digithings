@@ -19,17 +19,17 @@ def test_tool_def_name_reads_dict_forms_and_objects() -> None:
     assert _tool_def_name({"name": "session_set_model"}) == "session_set_model"
 
     class Tool:
-        name = "digivault_search_notes"
+        name = "vault_search_notes"
 
-    assert _tool_def_name(Tool()) == "digivault_search_notes"
+    assert _tool_def_name(Tool()) == "vault_search_notes"
 
 
 def test_filter_removes_only_session_controls() -> None:
     tools = [
         {"type": "function", "function": {"name": "digisearch"}},
         {"type": "function", "function": {"name": "session_set_model"}},
-        {"type": "function", "function": {"name": "zammad_search_tickets"}},
+        {"type": "function", "function": {"name": "ticket_search_tickets"}},
         {"type": "function", "function": {"name": "session_toggle_tool"}},
     ]
     kept = [t for t in tools if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
-    assert [_tool_def_name(t) for t in kept] == ["digisearch", "zammad_search_tickets"]
+    assert [_tool_def_name(t) for t in kept] == ["digisearch", "ticket_search_tickets"]
