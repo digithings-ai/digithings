@@ -12,8 +12,10 @@
  * runtime).
  *
  * Fail closed with **404**: an unset key, a missing header, or a mismatch all
- * return the identical not-found response, so the route's existence is never
- * disclosed. The key is Worker-only and is never forwarded to the Container.
+ * return the identical not-found response, so a refusal never reveals whether a
+ * key was valid. Non-POST methods answer `405` with `Allow: POST`, which
+ * discloses only that the path is Worker-owned. The key is Worker-only and is
+ * never forwarded to the Container.
  */
 import { inviteTokenValid } from "./occ-gate";
 import { SHARED_DIGICHAT_CONTAINER_ID } from "./paths";

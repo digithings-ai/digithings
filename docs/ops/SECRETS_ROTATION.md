@@ -287,6 +287,19 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Rollback** — re-put the previous secret and bump the id.
 **Gotchas** — proofs hold the old signature until expiry; the mint endpoint is the only source, so clients must re-mint.
 
+### 15. `DIGICHAT_ADMIN_KEY`
+
+**Blast radius** — the container reset lever stops working: `POST /_digichat-admin/container/reset` fails closed with `404`, so a wedged container can only be recovered by the fallbacks in [digichat-container-recovery.md](digichat-container-recovery.md). Chat itself is unaffected while the container is healthy.
+**Copies** — digichat Worker only (`apps/digichat-cloudflare/src/index.ts`, `src/admin-reset.ts`); operator custody `digithings-local/DIGICHAT_ADMIN_KEY` in Keychain. It is **never** forwarded into the container, and `src/env-vars-pin.test.ts` pins that absence.
+**Steps**
+1. Generate.
+2. From the repo root: `printf '%s' "$NEW" | npx --yes wrangler@4.133.0 secret put DIGICHAT_ADMIN_KEY --config apps/digichat-cloudflare/wrangler.toml`.
+3. Store the new value in Keychain under `digithings-local/DIGICHAT_ADMIN_KEY`.
+4. Deploy the digichat Worker.
+**Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://digithings.ai/_digichat-admin/container/reset -H "x-digi-admin-key: $NEW"` → `200` with `{"ok":true,…}`; the previous value → `404`. Note the rotate path **destroys the live instance**.
+**Rollback** — re-put the previous value and redeploy.
+**Gotchas** — `404` deliberately means "unset, missing, or wrong" so the route never reveals whether a key is valid; a `GET` returns `405` with `Allow: POST`. After the reset the first chat may answer `502 upstream_auth` while the sleeping stack container warms digikey — a cold-dependency artefact, not a bad token.
+
 ## Rotation cadence
 
 | Target | Recommended interval | Trigger | Owner role |
@@ -296,6 +309,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 | `DIGIKEY_DATABASE_URL` | 12 months, with the DB role | DB incident; role audit | data platform |
 | `MCP_EDGE_KEY` + tenant JSON | 12 months | edge 401 incident; tenant offboarding | Cloudflare / platform operator |
 | OCC tenant `token` in `DIGICHAT_EMBED_TENANTS` | on every staff off-handoff, and 12 months otherwise — **rotation is the only revocation** ([OCC_INVITE_KEY.md](OCC_INVITE_KEY.md)); before Act B2 it grants nothing, after Act B2 it is the whole perimeter | invite link leaked; staff offboarding | Cloudflare / platform operator, custody with security |
+| `DIGICHAT_ADMIN_KEY` | 12 months | operator offboarding; any suspected exposure | Cloudflare / platform operator, custody with security |
 | `GH_DISPATCH_TOKEN` | 12 months | CI PAT expiry (GitHub notifies); offboarding | CI / platform operator |
 | `CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN` | 12 months | token expiry; leaked-scope audit | Cloudflare / platform operator |
 | `AUTH_SECRET` | 12 months | auth incident; expected session reset | digichat owner |
