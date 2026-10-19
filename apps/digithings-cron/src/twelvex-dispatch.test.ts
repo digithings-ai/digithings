@@ -111,11 +111,50 @@ describe("dispatchTwelvex", () => {
     );
   });
 
+  it("prefers the twelve-x-only secret, and still accepts the shared token", async () => {
+    const job = ingestJob();
+    const makeRunner = () =>
+      vi.fn(async (_request: Request) =>
+        Response.json({ ok: true, exit_code: 0, duration_ms: 1, alert: "none" }),
+      );
+
+    // Dedicated secret wins even when the shared token is also set.
+    const dedicated = makeRunner();
+    await dispatchTwelvex(
+      {
+        DRY_RUN: "0",
+        RUNNER_AUTH_TOKEN: "shared-token",
+        TWELVEX_RUNNER_AUTH: "twelvex-token",
+        TWELVEX_RUNNER: { fetch: dedicated } as unknown as Fetcher,
+      },
+      job,
+      job.cron,
+    );
+    expect(dedicated.mock.calls[0][0].headers.get("Authorization")).toBe(
+      "Bearer twelvex-token",
+    );
+
+    // Transitional fallback: a deployment holding only the shared token still works.
+    const shared = makeRunner();
+    await dispatchTwelvex(
+      {
+        DRY_RUN: "0",
+        RUNNER_AUTH_TOKEN: "shared-token",
+        TWELVEX_RUNNER: { fetch: shared } as unknown as Fetcher,
+      },
+      job,
+      job.cron,
+    );
+    expect(shared.mock.calls[0][0].headers.get("Authorization")).toBe(
+      "Bearer shared-token",
+    );
+  });
+
   it("requires the auth token and the binding", async () => {
     const job = ingestJob();
     await expect(
       dispatchTwelvex({ DRY_RUN: "0" }, job, job.cron),
-    ).rejects.toThrow("RUNNER_AUTH_TOKEN is required");
+    ).rejects.toThrow("TWELVEX_RUNNER_AUTH or RUNNER_AUTH_TOKEN is required");
     await expect(
       dispatchTwelvex(
         { DRY_RUN: "0", RUNNER_AUTH_TOKEN: "runner-token" },
