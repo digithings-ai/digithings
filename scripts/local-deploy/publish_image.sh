@@ -91,7 +91,11 @@ if [ "$IMAGE" = "digillm" ]; then
   probe_container="${IMAGE}-probe-$$"
   probe_cleanup() { docker rm --force "$probe_container" >/dev/null 2>&1 || true; }
 else
-  probe_container="$(docker run --detach --rm --publish 127.0.0.1::3000 "$NAME")"
+  # The probe runs the image standalone, with no digigraph/digisearch/
+  # digiquant/digitrace to reach. DIGICHAT_ENABLED_SERVICES="" (set, not
+  # unset) makes getEnabledServiceIds() enable none of them, so /api/health
+  # reports the image's own version instead of 503 on unreachable upstreams.
+  probe_container="$(docker run --detach --rm --publish 127.0.0.1::3000 -e DIGICHAT_ENABLED_SERVICES= "$NAME")"
   probe_cleanup() { docker rm --force "$probe_container" >/dev/null 2>&1 || true; }
 fi
 trap probe_cleanup EXIT
