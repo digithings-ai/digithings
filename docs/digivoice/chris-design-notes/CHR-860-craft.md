@@ -6,7 +6,7 @@ Chris visual: NOT Claude-Code / OpenClaw quality yet. Fix on worktree
 ## Must
 1. **Redraw in place** — no duplicated menu lines as you navigate. Full-screen or
    alternate buffer + clear + redraw each key; never scroll-append menus.
-2. **DigiThings / DigiVoice logo header** matching digithings.ai PixelWordmark look
+2. **digithings / DigiVoice logo header** matching digithings.ai PixelWordmark look
    (pixel block ASCII / braille wordmark — simple, not a web UI). Title: DigiVoice setup.
 3. **Full CLI nav**: ↑↓ highlight, Enter select, Space toggle multi where relevant,
    Esc back, q quit; clear formatting (inverse/bold highlight, no scrap lines).
