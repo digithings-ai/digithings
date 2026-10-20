@@ -67,6 +67,7 @@ import {
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
@@ -166,6 +167,12 @@ export type ThreadProps = {
   reasoningMode?: GroupDisclosureMode | undefined;
   /** Disclosure mode for grouped tool-call runs. Default collapsed. */
   toolCallsMode?: GroupDisclosureMode | undefined;
+  /**
+   * Rendered as a row inside the composer border, under the input. The
+   * digichat skin passes its model / tools / search / view / context chips;
+   * other hosts leave it unset.
+   */
+  composerToolbar?: ReactNode;
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -364,6 +371,7 @@ export const Thread: FC<ThreadProps> = ({
   hiddenAttachmentNames,
   reasoningMode = "collapsed",
   toolCallsMode = "collapsed",
+  composerToolbar,
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -391,6 +399,7 @@ export const Thread: FC<ThreadProps> = ({
                   autoFocus={autoFocus}
                   placeholder={placeholder}
                   composerLayout={composerLayout}
+                  composerToolbar={composerToolbar}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -415,7 +424,8 @@ const ThreadRoot: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
   composerLayout: ComposerLayout;
-}> = ({ autoFocus, placeholder, composerLayout }) => {
+  composerToolbar?: ReactNode;
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -494,6 +504,7 @@ const ThreadRoot: FC<{
               autoFocus={autoFocus}
               placeholder={placeholder}
               layout={composerLayout}
+              toolbar={composerToolbar}
             />
             {Footer ? <Footer /> : null}
           </div>
@@ -700,7 +711,8 @@ const Composer: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
   layout: ComposerLayout;
-}> = ({ autoFocus, placeholder = "Send a message...", layout }) => {
+  toolbar?: ReactNode;
+}> = ({ autoFocus, placeholder = "Send a message...", layout, toolbar }) => {
   const compact = layout === "compact";
   const { onComposerSubmit, slash, mention } = useContext(ThreadChromeContext);
   const edit = useContext(ComposerEditContext);
@@ -855,6 +867,11 @@ const Composer: FC<{
           </div>
         </div>
       </ComposerPrimitive.AttachmentDropzone>
+      {toolbar ? (
+        <div data-slot="aui_composer-toolbar" className="aui-composer-toolbar">
+          {toolbar}
+        </div>
+      ) : null}
       {slash ? (
         <ComposerTriggerPopover
           char="/"
@@ -893,8 +910,6 @@ const ComposerSendControls: FC = () => {
   const sendDisabled = useAuiState(
     (s) => !s.composer.canSend || (s.thread.isRunning && !s.thread.capabilities.queue),
   );
-  const sendRef = useRef<HTMLButtonElement | null>(null);
-
   // A `type="submit"` button already submits its form on activation, so the
   // click must not also do it: `preventDefault()` suppresses that implicit
   // submission, and the explicit `requestSubmit()` below replaces it with one
@@ -903,7 +918,7 @@ const ComposerSendControls: FC = () => {
   // turn more than once.
   const submitComposer = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    const form = sendRef.current?.closest("form");
+    const form = event.currentTarget.closest("form");
     if (form) {
       form.requestSubmit();
       return;
@@ -954,10 +969,10 @@ const ComposerSendControls: FC = () => {
         </AuiIf>
       </AuiIf>
       <AuiIf condition={(s) => !s.thread.isRunning}>
-        <TooltipIconButton
-          ref={sendRef}
-          tooltip="Send (Enter)"
-          side="bottom"
+        {/* No tooltip/dropdown on send: the button submits on click and on
+            Enter, so the "Send (Enter)" popover was noise. */}
+        <Button
+          dress="chat"
           type="submit"
           variant="ghost"
           size="icon"
@@ -971,7 +986,7 @@ const ComposerSendControls: FC = () => {
             label="Send"
             className="aui-composer-send-icon size-3.5"
           />
-        </TooltipIconButton>
+        </Button>
       </AuiIf>
       <AuiIf condition={(s) => s.thread.isRunning}>
         <ComposerPrimitive.Cancel asChild>
