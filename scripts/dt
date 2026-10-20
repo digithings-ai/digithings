@@ -359,8 +359,10 @@ def main(argv: "list[str] | None" = None) -> int:
     root = repo_root()
     # The local stack's defaults live in the environment, so the plan's
     # subprocesses, the health gate and the URL table all read the same
-    # values. setdefault only: an explicit DT_SUPABASE_PORT (or any other
-    # knob) from the operator always wins.
+    # values. The port knob is resolved, not merely defaulted: a value that
+    # cannot carry the whole port set never becomes one, and everything
+    # downstream reads the port that is actually used. The other knobs are
+    # setdefault only, so an explicit value from the operator wins.
     localenv.apply_defaults(root)
     handlers = {
         "preflight": cmd_preflight,
