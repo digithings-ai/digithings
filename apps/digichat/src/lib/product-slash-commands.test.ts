@@ -49,6 +49,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     mcpServers: [],
     sessionKey: "embed-host",
     openSettings: vi.fn(),
+    openHelp: vi.fn(),
     openTools: vi.fn(),
     openMcp: vi.fn(),
     openByok: vi.fn(),
@@ -248,10 +249,11 @@ describe("executeSlashDef", () => {
     expect(a.newThread).toHaveBeenCalledOnce();
   });
 
-  it("does not toggle tools on /help (palette is the help; do not dump into the composer)", () => {
+  it("opens the help panel on /help without touching tools", () => {
     const a = api();
     const def = { id: "help" as const, names: ["/help"], needsArg: false, hint: "" };
     executeSlashDef(def, "", a);
+    expect(a.openHelp).toHaveBeenCalledOnce();
     expect(a.openSettings).not.toHaveBeenCalled();
     expect(a.setDigisearch).not.toHaveBeenCalled();
   });
