@@ -38,6 +38,22 @@ SCRIPT = REPO_ROOT / "scripts" / "package_r5_image_inputs.py"
 
 pytestmark = pytest.mark.unit
 
+# The npm inputs the digichat image's npm step consumes, written out here
+# instead of read from the module under test. A test that compares the
+# provenance record against the function that produced it cannot see a scope
+# that is too narrow: the record and the scope agree while both are wrong.
+# apps/dashboard is in the set because the image copies that manifest and the
+# root lockfile installs the app from it.
+NPM_SCOPE_INPUTS = frozenset(
+    {
+        "@digithings/design",
+        "@digithings/ui",
+        "@digithings/digichat-ui",
+        "@digithings/hero-banner",
+        "dashboard",
+    }
+)
+
 
 def _load() -> ModuleType:
     spec = importlib.util.spec_from_file_location("package_r5_image_inputs", SCRIPT)
@@ -246,3 +262,106 @@ def test_digest_falls_back_loudly_when_git_is_unavailable(
     digest = mod.content_digest(root)
     assert digest != hashlib.sha256().hexdigest(), "an unreadable tree must not hash to nothing"
     assert "computed without git" in capsys.readouterr().err
+
+
+def _fake_npm_pack(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Replace ``npm pack`` with a fake that records the packed workspaces."""
+    packed: list[str] = []
+
+    def fake_run(cmd: list[str], *, cwd: Path | None = None) -> None:
+        if cmd[:2] == ["npm", "pack"]:
+            name = cmd[cmd.index("--workspace") + 1]
+            dest = Path(cmd[cmd.index("--pack-destination") + 1])
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / f"{name.split('/')[-1]}-0.0.0.tgz").write_bytes(b"tar")
+            packed.append(name)
+
+    monkeypatch.setattr(mod, "_run", fake_run)
+    return packed
+
+
+def test_npm_only_packages_the_digichat_inputs_and_refuses_a_worker_deploy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The digichat image installs npm tarballs; the publish lane must be able
+    to package exactly those, and the tree must not read as a complete one.
+
+    The digichat image COPYs image-packages/digichat/ and nothing else, so
+    packaging it must not need uv or the wheels — a release must not depend on
+    unrelated Python packages building. But a partial tree must not pass a full
+    --check-only: a worker deploy built on it would ship an image without its
+    wheels, which is the stale ship the check exists to refuse.
+    """
+    monkeypatch.setattr(mod, "OUT", tmp_path)
+    packed = _fake_npm_pack(monkeypatch)
+
+    assert mod.main(["--npm-only"]) == 0
+    assert sorted(packed) == sorted(mod.NPM_PACKAGES), (
+        "every npm workspace the image installs must be packed"
+    )
+    npm_dir = tmp_path / "digichat" / "npm"
+    assert npm_dir.is_dir() and any(npm_dir.iterdir()), "the npm tarballs must land"
+    assert (tmp_path / "digichat" / "manifests" / "ui" / "package.json").is_file(), (
+        "the workspace manifests the Dockerfile COPYs must land"
+    )
+
+    document = json.loads((tmp_path / "PROVENANCE.json").read_text(encoding="utf-8"))
+    assert document["scope"] == mod.NPM_SCOPE, (
+        "a partial tree must say it is partial, or a reader cannot tell it "
+        "apart from a complete one"
+    )
+    assert set(mod.npm_input_paths()) == set(NPM_SCOPE_INPUTS), (
+        "the npm scope must cover every manifest the image copies, apps/dashboard included"
+    )
+    assert set(document["packages"]) == set(NPM_SCOPE_INPUTS), (
+        "the record must cover exactly the inputs that were packaged"
+    )
+
+    # The npm-scoped check passes on this tree...
+    assert mod.check_only(mod.npm_input_paths()) == 0
+    # ...and the full check refuses it: a worker deploy must not find a
+    # complete tree here.
+    capsys.readouterr()
+    assert mod.check_only() == 1
+    refusal = capsys.readouterr().out
+    missing = [line for line in refusal.splitlines() if line.strip().startswith("missing:")]
+    assert missing, "the refusal must say what is missing"
+    assert "dashboard" not in missing[0], "the refusal must not name a manifest the image does copy"
+
+
+@pytest.mark.parametrize(
+    "manifest_key",
+    ["dashboard", "ui"],
+    ids=["dashboard-manifest", "ui-manifest-control"],
+)
+def test_the_npm_scope_sees_a_changed_workspace_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, manifest_key: str
+) -> None:
+    """A manifest the image copies must sit inside the npm freshness scope.
+
+    The digichat Dockerfile COPYs the dashboard manifest out of
+    ``image-packages/digichat/`` and the root lockfile installs that app from
+    it, so a change to ``apps/dashboard/package.json`` makes the packaged tree
+    stale. With the dashboard outside the scope the npm-scoped check answered
+    "ok" for exactly that change, and the stale manifest surfaced inside the
+    image as an ``npm ci`` mismatch instead of the check's own message.
+
+    The ``ui`` case is the control: it was inside the scope all along, so it
+    proves the comparator fires and the dashboard zero is a scope hole rather
+    than a dead check.
+    """
+    monkeypatch.setattr(mod, "OUT", tmp_path)
+    _fake_npm_pack(monkeypatch)
+    assert mod.main(["--npm-only"]) == 0
+
+    real_digest = mod.content_digest
+    changed_root = mod.NPM_MANIFESTS[manifest_key].parent
+
+    def digest_with_a_change(root: Path) -> str:
+        digest = real_digest(root)
+        return "0" * 64 if root == changed_root else digest
+
+    monkeypatch.setattr(mod, "content_digest", digest_with_a_change)
+    assert mod.check_only(mod.npm_input_paths()) == 1, (
+        f"a changed {manifest_key} manifest must make the npm-scoped check refuse"
+    )
