@@ -394,7 +394,7 @@ seam helpers in `research/data/queries.py` — `r2_backend_enabled()`,
 `r2_close_rows(*, tickers, since, until)`,
 `r2_close_rows_tolerant(*, tickers, since, until, context)`,
 `r2_ohlcv_rows(*, tickers, since, until)`, `r2_manifest_seal()` — consumed by
-the five ops scripts (`execute_at_open.py`, `fill-entry-prices.py`,
+the five ops scripts (`execute_at_open.py`, `fill_entry_prices.py`,
 `refresh_performance_metrics.py`, `verify_nav_replay.py`,
 `finalize_period_accounting.py`) plus the research/portfolio readers that
 previously hit the Supabase market tables. Price-technicals reads are R2-only
@@ -416,7 +416,7 @@ Freshness: reader-side `research/data/freshness.py::assert_market_data_fresh`
 cron-side `data/prices/refresh_gate.py::staleness_gate` (seal ≤ 5 trading
 days — breach keeps the prior objects serving, writes the manifest
 `stale=true`, exits non-zero). Two Supabase market reads remain by design:
-same-day execution (`d > seal` — `execute_at_open` / `fill-entry-prices`
+same-day execution (`d > seal` — `execute_at_open` / `fill_entry_prices`
 price opens and fills from `price_history`; D3) and `FEDPROB/*`
 prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
 
