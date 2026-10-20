@@ -5,9 +5,8 @@
  * slash palette: opaque, composer-width, command/label left, value right.
  * Arrow keys move; Enter toggles, opens a nested list, or commits an exclusive
  * pick (then the menu closes). Escape closes. Left/Right on `/language` cycles
- * the full ISO list. Exclusive rows mark the selection with the same `>`
- * chevron as a user message, in a fixed left slot, and nothing else: hover
- * moves the keyboard cursor but never the mark.
+ * the full ISO list. The hovered or arrow-key row shows the same `>` chevron
+ * as a user message and shifts its content right to make room for it.
  */
 
 import {
@@ -1634,18 +1633,34 @@ export function EmbedComposerMenu({
                     onClick={() => row.activate()}
                     onKeyDown={(e) => onRowKey(e, index)}
                   >
-                    {/* Selection is the user-message chevron, in a fixed slot:
-                      it marks the checked row only, so hover never moves it,
-                      reflows a row or resizes a row. */}
-                    <span className="aui-menu-cursor" aria-hidden>
-                      {exclusive && row.checked ? (
+                    {/* The user-message chevron marks the hovered / arrow-key
+                        row and pushes that row's content right to make room.
+                        A checked row keeps its right-hand diamond instead: no
+                        chevron, so the two marks never double up. */}
+                    {index === cursor && !(exclusive && row.checked) ? (
+                      <span className="aui-menu-cursor" aria-hidden>
                         <DotMatrix state="user" className="size-3.5" />
-                      ) : null}
-                    </span>
+                      </span>
+                    ) : null}
                     <span className="min-w-0 shrink-0 font-medium">{row.label}</span>
-                    {row.value ? (
+                    {row.value || (exclusive && row.checked) ? (
                       <span className="text-muted-foreground ml-auto flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
-                        <span className="truncate">{row.value}</span>
+                        {row.value ? <span className="truncate">{row.value}</span> : null}
+                        {exclusive && row.checked ? (
+                          <span
+                            data-slot="dropdown-menu-radio-item-indicator"
+                            className="inline-flex shrink-0"
+                          >
+                            <span className="aui-menu-mark inline-flex shrink-0" aria-hidden>
+                              {[0, 1, 0, 1, 1, 1, 0, 1, 0].map((on, cell) => (
+                                <span
+                                  key={cell}
+                                  className={on ? "aui-menu-mark-cell is-on" : "aui-menu-mark-cell"}
+                                />
+                              ))}
+                            </span>
+                          </span>
+                        ) : null}
                       </span>
                     ) : null}
                   </button>
