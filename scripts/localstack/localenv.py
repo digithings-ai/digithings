@@ -38,6 +38,16 @@ SUPABASE_WORKDIR_REL = "digiquant/.supabase-local"
 #: 127.0.0.1:54329, which on this host is Paperclip's own board database.
 LOCAL_DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
 
+#: The digisearch service's own monitor store. The contract renders a
+#: postgres DSN for this key, but the consumer is a SQLite store:
+#: ``get_store()`` hands the value straight to sqlite3
+#: (digisearch/src/digisearch/monitors/store.py), and the local stack has
+#: no ``digivault`` database for a DSN to name. The compose digisearch
+#: service sets DIGI_WORKSPACE=/data/monitors (docker-compose.yml) and
+#: keeps that home on the digisearch_monitors volume, so the store's own
+#: fallback resolves to this path.
+LOCAL_DIGISEARCH_MONITORS_DB = "/data/monitors/.digisearch/monitors.sqlite3"
+
 
 def apply_defaults(root: Path, env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """Set the local-stack defaults without overriding the operator."""
@@ -71,6 +81,11 @@ def local_overrides(env: Mapping[str, str], existing: Mapping[str, str]) -> Dict
         # service's own sqlite default instead; digikey creates its own
         # schema in it.
         "DIGIKEY_DATABASE_URL": LOCAL_DIGIKEY_DATABASE_URL,
+        # The contract's digisearch monitors DSN names 127.0.0.1:54329 -
+        # Paperclip's own board database on this host - and it is a postgres
+        # DSN the SQLite monitor store cannot open. The local stack uses
+        # the digisearch service's own monitor store path instead.
+        "DIGISEARCH_MONITORS_DB": LOCAL_DIGISEARCH_MONITORS_DB,
         # The compose default is 0 (production wants a stable PEM). Local
         # Docker dev opts in explicitly.
         "DIGIKEY_ALLOW_EPHEMERAL_KEY": "1",
