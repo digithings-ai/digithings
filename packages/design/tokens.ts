@@ -13,13 +13,13 @@ export const designTokens = {
       "hex": "#D4C5A0",
       "rgb24": 13944224
     },
+    "accent-digibot": {
+      "hex": "#B87840",
+      "rgb24": 12089408
+    },
     "accent-digichat": {
       "hex": "#E2708A",
       "rgb24": 14839946
-    },
-    "accent-digiclaw": {
-      "hex": "#B87840",
-      "rgb24": 12089408
     },
     "accent-digidev": {
       "hex": "#6B9DFF",
@@ -245,13 +245,13 @@ export const designTokens = {
       "hex": "#D4C5A0",
       "rgb24": 13944224
     },
+    "accent-digibot": {
+      "hex": "#B87840",
+      "rgb24": 12089408
+    },
     "accent-digichat": {
       "hex": "#E2708A",
       "rgb24": 14839946
-    },
-    "accent-digiclaw": {
-      "hex": "#B87840",
-      "rgb24": 12089408
     },
     "accent-digidev": {
       "hex": "#6B9DFF",
