@@ -79,6 +79,10 @@ export function WorkChain({
     ),
   );
 
+  // The work is done when the answer starts: the reasoning and the tool
+  // calls are finished even though the token stream is still running. The
+  // marker and the title follow the work; the disclosure follows the turn.
+  const working = running || !answerStarted;
   const busy = running || turnRunning;
   const open = userOpen ?? (
     openAtRest
@@ -105,15 +109,15 @@ export function WorkChain({
             the title never shifts when the turn ends — and the check mark
             stays where it belongs, on the tool rows. */}
         <DotMatrix
-          state={busy ? "loading" : "idle"}
-          label={busy ? "Working" : "Worked"}
+          state={working ? "loading" : "idle"}
+          label={working ? "Working" : "Worked"}
           className="!size-3 shrink-0"
         />
         <span
           data-slot="aui_work-chain-label"
           className="aui-work-chain-label inline-block leading-none"
         >
-          {busy ? "Working" : "Worked"}
+          {working ? "Working" : "Worked"}
         </span>
         <span
           data-slot="aui_work-chain-chevron"

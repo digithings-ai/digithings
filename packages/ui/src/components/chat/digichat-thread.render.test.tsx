@@ -55,6 +55,41 @@ const TOOL_MESSAGES: ThreadMessageLike[] = [
   },
 ];
 
+/**
+ * Two work runs with only a source between them: one chain, not two.
+ * The agent reasoned, called a tool, pulled a source, then reasoned and
+ * called a tool again without writing anything in between.
+ */
+const TWO_RUNS_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "r1",
+        toolName: "digisearch",
+        argsText: "{}",
+        result: "ok",
+      },
+      {
+        type: "source",
+        sourceType: "url",
+        id: "s9",
+        url: "https://digithings.ai/docs",
+        title: "docs",
+      },
+      {
+        type: "tool-call",
+        toolCallId: "r2",
+        toolName: "digivault_get_note",
+        argsText: "{}",
+        result: "ok",
+      },
+      { type: "text", text: "one answer" },
+    ],
+  },
+];
+
 const GLOOMBERB_MESSAGES: ThreadMessageLike[] = [
   {
     role: "assistant",

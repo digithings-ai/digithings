@@ -205,6 +205,32 @@ export type ThreadMentionTrigger = {
   iconMap?: SlashPopoverProps["iconMap"];
 };
 
+/**
+ * The chain grouping.
+ *
+ * A source or a status part between two work runs must not split the chain:
+ * only text ends a work run, so two runs with nothing but a source between
+ * them are one chain, not two. The library's helper covers the part types it
+ * knows; the status parts (`data-*`) are matched here, and the memo
+ * fingerprint is kept so the tree is not rebuilt on every render.
+ */
+const chainGroupBy = (() => {
+  const base = groupPartByType({
+    reasoning: ["group-chainOfThought", "group-reasoning"],
+    "tool-call": ["group-chainOfThought", "group-tool"],
+    "standalone-tool-call": [],
+    source: ["group-chainOfThought"],
+  });
+  const fn = (part: { type: string }, context?: unknown) => {
+    if (part.type.startsWith("data-")) return ["group-chainOfThought"] as const;
+    return base(part as never, context as never);
+  };
+  (fn as unknown as Record<symbol, string>)[
+    Symbol.for("@assistant-ui/groupBy.memoKey")
+  ] = "digichat:chain-v2";
+  return fn;
+})();
+
 const DEFAULT_THREAD_ACTIONS: Required<ThreadActions> = {
   undo: true,
   feedback: false,
@@ -1109,6 +1135,9 @@ const AssistantMessage: FC = () => {
   // The whole turn, not just the group: the tools answer faster than the
   // chain can fold, and a group that closes between two of them flickers.
   const turnRunning = useAuiState((s) => s.thread.isRunning);
+  // The message parts, to tell a chain that holds real work from one that
+  // only holds a source or a status part.
+  const messageParts = useAuiState((s) => s.message.parts);
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -1125,11 +1154,7 @@ const AssistantMessage: FC = () => {
         className="aui-assistant-message-content text-foreground min-w-0 leading-relaxed wrap-break-word"
       >
         <MessagePrimitive.GroupedParts
-          groupBy={groupPartByType({
-            reasoning: ["group-chainOfThought", "group-reasoning"],
-            "tool-call": ["group-chainOfThought", "group-tool"],
-            "standalone-tool-call": [],
-          })}
+          groupBy={chainGroupBy}
         >
           {({ part, children }) => {
             switch (part.type) {
