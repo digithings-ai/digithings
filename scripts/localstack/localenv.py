@@ -40,9 +40,15 @@ LOCAL_DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
 
 
 def apply_defaults(root: Path, env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-    """Set the local-stack defaults without overriding the operator."""
+    """Set the local-stack defaults without overriding the operator.
+
+    The port is written back as the RESOLVED port, not the raw knob: a
+    value that cannot carry the whole port set never becomes one, and the
+    health gate, this file and the generated config all have to read the
+    same port.
+    """
     env = os.environ if env is None else env
-    env.setdefault(PORT_ENV, str(api_port(env)))
+    env[PORT_ENV] = str(api_port(env))
     env.setdefault(KEYCHAIN_PREFIX_ENV, DEFAULT_KEYCHAIN_PREFIX)
     env.setdefault(GENERATE_CWD_ENV, str(Path(root) / SUPABASE_WORKDIR_REL))
     return env
