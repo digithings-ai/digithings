@@ -120,7 +120,6 @@ export function toStockChatPrefsConfig(
 ): StockChatPrefsConfig {
   return {
     catalog: clientConfig.tools.catalog,
-    backendType: clientConfig.backendType,
     servers: clientConfig.mcp.servers,
     defaultLanguage: clientConfig.chrome.defaultLanguage,
     defaultModel: clientConfig.models.default,

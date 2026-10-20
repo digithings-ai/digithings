@@ -1174,11 +1174,11 @@ function EmbedChat({
       // The backend that serves this chat: the own-key provider the
       // session carries, else the house backend. This is the label the
       // composer chip shows, so it follows the active provider.
-      providerLabel: backendLabel(byokIsSet ? byokProvider : null),
+      providerLabel: backendLabel(
+        byokIsSet ? byokProvider : null,
+        stockClient.backendType,
+      ),
       showModels,
-      // The composer footer names the backend from this: a Foundry tenant is
-      // served by its own agent, not by the house model provider.
-      backendType: stockClient.backendType,
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,

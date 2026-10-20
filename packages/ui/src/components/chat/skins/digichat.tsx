@@ -422,23 +422,12 @@ export function DigichatSkin({
       workVisibility={workVisibility}
       composerToolbar={
         prefs && prefs.prefs.toolbar !== false ? (
-          <DigichatComposerToolbar
-            prefs={prefs}
-            providerLabel={backendLabel(prefs.backendType)}
-          />
+          <DigichatComposerToolbar prefs={prefs} />
         ) : undefined
       }
       scrollbars={prefs?.prefs.scrollbars ?? "always"}
     />
   );
-}
-
-/**
- * The name of the backend the tenant is served by. A Foundry tenant is
- * answered by its own agent, so the house model provider would be a lie.
- */
-function backendLabel(backendType: string | undefined): string {
-  return backendType === "foundry" ? "Azure AI Foundry" : "cheaperinference";
 }
 
 function threadTurns(messages: readonly unknown[]): TranscriptTurn[] {

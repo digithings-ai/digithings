@@ -37,6 +37,7 @@ export function WorkChain({
   openAtRest = false,
   foldOnAnswer = false,
   running = false,
+  followedByText = false,
   className,
 }: {
   children: ReactNode;
@@ -54,42 +55,36 @@ export function WorkChain({
   foldOnAnswer?: boolean;
   /** The chain group is running (a tool or the reasoning is streaming). */
   running?: boolean;
+  /**
+   * A text part follows this chain in the message: the agent wrote
+   * something, so the work that came before it is finished. Only the answer
+   * ends a work run — a second run of tool calls and reasoning without text
+   * in between belongs to the same block.
+   */
+  followedByText?: boolean;
   className?: string;
 }) {
-  const turnRunning = useAuiState((s) => s.thread.isRunning);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const [settled, setSettled] = useState(false);
 
+  // The work of this block is over when text follows it: the agent wrote
+  // something, so it stopped reasoning and stopped calling tools for that
+  // run. Until then the block is still working — a second run of tool calls
+  // and reasoning without text in between is the same block, not a new one.
+  // The marker and the title follow the work; the disclosure follows it too.
+  const working = !followedByText;
+
   useEffect(() => {
-    if (running || turnRunning) {
+    if (working) {
       setSettled(false);
       return;
     }
     const id = setTimeout(() => setSettled(true), SETTLE_MS);
     return () => clearTimeout(id);
-  }, [running, turnRunning]);
+  }, [working]);
 
-  // The answer has started: the text part of this message carries content.
-  const answerStarted = useAuiState((s) =>
-    s.message.parts.some(
-      (part) =>
-        part.type === "text" &&
-        typeof (part as { text?: string }).text === "string" &&
-        (part as { text?: string }).text !== "",
-    ),
-  );
-
-  // The work is done when the answer starts: the reasoning and the tool
-  // calls are finished even though the token stream is still running. The
-  // marker and the title follow the work; the disclosure follows the turn.
-  const working = running || !answerStarted;
-  const busy = running || turnRunning;
   const open = userOpen ?? (
-    openAtRest
-      ? true
-      : foldOnAnswer
-        ? busy && !answerStarted
-        : !settled && busy
+    openAtRest ? true : foldOnAnswer ? working : !settled && working
   );
 
   return (

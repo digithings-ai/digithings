@@ -108,12 +108,6 @@ export type EmbedChatPrefsApi = {
    */
   providerLabel?: string;
   showModels: boolean;
-  /**
-   * The tenant's backend discriminator ("digigraph" | "foundry" | ...). The
-   * composer footer names the backend from it: a Foundry tenant is served by
-   * its own agent, so the house model names would be a lie.
-   */
-  backendType?: string;
   hasDigisearch: boolean;
   hasVault: boolean;
   hasSessions: boolean;

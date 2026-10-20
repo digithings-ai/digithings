@@ -219,10 +219,12 @@ const chainGroupBy = (() => {
     reasoning: ["group-chainOfThought", "group-reasoning"],
     "tool-call": ["group-chainOfThought", "group-tool"],
     "standalone-tool-call": [],
-    source: ["group-chainOfThought"],
+    source: ["group-chainOfThought", "group-tool"],
   });
   const fn = (part: { type: string }, context?: unknown) => {
-    if (part.type.startsWith("data-")) return ["group-chainOfThought"] as const;
+    if (part.type === "data" || part.type.startsWith("data-")) {
+      return ["group-chainOfThought", "group-tool"] as const;
+    }
     return base(part as never, context as never);
   };
   (fn as unknown as Record<symbol, string>)[
@@ -1138,6 +1140,21 @@ const AssistantMessage: FC = () => {
   // The message parts, to tell a chain that holds real work from one that
   // only holds a source or a status part.
   const messageParts = useAuiState((s) => s.message.parts);
+  // Only text ends a work run: a chain with a text part after it has
+  // answered, so its work is over. A chain without one is still the agent's
+  // current work, even if the model streams another run of tool calls.
+  const hasWork = messageParts.some(
+    (part) => part.type === "reasoning" || part.type === "tool-call",
+  );
+  const followedByText = (indices: readonly number[]) => {
+    const last = indices.length > 0 ? indices[indices.length - 1] : -1;
+    return messageParts.some((part, index) => {
+      if (index <= last) return false;
+      if (part.type !== "text") return false;
+      const text = (part as { text?: unknown }).text;
+      return typeof text === "string" && text.trim() !== "";
+    });
+  };
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -1176,6 +1193,7 @@ const AssistantMessage: FC = () => {
                       openAtRest={disclosure.openAtRest}
                       foldOnAnswer={disclosure.foldOnAnswer}
                       running={part.status.type === "running"}
+                      followedByText={followedByText(part.indices)}
                     >
                       {children}
                     </WorkChain>
@@ -1188,6 +1206,14 @@ const AssistantMessage: FC = () => {
                 }
                 const locked = toolCallsMode === "locked_open";
                 const running = part.status.type === "running";
+                // The group can hold the source and status parts that sit
+                // between two tool runs; the count is the tool calls only.
+                const toolCount = part.indices.filter(
+                  (index) => messageParts[index]?.type === "tool-call",
+                ).length;
+                if (toolCount === 0) {
+                  return <div data-slot="aui_chain-of-thought">{children}</div>;
+                }
                 return (
                   <ToolGroupRoot
                     variant="ghost"
@@ -1201,7 +1227,7 @@ const AssistantMessage: FC = () => {
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
                     <ToolGroupTrigger
-                      count={part.indices.length}
+                      count={toolCount}
                       active={part.status.type === "running"}
                       disabled={locked}
                     />
@@ -1263,7 +1289,11 @@ const AssistantMessage: FC = () => {
                   </div>
                 );
               case "indicator":
-                return <AssistantWorkingIndicator />;
+                // The work block carries the activity animation. The
+                // standalone indicator is only for a turn that has not
+                // produced anything yet — it must not come back once the
+                // work block is on screen.
+                return hasWork ? null : <AssistantWorkingIndicator />;
               case "source":
                 // Citations are inline markdown links in the answer (DIG-1210);
                 // rendering source parts here stacked duplicate rows between
