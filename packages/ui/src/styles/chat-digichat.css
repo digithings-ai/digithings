@@ -1351,7 +1351,10 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"] {
   max-width: none;
-  width: 100%;
+  /* The row hugs its content: a button is centred by default, which is what
+     put the title in the middle and the arrow at the far edge. */
+  width: fit-content;
+  text-align: left;
   align-items: center;
   gap: 0.45rem;
   padding: 0;
@@ -1381,15 +1384,15 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   box-shadow: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-icon"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-reasoning-trigger-icon {
   display: inline-flex;
-  width: 0.875rem;
-  height: 0.875rem;
+  width: 0.75rem;
+  height: 0.75rem;
   flex-shrink: 0;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-label"] {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   background: none;
   animation: none;
@@ -1440,7 +1443,7 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger"] {
-  gap: 0;
+  gap: 0.35rem;
   padding: 0;
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -1458,7 +1461,17 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-chevron"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-loader"] {
-  display: none;
+  display: inline-flex;
+  width: 0.75rem;
+  height: 0.75rem;
+  align-items: center;
+  justify-content: center;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-chevron"] [data-slot="dot-matrix"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix"] {
+  width: 0.75rem;
+  height: 0.75rem;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-label"] {
@@ -1498,7 +1511,8 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"] {
   align-items: center;
-  width: 100%;
+  width: fit-content;
+  text-align: left;
   gap: 0.45rem;
   padding: 0;
   font-family: var(--font-mono);
@@ -1514,7 +1528,7 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger-label"] {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   font-weight: 400;
   font-size: inherit;
