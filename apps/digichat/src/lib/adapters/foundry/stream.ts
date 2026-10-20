@@ -815,13 +815,17 @@ function retryAfterMs(err: unknown): number | null {
   // Azure sends millisecond variants alongside the standard header; prefer the
   // finer-grained one when both are present.
   for (const name of ["retry-after-ms", "x-ms-retry-after-ms"]) {
-    const ms = Number(headers?.get?.(name));
+    const rawMs = headers?.get?.(name);
+    // Headers.get returns null when absent, and Number(null) is 0 — which would
+    // start every retry immediately and make the schedule dead code.
+    if (rawMs == null || rawMs.trim() === "") continue;
+    const ms = Number(rawMs);
     if (Number.isFinite(ms) && ms >= 0) {
       return Math.min(ms, CAPACITY_RETRY_AFTER_CAP_MS);
     }
   }
   const raw = headers?.get?.("retry-after");
-  if (!raw) return null;
+  if (raw == null || raw.trim() === "") return null;
   const seconds = Number(raw);
   if (Number.isFinite(seconds) && seconds >= 0) {
     return Math.min(seconds * 1000, CAPACITY_RETRY_AFTER_CAP_MS);
@@ -838,7 +842,7 @@ function retryAfterMs(err: unknown): number | null {
  * and `responses.create` carries the input — retrying it there would append the
  * user turn twice. Throttling happens before processing, so 429 is safe.
  */
-function capacityRetryDelayMs(
+export function capacityRetryDelayMs(
   err: unknown,
   attempt: number,
   schedule: readonly number[],
