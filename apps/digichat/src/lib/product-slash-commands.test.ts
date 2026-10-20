@@ -309,6 +309,18 @@ describe("executeSlashDef", () => {
     expect(a.openTools).toHaveBeenCalledOnce();
   });
 
+  it("keeps /view on the three levels and folds the retired hidden one", () => {
+    const a = api();
+    const def = { id: "view" as const, names: ["/view"], needsArg: false, hint: "" };
+    executeSlashDef(def, "verbose", a);
+    expect(a.setView).toHaveBeenCalledWith("verbose");
+    // A stale invocation still says `hidden`; it means the titles only.
+    executeSlashDef(def, "hidden", a);
+    expect(a.setView).toHaveBeenLastCalledWith("quiet");
+    executeSlashDef(def, "nonsense", a);
+    expect(a.openView).toHaveBeenCalledOnce();
+  });
+
   it("exposes extra MCP servers as slash tools", () => {
     const extra = extraSlashDefs(
       api({

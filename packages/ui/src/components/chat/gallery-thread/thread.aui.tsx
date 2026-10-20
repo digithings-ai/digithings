@@ -1109,14 +1109,14 @@ const AssistantWorkingIndicator: FC = () => {
       <DotMatrix
         state="loading"
         label="Assistant is working"
-        className="size-3.5"
+        className="!size-3"
       />
       {wakePhase === "waking" ? (
-        <span className="text-sm text-muted-foreground">Waking up services…</span>
+        <span className="text-xs text-muted-foreground">Waking up services…</span>
       ) : connectionState === "warming_up" ? (
-        <span className="text-sm text-muted-foreground">{connectionMessage ?? "Warming up…"}</span>
+        <span className="text-xs text-muted-foreground">{connectionMessage ?? "Warming up…"}</span>
       ) : connectionState === "connecting" ? (
-        <span className="text-sm text-muted-foreground">Connecting…</span>
+        <span className="text-xs text-muted-foreground">Connecting…</span>
       ) : null}
     </span>
   );
@@ -1190,6 +1190,7 @@ const AssistantMessage: FC = () => {
                 return (
                   <div data-slot="aui_chain-of-thought">
                     <WorkChain
+                      indices={part.indices}
                       openAtRest={disclosure.openAtRest}
                       foldOnAnswer={disclosure.foldOnAnswer}
                       running={part.status.type === "running"}

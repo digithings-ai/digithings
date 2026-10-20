@@ -9,6 +9,7 @@ import {
 } from "../../../ui/collapsible";
 import { DotMatrix } from "../DotMatrix";
 import { cn } from "./cn";
+import { workStatusText } from "./work-status";
 
 /**
  * How long the chain waits before it folds away once the turn is over.
@@ -31,9 +32,16 @@ const ANIMATION_DURATION = 200;
  * between two tool calls.
  *
  * The first manual toggle wins, as it does upstream.
+ *
+ * Folded, the header is a live status line: it names the tool that is
+ * running, or counts what the chain did once it is done. Expanded, it goes
+ * back to the plain "Working" / "Worked" title, because the reasoning and the
+ * tool calls are right there underneath — the header no longer has to
+ * describe them.
  */
 export function WorkChain({
   children,
+  indices,
   openAtRest = false,
   foldOnAnswer = false,
   running = false,
@@ -41,6 +49,12 @@ export function WorkChain({
   className,
 }: {
   children: ReactNode;
+  /**
+   * The message-part indices this chain holds. The folded header describes
+   * them ("Working — digisearch", "Used 3 tools"); without them the header
+   * has nothing to describe and keeps the plain title.
+   */
+  indices?: readonly number[];
   /**
    * The chain stays open for good: nothing ever folds (the verbose level).
    * The balanced level instead opens the chain while the turn runs and folds
@@ -87,6 +101,14 @@ export function WorkChain({
     openAtRest ? true : foldOnAnswer ? working : !settled && working
   );
 
+  // Folded, the header is a live status line — the same sentence the retired
+  // summary level showed. Expanded, the plain title is enough: the reasoning
+  // and the tool calls are underneath it.
+  const parts = useAuiState((s) => s.message.parts);
+  const status = !open && indices ? workStatusText(parts, indices) : undefined;
+  const title = status ? status.label : working ? "Working" : "Worked";
+  const markerRunning = status ? status.running : working;
+
   return (
     <Collapsible
       data-slot="aui_work-chain"
@@ -104,15 +126,15 @@ export function WorkChain({
             the title never shifts when the turn ends — and the check mark
             stays where it belongs, on the tool rows. */}
         <DotMatrix
-          state={working ? "loading" : "idle"}
-          label={working ? "Working" : "Worked"}
+          state={markerRunning ? "loading" : "idle"}
+          label={title}
           className="!size-3 shrink-0"
         />
         <span
           data-slot="aui_work-chain-label"
           className="aui-work-chain-label inline-block leading-none"
         >
-          {working ? "Working" : "Worked"}
+          {title}
         </span>
         <span
           data-slot="aui_work-chain-chevron"

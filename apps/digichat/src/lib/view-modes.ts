@@ -6,8 +6,9 @@
  * UI can both fold a view mode into the per-group disclosure modes the
  * gallery thread understands:
  *
- *   hidden   — the whole trace folds away to one summary line
- *   quiet    — the titles only: the chain and its rows, folded
+ *   quiet    — the titles only: the chain and its rows, folded. The folded
+ *              header is a live status line ("Working — digisearch",
+ *              "Used 3 tools"), which is all this level puts on screen.
  *   balanced — the rows open while their work streams, folded when it ends
  *   verbose  — nothing ever folds: everything stays open
  *
@@ -16,18 +17,23 @@
  * `open` pins it expanded.
  *
  * `quiet` / `verbose` are the product ids for the two levels previously
- * called `compact` / `detailed`; the old ids fold forward on read.
+ * called `compact` / `detailed`, and `quiet` is also where the retired
+ * `hidden` level went: the old ids fold forward on read.
  */
 
-export const VIEW_MODES = ["hidden", "quiet", "balanced", "verbose"] as const;
+export const VIEW_MODES = ["quiet", "balanced", "verbose"] as const;
 export type ViewMode = (typeof VIEW_MODES)[number];
 
 /**
  * Retired view ids still found in saved configs, tenant entries, slash
- * invocations and browser state. `compact` was the closed-summary level
- * (`quiet`); `detailed` was the fully-open one (`verbose`).
+ * invocations and browser state. `hidden` was the level that folded the whole
+ * trace into one line; the chain folds to its titles and shows that same line
+ * as its header now, so it means `quiet`. `compact` was the other
+ * closed-summary level (`quiet`); `detailed` was the fully-open one
+ * (`verbose`).
  */
 export const LEGACY_VIEW_MODE_ALIASES = {
+  hidden: "quiet",
   compact: "quiet",
   detailed: "verbose",
 } as const;
@@ -51,7 +57,7 @@ export function isViewMode(value: unknown): value is ViewMode {
   return typeof value === "string" && (VIEW_MODES as readonly string[]).includes(value);
 }
 
-/** True for the retired ids (`compact` / `detailed`) this module folds forward. */
+/** True for the retired ids (`hidden` / `compact` / `detailed`) folded forward. */
 export function isLegacyViewMode(value: unknown): value is LegacyViewMode {
   return (
     typeof value === "string" &&
@@ -62,7 +68,8 @@ export function isLegacyViewMode(value: unknown): value is LegacyViewMode {
 /**
  * Current id, or a retired id folded forward, or `DEFAULT_VIEW_MODE` for
  * anything else. Read-path normaliser: config, tenant entries and prefs all
- * pass their value through here so `compact` / `detailed` keep working.
+ * pass their value through here so `hidden` / `compact` / `detailed` keep
+ * working.
  */
 export function normalizeViewMode(value: unknown): ViewMode {
   if (isViewMode(value)) return value;
@@ -74,27 +81,21 @@ export function isThinkingMode(value: unknown): value is ThinkingMode {
   return typeof value === "string" && (THINKING_MODES as readonly string[]).includes(value);
 }
 
-export function viewIsVisible(view: ViewMode): boolean {
-  return view !== "hidden";
-}
-
 export function effectiveReasoningMode(
   view: ViewMode,
   thinking: ThinkingMode,
 ): ChainDisclosureMode {
-  if (view === "hidden") return "off";
   if (thinking === "open") return "expanded";
   if (thinking === "collapsed") return "collapsed";
   if (view === "verbose") return "expanded";
   if (view === "balanced") return "balanced";
-  // quiet — one summary line, never expanded
+  // quiet — the chain folded to its titles, never expanded
   return "collapsed";
 }
 
 export function effectiveToolCallsMode(view: ViewMode): ChainDisclosureMode {
-  if (view === "hidden") return "off";
   if (view === "verbose") return "expanded";
   if (view === "balanced") return "balanced";
-  // quiet — one summary line, never expanded
+  // quiet — the chain folded to its titles, never expanded
   return "collapsed";
 }
