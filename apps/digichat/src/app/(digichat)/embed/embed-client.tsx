@@ -1068,6 +1068,9 @@ function EmbedChat({
       openSettings: () => {
         setComposerMenu("settings");
       },
+      openHelp: () => {
+        setComposerMenu("help");
+      },
       openTools: () => {
         setComposerMenu("tools");
       },
@@ -1279,6 +1282,7 @@ function EmbedChat({
         <EmbedComposerMenu
           kind={composerMenu}
           models={stockClient.models.available}
+          defaultModel={stockClient.models.default}
           onClose={() => {
             setComposerMenu(null);
             setProviderSeed(undefined);

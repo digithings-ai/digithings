@@ -43,6 +43,7 @@
     "./chat/launcher": "./src/components/chat/DigichatLauncher.tsx",
     "./chat/surfaces": "./src/components/chat/chat-surfaces.ts",
     "./chat/dot-matrix": "./src/components/chat/DotMatrix.tsx",
+    "./chat/overlay-scrollbar": "./src/components/chat/overlay-scrollbar.tsx",
     "./chat/skins": "./src/components/chat/skins/index.ts",
     "./chat/skins/digichat": "./src/components/chat/skins/digichat.tsx",
     "./chat/stock": "./src/components/chat/stock/index.ts",

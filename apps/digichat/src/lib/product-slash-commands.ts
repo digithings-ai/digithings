@@ -249,7 +249,7 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       api.openArtifacts();
       return;
     case "help":
-      // Placeholder — the slash list is the help. Do not dump into the composer.
+      api.openHelp();
       return;
     case "byok":
       api.openByok(arg);

@@ -61,4 +61,5 @@ export type StockComposerMenuKind =
   | "search-engine"
   | "view"
   | "thinking"
-  | "provider";
+  | "provider"
+  | "help";

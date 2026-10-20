@@ -209,6 +209,9 @@ export function useStockChatPrefs({
       openSettings: () => {
         setComposerMenu("settings");
       },
+      openHelp: () => {
+        setComposerMenu("help");
+      },
       openTools: () => {
         setComposerMenu("tools");
       },

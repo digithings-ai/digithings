@@ -157,7 +157,7 @@
 .digichat-thread .aui-composer-send:not(:disabled):hover,
 .digichat-thread .aui-composer-send:focus-visible {
   background: transparent;
-  color: var(--ink-mute);
+  color: color-mix(in oklab, var(--ink-mute) 22%, transparent);
   box-shadow: none;
 }
 
