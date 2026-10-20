@@ -169,7 +169,7 @@
   scrollbar-color: color-mix(in oklab, var(--ink-mute) 38%, transparent) transparent;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar {
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
@@ -186,8 +186,8 @@
   scrollbar-gutter: stable;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar {
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .aui-composer-input::-webkit-scrollbar,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .dc-composer-menu-body::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
@@ -201,35 +201,35 @@
   scrollbar-color: color-mix(in oklab, var(--ink-mute) 24%, transparent) transparent;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"]::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-content"]::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar {
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="reasoning-text"]::-webkit-scrollbar,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="tool-group-content"]::-webkit-scrollbar,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .aui-tool-fallback-args-value::-webkit-scrollbar,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .aui-tool-fallback-result-content::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"]::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-content"]::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar-thumb {
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .aui-composer-input::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .dc-composer-menu-body::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="reasoning-text"]::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="tool-group-content"]::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .aui-tool-fallback-args-value::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .aui-tool-fallback-result-content::-webkit-scrollbar-thumb {
   border-radius: 0;
   background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"]::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-content"]::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar-thumb:hover {
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .aui-composer-input::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .dc-composer-menu-body::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="reasoning-text"]::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="tool-group-content"]::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .aui-tool-fallback-args-value::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .aui-tool-fallback-result-content::-webkit-scrollbar-thumb:hover {
   background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
 }
 
@@ -240,11 +240,16 @@
   scrollbar-gutter: stable;
 }
 
-/* data-scrollbars="auto" — the native overlay bar, shown only while the
-   surface is scrolling or the pointer is over it, and never reserving a
-   gutter. Absent or "always" keeps every rule above: 6px/10px/4px square
-   bars in a stable gutter. The custom overlay bars are switched off here so
-   a surface never draws the native bar and the component bar together. */
+/* data-scrollbars="auto" — the native overlay bar on the thread surfaces:
+   shown only while the surface is scrolling or the pointer is over it, and
+   never reserving a gutter. Absent or "always" keeps every rule above:
+   6px/10px/4px square bars in a stable gutter. The square
+   ::-webkit-scrollbar sizing is scoped to "always" as well: a styled webkit
+   scrollbar is a classic bar that reserves its own track and never becomes
+   an overlay. The composer menu is portalled outside the thread root, so the
+   mode attribute does not reach it and it keeps the sheet's square bar in
+   both modes. The custom overlay bars are switched off here so a surface
+   never draws the native bar and the component bar together. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"]
   [data-slot="aui_thread-viewport"] {
   overflow-y: auto;
@@ -297,17 +302,17 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   scrollbar-gutter: stable;
 }
 
-[data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
+html:has([data-thread-skin="digichat"]:not([data-scrollbars="auto"])) [data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-[data-slot="composer-trigger-popover-items"]::-webkit-scrollbar-thumb {
+html:has([data-thread-skin="digichat"]:not([data-scrollbars="auto"])) [data-slot="composer-trigger-popover-items"]::-webkit-scrollbar-thumb {
   border-radius: 0;
   background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
 }
 
-[data-slot="composer-trigger-popover-items"]::-webkit-scrollbar-thumb:hover {
+html:has([data-thread-skin="digichat"]:not([data-scrollbars="auto"])) [data-slot="composer-trigger-popover-items"]::-webkit-scrollbar-thumb:hover {
   background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
 }
 
@@ -315,16 +320,16 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
    second, rounded capsule underneath it (Safari ignores the webkit shape).
    Scoped to the mode: the auto rules switch the component bars off, so an
    unscoped suppression here leaves those surfaces with no bar at all. */
-:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) [data-slot="aui_thread-viewport"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) .dc-composer-menu-body,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) [data-slot="reasoning-text"],
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="aui_thread-viewport"],
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .dc-composer-menu-body,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="reasoning-text"],
 html:has([data-thread-skin="digichat"]:not([data-scrollbars="auto"])) [data-slot="composer-trigger-popover-items"] {
   scrollbar-width: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) .dc-composer-menu-body::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) [data-slot="reasoning-text"]::-webkit-scrollbar,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) .dc-composer-menu-body::-webkit-scrollbar,
+[data-thread-skin="digichat"]:not([data-scrollbars="auto"]) [data-slot="reasoning-text"]::-webkit-scrollbar,
 html:has([data-thread-skin="digichat"]:not([data-scrollbars="auto"])) [data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
   display: none;
 }

@@ -177,10 +177,20 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
   return rows;
 }
 
-/** Menu pick for a catalog tool inserts `/id ` so the user can add a query. */
-export function shouldInsertToolDraft(id: string, extra: readonly SlashDef[]): boolean {
+/**
+ * Tool-kind commands are session toggles, not one-shot commands: the built-in
+ * corpus tools plus every catalog tool and every connected MCP server. One
+ * predicate for both callers — the `/` palette (draft insert) and the
+ * composer menu (flip the session pref).
+ */
+export function isToolToggleCommand(id: string, extra: readonly SlashDef[]): boolean {
   if (id === "digisearch" || id === "digivault" || id === "websearch") return true;
   return extra.some((d) => d.id === id && d.kind === "tool");
+}
+
+/** Menu pick for a catalog tool inserts `/id ` so the user can add a query. */
+export function shouldInsertToolDraft(id: string, extra: readonly SlashDef[]): boolean {
+  return isToolToggleCommand(id, extra);
 }
 
 export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsApi): void {

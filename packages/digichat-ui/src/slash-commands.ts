@@ -31,6 +31,8 @@ export type SlashId =
   | "redo"
   | "mcp"
   | "tools"
+  | "toolbar"
+  | "scrollbar"
   | "artifacts";
 
 export type SlashDef = {

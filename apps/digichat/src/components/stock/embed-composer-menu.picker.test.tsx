@@ -342,3 +342,49 @@ describe("EmbedComposerMenu navigation tree", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("EmbedComposerMenu tool toggles", () => {
+  beforeEach(mountHost);
+  afterEach(() => {
+    document.querySelector("[data-picker-test-host]")?.remove();
+  });
+
+  it("toggles a corpus tool from the root list and keeps the menu open", async () => {
+    const user = userEvent.setup();
+    const api = prefs();
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    // The root list carries the corpus toggles. Picking one must flip the
+    // session pref: running the command's own `execute` would close the
+    // menu and change nothing, because a tool-kind command returns early.
+    const row = await screen.findByRole("menuitem", { name: /\/digisearch/ });
+    await user.click(row);
+
+    expect(api.setDigisearch).toHaveBeenCalledWith(
+      !DEFAULT_EMBED_CHAT_PREFS.digisearch,
+    );
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("toggles a catalog tool from the root list and keeps the menu open", async () => {
+    const user = userEvent.setup();
+    const api = prefs({ catalogTools: [{ id: "occ_notes", label: "Occ notes" }] });
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    const row = await screen.findByRole("menuitem", { name: /\/occ_notes/ });
+    await user.click(row);
+
+    expect(api.setExtraTool).toHaveBeenCalledWith("occ_notes", false);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});

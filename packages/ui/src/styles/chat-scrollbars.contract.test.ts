@@ -41,10 +41,18 @@ function rules(source: string): Rule[] {
 
 const sheet = rules(stripComments(css));
 
-/** Rules that are switched on by `[data-scrollbars="auto"]` and touch `target`. */
+/**
+ * Rules that are switched on by `[data-scrollbars="auto"]` and touch `target`.
+ * A rule conditioned on `:not([data-scrollbars="auto"])` is switched *off* by
+ * auto, so it is not part of the auto census; counting it there made an
+ * always-mode rule look like an auto-mode one.
+ */
 function autoRules(target: string): Rule[] {
   return sheet.filter(
-    (rule) => rule.selector.includes('[data-scrollbars="auto"]') && rule.selector.includes(target),
+    (rule) =>
+      rule.selector.includes('[data-scrollbars="auto"]') &&
+      !rule.selector.includes(':not([data-scrollbars="auto"])') &&
+      rule.selector.includes(target),
   );
 }
 
@@ -134,6 +142,38 @@ describe("data-scrollbars contract", () => {
     expect(suppressions.length).toBeGreaterThan(0);
     for (const rule of suppressions) {
       expect(rule.selector).toContain(':not([data-scrollbars="auto"])');
+    }
+  });
+
+  it("anchors the always-mode suppression on the element that carries the mode", () => {
+    // `.aui-theme-stage` is the gallery specimen frame and never carries
+    // `data-scrollbars`, so a suppression conditioned on the attribute
+    // through it reaches a nested digichat thread that is in auto mode --
+    // the thread then loses the native bar the mode promises to keep.
+    const suppressions = sheet.filter(
+      (rule) =>
+        rule.body.includes("scrollbar-width: none") ||
+        (rule.body.includes("display: none") && rule.selector.includes("::-webkit-scrollbar")),
+    );
+    expect(suppressions.length).toBeGreaterThan(0);
+    for (const rule of suppressions) {
+      expect(rule.selector).not.toContain(":is(.aui-theme-stage");
+    }
+  });
+
+  it("keeps the square webkit sizing out of auto mode", () => {
+    // A styled ::-webkit-scrollbar is a classic bar that reserves its own
+    // track, so in auto mode it would stand in for the native overlay bar
+    // the mode promises. The square sizing and the square thumb are
+    // therefore scoped to the always mode.
+    const square = sheet.filter(
+      (rule) =>
+        rule.selector.includes("::-webkit-scrollbar") &&
+        (/(width|height):\s*\d+px/.test(rule.body) || rule.body.includes("border-radius: 0")),
+    );
+    expect(square.length).toBeGreaterThan(0);
+    for (const rule of square) {
+      expect(rule.selector).toContain("data-scrollbars");
     }
   });
 

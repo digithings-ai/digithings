@@ -46,7 +46,12 @@ import {
   toolsMenuSummary,
   type SessionMcpConfig,
 } from "@/components/stock/embed-mcp-flow";
-import { buildProductSlashCommands, languageSelectOptions } from "@/lib/product-slash-commands";
+import {
+  buildProductSlashCommands,
+  extraSlashDefs,
+  isToolToggleCommand,
+  languageSelectOptions,
+} from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
 import {
   byokRequiresModel,
@@ -426,6 +431,23 @@ export function EmbedComposerMenu({
    * truth, so going back never lands on a second, shorter "main". Rows that
    * name a page open it in place; actions run and close the menu.
    */
+  /**
+   * Tool-kind rows — the corpus toggles, every catalog tool and every
+   * connected MCP server — are session toggles, not one-shot commands: their
+   * `execute` returns early, so running it would close the menu and change
+   * nothing. Flip the session pref instead, and keep the menu open so the
+   * row's On/Off description re-renders.
+   */
+  const toggleTool = useCallback(
+    (id: string) => {
+      if (id === "digisearch") api.setDigisearch(!api.prefs.digisearch);
+      else if (id === "digivault") api.setVault(!api.prefs.vault);
+      else if (id === "websearch") api.setWebSearch(!api.prefs.webSearch);
+      else api.setExtraTool(id, !api.extraToolOn(id));
+    },
+    [api],
+  );
+
   const mainRows = useMemo((): MenuRow[] => {
     const NODE_BY_ID: Partial<Record<string, MenuView>> = {
       models: "models",
@@ -439,10 +461,12 @@ export function EmbedComposerMenu({
       byok: "provider",
       help: "help",
     };
+    const extra = extraSlashDefs(api);
     return buildProductSlashCommands(api)
       .filter((command) => command.id !== "settings")
       .map((command) => {
         const node = NODE_BY_ID[command.id];
+        const isToolToggle = isToolToggleCommand(command.id, extra);
         return {
           id: command.id,
           label: command.label ?? `/${command.id}`,
@@ -452,13 +476,17 @@ export function EmbedComposerMenu({
                 setCursor(0);
                 setView(node);
               }
-            : () => {
-                command.execute();
-                onClose();
-              },
+            : isToolToggle
+              ? () => {
+                  toggleTool(command.id);
+                }
+              : () => {
+                  command.execute();
+                  onClose();
+                },
         };
       });
-  }, [api, onClose]);
+  }, [api, onClose, toggleTool]);
 
   const languageRows = useMemo(
     (): MenuRow[] =>
@@ -596,16 +624,6 @@ export function EmbedComposerMenu({
         },
       })),
     [api, onClose],
-  );
-
-  const toggleTool = useCallback(
-    (id: string) => {
-      if (id === "digisearch") api.setDigisearch(!api.prefs.digisearch);
-      else if (id === "digivault") api.setVault(!api.prefs.vault);
-      else if (id === "websearch") api.setWebSearch(!api.prefs.webSearch);
-      else api.setExtraTool(id, !api.extraToolOn(id));
-    },
-    [api],
   );
 
   const commitMcpDraft = useCallback(
