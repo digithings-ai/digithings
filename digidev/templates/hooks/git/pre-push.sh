@@ -18,7 +18,7 @@ allowed_url_regex='^({{REPO_URL_HTTPS}}(\.git)?|{{REPO_URL_SSH}}(\.git)?)$'
 # Branch naming taxonomy. Keep in sync with your team conventions.
 # Add new contributor handles to CONTRIBUTOR_HANDLES.
 CONTRIBUTOR_HANDLES='{{CONTRIBUTOR_HANDLES}}'
-branch_regex="^({{MAIN_BRANCH}}|{{DEFAULT_BRANCH}}|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+)$"
+branch_regex="^({{MAIN_BRANCH}}|{{DEFAULT_BRANCH}}|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore|revert)/[a-z0-9-]+)$"
 
 # A ref deletion pushes an all-zero sha as the local sha; a branch not yet present
 # upstream reports an all-zero remote sha. The width follows the repository's hash
@@ -64,7 +64,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "           task/<N>-<slug>" >&2
       echo "           {claude,codex,cursor,copilot}/<slug>" >&2
       echo "           {${CONTRIBUTOR_HANDLES//|/,}}/<slug>" >&2
-      echo "           {feat,fix,docs,chore}/<slug>" >&2
+      echo "           {feat,fix,docs,chore,revert}/<slug>" >&2
       failed=1
       continue
     fi
