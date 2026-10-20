@@ -16,7 +16,6 @@ import {
   ReasoningContent,
   ReasoningRoot,
   ReasoningText,
-  ReasoningTrigger,
 } from "../stock/reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
 import { WorkChain } from "./work-chain";
