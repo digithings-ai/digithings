@@ -56,6 +56,8 @@ const AUTO_SURFACES: Array<[label: string, selector: string]> = [
   ["tool fallback dump", '[data-slot="tool-fallback-dump"]'],
   ["tool fallback args", ".aui-tool-fallback-args-value"],
   ["tool fallback result", ".aui-tool-fallback-result-content"],
+  ["reasoning pane", '[data-slot="reasoning-text"]'],
+  ["tool group content", '[data-slot="tool-group-content"]'],
 ];
 
 describe("data-scrollbars contract", () => {
@@ -119,4 +121,20 @@ describe("data-scrollbars contract", () => {
     expect(matched.length).toBeGreaterThan(0);
     expect(matched.some((rule) => rule.selector.includes("html:has("))).toBe(true);
   });
+
+  it("scopes the always-mode suppression so auto keeps the native bar", () => {
+    // The auto rules switch the component bars off, so an always-mode
+    // suppression that is not conditioned on the mode leaves the surface
+    // with no bar at all in Chrome and Safari.
+    const suppressions = sheet.filter(
+      (rule) =>
+        rule.body.includes("scrollbar-width: none") ||
+        (rule.body.includes("display: none") && rule.selector.includes("::-webkit-scrollbar")),
+    );
+    expect(suppressions.length).toBeGreaterThan(0);
+    for (const rule of suppressions) {
+      expect(rule.selector).toContain(':not([data-scrollbars="auto"])');
+    }
+  });
+
 });

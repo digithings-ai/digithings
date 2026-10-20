@@ -312,18 +312,20 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 }
 
 /* Always mode paints a square overlay bar; the native bar must not draw a
-   second, rounded capsule underneath it (Safari ignores the webkit shape). */
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"],
-[data-slot="composer-trigger-popover-items"] {
+   second, rounded capsule underneath it (Safari ignores the webkit shape).
+   Scoped to the mode: the auto rules switch the component bars off, so an
+   unscoped suppression here leaves those surfaces with no bar at all. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) [data-slot="aui_thread-viewport"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) .dc-composer-menu-body,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) [data-slot="reasoning-text"],
+html:has([data-thread-skin="digichat"]:not([data-scrollbars="auto"])) [data-slot="composer-trigger-popover-items"] {
   scrollbar-width: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"]::-webkit-scrollbar,
-[data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) .dc-composer-menu-body::-webkit-scrollbar,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]):not([data-scrollbars="auto"]) [data-slot="reasoning-text"]::-webkit-scrollbar,
+html:has([data-thread-skin="digichat"]:not([data-scrollbars="auto"])) [data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
   display: none;
 }
 
