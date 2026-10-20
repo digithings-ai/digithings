@@ -124,6 +124,8 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIKEY_BFF_TOKEN
 #   DIGICHAT_PLAN_PROOF_SECRET
 #   DIGICHAT_MONITOR_TOKENS   # monitor free-turn bypass (DIG-613); optional, fails open
+#   DIGICHAT_TRIAL_PROOF_SECRET   # wrangler secret put DIGICHAT_TRIAL_PROOF_SECRET — trial-proof mint/verify secret (DIG-4530); forwarded to the container
+#   DIGICHAT_TENANT_MINT_CREDENTIALS   # wrangler secret put DIGICHAT_TENANT_MINT_CREDENTIALS — tenant mint credentials (DIG-4530); forwarded to the container
 #   DIGICHAT_DASHBOARD_SUPABASE_URL
 #   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
 #   ZAMMAD_API_TOKEN         # read-only Zammad helpdesk MCP (in-container zammad-mcp, OCC tickets)
