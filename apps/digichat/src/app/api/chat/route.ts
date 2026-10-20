@@ -305,6 +305,12 @@ export async function POST(req: Request) {
         // The tenant could not answer. Fall through to the per-IP budget with the
         // entitlement bounded server-side (see the degraded raise below) rather than
         // skipping the budget entirely, which is what an outage used to do.
+        // Logged like the two sibling fail-open paths in this gate: without a log, a
+        // tenant quota-service outage silently changes the entitlement from unbounded
+        // to capped and ops never sees it.
+        console.warn(
+          "[trial-gate] tenant quota service unavailable, bounding the entitlement to the trial cap:",
+        );
         quotaServiceUnavailable = true;
       } else {
         quotaSatisfied = true;

@@ -1503,6 +1503,39 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         expect(withHeader.status).toBe(withoutHeader.status);
         expect(withHeader.body).toEqual(withoutHeader.body);
       });
+
+      it("admits an uncounted visitor when the client IP cannot be resolved: the bound does not reach them", async () => {
+        // Residual, stated here so it is not silently inherited: the degraded raise
+        // lives inside the existing `ip !== "unknown"` guard, so a visitor whose IP
+        // cannot be resolved skips the per-IP quota entirely — admitted, uncounted,
+        // and not bounded by the 100-turn cap. This is pre-existing behaviour of the
+        // per-IP quota, unchanged by this leaf; the degraded path does not widen it.
+        const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
+        const ipSpy = vi.mocked(clientIpForRateLimit).mockReturnValue("unknown");
+        const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const fetchMock = vi.fn(async () => new Response("boom", { status: 500 }));
+        vi.stubGlobal("fetch", fetchMock);
+        const turns = EMBED_TRIAL_TURN_LIMIT + 5;
+        try {
+          for (let i = 0; i < turns; i++) {
+            const res = await POST(trialReq({ "x-embed-chat-token": "tok" }));
+            expect(res.status).toBe(200);
+          }
+          // The provider was consulted on every turn: this is the degraded path
+          // under test, not a path that skipped the quota service.
+          expect(fetchMock.mock.calls.length).toBe(turns);
+          // The degraded path was taken and logged, so this case is not vacuous:
+          // it is the unavailable verdict that produced the admission, not an
+          // "allow" verdict from the provider.
+          expect(warnSpy).toHaveBeenCalledWith(
+            "[trial-gate] tenant quota service unavailable, bounding the entitlement to the trial cap:",
+          );
+        } finally {
+          warnSpy.mockRestore();
+          ipSpy.mockReturnValue("127.0.0.1");
+          vi.unstubAllGlobals();
+        }
+      });
     });
 
     it(`allows the first ${EMBED_FREE_TURN_LIMIT} turns (server cap) then returns 402 trial_gate without calling Foundry`, async () => {

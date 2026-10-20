@@ -28,9 +28,10 @@ describe("consumeChatAccess", () => {
   });
 
   // Availability over strictness: an outage in the quota service must not break chat
-  // on every embedding site. The outage is REPORTED rather than allowed, so the caller
-  // can admit the visitor and bound the entitlement server-side instead of granting it
-  // outright.
+  // on every embedding site. The outage is REPORTED as a third verdict rather than
+  // allowed, so the caller can admit the visitor and bound the entitlement
+  // server-side instead of granting it outright. The provider only reports the
+  // verdict; the caller is the one that logs the degraded path.
   it("reports unavailable on a 500", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
     expect(await consumeChatAccess("https://api.test/consume", "id.secret")).toBe("unavailable");
