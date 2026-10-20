@@ -48,3 +48,8 @@ corpus has no grounded answer, say so clearly.
    `backend.vaultPathPrefix=clients/digithings`, `gate.webSearch=false`.
 3. Run/approve the backfill that indexes the five sources above, then verify the
    ~10 in-scope / ~5 out-of-scope acceptance transcripts.
+
+Until then the prompt lives only in the staged JSON. The local compose override,
+`wrangler.toml` and the `index.ts` fallback keep the `digithings` entry prompt-free:
+`tests/scripts/test_check_tenant_corpus_map.py` pins all three to agree (DIG-4463).
+When step 1 is applied, add the prompt to all three in one change and update that test.
