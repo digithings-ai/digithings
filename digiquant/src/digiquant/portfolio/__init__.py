@@ -1,7 +1,7 @@
 """digiquant.portfolio — analysis, portfolio mgmt, risk debate, reflection.
 
 Sibling sub-package of :mod:`digiquant.research`. See
-[ADR-0015](../../../docs/adr/0015-research-vs-portfolio.md) for the responsibility
+[ADR-0015](../../../docs/adr/0015-atlas-vs-hermes.md) for the responsibility
 boundary: research owns research (phases 1–7a, terminating at
 ``phase7_synthesis``), portfolio owns analysis + PM + risk + reflection
 (phases 7c, 7cd, 7d, 9).
@@ -18,15 +18,12 @@ Import direction (target state, ADR-0015):
       :mod:`digiquant.research.snapshot` plus shared state types from
       :mod:`digiquant.research.state`.
 
-Transitional state in #472 (the package skeleton ticket):
-    research's :func:`digiquant.research.graph.build_research_graph` still wires the
-    portfolio phases to keep the cron baseline / delta / monthly behaviour
-    identical across the package split — i.e. the four
-    ``from digiquant.portfolio.phases.* import build_phase*`` lines in
-    ``digiquant/src/digiquant/research/graph.py`` are a temporary direction
-    violation. Issue #473 (portfolio graph + research→portfolio chain) removes them
-    by introducing a top-level chain orchestrator that composes research and
-    portfolio outside either package.
+Historical note (#472 / #473, both closed):
+    research's :func:`digiquant.research.graph.build_research_graph` used to wire the
+    portfolio phases as a temporary direction violation. Issue #473 landed the
+    top-level chain orchestrator (:mod:`digiquant.portfolio.chain`), which composes
+    research and portfolio outside either package, and research no longer imports
+    portfolio phases.
 """
 
 from __future__ import annotations

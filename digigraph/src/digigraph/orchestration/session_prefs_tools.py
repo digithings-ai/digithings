@@ -65,7 +65,7 @@ SESSION_SET_LANGUAGE_TOOL = _fn(
 SESSION_SET_MODEL_TOOL = _fn(
     SESSION_SET_MODEL,
     "Set the chat model id for this session (must be on the deployment allowlist).",
-    {"model": {"type": "string", "description": "Model id, e.g. openai/gpt-oss-20b:free."}},
+    {"model": {"type": "string", "description": "Model id, e.g. deepseek/deepseek-v4.1-flash."}},
     ["model"],
 )
 SESSION_SET_EFFORT_TOOL = _fn(

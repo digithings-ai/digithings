@@ -558,8 +558,6 @@ def test_policy_invariants_hold_on_calibrated_multi_control_book() -> None:
     t = _targets(result)
     assert "B" not in t  # corr-dedup drops lower calibrated score vs A
     assert all(w <= 35.0 + 1e-6 for w in t.values())
-    if "A" in t and "C" not in t:
-        pass
     tech = sum(w for k, w in t.items() if k in {"A", "B"})
     assert tech <= 45.0 + 1e-6
     assert result.gross_pct <= 80.0 + 1e-6

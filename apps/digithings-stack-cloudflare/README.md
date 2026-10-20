@@ -138,13 +138,18 @@ It **refuses to deploy** if the commit cannot be resolved.
 > `STACK_CONTAINER_REV` is deliberately absent from `wrangler.toml [vars]`: unset means
 > "this deploy carried no rev". Inject it; never hand-write it.
 
-> **There is no CI deploy lane for this Worker** (DIG-2843). The
-> `deploy-digithings-stack-cloudflare.yml` that used to sit here — `workflow_dispatch` only,
-> behind the `production` environment gate — was deleted on 2026-10-01 by `f54af7052`
-> (#4919, Human Gate), so `npm run deploy` above is the whole deploy path. It is
-> recoverable at `git show 'f54af7052^:.github/workflows/deploy-digithings-stack-cloudflare.yml'`;
-> restoring it is a decision recorded on DIG-2843. The build half is still gated:
-> `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for this app on every PR,
+> **There is a CI deploy lane again, re-derived (DIG-4612).**
+> `deploy-digithings-stack-cloudflare.yml` fires on `push: main` and on a manual
+> `workflow_dispatch`, and its deploy job sits behind the `production` environment - Chris is
+> the required reviewer - so a merge to main deploys the stack only after Chris approves it.
+> The lane is re-derived, not reverted, following DIG-2843's own precedent, and it deploys
+> through `npm run deploy` so the Container id is always derived from the deploying commit; a
+> bare `npx wrangler deploy` still ships the legacy id. The credential the lane needs is a
+> Workers Scripts:Edit token in the `CLOUDFLARE_WORKERS_API_TOKEN` secret, not the
+> Vectorize/D1 token that also answers to `CLOUDFLARE_API_TOKEN` (the trap in
+> `wrangler.toml`). `npm run deploy` below is still the operator path for deploying a specific
+> tree by hand.
+> The build half is still gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for this app on every PR,
 > and the stack's `tsc --noEmit` + `vitest run` now run in `test-web.yml`. See
 > [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
 

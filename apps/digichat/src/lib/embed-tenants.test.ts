@@ -82,6 +82,8 @@ describe("parseEmbedTenants", () => {
                 default: true,
                 token: "edge-test-token",
                 authHeader: "x-digi-mcp-key",
+                allowedTools: ["search_tickets", "get_ticket"],
+                mutatingTools: [],
               },
               {
                 id: "digivault",
@@ -106,6 +108,8 @@ describe("parseEmbedTenants", () => {
           default: true,
           token: "edge-test-token",
           authHeader: "x-digi-mcp-key",
+          allowedTools: ["search_tickets", "get_ticket"],
+          mutatingTools: [],
         },
         {
           id: "digivault",

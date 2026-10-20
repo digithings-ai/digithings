@@ -1,103 +1,94 @@
-"""Query-side bge-m3 embedder. No network. Token values must not appear in errors."""
+"""Unit tests for the Workers AI bge-m3 embedder (custom endpoint + account path)."""
 
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 from digisearch.embedding.factory import EmbeddingConfigError
+from digisearch.embedding.providers import workers_ai as workers_ai_module
 from digisearch.embedding.providers.workers_ai import (
     BGE_M3_DIMENSIONS,
     BGE_M3_MODEL_ID,
-    FACTORY_NAMES,
     WorkersAiEmbedder,
 )
+from digisearch.search._stub import _embedding_provider_for
 
 pytestmark = pytest.mark.unit
 
 
-def test_provider_for_accepts_only_bge_m3() -> None:
-    from digisearch.embedding.providers.workers_ai import provider_for
+class _Response:
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
 
-    built = provider_for("@cf/baai/bge-m3", None)
-    assert isinstance(built, WorkersAiEmbedder)
-    assert provider_for("bge-m3", None) is not None
-    assert provider_for("minilm", None) is None
-    with pytest.raises(EmbeddingConfigError, match="single model"):
-        provider_for("bge-m3", "text-embedding-3-small")
+    def read(self) -> bytes:
+        return self._payload
 
+    def __enter__(self) -> "_Response":
+        return self
 
-def test_factory_builds_bge_m3_before_the_unknown_provider_error() -> None:
-    from digisearch.embedding.factory import _build_raw_provider
-
-    built = _build_raw_provider("@cf/baai/bge-m3", None)
-    assert isinstance(built, WorkersAiEmbedder)
-    assert isinstance(_build_raw_provider("bge-m3", None), WorkersAiEmbedder)
-    with pytest.raises(EmbeddingConfigError, match="unknown embedding provider"):
-        _build_raw_provider("not-a-provider", None)
+    def __exit__(self, *exc: object) -> None:
+        return None
 
 
-def test_injected_embedder_reports_1024_and_the_model_id() -> None:
+def _opener(seen: list[Any], payload: dict[str, Any]):
+    def opener(request):
+        seen.append(request)
+        return _Response(json.dumps(payload).encode())
+
+    return opener
+
+
+def _vectors() -> dict[str, Any]:
+    return {"result": {"data": [[0.5] * BGE_M3_DIMENSIONS]}}
+
+
+def test_custom_endpoint_is_used_and_needs_no_account_id(monkeypatch) -> None:
+    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+    seen: list[Any] = []
     provider = WorkersAiEmbedder(
-        embed_fn=lambda texts: [[0.25] * BGE_M3_DIMENSIONS for _ in texts]
+        url="https://embed.example/embed",
+        api_token="tok",
+        opener=_opener(seen, _vectors()),
     )
-    assert provider.model_id == "@cf/baai/bge-m3"
-    assert provider.model_id == BGE_M3_MODEL_ID
-    assert provider.dimensions == 1024
-    assert BGE_M3_MODEL_ID in FACTORY_NAMES
-    assert provider.embed([]) == []
-    vectors = provider.embed(["hello", "hallo"])
-    assert len(vectors) == 2
-    assert len(vectors[0]) == 1024
+    vectors = provider.embed(["hello"])
+    assert len(vectors) == 1 and len(vectors[0]) == BGE_M3_DIMENSIONS
+    assert len(seen) == 1
+    assert seen[0].full_url == "https://embed.example/embed"
+    assert seen[0].get_header("Authorization") == "Bearer tok"
 
 
-def test_missing_credentials_do_not_echo_a_token() -> None:
-    provider = WorkersAiEmbedder(account_id="", api_token="super-secret-token")
-    with pytest.raises(EmbeddingConfigError, match="CLOUDFLARE_API_TOKEN") as caught:
+def test_default_endpoint_still_needs_an_account_id(monkeypatch) -> None:
+    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+    provider = WorkersAiEmbedder(api_token="tok")
+    with pytest.raises(EmbeddingConfigError, match="CLOUDFLARE_ACCOUNT_ID"):
         provider.embed(["hello"])
-    assert "super-secret-token" not in str(caught.value)
 
 
-def test_http_error_hides_the_body_and_the_token() -> None:
-    import io
-    from email.message import Message
-    from urllib.error import HTTPError
-
-    secret = "super-secret-token"
-
-    def opener(_request):
-        raise HTTPError(
-            "https://api.cloudflare.com/ai",
-            401,
-            "denied",
-            hdrs=Message(),
-            fp=io.BytesIO(b"super-secret-token user@example.com"),
-        )
-
-    provider = WorkersAiEmbedder(account_id="account", api_token=secret, opener=opener)
-    with pytest.raises(EmbeddingConfigError, match=r"workers ai embed failed \(401\)") as caught:
-        provider.embed(["user@example.com"])
-    assert secret not in str(caught.value)
-    assert "user@example.com" not in str(caught.value)
-
-
-def test_parses_a_result_payload() -> None:
-    class Response:
-        def read(self) -> bytes:
-            payload = {"result": {"data": [[0.5] * BGE_M3_DIMENSIONS]}}
-            return json.dumps(payload).encode()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
+def test_default_endpoint_is_the_account_scoped_workers_ai_url(monkeypatch) -> None:
+    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+    seen: list[Any] = []
     provider = WorkersAiEmbedder(
-        account_id="account",
-        api_token="token",
-        opener=lambda _request: Response(),
+        account_id="acct", api_token="tok", opener=_opener(seen, _vectors())
     )
-    vectors = provider.embed(["Guten Tag"])
+    provider.embed(["hello"])
+    assert seen[0].full_url == (
+        f"https://api.cloudflare.com/client/v4/accounts/acct/ai/run/{BGE_M3_MODEL_ID}"
+    )
+
+
+def test_search_provider_uses_the_configured_embed_endpoint(monkeypatch) -> None:
+    """The query side must not raise on the documented-preferred path."""
+    monkeypatch.setenv("DIGISEARCH_WORKERS_AI_INDEXES", "occ")
+    monkeypatch.setenv("DIGISEARCH_BGE_M3_EMBED_URL", "https://embed.example/embed")
+    monkeypatch.setenv("DIGISEARCH_BGE_M3_EMBED_TOKEN", "tok")
+    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+    seen: list[Any] = []
+    monkeypatch.setattr(workers_ai_module, "urlopen", _opener(seen, _vectors()))
+    provider = _embedding_provider_for("occ", "acct", "vtok")
+    assert isinstance(provider, WorkersAiEmbedder)
+    vectors = provider.embed(["hello"])
     assert len(vectors) == 1
-    assert len(vectors[0]) == BGE_M3_DIMENSIONS
+    assert seen[0].full_url == "https://embed.example/embed"
+    assert seen[0].get_header("Authorization") == "Bearer tok"

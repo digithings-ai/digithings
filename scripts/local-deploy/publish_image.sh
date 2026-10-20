@@ -81,6 +81,16 @@ else
   HEALTH_PATH="/health/liveliness"; VERSION_PATH=""
 fi
 
+if [ "$IMAGE" = "digichat" ]; then
+  # The digichat image installs npm tarballs and workspace manifests out of
+  # image-packages/digichat/ — a generated, gitignored directory. A checkout
+  # never carries it, so without packaging it first the build context has no
+  # such path and the build dies computing its cache key. The digillm image
+  # installs no packaged input, so it needs none.
+  echo "--- packaging image inputs (scripts/package_r5_image_inputs.py --npm-only) ---"
+  python3 scripts/package_r5_image_inputs.py --npm-only
+fi
+
 echo "Building $NAME from commit $COMMIT (push=$PUSH)."
 docker build -f "$DOCKERFILE" "${BUILD_ARGS[@]}" "${LABELS[@]}" -t "$NAME" .
 

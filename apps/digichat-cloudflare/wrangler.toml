@@ -100,9 +100,15 @@ image_build_context = "../.."
 # DIGICHAT_VERSION for GET /api/health is baked from apps/digichat/package.json
 # inside infra/docker/Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
 # (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
-# 2, not 1: a rolling deploy must be able to start the new revision while the
-# old one drains, or the account's container-instance cap refuses the start
-# (DIG-4459). Only one instance serves traffic once the rollout settles; the
+# Two slots, not one: a rolling deploy must be able to start the new revision
+# while the old one drains, or the account's container-instance cap refuses the
+# start (DIG-4459). The digichat container id is derived from the deploying
+# commit (src/paths.ts), so every deploy addresses a NEW id while the previous
+# id's instance is still running — warm, or draining for up to 15 minutes after
+# the rollout's SIGTERM. With one slot the new instance cannot start until the
+# old one has fully exited, so every request that needs a container start then
+# fails with "Maximum number of running container instances exceeded"
+# (DIG-4487). Only one instance serves traffic once the rollout settles; the
 # second slot is rollout headroom, not steady-state cost.
 max_instances = 2
 instance_type = "basic"
@@ -145,6 +151,15 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
 #   DIGIKEY_URL=https://key.digithings.ai
 # Never use Mac Compose / *.trycloudflare.com quick tunnels in production.
+
+# Embed tenant config (DIG-1210): non-secret JSON in KV key `embed-tenants`,
+# credentials referenced by name (tokenEnv) and set as Worker secrets.
+# Create once:  npx wrangler kv namespace create DIGICHAT_TENANTS_KV
+# (created 2026-10-13). Without the binding the Worker uses
+# the legacy DIGICHAT_EMBED_TENANTS secret unchanged.
+[[kv_namespaces]]
+binding = "DIGICHAT_TENANTS_KV"
+id = "361b710bee56466097053275404535ba"
 
 [vars]
 # Legacy generic anonymous embed is intentionally NOT set (OFF). A stock deploy

@@ -79,8 +79,12 @@ export function repairPartialJson(text: string): string | undefined {
     if (stack[stack.length - 1] === "{") out = out.replace(/([{,])\s*"(?:[^"\\]|\\.)*"$/, "$1");
     out = out.replace(/,$/, "");
     // partial literal (tru, fals, nul) or number ending in '-' / '.' / 'e'
-    out = out.replace(/(?<=[:\[,]\s*)(t|tr|tru|f|fa|fal|fals|n|nu|nul)$/, "");
-    out = out.replace(/(?<=\d)[.eE+-]+$/, "").replace(/(?<=[:\[,]\s*)-$/, "");
+    // No lookbehind here: a lookbehind literal is a parse-time SyntaxError on
+    // Safari below 16.4 and on older embedded WebViews, and this module is
+    // imported by the rendered thread — one unparsable regex would take the
+    // whole thread down. The prefix is captured and written back instead.
+    out = out.replace(/([:\[,]\s*)(t|tr|tru|f|fa|fal|fals|n|nu|nul)$/, "$1");
+    out = out.replace(/(\d)[.eE+-]+$/, "$1").replace(/([:\[,]\s*)-$/, "$1");
     if (out === before) break;
   }
   while (stack.length) out += stack.pop() === "{" ? "}" : "]";

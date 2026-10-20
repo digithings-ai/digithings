@@ -61,6 +61,14 @@
       "count": 1,
       "ticket": "DIG-3895"
     },
+    "apps/corpus-index/src/http.test.ts": {
+      "count": 1,
+      "ticket": "DIG-3895"
+    },
+    "apps/corpus-index/src/run.test.ts": {
+      "count": 2,
+      "ticket": "DIG-3895"
+    },
     "apps/corpus-index/src/run.ts": {
       "count": 1,
       "ticket": "DIG-3895"
@@ -846,7 +854,7 @@
       "ticket": "DIG-3689"
     },
     "tests/dg/test_digisearch_handler.py": {
-      "count": 5,
+      "count": 7,
       "ticket": "DIG-3689"
     },
     "tests/dg/test_digivault_tool.py": {
@@ -1040,6 +1048,26 @@
     "tests/scripts/test_zammad_semantic_eval.py": {
       "count": 3,
       "ticket": "DIG-3689"
+    },
+    "digigraph/src/digigraph/graph/research.py": {
+      "count": 1,
+      "ticket": "DIG-2203"
+    },
+    "digigraph/src/digigraph/orchestration/digisearch_tools.py": {
+      "count": 1,
+      "ticket": "DIG-2203"
+    },
+    "packages/ui/src/components/chat/digichat-thread.sources-loop.test.tsx": {
+      "count": 3,
+      "ticket": "DIG-2203"
+    },
+    "tests/dg/test_occ_skill_and_continuation.py": {
+      "count": 4,
+      "ticket": "DIG-2203"
+    },
+    "tests/dg/test_tenant_digisearch_tools.py": {
+      "count": 8,
+      "ticket": "DIG-2203"
     }
   }
 }

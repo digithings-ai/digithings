@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CHART_TYPES } from "../../../../clients/digiquant-tui/src/pages/panel-shape";
+import { CHART_TYPES } from "digiquant-tui/pages/panel-shape";
 import { PanelChart } from "./panel-chart";
 import { PanelView } from "./panel-view";
 import { DeskPane } from "./pages/pane";
