@@ -107,7 +107,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # today and needs no change. Orphaned pre-gate commits like these need their own
 # hatch label (reviewed:owner) applied directly -- there is no
 # baseline value that retroactively covers a severed-ancestry commit.
-BASELINE_SHA = "b17877ac"
+BASELINE_SHA = "670029d758389e71e018c03d4864b8b02f4ee6b8"
 
 # Squash merges land as "subject (#1234)"; GitHub merge commits as
 # "Merge pull request #1234 from ...". Child commits preserved by a merge commit
