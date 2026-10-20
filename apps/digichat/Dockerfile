@@ -1,8 +1,9 @@
 # digichat — Next.js standalone.
 # Build from the REPO ROOT (compose: context '.', dockerfile apps/digichat/Dockerfile):
-# the root lockfile pins the install. @digithings/design, @digithings/ui and
-# @digithings/digichat-ui come from tarballs (scripts/package_r5_image_inputs.py),
-# not from a sibling-tree COPY. The only app tree copied is apps/digichat.
+# the root lockfile pins the install. @digithings/design, @digithings/ui,
+# @digithings/digichat-ui and @digithings/hero-banner come from tarballs
+# (scripts/package_r5_image_inputs.py), not from a sibling-tree COPY. The only
+# app tree copied is apps/digichat.
 FROM node:22-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
@@ -11,6 +12,7 @@ COPY apps/digichat/package.json apps/digichat/
 COPY image-packages/digichat/manifests/design/package.json packages/design/package.json
 COPY image-packages/digichat/manifests/ui/package.json packages/ui/package.json
 COPY image-packages/digichat/manifests/digichat-ui/package.json packages/digichat-ui/package.json
+COPY image-packages/digichat/manifests/hero-banner/package.json packages/hero-banner/package.json
 COPY image-packages/digichat/manifests/dashboard/package.json apps/dashboard/package.json
 RUN npm ci --workspace apps/digichat --include-workspace-root
 
@@ -28,7 +30,8 @@ COPY image-packages/digichat/npm/ /tmp/digi-npm/
 # packages/ui, so no gallery COPY is needed anymore (#3717 closed).
 RUN tar -xzf /tmp/digi-npm/digithings-design-*.tgz -C packages/design --strip-components=1 \
  && tar -xzf /tmp/digi-npm/digithings-ui-*.tgz -C packages/ui --strip-components=1 \
- && tar -xzf /tmp/digi-npm/digithings-digichat-ui-*.tgz -C packages/digichat-ui --strip-components=1
+ && tar -xzf /tmp/digi-npm/digithings-digichat-ui-*.tgz -C packages/digichat-ui --strip-components=1 \
+ && tar -xzf /tmp/digi-npm/digithings-hero-banner-*.tgz -C packages/hero-banner --strip-components=1
 COPY apps/digichat ./apps/digichat
 COPY tsconfig.base.json ./tsconfig.base.json
 # BYOK provider pins are imported from the repo-root config (#5020).
