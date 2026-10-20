@@ -819,9 +819,10 @@ disclaimer (`DISCLAIMER`). Every HTML tearsheet win-rate surface renders N +
 95% CI via `format_honest_rate` — categorized/full/risk stats tables, the KPI
 strip (thresholds act on the CI lower bound, not the point estimate), and the
 win/loss donut, whose `k` is caller-counted from realized **round trips**
-(`count_winning_trades(realized_pnls_series)`, counting `PnL > 0`) while its `n`
-is the **fill** count `num_trades` — so the pair is not a like-for-like sample,
-and the donut must never fall back to `round(rate * n)` as an observed count).
+(`count_winning_trades(realized_pnls_series)`, counting `PnL > 0`) and whose `n`
+is that same population: since DIG-1808 `num_trades` counts closed round trips
+too, not order-fill rows. The donut still must never fall back to
+`round(rate * n)` as an observed count).
 Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
 `tests/dq/test_tearsheet_honesty.py` (per-surface N + CI assertions).
 
@@ -839,9 +840,14 @@ payload that validated before still validates, and a consumer that has never
 heard of the envelope reads exactly what it read before. `num_trades` also
 gained a sharper description on the same leaf (a **fill** count, and explicitly
 *not* a win-rate denominator — `honest_rate.n` is the denominator), which is a
-description change and not a type or semantic change. No published surface
-depends on the old wording, so no migration, no `SCHEMA_VERSION` bump and no
-consumer notification are required. Consumers that want the envelope read
+description change and not a type or semantic change. **Superseded by
+DIG-1808**, which changed what the field *counts* rather than how it describes
+it: `num_trades` is now closed round trips, not fill rows, so L3's wording led
+a reader to a doubled sample size. No published surface
+depends on the old wording, so no migration and no `SCHEMA_VERSION` bump are
+required — the field is still a defaulted `int`. The semantic change is
+consumer-visible all the same, so it is recorded in the field description and
+in the PR body rather than in a version number. Consumers that want the envelope read
 `honest_rate`; they must never synthesize one from `num_trades` or from
 `round(rate * n)`.
 
