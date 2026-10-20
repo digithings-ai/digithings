@@ -574,7 +574,7 @@ def test_tenant_map_non_boolean_lock_fails_closed_to_locked(value: object) -> No
     must be a boolean"). The corpus map fails closed to LOCKED for that entry.
     """
     mapped = load_tenant_corpus_map(
-        json.dumps({"occ": {"lockSessionControls": value, "digisearchIndex": "occ_help"}})
+        json.dumps({"occ": {"lockSessionControls": value, "digisearchIndex": "tenant_a_index"}})
     )
     assert mapped["occ"].lock_session_controls is True
 
@@ -589,14 +589,14 @@ def test_tenant_map_bad_lock_keeps_the_entry() -> None:
             {
                 "occ": {
                     "lockSessionControls": "true",
-                    "digisearchIndex": "occ_help",
-                    "vaultPathPrefix": "clients/online-compliance-center",
+                    "digisearchIndex": "tenant_a_index",
+                    "vaultPathPrefix": "clients/tenant-a",
                 }
             }
         )
     )
-    assert mapped["occ"].digisearch_index == "occ_help"
-    assert mapped["occ"].vault_path_prefix == "clients/online-compliance-center"
+    assert mapped["occ"].digisearch_index == "tenant_a_index"
+    assert mapped["occ"].vault_path_prefix == "clients/tenant-a"
     assert mapped["occ"].lock_session_controls is True
 
 
