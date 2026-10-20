@@ -321,7 +321,7 @@ Three rules that differ from every other row here:
    second person can read. **This is not yet enforceable in this stack, and an
    operator must not record it as done on the strength of a file mode.** No service
    in `docker-compose.yml` declares a `user:`, and none of the Dockerfiles behind
-   the five digillm-importing compose services (`digiclaw`, `digigraph`,
+   the five digillm-importing compose services (`digibot`, `digigraph`,
    `digiquant`, `digisearch`, `digitrace`) has a `USER` directive, so those
    services run as uid 0 and root ignores file mode
    bits: a ledger chmod-ed `0222` on a volume is separated from other operators but
@@ -336,7 +336,7 @@ Three rules that differ from every other row here:
    consumes records through the in-process observer with `DIGILLM_EGRESS_LOG_PATH=off`.
    Same mount, same backup, or same read grant defeats the mechanism: an HMAC next
    to its own ledger is a dictionary for any candidate list the reader holds.
-2. **Set both variables on every service that imports digillm.** `digiclaw`,
+2. **Set both variables on every service that imports digillm.** `digibot`,
    `digigraph`, `digiquant`, `digisearch`, `digiskills` and `digitrace` all declare
    the dependency (`digiskills` ships no compose service of its own, so its vars
    ride with whichever service hosts it). A per-service compose `environment:` entry is per-service, so a

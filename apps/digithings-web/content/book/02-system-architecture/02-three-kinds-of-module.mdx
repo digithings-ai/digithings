@@ -16,7 +16,7 @@ digiquant, digikey, digivault, digitrace and the digichat back end. You deploy
 a service, you scale a service, and you can put another implementation behind
 the same interface.
 
-**Libraries** have no address at all. digillm, digibase, digifetch and digiclaw
+**Libraries** have no address at all. digillm, digibase, digifetch and digibot
 are packages that services import. They never listen for traffic, so there is
 nothing to deploy and nothing to secure at the network level; they travel
 inside the services that use them. When a library improves, every service that
@@ -29,7 +29,7 @@ own. A surface asks the hub, and the hub decides.
 | Kind | Has a network address | You deploy it | Examples |
 | --- | --- | --- | --- |
 | Service | yes | yes | digigraph, digisearch, digiquant, digikey, digivault |
-| Library | no | inside a service | digillm, digibase, digifetch, digiclaw |
+| Library | no | inside a service | digillm, digibase, digifetch, digibot |
 | Surface | yes, for people | yes | digichat, the dashboards, the terminal apps |
 
 This split is what makes the stack modular in practice rather than in name. A

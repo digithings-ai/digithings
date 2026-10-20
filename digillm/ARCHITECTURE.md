@@ -518,7 +518,7 @@ person can read.
 **One precondition decides whether any of this is possible: the digillm process must not
 be able to read the ledger.** As of this writing it can. No service in `docker-compose.yml`
 declares a `user:`, and none of the Dockerfiles behind the five digillm-importing
-compose services (`digiclaw`, `digigraph`, `digiquant`, `digisearch`, `digitrace`)
+compose services (`digibot`, `digigraph`, `digiquant`, `digisearch`, `digitrace`)
 has a `USER` directive, so those services run as uid 0 — and root ignores file mode bits. Chmod-ing the ledger to `0222`, or
 root-owning it on a volume, separates the ledger from *other operators*, not from *this
 process*, which also holds the pepper in its environment. That is the exact co-location
@@ -544,11 +544,11 @@ Required separation in staging and production:
   docker compose exec <service> sh -c '[ -e "$DIGILLM_EGRESS_LOG_PATH" ] || { echo NO-SINK; exit 1; }; [ -r "$DIGILLM_EGRESS_LOG_PATH" ] && echo LEAK || echo ok'
   ```
 - Set `DIGILLM_EGRESS_LOG_PATH` **explicitly in every service that imports digillm** —
-  `digiclaw`, `digigraph`, `digiquant`, `digisearch`, `digiskills` and `digitrace` all
+  `digibot`, `digigraph`, `digiquant`, `digisearch`, `digiskills` and `digitrace` all
   declare the dependency (`digiskills` ships no compose service of its own, so its
   vars ride with whichever service hosts it). Unset, it does not resolve to a host path: no image copies
   `digiquant/` or `.git`, so the checkout walk falls through to `$CWD` and the ledger lands
-  under `$CWD/digiquant/results/egress/records.jsonl` (`/app/...` for `digiclaw`,
+  under `$CWD/digiquant/results/egress/records.jsonl` (`/app/...` for `digibot`,
   `digigraph` and `digiquant`; `/app/digisearch/...` and `/app/digitrace/...` for those
   two, whose runtime `WORKDIR`s differ) **inside the container's writable
   layer**, where it is destroyed on the next recreate while every health check stays green.
