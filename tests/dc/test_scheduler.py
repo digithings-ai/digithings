@@ -427,7 +427,7 @@ def test_cli_tick_default_runner_does_not_print_ok(
         encoding="utf-8",
     )
     state = tmp_path / "state.json"
-    from digiclaw.cli import main
+    from digibot.cli import main
 
     assert (
         main(["schedule", "start", "demo", "--agents-dir", str(agents_dir), "--state", str(state)])

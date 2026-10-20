@@ -1581,7 +1581,7 @@ The **running service** installs `digisearch[server,ingestion,azure,chroma,web-s
 relied on before the split (the service additionally now ships pdfplumber for
 PDF ingest, which the old `[azure,chroma]`-only image lacked, plus the
 `[web-search]` stack for `POST /v1/web_search`). The image COPY/installs the
-`digifetch` and `digiclaw` workspace siblings exactly like `digibase`/`digikey` (their
+`digifetch` and `digibot` workspace siblings exactly like `digibase`/`digikey` (their
 `pyproject.toml` + `ARCHITECTURE.md` readme + `src`, then `uv pip install -e`),
 which is what satisfies the `[web-search]` extra's `digifetch>=0.1.0` pin at
 build time. `[web-search]` rides `all` like every other feature extra, but stays

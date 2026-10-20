@@ -145,7 +145,7 @@ def test_dispatch_agent_maps_web_watch_tick(monkeypatch: pytest.MonkeyPatch) -> 
     cli._dispatch_agent(agent("web-watch-tick"))
     assert calls == ["tick"]
     # Unknown agents fail loudly instead of reporting a no-op ok (#3881).
-    from digiclaw.scheduler import AgentRunnerNotConfiguredError
+    from digibot.scheduler import AgentRunnerNotConfiguredError
 
     with pytest.raises(AgentRunnerNotConfiguredError):
         cli._dispatch_agent(agent("example-continuous"))

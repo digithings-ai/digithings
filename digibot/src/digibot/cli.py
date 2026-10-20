@@ -113,7 +113,7 @@ def _dispatch_agent(agent: AgentDefinition) -> None:
 
         run_due_monitors()
         return
-    from digiclaw.scheduler import default_agent_runner
+    from digibot.scheduler import default_agent_runner
 
     default_agent_runner(agent)
 

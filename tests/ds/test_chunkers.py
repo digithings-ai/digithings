@@ -368,6 +368,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     re-chunked several chunks and split one chunk in two (chunks 80-81
     became three) - the last 8 chunks are byte-identical, net +1, max chunk
     1994 of the 2000 budget - fixture prose only; RecursiveChunker unchanged.
+    Re-recorded again for DIG-4602 (PR #5441): the image-build note's
+    module name was corrected to digibot, so chunk 81's hash changed and the
+    count stayed at 134 - fixture prose only; RecursiveChunker unchanged.
 
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
@@ -460,7 +463,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "d90f1ea6b18577c2",
         "6603c2da6eeb5309",
         "263c191decde0fc3",
-        "6b98699f770ea56f",
+        "f0439ec87bbd8a5c",
         "42d3db5b4b30c9c0",
         "06ba55aa13191afa",
         "533d598598a15fa9",
@@ -513,4 +516,5 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "8b8c754092fe534f",
         "059d9ccf5c138f8c",
         "22f9d694bae83638",
+
     ]

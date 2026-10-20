@@ -66,7 +66,7 @@ Python members live in their own directories. The import name is the directory n
 | Package | Path |
 |---------|------|
 | digibase | [digibase/](digibase/) |
-| digiclaw | [digiclaw/](digiclaw/) |
+| digibot | [digibot/](digibot/) |
 | digifetch | [digifetch/](digifetch/) |
 | digigraph | [digigraph/](digigraph/) |
 | digikey | [digikey/](digikey/) |

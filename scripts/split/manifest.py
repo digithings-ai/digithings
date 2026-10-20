@@ -274,7 +274,7 @@ RULES: list[tuple[str, str, str]] = [
     ("digisearch/", "R0", "OSS module"),
     ("digivault/", "R0", "OSS module"),
     ("digitrace/", "R0", "OSS module"),
-    ("digiclaw/", "R0", "OSS module"),
+    ("digibot/", "R0", "OSS module"),
     ("digivoice/", "R0", "OSS module"),
     ("digiskills/", "R0", "OSS module"),
     ("digidev/", "R0", "OSS module"),
