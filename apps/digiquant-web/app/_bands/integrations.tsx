@@ -1,11 +1,8 @@
 import { CtaLink, Marquee } from "@digithings/ui";
-import {
-  IntegrationMark,
-  RowMark,
-  integrationHref,
-  type IntegrationId,
-  type RowProviderId,
-} from "@/components/integrations/marks";
+import { IntegrationMark, integrationHref, RowMark, type IntegrationId, type RowProviderId } from "@/components/integrations/marks";
+import { ModuleBanner } from "@/components/integrations/module-banner";
+import { BANNERS } from "@digithings/hero-banner/definitions";
+import { PixelWordmark } from "@digithings/ui/pixel-wordmark";
 import { Band } from "../_chrome/Band";
 import PROVIDERS from "./integrations.providers.json";
 

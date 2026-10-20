@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ChartType, PanelPoint, PanelShape, PanelUnit } from "../../../../clients/digiquant-tui/src/pages/panel-shape";
+import type { ChartType, PanelPoint, PanelShape, PanelUnit } from "digiquant-tui/pages/panel-shape";
 import { chartEngine, inkFrom, echartsOption, velaConfig, velaOptions, type ChartInk } from "./panel-chart-options";
 
 /** Caption when a chart fails to mount. The table toggle still has the numbers. */

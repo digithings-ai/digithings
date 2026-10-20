@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 import { Button } from "@digithings/ui/ui";
-import { asOfStatus, toneOf } from "../../../../../clients/digiquant-tui/src/format";
+import { asOfStatus, toneOf } from "digiquant-tui/format";
 import { staleBanner } from "../app-settings";
 import { useAppSettings } from "../app-settings-store";
-import { expandLayout, type Need } from "../../../../../clients/digiquant-tui/src/expand";
-import { COLS, ROWS, type Layout, type Placement } from "../../../../../clients/digiquant-tui/src/grid";
-import { shapeLines, tidyBody, type PaneBody, type PaneBlock } from "../../../../../clients/digiquant-tui/src/pages/shape";
-import { bodySize, compactBody, hiddenLabel } from "../../../../../clients/digiquant-tui/src/pages/pane-fit";
+import { expandLayout, type Need } from "digiquant-tui/expand";
+import { COLS, ROWS, type Layout, type Placement } from "digiquant-tui/grid";
+import { shapeLines, tidyBody, type PaneBody, type PaneBlock } from "digiquant-tui/pages/shape";
+import { bodySize, compactBody, hiddenLabel } from "digiquant-tui/pages/pane-fit";
 import { PanelView } from "../panel-view";
 import { columnRoles } from "../table-columns";
 

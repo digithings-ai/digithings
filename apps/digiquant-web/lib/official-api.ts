@@ -66,7 +66,7 @@ function errorCode(body: unknown): string | null {
   return typeof body.error.code === "string" ? body.error.code : null;
 }
 
-import { isStubPayload } from "../../../packages/ui/src/lib/stub-payload";
+import { isStubPayload } from "@digithings/ui/lib/stub-payload";
 
 export { isStubPayload };
 
