@@ -7,6 +7,30 @@
 export const GATED_MESSAGE = { type: "datatap:gated" } as const;
 export const UNLOCKED_MESSAGE_TYPE = "datatap:unlocked";
 
+/**
+ * The embed client asks the page for a fresh trial proof with this message
+ * (DIG-4538). The page answers with the existing proof message. The type
+ * carries no tenant name: the channel is shared by every embedding page.
+ */
+export const TRIAL_PROOF_REFRESH_MESSAGE_TYPE = "trial:proof-refresh";
+
+/**
+ * Response header the server sets when the trial proof it was given has
+ * expired. The value is "1".
+ *
+ * The server keeps its own copy of this name beside the signing code, which
+ * needs node:crypto and cannot be imported by the browser bundle, so the
+ * name is mirrored here on purpose.
+ */
+export const TRIAL_PROOF_EXPIRED_HEADER = "x-embed-trial-proof-expired";
+
+/** True only when a response says the presented trial proof expired. */
+export function isTrialProofExpiredSignal(
+  headers: Headers | undefined | null,
+): boolean {
+  return headers?.get(TRIAL_PROOF_EXPIRED_HEADER) === "1";
+}
+
 /** True only for a well-formed unlock message from the exact known parent origin. */
 export function isUnlockedMessage(
   event: MessageEvent,
