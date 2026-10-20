@@ -14,6 +14,9 @@ describe("dataPlaneEnv", () => {
     expect("TWELVEX_SUPABASE_URL" in forwarded).toBe(false);
     expect("PRIMEMARKET_SESSION_TOKEN" in forwarded).toBe(false);
     expect("TWELVEX_SUPABASE_SERVICE_KEY" in forwarded).toBe(false);
+    expect("OPENAI_API_KEY" in forwarded).toBe(false);
+    expect("CORE_SUPABASE_SERVICE_KEY" in forwarded).toBe(false);
+    expect("OPENAI_API_BASE" in forwarded).toBe(false);
   });
 
   it("forwards an optional variable that is set", () => {
@@ -25,6 +28,20 @@ describe("dataPlaneEnv", () => {
     );
     expect(forwarded.TWELVEX_SUPABASE_URL).toBe("https://example.supabase.co");
     expect(forwarded.TWELVEX_SUPABASE_SERVICE_KEY).toBe("service-key-value");
+  });
+
+  it("forwards the FX research keys under the names the workflow uses", () => {
+    const forwarded = dataPlaneEnv(
+      env({
+        CHEAPERINFERENCE_API_KEY: "cheaper-key-value",
+        CORE_SUPABASE_SERVICE_KEY: "core-key-value",
+        OPENAI_API_BASE: "https://api.cheaperinference.com/v1",
+      }),
+    );
+    expect(forwarded.OPENAI_API_KEY).toBe("cheaper-key-value");
+    expect(forwarded.CORE_SUPABASE_SERVICE_KEY).toBe("core-key-value");
+    expect(forwarded.OPENAI_API_BASE).toBe("https://api.cheaperinference.com/v1");
+    expect("CHEAPERINFERENCE_API_KEY" in forwarded).toBe(false);
   });
 
   it("always sets DRY_RUN and never forwards the auth tokens", () => {

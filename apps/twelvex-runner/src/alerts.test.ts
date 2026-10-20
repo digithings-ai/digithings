@@ -1,9 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { decideAlert } from "./alerts";
+import { decideAlert, labelFor } from "./alerts";
 
 const NOW = Date.parse("2026-10-20T00:00:00Z");
 
 describe("alert body", () => {
+  it("files an FX research failure under the label the workflow uses", () => {
+    expect(labelFor("session", 1)).toBe("daily-run-failure");
+    expect(labelFor("session", 0)).toBeNull();
+    const decision = decideAlert({
+      route: "session",
+      exitCode: 1,
+      session: "asia",
+      reason: "the graph stopped",
+      logTail: "the last line the run said",
+      now: 0,
+      open: [],
+    });
+    expect(decision).toMatchObject({ action: "create", label: "daily-run-failure" });
+    expect(decision.action === "create" && decision.title).toContain("FX research run failed");
+    expect(decision.action === "create" && decision.body).toContain("session 'asia'");
+  });
   it("carries the log tail on a new failure so the run names its cause", () => {
     const decision = decideAlert({
       route: "ingest",

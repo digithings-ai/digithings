@@ -2,13 +2,22 @@
  * Routing and auth for POST /run/{ingest|heartbeat}.
  * The container binding is injected so tests do not start an image.
  */
-import { decideAlert, executeAlert, labelFor, loadOpen, verdictLine, SESSION_LABEL } from "./alerts";
+import {
+  decideAlert,
+  executeAlert,
+  labelFor,
+  lastMeaningfulLine,
+  loadOpen,
+  verdictLine,
+  SESSION_LABEL,
+} from "./alerts";
 import type { Env } from "./env";
-import { defaultTimeoutSeconds, isBucket, isRoute, type Route } from "./routes";
+import { defaultTimeoutSeconds, isBucket, isRoute, isSession, type Route } from "./routes";
 
 export type RunBody = {
   job_id?: string;
   bucket?: string;
+  session?: string;
   timeout_seconds?: number;
   dry_run?: boolean;
 };
@@ -70,11 +79,15 @@ export async function handle(
   if (route === "ingest" && (typeof parsed.bucket !== "string" || !isBucket(parsed.bucket))) {
     return Response.json({ error: "invalid_bucket" }, { status: 400 });
   }
+  if (route === "session" && (typeof parsed.session !== "string" || !isSession(parsed.session))) {
+    return Response.json({ error: "invalid_session" }, { status: 400 });
+  }
 
   const dryRun = env.DRY_RUN === "1" || parsed.dry_run === true;
   const body: RunBody = {
     job_id: typeof parsed.job_id === "string" ? parsed.job_id : route,
     bucket: parsed.bucket,
+    session: parsed.session,
     timeout_seconds:
       typeof parsed.timeout_seconds === "number"
         ? parsed.timeout_seconds
@@ -151,7 +164,13 @@ async function publishAlert(
       route,
       exitCode: result.exit_code,
       bucket: body.bucket,
-      reason: route === "ingest" ? verdictLine(result.log_tail ?? "") : "session probe failed",
+      session: body.session,
+      reason:
+        route === "ingest"
+          ? verdictLine(result.log_tail ?? "")
+          : route === "session"
+            ? lastMeaningfulLine(result.log_tail ?? "")
+            : "session probe failed",
       logTail: result.log_tail,
       now,
       open,

@@ -13,6 +13,12 @@ export interface Env {
   PRIMEMARKET_SESSION_TOKEN?: string;
   TWELVEX_SUPABASE_SERVICE_KEY?: string;
   TWELVEX_SUPABASE_URL?: string;
+  /** Cheaper Inference key. Forwarded into the container as OPENAI_API_KEY. */
+  CHEAPERINFERENCE_API_KEY?: string;
+  /** Core project key. The FX research graph writes the shared core calendar. */
+  CORE_SUPABASE_SERVICE_KEY?: string;
+  /** Model endpoint the house path uses. */
+  OPENAI_API_BASE?: string;
 }
 
 /**
@@ -35,6 +41,17 @@ export function dataPlaneEnv(env: Env): Record<string, string> {
   }
   if (env.TWELVEX_SUPABASE_URL) {
     forwarded.TWELVEX_SUPABASE_URL = env.TWELVEX_SUPABASE_URL;
+  }
+  // The FX research session reads the model key and the core key by the names
+  // the workflow uses, and the endpoint as a plain var.
+  if (env.CHEAPERINFERENCE_API_KEY) {
+    forwarded.OPENAI_API_KEY = env.CHEAPERINFERENCE_API_KEY;
+  }
+  if (env.CORE_SUPABASE_SERVICE_KEY) {
+    forwarded.CORE_SUPABASE_SERVICE_KEY = env.CORE_SUPABASE_SERVICE_KEY;
+  }
+  if (env.OPENAI_API_BASE) {
+    forwarded.OPENAI_API_BASE = env.OPENAI_API_BASE;
   }
   forwarded.DRY_RUN = env.DRY_RUN === "1" ? "1" : "0";
   return forwarded;

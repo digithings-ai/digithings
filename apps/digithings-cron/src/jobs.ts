@@ -33,7 +33,7 @@ export type Job = {
   /** Set when kind is "probe". Worker fetch; does not start the container. */
   probe?: "site" | "stack";
   /** Set when kind is "twelvex". POST /run/{route} on twelvex-runner. */
-  route?: "ingest" | "heartbeat";
+  route?: "ingest" | "heartbeat" | "session";
   /**
    * Set when kind is "watch". The service this job only READS. There is no
    * `command`: a watch job has nothing to start, and nothing to time out. Its
@@ -189,7 +189,7 @@ function cj(
 function tx(
   id: string,
   cron: string,
-  route: "ingest" | "heartbeat",
+  route: "ingest" | "heartbeat" | "session",
   workflow: string,
   opts: {
     inputs?: Record<string, string>;
@@ -206,7 +206,8 @@ function tx(
     inputs: opts.inputs,
     ref: DEVELOP,
     enabled: true,
-    timeoutSeconds: opts.timeoutSeconds ?? (route === "ingest" ? 1200 : 300),
+    timeoutSeconds:
+      opts.timeoutSeconds ?? (route === "ingest" ? 1200 : route === "session" ? 7200 : 300),
   };
 }
 
@@ -454,10 +455,21 @@ export const JOBS: readonly Job[] = [
   // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
   // digisearch_parity is not a digithings workflow (leftover sweep after #4970).
   // Add a twelve-x wd() row only with a known cron from that repo.
-  wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml"),
-  wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
+  // FX research sessions: the client-visible feed. They run on the runner
+  // now, with the session the workflow used to pass as an input.
+  tx("twelve-x-asia", "7 0 * * MON-FRI", "session", "daily_run_asia.yml", {
+    inputs: { session: "asia" },
+    timeoutSeconds: 7200,
+  }),
+  tx("twelve-x-london", "12 7 * * MON-FRI", "session", "daily_run_london.yml", {
+    inputs: { session: "london" },
+    timeoutSeconds: 7200,
+  }),
   // Weekday FX Hub clock; house-run-12 stays a disabled daily retry slot.
-  wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml"),
+  tx("twelve-x-new-york", "17 12 * * MON-FRI", "session", "daily_run_new_york.yml", {
+    inputs: { session: "new_york" },
+    timeoutSeconds: 7200,
+  }),
   tx("twelve-x-market-context-intraday", "4 */4 * * *", "ingest", "market_context_ingest.yml", {
     inputs: { bucket: "intraday" },
     timeoutSeconds: 1200,
