@@ -123,19 +123,23 @@ function ToolGroupTrigger({
       )}
       {...props}
     >
-      {active && (
-        <span data-slot="tool-group-trigger-loader" className="aui-tool-group-trigger-loader inline-flex shrink-0">
-          <DotMatrix state="loading" label="Tools running" className="size-3.5" />
-        </span>
-      )}
+      {/* The slot is always filled — the loading trail while the tools run,
+          the quiet corner dots when they are done — so the label and the
+          arrow keep their place. */}
+      <span data-slot="tool-group-trigger-loader" className="aui-tool-group-trigger-loader inline-flex shrink-0">
+        <DotMatrix
+          state={active ? "loading" : "idle"}
+          label={active ? "Tools running" : "Tools finished"}
+          className="!size-3 shrink-0"
+        />
+      </span>
       <span
         data-slot="tool-group-trigger-label"
         className={cn(
-          "aui-tool-group-trigger-label-wrapper inline-block text-start text-xs leading-none font-medium",
+          "aui-tool-group-trigger-label-wrapper inline-block min-w-[4rem] text-start text-xs leading-none font-medium",
           "group-data-[variant=ghost]/tool-group-root:font-normal",
           "group-data-[variant=outline]/tool-group-root:grow",
           "group-data-[variant=muted]/tool-group-root:grow",
-          active && "shimmer motion-reduce:animate-none",
         )}
       >
         {text}
@@ -150,7 +154,7 @@ function ToolGroupTrigger({
           "group-data-panel-open/trigger:rotate-0",
         )}
       >
-        <DotMatrix state="expand" label="Toggle tools" className="size-3.5" />
+        <DotMatrix state="expand" label="Toggle tools" className="!size-3 shrink-0" />
       </span>
     </CollapsibleTrigger>
   );

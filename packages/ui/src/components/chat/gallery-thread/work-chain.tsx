@@ -71,20 +71,22 @@ export function WorkChain({
     >
       <CollapsibleTrigger
         data-slot="aui_work-chain-trigger"
-        className="aui-work-chain-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]"
+        className="aui-work-chain-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-xs transition-[color,scale] active:scale-[0.98]"
       >
-        {/* The loading matrix while the chain works; nothing when it is done —
-            the check mark belongs to the tool rows, not to the chain. */}
-        {busy ? (
-          <DotMatrix state="loading" label="Working" className="size-3 shrink-0" />
-        ) : (
-          <span aria-hidden className="size-3 shrink-0" />
-        )}
+        {/* The marker is always there: the loading trail while the work runs,
+            the quiet corner dots when it is done. The slot keeps its size, so
+            the title never shifts when the turn ends — and the check mark
+            stays where it belongs, on the tool rows. */}
+        <DotMatrix
+          state={busy ? "loading" : "idle"}
+          label={busy ? "Working" : "Worked"}
+          className="!size-3 shrink-0"
+        />
         <span
           data-slot="aui_work-chain-label"
           className="aui-work-chain-label inline-block leading-none"
         >
-          Reasoning
+          {busy ? "Working" : "Worked"}
         </span>
         <span
           data-slot="aui_work-chain-chevron"
