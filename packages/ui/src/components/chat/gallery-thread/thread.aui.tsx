@@ -1203,8 +1203,9 @@ const AssistantMessage: FC = () => {
                     }
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
-                    {/* No trigger of its own: the chain header carries the
-                        reasoning title, and the chain is what folds away. */}
+                    {/* Upstream's structure: the reasoning is a sub-step with
+                        its own disclosure inside the chain. */}
+                    <ReasoningTrigger active={running} disabled={locked} />
                     <ReasoningContent aria-busy={running}>
                       <ReasoningText>{children}</ReasoningText>
                     </ReasoningContent>
