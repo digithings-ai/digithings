@@ -645,6 +645,21 @@ The public embed `/provider` path uses `EmbedComposerMenu` (provider list →
 token field → model when required) and the same `validateBYOKKey` /
 `pingByokKey` / `useBYOKKey` contract.
 
+**Decision — the provider menu cursor is indexed against the rendered
+rows, not against the provider order.** The `/provider` menu renders its
+rows from one ordered list: the clear-provider row first, then the
+provider order (`embed-provider-flow.ts`, `providerMenuRowIds()`). The
+menu's cursor is the row that Enter commits, so the cursor index must be
+read from that rendered list and never from the provider-order constant:
+the constant has no room for the prepended clear row, so an index taken
+from it lands one row above the active provider and Enter then commits
+that row instead. `providerMenuRowIndex()` is the only place that maps a
+provider to a row index, and the cursor sites in
+`embed-composer-menu.tsx` all go through it. The same rule holds for
+every other menu in that component — the cursor is set to the currently
+selected row, so the list a menu renders and the list it indexes are
+the same list by construction.
+
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 (stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
 opens BYOK mode):

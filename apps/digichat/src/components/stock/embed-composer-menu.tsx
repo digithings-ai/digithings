@@ -56,11 +56,13 @@ import {
 } from "@/hooks/use-byok-key";
 import { byokActivationGate, pingByokKey } from "@/lib/byok-ping";
 import {
+  CLEAR_PROVIDER_ROW_ID,
   CUSTOM_PROVIDER_MODEL,
-  PROVIDER_MENU_ORDER,
   defaultProviderPick,
   providerDisplayName,
   providerKeyPlaceholder,
+  providerMenuRowIds,
+  providerMenuRowIndex,
   providerModelChoices,
   sessionPickerModels,
   tryResolveProviderInput,
@@ -382,7 +384,7 @@ export function EmbedComposerMenu({
       } else if (kind === "provider") {
         const current = defaultProviderPick(providerActive?.provider, initialProvider);
         setProviderPick(current);
-        setCursor(Math.max(0, PROVIDER_MENU_ORDER.indexOf(current)));
+        setCursor(providerMenuRowIndex(providerActive?.provider));
       } else {
         setCursor(0);
       }
@@ -496,7 +498,7 @@ export function EmbedComposerMenu({
         activate: () => {
           const current = defaultProviderPick(providerActive?.provider, initialProvider);
           setProviderPick(current);
-          setCursor(Math.max(0, PROVIDER_MENU_ORDER.indexOf(current)));
+          setCursor(providerMenuRowIndex(providerActive?.provider));
           setView("provider");
         },
       });
@@ -876,27 +878,31 @@ export function EmbedComposerMenu({
 
   const providerRows = useMemo((): MenuRow[] => {
     // The house backend is a provider choice too: selecting it drops any BYOK
-    // key and returns routing to Cheaper Inference.
-    const rows: MenuRow[] = [
-      {
-        id: "cheaperinference",
-        label: slashName("cheaperinference"),
-        value: "Default · no key",
-        checked: !providerActive,
+    // key and returns routing to the default. The rendered order comes from
+    // providerMenuRowIds(), the same list the cursor index is taken from, so a
+    // prepended row can never shift the cursor.
+    const rows: MenuRow[] = providerMenuRowIds().map((rowId) => {
+      if (rowId === CLEAR_PROVIDER_ROW_ID) {
+        return {
+          id: rowId,
+          label: slashName(rowId),
+          value: "Default · no key",
+          checked: !providerActive,
+          exclusive: true,
+          activate: () => {
+            onClearProvider?.();
+            onClose();
+          },
+        };
+      }
+      return {
+        id: rowId,
+        label: slashName(rowId),
+        value: `${providerDisplayName(rowId)} · own key`,
+        checked: providerActive?.provider === rowId,
         exclusive: true,
         activate: () => {
-          onClearProvider?.();
-          onClose();
-        },
-      },
-      ...PROVIDER_MENU_ORDER.map((id) => ({
-        id,
-        label: slashName(id),
-        value: `${providerDisplayName(id)} · own key`,
-        checked: providerActive?.provider === id,
-        exclusive: true,
-        activate: () => {
-          setProviderPick(id);
+          setProviderPick(rowId);
           setKeyDraft("");
           setModelDraft("");
           setCustomModel(false);
@@ -904,10 +910,10 @@ export function EmbedComposerMenu({
           setLiveModels(undefined);
           setView("provider-key");
         },
-      })),
-    ];
+      };
+    });
     return rows;
-  }, [onClearProvider, onClose, providerActive, providerPick]);
+  }, [onClearProvider, onClose, providerActive]);
 
   const providerModelRows = useMemo((): MenuRow[] => {
     return providerModelChoices(providerPick, liveModels).map((m) => ({
@@ -988,7 +994,7 @@ export function EmbedComposerMenu({
   const goBack = useCallback(() => {
     if (view === "provider-key") {
       setView("provider");
-      setCursor(Math.max(0, PROVIDER_MENU_ORDER.indexOf(providerPick)));
+      setCursor(providerMenuRowIndex(providerPick));
       return;
     }
     if (view === "provider-model") {

@@ -282,6 +282,53 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
+  it("puts the cursor on the active provider row, not on the row before it", async () => {
+    const onClose = vi.fn();
+    const onClearProvider = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu
+          kind="provider"
+          providerActive={{ provider: "gemini", model: "gemini-2.5-pro" }}
+          onClose={onClose}
+          onClearProvider={onClearProvider}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+
+    // The cursor is the row the keyboard starts on, so Enter commits it.
+    const gemini = await screen.findByRole("menuitemradio", { name: /gemini/i });
+    expect(gemini).toHaveAttribute("data-cursor", "true");
+
+    const anthropic = screen.getByRole("menuitemradio", { name: /anthropic/i });
+    expect(anthropic).not.toHaveAttribute("data-cursor", "true");
+
+    const cheaper = screen.getByRole("menuitemradio", { name: /cheaperinference/i });
+    expect(cheaper).not.toHaveAttribute("data-cursor", "true");
+    unmount();
+  });
+
+  it("keeps the cursor on the clear row when no provider is connected", async () => {
+    const onClose = vi.fn();
+    const onClearProvider = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu
+          kind="provider"
+          onClose={onClose}
+          onClearProvider={onClearProvider}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+
+    const cheaper = await screen.findByRole("menuitemradio", { name: /cheaperinference/i });
+    expect(cheaper).toHaveAttribute("data-cursor", "true");
+
+    const openai = screen.getByRole("menuitemradio", { name: /openai/i });
+    expect(openai).not.toHaveAttribute("data-cursor", "true");
+    unmount();
+  });
+
   it("renders the /help panel with examples, commands and the contact address", async () => {
     const onClose = vi.fn();
     const { unmount } = render(

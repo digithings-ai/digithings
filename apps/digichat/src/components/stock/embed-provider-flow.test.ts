@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  CLEAR_PROVIDER_ROW_ID,
   PROVIDER_MENU_ORDER,
   defaultProviderPick,
   providerDisplayName,
   providerKeyPlaceholder,
+  providerMenuRowIds,
+  providerMenuRowIndex,
   providerModelChoices,
   sessionPickerModels,
   tryResolveProviderInput,
@@ -48,6 +51,32 @@ describe("sessionPickerModels", () => {
     expect(sessionPickerModels(house, "openai")).not.toContain(
       "deepseek/deepseek-v4-flash",
     );
+  });
+});
+
+describe("provider menu rows", () => {
+  it("renders the clear row first, then the provider order", () => {
+    expect(providerMenuRowIds()).toEqual([
+      CLEAR_PROVIDER_ROW_ID,
+      ...PROVIDER_MENU_ORDER,
+    ]);
+  });
+
+  it("points the cursor at the rendered row of the active provider", () => {
+    for (const id of PROVIDER_MENU_ORDER) {
+      expect(providerMenuRowIds()[providerMenuRowIndex(id)]).toBe(id);
+    }
+    // The rendered list carries the clear row first, so the cursor index of a
+    // provider is not its index in the provider order.
+    expect(providerMenuRowIndex("gemini")).not.toBe(
+      PROVIDER_MENU_ORDER.indexOf("gemini"),
+    );
+  });
+
+  it("keeps the cursor on the clear row when no provider is connected", () => {
+    expect(providerMenuRowIndex()).toBe(0);
+    expect(providerMenuRowIndex(undefined)).toBe(0);
+    expect(providerMenuRowIds()[providerMenuRowIndex()]).toBe(CLEAR_PROVIDER_ROW_ID);
   });
 });
 

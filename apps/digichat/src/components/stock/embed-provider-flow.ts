@@ -22,6 +22,38 @@ export const PROVIDER_MENU_ORDER: readonly BYOKProvider[] = [
   "openrouter",
 ];
 
+/**
+ * Row id of the clear-provider row that heads the rendered provider list.
+ * It is not a BYOKProvider: it means "no provider key, use the default".
+ */
+export const CLEAR_PROVIDER_ROW_ID = "cheaperinference";
+
+export type ProviderMenuRowId = typeof CLEAR_PROVIDER_ROW_ID | BYOKProvider;
+
+/**
+ * Rendered order of the provider menu rows: the clear row first, then the
+ * provider order. The rendered rows and the cursor index both come from this
+ * one list, so a prepended row can never shift the cursor.
+ */
+const PROVIDER_MENU_ROW_IDS: readonly ProviderMenuRowId[] = [
+  CLEAR_PROVIDER_ROW_ID,
+  ...PROVIDER_MENU_ORDER,
+];
+
+export function providerMenuRowIds(): readonly ProviderMenuRowId[] {
+  return PROVIDER_MENU_ROW_IDS;
+}
+
+/**
+ * Index of a provider inside the rendered provider rows. 0 is the clear row,
+ * which is also the selected row when no provider key is connected.
+ */
+export function providerMenuRowIndex(provider?: BYOKProvider): number {
+  if (!provider) return 0;
+  const index = PROVIDER_MENU_ROW_IDS.indexOf(provider);
+  return index >= 0 ? index : 0;
+}
+
 export function defaultProviderPick(
   active?: BYOKProvider,
   initial?: BYOKProvider,
