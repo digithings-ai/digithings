@@ -368,7 +368,7 @@ The ACR is the ledger of record for what is deployed. Digests below are verified
 | `v2.3.3` | `sha256:fc06e0a57902` | 2026-09-21T20:46Z | dev (`digichat--0000040`) |
 | `trial-1d0a8149-2.5.1` | `sha256:b41f25e7afe7` | 2026-10-19 | trial (`digichat-datatap-trial--0000005`) |
 | `trial-1d0a8149-2.6.0` | `sha256:c85574ba24ed` | 2026-10-20 | superseded (`digichat-datatap-trial--0000008`) |
-| `trial-1d0a8149-2.6.1` | `sha256:6b8e5c492f4f` | 2026-10-21 | **trial** (`digichat-datatap-trial--0000009`) |
+| `trial-1d0a8149-2.6.1` | `sha256:6b8e5c492f4f` | 2026-10-21 | **trial** (revision `--0000009`) |
 
 `trial-1d0a8149-2.6.1` is built from the `digichat-v2.6.1` tag (`3e3c384c1ea37d855e084e34710c3735580a48ad`) and is bound to it: `scripts/check_digichat_image_binding.py --facts` reports `ok: true` against the image's own `org.opencontainers.image.revision` and version.
 
