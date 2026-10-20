@@ -144,18 +144,22 @@ It **refuses to deploy** if the commit cannot be resolved.
 > the required reviewer - so a merge to main deploys the stack only after Chris approves it.
 > The lane is re-derived, not reverted, following DIG-2843's own precedent, and it deploys
 > through `npm run deploy` so the Container id is always derived from the deploying commit; a
-> bare `npx wrangler deploy` still ships the legacy id. The credential the lane needs is a
-> Workers Scripts:Edit token in the `CLOUDFLARE_WORKERS_API_TOKEN` secret, not the
-> Vectorize/D1 token that also answers to `CLOUDFLARE_API_TOKEN` (the trap in
-> `wrangler.toml`).
+> bare `npx wrangler deploy` still ships the legacy id. The credential the lane needs is the
+> repo secret `CLOUDFLARE_API_TOKEN`, which carries Workers Scripts:Edit on the
+> digithings.ai account: run 39490394661 uploaded and deployed this Worker with it.
 >
-> **That secret does not exist yet.** #6013 added the read of
-> `CLOUDFLARE_WORKERS_API_TOKEN` and the secret was never created, so the lane exported an
-> empty `CLOUDFLARE_API_TOKEN` and the failure landed on wrangler as an auth error rather
-> than on the missing credential. The lane now refuses to deploy without it and says which
-> credential is missing, and the gap is recorded in `.github/secret-names.json` under
-> `accepted_missing` (owner: chris) so the workflow-secret-reference check reports it
-> instead of hiding it. `npm run deploy` below is still the operator path for deploying a specific
+> **The trap that put two names in conflict is local, not CI.**
+> `apps/digithings-stack-cloudflare/wrangler.toml` warns that the LOCAL developer's
+> `CLOUDFLARE_API_TOKEN` in `.env` is a Vectorize/D1 token and makes `wrangler deploy`
+> fail with error 10000. That is a different credential from the repo secret of the same
+> name. A run of the lane from a developer machine must therefore not export the local
+> `.env` token into the deploy; CI only ever sees the repo secret.
+>
+> #6013 made the lane read `secrets.CLOUDFLARE_WORKERS_API_TOKEN`, a name that exists at
+> no level, and the lane exported an empty token: the failure landed on wrangler as an
+> auth error rather than on the missing credential. The lane reads the name that exists
+> again, and it refuses to deploy on an empty token, saying which credential is missing.
+> `npm run deploy` below is still the operator path for deploying a specific
 > tree by hand.
 > The build half is still gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for this app on every PR,
 > and the stack's `tsc --noEmit` + `vitest run` now run in `test-web.yml`. See

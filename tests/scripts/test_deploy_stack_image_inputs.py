@@ -477,8 +477,10 @@ def test_the_deploy_reads_the_secret_that_exists() -> None:
 
     The lane read CLOUDFLARE_WORKERS_API_TOKEN, which no secret answers, so
     wrangler got an empty token and the production deploy failed on auth (run
-    39482995993). #6066 fixed it on main; develop never carried it, so a
-    promotion of develop would have put the broken name back.
+    39482995993). #6066 fixed it on main and #6081 broke it again; develop
+    carried #6076's preflight on the same dead name, which no deploy could
+    ever pass. This pins the name that does exist: run 39490394661 uploaded
+    and deployed this Worker with it.
     """
     text = WORKFLOW.read_text(encoding="utf-8")
     code = "\n".join(

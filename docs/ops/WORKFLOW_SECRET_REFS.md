@@ -2,8 +2,7 @@
 
 Every `secrets.NAME` read under `.github/workflows/` must name a secret that exists at
 some level: a repo secret, a repo variable, an org secret, or an environment secret.
-This is the runbook for the check that says so, and for the one gap it currently knows
-about.
+This is the runbook for the check that says so.
 
 ## The failure this exists to stop
 
@@ -17,6 +16,10 @@ nothing said which credential was missing.
 
 That is the same defect class as DIG-4715: the producer and the validator disagree, and
 only production finds out.
+
+The gap is closed. The stack deploy lane now reads `secrets.CLOUDFLARE_API_TOKEN`, the
+repo secret that exists and that wrangler deploys the stack with (run 39490394661
+uploaded and deployed the Worker with it), and the manifest carries no accepted gaps.
 
 ## What runs
 
@@ -134,8 +137,8 @@ A name can be known to be missing and still be tolerated, if the gap is recorded
 owner and a review date. The entries live in `accepted_missing` in the manifest:
 
 ```json
-"CLOUDFLARE_WORKERS_API_TOKEN": {
-  "workflows": [".github/workflows/deploy-digithings-stack-cloudflare.yml"],
+"ACCEPTED_SECRET_NAME": {
+  "workflows": [".github/workflows/the-workflow-that-reads-it.yml"],
   "reason": "...",
   "owner": "chris",
   "since": "2026-10-20",
@@ -163,15 +166,23 @@ quietly.
 An acceptance must also name at least one workflow. An entry that covers every workflow
 is a blank cheque, not a decision, so the parser refuses it.
 
-### The one open entry
+### The open entries
 
-`CLOUDFLARE_WORKERS_API_TOKEN` exists at no level. The lane needs a Cloudflare API token
-with the **Workers Scripts:Edit** permission, under that name and not another: the repo's
-`CLOUDFLARE_API_TOKEN` is the Vectorize/D1 token, and exporting it makes wrangler fail
-with error 10000. The lane's own preflight refuses to deploy without it and says which
-credential is missing, so the gap is loud where it is used.
+There are none today. The one entry this section was written for,
+`CLOUDFLARE_WORKERS_API_TOKEN`, is gone: the stack deploy lane reads
+`secrets.CLOUDFLARE_API_TOKEN` again, a name that exists at the repo level and that
+wrangler deploys the stack with. The premise the entry rested on — that the repo's
+`CLOUDFLARE_API_TOKEN` is the Vectorize/D1 token and makes wrangler fail with error
+10000 — is a trap in `apps/digithings-stack-cloudflare/wrangler.toml` about the LOCAL
+developer's `.env` token, not about the repo secret. The two are different credentials,
+and the repo one carries Workers Scripts:Edit.
 
-Minting the token is a human action. Until it exists, this entry is the record.
+The entry had to go rather than be left to expire: an acceptance is only true while a
+workflow still reads the name, and
+`tests/scripts/test_secrets_audit.py::test_every_acceptance_still_describes_a_real_gap`
+fails the moment it stops being true. A stale entry would also have tolerated a
+future read of a name that exists nowhere — the exact failure this check exists to
+stop.
 
 ## What this check does not do
 
