@@ -103,6 +103,7 @@ import { signTrialProof } from "@/lib/trial-proof";
 import { streamText, createUIMessageStreamResponse } from "ai";
 import { parseDigichatConfig } from "@/lib/deploy-config";
 import {
+  loadDigichatConfig,
   resetDigichatConfigForTests,
   setDigichatConfigForTests,
 } from "@/lib/deploy-config/loader";
@@ -113,6 +114,7 @@ import {
   premiumUserKey,
   resetPremiumSpendForTests,
 } from "@/lib/premium-budget/budget";
+import { createDigiGraphClient } from "@/lib/digigraph";
 
 function catalogWithSearchVault() {
   return parseDigichatConfig({
@@ -2586,6 +2588,129 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(dashboardCtx.embedConfig.showByok).toBe(true);
     });
   });
+  describe("DIG-4589: one source decides the session lock and the model allowlist", () => {
+    // The embed tenant registry and the deployment config are two sources
+    // that can disagree. The loader merges them once, so the route reads the
+    // lock and the allowlist from the same artefact.
+    const OCC_HOST = "occ.digithings.ai";
+
+    const occCtx = {
+      tenantSlug: "occ",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "occ",
+        gateMode: "ungated",
+        theme: "dark",
+        attribution: false,
+        token: "occ-secret",
+        backend: { type: "digigraph" },
+        activityDetail: "full",
+      },
+    };
+
+    function occReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": `https://${OCC_HOST}`,
+          "x-embed-token": "occ-secret",
+          ...headers,
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    }
+
+    function occYaml(gate: string[] = []): string {
+      return [
+        "version: 1",
+        "hosts:",
+        `  ${OCC_HOST}:`,
+        "    slug: occ",
+        "    backend:",
+        "      type: digigraph",
+        ...gate,
+        "",
+      ].join("\n");
+    }
+
+    function installConfig(yaml: string, tenant: Record<string, unknown>): void {
+      setDigichatConfigForTests(
+        loadDigichatConfig({
+          fileContents: yaml,
+          env: {
+            DIGICHAT_EMBED_TENANTS: JSON.stringify({ [OCC_HOST]: tenant }),
+          },
+        }),
+      );
+    }
+
+    beforeEach(() => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(occCtx as never);
+    });
+
+    afterEach(() => {
+      resetDigichatConfigForTests();
+    });
+
+    it("enforces the tenant model offer when the deployment config has no list", async () => {
+      // The tenant curates the offer; the deployment config has no model
+      // list. Before the fix the empty deployment list won, so no allowlist
+      // ran and any x-digi-model was forwarded unchecked.
+      installConfig(occYaml(), {
+        slug: "occ",
+        token: "occ-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        models: { default: "only-this-model", available: ["only-this-model"] },
+      });
+
+      const denied = await POST(occReq({ "x-digi-model": "other-model" }));
+      expect(denied.status).toBe(400);
+      const body = (await denied.json()) as { error: string };
+      expect(body.error).toBe("model_not_allowed");
+
+      const allowed = await POST(occReq({ "x-digi-model": "only-this-model" }));
+      expect(allowed.status).toBe(200);
+    });
+
+    it("honours a session lock set in the deployment config", async () => {
+      // The lock is set in the deployment config only. The tenant registry
+      // does not set it, so before the fix nothing was locked and the
+      // visitor's model pick was forwarded.
+      installConfig(
+        occYaml(["    gate:", "      mode: ungated", "      lockSessionControls: true"]),
+        {
+          slug: "occ",
+          token: "occ-secret",
+          gateMode: "ungated",
+          backend: { type: "digigraph" },
+        },
+      );
+
+      const forwarded: string[] = [];
+      vi.mocked(createDigiGraphClient).mockImplementation(
+        (() =>
+          ((modelId: string) => {
+            forwarded.push(modelId);
+            return {};
+          }) as never) as never,
+      );
+      try {
+        const res = await POST(occReq({ "x-digi-model": "some-model" }));
+        expect(res.status).toBe(200);
+        // The house default, never the visitor's pick.
+        expect(forwarded).toEqual(["digigraph"]);
+      } finally {
+        vi.mocked(createDigiGraphClient).mockImplementation(
+          (() => (() => ({})) as never) as never,
+        );
+      }
+    });
+  });
+
   describe("trace stream (the production default)", () => {
     // Every other test in this file pins DIGICHAT_TRACE_UI="0", which routes through
     // `streamText`. Production does the opposite: the flag is unset, so `useTraceStream`

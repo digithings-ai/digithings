@@ -885,3 +885,83 @@ describe("compat web_search default-on (#3871)", () => {
     expect(filterForceToolHeader(dep, "web_search")).toBeUndefined();
   });
 });
+
+describe("tenants merge: one source for the session lock and the model allowlist (DIG-4589)", () => {
+  const OCC_HOST = "occ.digithings.ai";
+
+  function occYaml(gate: string[] = []): string {
+    return [
+      "version: 1",
+      "hosts:",
+      `  ${OCC_HOST}:`,
+      "    slug: occ",
+      "    backend:",
+      "      type: digigraph",
+      ...gate,
+      "",
+    ].join("\n");
+  }
+
+  function mergedHost(
+    yaml: string,
+    tenant: Record<string, unknown>,
+  ): NonNullable<ReturnType<typeof loadDigichatConfig>["hosts"]>[string] {
+    const config = loadDigichatConfig({
+      fileContents: yaml,
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({ [OCC_HOST]: tenant }),
+      },
+    });
+    const host = config.hosts?.[OCC_HOST];
+    expect(host).toBeDefined();
+    return host!;
+  }
+
+  it("keeps a deployment lock and takes the tenant model offer", () => {
+    // The two sources disagree: the lock is set in the deployment config,
+    // the model offer is curated in the tenant registry. The merged host
+    // must carry both, because the route reads one artefact.
+    const host = mergedHost(occYaml(["    gate:", "      mode: ungated", "      lockSessionControls: true"]), {
+      slug: "occ",
+      token: "occ-secret",
+      gateMode: "ungated",
+      backend: { type: "digigraph" },
+      models: { default: "only-this-model", available: ["only-this-model"] },
+    });
+
+    expect(host.gate.lockSessionControls).toBe(true);
+    expect(host.models?.available).toEqual(["only-this-model"]);
+    expect(host.models?.default).toBe("only-this-model");
+  });
+
+  it("keeps the deployment model list when the tenant curates none", () => {
+    const host = mergedHost(
+      occYaml([
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+      ]),
+      {
+        slug: "occ",
+        token: "occ-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+      },
+    );
+
+    expect(host.models?.available).toEqual(["deployment-model"]);
+    expect(host.gate.lockSessionControls).toBeUndefined();
+  });
+
+  it("never drops a tenant lock the deployment config does not set", () => {
+    const host = mergedHost(occYaml(), {
+      slug: "occ",
+      token: "occ-secret",
+      gateMode: "ungated",
+      backend: { type: "digigraph" },
+      lockSessionControls: true,
+    });
+
+    expect(host.gate.lockSessionControls).toBe(true);
+  });
+});

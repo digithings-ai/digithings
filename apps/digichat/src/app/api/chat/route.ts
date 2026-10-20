@@ -567,11 +567,14 @@ async function handleChat(
   let modelId = tenantDefaultModel || digigraphModelName();
   // A tenant with lockSessionControls pins the house default model (DIG-1210):
   // a visitor's /model pick or session_set_model result is never forwarded.
+  // The lock and the allowlist below both come from the merged deployment
+  // (DIG-4589), so a lock set in the deployment config is honoured too and
+  // the two sources can never disagree.
   // Exception: a locked tenant that curates its own `models.available` list
   // lets the visitor pick from exactly that list (allowlist enforced below).
   const lockedWithoutModelList =
-    embedConfig?.lockSessionControls === true &&
-    (embedConfig.models?.available?.length ?? 0) === 0;
+    dep?.gate.lockSessionControls === true &&
+    (dep?.models?.available?.length ?? 0) === 0;
   const requestedModel = lockedWithoutModelList
     ? undefined
     : req.headers.get("x-digi-model")?.trim() || undefined;
