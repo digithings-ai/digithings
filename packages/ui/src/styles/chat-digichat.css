@@ -237,6 +237,37 @@
   height: 0;
 }
 
+[data-slot="composer-trigger-popover-items"] {
+  scrollbar-width: none;
+}
+
+[data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.aui-overlay-scroll {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  bottom: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.aui-overlay-thumb {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-radius: 0;
+  background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+}
+
+.aui-overlay-thumb:hover {
+  background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
+}
+
 .dc-composer-menu-scroll {
   position: absolute;
   top: 0;
@@ -1109,25 +1140,50 @@
   font-family: var(--font-mono);
 }
 
+/* The highlighted palette row is marked by the chevron only: no outline or
+   wash, exactly like the composer menu. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-highlighted],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [aria-selected="true"],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [aria-selected="true"] {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted] {
   background: transparent;
   background-color: transparent;
   color: var(--ink);
-  outline: 1px solid var(--hair);
-  outline-offset: -1px;
+  outline: none;
 }
 
-/* Selected row: one chevron, in a slot reserved on every row so hover and
-   selection never reflow or resize a row. */
+/* Selected row: a 3x3 cube diamond, the same grid motif as the context
+   meter, instead of the dropdown radio disc. */
+.aui-menu-mark {
+  display: grid;
+  grid-template-columns: repeat(3, 2px);
+  grid-auto-rows: 2px;
+  gap: 1px;
+}
+
+.aui-menu-mark-cell {
+  background: color-mix(in oklab, var(--ink-mute) 22%, transparent);
+}
+
+.aui-menu-mark-cell.is-on {
+  background: currentColor;
+}
+
+/* Hover / arrow-key row: one chevron, rendered only on that row so its
+   label shifts right to make room for it. */
 .aui-menu-cursor {
   display: inline-flex;
-  width: 1rem;
   flex: none;
   align-items: center;
   justify-content: center;
+}
+
+/* Slash / mention palette: the chevron exists on every row but only the
+   highlighted one shows it, so that row shifts right like the menu. */
+.aui-composer-trigger-popover .aui-menu-cursor {
+  display: none;
+}
+
+.aui-composer-trigger-popover [data-highlighted] .aui-menu-cursor {
+  display: inline-flex;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings],
