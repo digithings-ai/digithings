@@ -41,7 +41,7 @@ describe("twelve-x runner jobs", () => {
   });
 
   it("dispatch sends the daily row to the runner", async () => {
-    const runnerFetch = vi.fn(async () =>
+    const runnerFetch = vi.fn(async (_request: Request) =>
       Response.json({ ok: true, exit_code: 0, duration_ms: 4, alert: "none" }),
     );
     const env: Env = {
@@ -53,7 +53,7 @@ describe("twelve-x runner jobs", () => {
     if (!job) throw new Error("missing daily job");
     const result = await dispatch(env, job, job.cron);
     expect(result).toEqual({ ok: true, status: 200, dry_run: false });
-    const request = runnerFetch.mock.calls[0][0] as Request;
+    const request = runnerFetch.mock.calls[0][0];
     expect(request.url).toBe("https://twelvex-runner/run/ingest");
   });
 });
@@ -71,7 +71,7 @@ describe("dispatchTwelvex", () => {
   });
 
   it("POSTs /run/ingest with the bucket and treats exit 0 as success", async () => {
-    const runnerFetch = vi.fn(async () =>
+    const runnerFetch = vi.fn(async (_request: Request) =>
       Response.json({ ok: true, exit_code: 0, duration_ms: 40, alert: "none", log_tail: "token=supersecret" }),
     );
     const env: Env = {
@@ -82,7 +82,7 @@ describe("dispatchTwelvex", () => {
     const job = ingestJob();
     const result = await dispatchTwelvex(env, job, job.cron);
     expect(result).toEqual({ ok: true, status: 200, dry_run: false });
-    const request = runnerFetch.mock.calls[0][0] as Request;
+    const request = runnerFetch.mock.calls[0][0];
     expect(request.url).toBe("https://twelvex-runner/run/ingest");
     expect(request.headers.get("Authorization")).toBe("Bearer runner-token");
     expect(JSON.parse(await request.text())).toMatchObject({
@@ -111,11 +111,81 @@ describe("dispatchTwelvex", () => {
     );
   });
 
+  it("prefers the twelve-x-only secret, and still accepts the shared token", async () => {
+    const job = ingestJob();
+    const makeRunner = () =>
+      vi.fn(async (_request: Request) =>
+        Response.json({ ok: true, exit_code: 0, duration_ms: 1, alert: "none" }),
+      );
+
+    // Dedicated secret wins even when the shared token is also set.
+    const dedicated = makeRunner();
+    await dispatchTwelvex(
+      {
+        DRY_RUN: "0",
+        RUNNER_AUTH_TOKEN: "shared-token",
+        TWELVEX_RUNNER_AUTH: "twelvex-token",
+        TWELVEX_RUNNER: { fetch: dedicated } as unknown as Fetcher,
+      },
+      job,
+      job.cron,
+    );
+    expect(dedicated.mock.calls[0][0].headers.get("Authorization")).toBe(
+      "Bearer twelvex-token",
+    );
+
+    // Transitional fallback: a deployment holding only the shared token still works.
+    const shared = makeRunner();
+    await dispatchTwelvex(
+      {
+        DRY_RUN: "0",
+        RUNNER_AUTH_TOKEN: "shared-token",
+        TWELVEX_RUNNER: { fetch: shared } as unknown as Fetcher,
+      },
+      job,
+      job.cron,
+    );
+    expect(shared.mock.calls[0][0].headers.get("Authorization")).toBe(
+      "Bearer shared-token",
+    );
+
+    // The production shape: only the dedicated secret is set.
+    const solo = makeRunner();
+    await dispatchTwelvex(
+      {
+        DRY_RUN: "0",
+        TWELVEX_RUNNER_AUTH: "twelvex-only",
+        TWELVEX_RUNNER: { fetch: solo } as unknown as Fetcher,
+      },
+      job,
+      job.cron,
+    );
+    expect(solo.mock.calls[0][0].headers.get("Authorization")).toBe(
+      "Bearer twelvex-only",
+    );
+
+    // An empty dedicated secret falls back rather than sending `Bearer `.
+    const empty = makeRunner();
+    await dispatchTwelvex(
+      {
+        DRY_RUN: "0",
+        TWELVEX_RUNNER_AUTH: "",
+        RUNNER_AUTH_TOKEN: "shared-token",
+        TWELVEX_RUNNER: { fetch: empty } as unknown as Fetcher,
+      },
+      job,
+      job.cron,
+    );
+    expect(empty.mock.calls[0][0].headers.get("Authorization")).toBe(
+      "Bearer shared-token",
+    );
+  });
+
   it("requires the auth token and the binding", async () => {
     const job = ingestJob();
     await expect(
       dispatchTwelvex({ DRY_RUN: "0" }, job, job.cron),
-    ).rejects.toThrow("RUNNER_AUTH_TOKEN is required");
+    ).rejects.toThrow("TWELVEX_RUNNER_AUTH or RUNNER_AUTH_TOKEN is required");
     await expect(
       dispatchTwelvex(
         { DRY_RUN: "0", RUNNER_AUTH_TOKEN: "runner-token" },

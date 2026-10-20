@@ -1,0 +1,3 @@
+# The suite needs the project virtualenv; `make test` assumes it is active.
+# sctl publish runs this command when publishing a change.
+test: uv run pytest -m unit

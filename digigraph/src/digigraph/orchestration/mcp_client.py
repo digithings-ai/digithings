@@ -850,7 +850,7 @@ def expand_mcp_disabled_tokens(
         if not key:
             continue
         prefix = f"{key}_"
-        out |= {n for n in extra if n == key or n.startswith(prefix)}
+        out |= {n for n in extra if n.lower() == key or n.lower().startswith(prefix)}
     return frozenset(out)
 
 

@@ -21,11 +21,11 @@
       "count": 3,
       "ticket": "DIG-3689"
     },
-    "Dockerfile.digichat-cloudflare": {
+    "infra/docker/Dockerfile.digichat-cloudflare": {
       "count": 4,
       "ticket": "DIG-2912"
     },
-    "Dockerfile.digithings-stack-cloudflare": {
+    "infra/docker/Dockerfile.digithings-stack-cloudflare": {
       "count": 9,
       "ticket": "DIG-3689"
     },
@@ -354,7 +354,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/ui-stream-parts.test.ts": {
-      "count": 13,
+      "count": 14,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/web-search-pref.test.ts": {
@@ -378,7 +378,7 @@
       "ticket": "DIG-3689"
     },
     "config/contract/contract.yaml": {
-      "count": 22,
+      "count": 25,
       "ticket": "DIG-3689"
     },
     "config/contract/generated/compose.env": {
@@ -842,7 +842,7 @@
       "ticket": "DIG-3689"
     },
     "tests/dg/test_corpus_routing.py": {
-      "count": 47,
+      "count": 49,
       "ticket": "DIG-3689"
     },
     "tests/dg/test_digisearch_handler.py": {
@@ -1022,7 +1022,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_zammad_mcp.py": {
-      "count": 134,
+      "count": 135,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_zammad_mcp_exports.py": {

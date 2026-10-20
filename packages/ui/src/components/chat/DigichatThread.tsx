@@ -5,7 +5,7 @@
  * (`gallery-thread/thread.aui.tsx` + slots + chatbot.css), not a parallel
  * ChatMarkdown / ChatThinking / ChatToolCall tree.
  */
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 
 import {
   Thread,
@@ -40,6 +40,8 @@ export type DigichatThreadProps = {
   reasoningMode?: GroupDisclosureMode;
   /** Deploy `toolCalls` disclosure mode. Defaults to `collapsed`. */
   toolCallsMode?: GroupDisclosureMode;
+  /** Row rendered inside the composer border, under the input. */
+  composerToolbar?: ReactNode;
 };
 
 export function DigichatThread({
@@ -56,6 +58,7 @@ export function DigichatThread({
   hiddenAttachmentNames,
   reasoningMode,
   toolCallsMode,
+  composerToolbar,
 }: DigichatThreadProps) {
   return (
     <Thread
@@ -72,6 +75,7 @@ export function DigichatThread({
       hiddenAttachmentNames={hiddenAttachmentNames}
       reasoningMode={reasoningMode}
       toolCallsMode={toolCallsMode}
+      composerToolbar={composerToolbar}
     />
   );
 }

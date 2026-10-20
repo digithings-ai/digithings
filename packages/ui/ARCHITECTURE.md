@@ -457,7 +457,7 @@ chrome (canvas gestures, native `<summary>`, custom timelines). See
 
 The reference app is **linted and type-checked** in CI by the `web` lane
 (`test-web.yml`), gated on `apps/reference/**`: `npm run lint` and
-`npm run typecheck` (`tsc --noEmit`) for the `design-reference` workspace (#1981).
+`npm run typecheck` (`tsc --noEmit`) for the `@digithings/reference` workspace (#1981).
 Run the same two commands locally from `reference/`, plus a live browser check —
 that last half is the only one CI cannot do.
 

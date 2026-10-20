@@ -67,14 +67,14 @@ body:
         someone else's data, endpoint, authentication flow or vendor-specific
         constant.
 
-        **No third-party data access merges without a `docs/vendor-terms/<vendor>/INDEX.md`
-        entry, written when the integration is proposed — not at review time.**
+        **No third-party data access merges without a vendor terms record in the private vendor-records store
+        (local only, never committed here), written when the integration is proposed — not at review time.**
 
-        Give the vendor and the entry's path. If the entry does not exist yet, say
+        Give the vendor and say whether the record exists. If the entry does not exist yet, say
         so; writing it is part of this task. An open-source `LICENSE` in the
         vendor's repository does not cover their data. Reading their public terms
         is not outreach — contacting them is Chris's decision.
-      placeholder: "Vendor: <name>\nEntry: docs/vendor-terms/<name>/INDEX.md (exists | to write)"
+      placeholder: "Vendor: <name>\nRecord: private vendor-records store (exists | to write)"
     validations:
       required: false
   - type: textarea

@@ -369,10 +369,11 @@ def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
             continue
         # All green, but a green that anyone with write access could have typed is
         # not a passing build. Require the evidence to come from a workflow run -
-        # except for the checks named in `status_context_checks`, which branch
-        # protection requires as commit statuses and no workflow ever reports
-        # (digithings `local-ci`, DIG-3707): for those, a SUCCESS status is the
-        # strongest evidence that exists.
+        # except for the checks named in `status_context_checks`: digithings'
+        # branch protection requires `local-ci` as a commit status (DIG-3707), and
+        # twelve-x requires the same name because its Actions job cannot start while
+        # billing is blocked (DIG-4454). For those a SUCCESS status is the strongest
+        # evidence that exists - and on twelve-x it is the only one.
         if required in policy.status_context_checks:
             continue
         if not any(_is_check_run(e) for e in entries):

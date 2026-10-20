@@ -90,12 +90,21 @@ zone_name = "digithings.ai"
 
 [[containers]]
 class_name = "DigiChatContainer"
-# Build context is monorepo root (two levels up from this package).
-image = "../../Dockerfile.digichat-cloudflare"
+# `image` and `image_build_context` resolve relative to THIS config file's
+# directory, and wrangler defaults the container build context to the
+# Dockerfile's own directory (`dirname(image)`). Pinned to the monorepo root
+# explicitly: the Dockerfile's COPY lines are repo-root-relative, so the
+# default would narrow the context to `infra/docker/` and break the build.
+image = "../../infra/docker/Dockerfile.digichat-cloudflare"
+image_build_context = "../.."
 # DIGICHAT_VERSION for GET /api/health is baked from apps/digichat/package.json
-# inside Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
+# inside infra/docker/Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
 # (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
-max_instances = 1
+# 2, not 1: a rolling deploy must be able to start the new revision while the
+# old one drains, or the account's container-instance cap refuses the start
+# (DIG-4459). Only one instance serves traffic once the rollout settles; the
+# second slot is rollout headroom, not steady-state cost.
+max_instances = 2
 instance_type = "basic"
 
 [[durable_objects.bindings]]

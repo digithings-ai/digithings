@@ -57,6 +57,26 @@ it("does not stream the upstream error body to the browser", async () => {
   expect(errorLog).toHaveBeenCalled();
 });
 
+it("sends the curated tenant model in the request body", async () => {
+  let sent: { model?: string } | null = null;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    sent = JSON.parse(String(init?.body)) as { model?: string };
+    return new Response("", { status: 200 });
+  });
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    model: "deepseek/deepseek-v4.1-flash",
+  });
+  await new Response(res.body).text();
+
+  expect(sent?.model).toBe("deepseek/deepseek-v4.1-flash");
+});
+
 // #3910: a real 200 always carries a non-null body even when the upstream sends
 // zero bytes, so `!res.body` only catches 204/205/HEAD. An SSE stream that ends
 // with no events must still fail the turn — otherwise it completes as a silent

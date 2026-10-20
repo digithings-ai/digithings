@@ -47,7 +47,7 @@ def test_tool_dispatch_avoids_pep563_annotations() -> None:
 
     ``from __future__ import annotations`` turns every annotated ``@mcp.tool()``
     parameter into a string, and FastMCP 1.9.3 ``Tool.from_function`` calls
-    ``issubclass()`` on the raw annotation — see Dockerfile.digithings-stack-cloudflare
+    ``issubclass()`` on the raw annotation — see infra/docker/Dockerfile.digithings-stack-cloudflare
     rebuild marker v8.
     """
     import re

@@ -4,7 +4,7 @@
 # MCP tool payloads carry heterogeneous JSON; Any is the honest annotation.
 # No `from __future__ import annotations`: the stack image ships FastMCP 1.9.3,
 # which calls issubclass() on raw annotations — PEP 563 string annotations crash
-# every @mcp.tool() at import (Dockerfile.digithings-stack-cloudflare marker v8).
+# every @mcp.tool() at import (infra/docker/Dockerfile.digithings-stack-cloudflare marker v8).
 import json
 import logging
 import os

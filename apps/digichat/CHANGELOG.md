@@ -1,5 +1,44 @@
 # Changelog
 
+## [2.5.1](https://github.com/digithings-ai/digithings/compare/digichat-v2.5.0...digichat-v2.5.1) (2026-10-19)
+
+Restores the OCC chat behaviour the 14 Oct build had, which the Cloudflare
+split did not carry over.
+
+### Bug Fixes
+
+* **occ:** citations are inline markdown only, deduped per turn, with a static source mark and non-web hrefs rendered as plain text ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** Allow/Deny only for an explicit approval or interrupt, not a server tool whose output was cut by a cold start ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** streaming tool args are pretty-printed from a repaired JSON prefix; DeepSeek's echoed search-template line is stripped ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** boot loader shows "Waking up services…" again ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** default model back to `deepseek/deepseek-v4.1-flash` with the six-model session allowlist and matching LiteLLM entries ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** `lockSessionControls` pins the house model and hides the session model/MCP/tool controls ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **digichat:** the digikey `bff_session` exchange retries a cold container with backoff ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+
+## [2.5.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.2...digichat-v2.5.0) (2026-10-19)
+
+The first tagged digichat release after `digichat-v2.3.2`. It carries the OCC
+chat work: the OCC surface now lives on its own
+Cloudflare worker, and the improvements that were sitting behind that split are
+in this image. digichat 2.4.0 was never tagged.
+
+### Features
+
+* **digichat:** OCC chat on its own worker - `/chat/occ*`, the ticket-system MCP bridge and the
+  digichat admin surface move to `digithings-digichat` instead of the base stack ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** edit-in-composer - an answer can be edited and re-sent ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** per-tool toggles - a visitor can switch individual tools off for a session ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** session model picker, gated by the tenant allowlist ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** prompt translation, inline citations and identity paragraphs in the OCC system
+  prompt ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **ticket-mcp:** the transport security guard now matches a bare `Host` as well as `host:*` ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+
+### Bug Fixes
+
+* **digichat:** the grounding tool is advertised as `digisearch`, not `digisearch_semantic` ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digigraph:** a per-tool toggle now also matches a tool whose registered name keeps its
+  camelCase ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+
 ## [2.4.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.2...digichat-v2.4.0) (2026-09-29)
 
 

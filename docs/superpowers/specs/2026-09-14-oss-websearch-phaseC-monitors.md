@@ -140,7 +140,7 @@ No new port. No new auth scope. No pandas. No embeddings or search internals
 dependency (R4): `digiclaw>=0.1.0` for the cron grammar IMPORT only — declared
 in digisearch `[server]` (`digisearch/pyproject.toml`) and installed (local
 package) into both images (`digisearch/Dockerfile`,
-`Dockerfile.digithings-stack-cloudflare`); neither image installs digiclaw today.
+`infra/docker/Dockerfile.digithings-stack-cloudflare`); neither image installs digiclaw today.
 
 ---
 
@@ -161,7 +161,7 @@ digisearch/src/digisearch/mcp_server.py             # +4 tools (modify, §4)
 digisearch/src/digisearch/orchestrator_tools.py     # +2 tool defs (modify, §4)
 digisearch/pyproject.toml                           # digiclaw>=0.1.0 in [server] (R4)
 digisearch/Dockerfile                               # install local digiclaw (R4)
-Dockerfile.digithings-stack-cloudflare              # install local digiclaw (R4)
+infra/docker/Dockerfile.digithings-stack-cloudflare              # install local digiclaw (R4)
 docker-compose.yml                                  # digisearch: DIGI_WORKSPACE +
                                                     # monitors volume (R12); heartbeat:
                                                     # DIGISEARCH_URL + tick loop (R9)
@@ -1334,7 +1334,7 @@ Expected: zero errors
 - Modify: `docker-compose.yml` (heartbeat: `DIGISEARCH_URL` + tick loop, R9;
   digisearch: `DIGI_WORKSPACE` + monitors volume, R12)
 - Modify: `digisearch/pyproject.toml` (`digiclaw>=0.1.0` in `[server]`, R4)
-- Modify: `digisearch/Dockerfile` + `Dockerfile.digithings-stack-cloudflare`
+- Modify: `digisearch/Dockerfile` + `infra/docker/Dockerfile.digithings-stack-cloudflare`
   (install the local digiclaw package; neither image installs it today, R4)
 - Modify: `digisearch/ARCHITECTURE.md` (§3 + §9: monitors module + routes),
   `digiclaw/ARCHITECTURE.md` (§3: tick surface + env vars)
@@ -1491,7 +1491,7 @@ history and dedup memory survive container recreate.
 
 Cron dependency packaging (R4): add `digiclaw>=0.1.0` to
 `digisearch/pyproject.toml` `[server]` and install the local digiclaw package
-in `digisearch/Dockerfile` and `Dockerfile.digithings-stack-cloudflare`
+in `digisearch/Dockerfile` and `infra/docker/Dockerfile.digithings-stack-cloudflare`
 (neither image installs digiclaw today) — the runner imports `digiclaw.cron`
 in-container.
 

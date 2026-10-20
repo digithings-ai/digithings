@@ -225,20 +225,26 @@ export function caretPx(
   const baseTop = (area.offsetTop || 0) + borderTop + paddingTop;
   void container;
 
+  // Ink-height block: start where the 1.1em block used to start (top aligned
+  // with the letter tops) and shorten the bottom so it stops at the baseline
+  // instead of hanging below it.
+  const caretHeight = Math.max(8, Math.round(fontSize * 0.8));
+  const topOffset = Math.max(0, (lineHeight - Math.round(fontSize * 1.1)) / 2);
+
   const mirrored = mirrorCaretPx(area, cs);
   if (mirrored) {
     return {
       left: (area.offsetLeft || 0) + mirrored.left - (area.scrollLeft || 0),
-      top: (area.offsetTop || 0) + mirrored.top - (area.scrollTop || 0),
-      height: mirrored.lineHeight,
+      top: (area.offsetTop || 0) + mirrored.top - (area.scrollTop || 0) + topOffset,
+      height: caretHeight,
       width: Math.max(1, chWidth),
     };
   }
 
   return {
     left: baseLeft + textWidth - (area.scrollLeft || 0),
-    top: baseTop + row * lineHeight - (area.scrollTop || 0),
-    height: lineHeight,
+    top: baseTop + row * lineHeight - (area.scrollTop || 0) + topOffset,
+    height: caretHeight,
     width: Math.max(1, chWidth),
   };
 }

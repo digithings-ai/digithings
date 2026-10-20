@@ -374,6 +374,12 @@ export async function createDigigraphTraceStreamResponse(opts: {
   upstreamHeaders: Record<string, string>;
   responseHeaders: Record<string, string>;
   activityDetail: ActivityDetail;
+  /**
+   * House model for the request body. Defaults to ``digigraphModelName()``;
+   * the route passes the tenant's curated ``models.default`` so the first
+   * turn runs the same model the picker shows (OCC: v4.1-flash).
+   */
+  model?: string;
   /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
   signal?: AbortSignal;
 }) {
@@ -386,7 +392,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
     ignoreIncompleteToolCalls: true,
   });
   const url = digigraphChatCompletionsUrl(opts.digigraphBaseUrl);
-  const model = digigraphModelName();
+  const model = opts.model?.trim() || digigraphModelName();
 
   const stream = createUIMessageStream({
     onError: (error) => (error instanceof Error ? error.message : "digigraph stream error"),

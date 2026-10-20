@@ -308,6 +308,9 @@ digigraph chat-only env (entrypoint / bundle compose; `DIGIQUANT_URL` is a `wran
 - `DIGI_WORKFLOW_PROFILE=research_rag`
 - `DIGI_ALLOWED_TOOLS=digisearch,digisearch_semantic,digisearch_web_search,digivault_search_notes,digivault_get_note,digivault_search_tag,digivault_backlinks` — fallback
   only, read solely when `digiproject.yaml` fails to load; kept in sync with it
+- `DIGI_SESSION_MODEL_ALLOWLIST` — house-upstream model slugs a chat session may pick
+  through `X-Digi-House-Model` (OCC settings). Only a listed slug binds, `llm_mode: free`
+  still refuses a paid one, and BYOK is unaffected. Empty turns the picker off.
 - Zammad ticket tools are not in the shared allowlist; the OCC tenant reaches them per
   request via its `mcp.servers` entry (`X-Digi-Mcp-Servers`), which now points at the
   digichat-served MCP (`https://digithings.ai/api/mcp/zammad/mcp`) — the stack no longer
@@ -336,7 +339,7 @@ Leave Supabase / other projects alone if you still need them.
 From **repo root**:
 
 ```bash
-docker build -f Dockerfile.digithings-stack-cloudflare -t digithings-stack:local .
+docker build -f infra/docker/Dockerfile.digithings-stack-cloudflare -t digithings-stack:local .
 
 docker run --rm -d --name digithings-stack \
   -p 127.0.0.1:8000:8000 -p 127.0.0.1:8005:8005 \

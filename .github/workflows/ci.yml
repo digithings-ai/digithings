@@ -137,7 +137,7 @@ jobs:
               - 'digiquant/src/digiquant/portfolio/graph.py'
               - 'apps/digithings-cron/**'
               - 'apps/digiquant-runner/**'
-              - 'Dockerfile.digiquant-runner'
+              - 'infra/docker/Dockerfile.digiquant-runner'
               - 'packages/digichat-ui/**'
               - 'packages/ui/**'
               - 'packages/design/**'
@@ -146,8 +146,8 @@ jobs:
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
               - 'apps/digitrace-langfuse/**'
-              - 'Dockerfile.digitrace-langfuse-web'
-              - 'Dockerfile.digitrace-langfuse-worker'
+              - 'infra/docker/Dockerfile.digitrace-langfuse-web'
+              - 'infra/docker/Dockerfile.digitrace-langfuse-worker'
               - 'apps/dashboard-api/**'
               - 'apps/digidata-api/**'
               - 'apps/corpus-index/**'
@@ -658,9 +658,9 @@ jobs:
       # One broken app should still report the others.
       fail-fast: false
       matrix:
-        # Directory names, not package names: digichat-cloudflare is the
-        # directory and digithings-digichat-cloudflare is the package, so the
-        # directory is the only stable key for `working-directory:` below.
+        # Directory names, not package names: a package name does not always
+        # match its directory, so the directory is the only stable key for
+        # `working-directory:` below.
         app:
           - digithings-cron
           - dashboard-api

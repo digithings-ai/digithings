@@ -65,7 +65,7 @@ describe("gallery Thread is the product digichat skin", () => {
 
   it("container no longer COPYs gallery chatbot.css (grammar lives in the package)", () => {
     const root = join(here, "../../../../../");
-    const cf = readFileSync(join(root, "Dockerfile.digichat-cloudflare"), "utf8");
+    const cf = readFileSync(join(root, "infra/docker/Dockerfile.digichat-cloudflare"), "utf8");
     const app = readFileSync(join(root, "apps/digichat/Dockerfile"), "utf8");
     const copy = "apps/reference/app/(chatbot)/chatbot/chatbot.css";
     expect(cf).not.toContain(copy);

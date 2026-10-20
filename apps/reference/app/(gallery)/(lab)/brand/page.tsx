@@ -16,7 +16,7 @@ import {
 /**
  * Brand kit — avatars, social headers, OG card, mail sign-off.
  *
- * Local design-reference only (`npm run dev --workspace design-reference`).
+ * Local design-reference only (`npm run dev --workspace @digithings/reference`).
  * Not shipped on digithings.ai. Artwork is DERIVED (build-avatar.py,
  * build-og.py, build-header.py); this page documents and serves those files.
  */

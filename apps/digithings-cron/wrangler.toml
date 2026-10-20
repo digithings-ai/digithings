@@ -31,6 +31,10 @@ BACKFILL_ENABLED = "0"
 #                         defaultBranchRef) fails with it. See docs/ops/SECRETS_INVENTORY.md.
 #   CRON_KICK_SECRET    — optional; enables POST /kick and GET /runs/:id
 #   RUNNER_AUTH_TOKEN   — Bearer for the digiquant-runner service binding
+#   TWELVEX_RUNNER_AUTH — Bearer cron sends to twelvex-runner; must equal that
+#                         Worker's RUNNER_AUTH_TOKEN. Separate from
+#                         RUNNER_AUTH_TOKEN so rotating one cannot break the other.
+#                         Empty falls back to RUNNER_AUTH_TOKEN.
 #
 # printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
 
@@ -53,9 +57,21 @@ service = "twelvex-runner"
 name = "BACKFILL_LEDGER"
 class_name = "BackfillLedger"
 
+# Cron-tick claim ledger (DIG-4384). One instance, `cron-ticks`. Cloudflare
+# delivers a Cron Trigger at least once, and on 14-17 Oct 2026 every tick of
+# this Worker arrived twice with a different scheduledTime each copy, so each
+# job claimed its own slot before dispatching. No cron trigger attaches to it.
+[[durable_objects.bindings]]
+name = "START_COUNTER"
+class_name = "StartCounter"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["BackfillLedger"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["StartCounter"]
 
 [triggers]
 crons = [

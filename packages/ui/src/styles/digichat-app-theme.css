@@ -181,3 +181,29 @@
     font-optical-sizing: auto;
   }
 }
+
+/* Sidebar thread list: square scrollbar in the same 6px, 32% tone as the
+   composer menu. */
+.dc-thread-list {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground, #8a8a8a) 32%, transparent)
+    transparent;
+}
+
+.dc-thread-list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dc-thread-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dc-thread-list::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: color-mix(in oklab, var(--muted-foreground, #8a8a8a) 32%, transparent);
+}
+
+.dc-thread-list::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--muted-foreground, #8a8a8a) 48%, transparent);
+}

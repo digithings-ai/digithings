@@ -20,7 +20,7 @@ exists, so it is recorded in full:
 | root `uv.lock` | **1.230.0** | **all 40 `uv sync` invocations in `.github/workflows/` across 29 workflow files, 35 of which use `--frozen`** |
 | `digiquant/uv.lock` | **1.223.0** | **nothing — see below** |
 | `digiquant/Dockerfile` → service container | **unpinned; floats to 1.231.0 today** | whatever PyPI serves at build time |
-| `Dockerfile.digiquant-runner` (repo root) | **1.230.0, already correct** | `uv sync --frozen --package digiquant --extra nautilus` — installs the engine from the root lock |
+| `infra/docker/Dockerfile.digiquant-runner` (repo root) | **1.230.0, already correct** | `uv sync --frozen --package digiquant --extra nautilus` — installs the engine from the root lock |
 | `digiquant/pyproject.toml` declared | `>=1.190,<2` | admits every 1.x minor |
 
 Reproduce the count with `grep -ro "uv sync" .github/workflows/ | wc -l` (40) and
@@ -42,7 +42,7 @@ reach the two other digiquant images:
 - `apps/digithings-stack-cloudflare/wrangler.toml:115` builds `digiquant/Dockerfile.mcp`,
   which installs `./digiquant[research,mcp]` — **no `nautilus` extra**, so no engine and
   nothing for the pin to fix. The Workers stack was never on a nautilus_trader version.
-- `Dockerfile.digiquant-runner` (repo root) already ships the engine correctly:
+- `infra/docker/Dockerfile.digiquant-runner` (repo root) already ships the engine correctly:
   `uv sync --frozen --package digiquant --extra nautilus`, i.e. straight from the root
   lock. It is pinned by the lock both before and after this ADR.
 
@@ -187,7 +187,7 @@ package in the image is resolved from PyPI **at image build time**:
   pull path.
 - The pin reaches exactly one build surface. `digiquant/Dockerfile` is built by
   `docker-compose.yml`; that is all. `Dockerfile.mcp` (Workers) installs no nautilus
-  extra and `Dockerfile.digiquant-runner` already installs `--frozen` from the root
+  extra and `infra/docker/Dockerfile.digiquant-runner` already installs `--frozen` from the root
   lock. Of the surfaces an earlier draft of this ADR named, the exposure is therefore
   one image, not five — and the engine's own version is the only thing this ADR closes.
 

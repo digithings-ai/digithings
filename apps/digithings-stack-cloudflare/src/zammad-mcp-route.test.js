@@ -64,11 +64,14 @@ describe("MCP edge paths", () => {
     expect(source).toContain("status: 401");
   });
 
-  it("strips the prefix, keeps the trailing slash, and forwards to the mapped port", () => {
+  it("strips the prefix, forwards the path unchanged, and forwards to the mapped port", () => {
     expect(source).toContain("url.pathname.slice(MCP_EDGE_PREFIX.length + 1)");
     expect(source).toContain("const port = MCP_EDGE_SERVERS[serverId];");
     expect(source).toContain('typeof port === "number"');
-    expect(source).toContain('if (!stripped.endsWith("/"))');
+    // mcp>=1.26 serves `/mcp` and 307s `/mcp/`; a rewritten path breaks
+    // clients that do not replay the body, so the client path is untouched.
+    expect(source).toContain('const stripped = slash === -1 ? "/" : rest.slice(slash);');
+    expect(source).not.toContain('stripped += "/"');
     expect(source).toContain("switchPort(forwarded, port)");
     // The MCP edge path reaches the shared stack through the single
 // stackContainer() helper (DIG-3229), which is where the Container id is
@@ -94,7 +97,7 @@ describe("in-container MCP program binds", () => {
 
   it("runs no zammad-mcp program: the OCC MCP lives in the digichat image now", () => {
     // Removed from the base platform: the zammad MCP is built into the digichat
-    // image (Dockerfile.digichat-cloudflare) and served at
+    // image (infra/docker/Dockerfile.digichat-cloudflare) and served at
     // https://digithings.ai/api/mcp/zammad/mcp. A re-added supervisord program
     // is a regression.
     expect(supervisor).not.toContain("[program:zammad-mcp]");
