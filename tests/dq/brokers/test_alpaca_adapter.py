@@ -16,8 +16,8 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import digiquant.brokers.alpaca as alpaca_mod
 import pytest
-from digiquant.brokers.alpaca import AlpacaAdapter, ApiKeyAuth, OAuthAuth
 from digiquant.brokers.base import BrokerAdapter
 from digiquant.brokers.contracts import (
     BrokerAuthError,
@@ -45,7 +45,7 @@ def _patch_trading_client(monkeypatch: pytest.MonkeyPatch, ctor: object) -> None
     looks up the original global — real paper-api HTTP and 401s. Patch the
     class's ``__globals__`` instead.
     """
-    monkeypatch.setitem(AlpacaAdapter.__init__.__globals__, "_TradingClient", ctor)
+    monkeypatch.setitem(alpaca_mod.AlpacaAdapter.__init__.__globals__, "_TradingClient", ctor)
 
 
 def _ts() -> datetime:
@@ -87,13 +87,13 @@ def client() -> MagicMock:
 
 
 @pytest.fixture
-def adapter(monkeypatch: pytest.MonkeyPatch, client: MagicMock) -> AlpacaAdapter:
+def adapter(monkeypatch: pytest.MonkeyPatch, client: MagicMock) -> alpaca_mod.AlpacaAdapter:
     import digiquant.brokers.alpaca as alpaca_mod
 
     if alpaca_mod._MarketOrderRequest is None:
         pytest.skip("alpaca-py not installed — install digiquant[brokers-alpaca] for unit mocks")
     _patch_trading_client(monkeypatch, MagicMock(return_value=client))
-    return AlpacaAdapter(auth=ApiKeyAuth(key_id="PK_TEST", secret="SK_TEST"))
+    return alpaca_mod.AlpacaAdapter(auth=alpaca_mod.ApiKeyAuth(key_id="PK_TEST", secret="SK_TEST"))
 
 
 class TestConstruction:
@@ -104,7 +104,7 @@ class TestConstruction:
 
         if alpaca_mod._MarketOrderRequest is None:
             pytest.skip("alpaca-py not installed")
-        AlpacaAdapter(auth=ApiKeyAuth(key_id="PK", secret="SK"))
+        alpaca_mod.AlpacaAdapter(auth=alpaca_mod.ApiKeyAuth(key_id="PK", secret="SK"))
         ctor.assert_called_once()
         kwargs = ctor.call_args.kwargs
         assert kwargs["paper"] is True
@@ -119,7 +119,7 @@ class TestConstruction:
 
         if alpaca_mod._MarketOrderRequest is None:
             pytest.skip("alpaca-py not installed")
-        AlpacaAdapter(auth=OAuthAuth(access_token="tok_abc"))
+        alpaca_mod.AlpacaAdapter(auth=alpaca_mod.OAuthAuth(access_token="tok_abc"))
         kwargs = ctor.call_args.kwargs
         assert kwargs["paper"] is True
         assert kwargs["oauth_token"] == "tok_abc"
@@ -137,14 +137,14 @@ class TestConstruction:
         if alpaca_mod._MarketOrderRequest is None:
             pytest.skip("alpaca-py not installed")
         boom = MagicMock(side_effect=RuntimeError("unpatched collection-time TradingClient"))
-        monkeypatch.setitem(AlpacaAdapter.__init__.__globals__, "_TradingClient", boom)
+        monkeypatch.setitem(alpaca_mod.AlpacaAdapter.__init__.__globals__, "_TradingClient", boom)
         monkeypatch.delitem(sys.modules, "digiquant.brokers.alpaca", raising=False)
         importlib.import_module("digiquant.brokers.alpaca")
         fresh_ctor = MagicMock(return_value=MagicMock())
         monkeypatch.setattr("digiquant.brokers.alpaca._TradingClient", fresh_ctor)
         ctor = MagicMock(return_value=MagicMock())
         _patch_trading_client(monkeypatch, ctor)
-        AlpacaAdapter(auth=OAuthAuth(access_token="tok_abc"))
+        alpaca_mod.AlpacaAdapter(auth=alpaca_mod.OAuthAuth(access_token="tok_abc"))
         ctor.assert_called_once()
         fresh_ctor.assert_not_called()
         boom.assert_not_called()
@@ -159,15 +159,19 @@ class TestConstruction:
             # Guard still runs before SDK check when env != paper.
             pass
         with pytest.raises(LiveVenueNotAuthorizedError):
-            AlpacaAdapter(auth=ApiKeyAuth(key_id="PK", secret="SK"), env="live")  # type: ignore[arg-type]
+            alpaca_mod.AlpacaAdapter(
+                auth=alpaca_mod.ApiKeyAuth(key_id="PK", secret="SK"), env="live"
+            )  # type: ignore[arg-type]
 
-    def test_protocol_conformance(self, adapter: AlpacaAdapter) -> None:
+    def test_protocol_conformance(self, adapter: alpaca_mod.AlpacaAdapter) -> None:
         assert isinstance(adapter, BrokerAdapter)
         assert adapter.name == "alpaca"
 
 
 class TestHappyPaths:
-    def test_submit_market_order(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_submit_market_order(
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
+    ) -> None:
         client.submit_order.return_value = _fake_order()
         ack = adapter.submit_order(_make_request())
         assert ack.external_order_id == "ord-1"
@@ -177,7 +181,7 @@ class TestHappyPaths:
         assert order_req.client_order_id == "intent-1"
         assert order_req.extended_hours is None
 
-    def test_submit_limit_order(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_submit_limit_order(self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock) -> None:
         client.submit_order.return_value = _fake_order(status="new")
         ack = adapter.submit_order(
             _make_request(
@@ -192,11 +196,13 @@ class TestHappyPaths:
             or float(order_req.limit_price) == 150.25
         )
 
-    def test_cancel_order(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_cancel_order(self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock) -> None:
         adapter.cancel_order("ord-1")
         client.cancel_order_by_id.assert_called_once_with("ord-1")
 
-    def test_get_positions_signs_short(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_get_positions_signs_short(
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
+    ) -> None:
         client.get_all_positions.return_value = [
             SimpleNamespace(
                 symbol="AAPL",
@@ -220,7 +226,7 @@ class TestHappyPaths:
         assert positions[1].quantity == Decimal("-2")
         assert positions[0].avg_entry_price == Decimal("100.00")
 
-    def test_get_account(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_get_account(self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock) -> None:
         client.get_account.return_value = SimpleNamespace(
             id="acct-1",
             equity="100000.50",
@@ -234,7 +240,9 @@ class TestHappyPaths:
         assert snap.currency == "USD"
         assert snap.as_of.tzinfo is not None
 
-    def test_list_fills_from_closed_orders(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_list_fills_from_closed_orders(
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
+    ) -> None:
         client.get_orders.return_value = [
             _fake_order(
                 id="fill-1",
@@ -254,7 +262,7 @@ class TestHappyPaths:
 
 class TestLocalTifGuard:
     def test_notional_gtc_rejected_without_http(
-        self, adapter: AlpacaAdapter, client: MagicMock
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
     ) -> None:
         req = _make_request(
             quantity=None,
@@ -267,7 +275,7 @@ class TestLocalTifGuard:
         client.submit_order.assert_not_called()
 
     def test_fractional_qty_gtc_rejected_without_http(
-        self, adapter: AlpacaAdapter, client: MagicMock
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
     ) -> None:
         req = _make_request(quantity=Decimal("1.5"), time_in_force=TimeInForce.GTC)
         with pytest.raises(BrokerOrderRejected, match="fractional/notional requires day TIF"):
@@ -284,18 +292,18 @@ class TestErrorMapping:
         http.response.headers = {"X-Request-ID": "req-abc"}
         return APIError(f'{{"code":{code},"message":"{message}"}}', http_error=http)
 
-    def test_401_maps_to_auth(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_401_maps_to_auth(self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock) -> None:
         client.get_account.side_effect = self._api_error(401, message="unauthorized")
         with pytest.raises(BrokerAuthError):
             adapter.get_account()
 
-    def test_403_maps_to_auth(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_403_maps_to_auth(self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock) -> None:
         client.get_account.side_effect = self._api_error(403, message="forbidden")
         with pytest.raises(BrokerAuthError):
             adapter.get_account()
 
     def test_401_non_json_body_does_not_leak_json_error(
-        self, adapter: AlpacaAdapter, client: MagicMock
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
     ) -> None:
         from alpaca.common.exceptions import APIError
 
@@ -306,7 +314,9 @@ class TestErrorMapping:
         with pytest.raises(BrokerAuthError):
             adapter.get_account()
 
-    def test_422_maps_to_rejected(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_422_maps_to_rejected(
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
+    ) -> None:
         client.submit_order.side_effect = self._api_error(422, code=42210000, message="invalid qty")
         with pytest.raises(BrokerOrderRejected) as ei:
             adapter.submit_order(_make_request())
@@ -314,7 +324,7 @@ class TestErrorMapping:
         assert "invalid qty" in ei.value.message
 
     def test_429_retries_then_raises(
-        self, adapter: AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         sleeps: list[float] = []
         monkeypatch.setattr("digiquant.brokers.alpaca.time.sleep", sleeps.append)
@@ -333,13 +343,15 @@ class TestErrorMapping:
         assert len(sleeps) == 2
 
     def test_other_status_maps_to_transport(
-        self, adapter: AlpacaAdapter, client: MagicMock
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
     ) -> None:
         client.get_account.side_effect = self._api_error(500, message="boom")
         with pytest.raises(BrokerTransportError):
             adapter.get_account()
 
-    def test_404_maps_to_order_not_found(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_404_maps_to_order_not_found(
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
+    ) -> None:
         client.get_order_by_client_id.side_effect = self._api_error(404, message="missing")
         with pytest.raises(BrokerOrderNotFound):
             adapter._call(client.get_order_by_client_id, "intent-1")
@@ -356,7 +368,7 @@ class TestIdempotentRecovery:
         return APIError(body, http_error=http)
 
     def test_transport_failure_recovers_via_client_order_id(
-        self, adapter: AlpacaAdapter, client: MagicMock
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
     ) -> None:
         client.submit_order.side_effect = ConnectionError("connection reset")
         client.get_order_by_client_id.return_value = _fake_order(id="ord-recovered")
@@ -367,7 +379,7 @@ class TestIdempotentRecovery:
         assert client.submit_order.call_count == 1
 
     def test_transport_failure_retries_when_client_id_404(
-        self, adapter: AlpacaAdapter, client: MagicMock
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
     ) -> None:
         order = _fake_order(id="ord-retry")
         client.submit_order.side_effect = [ConnectionError("timeout"), order]
@@ -378,7 +390,7 @@ class TestIdempotentRecovery:
         assert client.get_order_by_client_id.call_count == 1
 
     def test_submit_429_consults_client_id_before_each_retry(
-        self, adapter: AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """429 on submit: lookup → sleep → lookup again → resubmit (bounded)."""
         sleeps: list[float] = []
@@ -398,7 +410,7 @@ class TestIdempotentRecovery:
         )
 
     def test_submit_429_recovers_without_duplicate_submit(
-        self, adapter: AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr("digiquant.brokers.alpaca.time.sleep", lambda _s: None)
         client.submit_order.side_effect = self._api_error(429, message="slow")
@@ -409,7 +421,7 @@ class TestIdempotentRecovery:
         assert client.get_order_by_client_id.call_count == 1
 
     def test_submit_429_recovers_on_post_backoff_lookup(
-        self, adapter: AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Late-indexed order found on the post-sleep re-lookup — no second submit."""
         monkeypatch.setattr("digiquant.brokers.alpaca.time.sleep", lambda _s: None)
@@ -425,7 +437,7 @@ class TestIdempotentRecovery:
         assert client.get_order_by_client_id.call_count == 2
 
     def test_recovery_lookup_500_does_not_resubmit(
-        self, adapter: AlpacaAdapter, client: MagicMock
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
     ) -> None:
         """Non-404 lookup failure through real ``_map_exception`` must not resubmit."""
         client.submit_order.side_effect = ConnectionError("boom")
@@ -436,7 +448,7 @@ class TestIdempotentRecovery:
         assert client.get_order_by_client_id.call_count == 1
 
     def test_lookup_429_exhausted_does_not_resubmit(
-        self, adapter: AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr("digiquant.brokers.alpaca.time.sleep", lambda _s: None)
         monkeypatch.setattr("digiquant.brokers.alpaca.random.uniform", lambda _a, _b: 0.0)
@@ -449,7 +461,7 @@ class TestIdempotentRecovery:
         assert client.get_order_by_client_id.call_count == 3
 
     def test_lookup_429_then_404_authorizes_one_resubmit(
-        self, adapter: AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr("digiquant.brokers.alpaca.time.sleep", lambda _s: None)
         monkeypatch.setattr("digiquant.brokers.alpaca.random.uniform", lambda _a, _b: 0.0)
@@ -465,7 +477,7 @@ class TestIdempotentRecovery:
         assert client.get_order_by_client_id.call_count == 2
 
     def test_post_exhaustion_lookup_returns_found_ack(
-        self, adapter: AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Final attempt fails; exhaustion lookup finds the order — return ack, no raise."""
         monkeypatch.setattr("digiquant.brokers.alpaca.time.sleep", lambda _s: None)
@@ -484,7 +496,9 @@ class TestIdempotentRecovery:
         assert client.submit_order.call_count == 3
         assert client.get_order_by_client_id.call_count == 5
 
-    def test_422_no_retry_no_lookup(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_422_no_retry_no_lookup(
+        self, adapter: alpaca_mod.AlpacaAdapter, client: MagicMock
+    ) -> None:
         client.submit_order.side_effect = self._api_error(422, message="invalid")
         with pytest.raises(BrokerOrderRejected):
             adapter.submit_order(_make_request())
@@ -502,7 +516,7 @@ class TestIdempotentRecovery:
     )
     def test_auth_error_mid_loop_stops(
         self,
-        adapter: AlpacaAdapter,
+        adapter: alpaca_mod.AlpacaAdapter,
         client: MagicMock,
         submit_side: str,
         lookup_side: str | None,

@@ -16,14 +16,6 @@ from pathlib import Path
 
 import digigraph.model_config as model_config
 import pytest
-from digigraph.model_config import (
-    ModelModesConfig,
-    _load_model_modes,
-    _parse_provider_prefix,
-    get_model_for_mode,
-    resolve_effective_model,
-    resolve_request_model,
-)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -185,7 +177,7 @@ class TestModelPolicyConfig:
             "_MODEL_POLICY",
             model_config._load_model_policy(self._write_policy(tmp_path)),
         )
-        assert get_model_for_mode() == "vendor/tiny"
+        assert model_config.get_model_for_mode() == "vendor/tiny"
         assert model_config.effective_llm_settings()["source"] == "default"
 
     def test_a_configured_default_still_beats_the_policy_last_resort(
@@ -201,7 +193,7 @@ class TestModelPolicyConfig:
             "_MODEL_POLICY",
             model_config._load_model_policy(self._write_policy(tmp_path)),
         )
-        assert get_model_for_mode() == "vendor/configured"
+        assert model_config.get_model_for_mode() == "vendor/configured"
 
     def test_the_shipped_policy_is_the_one_the_module_loaded(
         self, monkeypatch: pytest.MonkeyPatch
@@ -213,12 +205,11 @@ class TestModelPolicyConfig:
         the one whose contents are live.
         """
         monkeypatch.delenv("DIGI_CONFIG_PATH", raising=False)
-        from digigraph.model_config import _MODEL_POLICY_PATH, _resolve_model_policy_path
 
-        resolved = _resolve_model_policy_path()
+        resolved = model_config._resolve_model_policy_path()
         assert resolved == _REPO_ROOT / "config" / "model-policy.json"
         assert resolved.exists()
-        assert _MODEL_POLICY_PATH == resolved
+        assert model_config._MODEL_POLICY_PATH == resolved
         assert model_config._load_model_policy(resolved) == model_config._MODEL_POLICY
 
 
@@ -245,21 +236,19 @@ class TestModelPolicyPathResolution:
             encoding="utf-8",
         )
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(override_dir))
-        from digigraph.model_config import _load_model_policy, _resolve_model_policy_path
 
-        resolved = _resolve_model_policy_path()
+        resolved = model_config._resolve_model_policy_path()
         assert resolved == override_dir / "model-policy.json"
         assert resolved != _REPO_ROOT / "config" / "model-policy.json"
-        assert _load_model_policy(resolved).fallback_model == "vendor/tiny"
+        assert model_config._load_model_policy(resolved).fallback_model == "vendor/tiny"
 
     def test_missing_file_still_raises_with_override_set(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
-        from digigraph.model_config import _load_model_policy, _resolve_model_policy_path
 
         with pytest.raises(FileNotFoundError):
-            _load_model_policy(_resolve_model_policy_path())
+            model_config._load_model_policy(model_config._resolve_model_policy_path())
 
 
 @pytest.mark.unit
@@ -322,21 +311,21 @@ class TestLoadModelModes:
 
     def test_returns_empty_when_path_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_config_xyz")
-        assert _load_model_modes() == ModelModesConfig()
+        assert model_config._load_model_modes() == model_config.ModelModesConfig()
 
     def test_returns_empty_when_file_missing(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         assert not (tmp_path / "model_modes.yaml").exists()
-        assert _load_model_modes() == ModelModesConfig()
+        assert model_config._load_model_modes() == model_config.ModelModesConfig()
 
     def test_loads_valid_yaml(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         (tmp_path / "model_modes.yaml").write_text(
             "defaults:\n  test: ollama/test\n  medium: ollama/med\n"
         )
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
-        data = _load_model_modes()
+        data = model_config._load_model_modes()
         assert data.defaults.get("test") == "ollama/test"
         assert data.defaults.get("medium") == "ollama/med"
 
@@ -346,7 +335,7 @@ class TestLoadModelModes:
         (tmp_path / "alt.yaml").write_text("defaults:\n  test: ollama/alt\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_MODEL_MODES_FILE", "alt.yaml")
-        data = _load_model_modes()
+        data = model_config._load_model_modes()
         assert data.defaults.get("test") == "ollama/alt"
 
     def test_returns_empty_on_invalid_yaml(
@@ -354,7 +343,7 @@ class TestLoadModelModes:
     ) -> None:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: [unclosed\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
-        assert _load_model_modes() == ModelModesConfig()
+        assert model_config._load_model_modes() == model_config.ModelModesConfig()
 
 
 def _clear_explicit_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -372,7 +361,7 @@ class TestGetModelForMode:
         _clear_explicit_llm_env(monkeypatch)
         monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
-        assert get_model_for_mode() == "gpt-4o-mini"
+        assert model_config.get_model_for_mode() == "gpt-4o-mini"
 
     def test_uses_defaults_test_from_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -381,7 +370,7 @@ class TestGetModelForMode:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/mini\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
-        assert get_model_for_mode() == "ollama/mini"
+        assert model_config.get_model_for_mode() == "ollama/mini"
 
     def test_uses_defaults_medium_when_mode_medium(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -393,7 +382,7 @@ class TestGetModelForMode:
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "medium")
         # Mode is resolved per-call via env var; no cached global to patch
-        assert get_model_for_mode() == "ollama/medium"
+        assert model_config.get_model_for_mode() == "ollama/medium"
 
     def test_falls_back_to_test_when_mode_missing_in_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -402,7 +391,7 @@ class TestGetModelForMode:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/fallback\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "best")
-        assert get_model_for_mode() == "ollama/fallback"
+        assert model_config.get_model_for_mode() == "ollama/fallback"
 
     def test_normalizes_mode_lowercase(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -411,7 +400,7 @@ class TestGetModelForMode:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/t\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "TEST")
-        assert get_model_for_mode() == "ollama/t"
+        assert model_config.get_model_for_mode() == "ollama/t"
 
 
 @pytest.mark.unit
@@ -427,7 +416,7 @@ class TestResolveEffectiveModel:
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:11434/v1")
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
-        assert resolve_effective_model("ignored") == "qwen3:8b"
+        assert model_config.resolve_effective_model("ignored") == "qwen3:8b"
 
     def test_no_strip_for_litellm_base(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -438,14 +427,14 @@ class TestResolveEffectiveModel:
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
-        assert resolve_effective_model("x") == "ollama/qwen3:8b"
+        assert model_config.resolve_effective_model("x") == "ollama/qwen3:8b"
 
     def test_env_ollama_model_wins(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:11434/v1")
         monkeypatch.setenv("OLLAMA_MODEL", "ollama/deepseek-r1:14b")
-        assert resolve_effective_model("x") == "deepseek-r1:14b"
+        assert model_config.resolve_effective_model("x") == "deepseek-r1:14b"
 
 
 @pytest.mark.unit
@@ -459,7 +448,7 @@ class TestResolveRequestModel:
     def test_env_ollama_model_wins(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OLLAMA_MODEL", "ollama/qwen:8b")
         monkeypatch.delenv("OPENAI_API_BASE", raising=False)
-        assert resolve_request_model("gpt-4o-mini") == "ollama/qwen:8b"
+        assert model_config.resolve_request_model("gpt-4o-mini") == "ollama/qwen:8b"
 
     def test_ollama_cloud_prefix_stripped_not_overridden_by_mode(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -477,7 +466,7 @@ class TestResolveRequestModel:
         monkeypatch.setenv("DIGI_LLM_MODE", "medium")
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         assert (
-            resolve_request_model("ollama-cloud/deepseek-v4-flash:cloud")
+            model_config.resolve_request_model("ollama-cloud/deepseek-v4-flash:cloud")
             == "deepseek-v4-flash:cloud"
         )
 
@@ -485,7 +474,7 @@ class TestResolveRequestModel:
         """A provider/ model with its key set is handed to digillm unchanged (digillm routes)."""
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
         assert (
-            resolve_request_model("openrouter/mistral/mistral-7b")
+            model_config.resolve_request_model("openrouter/mistral/mistral-7b")
             == "openrouter/mistral/mistral-7b"
         )
 
@@ -501,7 +490,7 @@ class TestResolveRequestModel:
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")  # not :11434 → no strip
         with pytest.raises(ValueError, match="Provider 'openrouter' key \(OPENROUTER_API_KEY\)"):
-            resolve_request_model("openrouter/mistral/mistral-7b")
+            model_config.resolve_request_model("openrouter/mistral/mistral-7b")
 
     def test_house_digiquant_slug_not_clobbered_by_mode_defaults(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -521,10 +510,13 @@ class TestResolveRequestModel:
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
-        assert resolve_request_model("deepseek/deepseek-v4-flash") == "deepseek/deepseek-v4-flash"
-        assert resolve_request_model("perplexity/sonar") == "perplexity/sonar"
+        assert (
+            model_config.resolve_request_model("deepseek/deepseek-v4-flash")
+            == "deepseek/deepseek-v4-flash"
+        )
+        assert model_config.resolve_request_model("perplexity/sonar") == "perplexity/sonar"
         # Explicit local ollama requests still go through effective-model resolution.
-        assert resolve_request_model("ollama/qwen3:8b") == "ollama/qwen3:8b"
+        assert model_config.resolve_request_model("ollama/qwen3:8b") == "ollama/qwen3:8b"
 
     def test_plain_model_uses_effective_model(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -536,7 +528,7 @@ class TestResolveRequestModel:
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:11434/v1")  # :11434 → strip ollama/
-        assert resolve_request_model("gpt-4o-mini") == "qwen3:8b"
+        assert model_config.resolve_request_model("gpt-4o-mini") == "qwen3:8b"
 
     def test_openrouter_byok_passthrough_without_platform_key(
         self, monkeypatch: pytest.MonkeyPatch
@@ -566,7 +558,7 @@ class TestResolveRequestModel:
         tok = push_byok_header(_Req())
         try:
             assert (
-                resolve_request_model("openrouter/openai/gpt-4o-mini")
+                model_config.resolve_request_model("openrouter/openai/gpt-4o-mini")
                 == "openrouter/openai/gpt-4o-mini"
             )
         finally:
@@ -583,7 +575,6 @@ class TestResolveRequestModel:
         user's key (model_not_found) while digichat still showed BYOK as active.
         """
         from digigraph.llm_auth import pop_byok, push_byok_header
-        from digigraph.model_config import _apply_byok_model_override
 
         monkeypatch.setenv("OLLAMA_MODEL", "ollama/qwen3:8b")
         monkeypatch.delenv("OPENAI_API_BASE", raising=False)
@@ -608,13 +599,13 @@ class TestResolveRequestModel:
         tok = push_byok_header(_Req())
         try:
             # Mirror llm_client: override first, then resolve_request_model.
-            chosen = _apply_byok_model_override("operator-default-ignored")
+            chosen = model_config._apply_byok_model_override("operator-default-ignored")
             assert chosen == "gpt-4o-mini"
-            assert resolve_request_model(chosen) == "gpt-4o-mini"
+            assert model_config.resolve_request_model(chosen) == "gpt-4o-mini"
             # Operator path without BYOK still lets OLLAMA_MODEL win (sibling test).
         finally:
             pop_byok(tok)
-        assert resolve_request_model("gpt-4o-mini") == "ollama/qwen3:8b"
+        assert model_config.resolve_request_model("gpt-4o-mini") == "ollama/qwen3:8b"
 
     def test_bare_slug_unroutable_byok_provider_does_not_bypass_ollama_model(
         self, monkeypatch: pytest.MonkeyPatch
@@ -656,7 +647,7 @@ class TestResolveRequestModel:
 
         tok = push_byok_header(_Req())
         try:
-            assert resolve_request_model("gpt-4-turbo") == "ollama/qwen3:8b"
+            assert model_config.resolve_request_model("gpt-4-turbo") == "ollama/qwen3:8b"
         finally:
             pop_byok(tok)
 
@@ -676,7 +667,6 @@ class TestResolveRequestModel:
         is still in effect.
         """
         from digigraph.llm_auth import pop_byok, push_byok_header
-        from digigraph.model_config import _apply_byok_model_override
 
         monkeypatch.setenv("DIGI_LLM_MODE", "free")
         monkeypatch.setenv("OLLAMA_MODEL", "ollama/qwen3:8b")
@@ -701,9 +691,9 @@ class TestResolveRequestModel:
 
         tok = push_byok_header(_Req())
         try:
-            chosen = _apply_byok_model_override("ollama/qwen3:8b")
+            chosen = model_config._apply_byok_model_override("ollama/qwen3:8b")
             assert chosen == "gpt-4o"
-            assert resolve_request_model(chosen) == "gpt-4o"
+            assert model_config.resolve_request_model(chosen) == "gpt-4o"
         finally:
             pop_byok(tok)
 
@@ -725,13 +715,13 @@ class TestResolveRequestModel:
             "zzz-test-provider", "https://example.invalid/v1", "ZZZ_TEST_PROVIDER_API_KEY"
         )
         try:
-            provider, model_id = _parse_provider_prefix("zzz-test-provider/some-model")
+            provider, model_id = model_config._parse_provider_prefix("zzz-test-provider/some-model")
             assert provider == "zzz-test-provider"
             assert model_id == "some-model"
 
             monkeypatch.setenv("ZZZ_TEST_PROVIDER_API_KEY", "test-key")
             assert (
-                resolve_request_model("zzz-test-provider/some-model")
+                model_config.resolve_request_model("zzz-test-provider/some-model")
                 == "zzz-test-provider/some-model"
             )
         finally:
@@ -767,7 +757,7 @@ class TestByokModelOverride:
 
         tok = push_byok_header(_Req())
         try:
-            assert get_model_for_mode() == "openrouter/openai/gpt-4o-mini"
+            assert model_config.get_model_for_mode() == "openrouter/openai/gpt-4o-mini"
         finally:
             pop_byok(tok)
 
@@ -804,7 +794,7 @@ class TestByokModelOverride:
 
         tok = push_byok_header(_Req())
         try:
-            assert get_model_for_mode() == "xai/grok-4-3"
+            assert model_config.get_model_for_mode() == "xai/grok-4-3"
         finally:
             pop_byok(tok)
 
@@ -850,7 +840,7 @@ class TestByokModelOverride:
         for provider in BYOK_ROUTABLE_PROVIDERS:
             tok = push_byok_header(_Req(provider))
             try:
-                resolved = get_model_for_mode()
+                resolved = model_config.get_model_for_mode()
             finally:
                 pop_byok(tok)
             expected = "some-model" if provider == "openai" else f"{provider}/some-model"
