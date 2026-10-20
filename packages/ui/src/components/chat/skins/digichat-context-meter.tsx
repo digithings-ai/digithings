@@ -2,6 +2,11 @@
 
 import { useAuiState } from "@assistant-ui/react";
 
+import {
+  CONTEXT_BAR_CELLS,
+  computeContextShares,
+} from "./digichat-context-meter-shares";
+
 /**
  * Context used, as the segmented digichat cube bar. The bar is the same
  * one that used to sit inside the breakdown card: its lit span is the
@@ -13,8 +18,11 @@ import { useAuiState } from "@assistant-ui/react";
  * thread, tool schemas get a flat per-tool allowance, and the remainder is
  * the system prompt. Values carry a `~` so the card never implies precision
  * the backend does not send.
+ *
+ * The split itself lives in `digichat-context-meter-shares.ts`: the three
+ * quantities are a partition of the reported total, so no share can print
+ * above 100 and the three always describe the same turn.
  */
-const BAR_CELLS = 25;
 
 const CONTEXT_WINDOWS: Record<string, number> = {
   "deepseek/deepseek-v4.1-flash": 1_048_576,
@@ -25,8 +33,6 @@ const CONTEXT_WINDOWS: Record<string, number> = {
   "z-ai/glm-4.7-flash": 200_000,
 };
 const DEFAULT_WINDOW = 1_048_576;
-/** Rough tokens per tool schema (name, description, JSON schema). */
-const TOKENS_PER_TOOL = 220;
 
 const format = (n: number): string =>
   n >= 1_000_000
@@ -90,27 +96,21 @@ export function DigichatContextMeter({
   const window = CONTEXT_WINDOWS[model] ?? DEFAULT_WINDOW;
   // No fabricated fill: until a turn reports usage the grid stays empty.
   const input = reportedInput ?? 0;
-  const ratio = Math.min(1, input / window);
-  const userTokens = input > 0 ? Math.round(userChars / 4) : 0;
-  const toolTokens = input > 0 ? toolCount * TOKENS_PER_TOOL : 0;
-  const systemTokens = Math.max(0, input - userTokens - toolTokens);
   const label = `${format(input)} / ${format(window)} tokens`;
 
-  // The used span grows with the window ratio; inside it the three types
-  // take their share of the prompt.
-  const usedCells = input > 0 ? Math.max(1, Math.round(ratio * BAR_CELLS)) : 0;
-  const sysPct = input > 0 ? Math.round((systemTokens / input) * 100) : 0;
-  const toolPct = input > 0 ? Math.round((toolTokens / input) * 100) : 0;
-  const userPct = input > 0 ? Math.max(0, 100 - sysPct - toolPct) : 0;
-  const sysCells = Math.min(
-    usedCells,
-    input > 0 ? Math.round((usedCells * systemTokens) / input) : 0,
-  );
-  const toolCells = Math.min(
-    usedCells - sysCells,
-    input > 0 ? Math.round((usedCells * toolTokens) / input) : 0,
-  );
-  const userCells = Math.max(0, usedCells - sysCells - toolCells);
+  // The three shares are a partition of the reported total, so no share
+  // can print above 100 and the printed numbers describe the same turn.
+  const {
+    systemTokens,
+    toolTokens,
+    userTokens,
+    systemPct: sysPct,
+    toolPct: toolPct,
+    userPct: userPct,
+    systemCells: sysCells,
+    toolCells: toolCells,
+    userCells: userCells,
+  } = computeContextShares({ input, userChars, toolCount, window });
 
   return (
     <span className="aui-context-meter-wrap">
@@ -120,7 +120,7 @@ export function DigichatContextMeter({
         tabIndex={0}
         aria-label={`Context ${label}`}
       >
-        {Array.from({ length: BAR_CELLS }, (_, index) => {
+        {Array.from({ length: CONTEXT_BAR_CELLS }, (_, index) => {
           const tone =
             index < sysCells
               ? "is-system"
