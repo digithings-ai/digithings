@@ -41,11 +41,24 @@ corpus has no grounded answer, say so clearly.
 
 ## Apply (Chris only, after PR review)
 
+The staged file is an **overlay**, not the registry. It carries no tenant token
+and no MCP rows. The registry is composed at apply time from the host secret
+store, so a tenant can never be dropped by applying a repository file.
+
 1. `DIGI_TENANT_CORPUS_MAP`: merge the `digithings.researchSystemPrompt` value from
    `DIG-3556-staged-prod-tenant-config.json` into the digigraph env/secret.
-2. `DIGICHAT_EMBED_TENANTS`: set `digithings.ai` entry with
-   `backend.digisearchIndex=digithings_docs`,
-   `backend.vaultPathPrefix=clients/digithings`, `gate.webSearch=false`.
+2. `DIGICHAT_EMBED_TENANTS`: compose the overlay onto the live registry, write
+   the result to the digichat Worker, and recycle the container so it reads the
+   new registry at boot:
+
+   ```sh
+   python3 scripts/digichat_tenant_registry.py apply \
+     --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
+     --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
+   ```
+
+   Run the same command with `compose` instead of `apply` first: it prints the
+   plan, the tenants, and the changed paths, and it writes nothing.
 3. Run/approve the backfill that indexes the five sources above, then verify the
    ~10 in-scope / ~5 out-of-scope acceptance transcripts.
 
