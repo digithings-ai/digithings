@@ -550,6 +550,34 @@ def test_the_override_cannot_put_the_production_prefix_back_into_the_local_list(
     assert "digithings/" not in local
 
 
+def test_the_shared_namespace_stays_out_of_the_local_list_without_its_slash(
+    tool, manifest, monkeypatch
+):
+    """A namespace is a namespace with or without its trailing slash.
+
+    A custom manifest can name the shared namespace "digithings" where the
+    shipped contract names it "digithings/". The guard that keeps the shared
+    namespace out of the local list compared the two as strings, so an
+    override that named it with the slash ("digithings/") passed the guard
+    and the local list carried the production namespace: an operator-prompt
+    value could then be answered from the production store.
+    """
+    doc = dict(manifest)
+    doc["contract"] = dict(manifest["contract"])
+    doc["contract"]["keychain_service_prefix"] = "digithings"
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings/")
+    local = tool.local_keychain_prefixes(doc)
+    assert "digithings/" not in local
+    assert "digithings" not in local
+    assert local == ("digithings-local/",)
+
+
+def test_a_prefix_without_its_slash_still_names_its_namespace(tool, monkeypatch):
+    """The item is looked up as f"{prefix}{NAME}", so the prefix keeps its slash."""
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local")
+    assert tool.local_keychain_prefixes({}) == ("digithings-local/",)
+
+
 def test_a_keychain_value_is_read_through_the_prefix_list(tool, manifest, entries, monkeypatch):
     entry = next(e for e in entries if e["name"] == "DIGIKEY_ADMIN_TOKEN")
     seen: dict = {}
@@ -747,12 +775,22 @@ def test_the_unresolved_report_names_the_secret_and_never_a_value(tool, capsys, 
     assert "a-value" not in out, "the report echoed a value"
 
     # and a value that is nowhere to be found is reported by name
-    monkeypatch.setattr(tool, "from_stores", lambda name, prefixes, allow_prompt: None)
+    asked: list = []
+
+    def recording_stores(name, prefixes, allow_prompt):
+        asked.append((name, tuple(prefixes)))
+        return None
+
+    monkeypatch.setattr(tool, "from_stores", recording_stores)
 
     assert tool.main(["--manifest", str(MANIFEST), "check", "--only", "E2E_BEARER_TOKEN"]) == 1
     out = capsys.readouterr().out
     assert "missing: E2E_BEARER_TOKEN" in out
-    assert "a-value" not in out, "the report echoed a value"
+    # the store is asked for the secret BY NAME and for a list of namespaces:
+    # that is all that travels to the store, and the report holds the name
+    assert asked, "the store was never asked for the secret"
+    assert asked[0][0] == "E2E_BEARER_TOKEN"
+    assert all(isinstance(prefix, str) for prefix in asked[0][1])
 
 
 def test_an_operator_prompt_value_is_read_from_the_store_before_it_is_asked_for(
