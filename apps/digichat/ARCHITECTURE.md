@@ -1086,6 +1086,45 @@ re-seeds it, so `/view` lands on the current view mode even when the menu was
 opened on another page. Coming back from a provider form lands on the provider
 row the user opened, not on the connected one.
 
+**View-level wording has one home (DIG-4665).** Decision: the view-level **wording**
+is owned by `@digithings/digichat-ui` `slash-commands.ts` (`VIEW_LABELS`, exported,
+and re-exported from the package index). The composer menu's `/view` page reads
+that shared map for the wording it prints beside each level, and the shared
+package builds the palette's `/view` choice options from the same map
+(`VIEW_CHOICES` on `SlashDef.choiceOptions`); the app keeps **no private copy**
+of it, and the lookup has no `?? ""` fallback, so a level with no wording is a
+compile error and not a blank column. Reason: the shared package already owns
+the public palette (the paragraph above), and a private copy is exactly what
+let a rename drift. #6034 renamed compact/detailed to quiet/verbose across the
+product while the composer menu's `/view` sub-page kept the retired ids, so its
+Quiet and Verbose rows rendered **blank descriptions**; #6046 then corrected the
+ids in that private copy, but the copy stayed, and #6079 retired the `hidden`
+level while that copy still carried it and its wording drifted away from the
+shared map. One copy of the map means the next rename cannot leave a surface
+unlabelled.
+
+The wording is the one the product prints today: `quiet` shows the titles only,
+`balanced` opens the rows while they stream, `verbose` leaves everything open
+(the app CHANGELOG and `packages/ui` gallery-thread use the same words). The
+shared map's terser wording from #6079 was rendered nowhere, so moving the
+shipped copy into the package is not a user-visible change; the palette's
+choice options, which nothing renders today, inherit it when they do.
+
+The view-level **ids** are a set of structural twins, and they must name the
+same three levels: the app contract `src/lib/view-modes.ts` (`VIEW_MODES`, plus
+the retired `hidden` → `quiet`, `compact` → `quiet` and `detailed` → `verbose`
+aliases folded forward on read, kept dependency-free so server config code can
+use it), the palette's own `VIEW_CODES` in the same shared package, and the
+prefs twin `ViewMode` / `normalizeViewPref` in `@digithings/ui/chat/stock`
+(`skin-types.ts`), which is what types `api.prefs.view`. The label map is keyed
+by the palette's id union and the menu indexes it with the app's union, so the
+two cannot diverge in TypeScript: a level added to the app without the package
+stops the app from compiling, and a level added to the package without the app
+is caught by `view-modes.test.ts`. Two copies of the vocabulary still live
+outside this module and do not read this map — the digichat-tui client palette
+and the digigraph session-prefs tool, both of which still teach the retired
+ids.
+
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup?, allowedTools?, mutatingTools? }` is
 forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?,allowedTools?,mutatingTools?}`). `setup` is the
 operator's tool-registration values (digisearch `index_name`, digivault `path_prefix`); digigraph merges it over the

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { VIEW_CODES, VIEW_LABELS } from "@digithings/digichat-ui";
 
 import {
   DEFAULT_THINKING_MODE,
@@ -19,6 +20,16 @@ describe("view-modes", () => {
     expect(DEFAULT_THINKING_MODE).toBe("auto");
     expect(VIEW_MODES).toEqual(["quiet", "balanced", "verbose"]);
     expect(THINKING_MODES).toEqual(["auto", "collapsed", "open"]);
+  });
+
+  it("keeps the id contract aligned with the shared palette", () => {
+    // The app owns the ids, the shared package owns the wording. Both must
+    // name the same levels: when they drift, a row can find no label and
+    // render a blank description (DIG-4665).
+    expect(VIEW_MODES).toEqual([...VIEW_CODES]);
+    for (const mode of VIEW_MODES) {
+      expect(VIEW_LABELS[mode].trim()).not.toBe("");
+    }
   });
 
   it("guards view and thinking mode values", () => {

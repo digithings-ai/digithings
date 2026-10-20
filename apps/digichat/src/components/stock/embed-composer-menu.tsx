@@ -22,7 +22,7 @@ import {
 import { createPortal } from "react-dom";
 import { DotMatrix } from "@digithings/ui/chat/dot-matrix";
 import { Button, Input, Label } from "@digithings/ui/ui";
-import { nextPaletteIndex } from "@digithings/digichat-ui";
+import { nextPaletteIndex, VIEW_LABELS } from "@digithings/digichat-ui";
 import { useEmbedChatPrefs } from "@digithings/ui/chat/stock";
 import {
   applyWellKnownMcp,
@@ -164,13 +164,6 @@ const SEARCH_ENGINE_LABELS: Record<string, string> = {
   parallel: "Parallel",
   firecrawl: "Firecrawl",
   tinyfish: "Tinyfish",
-};
-
-const VIEW_LABELS: Record<string, string> = {
-  hidden: "Hidden · one line",
-  quiet: "Quiet · titles only",
-  balanced: "Balanced · open while it runs",
-  verbose: "Verbose · everything open",
 };
 
 const THINKING_LABELS: Record<string, string> = {
@@ -571,7 +564,7 @@ export function EmbedComposerMenu({
       VIEW_MODES.map((id) => ({
         id,
         label: slashName(`view ${id}`),
-        value: VIEW_LABELS[id] ?? "",
+        value: VIEW_LABELS[id],
         checked: api.prefs.view === id,
         exclusive: true,
         activate: () => {

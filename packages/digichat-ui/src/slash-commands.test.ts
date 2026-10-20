@@ -9,6 +9,9 @@ import {
   parseSlashInput,
   SLASH_COMMANDS,
   slashHelpText,
+  VIEW_CHOICES,
+  VIEW_CODES,
+  VIEW_LABELS,
 } from "./slash-commands";
 
 describe("parseSlashInput", () => {
@@ -239,6 +242,29 @@ describe("SLASH_COMMANDS", () => {
       names: ["/provider", "/byok", "/key"],
       hint: "API provider",
     });
+  });
+});
+
+describe("view-level wording", () => {
+  it("gives every live level a wording and no retired level a label", () => {
+    // The shared map is the one home of the wording (DIG-4665): the composer
+    // menu's /view page and the palette's /view choice options both read it.
+    // A level with no wording renders a blank description column; a retired
+    // level with one keeps a dead id alive.
+    expect(Object.keys(VIEW_LABELS).sort()).toEqual([...VIEW_CODES].sort());
+    for (const code of VIEW_CODES) {
+      expect(VIEW_LABELS[code].trim()).not.toBe("");
+    }
+    // `hidden` was retired in #6079, `compact` / `detailed` in #6034.
+    for (const retired of ["hidden", "compact", "detailed"]) {
+      expect(Object.keys(VIEW_LABELS)).not.toContain(retired);
+    }
+  });
+
+  it("builds the /view choice options from the same map", () => {
+    expect(VIEW_CHOICES).toEqual(
+      VIEW_CODES.map((code) => ({ value: code, label: VIEW_LABELS[code] })),
+    );
   });
 });
 
