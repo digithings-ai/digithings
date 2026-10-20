@@ -147,7 +147,15 @@ It **refuses to deploy** if the commit cannot be resolved.
 > bare `npx wrangler deploy` still ships the legacy id. The credential the lane needs is a
 > Workers Scripts:Edit token in the `CLOUDFLARE_WORKERS_API_TOKEN` secret, not the
 > Vectorize/D1 token that also answers to `CLOUDFLARE_API_TOKEN` (the trap in
-> `wrangler.toml`). `npm run deploy` below is still the operator path for deploying a specific
+> `wrangler.toml`).
+>
+> **That secret does not exist yet.** #6013 added the read of
+> `CLOUDFLARE_WORKERS_API_TOKEN` and the secret was never created, so the lane exported an
+> empty `CLOUDFLARE_API_TOKEN` and the failure landed on wrangler as an auth error rather
+> than on the missing credential. The lane now refuses to deploy without it and says which
+> credential is missing, and the gap is recorded in `.github/secret-names.json` under
+> `accepted_missing` (owner: chris) so the workflow-secret-reference check reports it
+> instead of hiding it. `npm run deploy` below is still the operator path for deploying a specific
 > tree by hand.
 > The build half is still gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for this app on every PR,
 > and the stack's `tsc --noEmit` + `vitest run` now run in `test-web.yml`. See

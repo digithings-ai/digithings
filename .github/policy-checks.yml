@@ -51,6 +51,7 @@ tracked_workflows:
   - ci-docs.yml
   - ci-type-check.yml
   - security-gitleaks.yml
+  - security-workflow-secret-refs.yml
 
 checks:
   # ── develop's merge gate ────────────────────────────────────────────────────
@@ -184,6 +185,54 @@ checks:
       Unconditional lane, folded into `Required checks passed` (in its
       `needs:`). Deliberately ungated directly: it reports on every PR and
       goes red, and merges continue. Required nowhere.
+
+  - context: R0 client-literal baseline growth guard
+    workflow: ci.yml
+    job: r0-client-literals-baseline-growth
+    enforcement: advisory
+    reason: >-
+      Unconditional on a PR (`if: github.event_name == 'pull_request'`), folded
+      into `Required checks passed` (in its `needs:`), where a failure blocks
+      the merge — the aggregator is the gate. Not a required context in its own
+      right: develop requires the stable `Required checks passed` name, because
+      a job that does not report on every PR can never be required (GitHub
+      blocks forever on a status that never arrives). The job landed with
+      DIG-4577 without this entry and without its `needs:` line, so develop's
+      own "Verify needs list covers every job in this file" step and
+      `check_required_policy_checks.py` were both failing before DIG-4717
+      landed; both are fixed here.
+
+  - context: Workflow secret references
+    workflow: ci.yml
+    job: workflow-secret-refs
+    enforcement: advisory
+    reason: >-
+      Unconditional lane, folded into `Required checks passed` (in its
+      `needs:`), where a failure blocks the merge — the aggregator is the gate.
+      Not a required context in its own right: develop requires the stable
+      `Required checks passed` name, because a job that does not report on
+      every PR can never be required (GitHub blocks forever on a status that
+      never arrives). The check itself cannot read the live secret listings
+      from a workflow, so it compares the workflow reads against the committed
+      names-only manifest `.github/secret-names.json`; see DIG-4717.
+
+  - context: Workflow secret references (PR reporter)
+    workflow: security-workflow-secret-refs.yml
+    job: check
+    enforcement: advisory
+    reason: >-
+      The live reporter for the DIG-4717 check: every `secrets.NAME` read under
+      `.github/workflows/` is checked against the committed names-only manifest
+      `.github/secret-names.json`, and a read that no level defines fails the
+      job. It is path-filtered on the workflow tree, the manifest and the
+      script, so it cannot be a required context - GitHub blocks a merge
+      forever on a status that never arrives - and adding it to
+      `.github/required-contexts.txt` is a human-only repo-settings write
+      (DIG-1952 child B), so it stays advisory. It exists as its own workflow
+      because ci.yml is disabled on GitHub by the cost lock of 2026-10-14
+      (DIG-4364): a lane inside ci.yml reports nothing today. The same
+      command runs as the `workflow-secret-refs` lane in ci.yml, and that copy
+      is the one that gates a merge once CI is re-enabled.
 
   - context: wrangler deploy --dry-run
     workflow: ci.yml

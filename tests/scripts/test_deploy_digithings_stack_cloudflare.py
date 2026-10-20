@@ -326,6 +326,53 @@ def test_the_deploy_command_and_secrets_are_unchanged() -> None:
     )
 
 
+def test_the_deploy_fails_loudly_when_the_workers_token_is_missing() -> None:
+    """An empty secret is a silent deploy, so the lane has to look before it pushes.
+
+    Actions substitutes an empty string for a secret name it cannot resolve, so
+    `secrets.CLOUDFLARE_WORKERS_API_TOKEN` reached wrangler as an empty
+    `CLOUDFLARE_API_TOKEN` and the failure landed on wrangler as an auth error
+    rather than on the missing credential. #6013 added the read; the secret was
+    never created. This pins the preflight that says so, and pins that it never
+    prints the value.
+    """
+    steps = _steps(_stack_spec(), "deploy")
+    preflight = next(
+        (s for s in steps if "Preflight" in str(s.get("name") or "")),
+        {},
+    )
+    assert preflight, (
+        "the deploy job has no preflight step: an empty CLOUDFLARE_API_TOKEN is "
+        "what this lane shipped with, and it only surfaced as a wrangler auth "
+        "error (DIG-4717)"
+    )
+    env = preflight.get("env") or {}
+    assert env.get("CLOUDFLARE_WORKERS_API_TOKEN") == (
+        "${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}"
+    ), (
+        "the preflight must look at the same name the deploy exports, or it "
+        "checks a different credential than the one that runs"
+    )
+    script = str(preflight.get("run") or "")
+    assert "-z" in script and "exit 1" in script, (
+        "the preflight must fail the job when the token is empty"
+    )
+    assert "::error::" in script, (
+        "the preflight must say what is missing on the run page, not just exit 1"
+    )
+    assert "CLOUDFLARE_WORKERS_API_TOKEN is present" in script, (
+        "the success path must say the token is present"
+    )
+    unguarded = [
+        line
+        for line in script.splitlines()
+        if "$CLOUDFLARE_WORKERS_API_TOKEN" in line and "[" not in line
+    ]
+    assert not unguarded, (
+        f"the preflight expands the token outside a test, which would print it: {unguarded}"
+    )
+
+
 # --- repo-wide invariant: anything that deploys must fire on push: main ---
 
 
