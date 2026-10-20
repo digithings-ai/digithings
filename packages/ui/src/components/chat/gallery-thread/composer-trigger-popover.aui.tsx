@@ -10,6 +10,7 @@ import {
 } from "@assistant-ui/react";
 import { cn } from "./cn";
 import { DotMatrix } from "../DotMatrix";
+import { OverlayScrollbar } from "../overlay-scrollbar";
 
 type IconComponent = FC<{ className?: string }>;
 
@@ -66,13 +67,16 @@ type ItemsProps = {
 
 const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
   const { isLoading } = unstable_useTriggerPopoverScopeContext();
+  const listRef = useRef<HTMLDivElement | null>(null);
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverItems>
       {(items) => (
+        <div className="relative min-h-0">
         <div
           data-slot="composer-trigger-popover-items"
           className="flex max-h-[min(50vh,22rem)] flex-col overflow-y-auto py-1"
           ref={(node) => {
+            listRef.current = node;
             node
               ?.querySelector<HTMLElement>("[data-highlighted]")
               ?.scrollIntoView({ block: "nearest" });
@@ -103,6 +107,8 @@ const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
               {isLoading ? loadingLabel : emptyLabel}
             </div>
           )}
+        </div>
+        <OverlayScrollbar targetRef={listRef} width={6} />
         </div>
       )}
     </ComposerPrimitive.Unstable_TriggerPopoverItems>

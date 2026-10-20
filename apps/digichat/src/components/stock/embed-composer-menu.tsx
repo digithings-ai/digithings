@@ -1128,6 +1128,23 @@ export function EmbedComposerMenu({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [onKeyDown]);
 
+  // Keep the arrow-key cursor inside the scroll viewport. Without this the
+  // cursor walks past the fold on long pages (language, models) and the menu
+  // looks frozen because the row it moved to is out of sight.
+  useEffect(() => {
+    const body = menuBodyRef.current;
+    if (!body) return;
+    const row = body.querySelector<HTMLElement>('[data-cursor="true"]');
+    if (!row) return;
+    const rowRect = row.getBoundingClientRect();
+    const bodyRect = body.getBoundingClientRect();
+    if (rowRect.top < bodyRect.top) {
+      body.scrollTop -= bodyRect.top - rowRect.top;
+    } else if (rowRect.bottom > bodyRect.bottom) {
+      body.scrollTop += rowRect.bottom - bodyRect.bottom;
+    }
+  }, [cursor, view]);
+
   const onRowKey = (event: ReactKeyboardEvent, index: number) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -1140,9 +1157,7 @@ export function EmbedComposerMenu({
 
   const body = (
     <div
-      className={`dc-composer-menu aui-composer-trigger-popover absolute inset-x-0 bottom-full z-50 mb-1 w-full rounded-none border ${
-        view === "mcp-edit" ? "overflow-visible" : "overflow-hidden"
-      }`}
+      className="dc-composer-menu aui-composer-trigger-popover absolute inset-x-0 bottom-full z-50 mb-1 w-full overflow-hidden rounded-none border"
       data-thread-skin="digichat"
       data-embed-settings
       data-embed-composer-menu
@@ -1153,9 +1168,7 @@ export function EmbedComposerMenu({
       <div className="relative min-h-0">
         <div
           ref={menuBodyRef}
-          className={`dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col py-0.5 ${
-            view === "mcp-edit" ? "overflow-visible" : "overflow-y-auto"
-          }`}
+          className="dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col overflow-y-auto py-0.5"
         >
           {view === "provider-key" ? (
             <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5" htmlFor={keyFormId}>
