@@ -44,6 +44,6 @@ describe("SkinCredit", () => {
     render(<SkinCredit className="font-mono" />);
     const el = screen.getByTestId("skin-credit");
     expect(el.className).toMatch(/font-mono/);
-    expect(el.className).toMatch(/text-xs/);
+    expect(el.className).toMatch(/text-\[0\.6875rem\]/);
   });
 });
