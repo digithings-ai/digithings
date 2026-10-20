@@ -368,6 +368,7 @@ Intended behaviour, so you know what to expect:
 - **macOS:** values come from the Keychain via `security find-generic-password -s digithings/<name>`.
 - **Linux and other open-source setups:** `pass`, a 1Password CLI, or a plain `.env` you fill in by hand.
 - **Local-only keys** (the local Supabase anon and service keys, the local digikey root key) are generated locally. They are never copied from production.
+- **Operator-supplied values** (the local digikey API key, the digigraph upstream key, the digisearch seed key, the e2e bearer token) are read only from the prefix named for this workspace (`digithings-local/` in the local stack). The shared `digithings/` store holds the production values and is never a fallback for them: when the workspace store has no value, the renderer asks for it instead of silently taking the production one.
 - `.dev.vars`, `.dev.vars.local` and `.env.local` are ignored by Git, and the secret scan runs as a pre-commit hook and in CI.
 
 As noted in section 2, `.env.local` is ignored today (rule `.env*`) and **`.dev.vars` is not**. Until S5 lands, check `git status` before you stage anything.

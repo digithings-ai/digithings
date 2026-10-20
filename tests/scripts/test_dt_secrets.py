@@ -530,3 +530,189 @@ def test_from_store_still_reads_one_prefix(tool, monkeypatch):
     assert tool.from_store("NAME", "digithings/", allow_prompt=False) == "value-for-digithings/"
     monkeypatch.setattr(tool, "_from_one_store", lambda name, prefix: None)
     assert tool.from_store("NAME", "digithings/", allow_prompt=False) is None
+
+
+# ------------------------------------- operator-prompt never reads the shared store
+
+
+# The entries the contract marks "must never be copied from production" /
+# "never taken from production": a per-workspace or locally-issued credential.
+OPERATOR_PROMPT_NAMES = (
+    "DIGICLAW_DIGIKEY_API_KEY",
+    "DIGIGRAPH_UPSTREAM_API_KEY",
+    "DIGISEARCH_SEED_API_KEY",
+    "E2E_BEARER_TOKEN",
+)
+
+
+def _operator_entry(entries, name="DIGISEARCH_SEED_API_KEY"):
+    return next(e for e in entries if e["name"] == name)
+
+
+def test_an_operator_prompt_value_is_never_read_from_the_shared_prefix(
+    tool, manifest, entries, monkeypatch
+):
+    """A per-workspace credential must not come out of the shared store.
+
+    The contract says an operator-prompt value is "not a shared digithings
+    secret", and the entries themselves say they are "never taken from
+    production". The shared prefix "digithings/" IS the production store, so
+    the local render must stop there and ask the operator instead
+    (DIG-4659).
+    """
+    entry = _operator_entry(entries)
+    asked: list = []
+
+    def fake_one_store(name, prefix):
+        asked.append(prefix)
+        return "production-value" if prefix == "digithings/" else None
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "_from_one_store", fake_one_store)
+    monkeypatch.setattr(tool, "prompt", lambda label: "typed-by-the-operator")
+
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) is None
+    assert "production-value" not in asked
+    assert "digithings/" not in asked
+
+
+def test_the_shared_prefix_is_never_queried_for_an_operator_prompt_entry(
+    tool, manifest, entries, monkeypatch
+):
+    """The shared store is not even asked: the value is asked for instead."""
+    entry = _operator_entry(entries)
+    asked: list = []
+    prompted: list = []
+
+    def fake_one_store(name, prefix):
+        asked.append(prefix)
+        return None
+
+    def fake_prompt(label):
+        prompted.append(label)
+        return "typed-by-the-operator"
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "_from_one_store", fake_one_store)
+    monkeypatch.setattr(tool, "prompt", fake_prompt)
+
+    assert tool.resolve(manifest, entry, {}, allow_prompt=True) == "typed-by-the-operator"
+    assert asked == ["digithings-local/"]
+    assert prompted == ["DIGISEARCH_SEED_API_KEY: "]
+
+
+def test_an_operator_prompt_value_is_read_from_the_operator_prefix(
+    tool, manifest, entries, monkeypatch
+):
+    """The local stack's own prefix still answers for its own credentials."""
+    entry = _operator_entry(entries)
+
+    def fake_one_store(name, prefix):
+        return "local-value" if prefix == "digithings-local/" else None
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "_from_one_store", fake_one_store)
+
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) == "local-value"
+
+
+def test_without_an_operator_prefix_the_value_is_asked_for_not_taken_from_the_shared_store(
+    tool, manifest, entries, monkeypatch
+):
+    """No prefix for this workspace means the operator is asked for the value.
+
+    The shared store is not a fallback here: it is the production store.
+    """
+    entry = _operator_entry(entries)
+    asked: list = []
+
+    def fake_one_store(name, prefix):
+        asked.append(prefix)
+        return "shared-value"
+
+    monkeypatch.delenv(tool.KEYCHAIN_PREFIX_ENV, raising=False)
+    monkeypatch.setattr(tool, "_from_one_store", fake_one_store)
+    monkeypatch.setattr(tool, "prompt", lambda label: "typed-by-the-operator")
+
+    assert tool.resolve(manifest, entry, {}, allow_prompt=True) == "typed-by-the-operator"
+    assert asked == []
+
+
+def test_a_keychain_value_still_falls_back_to_the_shared_prefix(
+    tool, manifest, entries, monkeypatch
+):
+    """A shared secret keeps the full prefix list: the local one, then the shared one."""
+    entry = next(e for e in entries if e["name"] == "DIGIKEY_ADMIN_TOKEN")
+    asked: list = []
+
+    def fake_one_store(name, prefix):
+        asked.append(prefix)
+        return "shared-value" if prefix == "digithings/" else None
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "_from_one_store", fake_one_store)
+
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) == "shared-value"
+    assert asked == ["digithings-local/", "digithings/"]
+
+
+def test_the_contract_marks_the_never_from_production_entries_as_operator_prompt(entries):
+    """The contract says it; the renderer must honour it."""
+    for name in OPERATOR_PROMPT_NAMES:
+        entry = next(e for e in entries if e["name"] == name)
+        assert entry["source"] == "operator-prompt", name
+
+
+@pytest.mark.parametrize("name", OPERATOR_PROMPT_NAMES)
+def test_the_render_fails_for_any_never_from_production_entry_without_its_own_value(
+    tool, manifest, entries, monkeypatch, name
+):
+    """Each of the four FAILS the render instead of taking the production value.
+
+    This is the local stack's own path: the local render runs with --no-prompt,
+    so a missing operator value has to be a failure. A render that quietly took
+    the credential under "digithings/" would bind a production credential into
+    the local stack (DIG-4659).
+    """
+    entry = next(e for e in entries if e["name"] == name)
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(
+        tool,
+        "_from_one_store",
+        lambda n, prefix: "production-value" if prefix == "digithings/" else None,
+    )
+
+    values, missing, skipped = tool.resolve_all(manifest, [entry], allow_prompt=False, verbose=False)
+
+    assert name in missing
+    assert "production-value" not in values.values()
+
+
+@pytest.mark.parametrize("name", OPERATOR_PROMPT_NAMES)
+def test_the_own_prefix_answers_for_any_never_from_production_entry(
+    tool, manifest, entries, monkeypatch, name
+):
+    """The fix must not break the local flow: the workspace store still answers."""
+    entry = next(e for e in entries if e["name"] == name)
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(
+        tool,
+        "_from_one_store",
+        lambda n, prefix: "local-value" if prefix == "digithings-local/" else None,
+    )
+
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) == "local-value"
+
+
+def test_the_local_stack_names_its_own_keychain_prefix():
+    """The local stack names the prefix the operator values are read from.
+
+    `dt up` renders the secret file with this prefix in the environment, so the
+    operator-supplied values are read from the local store and the shared
+    "digithings/" store is never asked (DIG-4659). Without the prefix, the
+    render would ask for every operator value instead.
+    """
+    from scripts.localstack import localenv
+
+    env = localenv.apply_defaults(REPO, {})
+    assert env[localenv.KEYCHAIN_PREFIX_ENV] == "digithings-local/"
