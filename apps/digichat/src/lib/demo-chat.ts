@@ -11,20 +11,23 @@ import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
  * grouping, disclosure and the banner behave exactly as they do in
  * production — only the content is made up.
  *
+ * The content is deliberately client-neutral: the R0 gate keeps client names
+ * out of the repository, and a demo that named a client would leak one.
+ *
  * Enabled by `DIGICHAT_DEMO_CHAT=1` and never in production.
  */
 
 const REASONING = [
-  "The question is about how to raise a support ticket in the Online Compliance Center.\n",
+  "The question is about how to raise a support ticket.\n",
   "The help articles are the authoritative source, so I will search them first.\n",
-  "Then I will check the internal notes for the OCC help index, and finish with the live ticket list so the answer can name real tickets.\n",
+  "Then I will read the internal notes for the same topic, and finish with the live ticket list so the answer can name real tickets.\n",
 ];
 
 const TEXT = [
-  "You raise a ticket from the OCC portal: **Service Desk → New ticket**.\n\n",
-  "Choose the category *Access & onboarding* for account questions, *Mail archive* for archive access, or *Data protection* for retention and deletion. ",
-  "Add the subject, a short description and the affected mailbox, then submit — you get a ticket number like #28416 by email within a working day.\n\n",
-  "Tickets are handled in the order they arrive; the three most recent open ones right now are #28400 (faulty PDF display), #28410 (2FA login) and #28416 (mail archive access).\n",
+  "You raise a ticket from the customer portal: **Service Desk → New ticket**.\n\n",
+  "Pick the category that matches — *Access & onboarding* for account questions, *Mail archive* for archive access, or *Data protection* for retention and deletion. ",
+  "Add the subject, a short description and the affected mailbox, then submit — you get a ticket number by email within a working day.\n\n",
+  "Tickets are handled in the order they arrive; the three most recent open ones right now are #4120 (faulty PDF display), #4131 (two-factor login) and #4147 (mail archive access).\n",
 ];
 
 const TOOLS: {
@@ -36,17 +39,17 @@ const TOOLS: {
   {
     toolCallId: "demo-1",
     toolName: "digisearch",
-    input: { query: "how to raise a support ticket", index: "occ_help" },
+    input: { query: "how to raise a support ticket", index: "help_articles" },
     output:
-      "occ_help: 3 documents — “Raising a ticket (Service Desk)”, “Service Desk categories”, “Response times”. Snippet: “Open the portal, choose Service Desk → New ticket, pick a category, add the subject and the affected mailbox, then submit.”",
+      "help_articles: 3 documents — “Raising a ticket (Service Desk)”, “Service Desk categories”, “Response times”. Snippet: “Open the portal, choose Service Desk → New ticket, pick a category, add the subject and the affected mailbox, then submit.”",
   },
   {
     toolCallId: "demo-2",
-    toolName: "digivault_get_note",
+    toolName: "vault_get_note",
     input: {
       vault_paths: [
-        "clients/online-compliance-center/occ-search-user-administrator-manual-2-gett-i004",
-        "clients/online-compliance-center/occ-search-user-administrator-manual-9-ac-i045",
+        "clients/knowledge-base/user-administrator-manual-i004",
+        "clients/knowledge-base/user-administrator-manual-i045",
       ],
       query: "6 notes",
     },
@@ -55,10 +58,10 @@ const TOOLS: {
   },
   {
     toolCallId: "demo-3",
-    toolName: "zammad_list_tickets",
+    toolName: "ticketing_list_tickets",
     input: { state: "open", limit: 3 },
     output:
-      "#28400 Fehlerhafte Anzeige PDF Dokument (faulty display of PDF document) · #28410 kann mich nicht mehr anmelden / 2FA (cannot log in anymore) · #28416 Benutzer kann auf Mailarchiv nicht zugreifen (user cannot access mail archive)",
+      "#4120 Fehlerhafte Anzeige PDF Dokument (faulty display of PDF document) · #4131 kann mich nicht mehr anmelden / 2FA (cannot log in anymore) · #4147 Benutzer kann auf Mailarchiv nicht zugreifen (user cannot access mail archive)",
   },
 ];
 
