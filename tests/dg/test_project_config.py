@@ -6,7 +6,6 @@ import logging
 import os
 from pathlib import Path
 
-import digigraph.project_config as project_config_module
 import pytest
 from digigraph.project_config import DigiProjectConfig, _resolve_config_path, load_project_config
 
@@ -253,7 +252,7 @@ def test_digi_project_config_load_re_reads_on_mtime_change(
     No restart required for non-secret field changes."
     """
     # Isolate: clear the module-level cache so previous tests don't interfere.
-    monkeypatch.setattr(project_config_module, "_config_cache", {})
+    monkeypatch.setattr("digigraph.project_config._config_cache", {})
 
     cfg_file = tmp_path / "digiproject.yaml"
     cfg_file.write_text("project:\n  name: before-reload\nagents:\n  llm_mode: test\n")

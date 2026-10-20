@@ -41,20 +41,21 @@ CREATE TABLE IF NOT EXISTS digikey_licenses (
 
 @pytest.fixture()
 def client(monkeypatch, tmp_path):
+    import digikey.ratelimit as rl
+
     db_path = tmp_path / "dk-lic.db"
     monkeypatch.setenv("DIGIKEY_DATABASE_URL", f"sqlite:///{db_path}")
     monkeypatch.setenv("DIGIKEY_ALLOW_EPHEMERAL_KEY", "1")
     monkeypatch.setenv("DIGIKEY_ADMIN_TOKEN", ADMIN)
     monkeypatch.setenv("DIGIKEY_ISSUER", ISSUER)
     monkeypatch.delenv("DIGIKEY_BLOCKLIST_REDIS_URL", raising=False)
-    from digikey.ratelimit import get_limiter
 
     from digikey import blocklist, db
 
     db._engine = None
     db._session_factory = None
     blocklist.reset_client_cache()
-    get_limiter().reset()
+    rl.get_limiter().reset()
 
     from digikey.server import app
 
@@ -64,7 +65,7 @@ def client(monkeypatch, tmp_path):
             session.execute(text(DDL))
             session.commit()
         yield c
-    get_limiter().reset()
+    rl.get_limiter().reset()
 
 
 def _server_key():
