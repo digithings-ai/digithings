@@ -27,6 +27,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 from types import ModuleType
@@ -364,4 +365,33 @@ def test_the_npm_scope_sees_a_changed_workspace_manifest(
     monkeypatch.setattr(mod, "content_digest", digest_with_a_change)
     assert mod.check_only(mod.npm_input_paths()) == 1, (
         f"a changed {manifest_key} manifest must make the npm-scoped check refuse"
+    )
+
+
+def test_the_dockerfile_only_copies_what_the_packager_writes() -> None:
+    """Every ``image-packages`` COPY in the image has a package behind it.
+
+    The Dockerfile copies workspace manifests and untars npm tarballs out of
+    ``image-packages/``. If it names a package the packager does not produce,
+    the build fails with a missing-file error that reads like a broken image
+    rather than a missing input: that is how ``@digithings/hero-banner``
+    reached the image and broke ``next build`` (DIG-4489, DIG-4506).
+    """
+    dockerfile = (REPO_ROOT / "apps" / "digichat" / "Dockerfile").read_text(encoding="utf-8")
+
+    copied_manifests = set(
+        re.findall(r"image-packages/digichat/manifests/([A-Za-z0-9_-]+)/package\.json", dockerfile)
+    )
+    assert copied_manifests, "the Dockerfile copies no manifests from image-packages"
+    assert copied_manifests <= set(mod.NPM_MANIFESTS), (
+        f"the Dockerfile copies manifests the packager does not write: "
+        f"{sorted(copied_manifests - set(mod.NPM_MANIFESTS))}"
+    )
+
+    unpacked = set(re.findall(r"/tmp/digi-npm/digithings-([a-z0-9-]+)-\*\.tgz", dockerfile))
+    assert unpacked, "the Dockerfile unpacks no npm tarballs"
+    packed = {name.split("/")[-1] for name in mod.NPM_PACKAGES}
+    assert unpacked <= packed, (
+        f"the Dockerfile unpacks tarballs the packager does not write: "
+        f"{sorted(unpacked - packed)}"
     )
