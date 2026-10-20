@@ -285,3 +285,131 @@ def test_a_proven_self_review_is_refused_even_when_the_switch_is_off():
     )
     assert reason is not None
     assert "authoring seat (seat-a)" in reason
+
+
+# --------------------------------------------------------------------------
+# The verdict line: one parser, so the queue and the producer agree (DIG-4646)
+# --------------------------------------------------------------------------
+
+#: The QA lane's real change request (digithings-ai/digithings #5994, comment
+#: 6280947283 on #5968 is the same shape). The verdict line carries a leading
+#: word ("Review") and an em dash before the PR reference.
+FLEET_CHANGES_BODY = (
+    "<!-- in-session-review -->\n"
+    "\n"
+    "Review verdict: changes requested — digithings #5994 (DIG-4459) "
+    "@ `36fad1f939fbf9c2897894f205bfabc83c61096a`\n"
+    "\n"
+    "Reviewed: head `36fad1f9` (base `1e82af3f`), 6 files, +206/-6.\n"
+)
+
+#: The QA lane's real approval (comment 6285506816 on #5990): the verdict line
+#: comes first, then the marker.
+FLEET_APPROVE_BODY = (
+    "Review verdict: approve - digithings #5990 "
+    "@ `8e0750df22e626159cc4829b415dbffa2b0fc251`\n"
+    "\n"
+    "<!-- in-session-review -->\n"
+    "\n"
+    "Findings here.\n"
+)
+
+
+def test_the_fleet_change_request_line_is_read():
+    assert rpf.in_session_verdict_state(FLEET_CHANGES_BODY) == "CHANGES_REQUESTED"
+
+
+def test_the_fleet_approve_line_is_read():
+    assert rpf.in_session_verdict_state(FLEET_APPROVE_BODY) == "APPROVED"
+
+
+def test_a_bare_verdict_line_is_read():
+    assert rpf.in_session_verdict_state("**Verdict: CHANGES** (narrow)") == "CHANGES_REQUESTED"
+
+
+def test_prose_about_a_verdict_is_not_a_verdict():
+    assert rpf.in_session_verdict_state("The verdict: changes look fine to me.") == "COMMENTED"
+
+
+def test_a_verdict_identity_is_the_seat_it_names():
+    assert rpf.verdict_identity("<!-- dt-seat agent=seat-a -->") == ("seat", "seat-a")
+
+
+def test_a_verdict_identity_falls_back_to_the_session():
+    assert rpf.verdict_identity("<!-- dt-seat session=s-1 -->") == ("session", "s-1")
+
+
+def test_an_unnamed_verdict_has_no_identity():
+    assert rpf.verdict_identity("no marker here") == ("", "")
+    assert rpf.verdict_identity("no marker here", {"login": "chrizefan"}) == ("", "")
+
+
+def test_a_bot_login_is_its_own_identity():
+    assert rpf.verdict_identity("bot review", {"login": "coderabbitai[bot]"}) == (
+        "bot",
+        "coderabbitai",
+    )
+
+
+def test_a_dismissal_clears_only_its_own_change_request():
+    assert rpf.clears_change_request("DISMISSED", ("seat", "seat-a"), ("seat", "seat-a"))
+    assert not rpf.clears_change_request("DISMISSED", ("seat", "seat-b"), ("seat", "seat-a"))
+
+
+def test_a_named_change_request_is_cleared_by_the_same_identity_only():
+    assert rpf.clears_change_request("APPROVED", ("seat", "seat-a"), ("seat", "seat-a"))
+    assert not rpf.clears_change_request("APPROVED", ("seat", "seat-b"), ("seat", "seat-a"))
+    assert not rpf.clears_change_request("APPROVED", ("", ""), ("seat", "seat-a"))
+
+
+def test_an_unnamed_change_request_is_cleared_by_a_verdict_that_names_a_seat():
+    assert rpf.clears_change_request("APPROVED", ("seat", "seat-a"), ("", ""))
+    assert not rpf.clears_change_request("APPROVED", ("", ""), ("", ""))
+
+
+def _event(at, seq, login, identity, state):
+    return (at, seq, login, identity, state, "review %d" % seq)
+
+
+def test_an_unnamed_change_request_survives_another_unnamed_approval():
+    events = [
+        _event("2026-10-20T10:00:00Z", 1, "chrizefan", ("", ""), "CHANGES_REQUESTED"),
+        _event("2026-10-20T11:00:00Z", 2, "chrizefan", ("", ""), "APPROVED"),
+    ]
+    outstanding = rpf.outstanding_change_requests(events)
+    assert len(outstanding) == 1
+    assert outstanding[0][0] == "chrizefan"
+
+
+def test_the_same_seats_approval_clears_its_own_change_request():
+    events = [
+        _event("2026-10-20T10:00:00Z", 1, "chrizefan", ("seat", "seat-a"), "CHANGES_REQUESTED"),
+        _event("2026-10-20T11:00:00Z", 2, "chrizefan", ("seat", "seat-a"), "APPROVED"),
+    ]
+    assert rpf.outstanding_change_requests(events) == []
+
+
+def test_another_seats_approval_does_not_clear_a_named_change_request():
+    events = [
+        _event("2026-10-20T10:00:00Z", 1, "chrizefan", ("seat", "seat-a"), "CHANGES_REQUESTED"),
+        _event("2026-10-20T11:00:00Z", 2, "chrizefan", ("seat", "seat-b"), "APPROVED"),
+    ]
+    assert len(rpf.outstanding_change_requests(events)) == 1
+
+
+def test_only_the_same_login_clears_a_change_request():
+    events = [
+        _event("2026-10-20T10:00:00Z", 1, "chrizefan", ("seat", "seat-a"), "CHANGES_REQUESTED"),
+        _event("2026-10-20T11:00:00Z", 2, "someone-else", ("seat", "seat-a"), "APPROVED"),
+    ]
+    assert len(rpf.outstanding_change_requests(events)) == 1
+
+
+def test_a_pull_payload_with_a_commit_count_does_not_crash():
+    # The REST pull payload carries `commits` as a count, not as the list of
+    # commits. Reading the count crashed the producer on every PR (DIG-4646).
+    assert rpf._commit_texts({"commits": 3}) == []
+    assert rpf._commit_texts({"commits": 3, "body": "x"}) == []
+    assert rpf.author_identity({"commits": 3, "body": "<!-- dt-seat agent=seat-a -->"}) == {
+        "seat": frozenset({"seat-a"})
+    }

@@ -738,68 +738,11 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
 # a verdict.
 
 IN_SESSION_REVIEW_MARKER = "<!-- in-session-review -->"
-# A verdict line, as the fleet writes it: "Review verdict: changes requested —
-# #5968 @ 36fad1f9". The leading word before "verdict" is part of the shape
-# (DIG-4646): the QA lane says "Review verdict:", not "Verdict:", so a regex
-# that anchors on the bare word read every real verdict as no verdict at all —
-# a real change request was then neither a block nor excluded from the review
-# evidence, and a real approval was not an approval. Up to two leading words
-# are allowed so "review verdict:" still reads; the verdict itself is the words
-# that follow the colon, on that line only.
-_IN_SESSION_VERDICT_RE = re.compile(
-    r"^[\s>#*_]*(?:[A-Za-z][A-Za-z0-9_-]*[ \t]+){0,2}verdict\s*[:=][ \t]*(?P<rest>[^\n]*)",
-    re.I | re.M,
-)
-# The verdict words, read from the start of what follows the colon. A separator
-# ("-", an en or em dash) starts the review's own summary and ends the verdict:
-# "changes requested — #5968 @ 36fad1f9" is the verdict "changes requested".
-_VERDICT_SEPARATOR_RE = re.compile(r"\s[-–—]\s")
-#: Markdown decoration ends the verdict too: "**Verdict: CHANGES** (narrow)" says
-#: "CHANGES", not "CHANGES (narrow)".
-_VERDICT_DECORATOR_RE = re.compile(r"\*\*|__|[*`(]")
-_VERDICT_WORDS_RE = re.compile(r"[A-Za-z][A-Za-z_'-]*")
-#: The verdict words, read exactly. A phrase is a verdict when it is one of
-#: these, or when its first two words are (a real "changes requested because
-#: ..." still reads). A single word only counts when it is the whole phrase,
-#: so prose that happens to contain "changes" ("the verdict: changes look fine")
-#: is not a verdict.
-_VERDICT_BLOCKING_WORDS = frozenset(
-    {
-        "changes",
-        "change",
-        "block",
-        "blocked",
-        "reject",
-        "rejected",
-        "changes_requested",
-        "change_requested",
-        "changes_needed",
-        "changes_are_requested",
-        "request_changes",
-        "requests_changes",
-        "requested_changes",
-        "request_change",
-        "needs_changes",
-        "needs_change",
-    }
-)
-_VERDICT_APPROVING_WORDS = frozenset(
-    {
-        "approve",
-        "approves",
-        "approved",
-        "approval",
-        "lgtm",
-        "ok",
-        "okay",
-        "pass",
-        "passes",
-        "passed",
-        "ship",
-        "ships",
-        "shipped",
-    }
-)
+# A verdict line is read in one place, in scripts/review_pass_filter.py: the
+# QA lane writes "Review verdict: changes requested - #5994 @ `abc`", not
+# "Verdict:", so a parser anchored on the bare word read every real verdict as
+# no verdict at all (DIG-4646). The queue and the local-ci producer share that
+# parser, so they cannot disagree about what the fleet wrote.
 _REVIEW_STATES = frozenset({"APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"})
 
 
@@ -810,45 +753,14 @@ def _reviewer_key(login: Any) -> str:
     return key[: -len("[bot]")] if key.endswith("[bot]") else key
 
 
-def _verdict_phrase(rest: str) -> list[str]:
-    """The words of a verdict line, at most three of them.
-
-    "CHANGES**" is one word, "changes requested" is two, and the review's own
-    summary after the separator is not part of the verdict."""
-    head = _VERDICT_SEPARATOR_RE.split(str(rest or ""), maxsplit=1)[0]
-    head = _VERDICT_DECORATOR_RE.split(head, maxsplit=1)[0]
-    head = head.strip(" \t*_`\"'")
-    return _VERDICT_WORDS_RE.findall(head)[:3]
-
-
-def _verdict_state(words: list[str]) -> str:
-    """CHANGES_REQUESTED / APPROVED / COMMENTED for the words of a verdict line."""
-    if not words:
-        return "COMMENTED"
-    normalised = [w.lower().replace("-", "_") for w in words]
-    candidates = ["_".join(normalised)]
-    if len(normalised) > 2:
-        candidates.append("_".join(normalised[:2]))
-    for candidate in candidates:
-        if candidate in _VERDICT_BLOCKING_WORDS:
-            return "CHANGES_REQUESTED"
-        if candidate in _VERDICT_APPROVING_WORDS:
-            return "APPROVED"
-    return "COMMENTED"
-
-
 def _in_session_state(body: str) -> str:
     """CHANGES_REQUESTED / APPROVED / COMMENTED for an in-session review body.
 
-    The first *decisive* verdict line wins: a body that opens with a note
-    ("verdict: pending") and later states the verdict is read on the verdict,
-    not on the note. A body with no verdict line is a comment, not a verdict.
+    The verdict line is read by the shared parser in
+    ``scripts/review_pass_filter.py``, so the queue and the local-ci producer
+    read the fleet's verdicts the same way.
     """
-    for match in _IN_SESSION_VERDICT_RE.finditer(body or ""):
-        state = _verdict_state(_verdict_phrase(match.group("rest")))
-        if state != "COMMENTED":
-            return state
-    return "COMMENTED"
+    return rpf.in_session_verdict_state(body)
 
 
 def _review_events(pr: dict[str, Any]) -> list[tuple[str, int, str, tuple[str, str], str, str]]:
@@ -910,43 +822,18 @@ def _clears_change_request(
 ) -> bool:
     """Whether a later review act clears an outstanding change request.
 
-    A dismissal clears the review it dismisses, which carries that review's
-    own identity. An approval (or a comment-review) clears a change request
-    the same seat made, and clears a change request that named no seat at all
-    — an approval that names a seat is the only proof on the PR that a
-    different seat spoke. What it never clears is another seat's change
-    request: the author's own approval clearing a reviewer's block is exactly
-    what the login alone cannot explain (DIG-4646), and an unnamed approval
-    under the same login is no proof at all.
+    The rule lives in ``scripts/review_pass_filter.py`` so the queue and the
+    local-ci producer clear a change request the same way (DIG-4646).
     """
-    if state == "DISMISSED":
-        return identity == request_identity
-    if request_identity[0]:
-        # A named seat's change request is cleared by that seat and by nobody else.
-        return identity == request_identity
-    # An unnamed change request cannot be keyed by login, so only a verdict
-    # that names a seat can clear it.
-    return bool(identity[0])
+    return rpf.clears_change_request(state, identity, request_identity)
 
 
 def _reviewer_verdict_reasons(pr: dict[str, Any]) -> list[str]:
     """A refusal per change request that nothing since has cleared."""
-    open_requests: list[list[str]] = []
-    for at, _seq, login, identity, state, where in _review_events(pr):
-        if state == "CHANGES_REQUESTED":
-            # One change request per reviewer and seat: a later one from the
-            # same seat replaces the earlier one, so a reviewer who asks twice
-            # is one block, not two.
-            open_requests = [r for r in open_requests if not (r[0] == login and r[1] == identity)]
-            open_requests.append([login, identity, where, at])
-            continue
-        open_requests = [
-            r
-            for r in open_requests
-            if not (
-                r[0] == login and _clears_change_request(state, identity, r[1])
-            )
-        ]
+    # One change request per reviewer and seat: a later one from the same seat
+    # replaces the earlier one, so a reviewer who asks twice is one block, not
+    # two. The walk itself is shared with the local-ci producer.
+    open_requests = rpf.outstanding_change_requests(_review_events(pr))
     reasons: list[str] = []
     for login, identity, where, at in open_requests:
         kind, values = identity
@@ -980,21 +867,10 @@ def _verdict_identity(body: str, author: Any = None) -> tuple[str, str]:
     A bot is the one reviewer that needs no marker: it has no seats, so its
     login is its own identity and a later review by that bot clears the
     change request the bot made. `check_review_coverage.is_bot_login` is the
-    one rule for "this login is a bot", so the queue and the promotion gate
-    read a bot the same way.
+    one rule for "this login is a bot", so the queue, the promotion gate and
+    the local-ci producer read a bot the same way.
     """
-    identity = _identity(body)
-    for kind in ("seat", "session"):
-        values = identity.get(kind)
-        if values:
-            return (kind, ",".join(sorted(values)))
-    if isinstance(author, Mapping):
-        login = str((author or {}).get("login") or "")
-    else:
-        login = str(author or "")
-    if login and _coverage_module().is_bot_login(login):
-        return ("bot", _reviewer_key(login))
-    return ("", "")
+    return rpf.verdict_identity(body, author)
 
 
 def _seat_suffix(body: str) -> str:
@@ -1019,30 +895,17 @@ def _seat_suffix(body: str) -> str:
 #     a `<!-- dt-seat agent=<PAPERCLIP_AGENT_ID> run=<PAPERCLIP_RUN_ID>
 #     session=<id> -->` marker, or `Paperclip-Agent-Id:` / `Paperclip-Seat:` /
 #     `Paperclip-Run-Id:` / `Session-Id:` trailer lines, in the PR body and commit
-#     messages (the author) and in the review comment (the reviewer). Same-login
-#     review evidence counts only when it names a seat (or, for a PR authored
-#     outside Paperclip, a session) that is provably not the author's. Unnamed is
-#     not independent: it is refused, and the refusal says what to add.
+#     messages (the author) and in the review comment (the reviewer). The rule
+#     that a same-login review counts only when it names a seat (or, for a PR
+#     authored outside Paperclip, a session) that is provably not the author's
+#     sits behind the `seat_independence` policy switch: it is off until a
+#     producer writes those markers, because with no producer the rule refused
+#     every agent PR (DIG-4646). The overlap check -- a review naming a seat,
+#     session or run the author also names -- always runs, whatever the switch
+#     says.
 # (c) `review-applied` is posted per commit. The queue now requires it SUCCESS on
 #     the exact head it merges (`_gate_review_applied`); `merge_one` pins that
 #     same head with `--match-head-commit`.
-
-SEAT_MARKER = "dt-seat"
-_SEAT_MARKER_RE = re.compile(r"<!--\s*dt-seat\b(?P<fields>[^>]*?)\s*-->", re.I)
-_SEAT_FIELD_KINDS = {"agent": "seat", "seat": "seat", "run": "run", "session": "session"}
-_SEAT_TRAILER_KINDS = {
-    "paperclip-agent-id": "seat",
-    "paperclip-agent": "seat",
-    "paperclip-seat": "seat",
-    "paperclip-run-id": "run",
-    "session-id": "session",
-}
-_SEAT_TRAILER_RE = re.compile(
-    r"^[ \t>*_-]*(?P<key>Paperclip-Agent-Id|Paperclip-Agent|Paperclip-Seat|Paperclip-Run-Id"
-    r"|Session-Id)[*_`]*[ \t]*:[ \t]*[*_`]*[ \t]*(?P<value>[A-Za-z0-9][A-Za-z0-9._:/@-]*)",
-    re.I | re.M,
-)
-_PLACEHOLDER_IDS = frozenset({"?", "-", "none", "null", "unknown", "n/a", "tbd"})
 
 
 def _identity(text: str) -> dict[str, frozenset[str]]:
@@ -1052,10 +915,6 @@ def _identity(text: str) -> dict[str, frozenset[str]]:
     and the host CI producer read one implementation of it.
     """
     return rpf.identity_from_text(text)
-
-
-def _merge_identities(*ids: dict[str, frozenset[str]]) -> dict[str, frozenset[str]]:
-    return rpf.merge_identities(*ids)
 
 
 def _author_identity(pr: dict[str, Any]) -> dict[str, frozenset[str]]:

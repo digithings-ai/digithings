@@ -29,6 +29,7 @@ import json
 import os
 import re
 import time
+from pathlib import Path
 from typing import Any
 
 # A review posted this close to the push it claims to cover was not written
@@ -118,9 +119,18 @@ def merge_identities(*identities):
 
 
 def _commit_texts(pr):
-    """Commit message texts of a PR, in either payload shape."""
+    """Commit message texts of a PR, in either payload shape.
+
+    The REST pull payload carries ``commits`` as a *count*, not as the list of
+    commits; only the GraphQL payload and the ``/pulls/{n}/commits`` listing
+    carry the commits themselves. A count is not iterable, so it is dropped
+    here instead of crashing the caller (DIG-4646).
+    """
     texts = []
-    for commit in (pr or {}).get("commits") or []:
+    commits = (pr or {}).get("commits")
+    if not isinstance(commits, list):
+        commits = []
+    for commit in commits:
         if not isinstance(commit, dict):
             continue
         if "messageHeadline" in commit or "messageBody" in commit:
@@ -210,6 +220,250 @@ def independence_reason(author, reviewer, require_markers=True):
             % (kind, show_identity(author), kind, show_identity(reviewer))
         )
     return None
+
+
+# ---------------------------------------------------------------------------
+# Verdict lines: the shape the fleet actually writes
+# ---------------------------------------------------------------------------
+
+# A verdict line may carry up to two leading words before "verdict": the QA
+# lane writes "Review verdict: changes requested - #5994 @ `abc`", the older
+# in-session shape writes "**Verdict: CHANGES**". A regex anchored on the bare
+# word read every real verdict as no verdict at all (DIG-4646), so the queue
+# and the producer disagreed on 14 of the 22 live in-session comments — every
+# real change request among them.
+IN_SESSION_VERDICT_RE = re.compile(
+    r"^[\s>#*_]*(?:[A-Za-z][A-Za-z0-9_-]*[ \t]+){0,2}verdict\s*[:=][ \t]*(?P<rest>[^\n]*)",
+    re.I | re.M,
+)
+
+# A separator ("-", an en or em dash) starts the review's own summary and ends
+# the verdict: "changes requested - #5968 @ 36fad1f9" is the verdict
+# "changes requested".
+VERDICT_SEPARATOR_RE = re.compile(r"\s[-–—]\s")
+
+# Markdown decoration ends the verdict too: "**Verdict: CHANGES** (narrow)"
+# says "CHANGES", not "CHANGES (narrow)".
+VERDICT_DECORATOR_RE = re.compile(r"\*\*|__|[*`(]")
+
+VERDICT_WORDS_RE = re.compile(r"[A-Za-z][A-Za-z_'-]*")
+
+# The verdict words, read exactly. A phrase is a verdict when it is one of
+# these, or when its first two words are (a real "changes requested because
+# ..." still reads). A single word only counts when it is the whole phrase, so
+# prose that happens to contain "changes" ("the verdict: changes look fine")
+# is not a verdict.
+VERDICT_BLOCKING_WORDS = frozenset(
+    {
+        "changes",
+        "change",
+        "block",
+        "blocked",
+        "reject",
+        "rejected",
+        "changes_requested",
+        "change_requested",
+        "changes_needed",
+        "changes_are_requested",
+        "request_changes",
+        "requests_changes",
+        "requested_changes",
+        "request_change",
+        "needs_changes",
+        "needs_change",
+    }
+)
+VERDICT_APPROVING_WORDS = frozenset(
+    {
+        "approve",
+        "approves",
+        "approved",
+        "approval",
+        "lgtm",
+        "ok",
+        "okay",
+        "pass",
+        "passes",
+        "passed",
+        "ship",
+        "ships",
+        "shipped",
+    }
+)
+
+
+def verdict_phrase(rest):
+    """The words of a verdict line, at most three of them.
+
+    "CHANGES**" is one word, "changes requested" is two, and the review's own
+    summary after the separator is not part of the verdict."""
+    head = VERDICT_SEPARATOR_RE.split(str(rest or ""), maxsplit=1)[0]
+    head = VERDICT_DECORATOR_RE.split(head, maxsplit=1)[0]
+    head = head.strip(" \t*_`\"'")
+    return VERDICT_WORDS_RE.findall(head)[:3]
+
+
+def verdict_state(words):
+    """CHANGES_REQUESTED / APPROVED / COMMENTED for the words of a verdict line."""
+    if not words:
+        return "COMMENTED"
+    normalised = [w.lower().replace("-", "_") for w in words]
+    candidates = ["_".join(normalised)]
+    if len(normalised) > 2:
+        candidates.append("_".join(normalised[:2]))
+    for candidate in candidates:
+        if candidate in VERDICT_BLOCKING_WORDS:
+            return "CHANGES_REQUESTED"
+        if candidate in VERDICT_APPROVING_WORDS:
+            return "APPROVED"
+    return "COMMENTED"
+
+
+def in_session_verdict_state(body):
+    """CHANGES_REQUESTED / APPROVED / COMMENTED for an in-session review body.
+
+    The first *decisive* verdict line wins: a body that opens with a note
+    ("verdict: pending") and later states the verdict is read on the verdict,
+    not on the note. A body with no verdict line is a comment, not a verdict.
+
+    This is the one place that reads a verdict line, so the local-ci
+    ``review-applied`` producer and the merge queue read the fleet's verdicts
+    the same way.
+    """
+    for match in IN_SESSION_VERDICT_RE.finditer(body or ""):
+        state = verdict_state(verdict_phrase(match.group("rest")))
+        if state != "COMMENTED":
+            return state
+    return "COMMENTED"
+
+
+def reviewer_login_key(login):
+    """One key per reviewer: case-folded, ``[bot]`` suffix dropped.
+
+    The REST timeline and ``gh pr view --json`` disagree on the suffix for
+    the same bot, so both spellings have to name the same reviewer.
+    """
+    key = str(login or "").strip().lower()
+    return key[: -len("[bot]")] if key.endswith("[bot]") else key
+
+
+def _author_login(author):
+    """The login of a review's author record, or of a login string."""
+    if isinstance(author, dict):
+        for key in ("user", "author"):
+            record = author.get(key)
+            if isinstance(record, dict) and record.get("login"):
+                return str(record.get("login"))
+        if author.get("login"):
+            return str(author.get("login"))
+        return ""
+    return str(author or "")
+
+
+_COVERAGE_MODULE = None
+
+
+def _coverage_module():
+    """``scripts/check_review_coverage.py``, loaded by path.
+
+    ``scripts/`` is not a package and this module must not depend on the
+    caller's ``sys.path`` to find its neighbour, so the file is loaded from
+    next to this one.
+    """
+    global _COVERAGE_MODULE
+    if _COVERAGE_MODULE is None:
+        import importlib.util
+
+        path = Path(__file__).resolve().parent / "check_review_coverage.py"
+        spec = importlib.util.spec_from_file_location("check_review_coverage", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _COVERAGE_MODULE = module
+    return _COVERAGE_MODULE
+
+
+def _is_bot_login(author):
+    """Whether the author is a reviewer bot, by the one house rule.
+
+    ``scripts/check_review_coverage.py`` owns that rule (DIG-4298). It is
+    imported here so the local-ci producer and the merge queue agree on what a
+    bot is, and therefore on what a bot's own review clears.
+    """
+    try:
+        crc = _coverage_module()
+    except Exception:  # pragma: no cover - the module ships with the repo
+        return False
+    return bool(crc.is_bot_login(author))
+
+
+def verdict_identity(body, author=None):
+    """The identity a verdict names: ``(kind, values)``.
+
+    ``kind`` is ``"seat"`` or ``"session"`` and ``values`` are the names it
+    names, joined with a comma. A verdict that names neither is unnamed
+    (``("", "")``): it cannot be shown to come from a different seat, so it
+    cannot clear another seat's change request. A reviewer bot is its own
+    identity, so its own later review clears its own change request.
+    """
+    identity = identity_from_text(body or "")
+    for kind in ("seat", "session"):
+        values = identity.get(kind)
+        if values:
+            return (kind, ",".join(sorted(values)))
+    login = _author_login(author)
+    if login and _is_bot_login(author):
+        return ("bot", reviewer_login_key(login))
+    return ("", "")
+
+
+def clears_change_request(state, identity, request_identity):
+    """Whether a later review act clears an outstanding change request.
+
+    ``identity`` and ``request_identity`` are the ``(kind, values)`` pairs of
+    the later act and of the change request.
+
+    * a dismissal clears the change request of the same identity only;
+    * a change request that names a seat (or a session) is cleared by that
+      same identity only, so one seat's approval never clears another seat's
+      change request;
+    * a change request that names no seat is cleared by a later approval or
+      comment-review that names a seat, or by a dismissal.
+
+    An unnamed approval therefore clears nothing, which is what keeps two
+    seats that name no seat from clearing each other (DIG-4646).
+    """
+    if state == "DISMISSED":
+        return identity == request_identity
+    if request_identity[0]:
+        return identity == request_identity
+    return bool(identity[0])
+
+
+def outstanding_change_requests(events):
+    """The change requests of one PR that nothing since has cleared.
+
+    ``events`` are the review acts of one PR, oldest first, each
+    ``(at, seq, login, identity, state, where)``: ``login`` is who posted it,
+    ``identity`` the seat (else the session) it names, ``state`` the verdict
+    state. The result is one ``(login, identity, where, at)`` per change
+    request that is still outstanding.
+
+    Only the same login can clear its own change request: every seat posts
+    under one login, so a login is the most a verdict can be attributed to.
+    """
+    open_requests = []
+    for at, _seq, login, identity, state, where in events:
+        if state == "CHANGES_REQUESTED":
+            open_requests = [
+                r for r in open_requests if not (r[0] == login and r[1] == identity)
+            ]
+            open_requests.append((login, identity, where, at))
+            continue
+        open_requests = [
+            r for r in open_requests
+            if not (r[0] == login and clears_change_request(state, identity, r[1]))
+        ]
+    return open_requests
 
 
 # ---------------------------------------------------------------------------

@@ -160,15 +160,15 @@ def _fix_after(thread_first_at, fix_commit_ats):
 
 
 def thread_cleared(thread, fix_commit_ats, reviewer_logins=()):
-    if review_pass_filter is None:
-        # The rules cannot be applied, so a thread is not cleared.
-        return False
     """Condition (b) per thread: resolved, or fix-commit-after-comment AND a reply.
 
     A thread the PR's own author resolved does not count as cleared
     (DIG-4631). Every seat posts under the same GitHub login, so the
     resolution is checked against the author's seat, not against the login.
     """
+    if review_pass_filter is None:
+        # The rules cannot be applied, so a thread is not cleared.
+        return False
     if thread.get("author_resolved"):
         return False
     if thread.get("is_resolved"):
@@ -179,19 +179,29 @@ def thread_cleared(thread, fix_commit_ats, reviewer_logins=()):
 
 
 def evaluate(review_passes, threads, fix_commit_ats=(), check_runs=(), reviewer_logins=(),
-             verdict_blocks=()):
+             verdict_blocks=(), verdict_error=None):
     """Verdict for one PR head.
 
     Returns (ok, message, open_thread_ids). ``message`` names the unmet
     condition and the open threads; it is what local-ci posts as the status
     description (truncated to 139 chars by the caller).
 
-    ``verdict_blocks``: output of ``blocking_verdicts`` (reviewers whose latest
-    verdict is CHANGES_REQUESTED). Any entry fails the check before the pass and
+    ``verdict_blocks``: output of ``blocking_verdicts`` (change requests that
+    nothing since has cleared). Any entry fails the check before the pass and
     thread conditions are read: #5863 passed with a recorded pass and 0 threads
     while its latest review said "Verdict: CHANGES".
+
+    ``verdict_error``: set when the verdicts could not be read at all. An
+    unreadable record is not a clearance, so the check fails closed with that
+    reason - and it does not claim that changes were requested (DIG-4646).
     """
     threads = [t for t in (threads or []) if isinstance(t, dict)]
+    if verdict_error:
+        return (
+            False,
+            "review-applied: could not read the review verdicts: %s" % verdict_error,
+            [str(t.get("id") or "?") for t in threads if not t.get("is_resolved")],
+        )
     blocks = [b for b in (verdict_blocks or []) if b]
     if blocks:
         return (
@@ -233,13 +243,11 @@ def evaluate(review_passes, threads, fix_commit_ats=(), check_runs=(), reviewer_
 # same reviewer posts a later APPROVED or COMMENTED review, or the review is
 # dismissed (GitHub then reports it with state DISMISSED). Bots count like
 # humans. Formal reviews and in-session review comments (the marker) are read
-# in one time order; an in-session comment's verdict is its ``Verdict:`` line.
+# in one time order; an in-session comment's verdict is its ``Review verdict:``
+# line, read by the shared parser in ``scripts/review_pass_filter.py`` so this
+# producer and the merge queue read the fleet's verdicts the same way
+# (DIG-4646).
 
-_VERDICT_LINE_RE = re.compile(
-    r"^[\s>#*_]*verdict\s*[:=]\s*[*_`]*\s*(?P<word>[A-Za-z][A-Za-z_ -]*)", re.I | re.M
-)
-_BLOCKING_WORDS = ("changes", "request_changes", "changes_requested", "changes_needed", "block")
-_APPROVING_WORDS = ("approve", "approved", "lgtm", "pass", "ship")
 _REVIEW_STATES = frozenset({"APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"})
 
 
@@ -250,16 +258,18 @@ def reviewer_key(login):
 
 
 def in_session_state(body):
-    """CHANGES_REQUESTED / APPROVED / COMMENTED from an in-session review body."""
-    m = _VERDICT_LINE_RE.search(body or "")
-    if not m:
+    """CHANGES_REQUESTED / APPROVED / COMMENTED from an in-session review body.
+
+    The verdict line is read by the shared parser in
+    ``scripts/review_pass_filter.py``. The QA lane writes "Review verdict:
+    changes requested - #5994 @ `abc`", so a parser anchored on the bare word
+    "verdict" read every real verdict as no verdict at all (DIG-4646).
+    """
+    if review_pass_filter is None:
+        # The parser is missing, so no verdict can be read. Fail closed: the
+        # body is not a verdict.
         return "COMMENTED"
-    word = m.group("word").strip().lower().replace("-", "_").replace(" ", "_")
-    if word.startswith(_BLOCKING_WORDS):
-        return "CHANGES_REQUESTED"
-    if word.startswith(_APPROVING_WORDS):
-        return "APPROVED"
-    return "COMMENTED"
+    return review_pass_filter.in_session_verdict_state(body)
 
 
 # The opencode-power-pack code-review marker carries ``verdict=`` as a field
@@ -302,12 +312,26 @@ def _login_of(row):
     return None
 
 
+def verdict_identity(body, author=None):
+    """The seat (else the session) a verdict names; ("", "") when it names neither.
+
+    The shared rules in ``scripts/review_pass_filter.py`` read the identity, so
+    this producer and the merge queue judge the same verdict the same way
+    (DIG-4646).
+    """
+    if review_pass_filter is None:
+        return ("", "")
+    return review_pass_filter.verdict_identity(body, author)
+
+
 def review_events(reviews, comments):
-    """[(at, seq, reviewer, state, where)] for every readable verdict, oldest first.
+    """[(at, seq, reviewer, identity, state, where)] for every readable verdict, oldest first.
 
     ``reviews``: REST pull reviews ({user, state, submitted_at, body, id}).
     ``comments``: REST issue comments; only marker comments are verdicts.
     ``seq`` keeps GitHub's order for rows that carry no timestamp.
+    ``identity``: the seat (else the session) the verdict names, ("", "") when
+    it names neither - it decides what clears a change request.
     """
     events = []
     seq = 0
@@ -322,7 +346,9 @@ def review_events(reviews, comments):
         if state not in _REVIEW_STATES:
             continue  # PENDING: not submitted, not a verdict
         at = str(r.get("submitted_at") or r.get("submittedAt") or "")
-        events.append((at, seq, reviewer_key(_login_of(r)), state, "review %s" % (r.get("id") or seq)))
+        events.append((at, seq, reviewer_key(_login_of(r)),
+                       verdict_identity(body, r.get("user") or r.get("author")),
+                       state, "review %s" % (r.get("id") or seq)))
     for c in comments or []:
         seq += 1
         if not isinstance(c, dict):
@@ -332,21 +358,37 @@ def review_events(reviews, comments):
         if state is None:
             continue
         at = str(c.get("created_at") or c.get("createdAt") or "")
-        events.append((at, seq, reviewer_key(_login_of(c)), state,
-                       "in-session comment %s" % (c.get("id") or seq)))
+        events.append((at, seq, reviewer_key(_login_of(c)),
+                       verdict_identity(body, c.get("user") or c.get("author")),
+                       state, "in-session comment %s" % (c.get("id") or seq)))
     events.sort(key=lambda e: (e[0], e[1]))
     return events
 
 
 def blocking_verdicts(reviews, comments):
-    """One short message per reviewer whose latest verdict is CHANGES_REQUESTED."""
-    latest = {}
-    for at, _seq, reviewer, state, where in review_events(reviews, comments):
-        latest[reviewer] = (state, where, at)
+    """One short message per change request that nothing since has cleared.
+
+    The rules are the shared ones in ``scripts/review_pass_filter.py``: a change
+    request is cleared by the same identity (the same seat or session), by a
+    dismissal of that review, or - for a request that names no seat - by a later
+    verdict that names a seat. The merge queue applies the same rules, so the
+    producer and the queue agree on what is still blocking (DIG-4646).
+    """
+    events = review_events(reviews, comments)
+    if review_pass_filter is None:
+        # Without the shared rules, fall back to the reviewer's latest verdict.
+        latest = {}
+        for at, _seq, reviewer, _identity, state, where in events:
+            latest[reviewer] = (state, where, at)
+        return [
+            "%s (%s%s)" % (reviewer or "?", where, " at " + at if at else "")
+            for reviewer, (state, where, at) in sorted(latest.items())
+            if state == "CHANGES_REQUESTED"
+        ]
     return [
-        "%s (%s%s)" % (reviewer or "?", where, " at " + at if at else "")
-        for reviewer, (state, where, at) in sorted(latest.items())
-        if state == "CHANGES_REQUESTED"
+        "%s (%s%s)" % (login or "?", where, " at " + at if at else "")
+        for login, _identity, where, at
+        in review_pass_filter.outstanding_change_requests(events)
     ]
 
 
@@ -419,7 +461,14 @@ def _pr_context(pr_number, repo, run_gh, run_rest=None):
             at = (inner.get("committer") or {}).get("date") or commit.get("committedDate")
             if sha and at:
                 context["push_times"][sha] = at
-        context["identity"] = review_pass_filter.author_identity(data)
+        if review_pass_filter is not None:
+            # The pull payload carries `commits` as a count, not as the list of
+            # commits, so the list that was just read is handed over instead
+            # of the raw payload: reading the count crashed the producer on
+            # every PR (DIG-4646).
+            context["identity"] = review_pass_filter.author_identity(
+                dict(data, commits=commits)
+            )
     _PR_CONTEXT[key] = context
     return context
 

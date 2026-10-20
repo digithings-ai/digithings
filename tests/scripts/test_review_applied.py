@@ -186,10 +186,6 @@ class FetchTest(unittest.TestCase):
         self.assertIsNone(_mod.fetch_threads_graphql(1, "o/r", lambda argv: None))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class Dig4631ReviewPassTest(unittest.TestCase):
     """DIG-4631: evidence that must not count as a review pass.
 
@@ -286,3 +282,148 @@ class Dig4631ReviewPassTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("unresolved thread", msg)
         self.assertEqual(open_ids, ["PRRT_x"])
+
+
+class Dig4646ProducerTest(unittest.TestCase):
+    """DIG-4646: the producer reads what the fleet writes, and stops crashing.
+
+    Two defects in the producer half of this branch:
+
+    A. the REST pull payload carries ``commits`` as a *count*, so reading it as
+       the list of commits crashed the producer on every PR;
+    B. the verdict leg never ran and the producer's own parser could not read
+       the fleet's "Review verdict: ..." lines.
+    """
+
+    #: The QA lane's real change request (digithings-ai/digithings #5994).
+    FLEET_CHANGES_BODY = (
+        "<!-- in-session-review -->\n"
+        "\n"
+        "Review verdict: changes requested — digithings #5994 (DIG-4459) "
+        "@ `36fad1f939fbf9c2897894f205bfabc83c61096a`\n"
+        "\n"
+        "Reviewed: head `36fad1f9` (base `1e82af3f`), 6 files, +206/-6.\n"
+    )
+
+    #: The QA lane's real approval (comment 6285506816 on #5990): the verdict
+    #: line comes first, the marker below it.
+    FLEET_APPROVE_BODY = (
+        "Review verdict: approve - digithings #5990 "
+        "@ `8e0750df22e626159cc4829b415dbffa2b0fc251`\n"
+        "\n"
+        "<!-- in-session-review -->\n"
+        "\n"
+        "Findings here.\n"
+    )
+
+    def _comment(self, body, at="2026-10-20T10:00:00Z", cid=1, login="chrizefan"):
+        return {"id": cid, "user": {"login": login}, "body": body, "created_at": at}
+
+    def test_the_rest_pull_shape_with_a_commit_count_does_not_crash(self):
+        # The REST pull payload carries `commits` as a count, not as the list of
+        # commits. Reading the count crashed the producer on every PR.
+        def run_rest(path):
+            if path.endswith("/pulls/4242"):
+                return {"number": 4242, "body": "Work.",
+                        "commits": 3,
+                        "user": {"login": "chrizefan"}}
+            return []
+
+        def run_gh(argv):
+            if "commits" in argv[-1]:
+                return [{"sha": "a" * 40,
+                         "commit": {"committer": {"date": "2026-10-20T09:00:00Z"}}}]
+            return None
+
+        context = _mod._pr_context(4242, "o/r", run_gh, run_rest)
+        self.assertEqual(context["login"], "chrizefan")
+        self.assertEqual(context["identity"], {})
+
+    def test_a_pull_with_a_commit_count_does_not_crash_the_thread_read(self):
+        payload = {"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": []}}}}}
+
+        def run_gh(argv):
+            if "graphql" in argv:
+                return payload
+            if "pulls/4243/commits" in argv[-1]:
+                return []
+            return {"number": 4243, "body": "", "commits": 3}
+
+        threads = _mod.fetch_threads_graphql(4243, "o/r", run_gh)
+        self.assertEqual(threads, [])
+
+    def test_the_fleet_change_request_is_read(self):
+        self.assertEqual(_mod.in_session_state(self.FLEET_CHANGES_BODY),
+                         "CHANGES_REQUESTED")
+
+    def test_the_fleet_approve_is_read(self):
+        self.assertEqual(_mod.in_session_state(self.FLEET_APPROVE_BODY), "APPROVED")
+
+    def test_prose_about_a_verdict_is_not_a_verdict(self):
+        self.assertEqual(_mod.in_session_state("The verdict: changes look fine."),
+                         "COMMENTED")
+
+    def test_blocking_verdicts_finds_the_fleet_change_request(self):
+        blocks = _mod.blocking_verdicts(
+            [], [self._comment(self.FLEET_CHANGES_BODY)])
+        self.assertEqual(len(blocks), 1)
+        self.assertIn("chrizefan", blocks[0])
+
+    def test_an_unnamed_approval_does_not_clear_the_change_request(self):
+        # #5975 on 20 Oct 2026: changes requested, changes requested, approve -
+        # all under one login, none naming a seat. The approval is another
+        # seat's, so the change request still blocks.
+        comments = [
+            self._comment(self.FLEET_CHANGES_BODY, "2026-10-20T10:00:00Z", 1),
+            self._comment(self.FLEET_CHANGES_BODY, "2026-10-20T11:00:00Z", 2),
+            self._comment(self.FLEET_APPROVE_BODY, "2026-10-20T12:00:00Z", 3),
+        ]
+        blocks = _mod.blocking_verdicts([], comments)
+        self.assertEqual(len(blocks), 1)
+
+    def test_an_approval_that_names_a_seat_clears_the_change_request(self):
+        comments = [
+            self._comment(self.FLEET_CHANGES_BODY, "2026-10-20T10:00:00Z", 1),
+            self._comment(self.FLEET_APPROVE_BODY + "\n<!-- dt-seat agent=seat-a -->\n",
+                          "2026-10-20T12:00:00Z", 2),
+        ]
+        self.assertEqual(_mod.blocking_verdicts([], comments), [])
+
+    def test_evaluate_fails_closed_on_a_change_request(self):
+        ok, msg, open_ids = _mod.evaluate(
+            [INSESSION], [], verdict_blocks=["chrizefan (in-session comment 1)"])
+        self.assertFalse(ok)
+        self.assertIn("changes requested, not cleared", msg)
+        self.assertIn("chrizefan", msg)
+
+    def test_evaluate_fails_closed_when_the_verdicts_could_not_be_read(self):
+        ok, msg, open_ids = _mod.evaluate(
+            [INSESSION], [], verdict_error="the reviews or comments could not be read")
+        self.assertFalse(ok)
+        self.assertIn("could not read the review verdicts", msg)
+        self.assertNotIn("changes requested", msg)
+
+    def test_the_queue_and_the_producer_read_the_same_body(self):
+        # One definition of a verdict line: the queue's parser and the
+        # producer's parser must not disagree about the fleet's own words.
+        mq = _load_merge_queue()
+        for body in (self.FLEET_CHANGES_BODY, self.FLEET_APPROVE_BODY,
+                     "**Verdict: CHANGES** (narrow)",
+                     "The verdict: changes look fine."):
+            self.assertEqual(mq._in_session_state(body),
+                             _mod.in_session_state(body), body)
+
+
+def _load_merge_queue():
+    """The queue module, loaded by path (scripts/ is not a package)."""
+    root = os.path.abspath(os.path.join(_SCRIPTS, "..", ".."))
+    spec = importlib.util.spec_from_file_location(
+        "merge_queue", os.path.join(root, "scripts", "merge_queue.py"))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["merge_queue"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+if __name__ == "__main__":
+    unittest.main()
