@@ -14,7 +14,7 @@ import { isUnchangedEdit, shouldCommitEdit } from "./thread.aui";
 // sending, and an edit that changes nothing (or nothing at all) is not sent
 // back to the model.
 
-const run = vi.fn(async () => ({ content: [{ type: "text", text: "ok" }] }));
+const run = vi.fn(async () => ({ content: [{ type: "text" as const, text: "ok" }] }));
 const adapter: ChatModelAdapter = { run };
 
 // The user message must be the LAST one: the action bar autohides (and

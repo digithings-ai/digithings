@@ -674,7 +674,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
         else:
             # Fallback: regex-parsed digest data — less reliable, may return empty fields
             print(
-                f"   ⚠️  {d['date']}: snapshot.json missing/unpopulated, using regex fallback (run generate-snapshot.py to fix)",
+                f"   ⚠️  {d['date']}: snapshot.json missing/unpopulated, using regex fallback (run generate_snapshot.py to fix)",
                 file=sys.stderr,
             )
             meta = _detect_run_type(day_dir) if day_dir.exists() else "baseline"

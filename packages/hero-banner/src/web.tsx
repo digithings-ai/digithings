@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { paintFrame, toneColors } from "./canvas";
 import { claimLoading, nextTickMs, preparedBanner, resolveLive, resolveMotion, sampleBanner } from "./engine";
+import { settledFallback } from "./ssr";
 import type { BannerDefinition } from "./types";
 
 /**
@@ -34,6 +35,30 @@ export function HeroBanner({
   const { layout } = preparedBanner(def);
   const usedGap = gap ?? layout.gap;
   const width = layout.text.length * layout.font.cols + Math.max(0, layout.text.length - 1) * usedGap;
+  // The canvas paints on mount, so a server render and a no-JS page would
+  // show an empty box. The settled mark is the fallback: it is the same
+  // frame the banner draws when it is still, so the shape is the mark and not
+  // an approximation. The colour stays a CSS value so the fallback follows
+  // the page theme the way the painted canvas does.
+  const fallback = useMemo(() => settledFallback(def, { gap: usedGap }), [def, usedGap]);
+  const [painted, setPainted] = useState(false);
+  const settledStyle = (
+    painted
+      ? {}
+      : fallback.kind === "mask"
+        ? {
+            backgroundColor: fallback.color,
+            maskImage: fallback.url,
+            maskSize: "100% 100%",
+            maskRepeat: "no-repeat",
+            maskMode: "alpha",
+          }
+        : {
+            backgroundImage: fallback.url,
+            backgroundSize: "100% 100%",
+            backgroundRepeat: "no-repeat",
+          }
+  ) as CSSProperties;
 
   useEffect(() => {
     const canvas = ref.current;
@@ -69,6 +94,12 @@ export function HeroBanner({
       if (wait != null) timer = setTimeout(() => (raf = requestAnimationFrame(draw)), wait);
     };
     draw();
+    // The canvas now carries the mark itself, so drop the server-rendered
+    // fallback in the same task, before the browser paints the frame.
+    canvas.style.backgroundColor = "";
+    canvas.style.backgroundImage = "";
+    canvas.style.maskImage = "";
+    setPainted(true);
     return () => {
       if (timer) clearTimeout(timer);
       cancelAnimationFrame(raf);
@@ -81,7 +112,12 @@ export function HeroBanner({
       role="img"
       aria-label={def.label}
       className={className}
-      style={{ width: "100%", aspectRatio: `${width} / ${layout.height}`, imageRendering: "pixelated" }}
+      style={{
+        width: "100%",
+        aspectRatio: `${width} / ${layout.height}`,
+        imageRendering: "pixelated",
+        ...settledStyle,
+      }}
     />
   );
 }

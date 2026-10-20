@@ -43,6 +43,11 @@ export type StockChatPrefsConfig = {
   thinking: ThinkingMode;
   tenantAllowsWeb: boolean;
   showByok: boolean;
+  /**
+   * The backend that serves this chat, as a display label. The host owns
+   * the provider vocabulary; absent means unknown.
+   */
+  providerLabel?: string;
   allowUserServers?: boolean;
   allowAddForm?: boolean;
 };
@@ -200,6 +205,7 @@ export function useStockChatPrefs({
         }),
       tenantAllowsWeb,
       showByok,
+      providerLabel: config.providerLabel,
       showModels,
       backendType: config.backendType,
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
@@ -283,6 +289,7 @@ export function useStockChatPrefs({
       redo,
       config.allowUserServers,
       config.allowAddForm,
+      config.providerLabel,
       config.servers,
       config.view,
       config.thinking,

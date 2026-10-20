@@ -49,6 +49,11 @@ const settled = (host: HTMLElement) =>
     'a .chat-md-mermaid figure past data-state="pending"',
   );
 
+// Every mounted root is unmounted after its test. A live root keeps its
+// MutationObserver on <html data-theme>, so the next test's theme change would
+// re-run effects that belong to a finished test and steal its mock calls.
+const mounted: Array<() => void> = [];
+
 async function mount(ui: ReactElement) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -57,7 +62,9 @@ async function mount(ui: ReactElement) {
     root.render(ui);
   });
   await settled(host);
-  return { host, unmount: () => act(() => root.unmount()) };
+  const unmount = () => act(() => root.unmount());
+  mounted.push(unmount);
+  return { host, unmount };
 }
 
 beforeEach(() => {
@@ -69,6 +76,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const unmount of mounted.splice(0)) unmount();
   document.body.innerHTML = "";
 });
 
