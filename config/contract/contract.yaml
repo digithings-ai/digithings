@@ -1859,6 +1859,12 @@ secrets:
 - name: DIGICHAT_MONITOR_TOKENS
   worker: digithings-digichat
   required: false
+- name: DIGICHAT_TRIAL_PROOF_SECRET
+  worker: digithings-digichat
+  required: false
+- name: DIGICHAT_TENANT_MINT_CREDENTIALS
+  worker: digithings-digichat
+  required: false
 - name: DATABASE_URL
   worker: digitrace-langfuse
   required: true
