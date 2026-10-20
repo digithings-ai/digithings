@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import stat
 import sys
@@ -84,6 +85,9 @@ SOURCE_OPERATOR = "operator"
 #: The value in the .env is the local stack's own; it always wins.
 SOURCE_OVERRIDE = "override"
 
+#: A name in a KEY=value file: what the shell exports and what compose reads.
+ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
 
 def apply_defaults(root: Path, env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """Set the local-stack defaults without overriding the operator.
@@ -101,7 +105,14 @@ def apply_defaults(root: Path, env: Optional[Dict[str, str]] = None) -> Dict[str
 
 
 def read_env_file(path: Path) -> Dict[str, str]:
-    """Read a KEY=value file. Values are returned as they are stored."""
+    """Read a KEY=value file. Values are returned as they are stored.
+
+    A line whose name is not an env identifier is not an entry: the host
+    bring-up sources this file under `set -e`, so a line like "FOO BAR=baz"
+    is read as a command and aborts the bring-up. The rewrite before
+    DIG-4662 dropped such lines, so this one does not carry them over
+    either.
+    """
     values: Dict[str, str] = {}
     if not path.exists():
         return values
@@ -109,7 +120,7 @@ def read_env_file(path: Path) -> Dict[str, str]:
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         name, sep, value = line.partition("=")
-        if sep and name.strip():
+        if sep and ENV_NAME.match(name.strip()):
             values[name.strip()] = value
     return values
 
@@ -222,6 +233,18 @@ def operator_owns(
     return entry.get("source") == SOURCE_OPERATOR
 
 
+def recorded_source(entry: Optional[Mapping[str, str]]) -> str:
+    """The source the provenance block recorded for a name.
+
+    Only the three known sources are honoured; a broken or unknown record
+    reads as the operator's own value.
+    """
+    source = (entry or {}).get("source")
+    if source in (SOURCE_RENDER, SOURCE_OPERATOR, SOURCE_OVERRIDE):
+        return str(source)
+    return SOURCE_OPERATOR
+
+
 def compose_env(
     rendered: Mapping[str, str],
     existing: Mapping[str, str],
@@ -244,9 +267,14 @@ def compose_env(
             # The local stack decides this one; the operator's copy is not used.
             continue
         if name not in rendered:
-            # Not part of the render: the operator owns it.
+            # The render does not claim this name any more. The recorded
+            # source still says who owns the value: a value the render wrote
+            # keeps the render's source, so a later render that claims the
+            # name again decides it and a rotated secret lands. Calling it
+            # the operator's here would freeze that value in the .env for
+            # good. Without a record the operator owns it.
             values[name] = value
-            sources[name] = SOURCE_OPERATOR
+            sources[name] = recorded_source(state.get(name))
             continue
         if operator_owns(value, state.get(name)):
             values[name] = value

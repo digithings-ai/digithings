@@ -54,6 +54,15 @@ def _block(root: Path) -> str:
     raise AssertionError("the .env carries no provenance block")
 
 
+def _state(root: Path) -> dict:
+    """The managed provenance block, parsed."""
+    for line in (root / ".env").read_text().splitlines():
+        stripped = line.strip()
+        if stripped.startswith(localenv.STATE_MARKER):
+            return json.loads(stripped[len(localenv.STATE_MARKER) :].strip())
+    raise AssertionError("the .env carries no provenance block")
+
+
 def _replace(root: Path, name: str, old: str, new: str) -> None:
     body = (root / ".env").read_text().replace(f"{name}={old}", f"{name}={new}")
     (root / ".env").write_text(body)
@@ -172,6 +181,49 @@ def test_the_operator_own_name_survives_a_lost_provenance_block(tmp_path: Path) 
     _strip_block(root)
     localenv.write_env(root, env=ENV)
     assert _values(root)["FOO"] == "bar"
+    assert _values(root)["AUTH_SECRET"] == "first"
+
+
+def test_a_rotated_secret_reaches_the_env_after_the_render_stopped_claiming_it(
+    tmp_path: Path,
+) -> None:
+    """A name the render drops keeps the render's ownership of the value.
+
+    The render claims AUTH_SECRET, then stops claiming it: the contract
+    entry goes, or the render is asked for a subset. The value that stays in
+    the .env is still the render's, so the record has to keep saying so. If
+    it were relabelled as the operator's, the next render that claims the
+    name again would find a value that reads as the operator's own and the
+    rotated secret would never reach the .env.
+    """
+    root = _root(tmp_path, dev_vars="AUTH_SECRET=first\n")
+    localenv.write_env(root, env=ENV)
+    assert _state(root)["AUTH_SECRET"]["source"] == "render"
+
+    # The render stops claiming the name.
+    (root / ".dev.vars").write_text("")
+    localenv.write_env(root, env=ENV)
+    assert (
+        _state(root)["AUTH_SECRET"]["source"] == "render"
+    ), "the record must not hand a render's value to the operator"
+
+    # And when the render claims it again, the rotated secret lands.
+    (root / ".dev.vars").write_text("AUTH_SECRET=second\n")
+    localenv.write_env(root, env=ENV)
+    assert _values(root)["AUTH_SECRET"] == "second"
+
+
+def test_a_line_that_is_not_an_env_entry_is_not_carried_over(tmp_path: Path) -> None:
+    """The host bring-up sources the .env under `set -e`.
+
+    A line whose name is not an env identifier ("FOO BAR=baz") is not an
+    entry: the shell reads it as a command and the bring-up aborts with
+    "FOO: command not found". The rewrite before DIG-4662 dropped such
+    lines, so this one does not carry them over either.
+    """
+    root = _root(tmp_path, dev_vars="AUTH_SECRET=first\n", env="FOO BAR=baz\n")
+    localenv.write_env(root, env=ENV)
+    assert "FOO BAR" not in (root / ".env").read_text()
     assert _values(root)["AUTH_SECRET"] == "first"
 
 
