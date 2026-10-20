@@ -873,7 +873,7 @@ describe("one issue per occurrence", () => {
       open: [
         {
           number: 5945,
-          title: "edited by hand",
+          title: `${neverLandedTitle("2026-10-19")} (reopened by hand)`,
           body: `something\n${occurrenceMarker("never-landed:2026-10-19")}`,
           html_url: "https://gh/5945",
           labels: [],
@@ -885,6 +885,65 @@ describe("one issue per occurrence", () => {
     expect(result.raised).toBe(false);
     expect(result.url).toBe("https://gh/5945");
     expect(issuePosts(calls)).toHaveLength(0);
+  });
+
+  it("does not let a foreign issue that quotes the marker suppress the alarm", async () => {
+    // An operator pasting an alarm body into a tracker issue must not silence
+    // the live alert for that occurrence.
+    const { fetcher, calls } = githubMock({
+      open: [
+        {
+          number: 6300,
+          title: "[run-watch] house-run: no book for 2026-10-19",
+          body: `copied from the alert\n${occurrenceMarker("never-landed:2026-10-19")}`,
+          html_url: "https://gh/6300",
+          labels: [],
+          state: "open",
+        },
+      ],
+      create: { number: 6301, html_url: "https://gh/6301", labels: [] },
+    });
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+    expect(result.raised).toBe(true);
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("does not file a second issue when the occurrence it found has no usable url", async () => {
+    // The occurrence is right there; a missing html_url is not a reason to
+    // raise it a second time.
+    const { fetcher, calls } = githubMock({
+      open: [
+        {
+          number: 6302,
+          title: neverLandedTitle("2026-10-19"),
+          body: "",
+          html_url: null,
+          labels: [],
+          state: "open",
+        },
+      ],
+    });
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+    expect(result.raised).toBe(false);
+    expect(issuePosts(calls)).toHaveLength(0);
+  });
+
+  it("says so when the open issues cannot be read", async () => {
+    // The house trade-off is to raise rather than dedupe blind; the refusal
+    // is logged so a duplicate is explainable rather than mysterious.
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const github: WatchFetch = vi.fn(async (url: string) => {
+        if (url.includes("/issues?")) return new Response("boom", { status: 500 });
+        return Response.json({ html_url: "https://gh/6303" }, { status: 201 });
+      }) as unknown as WatchFetch;
+      const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, github, true);
+      expect(result.raised).toBe(true);
+      const lines = log.mock.calls.map((call) => String(call[0]));
+      expect(lines.some((line) => line.includes("open issues could not be read"))).toBe(true);
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("creates the class label when the repository does not have it", async () => {
@@ -1021,5 +1080,59 @@ describe("one issue per occurrence", () => {
     const result = await raiseHouseRunAlarm("gh-token", lost, DEADLINE, fetcher);
     expect(result.raised).toBe(true);
     expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("raises the occurrence even when the label route throws", async () => {
+    // The label is bookkeeping the duplicate check does not read, so a
+    // transport failure on the label route must not swallow the alarm.
+    const { fetcher, calls } = githubMock({
+      open: [],
+      create: { number: 6200, html_url: "https://gh/6200", labels: [] },
+    });
+    const throwing: WatchFetch = (async (url: string, init: RequestInit) => {
+      if (url.includes("/labels")) throw new Error("labels route down");
+      return fetcher(url, init);
+    }) as unknown as WatchFetch;
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, throwing, true);
+    expect(result.raised).toBe(true);
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("keeps the raised receipt when the follow-up label call throws", async () => {
+    // The issue was created: the tick must still report it as raised.
+    const { fetcher, calls } = githubMock({
+      open: [],
+      labelStatus: 200,
+      create: { number: 6201, html_url: "https://gh/6201", labels: [] },
+    });
+    const throwing: WatchFetch = (async (url: string, init: RequestInit) => {
+      if (url.includes("/issues/6201/labels")) throw new Error("apply failed");
+      return fetcher(url, init);
+    }) as unknown as WatchFetch;
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, throwing, true);
+    expect(result).toEqual({
+      run_id: "house-run:2026-10-19",
+      raised: true,
+      url: "https://gh/6201",
+    });
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("says so when the class label is not available", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const { fetcher } = githubMock({
+        open: [],
+        labelStatus: 404,
+        labelCreateStatus: 403,
+        create: { number: 6202, html_url: "https://gh/6202", labels: [] },
+      });
+      const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+      expect(result.raised).toBe(true);
+      const lines = log.mock.calls.map((call) => String(call[0]));
+      expect(lines.some((line) => line.includes(HOUSE_RUN_WATCH_LABEL))).toBe(true);
+    } finally {
+      log.mockRestore();
+    }
   });
 });

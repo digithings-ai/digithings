@@ -48,12 +48,12 @@
  * deliberately not shared here; that duplication is a known, stated deviation.
  *
  * DIG-4566 changed how the duplicate check reads the repository. The label is
- * still the class, but it is no longer the identity: this token could not
- * create the label, GitHub dropped it from every issue it filed, and the
- * label-filtered check therefore matched nothing and filed a new issue every
- * tick (CHR-948..960). An occurrence is now identified by its title and by a
- * marker in its body, and the label is applied after the issue exists — as
- * bookkeeping the duplicate check does not depend on.
+ * still the class, but it is no longer the identity: it was not on the issues
+ * this watcher filed (issue #5945 reads `labels: []`), so the label-filtered
+ * check matched nothing and filed a new issue every tick (CHR-948..960). An
+ * occurrence is now identified by its title and by a marker in its body, and
+ * the label is applied after the issue exists — as bookkeeping the duplicate
+ * check does not depend on.
  */
 
 /** Mirrors `WATCHDOG_GRACE_SECONDS` in `apps/digiquant-runner/src/runner-session.ts`. */
@@ -78,6 +78,15 @@ export const HOUSE_RUN_LOST_ERROR = "house_run_lost";
  * digiquant pipeline, and `GH_DISPATCH_TOKEN` carries Issues write on both repos.
  */
 export const HOUSE_RUN_WATCH_LABEL = "digiquant-house-run-not-landed";
+
+/**
+ * The title prefix every alarm this watcher files carries. The marker match
+ * is restricted to it: the marker is a machine marker, but an operator who
+ * pastes an alarm body into a tracker issue would otherwise suppress the
+ * live alert for that occurrence — and a suppressed alarm is not recoverable.
+ */
+export const ALARM_TITLE_PREFIX = "digiquant house-run";
+
 export const ALERT_REPO = "digithings-ai/digithings";
 
 /**
@@ -94,12 +103,12 @@ export const RUN_WATCH_KEY = "run-watch:digiquant-house-run:no-book";
  * HTML comment.
  *
  * The class label cannot carry that identity. GitHub silently drops a label
- * the repository does not have, and the label this watcher creates is created
- * by a token that cannot always create it — so the label was absent, the
- * label-filtered duplicate check matched nothing, and every tick filed a new
- * issue (DIG-4566, CHR-948..960). The body is always writable with the same
- * token, so the marker lives there and the duplicate check reads the title or
- * the marker, never the label.
+ * the repository does not have, and the label this watcher asks for was not on
+ * the issues it filed (issue #5945 reads `labels: []`) — so the label-filtered
+ * duplicate check matched nothing and every tick filed a new issue (DIG-4566,
+ * CHR-948..960). The body is always writable with the same token, so the
+ * marker lives there and the duplicate check reads the title or the marker,
+ * never the label.
  */
 export function occurrenceMarker(occurrenceId: string): string {
   return `<!-- digiquant-house-run-alarm:${occurrenceId} -->`;
@@ -492,7 +501,11 @@ export async function raiseDispatchMissingAlarm(
   const marker = occurrenceMarker(`dispatch:${runDate}`);
   try {
     const existing = await findOpenOccurrence(fetcher, token, title, marker);
-    if (existing) return { run_id, raised: false, url: existing };
+    if (existing) {
+      return existing.url
+        ? { run_id, raised: false, url: existing.url }
+        : { run_id, raised: false };
+    }
     await ensureLabel(fetcher, token);
     const { status, body } = await postJson(
       fetcher,
@@ -591,7 +604,11 @@ export async function raiseNeverLandedAlarm(
   const marker = occurrenceMarker(`never-landed:${runDate}`);
   try {
     const existing = await findOpenOccurrence(fetcher, token, title, marker);
-    if (existing) return { run_id, raised: false, url: existing };
+    if (existing) {
+      return existing.url
+        ? { run_id, raised: false, url: existing.url }
+        : { run_id, raised: false };
+    }
     await ensureLabel(fetcher, token);
     const { status, body } = await postJson(
       fetcher,
@@ -616,78 +633,110 @@ export async function raiseNeverLandedAlarm(
  * Create the class label when the repository does not have it, and report
  * whether it exists afterwards.
  *
- * The previous version fired the create and forgot the answer: a create the
- * token was not allowed to make left the repository without the label, GitHub
- * then dropped that label from every issue it was asked to file, and the
- * label-filtered duplicate check matched nothing (DIG-4566, CHR-948..960).
- * A label that cannot be created is a fact to report, not a reason to stop:
- * the duplicate check does not read the label any more.
+ * The previous version fired the create and forgot the answer: a create that
+ * did not take effect left the repository without the label this code asks
+ * for, GitHub then dropped that label from every issue it was asked to file,
+ * and the label-filtered duplicate check matched nothing (DIG-4566,
+ * CHR-948..960).
+ *
+ * The label is bookkeeping the duplicate check does not read, so this never
+ * throws and never stops the alarm: a label that cannot be created or read is
+ * logged and the occurrence is raised without it.
  */
 async function ensureLabel(
   fetcher: WatchFetch,
   token: string | undefined,
 ): Promise<boolean> {
   const headers = ghHeaders(token, true);
-  const existing = await fetcher(
-    `https://api.github.com/repos/${ALERT_REPO}/labels/${HOUSE_RUN_WATCH_LABEL}`,
-    { method: "GET", headers },
-  );
-  if (existing.status === 200) return true;
-  if (existing.status !== 404) return false;
-  const created = await fetcher(`https://api.github.com/repos/${ALERT_REPO}/labels`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      name: HOUSE_RUN_WATCH_LABEL,
-      color: "d73a4a",
-      description: "A digiquant house run the runner still reports open, past its deadline",
-    }),
-  });
-  if (created.status === 201) return true;
-  // 422 means it already exists — someone else created it between the read
-  // and the write. Anything else is a refusal, so read the state back once.
-  const recheck = await fetcher(
-    `https://api.github.com/repos/${ALERT_REPO}/labels/${HOUSE_RUN_WATCH_LABEL}`,
-    { method: "GET", headers },
-  );
-  return recheck.status === 200;
+  try {
+    const existing = await fetcher(
+      `https://api.github.com/repos/${ALERT_REPO}/labels/${HOUSE_RUN_WATCH_LABEL}`,
+      { method: "GET", headers },
+    );
+    if (existing.status === 200) return true;
+    if (existing.status !== 404) {
+      console.log(
+        `${RUN_WATCH_KEY}: the class label ${HOUSE_RUN_WATCH_LABEL} could not be read (HTTP ${existing.status}); the occurrence is raised without it`,
+      );
+      return false;
+    }
+    const created = await fetcher(`https://api.github.com/repos/${ALERT_REPO}/labels`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: HOUSE_RUN_WATCH_LABEL,
+        color: "d73a4a",
+        description: "A digiquant house run the runner still reports open, past its deadline",
+      }),
+    });
+    if (created.status === 201) return true;
+    // 422 means it already exists — someone else created it between the read
+    // and the write. Anything else is a refusal, so read the state back once.
+    const recheck = await fetcher(
+      `https://api.github.com/repos/${ALERT_REPO}/labels/${HOUSE_RUN_WATCH_LABEL}`,
+      { method: "GET", headers },
+    );
+    if (recheck.status === 200) return true;
+    console.log(
+      `${RUN_WATCH_KEY}: the class label ${HOUSE_RUN_WATCH_LABEL} could not be created (HTTP ${created.status}); the occurrence is raised without it`,
+    );
+    return false;
+  } catch {
+    console.log(
+      `${RUN_WATCH_KEY}: the class label ${HOUSE_RUN_WATCH_LABEL} could not be read or created; the occurrence is raised without it`,
+    );
+    return false;
+  }
 }
 
 /**
  * Apply the class label to an issue GitHub created without it.
  *
  * The label is applied after the issue exists, because the label on the create
- * call is exactly what GitHub drops when the repository has no such label. A
- * failure here is not a reason to file again: the issue exists, and the
- * duplicate check reads the title and the body marker, never the label.
+ * call is exactly what GitHub drops when the repository has no such label.
+ *
+ * A failure here is not a reason to file again and not a reason to lose the
+ * receipt: the issue exists, the duplicate check reads the title and the body
+ * marker, and the caller keeps `raised: true` whatever this returns.
  */
 async function applyLabelIfMissing(
   fetcher: WatchFetch,
   token: string | undefined,
   created: unknown,
 ): Promise<boolean> {
-  if (!created || typeof created !== "object") return false;
-  const issue = created as { number?: unknown; labels?: unknown };
-  const number = issue.number;
-  if (typeof number !== "number") return false;
-  const labels = issue.labels;
-  const applied = Array.isArray(labels) && labels.some((entry) => {
-    if (typeof entry === "string") return entry === HOUSE_RUN_WATCH_LABEL;
-    if (entry && typeof entry === "object") {
-      return (entry as { name?: unknown }).name === HOUSE_RUN_WATCH_LABEL;
-    }
+  try {
+    if (!created || typeof created !== "object") return false;
+    const issue = created as { number?: unknown; labels?: unknown };
+    const number = issue.number;
+    if (typeof number !== "number") return false;
+    const labels = issue.labels;
+    const applied = Array.isArray(labels) && labels.some((entry) => {
+      if (typeof entry === "string") return entry === HOUSE_RUN_WATCH_LABEL;
+      if (entry && typeof entry === "object") {
+        return (entry as { name?: unknown }).name === HOUSE_RUN_WATCH_LABEL;
+      }
+      return false;
+    });
+    if (applied) return true;
+    const response = await fetcher(
+      `https://api.github.com/repos/${ALERT_REPO}/issues/${number}/labels`,
+      {
+        method: "POST",
+        headers: ghHeaders(token, true),
+        body: JSON.stringify({ labels: [HOUSE_RUN_WATCH_LABEL] }),
+      },
+    );
+    if (response.status === 200 || response.status === 201) return true;
+    console.log(
+      `${RUN_WATCH_KEY}: the class label ${HOUSE_RUN_WATCH_LABEL} could not be applied to issue ${number} (HTTP ${response.status}); the duplicate check does not read the label`,
+    );
     return false;
-  });
-  if (applied) return true;
-  const response = await fetcher(
-    `https://api.github.com/repos/${ALERT_REPO}/issues/${number}/labels`,
-    {
-      method: "POST",
-      headers: ghHeaders(token, true),
-      body: JSON.stringify({ labels: [HOUSE_RUN_WATCH_LABEL] }),
-    },
-  );
-  return response.status === 200 || response.status === 201;
+  } catch {
+    console.log(
+      `${RUN_WATCH_KEY}: the class label ${HOUSE_RUN_WATCH_LABEL} could not be applied to the issue that was filed; the duplicate check does not read the label`,
+    );
+    return false;
+  }
 }
 
 /** GitHub's issue list, as this watcher reads it. Only the fields it matches on. */
@@ -710,7 +759,7 @@ const OPEN_ISSUE_PAGE_SIZE = 100;
  * The open occurrence of this exact drift, or null.
  *
  * The match is on the title or on the body marker, never on a label. The label
- * was the class, but the label could not be created and GitHub dropped it, so
+ * was the class, but the label was not on the issues this watcher filed, so
  * the check never saw its own occurrences and filed a new issue every tick
  * (DIG-4566, CHR-948..960).
  *
@@ -719,16 +768,23 @@ const OPEN_ISSUE_PAGE_SIZE = 100;
  * when it is not there.
  *
  * Nothing is deduped against a row it did not read: a non-200 or a non-array
- * body yields null, so the caller raises rather than deduping blind. A pull
- * request is not an occurrence, and a closed issue never blocks — a new day
- * must be able to raise its own alert.
+ * body yields null, so the caller raises rather than deduping blind. That is
+ * the house trade-off — a duplicate issue is recoverable, a silently
+ * suppressed alarm is not — and the refusal is logged so a duplicate is
+ * explainable rather than mysterious. A pull request is not an occurrence, a
+ * closed issue never blocks, and the marker only counts on a row that carries
+ * this watcher's title prefix.
+ *
+ * A row that matches but has no usable `html_url` is still a match: it is
+ * returned as a found occurrence without a URL, so the caller does not file a
+ * second issue for an occurrence that is right there.
  */
 async function findOpenOccurrence(
   fetcher: WatchFetch,
   token: string | undefined,
   title: string,
   marker: string,
-): Promise<string | null> {
+): Promise<{ url?: string } | null> {
   const headers = ghHeaders(token, false);
   for (let page = 1; page <= MAX_OPEN_ISSUE_PAGES; page += 1) {
     const url =
@@ -736,7 +792,12 @@ async function findOpenOccurrence(
       `?state=open&sort=created&direction=desc` +
       `&per_page=${OPEN_ISSUE_PAGE_SIZE}&page=${page}`;
     const { status, body } = await readJson(fetcher, url, headers);
-    if (!OK_STATUSES.has(status) || !Array.isArray(body)) return null;
+    if (!OK_STATUSES.has(status) || !Array.isArray(body)) {
+      console.log(
+        `${RUN_WATCH_KEY}: the open issues could not be read (HTTP ${status}); the occurrence is raised without a duplicate check`,
+      );
+      return null;
+    }
     for (const row of body) {
       if (!row || typeof row !== "object") continue;
       const issue = row as OpenIssueRow;
@@ -746,9 +807,14 @@ async function findOpenOccurrence(
       // state is unknown, not closed.
       if (typeof issue.state === "string" && issue.state !== "open") continue;
       const sameTitle = issue.title === title;
-      const sameMarker = typeof issue.body === "string" && issue.body.includes(marker);
+      // The marker only counts on one of this watcher's own issues.
+      const ours =
+        typeof issue.title === "string" && issue.title.startsWith(ALARM_TITLE_PREFIX);
+      const sameMarker =
+        ours && typeof issue.body === "string" && issue.body.includes(marker);
       if (!sameTitle && !sameMarker) continue;
-      return typeof issue.html_url === "string" ? issue.html_url : null;
+      const html = issue.html_url;
+      return typeof html === "string" ? { url: html } : {};
     }
     if (body.length < OPEN_ISSUE_PAGE_SIZE) return null;
   }
@@ -766,7 +832,11 @@ export async function raiseHouseRunAlarm(
   const marker = occurrenceMarker(`lost:${verdict.run_id}`);
   try {
     const existing = await findOpenOccurrence(fetcher, token, title, marker);
-    if (existing) return { run_id: verdict.run_id, raised: false, url: existing };
+    if (existing) {
+      return existing.url
+        ? { run_id: verdict.run_id, raised: false, url: existing.url }
+        : { run_id: verdict.run_id, raised: false };
+    }
     await ensureLabel(fetcher, token);
     const { status, body } = await postJson(
       fetcher,
