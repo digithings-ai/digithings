@@ -111,6 +111,11 @@ class Policy:
     ignored_checks: frozenset[str] = frozenset()
     required_checks_by_repo: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     status_context_checks: frozenset[str] = frozenset()
+    #: The local-ci status that says the review was applied (DIG-3842). Required
+    #: SUCCESS on the exact head the queue merges; "" switches the gate off for a
+    #: repo whose CI does not post it (twelve-x, see the policy note).
+    review_applied_context: str = "review-applied"
+    review_applied_by_repo: Mapping[str, str] = field(default_factory=dict)
 
     def authority(self, role: str) -> Authority | None:
         return next((a for a in self.merge_authorities if a.role == role), None)
@@ -138,6 +143,16 @@ class Policy:
         """
         return tuple(self.required_checks_by_repo.get(repo, ())) or self.required_checks
 
+    def review_applied_for(self, repo: str) -> str:
+        """The review-applied context this repo must report on its head, or "".
+
+        An unlisted repo falls back to the default, so a new repo gets the gate
+        rather than silently losing it; only an explicit "" entry switches it off.
+        """
+        if repo in self.review_applied_by_repo:
+            return self.review_applied_by_repo[repo]
+        return self.review_applied_context
+
     def for_repo(self, repo: str) -> Policy:
         """A copy whose `required_checks` are this repo's.
 
@@ -146,7 +161,11 @@ class Policy:
         and `_audit_body` both read `policy.required_checks`, so the check the merge
         depended on and the check the audit comment names cannot come from two places.
         """
-        return replace(self, required_checks=self.required_for(repo))
+        return replace(
+            self,
+            required_checks=self.required_for(repo),
+            review_applied_context=self.review_applied_for(repo),
+        )
 
 
 @dataclass
@@ -208,6 +227,11 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
             str(repo): tuple(str(name) for name in names)
             for repo, names in (raw.get("required_checks_by_repo") or {}).items()
         },
+        review_applied_context=str(defaults.get("review_applied_context", "review-applied")),
+        review_applied_by_repo={
+            str(repo): str(name)
+            for repo, name in (raw.get("review_applied_context_by_repo") or {}).items()
+        },
     )
 
 
@@ -252,7 +276,8 @@ def fetch_queue(repo: str, base: str, limit: int) -> list[dict[str, Any]]:
         "--limit",
         str(limit),
         "--json",
-        "number,title,headRefName,headRefOid,baseRefName,isDraft,mergeable,"
+        # `body` carries the authoring seat's identity (see `_author_identity`).
+        "number,title,body,headRefName,headRefOid,baseRefName,isDraft,mergeable,"
         "mergeStateStatus,statusCheckRollup,reviewDecision,author,createdAt,reviews,"
         "comments,commits,labels",
     )
@@ -538,12 +563,23 @@ def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
     (`_apply_reviews_checks_comments`) that both the queue and the promotion gate
     call: bot logins are excluded from `approvals` there, while listed
     reviewer-bot reviews still flow through to the `REVIEW_BOTS` hatch.
+
+    A review whose verdict is CHANGES_REQUESTED is dropped too, whatever form the
+    verdict takes (a formal review state, a `Verdict:` line under the in-session
+    marker, or a power-pack `verdict=` field): it blocks, and it never counts.
     """
     author = str((pr.get("author") or {}).get("login") or "")
     kept: list[dict[str, Any]] = []
     for review in pr.get("reviews") or []:
+        if not isinstance(review, dict):
+            continue
         login = str((review.get("author") or {}).get("login") or "")
         if login and login == author:
+            continue
+        # A review that requests changes blocks (`_gate_review`); it is never also
+        # the evidence that the PR was reviewed. Before #5863's follow-up a bot's
+        # CHANGES_REQUESTED fed the REVIEW_BOTS hatch as a completed agent review.
+        if _review_state(review) == "CHANGES_REQUESTED":
             continue
         kept.append(review)
     return kept
@@ -696,7 +732,15 @@ def _review_events(pr: dict[str, Any]) -> list[tuple[str, int, str, str, str]]:
             continue  # PENDING and unknown states are not a submitted verdict
         login = (review.get("author") or review.get("user") or {}).get("login")
         at = str(review.get("submittedAt") or review.get("submitted_at") or "")
-        events.append((at, seq, _reviewer_key(login), state, f"review {review.get('id') or seq}"))
+        events.append(
+            (
+                at,
+                seq,
+                _seat_reviewer_key(login, body),
+                state,
+                f"review {review.get('id') or seq}{_seat_suffix(body)}",
+            )
+        )
     for comment in pr.get("comments") or []:
         seq += 1
         if not isinstance(comment, Mapping):
@@ -710,9 +754,9 @@ def _review_events(pr: dict[str, Any]) -> list[tuple[str, int, str, str, str]]:
             (
                 at,
                 seq,
-                _reviewer_key(login),
+                _seat_reviewer_key(login, body),
                 _in_session_state(body),
-                f"in-session review comment {comment.get('id') or seq}",
+                f"in-session review comment {comment.get('id') or seq}{_seat_suffix(body)}",
             )
         )
     events.sort(key=lambda e: (e[0], e[1]))
@@ -725,12 +769,282 @@ def _reviewer_verdict_reasons(pr: dict[str, Any]) -> list[str]:
     for at, _seq, reviewer, state, where in _review_events(pr):
         latest[reviewer] = (state, where, at)
     return [
-        f"review verdict: {reviewer or '?'}'s latest review ({where}"
+        f"review verdict: {reviewer.split(_SEAT_KEY_SEP)[0] or '?'}'s latest review ({where}"
         f"{' at ' + at if at else ''}) requests changes and no later approval, "
         "comment-review or dismissal from that reviewer has cleared it"
         for reviewer, (state, where, at) in sorted(latest.items())
         if state == "CHANGES_REQUESTED"
     ]
+
+
+def _seat_reviewer_key(login: Any, body: str) -> str:
+    """The reviewer a verdict belongs to: the login, narrowed by the seat it names.
+
+    Every board seat posts as one GitHub login, so the login alone would let any
+    seat's later approval (the author's included) clear another seat's change
+    request. A verdict that names its seat (`_identity`) is keyed by login and
+    seat; one that names none keys by login alone, as before, so an unnamed block
+    is cleared only by an unnamed later verdict from that login.
+    """
+    seats = _identity(body).get("seat")
+    key = _reviewer_key(login)
+    return f"{key}{_SEAT_KEY_SEP}{','.join(sorted(seats))}" if seats else key
+
+
+def _seat_suffix(body: str) -> str:
+    seats = _identity(body).get("seat")
+    return f" by seat {','.join(sorted(seats))}" if seats else ""
+
+
+_SEAT_KEY_SEP = "\x1f"
+
+
+# --- review evidence: never a change request, never the author's own seat ----
+#
+# Follow-up to #5863 (QA review monitor, 2026-10-20). Three ways a review record
+# could still authorise a merge it should not:
+#
+# (a) A CHANGES_REQUESTED verdict was read by the verdict gate as a block, but the
+#     very same comment or review was also handed to the coverage gate as evidence
+#     that a review ran. A change request now only blocks; it is dropped from the
+#     evidence wherever it appears (formal review, in-session `Verdict:` line, or
+#     power-pack `verdict=` field).
+# (b) Every board seat posts as `chrizefan`, so an in-session review comment on a
+#     `chrizefan` PR could be the authoring session attesting its own work (the
+#     DIG-4459 chat PRs were "reviewed" seconds after they were opened). The login
+#     cannot tell seats apart, so the identity is read from what the seat writes:
+#     a `<!-- dt-seat agent=<PAPERCLIP_AGENT_ID> run=<PAPERCLIP_RUN_ID>
+#     session=<id> -->` marker, or `Paperclip-Agent-Id:` / `Paperclip-Seat:` /
+#     `Paperclip-Run-Id:` / `Session-Id:` trailer lines, in the PR body and commit
+#     messages (the author) and in the review comment (the reviewer). Same-login
+#     review evidence counts only when it names a seat (or, for a PR authored
+#     outside Paperclip, a session) that is provably not the author's. Unnamed is
+#     not independent: it is refused, and the refusal says what to add.
+# (c) `review-applied` is posted per commit. The queue now requires it SUCCESS on
+#     the exact head it merges (`_gate_review_applied`); `merge_one` pins that
+#     same head with `--match-head-commit`.
+
+SEAT_MARKER = "dt-seat"
+_SEAT_MARKER_RE = re.compile(r"<!--\s*dt-seat\b(?P<fields>[^>]*?)\s*-->", re.I)
+_SEAT_FIELD_KINDS = {"agent": "seat", "seat": "seat", "run": "run", "session": "session"}
+_SEAT_TRAILER_KINDS = {
+    "paperclip-agent-id": "seat",
+    "paperclip-agent": "seat",
+    "paperclip-seat": "seat",
+    "paperclip-run-id": "run",
+    "session-id": "session",
+}
+_SEAT_TRAILER_RE = re.compile(
+    r"^[ \t>*_-]*(?P<key>Paperclip-Agent-Id|Paperclip-Agent|Paperclip-Seat|Paperclip-Run-Id"
+    r"|Session-Id)[*_`]*[ \t]*:[ \t]*[*_`]*[ \t]*(?P<value>[A-Za-z0-9][A-Za-z0-9._:/@-]*)",
+    re.I | re.M,
+)
+_PLACEHOLDER_IDS = frozenset({"?", "-", "none", "null", "unknown", "n/a", "tbd"})
+
+
+def _identity(text: str) -> dict[str, frozenset[str]]:
+    """{kind: values} for the seat identity a body names; kinds: seat, session, run.
+
+    `agent=` and `seat=` are one kind: a Paperclip seat writes its agent id, and a
+    reviewer outside Paperclip writes a stable seat name. Only marker fields and
+    line-anchored trailers are read, never prose.
+    """
+    found: dict[str, set[str]] = {}
+
+    def add(kind: str, value: str) -> None:
+        v = value.strip().strip("'\";,.`").lower()
+        if v and v not in _PLACEHOLDER_IDS and not v.startswith("$"):
+            found.setdefault(kind, set()).add(v)
+
+    for regex in (_SEAT_MARKER_RE, _MARKER_RE):
+        for marker in regex.finditer(text or ""):
+            for f in _MARKER_FIELD_RE.finditer(marker.group("fields")):
+                kind = _SEAT_FIELD_KINDS.get(f.group("key").lower())
+                if kind:
+                    add(kind, f.group("value"))
+    for m in _SEAT_TRAILER_RE.finditer(text or ""):
+        add(_SEAT_TRAILER_KINDS[m.group("key").lower()], m.group("value"))
+    return {k: frozenset(v) for k, v in found.items()}
+
+
+def _merge_identities(*ids: dict[str, frozenset[str]]) -> dict[str, frozenset[str]]:
+    out: dict[str, set[str]] = {}
+    for one in ids:
+        for kind, values in one.items():
+            out.setdefault(kind, set()).update(values)
+    return {k: frozenset(v) for k, v in out.items()}
+
+
+def _author_identity(pr: dict[str, Any]) -> dict[str, frozenset[str]]:
+    """Every seat, session and run the PR's body and commits name as their author."""
+    texts = [str(pr.get("body") or "")]
+    for commit in pr.get("commits") or []:
+        if isinstance(commit, Mapping):
+            texts.append(
+                f"{commit.get('messageHeadline') or ''}\n{commit.get('messageBody') or ''}"
+            )
+    return _merge_identities(*(_identity(t) for t in texts))
+
+
+def _show(identity: dict[str, frozenset[str]]) -> str:
+    parts = [
+        f"{kind}={','.join(sorted(identity[kind]))}"
+        for kind in ("seat", "session", "run")
+        if identity.get(kind)
+    ]
+    return " ".join(parts) or "nothing"
+
+
+def _not_independent(
+    author: dict[str, frozenset[str]], reviewer: dict[str, frozenset[str]]
+) -> str | None:
+    """Why a same-login review cannot be shown to come from another seat, or None.
+
+    Fails closed at every step: a review is independent only when the author is
+    named, the reviewer is named, nothing they name coincides, and they are
+    compared on the strongest kind the author names (the seat if there is one,
+    else the session). A run id alone never identifies a seat.
+    """
+    if not author.get("seat") and not author.get("session"):
+        return (
+            "the PR names no authoring seat or session (add a `<!-- dt-seat agent=... -->` "
+            "marker or a `Paperclip-Agent-Id:` / `Session-Id:` trailer to the PR body or "
+            "commits), so a review under the author's own login cannot be shown to come "
+            "from a different seat"
+        )
+    if not reviewer:
+        return (
+            "the review names no reviewer seat (`<!-- dt-seat agent=... -->`), and every "
+            "seat posts under the author's login, so it may be the authoring session's own "
+            "attestation"
+        )
+    for kind in ("seat", "session", "run"):
+        shared = author.get(kind, frozenset()) & reviewer.get(kind, frozenset())
+        if shared:
+            return (
+                f"the review comes from the authoring {kind} ({','.join(sorted(shared))}); "
+                "a different reviewer seat has to review it"
+            )
+    kind = "seat" if author.get("seat") else "session"
+    if not reviewer.get(kind):
+        return (
+            f"the author is named by {kind} ({_show(author)}) but the review names no "
+            f"{kind} ({_show(reviewer)}), so the two cannot be told apart"
+        )
+    return None
+
+
+def _comment_verdict(body: str) -> str | None:
+    """CHANGES_REQUESTED / APPROVED / COMMENTED for a review comment, or None.
+
+    A power-pack marker's `verdict=` is read first, then the in-session marker's
+    `Verdict:` line; a comment carrying neither is not a review verdict.
+    """
+    for marker in _MARKER_RE.finditer(body or ""):
+        fields = {
+            m.group("key").lower(): m.group("value")
+            for m in _MARKER_FIELD_RE.finditer(marker.group("fields"))
+        }
+        verdict = _normalise_verdict(fields.get("verdict", ""))
+        if verdict in BLOCKING_VERDICTS:
+            return "CHANGES_REQUESTED"
+        if verdict in READABLE_VERDICTS:
+            return "APPROVED"
+    if IN_SESSION_REVIEW_MARKER in (body or ""):
+        return _in_session_state(body)
+    return None
+
+
+def _review_state(review: Mapping[str, Any]) -> str:
+    """A formal review's effective state, reading a verdict carried in its body."""
+    state = str(review.get("state") or "").upper()
+    if state == "COMMENTED":
+        return _comment_verdict(str(review.get("body") or "")) or state
+    return state
+
+
+def _evidence_comments(pr: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """(comments the coverage gate may score, why each dropped one was dropped).
+
+    Dropped: any comment whose verdict is a change request (a), and any in-session
+    review comment under the PR author's own login that does not prove it came
+    from a different seat (b). Everything else passes through untouched, so the
+    CodeRabbit and marker matching in check_review_coverage stays the one source
+    of truth for what counts.
+    """
+    author_login = _reviewer_key((pr.get("author") or {}).get("login"))
+    author_id: dict[str, frozenset[str]] | None = None
+    kept: list[dict[str, Any]] = []
+    dropped: list[str] = []
+    for comment in pr.get("comments") or []:
+        if not isinstance(comment, Mapping):
+            continue
+        body = str(comment.get("body") or "")
+        where = f"comment {comment.get('id') or comment.get('createdAt') or '?'}"
+        if _comment_verdict(body) == "CHANGES_REQUESTED":
+            dropped.append(f"{where} requests changes, which blocks and is never review evidence")
+            continue
+        if IN_SESSION_REVIEW_MARKER in body:
+            login = _reviewer_key((comment.get("author") or comment.get("user") or {}).get("login"))
+            if not login or login == author_login:
+                if author_id is None:
+                    author_id = _author_identity(pr)
+                why = _not_independent(author_id, _identity(body))
+                if why:
+                    dropped.append(f"{where}: {why}")
+                    continue
+        kept.append(dict(comment))
+    return kept, dropped
+
+
+def _gate_review_applied(pr: dict[str, Any], policy: Policy, repo: str | None) -> list[str]:
+    """`review-applied` must be SUCCESS on the exact head this merge would land.
+
+    local-ci posts the status per commit, so a green verdict on an earlier push
+    says nothing about the commits pushed after it. The row's rollup is read
+    first (it is the head commit's); when a repo is given, the head's own combined
+    status is then read by SHA and must name that same SHA, so a stale row or a
+    moved head cannot carry an older green. `merge_one` pins the same SHA with
+    `--match-head-commit`. Every read that fails refuses.
+    """
+    ctx = policy.review_applied_context
+    if not ctx:
+        return []
+    head = str(pr.get("headRefOid") or "")
+    if not head:
+        return [f"'{ctx}': the row names no head SHA, so it cannot be checked on the merged tip"]
+    entries = [e for e in _rollup(pr) if _check_name(e) == ctx]
+    if not entries:
+        return [
+            f"'{ctx}' has not reported on the head {head[:12]}; a {ctx} verdict on an "
+            "earlier commit does not cover the commits pushed after it"
+        ]
+    states = sorted({str(e.get("conclusion") or e.get("state") or "?").upper() for e in entries})
+    if states != ["SUCCESS"]:
+        return [f"'{ctx}' is {', '.join(states)} on the head {head[:12]}"]
+    if repo is None:
+        return []
+    try:
+        data = _gh_json("api", f"repos/{repo}/commits/{head}/status?per_page=100")
+    except (QueueError, ValueError, OSError):
+        return [f"'{ctx}': the head {head[:12]}'s statuses could not be read"]
+    if not isinstance(data, dict) or str(data.get("sha") or "") != head:
+        got = str((data or {}).get("sha") or "") if isinstance(data, dict) else ""
+        return [
+            f"'{ctx}': the status read for {head[:12]} came back for "
+            f"{got[:12] or 'no commit'}, so it is not evidence about the merged tip"
+        ]
+    on_head = [
+        s
+        for s in (data.get("statuses") or [])
+        if isinstance(s, Mapping) and s.get("context") == ctx
+    ]
+    if not on_head:
+        return [f"'{ctx}' has not reported on the head {head[:12]}"]
+    head_states = sorted({str(s.get("state") or "?").lower() for s in on_head})
+    if head_states != ["success"]:
+        return [f"'{ctx}' is {', '.join(head_states)} on the head {head[:12]}"]
+    return []
 
 
 # --- review comments addressed -----------------------------------------------
@@ -915,21 +1229,31 @@ def _review_coverage(pr: dict[str, Any], repo: str | None) -> tuple[list[str], s
         "agent_tool": [],
         "agent_review": None,
     }
+    evidence, dropped = _evidence_comments(
+        {**pr, "comments": comments if isinstance(comments, list) else []}
+    )
     crc._apply_reviews_checks_comments(
         state,
         reviews=_evidence_reviews(pr),
         checks=_rollup(pr),
-        comments=comments if isinstance(comments, list) else [],
+        comments=evidence,
     )
     reviewed, why = crc.verdict_for(state)
     if reviewed:
         return [], why
+    not_counted = ""
+    if dropped:
+        shown = "; ".join(dropped[:3]) + (
+            f"; and {len(dropped) - 3} more" if len(dropped) > 3 else ""
+        )
+        not_counted = f". Not counted as review evidence: {shown}"
     return [
         f"review coverage: {why} — the queue needs a review pass that left its "
         "findings on the PR, the same evidence scripts/check_review_coverage.py "
         "enforces at promotion (completed Bot run, a reviewer bot such as "
-        "CodeRabbit or Copilot, an in-session review with its findings comment, "
-        "an approval, or reviewed:owner)"
+        "CodeRabbit or Copilot, an in-session review from a seat other than the "
+        "author's with its findings comment, an approval, or reviewed:owner)"
+        f"{not_counted}"
     ], ""
 
 
@@ -980,6 +1304,9 @@ def evaluate(
     reasons.extend(_gate_review(pr))
     coverage_reasons, review_evidence = _review_coverage(pr, repo)
     reasons.extend(coverage_reasons)
+    # review-applied on the exact tip. The rollup half is free; the by-SHA read is
+    # one REST call, so it is spent only on a PR every earlier gate passed.
+    reasons.extend(_gate_review_applied(pr, policy, repo if not reasons else None))
     # Read last, and only for a PR every other gate passed: it is one GraphQL read
     # per PR, and a PR already refused elsewhere needs no second reason to wait.
     if not reasons:
@@ -1036,7 +1363,13 @@ def _audit_body(verdict: Verdict, authority: Authority, policy: Policy) -> str:
         f"- method: `{policy.merge_method}`\n"
         f"- review: {review}\n"
         f"- required checks: {', '.join(f'`{c}`' for c in policy.required_checks)}\n"
-        f"- checks reported: {len(verdict.checks)}\n\n"
+        + (
+            f"- `{policy.review_applied_context}`: SUCCESS on `{verdict.head_sha[:12]}`, "
+            "the merged head\n"
+            if policy.review_applied_context
+            else ""
+        )
+        + f"- checks reported: {len(verdict.checks)}\n\n"
         f"{checks}\n\n"
         "Gate definition and the roster: `docs/MERGE_QUEUE.md`, "
         "`scripts/merge_queue_policy.json`."

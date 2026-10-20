@@ -63,6 +63,25 @@ def _load() -> Any:
 
 mq = _load()
 
+#: The authoring seat every fixture PR names in its body (`merge_queue._identity`).
+#: Every board seat posts as `chrizefan`, so the seat, not the login, is what tells
+#: the author apart from a reviewer.
+AUTHOR_SEAT = "author-seat-0001"
+REVIEWER_SEAT = "reviewer-seat-0002"
+AUTHOR_BODY = f"Work.\n\n<!-- dt-seat agent={AUTHOR_SEAT} run=run-author-1 -->\n"
+REVIEWER_STAMP = f"<!-- dt-seat agent={REVIEWER_SEAT} run=run-reviewer-1 -->"
+
+
+def _head_status(sha: str = "a" * 40, state: str = "success", **rule: Any) -> dict[str, Any]:
+    """`gh api repos/<repo>/commits/<sha>/status` for one head: the by-SHA read of
+    `review-applied` that `_gate_review_applied` makes when it has a repo."""
+    return gh_rule(
+        rf"^api repos/[^ ]+/commits/{sha}/status",
+        stdout={"sha": sha, "statuses": [{"context": "review-applied", "state": state}]},
+        **rule,
+    )
+
+
 #: `gh api graphql` answer for a PR with no review threads.
 NO_THREADS: dict[str, Any] = {
     "data": {"repository": {"pullRequest": {"reviewThreads": {"totalCount": 0, "nodes": []}}}}
@@ -76,6 +95,7 @@ def _pr(
     head_sha: str = "a" * 40,
     test_conclusion: str | None = "SUCCESS",
     local_ci_state: str | None = "SUCCESS",
+    review_applied_state: str | None = "SUCCESS",
     test_status: str = "COMPLETED",
     reviews: list[dict[str, Any]] | None = None,
     author: str = "chrizefan",
@@ -88,8 +108,19 @@ def _pr(
     commits: list[dict[str, Any]] | None = None,
     omit: tuple[str, ...] = (),
     approved: bool = False,
+    body: str = AUTHOR_BODY,
 ) -> dict[str, Any]:
     rollup: list[dict[str, Any]] = list(extra_checks or [])
+    # `review-applied` is local-ci's review verdict, posted per commit; the queue
+    # requires it SUCCESS on the exact head it merges (#5863 follow-up).
+    if review_applied_state is not None:
+        rollup.append(
+            {
+                "__typename": "StatusContext",
+                "context": "review-applied",
+                "state": review_applied_state,
+            }
+        )
     # `local-ci` is the host mirror's commit status, and it is a REQUIRED check on both
     # repos now (digithings always; twelve-x since DIG-4454, while GitHub Actions cannot
     # start). It is a StatusContext, not a CheckRun, which `status_context_checks` allows.
@@ -115,6 +146,7 @@ def _pr(
     pr = {
         "number": number,
         "title": title or f"work for #{number}",
+        "body": body,
         "headRefName": f"DIG-{number}-work",
         "headRefOid": head_sha,
         "baseRefName": "develop",
@@ -373,7 +405,8 @@ def test_a_required_check_that_no_pr_in_the_queue_ever_reports_is_a_misconfigura
     # Nothing reported anywhere is a different problem — CI never ran — and must not
     # be reported as a naming problem.
     assert mq.unmatched_required_checks(
-        [_pr(2, test_conclusion=None, local_ci_state=None)], ("test",)
+        [_pr(2, test_conclusion=None, local_ci_state=None, review_applied_state=None)],
+        ("test",),
     ) == ((), ())
 
 
@@ -581,10 +614,16 @@ def test_the_audit_comment_records_the_checks_actually_required(gh_stub: Any) ->
             "context": "local-ci",
             "state": "SUCCESS",
         },
+        {
+            "__typename": "StatusContext",
+            "context": "review-applied",
+            "state": "SUCCESS",
+        },
     ]
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
+            _head_status("c" * 40),
             gh_rule(r"^api graphql", stdout=NO_THREADS),
             gh_rule(r"^pr merge", stdout=""),
             gh_rule(r"^pr comment", stdout=""),
@@ -596,6 +635,7 @@ def test_the_audit_comment_records_the_checks_actually_required(gh_stub: Any) ->
     assert len(comments) == 1
     body = comments[0][comments[0].index("--body") + 1]
     assert "local-ci" in body
+    assert f"`review-applied`: SUCCESS on `{'c' * 12}`" in body
 
 
 # --- review: who is allowed to say the code was read --------------------------
@@ -705,7 +745,7 @@ def test_review_evidence_alone_is_enough_at_the_production_setting() -> None:
                 "authorAssociation": "MEMBER",
                 "createdAt": "2026-10-19T00:00:00Z",
                 "body": (
-                    "<!-- in-session-review -->\n\n"
+                    f"<!-- in-session-review -->\n{REVIEWER_STAMP}\n\n"
                     "## Verdict: approve-with-nits\n\n0 blockers, 2 majors filed.\n"
                 ),
             }
@@ -855,7 +895,7 @@ def test_review_threads_are_read_from_github(gh_stub: Any) -> None:
             }
         }
     }
-    stub = gh_stub(gh_rule(r"^api graphql", stdout=open_thread))
+    stub = gh_stub(_head_status(), gh_rule(r"^api graphql", stdout=open_thread))
     verdict = mq.evaluate(
         _pr(7, approved=True),
         mq.load_policy(),
@@ -869,7 +909,7 @@ def test_review_threads_are_read_from_github(gh_stub: Any) -> None:
 
 
 def test_an_unreadable_thread_list_holds_the_pr(gh_stub: Any) -> None:
-    gh_stub(gh_rule(r"^api graphql", stderr="HTTP 502", exit_code=1))
+    gh_stub(_head_status(), gh_rule(r"^api graphql", stderr="HTTP 502", exit_code=1))
     verdict = mq.evaluate(
         _pr(7, approved=True),
         mq.load_policy(),
@@ -1999,7 +2039,7 @@ def _labeled_pr(number: int, comments: list[dict[str, Any]] | None) -> dict[str,
 def _finding_comment() -> dict[str, Any]:
     return {
         "author": {"login": "chrizefan"},
-        "body": f"findings for this PR\n\n{_MARKER}\nsha 71bae0e9",
+        "body": f"findings for this PR\n\n{_MARKER}\n{REVIEWER_STAMP}\nsha 71bae0e9",
         "createdAt": "2026-10-12T23:08:43Z",
         "url": "https://github.com/digithings-ai/digithings/pull/5526#issuecomment-1",
     }
@@ -2049,6 +2089,7 @@ def test_a_claimed_review_fetches_comments_lazily(gh_stub: Any) -> None:
     """`gh pr list` carries labels but no comments; the queue fetches them only for a claim."""
     gh_stub(
         gh_rule(r"^pr view", stdout={"comments": [_finding_comment()]}),
+        _head_status(),
         gh_rule(r"^api graphql", stdout=NO_THREADS),
     )
     pr = _labeled_pr(5526, None)
@@ -2253,3 +2294,298 @@ def test_rows_without_timestamps_keep_github_order() -> None:
         ],
     )
     assert _eval(pr).eligible
+
+
+# --- #5863 follow-up: a change request is never evidence -----------------------
+#
+# QA review monitor, 2026-10-20. (a) A CHANGES_REQUESTED verdict only blocks: it is
+# dropped from the review evidence wherever it appears. (b) Every seat posts as
+# `chrizefan`, so same-login review evidence must name a seat other than the
+# author's. (c) `review-applied` must be SUCCESS on the exact head being merged.
+
+
+def _seat_in_session(
+    verdict: str | None,
+    at: str = "2026-10-20T08:00:00Z",
+    *,
+    stamp: str | None = REVIEWER_STAMP,
+    login: str = "chrizefan",
+) -> dict[str, Any]:
+    body = f"{mq.IN_SESSION_REVIEW_MARKER}\n"
+    if stamp:
+        body += f"{stamp}\n"
+    body += "## In-session review\n\nFindings here.\n"
+    if verdict is not None:
+        body += f"\n**Verdict: {verdict}**\n"
+    return {"id": f"IC_{at}", "author": {"login": login}, "body": body, "createdAt": at}
+
+
+def _agent_pr(comments: list[dict[str, Any]], **kw: Any) -> dict[str, Any]:
+    pr = _pr(1, comments=comments, **kw)
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    return pr
+
+
+def _coverage_reasons(verdict: Any) -> list[str]:
+    return [r for r in verdict.reasons if r.startswith("review coverage:")]
+
+
+def test_an_independent_in_session_approval_is_review_evidence() -> None:
+    verdict = _eval(_agent_pr([_seat_in_session("APPROVE")]))
+    assert verdict.eligible, verdict.reasons
+    assert "in-session review" in verdict.review_evidence
+
+
+def test_an_in_session_changes_verdict_is_not_review_evidence() -> None:
+    verdict = _eval(_agent_pr([_seat_in_session("CHANGES")]))
+    assert not verdict.eligible
+    coverage = _coverage_reasons(verdict)
+    assert coverage, verdict.reasons
+    assert "requests changes, which blocks and is never review evidence" in coverage[0]
+
+
+def test_a_power_pack_changes_verdict_is_not_review_evidence() -> None:
+    comment = _seat_in_session(None)
+    comment["body"] = (
+        "<!-- opencode-power-pack:code-review "
+        f"scope=digithings-ai/digithings#1@{'a' * 40} verdict=changes_requested -->\n"
+        + comment["body"]
+    )
+    verdict = _eval(_agent_pr([comment]))
+    assert not verdict.eligible
+    assert _coverage_reasons(verdict), verdict.reasons
+
+
+def test_a_bots_formal_change_request_is_not_an_agent_review() -> None:
+    """Before this, a CodeRabbit CHANGES_REQUESTED fed the REVIEW_BOTS hatch."""
+    pr = _pr(1, reviews=[_review("coderabbitai", "CHANGES_REQUESTED", "2026-10-20T01:00:00Z")])
+    verdict = _eval(pr)
+    assert not verdict.eligible
+    assert _coverage_reasons(verdict), verdict.reasons
+    assert mq._evidence_reviews(pr) == []
+
+
+def test_a_commented_review_whose_body_says_changes_is_dropped_from_evidence() -> None:
+    body = f"{mq.IN_SESSION_REVIEW_MARKER}\n**Verdict: CHANGES**\n"
+    pr = _pr(1, reviews=[_review("coderabbitai", "COMMENTED", "2026-10-20T01:00:00Z", body)])
+    assert mq._evidence_reviews(pr) == []
+
+
+def test_a_change_request_then_the_same_seats_approval_merges_on_the_approval() -> None:
+    pr = _agent_pr(
+        [
+            _seat_in_session("CHANGES", "2026-10-20T08:00:00Z"),
+            _seat_in_session("APPROVE", "2026-10-20T09:00:00Z"),
+        ]
+    )
+    verdict = _eval(pr)
+    assert verdict.eligible, verdict.reasons
+
+
+# --- (b) the author's own seat or session cannot review its PR ------------------
+
+
+def test_an_unstamped_same_login_in_session_review_is_refused() -> None:
+    verdict = _eval(_agent_pr([_seat_in_session("APPROVE", stamp=None)]))
+    assert not verdict.eligible
+    assert "names no reviewer seat" in _coverage_reasons(verdict)[0]
+
+
+def test_the_authoring_seat_reviewing_its_own_pr_is_refused() -> None:
+    stamp = f"<!-- dt-seat agent={AUTHOR_SEAT} run=run-later-9 -->"
+    verdict = _eval(_agent_pr([_seat_in_session("APPROVE", stamp=stamp)]))
+    assert not verdict.eligible
+    assert f"authoring seat ({AUTHOR_SEAT})" in _coverage_reasons(verdict)[0]
+
+
+def test_a_shared_run_id_is_the_author_even_under_another_seat_name() -> None:
+    stamp = f"<!-- dt-seat agent={REVIEWER_SEAT} run=run-author-1 -->"
+    verdict = _eval(_agent_pr([_seat_in_session("APPROVE", stamp=stamp)]))
+    assert not verdict.eligible
+    assert "authoring run (run-author-1)" in _coverage_reasons(verdict)[0]
+
+
+def test_a_pr_that_names_no_authoring_seat_cannot_take_same_login_review() -> None:
+    verdict = _eval(_agent_pr([_seat_in_session("APPROVE")], body="No identity here."))
+    assert not verdict.eligible
+    assert "PR names no authoring seat or session" in _coverage_reasons(verdict)[0]
+
+
+@pytest.mark.parametrize(
+    "trailer",
+    [
+        f"Paperclip-Agent-Id: {AUTHOR_SEAT}",
+        f"Paperclip-Seat: {AUTHOR_SEAT}",
+        f"<!-- dt-seat agent={AUTHOR_SEAT} -->",
+    ],
+)
+def test_the_author_seat_is_read_from_commit_trailers(trailer: str) -> None:
+    commits = [{"oid": "a" * 40, "messageHeadline": "fix: x", "messageBody": f"why\n\n{trailer}"}]
+    independent = _agent_pr([_seat_in_session("APPROVE")], body="", commits=commits)
+    assert _eval(independent).eligible, _eval(independent).reasons
+    stamp = f"<!-- dt-seat agent={AUTHOR_SEAT} -->"
+    own = _agent_pr([_seat_in_session("APPROVE", stamp=stamp)], body="", commits=commits)
+    assert not _eval(own).eligible
+
+
+def test_every_seat_that_committed_counts_as_an_author() -> None:
+    commits = [
+        {"oid": "b" * 40, "messageBody": "Paperclip-Agent-Id: helper-seat-7"},
+        {"oid": "a" * 40, "messageBody": ""},
+    ]
+    stamp = "<!-- dt-seat agent=helper-seat-7 -->"
+    verdict = _eval(_agent_pr([_seat_in_session("APPROVE", stamp=stamp)], commits=commits))
+    assert not verdict.eligible
+    assert "authoring seat (helper-seat-7)" in _coverage_reasons(verdict)[0]
+
+
+def test_a_session_authored_pr_needs_a_reviewer_session_to_compare() -> None:
+    body = "Session-Id: sess-author-1\n"
+    seat_only = _agent_pr([_seat_in_session("APPROVE")], body=body)
+    assert not _eval(seat_only).eligible
+    assert "names no session" in _coverage_reasons(_eval(seat_only))[0]
+    other_session = _agent_pr(
+        [_seat_in_session("APPROVE", stamp="<!-- dt-seat seat=board session=sess-review-2 -->")],
+        body=body,
+    )
+    assert _eval(other_session).eligible, _eval(other_session).reasons
+
+
+def test_a_seat_authored_pr_needs_a_reviewer_seat_not_just_a_session() -> None:
+    stamp = "<!-- dt-seat session=sess-review-2 -->"
+    verdict = _eval(_agent_pr([_seat_in_session("APPROVE", stamp=stamp)]))
+    assert not verdict.eligible
+    assert "names no seat" in _coverage_reasons(verdict)[0]
+
+
+def test_another_logins_in_session_review_is_judged_by_login() -> None:
+    comment = _seat_in_session("APPROVE", stamp=None, login="someone-else")
+    assert _eval(_agent_pr([comment])).eligible
+
+
+def test_identity_is_read_from_markers_and_trailers_never_prose() -> None:
+    assert mq._identity("we spoke to Paperclip-Agent-Id: x in passing") == {}
+    assert mq._identity("<!-- dt-seat agent=$PAPERCLIP_AGENT_ID run=? -->") == {}
+    got = mq._identity(
+        "<!-- dt-seat agent=AbC run=r1 session=s1 -->\n> **Paperclip-Seat:** board\n"
+    )
+    assert got == {
+        "seat": frozenset({"abc", "board"}),
+        "run": frozenset({"r1"}),
+        "session": frozenset({"s1"}),
+    }
+
+
+def test_the_author_seats_approval_does_not_clear_a_reviewer_seats_change_request() -> None:
+    """Same login, different seats: the verdict is keyed by seat, so the author
+    cannot clear a reviewer's block by posting its own later approval."""
+    own = f"<!-- dt-seat agent={AUTHOR_SEAT} -->"
+    pr = _agent_pr(
+        [
+            _seat_in_session("CHANGES", "2026-10-20T08:00:00Z"),
+            _seat_in_session("APPROVE", "2026-10-20T09:00:00Z", stamp=own),
+        ]
+    )
+    verdict = _eval(pr)
+    assert not verdict.eligible
+    assert any(
+        r.startswith("review verdict: chrizefan's latest review")
+        and f"by seat {REVIEWER_SEAT}" in r
+        for r in verdict.reasons
+    ), verdict.reasons
+
+
+# --- (c) review-applied on the exact head being merged --------------------------
+
+
+def test_no_review_applied_on_the_head_blocks() -> None:
+    verdict = _eval(_pr(1, approved=True, review_applied_state=None))
+    assert not verdict.eligible
+    assert any("'review-applied' has not reported on the head" in r for r in verdict.reasons)
+
+
+@pytest.mark.parametrize("state", ["FAILURE", "PENDING", "ERROR"])
+def test_a_review_applied_that_is_not_success_blocks(state: str) -> None:
+    verdict = _eval(_pr(1, approved=True, review_applied_state=state))
+    assert not verdict.eligible
+    assert any(f"'review-applied' is {state}" in r for r in verdict.reasons), verdict.reasons
+
+
+def _with_repo(pr: dict[str, Any]) -> Any:
+    return mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", repo="digithings-ai/digithings"
+    )
+
+
+def test_review_applied_is_read_by_the_head_sha(gh_stub: Any) -> None:
+    stub = gh_stub(_head_status("d" * 40), gh_rule(r"^api graphql", stdout=NO_THREADS))
+    verdict = _with_repo(_pr(1, head_sha="d" * 40, approved=True))
+    assert verdict.eligible, verdict.reasons
+    assert stub.matching(f"repos/digithings-ai/digithings/commits/{'d' * 40}/status")
+
+
+def test_a_green_review_applied_on_an_older_sha_does_not_count(gh_stub: Any) -> None:
+    """The status read answers for another commit: not evidence about this tip."""
+    gh_stub(
+        gh_rule(
+            r"^api repos/[^ ]+/commits/",
+            stdout={
+                "sha": "e" * 40,
+                "statuses": [{"context": "review-applied", "state": "success"}],
+            },
+        ),
+        gh_rule(r"^api graphql", stdout=NO_THREADS),
+    )
+    verdict = _with_repo(_pr(1, head_sha="d" * 40, approved=True))
+    assert not verdict.eligible
+    assert any("came back for eeeeeeeeeeee" in r for r in verdict.reasons), verdict.reasons
+
+
+@pytest.mark.parametrize("state", ["failure", "pending"])
+def test_the_heads_own_status_outranks_a_stale_green_row(gh_stub: Any, state: str) -> None:
+    gh_stub(_head_status(state=state), gh_rule(r"^api graphql", stdout=NO_THREADS))
+    verdict = _with_repo(_pr(1, approved=True))
+    assert not verdict.eligible
+    assert any(f"'review-applied' is {state} on the head" in r for r in verdict.reasons)
+
+
+def test_a_head_with_no_review_applied_status_blocks(gh_stub: Any) -> None:
+    gh_stub(
+        gh_rule(r"^api repos/[^ ]+/commits/", stdout={"sha": "a" * 40, "statuses": []}),
+        gh_rule(r"^api graphql", stdout=NO_THREADS),
+    )
+    verdict = _with_repo(_pr(1, approved=True))
+    assert not verdict.eligible
+
+
+def test_an_unreadable_head_status_blocks(gh_stub: Any) -> None:
+    gh_stub(
+        gh_rule(r"^api repos/[^ ]+/commits/", stderr="HTTP 502", exit_code=1),
+        gh_rule(r"^api graphql", stdout=NO_THREADS),
+    )
+    verdict = _with_repo(_pr(1, approved=True))
+    assert not verdict.eligible
+    assert any("statuses could not be read" in r for r in verdict.reasons)
+
+
+def test_review_applied_is_per_repo() -> None:
+    policy = mq.load_policy()
+    assert policy.for_repo("digithings-ai/digithings").review_applied_context == "review-applied"
+    # twelve-x's local mirror posts no review-applied; requiring it would refuse every PR.
+    assert policy.for_repo("digithings-ai/twelve-x").review_applied_context == ""
+    # An unlisted repo inherits the gate rather than losing it.
+    assert policy.for_repo("digithings-ai/elsewhere").review_applied_context == "review-applied"
+    twelve_x = mq.evaluate(
+        _pr(1, approved=True, review_applied_state=None),
+        policy.for_repo("digithings-ai/twelve-x"),
+        acting_role="em",
+        base="develop",
+    )
+    assert not any("review-applied" in r for r in twelve_x.reasons), twelve_x.reasons
+
+
+def test_the_queue_fetches_the_pr_body_for_the_author_seat(gh_stub: Any) -> None:
+    stub = gh_stub(gh_rule(r"^pr list", stdout=[]))
+    mq.fetch_queue("digithings-ai/digithings", "develop", 5)
+    fields = stub.matching("pr list")[0][-1]
+    assert "body" in fields.split(",")

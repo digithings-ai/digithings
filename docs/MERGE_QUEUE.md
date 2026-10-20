@@ -84,7 +84,9 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
 | Review | No outstanding `CHANGES_REQUESTED` review and no posted verdict of `changes_requested`. Review *evidence* is the row below: the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. |
-| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. |
+| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. Two exclusions (#5863 follow-up): a **change request is never evidence** — a formal `CHANGES_REQUESTED`, an in-session `Verdict: CHANGES` or a power-pack `verdict=changes_requested` only blocks — and an in-session review under the PR author's own login counts only when it **names a reviewer seat that is not the author's** (see "Who reviewed it" below). |
+| Each reviewer's latest verdict | Every reviewer's latest verdict is read in time order across formal reviews and in-session review comments; a latest change request blocks until that same reviewer (login, narrowed by the seat it names) approves, comment-reviews, or the review is dismissed. |
+| Review applied on the merged tip | `review-applied` (local-ci, DIG-3842) must be `SUCCESS` on the exact head SHA being merged. The queue reads it from the row's rollup and then from `GET /repos/{repo}/commits/{head}/status`, whose `sha` must equal the head; `merge_one` pins that head with `--match-head-commit`. A green verdict on an earlier commit does not count. Per repo in `review_applied_context_by_repo`: on for `digithings`, off for `twelve-x` (its mirror does not post it). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
 | Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested` still scoped to the branch, blocks. |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
@@ -193,6 +195,28 @@ issue. If the gate reports that it cannot find the merge base, that is the workf
 `actions/checkout` `fetch-depth: 0`, not a content verdict — it still fails closed, and it
 still blocks. The rules and the approved allowlist are in
 [`VENDOR_CONTENT_BOUNDARY.md`](VENDOR_CONTENT_BOUNDARY.md).
+
+### Who reviewed it: the seat, not the login
+
+Every board seat posts as `chrizefan`, so a GitHub login cannot tell the authoring
+session from a reviewer. The queue reads the identity each seat writes down instead:
+
+- **Author** — the PR body and every commit message on the PR: a
+  `<!-- dt-seat agent=<PAPERCLIP_AGENT_ID> run=<PAPERCLIP_RUN_ID> session=<id> -->` marker,
+  or `Paperclip-Agent-Id:` / `Paperclip-Seat:` / `Paperclip-Run-Id:` / `Session-Id:`
+  trailer lines. Every seat that committed counts as an author.
+- **Reviewer** — the same marker or trailers inside the in-session review comment (or as
+  `agent=` / `session=` fields on the power-pack marker).
+
+A same-login review counts only when the author is named, the reviewer is named, no seat,
+session or run they name coincides, and the reviewer names the strongest kind the author
+does (a seat if the author names one, otherwise a session). A run id alone never
+identifies a seat. Anything unnamed is refused, and the refusal says what to add. A review
+from a different login (a human, a reviewer bot) is judged by its login as before.
+
+This is a record, not an enforcement mechanism — the same credential can write any
+marker — but it turns "the authoring session attested its own work seconds after opening
+the PR" into a refusal instead of a merge.
 
 ## Running it
 
