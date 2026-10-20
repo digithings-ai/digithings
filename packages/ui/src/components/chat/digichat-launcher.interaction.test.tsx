@@ -73,6 +73,9 @@ describe("DigichatLauncher interactions", () => {
     expect(container.querySelector(".digichat-launcher__panel")).not.toBeNull();
     expect(onOpenChange).toHaveBeenCalledWith(true);
     const chatBody = container.querySelector("[data-chat-body]");
+    // the caller's child is a required prop, so the body has to be in the DOM:
+    // without this the reopen check below would compare null with null.
+    expect(chatBody).not.toBeNull();
 
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
