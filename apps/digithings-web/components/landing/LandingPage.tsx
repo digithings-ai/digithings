@@ -6,7 +6,7 @@ import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { ContactForm } from "@/components/landing/ContactForm";
 import { PixelField } from "@/components/landing/PixelField";
-import { PixelWordmark } from "@/components/landing/PixelWordmark";
+import { PixelWordmark } from "@digithings/ui/pixel-wordmark";
 import { FaqMorph } from "@/components/landing/FaqMorph";
 import { ModuleGrid } from "@/components/landing/ModuleGrid";
 import { Pricing } from "@/components/landing/Pricing";

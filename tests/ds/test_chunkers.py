@@ -363,13 +363,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 133) re-recorded for the http_client tree line
     in ARCHITECTURE.md (query helpers removed; format_results_table stays) —
     fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 134 for the DIG-2203 OCC census re-cut (PR #5937):
+    ARCHITECTURE.md now carries the multi-index fan-out paragraph and the
+    trackers-ingest CC0-1.0 row, which added one chunk — fixture prose only;
+    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 133
+    assert len(chunks) == 134
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -453,8 +457,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "f27dfd53b2cda272",
         "d90f1ea6b18577c2",
         "6603c2da6eeb5309",
-        "e351b4963a561cd6",
-        "3442051d624d3623",
+        "263c191decde0fc3",
+        "6b98699f770ea56f",
+        "42d3db5b4b30c9c0",
         "06ba55aa13191afa",
         "533d598598a15fa9",
         "ec4e79e9d9714f36",

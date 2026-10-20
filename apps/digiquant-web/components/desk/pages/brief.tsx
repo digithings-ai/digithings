@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRefreshGeneration } from "../app-settings-store";
-import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
-import { EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
-import { briefBlocks } from "../../../../../clients/digiquant-tui/src/pages/brief-format";
-import { shapeLines, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
+import { BLOCKS, layoutFor } from "digiquant-tui/catalog";
+import { EMPTY_READ, STUB_READ, type ReadResult } from "digiquant-tui/read";
+import { briefBlocks } from "digiquant-tui/pages/brief-format";
+import { shapeLines, type PaneBody } from "digiquant-tui/pages/shape";
 import { readOfficial, type OfficialRead } from "../read-block";
 import { DESK_TILE, DeskPane, PANE_MOSAIC, useDeskMosaic } from "./pane";
 

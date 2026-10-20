@@ -6,19 +6,33 @@
  */
 
 import { createContext, useContext } from "react";
-import type { ChainDisclosureMode, UserAlign } from "./skin-types";
+import type {
+  ChainDisclosureMode,
+  ThinkingMode,
+  UserAlign,
+  ViewMode,
+} from "./skin-types";
 
 export type DeployUiValue = {
   /** Effective reasoning disclosure (view mode + thinking override). */
   reasoning: ChainDisclosureMode;
   /** Effective tool-call disclosure (view mode only). */
   toolCalls: ChainDisclosureMode;
+  /**
+   * The raw view level, before it is folded into a disclosure mode. The
+   * distinction matters: `quiet` is not "closed", it is "one summary line".
+   */
+  view: ViewMode;
+  /** The raw thinking override, before folding. */
+  thinking: ThinkingMode;
   userAlign: UserAlign;
 };
 
 export const DEFAULT_DEPLOY_UI: DeployUiValue = {
   reasoning: "collapsed",
   toolCalls: "collapsed",
+  view: "balanced",
+  thinking: "auto",
   userAlign: "right",
 };
 

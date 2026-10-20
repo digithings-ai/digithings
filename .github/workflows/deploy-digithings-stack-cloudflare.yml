@@ -1,0 +1,169 @@
+# Deploy: digithings-stack (Cloudflare Containers)
+#
+# The merge-to-main deploy path for the digithings-stack Worker (digikey +
+# digigraph + digisearch + digivault + LiteLLM under supervisord) and its two
+# Containers, publishing graph.digithings.ai / key.digithings.ai and
+# search.digithings.ai.
+#
+# HISTORY - read this before changing anything here.
+#
+# 1. Before a lane existed the stack was deployed by hand, from a developer
+#    machine, with Docker and `npx wrangler login`. DIG-2843 decided that
+#    story: document it as it is, no CI lane. That decision was taken while
+#    the Container id was a HAND-EDITED string that every image-changing
+#    deploy had to remember to bump, and a code-only redeploy left the old
+#    instance serving its old image.
+# 2. That hazard is gone. The Container id is now DERIVED from the deploying
+#    commit (DIG-3229 for this Worker's own id, DIG-3814 for the digichat
+#    id), so every deploy creates a fresh instance and there is nothing left
+#    to hand-edit and nothing to forget. `npm run deploy`
+#    (apps/digithings-stack-cloudflare/scripts/deploy.mjs) injects the rev,
+#    refuses to deploy when the commit cannot be resolved, and reads
+#    /_stack/meta back afterwards to prove the live ids are the ones this
+#    commit implies.
+# 3. So this lane is RE-DERIVED, not `git revert`ed back - DIG-2843's own
+#    precedent is to re-derive a deleted lane, never to revert it. It
+#    deploys through the wrapper, so the rev is never absent.
+#
+# THE GATE IS THE POINT. The deploy job sits behind the `production`
+# environment, whose manifest (.github/environments.json) names Chris as the
+# required reviewer and allows main-branch deployments only. That is what
+# lets Chris stop a deploy; the trigger is only what makes the gate
+# observable. Do not remove `push` without replacing the merge-to-main
+# deploy path, and keep production-deploy-gate-watchdog.yml able to see
+# anything that sits on the gate.
+#
+# CREDENTIALS. wrangler authenticates from CLOUDFLARE_API_TOKEN, and in
+# this house that NAME is also the Vectorize/D1 token - the trap documented
+# in apps/digithings-stack-cloudflare/wrangler.toml and in that app's
+# README. Exporting the D1 token makes wrangler authenticate as it and
+# every deploy fails with code 10000. This lane therefore reads a Workers
+# Scripts:Edit token from a DIFFERENT secret name and exports it under
+# wrangler's own name.
+#
+# Do not add `working-directory`: both Containers pin
+# `image_build_context = "../.."`, so the image build needs the repository
+# root as its context (#4046).
+name: "Deploy: digithings-stack (Cloudflare Containers)"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/docker/Dockerfile.digithings-stack-cloudflare"
+      - "apps/digithings-stack-cloudflare/**"
+      - "digiquant/**"
+      - "digivault/**"
+      - "apps/dashboard-api/**"
+      - "apps/digichat-cloudflare/**"
+      - "infra/docker/Dockerfile.digichat-cloudflare"
+      - "apps/digichat/**"
+      - "config/**"
+      - "infra/**"
+      - "scripts/**"
+      - "digibase/**"
+      - "digiclaw/**"
+      - "digifetch/**"
+      - "digigraph/**"
+      - "digikey/**"
+      - "digillm/**"
+      - "digitrace/**"
+      - "digisearch/**"
+      - ".github/workflows/deploy-digithings-stack-cloudflare.yml"
+  pull_request:
+    paths:
+      - "infra/docker/Dockerfile.digithings-stack-cloudflare"
+      - "apps/digithings-stack-cloudflare/**"
+      - "digiquant/**"
+      - "digivault/**"
+      - "apps/dashboard-api/**"
+      - "apps/digichat-cloudflare/**"
+      - "infra/docker/Dockerfile.digichat-cloudflare"
+      - "apps/digichat/**"
+      - "config/**"
+      - "infra/**"
+      - "scripts/**"
+      - "digibase/**"
+      - "digiclaw/**"
+      - "digifetch/**"
+      - "digigraph/**"
+      - "digikey/**"
+      - "digillm/**"
+      - "digitrace/**"
+      - "digisearch/**"
+      - ".github/workflows/deploy-digithings-stack-cloudflare.yml"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (default: main tip - promote to main first)"
+        required: false
+        default: "main"
+
+permissions:
+  contents: read
+
+# Per-run group, and never superseding: the `production` environment can
+# hold a run at the approval gate, so a shared group with
+# cancel-in-progress: true would cancel a deployment Chris already
+# approved. This is the same shape, and the same reason, as the other
+# production-gated lane in this repo (deploy-digiquant-runner.yml).
+# The serialising race between two quick merges to main is separate work
+# and is not solved here.
+concurrency:
+  group: deploy-digithings-stack-cloudflare-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: "check (pull request - validation only)"
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspace digithings-stack-cloudflare
+      - run: npm run test --workspace digithings-stack-cloudflare
+
+  check-deploy-gate:
+    name: "check (deploy gate)"
+    # No `needs`: with `needs: [check]` the merge-to-main path skipped
+    # `check`, so it skipped the gate and then skipped `deploy` - DIG-1569
+    # reproduced inside its own fix.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspace digithings-stack-cloudflare
+      - run: npm run test --workspace digithings-stack-cloudflare
+
+  deploy:
+    name: "deploy (production)"
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [check-deploy-gate]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: "Deploy stack container"
+        run: npm run deploy --workspace digithings-stack-cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

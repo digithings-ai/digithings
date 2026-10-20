@@ -24,7 +24,11 @@ from digiquant.portfolio.models.forecast_calibration import (
     calibrated_forecast_content_hash,
     calibrated_forecast_id,
 )
-from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+from digiquant.portfolio.models.pm_direction import (
+    ForecastReference,
+    PMDirectionMemo,
+    TickerDirection,
+)
 from digiquant.portfolio.models.risk_policy import (
     CapabilityLimit,
     CovarianceSnapshot,
@@ -222,7 +226,6 @@ def _memo(*tickers: str, directions: dict[str, str] | None = None) -> PMDirectio
         for idx, ticker in enumerate(tickers, start=1)
     ]
     # Attach degraded forecast refs so memo validates without inventing IDs
-    from digiquant.portfolio.models.pm_direction import ForecastReference
 
     roster = [
         entry.model_copy(

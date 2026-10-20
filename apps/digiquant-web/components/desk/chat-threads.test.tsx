@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CHAT_CLOSED, chatFailureSentence } from "../../../../clients/digiquant-tui/src/pages/chat-format";
+import { CHAT_CLOSED, chatFailureSentence } from "digiquant-tui/pages/chat-format";
 import { ChatThreadRows } from "./chat-threads";
 
 describe("desk chat threads", () => {

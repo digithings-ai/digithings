@@ -77,7 +77,12 @@ export { SkinCredit, SKIN_CREDIT_TEXT } from "./skin-credit";
 export { Thread } from "./thread.aui";
 export {
   ToolFallback,
+  ToolFallbackArgs,
   ToolFallbackAttribution,
+  ToolFallbackContent,
+  ToolFallbackResult,
+  ToolFallbackRoot,
+  ToolFallbackTrigger,
   formatToolDuration,
   type ToolFallbackRootProps,
 } from "./tool-fallback.aui";

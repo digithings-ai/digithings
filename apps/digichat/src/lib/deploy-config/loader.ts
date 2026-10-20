@@ -328,6 +328,63 @@ export type LoadDigichatConfigOptions = {
  * Load + validate config. Throws on invalid content (fail closed).
  * Missing file is OK when allowMissingFile (default) and tenants/env provide shape.
  */
+/**
+ * The placeholder token a shipped template carries. Uppercase only, because
+ * the templates write `REPLACE-FOUNDRY-ACCOUNT` and an operator-chosen agent
+ * name like `my-REPLACE-agent` is a real name, not a template.
+ */
+const TEMPLATE_PLACEHOLDER = /REPLACE-[A-Z][A-Z0-9-]*/;
+
+/** The first foundry field of a deployment that still holds a placeholder. */
+function placeholderField(deployment: DigichatDeployment | undefined): string | null {
+  const backend = deployment?.backend;
+  if (!backend || backend.type !== "foundry") return null;
+  for (const [name, value] of [
+    ["projectEndpoint", backend.projectEndpoint],
+    ["agentName", backend.agentName],
+  ] as const) {
+    if (typeof value === "string" && TEMPLATE_PLACEHOLDER.test(value)) return name;
+  }
+  return null;
+}
+
+/**
+ * A shipped template carries `REPLACE-` placeholders. Deployed as-is, the
+ * container boots and then fails every chat on a DNS lookup of
+ * `replace-foundry-account.services.ai.azure.com` (#6023). Refuse it at load
+ * time, naming the file, instead of at chat time with a name nobody can read.
+ */
+function assertRenderedDeployment(cfg: DigichatConfig, source: string): void {
+  const entries: [string, DigichatDeployment | undefined][] = [
+    ["deployment", cfg.deployment],
+    ...Object.entries(cfg.hosts ?? {}).map(
+      ([host, deployment]) => [`hosts.${host}`, deployment] as [string, DigichatDeployment | undefined],
+    ),
+  ];
+  for (const [path, deployment] of entries) {
+    const field = placeholderField(deployment);
+    if (field) {
+      throw new Error(
+        `${source}: ${path}.backend.${field} still holds a REPLACE- placeholder — render the tenant config before deploying`,
+      );
+    }
+  }
+}
+
+/**
+ * Whether any deployment in this config talks to digigraph. A deployment with
+ * no backend is a digigraph install (the chat route defaults to it), so an
+ * empty config and a registry of foundry tenants both count as "not digigraph"
+ * only when every entry says so.
+ */
+export function configUsesDigigraph(cfg: DigichatConfig): boolean {
+  const deployments = [cfg.deployment, ...Object.values(cfg.hosts ?? {})].filter(
+    (d): d is DigichatDeployment => Boolean(d),
+  );
+  if (deployments.length === 0) return true;
+  return deployments.some((d) => (d.backend?.type ?? "digigraph") !== "foundry");
+}
+
 export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): DigichatConfig {
   const env = opts.env ?? process.env;
   const path = resolveConfigPath(env);
@@ -394,6 +451,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
     );
   }
 
+  assertRenderedDeployment(merged, path);
   return applyEnvOverlay(merged, env);
 }
 

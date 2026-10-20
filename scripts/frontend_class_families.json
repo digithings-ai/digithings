@@ -1,6 +1,6 @@
 {
   "_note": "Baseline of app-local CSS component-class families (first hyphen segment of classes DEFINED in each app's own css). The frontend canon guard (#1421) fails when an app grows a NEW family: new UI belongs in the reference + @digithings/ui first (packages/ui/MIGRATION.md). To extend deliberately, add the prefix here in the same PR with a justifying comment in that PR's body.",
-  "_frozen": "2026-07-08 \u2014 post component-consolidation epic (#1414)",
+  "_frozen": "2026-07-08 — post component-consolidation epic (#1414)",
   "_dq": "dashboard .dq-slab is the BLEND v0.1 tonal slab (surface + hairline, radius 0) that replaced the retired .glass-card family. MotionLayer reveals .dq-slab.",
   "_acct": "dashboard .acct-* is the digiweb account family (login, signup, session, settings) born in apps/reference/app/account/account.css. dashboard consumes the same prefix rather than forking a local one (PR #3264).",
   "_dboot": "digithings-web .dboot-* is the @digithings/ui digichat boot-loader family (packages/ui/src/styles/digichat-boot-loader.css); the site shell overrides one dock rule for the wide composer (ChatEmbedShell); same precedent as .tl-*.",
@@ -42,7 +42,8 @@
     "pixel",
     "integrations",
     "ground",
-    "band"
+    "band",
+    "vela"
   ],
   "dashboard": [
     "acct",
@@ -77,7 +78,8 @@
   "_dq_pixel": "digiquant-web .pixel-* and .integrations-* are the digithings wordmark rules the integrations band reuses (same composition as digithings-web .pixel-*). App-local landing CSS. The band's look stays where it is; this entry only names the families the census already sees.",
   "_dq_desk": "digiquant-web .scripted-* is the one-rule row-gap under the scripted digichat thread: the slot name aui_message-group cannot be an arbitrary Tailwind variant (the underscore becomes a space and the stylesheet fails to parse). .desk-* and .cell-* are the embedded terminal mosaic in terminal-desk.module.css. App-local landing composition, same status as digithings-web .pixel-* / .section-*. .cmd / .cmd-in / .cmd-list are the desk path field ported from the terminal draft. .rail / .nav-row / .nav-tri / .nav-path are the folder sidebar from the same draft. .desk-pick / .desk-list are the desk selector. .ground is the desk chat scope that clears the digichat skin fill so the thread sits on the desk (desk-chat.module.css). The look stays where it is; this entry only names the family the census already sees.",
   "_landing": "digithings-web .pixel-* (PixelField/PixelWordmark), .hero-* (the staged hero entrance) and .section-* (the numbered section eyebrow + gutter rail) are the home landing's own composition (#4895 / #4424), owner-picked; app-local like .whyx-*. If the landing's pixel mark or section eyebrow is promoted into @digithings/ui, delete the matching entry with the app block.",
-  "_stack": "digithings-web .stack-* is the /variants/mixed stack showcase (branch claude/home-variants): the bento grid as a map with a travelling focus, pinned by .stack-pin and dimmed per .stack-cell.is-active. Exploration only \u2014 if the showcase is picked it moves into @digithings/ui (data-layout styles + component + tests) and this entry is deleted with the app block.",
-  "_faq": "digithings-web .faq-morph* is the #faq band's scroll-driven zoom-morph (branch claude/home-variants): the chat container starts large over the frame and retracts into the right column as the FAQ list rises in on the left (#4429). Same shape and same status as the .stack-* family \u2014 the pinned track and sticky pin live in the app sheet because the geometry is this band's own two-column grid; if the owner picks the morph it promotes into @digithings/ui and this entry is deleted with the app block.",
-  "_whyx": "whyx \u2014 the #why band's composition (#4429 round 15): `whyx*` (the rented/owned container diagrams, the guided walk, the capability table and the cost model). App-local because the composition is digithings.ai's own argument, folded in from the /variants/why exploration the owner picked."
+  "_stack": "digithings-web .stack-* is the /variants/mixed stack showcase (branch claude/home-variants): the bento grid as a map with a travelling focus, pinned by .stack-pin and dimmed per .stack-cell.is-active. Exploration only — if the showcase is picked it moves into @digithings/ui (data-layout styles + component + tests) and this entry is deleted with the app block.",
+  "_faq": "digithings-web .faq-morph* is the #faq band's scroll-driven zoom-morph (branch claude/home-variants): the chat container starts large over the frame and retracts into the right column as the FAQ list rises in on the left (#4429). Same shape and same status as the .stack-* family — the pinned track and sticky pin live in the app sheet because the geometry is this band's own two-column grid; if the owner picks the morph it promotes into @digithings/ui and this entry is deleted with the app block.",
+  "_whyx": "whyx — the #why band's composition (#4429 round 15): `whyx*` (the rented/owned container diagrams, the guided walk, the capability table and the cost model). App-local because the composition is digithings.ai's own argument, folded in from the /variants/why exploration the owner picked.",
+  "_vela": "digiquant-web .vela-* is the LuxAlgo Vela widget namespace, not app-built UI: the desk wrapper (.vela-host, components/desk/vela-pane.tsx) and the vendor callout class the app targets to enforce the radius/focus canon on vendor-injected chrome. No equivalent family exists in @digithings/ui because the widget injects its own stylesheet; promoted rules cannot reach it."
 }

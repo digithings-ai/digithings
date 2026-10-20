@@ -26,6 +26,8 @@ from digiquant.tool_refusals import (
     refusal_message,
 )
 
+pytestmark = pytest.mark.unit
+
 #: Every legal value of the variable, including the ones that look like they
 #: might un-refuse something. Counsel's condition 3 asks for "every legal value",
 #: so adversarial strings are included deliberately — each must fail to permit.

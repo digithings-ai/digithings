@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
 from digiquant.indicators.dpsd import DPSDTrend
+
+pytestmark = pytest.mark.unit
 
 
 def _feed(dpsd: DPSDTrend, prices: list[float]) -> None:
@@ -75,12 +78,14 @@ class TestDPSDTrend:
             ema_length=5,
             include_ema=True,
         )
+        # A monotone rise holds trend == 1 with no transition, so drive a
+        # fall (trend -> -1) then a rise (trend -> 1): exactly one crossing.
         crossups = []
-        for i in range(60):
+        for i in list(range(400, 0, -10)) + list(range(0, 600, 10)):
             dpsd.update(src=float(i), close=float(i))
             if dpsd.initialized:
                 crossups.append(dpsd.crossed_up())
-        assert sum(crossups) <= 5
+        assert sum(crossups) == 1
 
     def test_percentile_type_60_40(self) -> None:
         dpsd = DPSDTrend(

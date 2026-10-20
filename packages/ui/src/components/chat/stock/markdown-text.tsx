@@ -42,7 +42,7 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
 
 const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
   const stableComponents = useShallowStable(components);
-  const markdownComponents = useMemo(() => {
+    const markdownComponents = useMemo(() => {
     if (!stableComponents) return defaultComponents;
     return {
       ...defaultComponents,

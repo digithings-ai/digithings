@@ -15,10 +15,12 @@ const SYNC_SECRET = "test-sync-secret";
 const SECRET_KEY = "sb_secret_fakevalue";
 const PUBLISHABLE_KEY = "sb_publishable_fakevalue";
 const GRANTED_EMAIL = "granted@example.test";
-const SUPABASE_URL = "http://127.0.0.1:9";
+const CORE_SUPABASE_URL = "https://core-project.supabase.co";
+const TWELVEX_SUPABASE_URL = "http://127.0.0.1:9";
 
 type Seen = {
   path: string;
+  host: string;
   apikey: string | null;
   authorization: string | null;
   method: string;
@@ -29,7 +31,8 @@ type Seen = {
 function newKeyEnv(extra: FxHubEnv = {}): FxHubEnv {
   return {
     FX_HUB_GRANT_SYNC_SECRET: SYNC_SECRET,
-    SUPABASE_URL,
+    SUPABASE_URL: CORE_SUPABASE_URL,
+    TWELVEX_SUPABASE_URL,
     SUPABASE_SECRET_KEYS: JSON.stringify({ default: SECRET_KEY }),
     SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: PUBLISHABLE_KEY }),
     ...extra,
@@ -61,6 +64,7 @@ function installFake(opts: {
     const body = req.method === "GET" || req.method === "HEAD" ? null : await req.text();
     seen.push({
       path: url.pathname,
+      host: url.host,
       apikey: req.headers.get("apikey"),
       authorization: req.headers.get("authorization"),
       method: req.method,
@@ -179,11 +183,46 @@ describe("fx-hub-session", () => {
     expect(body.ok).toBe(false);
     expect(body.code).toBe("API_KEYS_UNCONFIGURED");
     expect(body.message).toBe(
-      "project API keys not configured: SUPABASE_URL, SUPABASE_SECRET_KEYS[default], SUPABASE_PUBLISHABLE_KEYS[default]",
+      "project API keys not configured: TWELVEX_SUPABASE_URL, SUPABASE_SECRET_KEYS[default], SUPABASE_PUBLISHABLE_KEYS[default]",
     );
     expect(body.message).not.toContain("legacy-anon-jwt");
     expect(body.message).not.toContain("legacy-service-role-jwt");
     expect(seen).toHaveLength(0);
+  });
+
+  it("targets the twelve-x project URL for the grant lookup, the magic link and the OTP, never the core URL", async () => {
+    const seen = installFake({ granted: true });
+
+    // (a) all three calls the edge function makes go to the twelve-x project.
+    const res = await handleFxHubSession(post({ email: GRANTED_EMAIL }), newKeyEnv());
+    expect(res.status).toBe(200);
+    expect(seen.map((call) => call.path)).toEqual([
+      "/rest/v1/fx_hub_grants",
+      "/auth/v1/admin/generate_link",
+      "/auth/v1/verify",
+    ]);
+    for (const call of seen) {
+      expect(call.host).toBe("127.0.0.1:9");
+    }
+
+    // (b) the core project URL is in the environment and is still never used.
+    expect(seen.some((call) => call.host === "core-project.supabase.co")).toBe(false);
+
+    // (c) without the twelve-x URL the module still refuses, and says which key is missing.
+    const refusedCalls = installFake({ granted: true });
+    const refused = await handleFxHubSession(post({ email: GRANTED_EMAIL }), {
+      FX_HUB_GRANT_SYNC_SECRET: SYNC_SECRET,
+      SUPABASE_URL: CORE_SUPABASE_URL,
+      SUPABASE_SECRET_KEYS: JSON.stringify({ default: SECRET_KEY }),
+      SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: PUBLISHABLE_KEY }),
+    });
+    const refusedBody = (await refused.json()) as { code: string; message: string };
+    expect(refused.status).toBe(500);
+    expect(refusedBody.code).toBe("API_KEYS_UNCONFIGURED");
+    expect(refusedBody.message).toBe(
+      "project API keys not configured: TWELVEX_SUPABASE_URL",
+    );
+    expect(refusedCalls).toHaveLength(0);
   });
 
   it("reports unparseable and empty key dictionaries", async () => {
@@ -191,7 +230,7 @@ describe("fx-hub-session", () => {
       const seen = installFake({ granted: true });
       const res = await handleFxHubSession(post({ email: GRANTED_EMAIL }), {
         FX_HUB_GRANT_SYNC_SECRET: SYNC_SECRET,
-        SUPABASE_URL,
+        TWELVEX_SUPABASE_URL,
         SUPABASE_SECRET_KEYS: raw,
         SUPABASE_PUBLISHABLE_KEYS: raw,
       });
@@ -211,7 +250,7 @@ describe("fx-hub-session", () => {
     const seen = installFake({ granted: true });
     const res = await handleFxHubSession(post({ email: GRANTED_EMAIL }), {
       FX_HUB_GRANT_SYNC_SECRET: SYNC_SECRET,
-      SUPABASE_URL,
+      TWELVEX_SUPABASE_URL,
       SUPABASE_SECRET_KEYS: JSON.stringify({ other: SECRET_KEY }),
       SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ other: PUBLISHABLE_KEY }),
     });

@@ -355,6 +355,14 @@ is taken, follow the precedent set by
 `git revert` it**, because the deleted digichat lane pinned no `wranglerVersion` for a
 documented reason (4.28.0 rejects `deploy --message`) and re-deriving it keeps that.
 
+**Update (2026-10-20, DIG-4612):** that decision has been taken for the **stack** lane.
+`deploy-digithings-stack-cloudflare.yml` is re-derived on `develop` - by the same precedent,
+not by a revert - because the reason the lane was deleted is gone: the Container id is derived
+from the deploying commit, so a deploy can no longer ship the previous instance, and the lane
+deploys through `npm run deploy` (the rev-injecting wrapper) instead of a bare
+`npx wrangler deploy`. The **digichat** lane is NOT restored: DIG-2843's "document as-is"
+still stands for `apps/digichat-cloudflare`, which keeps shipping out-of-band by hand.
+
 #### Deploying by hand today
 
 Prerequisites: Workers Paid; a Docker CLI; `npx wrangler login` into the digithings Cloudflare

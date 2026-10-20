@@ -9,7 +9,7 @@ import {
   panelData,
   type ChartType,
   type PanelMode,
-} from "../../../../clients/digiquant-tui/src/pages/panel-shape";
+} from "digiquant-tui/pages/panel-shape";
 import { PanelChart } from "./panel-chart";
 
 type Pick = { mode?: PanelMode; chart?: ChartType };

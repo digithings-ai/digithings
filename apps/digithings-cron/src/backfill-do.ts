@@ -17,6 +17,7 @@
  * collide on a key even if they are ever pointed at the same storage.
  */
 
+import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./env";
 
 /**
@@ -105,19 +106,18 @@ export function isStaleClaim(record: RemediationRecord, nowMs: number): boolean 
   return age > IN_FLIGHT_TTL_MS;
 }
 
-export class BackfillLedger {
-  constructor(
-    private readonly state: DurableObjectState,
-    env: Env,
-  ) {
-    void env;
+export class BackfillLedger extends DurableObject<Env> {
+  /** `extends DurableObject` is what makes this class callable over RPC; a
+   *  class that does not extend it has no callable methods on its stub. */
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
   }
 
   /** Current state per date. Absent dates read as "unknown" (never remediated). */
   async status(dates: string[]): Promise<Record<string, RemediationState | "unknown">> {
     const out: Record<string, RemediationState | "unknown"> = {};
     for (const date of dates) {
-      const record = await this.state.storage.get<RemediationRecord>(ledgerKey(date));
+      const record = await this.ctx.storage.get<RemediationRecord>(ledgerKey(date));
       out[date] = record?.state ?? "unknown";
     }
     return out;
@@ -142,7 +142,7 @@ export class BackfillLedger {
     const skipped: string[] = [];
     const nowMs = Date.parse(now);
 
-    await this.state.storage.transaction(async (txn) => {
+    await this.ctx.storage.transaction(async (txn) => {
       for (const date of dates) {
         const existing = await txn.get<RemediationRecord>(ledgerKey(date));
         const staleClaim = existing?.state === "in_flight" && isStaleClaim(existing, nowMs);
@@ -180,7 +180,7 @@ export class BackfillLedger {
       // moment the date settles, so it is dropped rather than left behind.
       const { reclaimed_from: _stale, ...rest } = record;
       void _stale;
-      await this.state.storage.put<RemediationRecord>(ledgerKey(date), {
+      await this.ctx.storage.put<RemediationRecord>(ledgerKey(date), {
         ...rest,
         state: "done",
         completed_at: now,
@@ -211,14 +211,14 @@ export class BackfillLedger {
       if (record.reclaimed_from === "done") {
         // Put back the remediation this forced claim borrowed. `completed_at`
         // is the original acceptance, so it is kept, not stamped with `now`.
-        await this.state.storage.put<RemediationRecord>(key, {
+        await this.ctx.storage.put<RemediationRecord>(key, {
           state: "done",
           claimed_at: record.claimed_at,
           completed_at: record.completed_at,
         });
         return;
       }
-      await this.state.storage.put<RemediationRecord>(key, {
+      await this.ctx.storage.put<RemediationRecord>(key, {
         ...record,
         state: "dispatch_suppressed",
         suppressed_at: now,
@@ -244,7 +244,7 @@ export class BackfillLedger {
   async release(dates: string[], claimedAt: string): Promise<void> {
     await this.settle("release", dates, claimedAt, async ({ date, record }) => {
       if (record.reclaimed_from === "done") {
-        await this.state.storage.put<RemediationRecord>(ledgerKey(date), {
+        await this.ctx.storage.put<RemediationRecord>(ledgerKey(date), {
           state: "done",
           claimed_at: record.claimed_at,
           completed_at: record.completed_at,
@@ -252,7 +252,7 @@ export class BackfillLedger {
         return;
       }
       if (record.state === "in_flight") {
-        await this.state.storage.delete(ledgerKey(date));
+        await this.ctx.storage.delete(ledgerKey(date));
       }
     });
   }
@@ -278,7 +278,7 @@ export class BackfillLedger {
     write: (record: { date: string; record: RemediationRecord }) => Promise<void>,
   ): Promise<void> {
     for (const date of dates) {
-      const record = await this.state.storage.get<RemediationRecord>(ledgerKey(date));
+      const record = await this.ctx.storage.get<RemediationRecord>(ledgerKey(date));
       if (!record) {
         this.logSkipped(op, date, "record_missing", undefined);
         continue;

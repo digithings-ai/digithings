@@ -5,9 +5,9 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 
+import digibase.service_auth as service_auth
 import httpx
 import pytest
-from digibase.service_auth import ServiceAuthError, clear_service_jwt_cache, get_service_jwt
 
 pytestmark = pytest.mark.unit
 
@@ -29,18 +29,18 @@ def test_exchange_and_cache(monkeypatch: pytest.MonkeyPatch) -> None:
             return client.post(url, json=payload).json()
 
     monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
-    clear_service_jwt_cache()
-    assert get_service_jwt() == "jwt-1"
-    assert get_service_jwt() == "jwt-1"
+    service_auth.clear_service_jwt_cache()
+    assert service_auth.get_service_jwt() == "jwt-1"
+    assert service_auth.get_service_jwt() == "jwt-1"
     assert len(calls) == 1
 
 
 def test_missing_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DIGIQUANT_DIGIKEY_API_KEY", raising=False)
-    clear_service_jwt_cache()
+    service_auth.clear_service_jwt_cache()
     try:
-        get_service_jwt()
-    except ServiceAuthError:
+        service_auth.get_service_jwt()
+    except service_auth.ServiceAuthError:
         return
     raise AssertionError("expected ServiceAuthError")
 
@@ -73,20 +73,20 @@ def test_distinct_keys_sharing_prefix_get_distinct_entries(
             return client.post(url, json=payload).json()
 
     monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
-    clear_service_jwt_cache()
+    service_auth.clear_service_jwt_cache()
     monkeypatch.setenv("DIGIQUANT_DIGIKEY_API_KEY", key_a)
-    assert get_service_jwt() == "jwt-a"
+    assert service_auth.get_service_jwt() == "jwt-a"
     monkeypatch.setenv("DIGIQUANT_DIGIKEY_API_KEY", key_b)
-    assert get_service_jwt() == "jwt-b"
+    assert service_auth.get_service_jwt() == "jwt-b"
     assert len(calls) == 2
 
 
 def test_missing_digikey_url_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGIQUANT_DIGIKEY_API_KEY", "dgk_live_testkey1234567890")
     monkeypatch.delenv("DIGIKEY_URL", raising=False)
-    clear_service_jwt_cache()
-    with pytest.raises(ServiceAuthError):
-        get_service_jwt()
+    service_auth.clear_service_jwt_cache()
+    with pytest.raises(service_auth.ServiceAuthError):
+        service_auth.get_service_jwt()
 
 
 def test_empty_access_token_raises(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,9 +104,9 @@ def test_empty_access_token_raises(monkeypatch: pytest.MonkeyPatch) -> None:
             return client.post(url, json=payload).json()
 
     monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
-    clear_service_jwt_cache()
-    with pytest.raises(ServiceAuthError, match="empty token"):
-        get_service_jwt()
+    service_auth.clear_service_jwt_cache()
+    with pytest.raises(service_auth.ServiceAuthError, match="empty token"):
+        service_auth.get_service_jwt()
 
 
 def test_exchange_failure_raises(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -117,9 +117,9 @@ def test_exchange_failure_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         raise httpx.ConnectError("boom")
 
     monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
-    clear_service_jwt_cache()
-    with pytest.raises(ServiceAuthError, match="exchange failed"):
-        get_service_jwt()
+    service_auth.clear_service_jwt_cache()
+    with pytest.raises(service_auth.ServiceAuthError, match="exchange failed"):
+        service_auth.get_service_jwt()
 
 
 def test_expired_entry_reexchanges(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,16 +144,16 @@ def test_expired_entry_reexchanges(monkeypatch: pytest.MonkeyPatch) -> None:
             return client.post(url, json=payload).json()
 
     monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
-    clear_service_jwt_cache()
+    service_auth.clear_service_jwt_cache()
     t0 = time.monotonic()
-    assert get_service_jwt() == "jwt-1"
+    assert service_auth.get_service_jwt() == "jwt-1"
     assert len(calls) == 1
 
     def _later() -> float:
         return t0 + 1000.0
 
     monkeypatch.setattr(time, "monotonic", _later)
-    assert get_service_jwt() == "jwt-2"
+    assert service_auth.get_service_jwt() == "jwt-2"
     assert len(calls) == 2
 
 
@@ -172,9 +172,9 @@ def test_null_access_token_raises(monkeypatch: pytest.MonkeyPatch) -> None:
             return client.post(url, json=payload).json()
 
     monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
-    clear_service_jwt_cache()
-    with pytest.raises(ServiceAuthError, match="empty token"):
-        get_service_jwt()
+    service_auth.clear_service_jwt_cache()
+    with pytest.raises(service_auth.ServiceAuthError, match="empty token"):
+        service_auth.get_service_jwt()
 
 
 def test_distinct_digikey_bases_get_distinct_entries(
@@ -200,10 +200,10 @@ def test_distinct_digikey_bases_get_distinct_entries(
             return client.post(url, json=payload).json()
 
     monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
-    clear_service_jwt_cache()
-    assert get_service_jwt() == "jwt-1"
+    service_auth.clear_service_jwt_cache()
+    assert service_auth.get_service_jwt() == "jwt-1"
     monkeypatch.setenv("DIGIKEY_URL", "http://digikey-b:8005")
-    assert get_service_jwt() == "jwt-2"
+    assert service_auth.get_service_jwt() == "jwt-2"
     assert calls == ["digikey-a", "digikey-b"]
 
 
@@ -230,15 +230,14 @@ def test_comma_scope_tuple_collision_regression(
             return client.post(url, json=payload).json()
 
     monkeypatch.setattr("digibase.service_auth._http_post", _fake_post)
-    clear_service_jwt_cache()
+    service_auth.clear_service_jwt_cache()
     # ``",".join(("a,b",)) == ",".join(("a", "b")) == "a,b"`` — these must not share.
-    assert get_service_jwt(scopes=("a,b",)) == "jwt-1"
-    assert get_service_jwt(scopes=("a", "b")) == "jwt-2"
+    assert service_auth.get_service_jwt(scopes=("a,b",)) == "jwt-1"
+    assert service_auth.get_service_jwt(scopes=("a", "b")) == "jwt-2"
     assert len(calls) == 2
 
 
 def test_http_post_uses_shared_sync_client_factory() -> None:
-    import digibase.service_auth as service_auth
 
     from digibase import http_client
 
@@ -248,7 +247,6 @@ def test_http_post_uses_shared_sync_client_factory() -> None:
 def test_http_post_routes_through_sync_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import digibase.service_auth as service_auth
 
     seen = []
 
@@ -282,7 +280,6 @@ def _patch_mock_transport(
     shared ``http_client`` module) so each attempt builds a client backed by an
     ``httpx.MockTransport``.
     """
-    import digibase.service_auth as service_auth
 
     def fake_sync_client(**kwargs: object) -> httpx.Client:
         return httpx.Client(transport=httpx.MockTransport(handler))
@@ -312,14 +309,14 @@ def test_first_call_read_timeout_is_retried(
         )
 
     _patch_mock_transport(monkeypatch, handler)
-    clear_service_jwt_cache()
+    service_auth.clear_service_jwt_cache()
 
-    assert get_service_jwt() == "jwt-1"
+    assert service_auth.get_service_jwt() == "jwt-1"
     assert len(calls) == 2
     assert len(sleeps) == 1
 
     # The token won by a retry is cached exactly like a first-try success.
-    assert get_service_jwt() == "jwt-1"
+    assert service_auth.get_service_jwt() == "jwt-1"
     assert len(calls) == 2
 
 
@@ -336,10 +333,10 @@ def test_401_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
         return httpx.Response(401, json={"detail": "invalid api key"})
 
     _patch_mock_transport(monkeypatch, handler)
-    clear_service_jwt_cache()
+    service_auth.clear_service_jwt_cache()
 
-    with pytest.raises(ServiceAuthError, match="exchange failed"):
-        get_service_jwt()
+    with pytest.raises(service_auth.ServiceAuthError, match="exchange failed"):
+        service_auth.get_service_jwt()
     assert len(calls) == 1
     assert sleeps == []
 
@@ -359,10 +356,10 @@ def test_persistent_read_timeout_raises_after_bounded_attempts(
         raise httpx.ReadTimeout("still cold", request=request)
 
     _patch_mock_transport(monkeypatch, handler)
-    clear_service_jwt_cache()
+    service_auth.clear_service_jwt_cache()
 
-    with pytest.raises(ServiceAuthError, match="exchange failed"):
-        get_service_jwt()
+    with pytest.raises(service_auth.ServiceAuthError, match="exchange failed"):
+        service_auth.get_service_jwt()
     # 1 initial attempt + 2 retries.
     assert len(calls) == 3
     assert len(sleeps) == 2
@@ -381,9 +378,9 @@ def test_server_error_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
         return httpx.Response(503, json={"detail": "unavailable"})
 
     _patch_mock_transport(monkeypatch, handler)
-    clear_service_jwt_cache()
+    service_auth.clear_service_jwt_cache()
 
-    with pytest.raises(ServiceAuthError, match="exchange failed"):
-        get_service_jwt()
+    with pytest.raises(service_auth.ServiceAuthError, match="exchange failed"):
+        service_auth.get_service_jwt()
     assert len(calls) == 1
     assert sleeps == []

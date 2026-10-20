@@ -48,6 +48,12 @@ PREFLIGHT_PATHS = (
 )
 
 
+# Operator shell-outs (execute_at_open and friends) are batch jobs: the bound is
+# deliberately generous, but it is a bound — a hung child must not wedge the run.
+SUBPROCESS_TIMEOUT_SECONDS = 3600
+TIMEOUT_EXIT_CODE = 124
+
+
 def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
@@ -62,7 +68,13 @@ def _run(cmd: list[str], dry_run: bool = False) -> int:
     print(f"$ {' '.join(cmd)}")
     if dry_run:
         return 0
-    r = subprocess.run(cmd, cwd=str(REPO_ROOT))
+    try:
+        r = subprocess.run(cmd, cwd=str(REPO_ROOT), timeout=SUBPROCESS_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        print(
+            f"TIMEOUT: {' '.join(cmd)} exceeded {SUBPROCESS_TIMEOUT_SECONDS}s"
+        )
+        return TIMEOUT_EXIT_CODE
     return int(r.returncode)
 
 
