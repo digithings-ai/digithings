@@ -1,13 +1,12 @@
 # P2.2 — Confirm twelve-x research publish matches the stage-1 board
 
-> 🛑 **HELD — 2026-10-05 (DIG-503). Do not implement this package.** This
-> package would wire the research vendor's session-heartbeat workflow and its
-> private config constants into the open-source product; the table below has had
-> those names removed for that reason. The vendor's Terms prohibit the access
-> method, and publishing that path from this public repository is the exposure
-> being closed. See [`../HOLD-Primarket.md`](../HOLD-Primarket.md). The hold
-> lifts only when DIG-478 is decided **and** Counsel confirms the exposure is
-> resolved.
+> 🛑 **HELD — 2026-10-05 (DIG-503). Do not implement this package.** The
+> producer-scope table below names the research vendor's session-heartbeat
+> workflow and its private config constants. The vendor's Terms prohibit the
+> access method, and publishing that path from this public repository is the
+> exposure being closed. See [`../HOLD-Primarket.md`](../HOLD-Primarket.md). The
+> hold lifts only when DIG-478 is decided **and** Counsel confirms the exposure
+> is resolved.
 
 **Lane:** Needs a GitHub token that can read `digithings-ai/twelve-x`, then stronger review. OpenCode free is the wrong lane until step 0 passes.
 

@@ -2,6 +2,8 @@ import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
 import {
   DIGIGRAPH_UNAVAILABLE_MESSAGE,
+  HOSTED_WEB_SEARCH_SCOPE,
+  INSUFFICIENT_LICENSE_SCOPE_CODE,
   RATE_LIMIT_RETRY_CODE,
   UPSTREAM_BOOT_MAX_ATTEMPTS,
   UPSTREAM_BOOT_MAX_ELAPSED_MS,
@@ -53,6 +55,26 @@ it("does not stream the upstream error body to the browser", async () => {
   expect(body).not.toContain('"type":"text-delta"');
   expect(body).not.toContain('"type":"text-start"');
   expect(errorLog).toHaveBeenCalled();
+});
+
+it("sends the curated tenant model in the request body", async () => {
+  let sent: { model?: string } | null = null;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    sent = JSON.parse(String(init?.body)) as { model?: string };
+    return new Response("", { status: 200 });
+  });
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    model: "deepseek/deepseek-v4.1-flash",
+  });
+  await new Response(res.body).text();
+
+  expect(sent?.model).toBe("deepseek/deepseek-v4.1-flash");
 });
 
 // #3910: a real 200 always carries a non-null body even when the upstream sends
@@ -1713,4 +1735,95 @@ it("stops a boot wait when the request is aborted", async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+const HOSTED_WEB_SEARCH_DENIAL = JSON.stringify({
+  error: INSUFFICIENT_LICENSE_SCOPE_CODE,
+  message:
+    `Hosted capability requires license scope '${HOSTED_WEB_SEARCH_SCOPE}'. ` +
+    "Serve plain inference without the hosted headers, or provision a license that entitles this capability.",
+});
+
+function headerBag(init: RequestInit | undefined): Record<string, string> {
+  const headers = new Headers(init?.headers);
+  return {
+    web: headers.get("x-digi-enable-web-search") ?? "",
+    engine: headers.get("x-digi-search-engine") ?? "",
+    corpus: headers.get("x-digi-corpus-index") ?? "",
+  };
+}
+
+it("retries a hosted-web-search 403 once without the hosted web-search headers", async () => {
+  const seen: Array<Record<string, string>> = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    seen.push(headerBag(init));
+    if (seen.length === 1) {
+      return new Response(HOSTED_WEB_SEARCH_DENIAL, {
+        status: 403,
+        statusText: "Forbidden",
+      });
+    }
+    return new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    );
+  });
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("What is digigraph?")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {
+      Authorization: "Bearer from-upstream-headers",
+      "X-Digi-Enable-Web-Search": "1",
+      "X-Digi-Search-Engine": "exa",
+      "X-Digi-Corpus-Index": "docs",
+    },
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(seen).toHaveLength(2);
+  expect(seen[0]).toEqual({ web: "1", engine: "exa", corpus: "docs" });
+  expect(seen[1]).toEqual({ web: "", engine: "", corpus: "docs" });
+  expect(body).toContain("Hello.");
+  expect(body).not.toContain(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(errorLog.mock.calls.some((call) => String(call[0]).includes(HOSTED_WEB_SEARCH_SCOPE))).toBe(
+    true,
+  );
+});
+
+it("does not retry a corpus license denial by dropping corpus headers", async () => {
+  const seen: Array<Record<string, string>> = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    seen.push(headerBag(init));
+    return new Response(
+      JSON.stringify({
+        error: INSUFFICIENT_LICENSE_SCOPE_CODE,
+        message: "Hosted capability requires license scope 'digisearch-corpus'.",
+      }),
+      { status: 403, statusText: "Forbidden" },
+    );
+  });
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {
+      "X-Digi-Enable-Web-Search": "1",
+      "X-Digi-Corpus-Index": "docs",
+    },
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(seen).toHaveLength(1);
+  expect(seen[0]?.corpus).toBe("docs");
+  expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
 });

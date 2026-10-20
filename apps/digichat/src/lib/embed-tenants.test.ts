@@ -82,6 +82,8 @@ describe("parseEmbedTenants", () => {
                 default: true,
                 token: "edge-test-token",
                 authHeader: "x-digi-mcp-key",
+                allowedTools: ["search_tickets", "get_ticket"],
+                mutatingTools: [],
               },
               {
                 id: "digivault",
@@ -106,6 +108,8 @@ describe("parseEmbedTenants", () => {
           default: true,
           token: "edge-test-token",
           authHeader: "x-digi-mcp-key",
+          allowedTools: ["search_tickets", "get_ticket"],
+          mutatingTools: [],
         },
         {
           id: "digivault",
@@ -118,6 +122,128 @@ describe("parseEmbedTenants", () => {
       allowUserServers: false,
       allowAddForm: false,
     });
+  });
+
+  it("keeps an MCP tool allowlist on an operator server row (DIG-284)", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp: {
+            servers: [
+              {
+                id: "zammad",
+                url: "http://zammad-mcp:8770/mcp",
+                // RAW MCP names — bare, never zammad_-prefixed.
+                allowedTools: ["list_tickets", "get_ticket"],
+              },
+              {
+                id: "digivault",
+                url: "http://digivault-mcp:8769/mcp",
+                allowedTools: ["search_vault"],
+                mutatingTools: [],
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const servers = reg.get("occ.digithings.ai")?.mcp?.servers;
+    // Exact values, not truthiness: a broken parser that dropped the key would
+    // still leave two server rows in place.
+    expect(servers?.[0].allowedTools).toEqual(["list_tickets", "get_ticket"]);
+    expect(servers?.[1].allowedTools).toEqual(["search_vault"]);
+    // Explicit [] is preserved — "nothing on this row mutates".
+    expect(servers?.[1].mutatingTools).toEqual([]);
+    // Absent keys stay absent, on the row and on the parsed object.
+    expect(servers?.[0]).not.toHaveProperty("mutatingTools");
+    expect(servers?.[0].mutatingTools).toBeUndefined();
+  });
+
+  it("drops an out-of-bounds MCP tool allowlist whole, never truncating it", () => {
+    const withAllowed = (allowedTools: unknown) =>
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp: { servers: [{ id: "zammad", url: "http://zammad-mcp:8770/mcp", allowedTools }] },
+        },
+      });
+    const firstServer = (allowedTools: unknown) =>
+      parseEmbedTenants(withAllowed(allowedTools)).get("occ.digithings.ai")?.mcp?.servers[0];
+
+    // 257 entries (bound 256): dropped whole, NOT trimmed to 256.
+    const tooMany = Array.from({ length: 257 }, (_, i) => `tool_${i}`);
+    const many = firstServer(tooMany);
+    expect(many).not.toHaveProperty("allowedTools");
+    expect(many?.allowedTools).toBeUndefined();
+
+    // A single 65-char entry (bound 64): the whole list goes, not just that name.
+    const tooLong = ["a".repeat(65)];
+    const long = firstServer(tooLong);
+    expect(long).not.toHaveProperty("allowedTools");
+    expect(long?.allowedTools).toBeUndefined();
+
+    // A non-string entry also fails closed.
+    const nonString = firstServer(["list_tickets", 7]);
+    expect(nonString).not.toHaveProperty("allowedTools");
+    expect(nonString?.allowedTools).toBeUndefined();
+
+    // Control: a list exactly at both bounds survives intact and in order.
+    const atBound = Array.from({ length: 256 }, (_, i) => `t${i}`.padEnd(64, "x"));
+    const ok = firstServer(atBound);
+    expect(ok?.allowedTools).toHaveLength(256);
+    expect(ok?.allowedTools?.[255]).toBe(atBound[255]);
+  });
+
+  it("treats an empty allowedTools as absent but preserves an empty mutatingTools", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp: {
+            servers: [
+              { id: "zammad", url: "http://zammad-mcp:8770/mcp", allowedTools: [], mutatingTools: [] },
+            ],
+          },
+        },
+      }),
+    );
+    const server = reg.get("occ.digithings.ai")?.mcp?.servers[0];
+    expect(server).not.toHaveProperty("allowedTools");
+    expect(server?.allowedTools).toBeUndefined();
+    expect(server?.mutatingTools).toEqual([]);
+  });
+
+  it("rejects a non-array MCP tool allowlist", () => {
+    const withMcp = (mcp: unknown) =>
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp,
+        },
+      });
+    expect(() =>
+      parseEmbedTenants(
+        withMcp({ servers: [{ id: "zammad", url: "http://zammad-mcp:8770/mcp", allowedTools: "list_tickets" }] }),
+      ),
+    ).toThrow(/mcp\.servers\[0\]\.allowedTools must be an array/);
+    expect(() =>
+      parseEmbedTenants(
+        withMcp({ servers: [{ id: "zammad", url: "http://zammad-mcp:8770/mcp", mutatingTools: {} }] }),
+      ),
+    ).toThrow(/mcp\.servers\[0\]\.mutatingTools must be an array/);
   });
 
   it("rejects malformed MCP setup values", () => {
@@ -478,8 +604,8 @@ describe("parseEmbedTenants", () => {
           ...keys,
         },
       });
-    const reg = parseEmbedTenants(entry({ view: "detailed", thinking: "open" }));
-    expect(reg.get("example.com")?.view).toBe("detailed");
+    const reg = parseEmbedTenants(entry({ view: "verbose", thinking: "open" }));
+    expect(reg.get("example.com")?.view).toBe("verbose");
     expect(reg.get("example.com")?.thinking).toBe("open");
     expect(() => parseEmbedTenants(entry({ view: "expanded" }))).toThrow(/view/);
     expect(() => parseEmbedTenants(entry({ thinking: "yes" }))).toThrow(/thinking/);
@@ -1003,5 +1129,31 @@ describe("isPlanTierSatisfied", () => {
   it("denies unknown/spoofed tier strings", () => {
     expect(isPlanTierSatisfied(deskCfg, "premium")).toBe(false);
     expect(isPlanTierSatisfied(deskCfg, "")).toBe(false);
+  });
+});
+
+describe("lockSessionControls (DIG-1210)", () => {
+  const entry = (lock: unknown) => ({
+    "example.com": {
+      slug: "example",
+      backend: { type: "digigraph" as const },
+      gateMode: "ungated" as const,
+      token: "t",
+      ...(lock === undefined ? {} : { lockSessionControls: lock }),
+    },
+  });
+
+  it("parses true and keeps it out of the client projection", () => {
+    const registry = parseEmbedTenants(JSON.stringify(entry(true)));
+    expect(registry.get("example.com")?.lockSessionControls).toBe(true);
+  });
+
+  it("leaves the flag unset when absent or false", () => {
+    expect(parseEmbedTenants(JSON.stringify(entry(undefined))).get("example.com")?.lockSessionControls).toBeUndefined();
+    expect(parseEmbedTenants(JSON.stringify(entry(false))).get("example.com")?.lockSessionControls).toBeUndefined();
+  });
+
+  it("rejects a non-boolean value", () => {
+    expect(() => parseEmbedTenants(JSON.stringify(entry("yes")))).toThrow(/lockSessionControls/);
   });
 });

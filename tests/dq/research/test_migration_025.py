@@ -12,6 +12,7 @@ MIGRATION_PATH = (
     / "digiquant"
     / "supabase"
     / "migrations"
+    / "engine"
     / "025_thesis_daily_fields.sql"
 )
 

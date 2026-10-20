@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DigichatThread, type GroupDisclosureMode } from "./DigichatThread";
+import type { WorkVisibility } from "./stock/skin-types";
 
 const adapter: ChatModelAdapter = {
   async run() {
@@ -183,6 +184,7 @@ type HarnessProps = {
   initialMessages?: readonly ThreadMessageLike[];
   reasoningMode?: GroupDisclosureMode;
   toolCallsMode?: GroupDisclosureMode;
+  workVisibility?: WorkVisibility;
 };
 
 function Harness({
@@ -192,6 +194,7 @@ function Harness({
   initialMessages,
   reasoningMode,
   toolCallsMode,
+  workVisibility,
 }: HarnessProps) {
   const runtime = useLocalRuntime(
     adapter,
@@ -206,6 +209,7 @@ function Harness({
         hiddenAttachmentNames={hiddenAttachmentNames}
         reasoningMode={reasoningMode}
         toolCallsMode={toolCallsMode}
+        workVisibility={workVisibility}
       />
       {attachmentName ? <AddComposerAttachment name={attachmentName} /> : null}
     </AssistantRuntimeProvider>
@@ -341,6 +345,65 @@ describe("DigichatThread", () => {
     const { host, unmount } = await mount({
       initialMessages: TOOL_MESSAGES,
       toolCallsMode: "expanded",
+    });
+    await act(async () => {});
+    expect(
+      host
+        .querySelector('[data-slot="tool-group-root"]')
+        ?.hasAttribute("data-open"),
+    ).toBe(true);
+    unmount();
+  });
+
+  it("folds the whole trace to one line when the client is hidden", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      workVisibility: "hidden",
+    });
+    await act(async () => {});
+    const summary = host.querySelector('[data-slot="aui_work-chain-summary"]');
+    expect(summary).toBeTruthy();
+    expect(summary?.textContent).toContain("Used 2 tools");
+    // The chain itself is not rendered at all.
+    expect(host.querySelector('[data-slot="aui_work-chain"]')).toBeNull();
+    expect(host.querySelector('[data-slot="tool-group-root"]')).toBeNull();
+    expect(host.textContent).toContain("grounded answer");
+    unmount();
+  });
+
+  it("shows the titles only when the client is quiet", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      workVisibility: "quiet",
+    });
+    await act(async () => {});
+    // The chain and its rows are there, folded.
+    expect(host.querySelector('[data-slot="aui_work-chain"]')).toBeTruthy();
+    const group = host.querySelector('[data-slot="tool-group-root"]');
+    expect(group).toBeTruthy();
+    expect(group?.hasAttribute("data-closed")).toBe(true);
+    expect(host.querySelector('[data-slot="aui_work-chain-summary"]')).toBeNull();
+    unmount();
+  });
+
+  it("folds the quiet chain as soon as the answer has started", async () => {
+    // The titles are there while the agent works; when the answer streams
+    // they get out of its way.
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      workVisibility: "quiet",
+    });
+    await act(async () => {});
+    const chain = host.querySelector('[data-slot="aui_work-chain"]');
+    expect(chain).toBeTruthy();
+    expect(chain?.hasAttribute("data-closed")).toBe(true);
+    unmount();
+  });
+
+  it("keeps the chain open when the client is verbose", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      workVisibility: "verbose",
     });
     await act(async () => {});
     expect(

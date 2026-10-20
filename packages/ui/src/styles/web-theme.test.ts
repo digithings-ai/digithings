@@ -107,3 +107,28 @@ describe("hair scale contract (design/tokens.css)", () => {
     expect(tokens.match(/--hair-strong:/g)?.length).toBe(2);
   });
 });
+
+describe("mosaic focus-detail transition contract (DIG-2354)", () => {
+  const SELECTOR = ".dg-mosaic--rows .dg-cell.on .dg-mosaic-enter";
+
+  // `position` is a discrete property and is deliberately absent from the
+  // transition list, so the detail leaves the flow at t=0. A transition-delay on
+  // opacity therefore paints the box open first and fades the copy in
+  // afterwards, which is the defect this pins. Only opacity is asserted: the
+  // transform keeps its own 0.14s stagger on purpose.
+  it("fades the focus detail in with no delay, alongside the instant position flip", () => {
+    const at = css.indexOf(SELECTOR);
+    expect(at).toBeGreaterThan(-1);
+    const block = css.slice(at, css.indexOf("}", at));
+    const opacity = block.match(/opacity\s+[\d.]+m?s\s+var\(--ease\)([^,;]*)[;,]/);
+    expect(opacity).not.toBeNull();
+    expect(opacity?.[1].trim()).toBe("");
+  });
+
+  it("keeps the resting rule out of flow, so the pair still brackets the state", () => {
+    expect(css).toContain(
+      ".dg-mosaic--rows .dg-cell:not(.on) .dg-mosaic-enter {",
+    );
+    expect(css.match(/\.dg-mosaic-enter \{/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+});

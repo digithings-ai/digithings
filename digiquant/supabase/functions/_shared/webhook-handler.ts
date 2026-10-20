@@ -90,11 +90,14 @@ export async function handleStripeEvent(
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
 function extractWorkspaceId(obj: Record<string, unknown>): string | null {
-  const meta = obj.metadata;
-  if (meta && typeof meta === "object" && meta !== null) {
-    const wid = (meta as Record<string, unknown>).workspace_id;
-    if (typeof wid === "string" && wid.length > 0) return wid;
+  const metadata = asRecord(obj.metadata);
+  if (typeof metadata.workspace_id === "string" && metadata.workspace_id.length > 0) {
+    return metadata.workspace_id;
   }
   if (typeof obj.client_reference_id === "string" && obj.client_reference_id.length > 0) {
     return obj.client_reference_id;

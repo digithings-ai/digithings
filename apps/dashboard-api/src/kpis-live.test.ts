@@ -156,4 +156,93 @@ describe('registerLiveRoutes', () => {
     expect(body.provenance.source).toBe('market_api');
     expect(body.provenance.contract).toBeNull();
   });
+
+  it('never wears a market_api badge when no market data was read', async () => {
+    const handlers = new Map<string, (req: Request) => Promise<Response>>();
+    registerLiveRoutes((path, handler) => handlers.set(path, handler), {
+      loadLiveBook: async () => ({
+        positions: [
+          {
+            ticker: 'XLV',
+            weightPct: 20,
+            markPrice: null,
+            effectivePrice: null,
+            isLive: false,
+            metricsAsOf: null,
+            livePriceDate: null,
+          },
+        ],
+        navHistory: NAV6,
+        benchmarkHistory: [],
+        benchmarkTicker: 'SPY',
+      }),
+    });
+    const res = await handlers.get('/kpis/live')!(new Request('https://api.test/kpis/live'));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { quote_date: string | null; overlay_eligible: boolean };
+      provenance: { source: string; marks: string };
+    };
+    expect(body.provenance.marks).toBe('unavailable');
+    expect(body.provenance.source).not.toBe('market_api');
+    expect(body.data.quote_date).toBeNull();
+    expect(body.data.overlay_eligible).toBe(false);
+  });
+});
+
+describe('since-inception is the chained base-100 index, never nav/100 (DIG-2801)', () => {
+  // Level jumps on 02/08/30 Sep that the accounting day returns do not contain:
+  // raw NAV/100 reads ~+22.09%, the chained index reads ~+0.21%.
+  const SEAM_NAV: LiveBook['navHistory'] = [
+    { date: '2026-09-01', nav: 100, day_return_pct: null, source: 'legacy_nav_history' },
+    { date: '2026-09-02', nav: 104.93, day_return_pct: 0.004, source: 'legacy_nav_history' },
+    { date: '2026-09-08', nav: 108.55, day_return_pct: 0.001, source: 'legacy_nav_history' },
+    { date: '2026-09-30', nav: 121.85, day_return_pct: 0.002, source: 'legacy_nav_history' },
+    { date: '2026-10-01', nav: 121.85, day_return_pct: null, source: 'legacy_nav_history' },
+  ];
+  const SEAM_SPY = [
+    { date: '2026-09-01', price: 500 },
+    { date: '2026-09-30', price: 515 },
+    { date: '2026-10-01', price: 515 },
+  ];
+  // Firing control: no level jumps, so the index and nav/100 are the same number.
+  const CLEAN_NAV: LiveBook['navHistory'] = [
+    { date: '2026-10-01', nav: 100, day_return_pct: null },
+    { date: '2026-10-02', nav: 101, day_return_pct: 1 },
+    { date: '2026-10-03', nav: 102.01, day_return_pct: 1 },
+  ];
+
+  const liveBook = (navHistory: LiveBook['navHistory'], benchmarkHistory = SEAM_SPY): LiveBook => ({
+    positions: POSITIONS,
+    navHistory,
+    benchmarkHistory,
+    benchmarkTicker: 'SPY',
+  });
+
+  it('reads the chained index, not the raw accounting level ratio', () => {
+    const data = buildLiveData(liveBook(SEAM_NAV));
+    // nav/100 would be (121.85 * 1.002 / 100 - 1) * 100
+    expect(data.since_inception_live_pct).toBe(0.207014);
+    expect(data.since_inception_live_pct).not.toBeCloseTo(22.0937, 2);
+  });
+
+  it('agrees with nav/100 when the book carries no level jumps (firing control)', () => {
+    const data = buildLiveData(liveBook(CLEAN_NAV, SEAM_SPY));
+    const navOverHundred = (102.01 * 1.002) / 100 * 100 - 100;
+    expect(data.since_inception_live_pct).toBeCloseTo(navOverHundred, 6);
+    expect(data.since_inception_live_pct).toBe(2.21402);
+  });
+
+  it('feeds the same index figure into the excess portfolio leg', () => {
+    const data = buildLiveData(liveBook(SEAM_NAV));
+    const benchmarkReturnPct = (515 / 500 - 1) * 100;
+    expect(data.excess_live_pct).toBeCloseTo(0.207014 - benchmarkReturnPct, 9);
+    expect(data.excess_live_pct).not.toBeCloseTo(22.0937 - benchmarkReturnPct, 2);
+  });
+
+  it('needs two accounting rows, matching the /brief series', () => {
+    const single = buildLiveData(liveBook([{ date: '2026-10-01', nav: 121.85 }], SEAM_SPY));
+    expect(single.since_inception_live_pct).toBeNull();
+    expect(single.excess_live_pct).toBeNull();
+  });
 });

@@ -3,12 +3,8 @@
  * (book_as_of gate folded in per CONTRACT.md section 0).
  */
 import { describe, expect, it } from "vitest";
-import app, {
-  buildProvenance,
-  errorResponse,
-  parseCommonParams,
-  type Env,
-} from "./index";
+import app, { type Env } from "./index";
+import { buildProvenance, errorResponse, parseCommonParams } from "./responses";
 import { STUB_NULL_AS_OF } from "./stubs";
 
 const NO_ENV: Env = {};
@@ -65,6 +61,29 @@ describe("GET /healthz", () => {
     const res = await app.fetch(new Request("https://x/healthz"), NO_ENV);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, service: "dashboard-api" });
+  });
+});
+
+describe("FX Hub mount", () => {
+  it("answers GET /fx-hub-session from the mounted module", async () => {
+    const res = await app.fetch(new Request("https://x/fx-hub-session"), NO_ENV);
+    expect(res.status).toBe(405);
+    expect(await res.json()).toEqual({ ok: false, code: "METHOD_NOT_ALLOWED" });
+  });
+
+  it("answers POST /fx-hub-grant-sync with no secret as unauthorized", async () => {
+    const res = await app.fetch(
+      new Request("https://x/fx-hub-grant-sync", { method: "POST" }),
+      NO_ENV,
+    );
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ ok: false, code: "UNAUTHORIZED" });
+  });
+
+  it("strips a trailing slash before the FX Hub dispatch", async () => {
+    const res = await app.fetch(new Request("https://x/fx-hub-session/"), NO_ENV);
+    expect(res.status).toBe(405);
+    expect(await res.json()).toEqual({ ok: false, code: "METHOD_NOT_ALLOWED" });
   });
 });
 

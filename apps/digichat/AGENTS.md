@@ -39,13 +39,15 @@ Before making any change to `apps/digichat/`:
 
 Beyond root `AGENTS.md`:
 
+- **No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).** OCC and Zammad ticket text is stored and shown as written. Do not add a masker on that path. Secret scrubbing stays.
+
 - **BFF pattern is non-negotiable**: No digigraph URL, digikey token, or upstream service credential may ever reach the browser. All upstream calls go through Next.js Route Handlers.
 - **Auth on every route except the documented few**: Every `src/app/api/` route handler must call `requireDigiChatAuth()`, except the intentionally public routes (`GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`, dev-only `POST /api/baseline-chat`) and the self-authenticating ones (`POST /api/plan-proof` embed token, `/api/ecosystem/config` `auth()` session, `GET /api/mcp/oauth/callback` OAuth state cookie).
 - **SSRF guard on ecosystem endpoints**: Any user-supplied service URL must pass `isAllowedServiceUrl()` before being fetched. Never construct a fetch URL from raw user input.
 - **No raw Next.js version assumptions**: Next.js 16 App Router has breaking changes. Read `node_modules/next/dist/docs/` before writing route handlers, server actions, or middleware.
 - **Machine keys are bcrypt-hashed in Postgres**: `digi_live_…` API keys are stored hashed. Never store or log raw machine key material.
 - **Session token never in responses**: `AUTH_SECRET` encrypted session cookie must not be re-surfaced in API responses or logged. `X-Digichat-Session` header carries only a stable opaque UUID — not the session token itself.
-- **`DIGICHAT_ALLOW_DEV_GLOBAL=1` is dev-only**: Dev password provider and local bootstrap gate must never activate in production builds. They are guarded by env var checks — do not weaken them.
+- **Dev auth gates are `DIGICHAT_DEV_AUTH=1` and `DIGICHAT_LOCAL_AUTH_KEY`, not `DIGICHAT_ALLOW_DEV_GLOBAL`** (no such variable exists). `assertDevAuthDisabledInProduction()` in `src/lib/startup-env-guards.ts` throws when `NODE_ENV=production` and `DIGICHAT_DEV_AUTH=1`. It runs from `register()` in `src/instrumentation.ts` and from `devProvider()` in `src/auth.ts`, so the dev password provider cannot register in production. The local-bootstrap provider is gated on `DIGICHAT_LOCAL_AUTH_KEY` and `NODE_ENV !== "production"` (`src/auth.ts`). Do not weaken either guard.
 - **Drizzle migrations are additive**: New columns must be nullable or have a default. Never drop a column from an existing migration file — write a new one.
 - **OpenClaw and RAG ingestion UI are Phase 2**: Do not scaffold, stub, or add routing for channel integrations or document upload UI without explicit phase scope.
 
@@ -79,3 +81,13 @@ make test-unit
 ## More
 
 Extension patterns, anti-patterns, and integration boundaries live in [`ARCHITECTURE.md`](ARCHITECTURE.md). Update that doc when changing interfaces or behavior.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

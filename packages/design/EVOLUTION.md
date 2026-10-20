@@ -1,6 +1,8 @@
 # digithings design evolution
 
-**Status:** Living document · **Last updated:** 2026-07-05
+**Status:** Historical ledger. The competitor scans, design mine, landing demos, spec HTML, and smoke page were removed (DIG-3422). Build the next design reference in digiweb (`apps/reference`). Do not extend this file.
+
+**Last updated:** 2026-07-05
 
 > **⚠️ 2026-07-02 — landing wiring reverted (design review, #1308).** After review,
 > the epic's live landing/redesign changes were reverted from digithings.ai and
@@ -13,10 +15,9 @@
 > (unused except by `/#pricing`); the checklist marks reflect what was *built*, not
 > what is currently wired live. See #1308.
 
-This file synthesizes external north stars — [Graphite](references/graphite.com.md),
-[Cursor](references/cursor.com.md), [x.ai](references/x.ai.md), plus the 2026-08
-utilitarian set [Herdr](references/herdr.dev.md), [AgentMail](references/agentmail.to.md),
-[Omarchy](references/omarchy.org.md) — with our current implementation and sets
+This file synthesizes external north stars — Graphite, Cursor, x.ai, plus the 2026-08
+utilitarian set Herdr, AgentMail, Omarchy, plus Langfuse
+(2026-10 light-surface marketing-clarity reference for the next polish pass) — with our current implementation and sets
 **evolution paths** per surface. Active blend lock + preference ledger:
 [`BLEND.md`](BLEND.md). Live picker: design-reference `/iterate`.
 
@@ -37,16 +38,11 @@ only reference to it was an unused `styles.css` import — no `.term-*` class
 was ever consumed, since digichat's real chat UI uses its own `.dc-term-*`
 system instead.
 
-**Deep audits:** [`references/scans/`](references/scans/INDEX.md) — page-by-page,
-components, mobile nav (Playwright), copy patterns.
-
-**Implementation backlog:** [GitHub epic #1200](https://github.com/digithings-ai/digithings/issues/1200) · [`docs/agent-backlog/design-evolution/INDEX.md`](../../docs/agent-backlog/design-evolution/INDEX.md)
+**Implementation backlog:** [GitHub epic #1200](https://github.com/digithings-ai/digithings/issues/1200). The competitor scans and the design-evolution backlog index are gone. Live specimens are in `apps/reference`.
 
 **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md) — voice, literal CTAs, per-surface section maps.
 
-It does not replace [`README.md`](README.md) (token API) or
-[`demos/digiquant-landing/DESIGN_DECISIONS.md`](demos/digiquant-landing/DESIGN_DECISIONS.md)
-(iteration log). It is the **strategic layer**: what we keep, what we borrow, what
+It does not replace [`README.md`](README.md) (token API). It is the **strategic layer**: what we keep, what we borrow, what
 we build next.
 
 ---
@@ -337,7 +333,7 @@ Add to `tokens.css` when implementing primitives:
 - [x] both landings closing CTA wiring — #1227. `ClosingCtaBand` wired before the footer on both sites via `<Reveal className="closing-cta">` (reveal-up + reduced-motion via the shared Reveal). digithings.ai: "Build your agent stack in the open." → **Ask digichat** (/chat) · Read the docs (/docs). digiquant.io: "One graph, research to execution." → **Open dashboard** (/#dashboard) · Browse strategies (/strategies). Internal links use `next/link`.
 - [x] `TrustStrip` integration logo variant (`.trust-strip--logos`) — #1229. x.ai-style integration-mark row (real stack: NautilusTrader · LangGraph · LiteLLM · Polars), grayscale/muted default → color on hover, composes on the base strip. Smoke demo (text wordmarks; production uses real logo `<img>` + `alt`) + `site/README.md`. No stock/fabricated logos.
 - [x] `CaseStudyCard` primitive (P3, content-gated) — #1230. `.case-study` flat card (`{org} × digithings` label, quote, attribution + optional logo), composes in bento/capability-grid/`.h-scroll`. Content-gated — ships dormant, `.case-study--example` watermark for demos only, real attribution required in production. Smoke demo (watermarked example row) + `site/README.md` content shape.
-- [x] dashboard status dot → digismith (P3) — #1231. Sidebar-footer operator dot polling digismith `GET /v1/status` every 60s (`lib/digismith-status.ts` + `components/status-dot.tsx`). Env-gated on `NEXT_PUBLIC_DIGISMITH_URL` (unset → not rendered, so local dev without the stack is unaffected); non-blocking client fetch; green (ok) / amber (degraded) / red (error) / grey (unreachable — graceful); no PII in the label. Documented in dashboard README (no ARCHITECTURE.md exists). Maintainer-approved the new dashboard→digismith dependency; deploy needs CORS + CSP `connect-src`.
+- [x] dashboard status dot → digitrace (P3) — #1231. Sidebar-footer operator dot polling digitrace `GET /v1/status` every 60s (`lib/digitrace-status.ts` + `components/status-dot.tsx`). Env-gated on `NEXT_PUBLIC_DIGITRACE_URL` (unset → not rendered, so local dev without the stack is unaffected); non-blocking client fetch; green (ok) / amber (degraded) / red (error) / grey (unreachable — graceful); no PII in the label. Documented in dashboard README (no ARCHITECTURE.md exists). Maintainer-approved the new dashboard→digitrace dependency; deploy needs CORS + CSP `connect-src`.
 
 ---
 
@@ -361,10 +357,7 @@ From user iteration log + reference analysis:
 | File | Role |
 |------|------|
 | [`COPY_GUIDE.md`](COPY_GUIDE.md) | Voice, CTAs, section maps, IA templates |
-| [`references/README.md`](references/README.md) | Index of external scans |
-| [`demos/digiquant-landing/DESIGN_DECISIONS.md`](demos/digiquant-landing/DESIGN_DECISIONS.md) | v7 iteration punchlist |
 | [`site/README.md`](site/README.md) | Theme contract + JS modules |
-| [`references/dashboard-subpage-chrome.md`](references/dashboard-subpage-chrome.md) | dashboard subpage chrome — tab bar, tabs-vs-sidebar, typography, surfaces (#1220) |
 | [`docs/adr/0009-frontend-umbrella.md`](../../docs/adr/0009-frontend-umbrella.md) | Monorepo layout |
 | `apps/digithings-web/components/landing/` | digithings landing components |
 | `apps/digiquant-web/components/landing/` | digiquant landing components |

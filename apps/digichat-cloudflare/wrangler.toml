@@ -12,37 +12,106 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
-# Zone routes — same hostname as Pages: Worker owns digichat paths; Pages owns /chat shells.
+# ROUTE HOLD (2026-10-18): the zone routes were moved to digithings-stack in code
+# (cost epic: one DigiChat container, not two), but that cutover has NOT been
+# deployed - the stack's live deployment predates it and still carries only
+# graph/key/search. Deploying this worker with only /chat/occ* would therefore
+# DELETE the seven live routes below and Pages would 404 /embed and /api/chat,
+# taking OCC down.
+#
+# OCC is in active use, so this deploy re-asserts the CURRENT live route set
+# (verified live: all eight routes resolve to digithings-digichat) and changes
+# nothing about traffic. The /api/mcp/zammad* route below is additive and
+# secret-gated (stage 1 of moving the OCC helpdesk MCP off the shared base
+# stack); nothing consumes it yet. To complete the cutover later: remove these
+# seven from here, keep them on apps/digithings-stack-cloudflare/wrangler.toml,
+# and deploy the stack first.
+#
+# To roll back: this exact route list IS the rollback shape.
 [[routes]]
 pattern = "digithings.ai/embed*"
 zone_name = "digithings.ai"
+
 [[routes]]
 pattern = "digithings.ai/api/chat*"
 zone_name = "digithings.ai"
+
 [[routes]]
 pattern = "digithings.ai/api/embed*"
 zone_name = "digithings.ai"
+
 [[routes]]
 pattern = "digithings.ai/api/byok*"
 zone_name = "digithings.ai"
+
 [[routes]]
 pattern = "digithings.ai/api/plan-proof*"
 zone_name = "digithings.ai"
+
 [[routes]]
 pattern = "digithings.ai/api/health"
 zone_name = "digithings.ai"
+
 [[routes]]
 pattern = "digithings.ai/_dtchat*"
 zone_name = "digithings.ai"
 
+# Post-deploy read-back for scripts/deploy.mjs. That script injects
+# `--var DIGICHAT_CONTAINER_REV:<sha12>` and then fetches this path to confirm
+# the Worker is addressing the Container its commit implies. `paths.ts` records
+# that the route must be enabled here; without it the deploy finishes
+# DEPLOYED-but-UNVERIFIED (non-zero) *after* a successful upload, so a real
+# problem reads as a verification failure and a verification failure reads as a
+# deploy failure.
+[[routes]]
+pattern = "digithings.ai/_digichat/meta"
+zone_name = "digithings.ai"
+
+# Worker-owned, secret-gated container reset lever: intercepted by this Worker
+# (never proxied to the container) so an instance that outlived its idle tail
+# can be destroyed. Additive; gated by x-digi-admin-key == DIGICHAT_ADMIN_KEY.
+[[routes]]
+pattern = "digithings.ai/_digichat-admin*"
+zone_name = "digithings.ai"
+
+# Read-only OCC helpdesk MCP (stage 1): secret-gated by x-digi-mcp-key ==
+# ZAMMAD_EDGE_KEY, then served by the in-container zammad-mcp through the
+# trusted proxy. ADDITIVE — no live traffic uses it until stage 2.
+[[routes]]
+pattern = "digithings.ai/api/mcp/zammad*"
+zone_name = "digithings.ai"
+
+# DIG-3585: the invite-gated OCC Pages shell. Same pattern is on
+# apps/digithings-stack-cloudflare/wrangler.toml so a stack deploy keeps the gate.
+# Valid ?token= or the occ_invite cookie passes through to Pages.
+[[routes]]
+pattern = "digithings.ai/chat/occ*"
+zone_name = "digithings.ai"
+
 [[containers]]
 class_name = "DigiChatContainer"
-# Build context is monorepo root (two levels up from this package).
-image = "../../Dockerfile.digichat-cloudflare"
+# `image` and `image_build_context` resolve relative to THIS config file's
+# directory, and wrangler defaults the container build context to the
+# Dockerfile's own directory (`dirname(image)`). Pinned to the monorepo root
+# explicitly: the Dockerfile's COPY lines are repo-root-relative, so the
+# default would narrow the context to `infra/docker/` and break the build.
+image = "../../infra/docker/Dockerfile.digichat-cloudflare"
+image_build_context = "../.."
 # DIGICHAT_VERSION for GET /api/health is baked from apps/digichat/package.json
-# inside Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
+# inside infra/docker/Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
 # (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
-max_instances = 5
+# Two slots, not one: a rolling deploy must be able to start the new revision
+# while the old one drains, or the account's container-instance cap refuses the
+# start (DIG-4459). The digichat container id is derived from the deploying
+# commit (src/paths.ts), so every deploy addresses a NEW id while the previous
+# id's instance is still running — warm, or draining for up to 15 minutes after
+# the rollout's SIGTERM. With one slot the new instance cannot start until the
+# old one has fully exited, so every request that needs a container start then
+# fails with "Maximum number of running container instances exceeded"
+# (DIG-4487). Only one instance serves traffic once the rollout settles; the
+# second slot is rollout headroom, not steady-state cost.
+max_instances = 2
+instance_type = "basic"
 
 [[durable_objects.bindings]]
 name = "DIGICHAT"
@@ -53,14 +122,20 @@ tag = "v1"
 new_sqlite_classes = ["DigiChatContainer"]
 
 # Secrets (wrangler secret put):
+#   OCC_INVITE_KEY           # Worker-only /chat/occ gate; never forwarded to the container
 #   AUTH_SECRET
 #   DIGICHAT_EMBED_TENANTS   # digithings + occ JSON — see README
 #   DIGIGRAPH_INTERNAL_URL   # reachable digigraph base URL
 #   DIGIKEY_URL
 #   DIGIKEY_BFF_TOKEN
 #   DIGICHAT_PLAN_PROOF_SECRET
+#   DIGICHAT_MONITOR_TOKENS   # monitor free-turn bypass (DIG-613); optional, fails open
 #   DIGICHAT_DASHBOARD_SUPABASE_URL
 #   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
+#   ZAMMAD_API_TOKEN         # read-only Zammad helpdesk MCP (in-container zammad-mcp, OCC tickets)
+#   ZAMMAD_BASE_URL          # Zammad base URL for that MCP (optional; client default otherwise)
+#   ZAMMAD_EDGE_KEY          # Worker-only /api/mcp/zammad gate; never forwarded to the container
+#   DIGICHAT_ADMIN_KEY       # Worker-only /_digichat-admin container reset lever; never forwarded
 # Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB.
 # It is deliberately NOT forwarded to the Container. This Cloudflare deployment
 # is DB-less (no Postgres instance or secret), so digichat falls back to
@@ -75,6 +150,15 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIKEY_URL=https://key.digithings.ai
 # Never use Mac Compose / *.trycloudflare.com quick tunnels in production.
 
+# Embed tenant config (DIG-1210): non-secret JSON in KV key `embed-tenants`,
+# credentials referenced by name (tokenEnv) and set as Worker secrets.
+# Create once:  npx wrangler kv namespace create DIGICHAT_TENANTS_KV
+# (created 2026-10-13). Without the binding the Worker uses
+# the legacy DIGICHAT_EMBED_TENANTS secret unchanged.
+[[kv_namespaces]]
+binding = "DIGICHAT_TENANTS_KV"
+id = "361b710bee56466097053275404535ba"
+
 [vars]
 # Legacy generic anonymous embed is intentionally NOT set (OFF). A stock deploy
 # must not grant `/embed` to unregistered hosts. To opt in for a dedicated legacy
@@ -86,5 +170,11 @@ DIGICHAT_REQUIRE_ROOT_AUTH = "0"
 DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io"
 # Profile A: digisearch/digivault are loopback inside digithings-stack; digichat
 # only talks to digigraph (+ digikey for bff_session). Do not probe digisearch
-# / digiquant / digismith from /api/health (defaults would be unreachable).
+# / digiquant / digitrace from /api/health (defaults would be unreachable).
 DIGICHAT_ENABLED_SERVICES = "digigraph"
+
+# BEGIN config-contract (generated by scripts/render_config_contract.py — do not hand-edit)
+DT_VARIANT = "hosted"
+DT_TARGET = "hosted"
+DT_BASE_URL = "https://digithings.ai"
+# END config-contract

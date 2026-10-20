@@ -74,4 +74,16 @@ describe("RepoHeatmap GitHub-style contributions", () => {
     expect(cells.length).toBeGreaterThanOrEqual(28);
     expect(html).toMatch(/data-level="[1-4]"/);
   });
+
+  it("builds cubes and month names left to right when build is set", () => {
+    const html = renderToStaticMarkup(
+      <RepoHeatmap pulls={PULLS} weeks={4} end={new Date("2026-08-24T07:15:49Z")} build />,
+    );
+    expect(html).toContain("ra-heat--build");
+    expect(html).not.toContain("is-armed");
+    expect(html).toMatch(/animation-delay:\s*0ms/);
+    expect(html).toMatch(/animation-delay:\s*22ms/);
+    const css = readFileSync(path.resolve(process.cwd(), "src/styles/repo-activity.css"), "utf8");
+    expect(css).toMatch(/@keyframes ra-heat-build/);
+  });
 });

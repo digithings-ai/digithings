@@ -14,10 +14,17 @@
 
 import type { ActivityDetail } from "@/lib/chat-activity";
 import type { PageContextMode } from "@/lib/deploy-config/schema";
+import {
+  MAX_MCP_TOOL_ENTRIES,
+  MAX_MCP_TOOL_NAME_LENGTH,
+} from "@/lib/deploy-config/mcp-servers";
+import { HEX_COLOR } from "@/lib/hex-color";
 import { LANGUAGES } from "@/lib/languages";
 import {
   THINKING_MODES,
   VIEW_MODES,
+  isLegacyViewMode,
+  normalizeViewMode,
   type ThinkingMode,
   type ViewMode,
 } from "@/lib/view-modes";
@@ -159,6 +166,13 @@ export type EmbedTenantConfig = {
    */
   showLanguageSelector?: boolean;
   /**
+   * When true, this tenant pins the house default model and hides the
+   * per-session model/MCP/tool controls: the X-Digi-Model header is ignored
+   * (house default model) and digigraph hides session_set_model /
+   * session_*_mcp / session_toggle_tool.
+   */
+  lockSessionControls?: boolean;
+  /**
    * When true, this tenant offers web search (#3420, default-on #3859):
    * compat hydrate injects a default-on catalog entry and the user pref
    * defaults on. Omit or false for corpus-only tenants (e.g. datatap) —
@@ -168,8 +182,9 @@ export type EmbedTenantConfig = {
   webSearch?: boolean;
   /**
    * Chain-of-thought view mode for this tenant's embeds (digichat skin):
-   * hidden / compact / balanced / detailed. `balanced` (default) opens
+   * hidden / quiet / balanced / verbose. `balanced` (default) opens
    * reasoning + tool groups while they stream and collapses them when done.
+   * The retired ids `compact` / `detailed` are folded to `quiet` / `verbose`.
    */
   view?: ViewMode;
   /**
@@ -198,6 +213,19 @@ export type EmbedTenantConfig = {
        */
       setup?: Record<string, string>;
       authHeader?: string;
+      /**
+       * Operator tool allowlist for this row (DIG-284). RAW MCP tool names,
+       * matched exactly by digigraph — bare `list_tickets`, never the
+       * `zammad_`-prefixed form. Omit to deny every tool on this row; the same
+       * bounds as the YAML `mcp.servers[].allowedTools` apply.
+       */
+      allowedTools?: string[];
+      /**
+       * Subset of `allowedTools` whose tools mutate remote state (DIG-284). An
+       * explicit `[]` is preserved and means "nothing on this row mutates";
+       * absent stays absent (every allowed tool then needs approval).
+       */
+      mutatingTools?: string[];
     }>;
     allowUserServers?: boolean;
     allowAddForm?: boolean;
@@ -222,7 +250,13 @@ export type EmbedTenantConfig = {
   pageContext?: PageContextMode;
   tools?: {
     allowUserToggle?: boolean;
-    catalog: Array<{ id: string; default?: boolean; label?: string }>;
+    catalog: Array<{
+      id: string;
+      default?: boolean;
+      label?: string;
+      /** Individual tools under this catalog entry (per-tool session toggles). */
+      tools?: Array<{ id: string; label?: string }>;
+    }>;
   };
   models?: { default?: string; available?: string[]; allowPicker?: boolean };
   /**
@@ -260,8 +294,31 @@ export type EmbedTenantConfig = {
   requiredPlanTier?: "desk" | "studio" | "enterprise";
 };
 
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * Embed-path mirror of `boundedToolAllowlist` / `boundedMutatingList` in
+ * `deploy-config/mcp-servers` (those helpers are module-private, so the logic is
+ * mirrored here against the same exported constants — the bounds cannot drift).
+ * An out-of-bounds list is dropped WHOLE rather than truncated: a partial
+ * allowlist would quietly deny tools the operator asked for while still looking
+ * configured. Dropped means the key is omitted, and digigraph reads an absent
+ * allowlist as zero tools for that server.
+ */
+function boundedToolAllowlist(value: readonly string[] | undefined): string[] | undefined {
+  if (!value || value.length === 0) return undefined;
+  if (value.length > MAX_MCP_TOOL_ENTRIES) return undefined;
+  if (value.some((name) => typeof name !== "string" || name.length > MAX_MCP_TOOL_NAME_LENGTH)) {
+    return undefined;
+  }
+  return [...value];
+}
+
+/** `mutatingTools` keeps an explicit `[]` ("nothing on this row mutates"). */
+function boundedMutatingList(value: readonly string[] | undefined): string[] | undefined {
+  if (Array.isArray(value) && value.length === 0) return [];
+  return boundedToolAllowlist(value);
+}
 
 export function normalizeEmbedHost(input: string | null | undefined): string | null {
   if (!input) return null;
@@ -545,14 +602,21 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showByok !== undefined && typeof v.showByok !== "boolean") {
     throw new Error(`${ctx}: showByok must be a boolean`);
   }
+  if (v.lockSessionControls !== undefined && typeof v.lockSessionControls !== "boolean") {
+    throw new Error(`${ctx}: lockSessionControls must be a boolean`);
+  }
   if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
     throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
   }
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
-  if (v.view !== undefined && !VIEW_MODES.includes(v.view as ViewMode)) {
-    throw new Error(`${ctx}: view must be "hidden", "compact", "balanced", or "detailed"`);
+  if (
+    v.view !== undefined &&
+    !VIEW_MODES.includes(v.view as ViewMode) &&
+    !isLegacyViewMode(v.view)
+  ) {
+    throw new Error(`${ctx}: view must be "hidden", "quiet", "balanced", or "verbose"`);
   }
   if (v.thinking !== undefined && !THINKING_MODES.includes(v.thinking as ThinkingMode)) {
     throw new Error(`${ctx}: thinking must be "auto", "collapsed", or "open"`);
@@ -654,6 +718,21 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
           `embed tenant "${hostKey}": mcp.servers[${index}].authHeader must be a string`,
         );
       }
+      if (server.allowedTools !== undefined && !Array.isArray(server.allowedTools)) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].allowedTools must be an array`,
+        );
+      }
+      if (server.mutatingTools !== undefined && !Array.isArray(server.mutatingTools)) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].mutatingTools must be an array`,
+        );
+      }
+      // Bounds are enforced by dropping the whole list, never truncating it —
+      // an over-long or non-string entry fails closed (zero tools) rather than
+      // looking configured while denying tools the operator asked for (DIG-284).
+      const allowedTools = boundedToolAllowlist(server.allowedTools as string[] | undefined);
+      const mutatingTools = boundedMutatingList(server.mutatingTools as string[] | undefined);
       let setup: Record<string, string> | undefined;
       const rawSetup = server.setup;
       if (rawSetup !== undefined) {
@@ -682,6 +761,8 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
         ...(setup ? { setup } : {}),
         ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
+        ...(allowedTools ? { allowedTools } : {}),
+        ...(mutatingTools ? { mutatingTools } : {}),
       };
     });
     const rawMcpRecord = rawMcp as Record<string, unknown>;
@@ -727,8 +808,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
+    ...(v.lockSessionControls === true ? { lockSessionControls: true } : {}),
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
-    view: VIEW_MODES.includes(v.view as ViewMode) ? (v.view as ViewMode) : undefined,
+    view: v.view !== undefined ? normalizeViewMode(v.view) : undefined,
     thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)
       ? (v.thinking as ThinkingMode)
       : undefined,
@@ -749,9 +831,71 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       ? (v.llmAccess as EmbedLlmAccess)
       : undefined,
     gate,
+    ...parseTenantTools(v.tools, hostKey),
+    ...parseTenantModels(v.models, hostKey),
     ...(REQUIRED_PLAN_TIERS.includes(v.requiredPlanTier as "desk" | "studio" | "enterprise")
       ? { requiredPlanTier: v.requiredPlanTier as "desk" | "studio" | "enterprise" }
       : {}),
+  };
+}
+
+const TOOL_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+/** Optional `tools.catalog` (ids/labels and per-tool sub-ids only — never URLs). */
+function parseTenantTools(
+  raw: unknown,
+  hostKey: string,
+): Pick<EmbedTenantConfig, "tools"> {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== "object") throw new Error(`embed tenant "${hostKey}": tools must be an object`);
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r.catalog)) throw new Error(`embed tenant "${hostKey}": tools.catalog must be an array`);
+  const catalog = r.catalog.map((e, i) => {
+    const entry = e as Record<string, unknown>;
+    if (typeof entry?.id !== "string" || !TOOL_ID_RE.test(entry.id)) {
+      throw new Error(`embed tenant "${hostKey}": tools.catalog[${i}].id invalid`);
+    }
+    const subs = Array.isArray(entry.tools)
+      ? entry.tools.map((t, j) => {
+          const st = t as Record<string, unknown>;
+          if (typeof st?.id !== "string" || !TOOL_ID_RE.test(st.id)) {
+            throw new Error(`embed tenant "${hostKey}": tools.catalog[${i}].tools[${j}].id invalid`);
+          }
+          return { id: st.id, ...(typeof st.label === "string" ? { label: st.label } : {}) };
+        })
+      : undefined;
+    return {
+      id: entry.id,
+      ...(typeof entry.default === "boolean" ? { default: entry.default } : {}),
+      ...(typeof entry.label === "string" ? { label: entry.label } : {}),
+      ...(subs?.length ? { tools: subs } : {}),
+    };
+  });
+  return {
+    tools: {
+      ...(typeof r.allowUserToggle === "boolean" ? { allowUserToggle: r.allowUserToggle } : {}),
+      catalog,
+    },
+  };
+}
+
+/** Optional `models` session picker list (model slugs only). */
+function parseTenantModels(
+  raw: unknown,
+  hostKey: string,
+): Pick<EmbedTenantConfig, "models"> {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== "object") throw new Error(`embed tenant "${hostKey}": models must be an object`);
+  const r = raw as Record<string, unknown>;
+  const available = Array.isArray(r.available)
+    ? r.available.filter((m): m is string => typeof m === "string" && m.trim().length > 0).map((m) => m.trim())
+    : [];
+  return {
+    models: {
+      ...(typeof r.default === "string" && r.default.trim() ? { default: r.default.trim() } : {}),
+      available,
+      ...(typeof r.allowPicker === "boolean" ? { allowPicker: r.allowPicker } : {}),
+    },
   };
 }
 

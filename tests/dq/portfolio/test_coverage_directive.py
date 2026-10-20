@@ -13,6 +13,8 @@ from digiquant.portfolio.phases.coverage_director import (
 from digiquant.research.state import ExcludedTicker, FocusRosterEntry
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.unit
+
 
 def _entry(ticker: str, reason: str = "held") -> FocusRosterEntry:
     return FocusRosterEntry(ticker=ticker, roster_reason=reason, rationale="h4")

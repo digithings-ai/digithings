@@ -17,17 +17,25 @@ and `controls-overlay.css` (behavioral controls). The kit parts carry the
 | `card.tsx` | `ui/card` + parts | `dress="chat"` on root | Full 7-part shape, `size` `"default" \| "sm"`, `data-slot`/`data-size` hooks. Parts inherit the dress through the kit's Card context. |
 | `collapsible.tsx` | `ui/collapsible` | none (unstyled passthrough) | Re-exports the kit `Collapsible` (re-pointed to `@digithings/ui/ui` in wave 4); byte-identical to the deleted controls copy. |
 | `dropdown-menu.tsx` | `DropdownMenu` family (15 names) | none — default skin IS the chat dress | `skin="reference"` stays available on `DropdownMenuContent`. |
-| `tooltip.tsx` | `Tooltip` family | none — default skin IS the chat dress | Provider `delay` defaults to 0; `skin="reference"` available on `TooltipContent`. |
 
-Import sites: **zero changes** — every consumer still imports from
-`@/components/ui/<x>`.
+There is **no** local `tooltip.tsx` adapter: `Tooltip` and its provider come
+straight from `@digithings/ui/ui` (`TooltipProvider` is imported that way in
+`src/components/providers.tsx`), so tooltip behavior follows the kit directly.
+
+Import sites for the four adapters above are unchanged: those consumers
+still import from `@/components/ui/<x>`. `badge`, `input`, `label`, `sheet`,
+and `tooltip` are not in that set — see Removed below.
 
 ## Removed in wave 4 — dead wrappers
 
-`badge.tsx`, `input.tsx`, `label.tsx`, and `sheet.tsx` were deleted: every
-call site had already moved to the kit (`@digithings/ui/ui`), so the wrappers
-had zero importers (grep-verified). `src/components/ui/` now holds only the
-five thin adapters above — no local-only wrappers remain.
+`badge.tsx`, `input.tsx`, `label.tsx`, and `sheet.tsx` were deleted.
+Remaining app call sites import the kit (`@digithings/ui/ui`), not
+`@/components/ui/<x>`: `Input` and `Label` in `chat-shell.tsx`,
+`byok-cli-flow.tsx`, and `embed-composer-menu.tsx`. `tooltip.tsx` was never a
+local wrapper; `TooltipProvider` is imported from `@digithings/ui/ui` in
+`src/components/providers.tsx`. `src/components/ui/` now holds only the four
+thin adapters above — `button.tsx`, `card.tsx`, `collapsible.tsx`,
+`dropdown-menu.tsx` — and no local-only wrappers remain.
 
 ## Vendored trees (do not restyle)
 

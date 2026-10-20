@@ -1,12 +1,12 @@
 /**
  * dashboard-api shared performance kernel (slice 0004).
  *
- * Pure, dependency-free ports of the client-side derivations in
- * `apps/dashboard/lib/performance-ssot.ts`, `apps/dashboard/lib/accounting-views.ts`,
- * `apps/dashboard/lib/dashboard-ssot.ts` (committedBookDate),
- * `apps/dashboard/lib/benchmark-tickers.ts`, `apps/dashboard/lib/brief-book-event.ts`,
- * `apps/dashboard/lib/observability-queries.ts` (continuity series + benchmark
- * alignment) and `packages/ui` live-performance-kpis math.
+ * Pure, dependency-free ports of the shared derivations in `@digiquant/contract`
+ * (`performance-ssot`, `accounting-views`, `dashboard-ssot` committedBookDate,
+ * `benchmark-tickers`, `brief-book-event`). The desk re-exports those modules
+ * from `apps/dashboard/lib`. Also ports continuity and benchmark alignment from
+ * `apps/dashboard/lib/observability-queries.ts` and the `@digithings/ui`
+ * live-performance-kpis math.
  *
  * The worker serves snapshots only; no subscriptions, no realtime lane here.
  * All digi product names stay lowercase.
@@ -185,7 +185,8 @@ export function isNavSeriesSeam(
   if (row.series_seam === true) return true;
   if (prevSource == null) return false;
   const source = row.source ?? null;
-  return source != null && prevSource != null && source !== prevSource;
+  // `prevSource` is non-null here (early return above); only `source` needs the check.
+  return source != null && source !== prevSource;
 }
 
 /** Dates where the stitched NAV series flips source. */

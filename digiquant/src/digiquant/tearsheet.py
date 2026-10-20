@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from pathlib import Path
 from typing import Any  # score:allow untyped any — tearsheet HTML assembly
 
@@ -35,9 +36,11 @@ from digiquant.charts import (
     _build_underwater_from_returns,
     _build_win_rate_donut,
     _build_yearly_returns_chart,
+    count_winning_trades,
     section_unavailable_html,
 )
 from digiquant.models import BacktestResult
+from digiquant.paths import resolve_under
 from digiquant.tearsheet_extract import (
     _compute_drawdown,
     _extract_equity_curve,
@@ -49,6 +52,7 @@ from digiquant.tearsheet_stats import (
     _build_categorized_stats,
     _build_full_stats_table,
     _build_risk_metrics_table,
+    resolve_win_rate,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,6 +72,7 @@ def create_tearsheet(
     stats_general: dict | None = None,
     returns_series: Any = None,
     realized_pnls_series: Any = None,
+    initial_balance: float | None = None,
     full: bool = True,
 ) -> Path:
     try:
@@ -75,7 +80,9 @@ def create_tearsheet(
     except ImportError as e:
         raise ImportError("Tearsheet requires plotly. pip install digiquant[visualization]") from e
 
-    out = Path(output_path)
+    # The hub already confines tearsheet_path. This check is in the function
+    # that writes, which is the check CodeQL counts (DIG-4057 batch B).
+    out = resolve_under(Path.cwd() / "backtest_results", output_path, label="tearsheet_path")
     out.parent.mkdir(parents=True, exist_ok=True)
 
     timestamps, balances = _extract_equity_curve(account_report)
@@ -119,7 +126,11 @@ def create_tearsheet(
             return fallback
         return fig.to_html(full_html=False, include_plotlyjs=include_plotlyjs, div_id=div_id)
 
-    initial_balance = 1_000_000.0
+    # The equity chart compounds the return series as (1 + r). Anchored on the
+    # account's own start balance — the first row of the balance path — that
+    # reproduces the account exactly; the venue constant is the fallback for a report
+    # with no readable balance path at all.
+    initial_balance = 1_000_000.0 if initial_balance is None else initial_balance
 
     # Build core figures (always)
     equity_fig = _build_equity_chart(timestamps, balances) if timestamps else None
@@ -127,7 +138,12 @@ def create_tearsheet(
     price_fig = _build_price_chart_inline(
         ohlcv_df, symbol, period, std_dev, fill_ts, fill_px, fill_sides
     )
-    win_rate_donut_fig = _build_win_rate_donut(win_rate, result.num_trades)
+    # k and n come from one place: the honest block when present, else a
+    # caller-counted k over the closed round-trip count. Never rate × n on
+    # this surface.
+    counts = resolve_win_rate(result, win_rate, wins=count_winning_trades(realized_pnls_series))
+    num_wins = counts.k if counts.counted else None
+    win_rate_donut_fig = _build_win_rate_donut(win_rate, counts.n, num_wins=num_wins)
     realized_pnl_fig = _build_realized_pnl_chart(realized_pnls_series)
     per_trade_pnl_fig = _build_per_trade_pnl_bars(realized_pnls_series)
     cum_trade_pnl_fig = _build_cumulative_trade_pnl(realized_pnls_series)
@@ -194,6 +210,7 @@ def create_tearsheet(
         symbols_str=symbols_str,
         params_str=params_str,
         win_rate=win_rate,
+        win_rate_wins=num_wins,
         profit_factor=profit_factor,
         sortino=sortino,
         calmar=calmar,

@@ -8,6 +8,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-green.svg" alt="Python 3.12+" /></a>
+  <a href="https://github.com/digithings-ai/digithings/actions/workflows/ci.yml"><img src="https://github.com/digithings-ai/digithings/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI" /></a>
 </p>
 
 ---
@@ -49,7 +50,7 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **digisearch** | RAG + document search; Azure/Chroma backends | [digisearch/ARCHITECTURE.md](digisearch/ARCHITECTURE.md) |
 | **digichat** | Next.js BFF + chat UI (Auth.js, machine API keys) | `digichat/ARCHITECTURE.md` (nested repo) |
 | **digikey** | JWT + scoped API-key auth plane | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
-| **digismith** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digismith/ARCHITECTURE.md](digismith/ARCHITECTURE.md) |
+| **digitrace** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
 | **digiclaw** | Heartbeat, audit, MCP skill → digigraph | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
 | **digibase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | **digivault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |
@@ -57,6 +58,36 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **digifetch** | Shared web-scraping / headless-fetch engine library | [digifetch/ARCHITECTURE.md](digifetch/ARCHITECTURE.md) |
 | **digidev** | Drop-in agentic-coding workflow kit | [digidev/README.md](digidev/README.md) |
 | **config** | LiteLLM + model modes (test/medium/best) | [config/MODELS.md](config/MODELS.md) |
+
+## Packages
+
+Python members live in their own directories. The import name is the directory name.
+
+| Package | Path |
+|---------|------|
+| digibase | [digibase/](digibase/) |
+| digiclaw | [digiclaw/](digiclaw/) |
+| digifetch | [digifetch/](digifetch/) |
+| digigraph | [digigraph/](digigraph/) |
+| digikey | [digikey/](digikey/) |
+| digillm | [digillm/](digillm/) |
+| digiquant | [digiquant/](digiquant/) |
+| digisearch | [digisearch/](digisearch/) |
+| digiskills | [digiskills/](digiskills/) |
+| digitrace | [digitrace/](digitrace/) |
+| digivault | [digivault/](digivault/) |
+| digivoice | [digivoice/](digivoice/) |
+
+JavaScript workspace packages:
+
+| Package | Path |
+|---------|------|
+| `@digithings/design` | [packages/design/](packages/design/) |
+| `@digithings/digichat-cli` | [apps/digichat/cli/](apps/digichat/cli/) |
+| `@digithings/digichat-ui` | [packages/digichat-ui/](packages/digichat-ui/) |
+| `@digithings/hero-banner` | [packages/hero-banner/](packages/hero-banner/) |
+| `@digithings/surface-config` | [packages/surface-config/](packages/surface-config/) |
+| `@digithings/ui` | [packages/ui/](packages/ui/) |
 
 ## Quick start
 
@@ -106,7 +137,7 @@ curl -s -X POST http://127.0.0.1:8000/workflow \
 | digigraph | 8000 | Orchestration, chat API |
 | digiquant | 8001 | Backtest, optimize, MCP |
 | digisearch| 8002 | Document search, RAG |
-| digismith | 8003 | Observability status API |
+| digitrace | 8003 | Observability status API |
 | LiteLLM   | 4000 | LLM routing       |
 | digikey   | 8005 | API keys + JWT exchange |
 | digivault | 8004 | Markdown vault management (profile `digivault`) |
@@ -133,7 +164,7 @@ digithings/
 ├── digisearch/   # RAG, document search, ingestion
 ├── digichat/     # Next.js BFF + chat UI
 ├── digikey/      # API keys + JWT
-├── digismith/    # Tracing helpers + status API
+├── digitrace/    # Tracing helpers + status API
 ├── digiclaw/     # Heartbeat, audit, MCP skill
 ├── digibase/     # Shared HTTP/audit library
 ├── config/       # LiteLLM, model modes

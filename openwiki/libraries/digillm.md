@@ -26,10 +26,10 @@ provider-agnostic library speaking to any OpenAI-compatible endpoint.
 [Cheaper Inference](../../docs/providers/cheaperinference.md) (LiteLLM overlay /
 CLI rewrite); otherwise OpenRouter. Force OpenRouter with
 `DIGI_HOUSE_UPSTREAM=openrouter`. LiteLLM remains the local swap layer via
-`OPENAI_API_BASE`. No FastAPI; no hard dependency on digismith.
+`OPENAI_API_BASE`. No FastAPI; no hard dependency on digitrace.
 Hard deps are `openai>=1.0` + `pydantic>=2`; mode resolution, tracing,
-and dev tools ride extras. Consumers: twelve-x now; digigraph and
-digisearch migrate later.
+and dev tools ride extras. digigraph (`llm_client.py`) and digisearch
+import it. There is no HTTP service.
 
 ## Module map
 

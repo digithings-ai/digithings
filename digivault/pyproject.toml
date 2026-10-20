@@ -17,6 +17,11 @@ dependencies = [
     "pyyaml>=6",
 ]
 
+
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.optional-dependencies]
 # FastAPI service + MCP server + CLI. The core library (frontmatter, wikilinks,
 # vault) imports none of these; ``import digivault`` never imports FastAPI.
@@ -36,7 +41,7 @@ service = [
     # only an actual live request does. That means an extra costs nothing at the
     # only in-package call site (server.py, already gated behind [service]) and
     # nothing in this monorepo's own usage: the production image already installs
-    # `digivault[service]` (Dockerfile.digithings-stack-cloudflare:53), and CI
+    # `digivault[service]` (infra/docker/Dockerfile.digithings-stack-cloudflare:53), and CI
     # installs `uv sync --all-extras`. It only matters for a bare `pip install
     # digivault` outside this repo, which is exactly the case the rule protects.
     "httpx>=0.27",

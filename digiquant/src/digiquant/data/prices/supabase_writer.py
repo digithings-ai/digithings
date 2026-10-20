@@ -15,6 +15,12 @@ Preserves the column contracts research still reads:
 
 All audit payloads are passed through
 :func:`digibase.audit.redact_mapping` before being emitted (per CLAUDE.md).
+
+Every upsert below passes ``returning="minimal"``. postgrest-py defaults to
+``ReturnMethod.representation``, which makes PostgREST answer every chunk POST
+with the inserted rows in full — a body this module never reads, because each
+helper counts its own input batch. Suppressing it makes a write cost zero
+response bytes (DIG-1835). Do not drop the keyword.
 """
 
 from __future__ import annotations
@@ -129,7 +135,9 @@ def upsert_price_history(
         return UpsertResult(table="price_history", rows=0)
     total = 0
     for batch in _chunks(rows, chunk):
-        _call_with_retry(lambda b=batch: client.table("price_history").upsert(b).execute())
+        _call_with_retry(
+            lambda b=batch: client.table("price_history").upsert(b, returning="minimal").execute()
+        )
         total += len(batch)
     _emit_audit("price_history", total)
     return UpsertResult(table="price_history", rows=total)
@@ -148,7 +156,11 @@ def upsert_instruments(
     total = 0
     for batch in _chunks(rows, chunk):
         _call_with_retry(
-            lambda b=batch: client.table("instruments").upsert(b, on_conflict="ticker").execute()
+            lambda b=batch: (
+                client.table("instruments")
+                .upsert(b, on_conflict="ticker", returning="minimal")
+                .execute()
+            )
         )
         total += len(batch)
     _emit_audit("instruments", total)
@@ -173,7 +185,11 @@ def upsert_price_technicals(
         groups.setdefault(tuple(sorted(row)), []).append(row)
     for group in groups.values():
         for batch in _chunks(group, chunk):
-            _call_with_retry(lambda b=batch: client.table("price_technicals").upsert(b).execute())
+            _call_with_retry(
+                lambda b=batch: (
+                    client.table("price_technicals").upsert(b, returning="minimal").execute()
+                )
+            )
             total += len(batch)
     _emit_audit("price_technicals", total)
     return UpsertResult(table="price_technicals", rows=total)
@@ -192,7 +208,7 @@ def upsert_macro_observations(
         _call_with_retry(
             lambda b=batch: (
                 client.table("macro_series_observations")
-                .upsert(b, on_conflict="source,series_id,obs_date")
+                .upsert(b, on_conflict="source,series_id,obs_date", returning="minimal")
                 .execute()
             )
         )
@@ -222,7 +238,7 @@ def upsert_fx_intraday_observations(
         _call_with_retry(
             lambda b=batch: (
                 client.table("fx_intraday_observations")
-                .upsert(b, on_conflict="source,series_id,interval,ts")
+                .upsert(b, on_conflict="source,series_id,interval,ts", returning="minimal")
                 .execute()
             )
         )

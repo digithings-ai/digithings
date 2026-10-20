@@ -92,8 +92,30 @@ describe("DigichatConfigSchema", () => {
         features: { reasoning: "expanded", toolCalls: "locked_open" },
       },
     });
-    expect(expanded.deployment?.features.view).toBe("detailed");
+    expect(expanded.deployment?.features.view).toBe("verbose");
     expect(expanded.deployment?.features.thinking).toBe("open");
+  });
+
+  it("folds the retired view ids forward", () => {
+    const quiet = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { view: "compact" },
+      },
+    });
+    expect(quiet.deployment?.features.view).toBe("quiet");
+
+    const verbose = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { view: "detailed" },
+      },
+    });
+    expect(verbose.deployment?.features.view).toBe("verbose");
   });
 
   it("accepts view/thinking modes and cli.enabled", () => {
@@ -102,7 +124,7 @@ describe("DigichatConfigSchema", () => {
       deployment: {
         slug: "acme",
         backend: { type: "digigraph" },
-        features: { view: "detailed", thinking: "open" },
+        features: { view: "verbose", thinking: "open" },
         chrome: { defaultLanguage: "de", transcript: { userAlign: "left" } },
         models: {
           default: "gpt-4o-mini",
@@ -112,7 +134,7 @@ describe("DigichatConfigSchema", () => {
         cli: { enabled: true },
       },
     });
-    expect(cfg.deployment?.features.view).toBe("detailed");
+    expect(cfg.deployment?.features.view).toBe("verbose");
     expect(cfg.deployment?.features.thinking).toBe("open");
     expect(cfg.deployment?.chrome.defaultLanguage).toBe("de");
     expect(cfg.deployment?.chrome.transcript.userAlign).toBe("left");
@@ -288,9 +310,7 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.tools?.catalog.map((t) => t.id)).toEqual([
       "digisearch",
       "digivault",
-      "web_search",
     ]);
-    expect(dt?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
     expect(dt?.models.allowPicker).toBe(true);

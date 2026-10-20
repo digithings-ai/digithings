@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any  # score:allow untyped any — plotly Figure typing
 
 from digiquant.charts.common import (
@@ -12,6 +11,39 @@ from digiquant.charts.common import (
     _apply_layout,
     _extract_frame,
 )
+from digiquant.fonts import MONO_FONT_STACK
+from digiquant.stats import normalize_series
+from digiquant.stats.honesty import honest_rate
+
+
+def count_winning_trades(realized_pnls_series: Any) -> int | None:
+    """Count winning (PnL > 0) trades; None when the series is missing/empty.
+    Delegates to :func:`digiquant.stats.normalize_series` — the same honest denominator
+    the model path uses, so chart and model counts cannot drift apart. Never
+    ``.to_pandas()``: that bridge needs pyarrow, which is not installed, so it raised
+    ``ModuleNotFoundError`` and — called unguarded from ``tearsheet.py`` — crashed
+    whole-tearsheet generation.
+    """
+    normalized = normalize_series(realized_pnls_series)
+    if normalized is None:
+        return None
+    return sum(1 for value in normalized[1] if value > 0)
+
+
+def _finite_values(realized_pnls_series: Any) -> list[float] | None:
+    """The finite values of a PnL/returns input, or None when there are none.
+
+    Delegates to :func:`digiquant.stats.normalize_series` like
+    :func:`count_winning_trades`, so a chart cannot disagree with the model about
+    which rows count. The three builders that used to read the input themselves
+    did it through ``.values.tolist()``, which on the pyo3 analyzer's ``dict``
+    resolves to a bound method and raises ``AttributeError`` — they returned
+    ``ChartUnavailable`` on every real build while looking like covered callers.
+    """
+    normalized = normalize_series(realized_pnls_series)
+    if normalized is None:
+        return None
+    return normalized[1]
 
 
 def _build_realized_pnl_chart(realized_pnls_series: Any) -> Any:
@@ -65,26 +97,8 @@ def _build_trade_pnl_distribution_chart(realized_pnls_series: Any) -> Any:
     try:
         import plotly.graph_objects as go
 
-        raw = (
-            realized_pnls_series.to_pandas()
-            if hasattr(realized_pnls_series, "to_pandas")
-            else realized_pnls_series
-        )
-        if hasattr(raw, "values"):
-            raw_vals = raw.values.tolist()
-        elif hasattr(raw, "tolist"):
-            raw_vals = raw.tolist()
-        else:
-            raw_vals = list(raw)
-        vals = []
-        for x in raw_vals:
-            try:
-                fv = float(x)
-                if not math.isnan(fv):
-                    vals.append(fv)
-            except (TypeError, ValueError):
-                pass
-        if not vals:
+        vals = _finite_values(realized_pnls_series)
+        if vals is None:
             return None
         wins = [v for v in vals if v > 0]
         losses = [v for v in vals if v <= 0]
@@ -141,26 +155,8 @@ def _build_per_trade_pnl_bars(realized_pnls_series: Any) -> Any:
     try:
         import plotly.graph_objects as go
 
-        raw = (
-            realized_pnls_series.to_pandas()
-            if hasattr(realized_pnls_series, "to_pandas")
-            else realized_pnls_series
-        )
-        if hasattr(raw, "values"):
-            raw_vals = raw.values.tolist()
-        elif hasattr(raw, "tolist"):
-            raw_vals = raw.tolist()
-        else:
-            raw_vals = list(raw)
-        vals = []
-        for x in raw_vals:
-            try:
-                fv = float(x)
-                if not math.isnan(fv) and not math.isinf(fv):
-                    vals.append(fv)
-            except (TypeError, ValueError):
-                pass
-        if not vals:
+        vals = _finite_values(realized_pnls_series)
+        if vals is None:
             return None
         trade_nums = list(range(1, len(vals) + 1))
         colors = ["#34d399" if v > 0 else "#f87171" for v in vals]
@@ -202,16 +198,51 @@ def _build_per_trade_pnl_bars(realized_pnls_series: Any) -> Any:
         return ChartUnavailable("Per-Trade PnL", str(exc))
 
 
-def _build_win_rate_donut(win_rate: float | None, num_trades: int) -> Any:
-    """Donut chart showing win/loss split."""
+def _build_win_rate_donut(
+    win_rate: float | None, num_trades: int, num_wins: int | None = None
+) -> Any:
+    """Donut chart showing win/loss split.
+
+    ``num_wins`` is the caller-counted (k, n) pair — the only honest source
+    for the center annotation. When omitted, the pie slices still use the
+    rate-derived estimate, but the center renders an explicit unknown
+    (rate + n, wins uncounted, no CI) instead of presenting a reconstructed
+    ``round(rate * n)`` count as observed.
+    The center annotation always carries N + Wilson 95% CI (counted path),
+    never a bare percentage.
+    """
     if win_rate is None:
         return None
     try:
         import plotly.graph_objects as go
 
-        wr = max(0.0, min(1.0, win_rate))
-        wins = round(wr * num_trades)
+        wr = win_rate / 100.0 if win_rate > 1 else win_rate
+        wr = max(0.0, min(1.0, wr))
+        if num_wins is None:
+            # Slice-only estimate: shapes the pie, never shown as counted k.
+            wins = round(wr * num_trades)
+            counted = False
+        else:
+            wins = min(num_trades, max(0, num_wins))
+            counted = True
         losses = num_trades - wins
+        hr = honest_rate(wins, num_trades)
+        sub = "<span style='font-size:9px;color:#64748b'>"
+        if hr.refused or hr.estimate is None or hr.ci_lo is None or hr.ci_hi is None:
+            center = f"<b>REFUSED</b><br>{sub}n={num_trades}</span>"
+        elif not counted:
+            center = (
+                f"<b>{wr * 100:.1f}%</b><br>"
+                "<span style='font-size:9px;color:#64748b'>"
+                f"n={num_trades} · wins uncounted</span>"
+            )
+        else:
+            flag = " · LOW SAMPLE" if hr.low_sample else ""
+            center = (
+                f"<b>{hr.estimate * 100:.1f}%</b><br>"
+                f"<span style='font-size:9px;color:#64748b'>n={num_trades}, "
+                f"95% CI [{hr.ci_lo * 100:.1f}%, {hr.ci_hi * 100:.1f}%]{flag}</span>"
+            )
         fig = go.Figure(
             data=[
                 go.Pie(
@@ -227,13 +258,13 @@ def _build_win_rate_donut(win_rate: float | None, num_trades: int) -> Any:
             ]
         )
         fig.add_annotation(
-            text=f"<b>{wr * 100:.1f}%</b><br><span style='font-size:9px;color:#64748b'>WIN RATE</span>",
+            text=center,
             x=0.5,
             y=0.5,
             xref="paper",
             yref="paper",
             showarrow=False,
-            font=dict(size=18, color="#f1f5f9", family="'IBM Plex Mono', monospace"),
+            font=dict(size=18, color="#f1f5f9", family=MONO_FONT_STACK),
             align="center",
         )
         layout = dict(_CHART_LAYOUT)
@@ -255,26 +286,8 @@ def _build_cumulative_trade_pnl(realized_pnls_series: Any) -> Any:
     try:
         import plotly.graph_objects as go
 
-        raw = (
-            realized_pnls_series.to_pandas()
-            if hasattr(realized_pnls_series, "to_pandas")
-            else realized_pnls_series
-        )
-        if hasattr(raw, "values"):
-            raw_vals = raw.values.tolist()
-        elif hasattr(raw, "tolist"):
-            raw_vals = raw.tolist()
-        else:
-            raw_vals = list(raw)
-        vals = []
-        for x in raw_vals:
-            try:
-                fv = float(x)
-                if not math.isnan(fv) and not math.isinf(fv):
-                    vals.append(fv)
-            except (TypeError, ValueError):
-                pass
-        if not vals:
+        vals = _finite_values(realized_pnls_series)
+        if vals is None:
             return None
         cum = []
         running = 0.0

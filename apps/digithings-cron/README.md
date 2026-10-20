@@ -6,31 +6,430 @@ Replaces unreliable GitHub Actions schedule triggers with Cloudflare Cron Trigge
 that dispatch workflow_dispatch / repository_dispatch on the default `develop` branch of
 digithings-ai/digithings and digithings-ai/twelve-x (FX Hub).
 
-Thin Worker only — no Containers / Durable Objects. Default branch stays develop.
+Price and market-data jobs (`kind: container`) POST the private digiquant-runner
+Worker over the `RUNNER` service binding (#4761). This Worker still has no
+Containers of its own. twelve-x market-context ingest and the session heartbeat
+(`kind: twelvex`) POST the private twelvex-runner over `TWELVEX_RUNNER`.
+The other twelve-x rows stay `workflow_dispatch`. Default branch stays
+develop. `GITHUB_OVERRIDE_JOBS` defaults to empty; a listed job id falls back to
+workflow_dispatch and logs `github_override` at error.
 
 ## Layout
 
-- wrangler.toml — name digithings-cron, triggers crons, DRY_RUN var
-- src/jobs.ts — typed job map
-- src/dispatch.ts — GitHub API dispatch (204/200 ok; rate limits retry)
+- wrangler.toml — name digithings-cron, triggers crons, DRY_RUN, RUNNER binding
+- src/jobs.ts — typed job map (`kind` includes `container`)
+- src/dispatch.ts — GitHub API dispatch, or POST digiquant-runner
 - src/et-open.ts — season-specific America/New_York 09:30 gate
-- src/index.ts — scheduled + GET /healthz + optional POST /kick
+- src/backfill.ts — pure plan builder for POST /backfill (allowlist, date validation)
+- src/backfill-do.ts — BackfillLedger Durable Object, per-date idempotence
+- src/counter-do.ts — StartCounter Durable Object, per-slot cron-tick claims
+- src/index.ts — scheduled + GET /healthz + optional POST /kick, POST /backfill, GET /runs/:id
 
 ## Env
 
-- Secret GH_DISPATCH_TOKEN (required for real dispatch)
-- Optional secret CRON_KICK_SECRET (enables POST /kick)
+- Secret GH_DISPATCH_TOKEN (required for real GitHub dispatch)
+- Optional secret CRON_KICK_SECRET (enables POST /kick, POST /backfill, GET /runs/:id)
+- Secret RUNNER_AUTH_TOKEN (Bearer for kind `container`; required outside dry-run)
+- Secret TWELVEX_RUNNER_AUTH (Bearer sent to twelvex-runner for kind `twelvex`; must equal that Worker's `RUNNER_AUTH_TOKEN`; empty falls back to `RUNNER_AUTH_TOKEN`)
 - Var DRY_RUN = "0" by default; "1" logs intended POST only
+- Var GITHUB_OVERRIDE_JOBS = "" (comma-separated job ids that stay on GitHub)
+- Var BACKFILL_ENABLED = "0" by default; "1" enables POST /backfill (404 `backfill_disabled` otherwise)
+- DO binding BACKFILL_LEDGER → class BackfillLedger (SQLite-backed; needs a migration tag)
+- DO binding START_COUNTER → class StartCounter (SQLite-backed; migration tag v2). Claims one cron slot per job so a duplicate delivery cannot dispatch twice — see `## One tick, one dispatch`.
 
 Set secrets from this directory with wrangler secret put (never echo values).
 
+## POST /kick
+
+Body is `{ cron, force?, args? }`, authorised by `CRON_KICK_SECRET`. It fires
+every enabled row on `cron`; `force` also fires disabled rows.
+
+`args` reaches **every** dispatch path, never silently dropped:
+
+| Row kind | Where `args` goes |
+|---|---|
+| `workflow_dispatch` | `inputs` in the `POST /dispatches` body |
+| `repository_dispatch` | `client_payload` in the `POST /dispatches` body |
+| `container` | `args` in the digiquant-runner body |
+| `probe` | nothing to send — a probe fetches a URL and takes no input |
+
+**Conflict rule on a GitHub row: the caller's arg wins per key.** The row's
+static `inputs` are the defaults, and each key in `args` overrides that one
+key. Keys `args` does not mention keep the row's value, so a partial override
+cannot blank the rest of the inputs. Before this rule existed, `args` on a
+GitHub row were discarded and the run still answered `200 {ok:true}` with the
+row's static input — a silent wrong-input run.
+
+A key GitHub's workflow does not declare still comes back as GitHub's own
+refusal of the dispatch, surfaced as a legible
+`400 undeclared_workflow_input` naming the key (last row below).
+Hidden (404) unless `CRON_KICK_SECRET` is set. `Authorization: Bearer
+$CRON_KICK_SECRET`, otherwise 401. Body `{ cron, force?, args? }`; every `args`
+value must be a string.
+
+400 responses, each with `error`:
+
+- `invalid_json` — the body did not parse.
+- `invalid_args` — an `args` value was not a string.
+- `cron_required` — `cron` was empty.
+- `undeclared_workflow_input` — GitHub refused the dispatch because a
+  `workflow_dispatch` input key is not declared in the workflow YAML. The body
+  also carries `cron` and a `detail` naming the workflow, the ref and the
+  offending key(s). It is the caller's own input, so it answers 400 and not 500.
+  `dispatchGithub` fails closed on the first attempt: a deterministic refusal
+  is never retried. Only `workflow_dispatch` / `repository_dispatch` rows can
+  reach this; `kind: container` and `kind: probe` never call GitHub unless the
+  job id is in `GITHUB_OVERRIDE_JOBS`.
+
+Every other failure keeps its previous shape. `dispatchGithub` throws, the
+error leaves the route, and the response is the Worker runtime's 500.
+
+
+## One tick, one dispatch (DIG-4384)
+
+Cloudflare delivers a Cron Trigger **at least once**. On 14-17 Oct 2026 a large
+share of this Worker's ticks (all of them on 15 Oct) arrived twice, 7-29s apart,
+and each copy carried its own `scheduledTime` (the `52 * * * MON-FRI` slot
+arrived as `00:52:48` and `00:52:55`). Both copies dispatched, so every affected
+workflow started twice.
+
+`scheduled()` now claims each job's slot in the `START_COUNTER` Durable Object
+before dispatching. The claim is keyed by cron plus job id and by the UTC
+minute, never by the exact delivery time, which is the only unit the two copies
+share. A cron expression fires at most once per minute, so one job owes at most
+one dispatch per slot and no legitimate start is collapsed; rows that share a
+workflow file have their own ids and their own claims. A duplicate delivery
+logs `skipped: "duplicate_tick"` and starts nothing.
+
+Two properties are deliberate:
+
+- **Fail open.** A missing `START_COUNTER` binding or an unreachable object
+  dispatches anyway (`start_counter_unbound` / `start_counter_unreachable`).
+  A duplicate run costs Actions minutes; a dropped tick costs a production
+  clock.
+- **Release on failure.** If the dispatch itself fails, nothing started
+  upstream, so the slot is released for the next delivery of the same tick to
+  retry. A claim is only ever kept for a dispatch that GitHub (or a runner)
+  accepted.
+
+A claim moves through three states. It is written before the dispatch
+(`claimed`), moved to `dispatching` immediately before the call, and to
+`confirmed` when that call is accepted. A `claimed` slot that never reached the
+dispatch is handed out again after 5s, so a Worker that dies between the two
+does not lose the tick. A `dispatching` slot is held for 6h, above the longest
+synchronous dispatch (`house-run` declares 14400s and twelve-x ingest 1200s), so
+an ordinary second delivery 7-29s later, or a late one during a long run, cannot
+duplicate the dispatch. A dispatch that outlives that long lease is treated as
+dead; that is the same fail-open trade as the missing-binding rule, because a
+duplicate costs Actions minutes and a dropped daily clock costs a day. Every
+transition and the release are fenced by the claim token, so a stale delivery
+cannot confirm or erase the new owner's claim.
+
+Two residual windows are deliberate and small. A Worker killed after
+`dispatching` is written but before the dispatch call leaves the slot held, so
+the duplicate pair does not recover it; the window is between one Durable Object
+write and the next call. If writing `dispatching` itself fails on an unreachable
+counter, the worker dispatches anyway (the fail-open rule) and the claim can
+expire after 5s; the duplicate would then start a second run.
+
+The slot is the UTC minute because that is the only unit the two copies share;
+0 of 514 measured pairs straddled a minute boundary. A pair that does straddle
+one gets two slots and would dispatch twice. That case cannot be collapsed
+safely for an every-minute clock: a copy at `:00:05` is indistinguishable from
+the next legitimate tick.
+
+Claims are kept per UTC day (`slots:<cron + job>:<day>`), and the claim
+transaction drops the previous day it wrote. A minute never recurs, so nothing
+needs to expire to avoid re-arming a duplicate, and an every-minute clock does
+not add a row a minute forever.
+
+`POST /kick` never claims: a human kicking a cron twice in a minute is not a
+duplicate delivery.
+
 ## Unique crons
 
-34 unique cron expressions in wrangler.toml [triggers]. House research/portfolio
-retries (`house-run-09`…`12`) use daily `DOW=*`; twelve-x-new-york stays
-weekday-only on `17 12 * * MON-FRI`. At-open price clocks remain `MON-FRI` with
-the ET open gate.
+`wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
+(44 expressions after the DIG-4364 lock hold). House-run is
+weekly Monday morning only (`house-run-09` at `17 9 * * MON`); daily
+`house-run-10/11/12` stay in `src/jobs.ts` with `enabled: false`.
+`checkpoint-archive` is live at `30 13 * * *` on digiquant-runner.
+GHA `schedule:` stays off — this Worker is the SSOT. Leftover sweep after
+#4970: develop YAML has zero `on.schedule` keys; `digisearch_parity` is
+not a workflow in this repo. Path A traps
+(`agent-pr-finalizer`, `agent-backlog-snapshot`, `refresh-repo-activity`,
+`project-enforce-assignment`) are `workflow_dispatch` jobs with dispatch-only
+YAML; `agent-pr-finalizer` is held off the clock by the 2026-10-14 GitHub cost
+lock (see below). twelve-x-new-york is weekday-only
+on `17 12 * * MON-FRI`. `twelve-x-digisearch-parity` is weekly Monday
+09:08 UTC (`8 9 * * MON`; GHA was `0 9 * * 1`, offset avoids house-run-09).
 
+## GitHub cost-lock holds (DIG-4364)
+
+The 2026-10-14 GitHub cost lock set 57 workflows to `disabled_manually`,
+including four this Worker used to dispatch on a clock. GitHub refuses
+`workflow_dispatch` on a disabled workflow with
+`422 {"message":"Cannot trigger a 'workflow_dispatch' on a disabled workflow"}`,
+a body `isBenign422` (in `src/dispatch.ts`) deliberately does not match, so each
+tick surfaced as a `scheduled` exception:
+
+| Job row | Cron | Workflow |
+| --- | --- | --- |
+| `agent-pr-finalizer` | `11 7 * * *` | `agent-pr-finalizer.yml` |
+| `ci-pr-hygiene` | `21 6 * * *` | `ci-pr-hygiene.yml` |
+| `security-pip-audit` | `33 6 * * MON` | `security-pip-audit.yml` |
+| `security-npm-audit` | `37 6 * * MON` | `security-npm-audit.yml` |
+
+Each row stays in `src/jobs.ts` with its `cron`, `workflow` and `inputs` intact
+but `enabled: false`, and its `[triggers].crons` line is removed — leaving the
+line in place would break `src/trigger-contract.test.ts`, which asserts the
+trigger list equals `uniqueEnabledCrons()` in order. So restoring a lane once the
+workflow is re-enabled on GitHub is a one-flag edit: flip `enabled` back to true
+and re-add the cron line. The clock holds only in the *repo*; production stops
+answering the 422 only after this Worker is redeployed, and the deploy workflow
+(`deploy-digithings-cron.yml`) is itself `disabled_manually`. Re-enabling the
+workflows is a GitHub-settings decision, not a repo change.
+
+## Snapshot backfill (POST /backfill)
+
+`POST /backfill` is the sanctioned dispatch path for **dated** `fx_confluence_snapshot`
+backfills in twelve-x. It is **not a job and not a clock**: there is no `JOBS` row for
+it, no `cron`, and no `[triggers]` expression. Nothing fires it on a schedule; a human or
+an agent POSTs it.
+
+### Why it is not a `wd()` row
+
+`src/jobs.ts` carries the rule *"Add a twelve-x `wd()` row only with a known cron from
+that repo."* A dated remediation has no twelve-x cron — its schedule is "the day we decide
+to run it", which is not a cron expression. An earlier attempt modelled it as a `wd()` row
+with an invented `0 0 30 2 *` (February 30) cron plus `enabled: false`, which is precisely
+the shape the rule forbids. This endpoint drops that fiction: no row, no cron, no
+`enabled` flag. The checkable form is `git diff origin/develop -- src/jobs.ts` being empty.
+
+### Input contract
+
+Body is JSON with an allowlist of exactly two keys, `BACKFILL_INPUT_KEYS`:
+
+- `dates` — **required**. Comma-separated `YYYY-MM-DD` run dates to re-stamp.
+- `force_dates` — optional, must be the string `"true"`. Re-dispatches dates already
+  recorded as remediated.
+
+Anything else is refused with `400 unexpected_arg`, naming the key. That includes the two
+keys upstream does accept and this endpoint deliberately does not:
+
+- **`run_date` is never accepted.** It belongs to `daily_run.yml`, not `maintenance.yml`.
+  A wrong key makes GitHub return `422` while the caller believes it succeeded and starts
+  zero runs — the 2026-09-28 outage shape, whose cause was only in the second log line.
+- **`since` / `until` are not accepted** even though `maintenance.yml` supports them. A
+  date *range* cannot be made idempotent per date from this Worker — it cannot enumerate
+  stored `run_dates` — and a range is the unbounded shape that produced the original
+  surplus. Exact dates are what make the per-date no-op guarantee below provable.
+
+Cap: `MAX_BACKFILL_DATES = 32` after dedupe (`400 too_many_dates`). Non-existent dates
+such as `2026-02-30` are rejected (`400 invalid_dates`, names the element) rather than
+silently reaching twelve-x.
+
+### Idempotence per date
+
+`BackfillLedger` is a Durable Object, chosen over KV because KV has no atomic
+read-modify-write — two overlapping kicks could both read "absent" and both dispatch.
+`claim()` runs inside a single `storage.transaction`, so exactly one caller wins a date.
+
+- First POST for a date dispatches it and records it `done`.
+- A repeat POST for an already-remediated date is a **no-op**: `200` with
+  `{"dispatched": [], "already_remediated": true}` and **zero** upstream requests.
+- An in-flight date is never stolen, even with `force_dates`.
+- A dispatch failure releases its claims, so a retry is still possible.
+- Under `DRY_RUN=1` nothing is recorded, so a preview cannot mark a date remediated.
+
+This is the property that makes the endpoint safe to leave armed: a re-fire of a date set
+cannot rebuild the surplus that a second backfill of the same date created once already.
+
+### Three ledger states, not two
+
+A date is `done` only when GitHub **started a run**. A dispatch GitHub declined is a third
+state, `dispatch_suppressed`, and it is the one that keeps the endpoint honest:
+
+- **A benign 422 is not remediation.** A run for the ref already being queued makes GitHub
+  answer `422`; `isBenign422` recognises only bodies containing `already queued` or
+  `already running`, and a date whose dispatch got one of those starts no run. The endpoint
+  answers `409 dispatch_suppressed`, records `dispatch_suppressed` with the GitHub status, and
+  leaves the date **claimable** — so the next POST retries it. Recording `done` here instead is
+  what would make every later retry answer
+  `200 {"dispatched": [], "already_remediated": true}` with zero upstream calls, for a date that
+  was never backfilled.
+- **A disabled workflow is a different 422, and it is a failure.** GitHub answers a dispatch
+  against a `disabled_manually` workflow with
+  `422 {"message":"Cannot trigger a 'workflow_dispatch' on a disabled workflow"}` — captured
+  live 2026-10-06 and pinned in `src/backfill-route.test.ts`. That body matches none of
+  `isBenign422`'s substrings, so the dispatch **fails** rather than being suppressed:
+  `502 dispatch_failed`, the claim released, and no remediation state recorded. It is not, and
+  never was, `409 dispatch_suppressed`; see [Deployment caution](#deployment-caution). The safety
+  outcome is the same as for the benign 422 — nothing marked `done`, the date claimable, the next
+  POST a real retry — but the status code is 502.
+- **A claim ages out.** `IN_FLIGHT_TTL_MS` (30 min) is the window a claim may stand. A request
+  killed between `claim` and settle — isolate eviction, client abort — otherwise locks its
+  dates out forever, and every later POST reports them as remediated. Past the TTL an
+  `in_flight` date is claimable again; an unparseable `claimed_at` counts as abandoned.
+- **Only the caller that owns a claim may settle it.** `claim` hands back the `claimed_at` it
+  wrote, and `markDone`, `markSuppressed` and `release` write nothing unless that token still
+  matches the stored record. Without the fence a slow request can delete or overwrite a claim
+  that has since aged out and been re-dispatched, leaving a date with no record at all even
+  though a run exists for it. A settle that finds no matching claim is skipped and logged with
+  its reason (`ledger_write_skipped`).
+- **A declined forced re-dispatch leaves a `done` date `done`.** `force_dates` on a date already
+  `done` borrows its record and notes `reclaimed_from: "done"`. If GitHub then declines, the
+  earlier run is still standing, so the record goes back to `done` with its original
+  `completed_at` — through both the `dispatch_suppressed` path and the `release` path a hard
+  dispatch failure takes. Demoting it would throw away the fact the date was remediated and
+  let the next plain POST dispatch it a second time, which is the DIG-48 surplus.
+- **`already_remediated` means every date is `done`.** A date held by a live request answers
+  `dispatched: []` with `already_remediated: false`, because in-flight is not remediated.
+
+Every response carries `states`, the ledger's per-date view of the request, so "nothing to do"
+is distinguishable from "stranded" without reading storage.
+
+### Guard ladder
+
+Every rung runs before the first request leaves the Worker:
+
+| Condition | Response |
+| --- | --- |
+| `CRON_KICK_SECRET` unset | 404 |
+| Bad bearer | 401 |
+| `BACKFILL_ENABLED !== "1"` | 404 `backfill_disabled` |
+| Body not JSON | 400 `invalid_json` |
+| Non-object body, or a non-string value | 400 `invalid_args` |
+| Key outside the allowlist | 400 `unexpected_arg` |
+| `force_dates` present and not `"true"` | 400 `invalid_args` |
+| **`dates` missing or blank (bare kick)** | **400 `missing_required_arg`** |
+| Splits to no dates | 400 `invalid_dates` |
+| Element is not a real calendar date | 400 `invalid_dates` |
+| More than 32 dates | 400 `too_many_dates` |
+| `BACKFILL_LEDGER` binding absent | 503 `backfill_unconfigured` |
+| GitHub dispatch failed, including a disabled workflow | 502 `dispatch_failed` (claims released) |
+| GitHub declined with an already-running 422 | 409 `dispatch_suppressed` (dates stay dispatchable) |
+
+Success dispatches `maintenance.yml` on `digithings-ai/twelve-x` at `ref: develop` with
+inputs `{backfill_snapshots: "true", dates: "<csv>"}` only.
+
+### Response body
+
+Every answer carries `states` (`done` / `dispatch_suppressed` / `in_flight` / `unknown` per
+requested date). Two further flags are `false` on every healthy response and turn true only
+when the ledger itself misbehaved, so they are the signal to alarm on:
+
+- `ledger_write_failed` — GitHub accepted the dispatch, so a run exists, but the ledger write
+  did not land. The claim stays `in_flight` and ages out via `IN_FLIGHT_TTL_MS`; the endpoint
+  does **not** release it, because releasing would re-dispatch dates that already ran (the
+  DIG-48 surplus) and reporting `502` would call a GitHub success a failure.
+- `release_failed` — a dispatch failed *and* releasing its claim failed. The date strands as
+  `in_flight` until the TTL retires it. The status stays `502` rather than becoming an
+  unhandled `500`.
+
+```
+curl -X POST https://digithings-cron.<account>.workers.dev/backfill \
+  -H "Authorization: Bearer $CRON_KICK_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"dates":"2026-06-02,2026-06-03"}'
+```
+
+Scope is `fx_confluence_snapshot` only. `fx_trade_ideas_snapshot` is never written or
+pruned by this path (twelve-x `tests/test_backfill_snapshots.py`).
+
+### Deployment caution
+
+Any push to `main` touching `apps/digithings-cron/**` deploys this Worker to production,
+after the `production` environment gate is approved (see `## Deploy`). A PR against
+`develop` is not a production change: it reaches production only when `develop` is
+promoted into `main`. Nothing here is
+enabled by default: `BACKFILL_ENABLED = "0"` in `wrangler.toml`, and turning it on is a
+separate, explicit act.
+
+**Prerequisite:** twelve-x `maintenance.yml` is currently `disabled_manually`, and GitHub
+refuses to dispatch a disabled workflow. Until it is re-enabled (DIG-757), every
+`POST /backfill` answers **`502 dispatch_failed`**, not `409 dispatch_suppressed`. GitHub's 422
+for a disabled workflow is `Cannot trigger a 'workflow_dispatch' on a disabled workflow`, which
+is not a body `isBenign422` treats as benign, so the dispatch counts as a failure rather than a
+suppression. The claim is released and nothing is recorded as remediated, so re-enabling the
+workflow and POSTing again is all it takes; no date is lost to the attempt.
+`409 dispatch_suppressed` is the *other* 422 case — a run for the ref already queued — and it
+cannot occur while the workflow is disabled.
+
+## twelve-x watchdogs (DIG-4381)
+
+`src/twelvex-watch.ts` holds the two detectors that ask, from this Worker,
+whether a twelve-x check *ran*. They file against `digithings-ai/twelve-x` with
+`GH_DISPATCH_TOKEN`, one label per class. The feed detector files at most one
+issue per 24h window (an occurrence inside the window comments on the open
+issue instead); the heartbeat detector files one per occurrence.
+
+- `twelve-x-feed-confirm-watchdog` (`23 16 * * MON-FRI`) reads
+  `feed_published_confirm.yml` run history over a 6h lookback. Label
+  `feed-confirm-silent`.
+- `twelve-x-session-heartbeat-watchdog` (`40 */6 * * *`) reads the last
+  heartbeat dispatch; silent while it is inside its tolerance. Label
+  `primarketet-heartbeat-missing`.
+
+**`status === "completed"` is not confirmation; `conclusion === "success"` is.**
+GitHub reports a billing-blocked run as `status=completed, conclusion=failure` —
+the run object completes while no job ever starts, so a run list filtered on
+status alone reads a blocked run as healthy. The feed watchdog therefore alarms
+when no run in the lookback concluded `success`, and names each run's status and
+conclusion in the issue. The same rule catches a syntax error on develop, a
+cancelled run, a runner lost before step 1 and an expired job token, none of
+which start the workflow's own alert steps. A run that failed far enough to exit
+non-zero already filed its `feed-publication-gap` / `feed-confirm-unconfirmed`
+issue; the alarm body says so, so the reader is not looking at two unrelated
+findings. The filed title tracks which case it is — "did not run", "did not
+succeed", or "state unknown" for an unreadable run history — so a failed run is
+never filed as one that never happened.
+
+`evaluateCatchup` (`sessionCatchupDue`) also reads `conclusion` — it treats a
+pending run as covering today's slot, but for a past day it needs
+`conclusion === "success"` exactly as this watchdog does. It is the pre-existing
+correct shape this defect deviated from.
+
+## Required trigger contract (DIG-732)
+
+`src/required-triggers.ts` is the contract as data: every cron the FX pipeline
+needs, with the reason it is required and what is lost without it. Today that is
+the three session clocks, `twelve-x-session-catchup`, and
+`twelve-x-primemarket-heartbeat`. Each row names the capability, so DIG-678 /
+DIG-55 may change which job fills a row but may never let a required cron vanish
+silently.
+
+DIG-553 Finding 1 (measured over 543 runs): 1–30 Aug 2026 had zero catch-up runs,
+so every failed day auto-unrecovered, and six client-visible stale days (7, 14,
+19, 20, 24, 25 Aug) predated the Worker's first clock day on 2026-08-31 and were
+unrecoverable. Deleting the `twelve-x-session-catchup` job row and its cron line
+together left `src/jobs.ts`'s own assertion green — only a copied id list in a
+unit test noticed, and nobody ran it for five weeks.
+
+Two distinct alarm classes, one issue per occurrence, the label is the class
+(twelve-x convention, `tests/test_alerting_workflows.py` in twelve-x):
+
+- `missing_required_cron` — a required cron is absent from the trigger list under
+  test, or its job row is gone, disabled, or points at a different cron. Label
+  `cron-missing-required-trigger`.
+- `unrecognised_cron` — a cron fires and no job row claims it, not even a
+  disabled one, so it starts nothing. Label `cron-unrecognised-trigger`. This is
+  not the same failure as a missing required cron and must not read as one.
+  Raised from the cron tick in `src/index.ts` (scheduled only; a human typing a
+  cron on POST /kick is not drift).
+
+A broken contract opens an issue in `digithings-ai/twelve-x` through
+`GH_DISPATCH_TOKEN` and never throws. Absence is loud by default: an unmet
+contract fails the deploy and alarms.
+
+"Occurrence" means an occurrence of drift, not an observation of it. A tick
+re-detects the same unmapped trigger every time it fires and the deployed check
+re-runs on every deploy, so `src/trigger-alarm.ts` first looks for an open issue
+with the same class label and the same title, and returns that issue instead of
+filing another. It never comments on the open issue, so an unresolved drift
+stays one visible open issue instead of six a day. Close it when the drift is
+resolved and the next occurrence opens a fresh one. An unreadable search always
+raises rather than suppressing: a duplicate issue is recoverable, a silent
+miss is not.
 ## Local
 
 ```
@@ -42,11 +441,16 @@ npm run dev
 
 ## Deploy
 
-Deploy from `develop` and `main`. CI workflow:
-.github/workflows/deploy-digithings-cron.yml (push paths
-apps/digithings-cron/** + workflow_dispatch; Node 22; wrangler deploy).
+Deploy from `main` only, behind the `production` environment gate (DIG-3129). CI
+workflow: .github/workflows/deploy-digithings-cron.yml (push to `main`, paths
+apps/digithings-cron/**; plus workflow_dispatch; Node 22; wrangler deploy).
 Needs CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID and syncs GH_DISPATCH_TOKEN
 through the wrangler-action secret input without printing the value.
+
+A push to `develop` does not deploy. It is validated by the CI `web` lane
+(.github/workflows/test-web.yml, which runs this workspace's Vitest + typecheck)
+and by build-cloudflare-workers.yml, and reaches production only when `develop`
+is promoted into `main`.
 
 ## Migration
 
@@ -54,10 +458,21 @@ digithings: schedule blocks removed in this PR, workflow_dispatch / repository_d
 
 twelve-x follow-up (other repo): remove schedule from daily_run_asia/london/new_york,
 market_context_ingest (keep bucket input), performance_eval, primemarket_session_heartbeat,
-session_catchup; keep workflow_dispatch; add header pointing at digithings-cron.
+session_catchup, digisearch_parity_check; keep workflow_dispatch; add header pointing at
+digithings-cron.
 
 ## Jobs
 
 See src/jobs.ts for the full enabled map. market_context uses bucket inputs
-intraday / daily / weekly. agent-pr-finalizer dispatches with dry_run=false.
-House-run uses repository_dispatch event_type digiquant-baseline.
+intraday / daily / weekly. agent-pr-finalizer dispatches with `dry_run=false`
+(held off the clock by DIG-4364 until its workflow is re-enabled on GitHub).
+twelve-x-archive-maintenance dispatches with `dry_run=false` and
+`dump_before_prune=true`. `twelve-x-digisearch-parity` dispatches
+`digisearch_parity_check.yml` with no inputs (workflow default days=14).
+House-run is `kind: container`
+(`house-run-09` Monday 09:17 UTC). Price jobs, market-data-refresh,
+checkpoint-archive, onchain, tearsheets, research-metrics, and
+execution-cron-check use `kind: container`. Those workflows have no
+`schedule:` of their own. The runner command catalog is
+`apps/digiquant-runner/commands.json`. Operator notes:
+`docs/ops/digiquant-runner.md`.

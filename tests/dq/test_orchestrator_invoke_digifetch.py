@@ -61,6 +61,8 @@ def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any, **kwargs: Any) 
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    # Don't set enabled=True by default; let the client read from GLOOMBERB_ENABLED
+    # unless the test explicitly passes enabled=True/False.
     gloomberb = GloomberbClient(fetcher=fetcher, **kwargs)
     monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: gloomberb)
 
@@ -77,7 +79,7 @@ def _fail_handler(request: httpx.Request) -> httpx.Response:
 def test_digifetch_quote_returns_the_attributed_envelope(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _patch_client(monkeypatch, _quote_handler)
+    _patch_client(monkeypatch, _quote_handler, enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
@@ -115,7 +117,7 @@ def test_gated_tool_without_cookie_is_typed_auth_required(
 ) -> None:
     # Both session- and pro-gated names answer the typed envelope (the cookie
     # gate runs first), never a 400 and never a wire request.
-    _patch_client(monkeypatch, _fail_handler)
+    _patch_client(monkeypatch, _fail_handler, enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": tool, "arguments": arguments},
@@ -133,7 +135,7 @@ def test_pro_tool_with_free_session_is_typed_pro_required(
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text="Pro plan required")
 
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    _patch_client(monkeypatch, handler, session_cookie="test-session=test", enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": "digifetch_transcripts", "arguments": {"ticker": "AAPL"}},
@@ -177,7 +179,7 @@ def test_price_history_date_window_dispatches_through_the_endpoint(
             },
         )
 
-    _patch_client(monkeypatch, handler)
+    _patch_client(monkeypatch, handler, enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
@@ -216,8 +218,8 @@ def test_client_fault_returns_error_not_an_envelope(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The dispatcher's non-envelope path (agent_tools.py: the client call raised)
-    # answers {"error": "<Type>: <msg>"} — the endpoint must surface it as
-    # ok:false with the message preserved under `data`.
+    # answers {"error": "<Type>"} — the endpoint must surface it as ok:false.
+    # The exception text stays out of the body.
     class _Boom:
         def quote(self, request: Any) -> Any:
             raise RuntimeError("boom")
@@ -230,5 +232,64 @@ def test_client_fault_returns_error_not_an_envelope(
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is False
-    assert body["error"].startswith("RuntimeError")
-    assert body["data"] == {"error": "RuntimeError: boom"}
+    assert body["error"] == "RuntimeError"
+    assert body["data"] == {"error": "RuntimeError"}
+
+
+def test_section12_hosted_surface_tripwire_gated_tools_unreachable_without_a_cookie(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§12 tripwire, re-pinned after the DIG-2752 rescope (decision d4922299).
+
+    The family no longer needs an opt-in, so the property is no longer "the kill
+    switch blocks everything". It is narrower and still zero-HTTP: from the
+    hosted /v1/orchestrator_invoke surface with NOTHING configured - no flag, no
+    cookie, exactly what a deployed environment looks like - a cookie-gated tool
+    MUST fail (now with the typed ``auth_required`` envelope instead of a
+    disabled ``upstream_error``) and MUST make no network request, while the
+    keyless ``free`` tools are reachable. The sibling tests above pin the same
+    ``auth_required`` envelope with the flag set explicitly; this one pins the
+    default, hosted, end-to-end shape that they do not cover.
+    """
+    monkeypatch.delenv(GLOOMBERB_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
+
+    # Any handler would fail if called, proving no request is made.
+    _patch_client(monkeypatch, _fail_handler)
+
+    # A session-gated tool (holders) must not be reachable.
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digifetch_holders", "arguments": {"symbol": "AAPL"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False, "Cookie-gated tool must not succeed without a cookie"
+    assert body["data"]["data"]["code"] == "auth_required"
+
+    # A pro-gated tool (transcripts) must not be reachable either.
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digifetch_transcripts", "arguments": {"ticker": "AAPL"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False, "Pro-gated tool must not succeed without a cookie"
+    assert body["data"]["data"]["code"] == "auth_required"
+
+    # The keyless surface IS reachable now, and that is the decision: it must
+    # actually reach the transport, which a recording handler proves.
+    reached: list[str] = []
+
+    def _recording_handler(request: httpx.Request) -> httpx.Response:
+        reached.append(str(request.url))
+        return httpx.Response(200, json={"symbol": "AAPL", "price": 1.0})
+
+    _patch_client(monkeypatch, _recording_handler)
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
+    )
+    assert r.status_code == 200
+    assert r.json()["ok"] is True, "A free tool must succeed with no credential"
+    assert reached, "the free tool must actually reach the transport"

@@ -44,12 +44,13 @@ hosts:
     # browser. Zammad rides its `Token token=<x>` scheme as a raw authHeader
     # value (#3841); digigraph treats the dotless `zammad-mcp` name as
     # container-internal DNS (loopback URLs are never dialable, #3879).
-    # On the Cloudflare stack the same server is reached via the key-gated
-    # route instead: url https://graph.digithings.ai/_stack/mcp/zammad/mcp,
-    # token: <MCP_EDGE_KEY value>, authHeader: x-digi-mcp-key (the dotless
-    # `zammad-mcp` name does not resolve there; tokenEnv cannot resolve the
-    # Worker-only MCP_EDGE_KEY secret, so the value goes in `token` literally;
-    # fail-closed 401 without the key).
+    # In production (Cloudflare) the same server runs inside the digichat
+    # image and is served via the key-gated digichat Worker route instead:
+    # url https://digithings.ai/api/mcp/zammad/mcp,
+    # token: <ZAMMAD_EDGE_KEY value>, authHeader: x-digi-mcp-key (tokenEnv
+    # cannot resolve the digichat Worker's ZAMMAD_EDGE_KEY secret, which is
+    # Worker-scoped and never forwarded to the container, so the value goes in
+    # `token` literally; fail-closed 401 without the key).
     mcp:
       allowUserServers: false
       allowAddForm: false
@@ -94,4 +95,6 @@ hosts:
       llmAccess: operator
       showByok: false
       showLanguageSelector: true
+      # Pin the house model and hide per-session model/MCP/tool controls.
+      lockSessionControls: true
       webSearch: false

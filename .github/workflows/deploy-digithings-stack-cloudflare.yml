@@ -1,57 +1,62 @@
-# Manual deploy for the digithings-stack Cloudflare Container (Profile A stack:
-# digikey + digigraph + digisearch + digivault + LiteLLM under supervisord —
-# see apps/digithings-stack-cloudflare/README.md).
+# Deploy: digithings-stack (Cloudflare Containers)
 #
-# Before this file the stack deploy was manual-only (`npx wrangler deploy`
-# from apps/digithings-stack-cloudflare/ on a developer machine with
-# Docker + `wrangler login`) — verified no workflow anywhere ran it. Automation
-# replaced the manual keyboard, NOT the human: the `deploy` job runs on a merge
-# to `main` and on `workflow_dispatch`, always behind the `production`
-# environment gate. Pull requests run the `check` job only and can never deploy.
+# The merge-to-main deploy path for the digithings-stack Worker (digikey +
+# digigraph + digisearch + digivault + LiteLLM under supervisord) and its two
+# Containers, publishing graph.digithings.ai / key.digithings.ai and
+# search.digithings.ai.
 #
-# DIG-1569: this file originally triggered on `pull_request` +
-# `workflow_dispatch` ONLY — there was no `push` trigger, so a merge to `main`
-# deployed nothing at all. On DIG-1484 the fix that retired an unmasked
-# customer-PII seed payload was merged as `da88fa71` and production served the
-# retiring container (`shared-v16`) for ~19 hours afterwards, with three
-# deployments parked on the `production` gate and no alert. The gate is still
-# the control that lets Chris stop a deploy; the trigger is what makes the gate
-# observable. Do not remove `push` without replacing the merge-to-main deploy
-# path, and keep `.github/workflows/production-deploy-gate-watchdog.yml` able to
-# see anything that sits on the gate.
+# HISTORY - read this before changing anything here.
 #
-# The `push` and `pull_request` path filters below are deliberately duplicated
-# rather than shared through a YAML anchor: an anchor here is invisible to
-# review, and the one thing this file must never do is let the merge path and
-# the review path drift apart. `tests/scripts/test_deploy_digithings_stack_cloudflare.py`
-# pins the two lists as byte-identical and fails on drift.
+# 1. Before a lane existed the stack was deployed by hand, from a developer
+#    machine, with Docker and `npx wrangler login`. DIG-2843 decided that
+#    story: document it as it is, no CI lane. That decision was taken while
+#    the Container id was a HAND-EDITED string that every image-changing
+#    deploy had to remember to bump, and a code-only redeploy left the old
+#    instance serving its old image.
+# 2. That hazard is gone. The Container id is now DERIVED from the deploying
+#    commit (DIG-3229 for this Worker's own id, DIG-3814 for the digichat
+#    id), so every deploy creates a fresh instance and there is nothing left
+#    to hand-edit and nothing to forget. `npm run deploy`
+#    (apps/digithings-stack-cloudflare/scripts/deploy.mjs) injects the rev,
+#    refuses to deploy when the commit cannot be resolved, and reads
+#    /_stack/meta back afterwards to prove the live ids are the ones this
+#    commit implies.
+# 3. So this lane is RE-DERIVED, not `git revert`ed back - DIG-2843's own
+#    precedent is to re-derive a deleted lane, never to revert it. It
+#    deploys through the wrapper, so the rev is never absent.
 #
-# Deploy runs from the repo root (`-c apps/digithings-stack-cloudflare/
-# wrangler.toml`) — the documented command, and it keeps the relative `-c` path
-# and npm workspace resolution unambiguous. The container Docker build context
-# itself is NOT the cwd: wrangler resolves it from the config file and defaults
-# it to the Dockerfile's directory, so both containers pin
-# `image_build_context = "../.."` in wrangler.toml (#4046).
+# THE GATE IS THE POINT. The deploy job sits behind the `production`
+# environment, whose manifest (.github/environments.json) names Chris as the
+# required reviewer and allows main-branch deployments only. That is what
+# lets Chris stop a deploy; the trigger is only what makes the gate
+# observable. Do not remove `push` without replacing the merge-to-main
+# deploy path, and keep production-deploy-gate-watchdog.yml able to see
+# anything that sits on the gate.
 #
-# Requires repo secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID — NOT
-# guaranteed present. Until they are added (Settings -> Secrets and variables
-# -> Actions, or `gh secret set`), the deploy job fails closed with a wrangler
-# auth error rather than deploying nothing silently. The token needs at least
-# Workers Scripts:Edit on the digithings.ai Cloudflare account.
+# CREDENTIALS. wrangler authenticates from CLOUDFLARE_API_TOKEN, and in
+# this house that NAME is also the Vectorize/D1 token - the trap documented
+# in apps/digithings-stack-cloudflare/wrangler.toml and in that app's
+# README. Exporting the D1 token makes wrangler authenticate as it and
+# every deploy fails with code 10000. This lane therefore reads a Workers
+# Scripts:Edit token from a DIFFERENT secret name and exports it under
+# wrangler's own name.
+#
+# Do not add `working-directory`: both Containers pin
+# `image_build_context = "../.."`, so the image build needs the repository
+# root as its context (#4046).
 name: "Deploy: digithings-stack (Cloudflare Containers)"
 
 on:
   push:
-    branches:
-      - "main"
+    branches: [main]
     paths:
-      - "Dockerfile.digithings-stack-cloudflare"
+      - "infra/docker/Dockerfile.digithings-stack-cloudflare"
       - "apps/digithings-stack-cloudflare/**"
       - "digiquant/**"
       - "digivault/**"
       - "apps/dashboard-api/**"
       - "apps/digichat-cloudflare/**"
-      - "Dockerfile.digichat-cloudflare"
+      - "infra/docker/Dockerfile.digichat-cloudflare"
       - "apps/digichat/**"
       - "config/**"
       - "infra/**"
@@ -62,19 +67,18 @@ on:
       - "digigraph/**"
       - "digikey/**"
       - "digillm/**"
-      - "digismith/**"
+      - "digitrace/**"
       - "digisearch/**"
       - ".github/workflows/deploy-digithings-stack-cloudflare.yml"
-      - ".github/workflows/deploy-digichat-cloudflare.yml"
   pull_request:
     paths:
-      - "Dockerfile.digithings-stack-cloudflare"
+      - "infra/docker/Dockerfile.digithings-stack-cloudflare"
       - "apps/digithings-stack-cloudflare/**"
       - "digiquant/**"
       - "digivault/**"
       - "apps/dashboard-api/**"
       - "apps/digichat-cloudflare/**"
-      - "Dockerfile.digichat-cloudflare"
+      - "infra/docker/Dockerfile.digichat-cloudflare"
       - "apps/digichat/**"
       - "config/**"
       - "infra/**"
@@ -85,148 +89,81 @@ on:
       - "digigraph/**"
       - "digikey/**"
       - "digillm/**"
-      - "digismith/**"
+      - "digitrace/**"
       - "digisearch/**"
       - ".github/workflows/deploy-digithings-stack-cloudflare.yml"
-      - ".github/workflows/deploy-digichat-cloudflare.yml"
   workflow_dispatch:
     inputs:
       ref:
-        description: "Git ref to deploy (default: main tip — promote to main first)"
+        description: "Git ref to deploy (default: main tip - promote to main first)"
         required: false
         default: "main"
 
 permissions:
   contents: read
 
+# Per-run group, and never superseding: the `production` environment can
+# hold a run at the approval gate, so a shared group with
+# cancel-in-progress: true would cancel a deployment Chris already
+# approved. This is the same shape, and the same reason, as the other
+# production-gated lane in this repo (deploy-digiquant-runner.yml).
+# The serialising race between two quick merges to main is separate work
+# and is not solved here.
 concurrency:
-  # Per-run group, unchanged from before this PR and unchanged for the same reason.
-  # #2541: a shared group + `environment: production` + cancel-in-progress: false
-  # means an unapproved run does not delay the workflow, it STOPS it -- every later
-  # run is evicted from the group's single pending slot and reports `cancelled` with
-  # zero jobs, which reads like a cancelled deploy rather than one that never ran.
-  # db-migrate lost 15 days and migrations 066-070 that way.
-  #
-  # I changed this to a per-ref group on the reasoning that two merges in quick
-  # succession would race two `wrangler deploy`s onto the same container name. That
-  # is a real hazard, and this change is still the wrong fix for it: a per-ref group
-  # restores the #2541 starvation, and with a push trigger it would now do it on the
-  # common path -- one unapproved merge to main parks every deploy behind it.
-  # tests/scripts/test_workflow_environment_concurrency.py enforces the rule repo-wide
-  # and failed this branch, correctly.
-  #
-  # The serialising race between two merges is real and is NOT solved here: nothing
-  # in this file mutual-excludes two `production` deployments, and the group above is
-  # per-run by design. An earlier draft claimed the environment gate bounds it; that
-  # is wrong -- GitHub environments gate each deployment independently and do not
-  # exclude one another, so two approved merges can run `wrangler deploy` against the
-  # same container name at once. Fixing it needs a shared group or a deploy-level
-  # lock, each of which trades against #2541, so it is separate work with its own
-  # test rather than a drive-by inside a production-trigger change.
   group: deploy-digithings-stack-cloudflare-${{ github.run_id }}
   cancel-in-progress: false
+
 jobs:
-  # ── Validation only. Runs on every trigger, deploys nothing. ────────────────
-  # Its steps are duplicated in `check-deploy-gate` rather than shared through a
-  # composite action on purpose: the pull_request path must be readable on its
-  # own as "this cannot deploy", with no shared job whose steps could later grow
-  # a deploy command.
   check:
-    name: "check (pull request — validation only)"
+    name: "check (pull request - validation only)"
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspace digithings-stack-cloudflare
+      - run: npm run test --workspace digithings-stack-cloudflare
 
-      - name: Install workspace dependencies
-        # Root lockfile owns this workspace (apps/*, packages/*): the stack package
-        # has no lockfile of its own, so `npm ci` must run at repo root — in
-        # the stack dir it fails with EUSAGE (no package-lock.json there).
-        run: npm ci
-
-      - name: Typecheck stack worker
-        working-directory: apps/digithings-stack-cloudflare
-        run: npx tsc --noEmit
-
-      - name: Test stack worker
-        working-directory: apps/digithings-stack-cloudflare
-        run: npx vitest run
-
-  # ── The gate that decides whether a deploy is allowed to start. ─────────────
-  # Same checks as `check`, on the ref that will actually be deployed. A failed
-  # gate skips the deploy job below, so a red typecheck on main cannot reach
-  # production.
   check-deploy-gate:
     name: "check (deploy gate)"
+    # No `needs`: with `needs: [check]` the merge-to-main path skipped
+    # `check`, so it skipped the gate and then skipped `deploy` - DIG-1569
+    # reproduced inside its own fix.
     if: github.event_name != 'pull_request'
-    # Deliberately no `needs`. `check` is pull_request-only, and a skipped need
-    # skips everything downstream: with `needs: [check]` here, merging to main
-    # skipped `check`, which skipped this job, which skipped `deploy` -- the exact
-    # DIG-1569 failure, reproduced inside its own fix. `actionlint` does not catch
-    # it, and the repo's own ci.yml only gets away with depending on path-filtered
-    # jobs because its consumer declares `if: always()`.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          # Dispatch may target inputs.ref; on push it is always the pushed sha.
           ref: ${{ inputs.ref || github.sha }}
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-
-      - name: Install workspace dependencies
-        run: npm ci
-
-      - name: Typecheck stack worker
-        working-directory: apps/digithings-stack-cloudflare
-        run: npx tsc --noEmit
-
-      - name: Test stack worker
-        working-directory: apps/digithings-stack-cloudflare
-        run: npx vitest run
+      - run: npm ci
+      - run: npm run typecheck --workspace digithings-stack-cloudflare
+      - run: npm run test --workspace digithings-stack-cloudflare
 
   deploy:
     name: "deploy (production)"
-    # Merge to main, or an explicit manual dispatch. Never a pull request.
-    # The `production` environment below is the human-approval control — a
-    # reviewer (Chris) still has the last word, so automation here does not
-    # remove the gate, it only stops the gate from silently holding a deploy
-    # for a day. production-deploy-gate-watchdog.yml alerts when it does.
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: [check-deploy-gate]
-    environment: production
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
         with:
-          # Default input is main: a no-input dispatch ships the promoted tip.
-          # On push, inputs.ref is unset, so this is github.sha — the exact
-          # commit the gate above validated.
           ref: ${{ inputs.ref || github.sha }}
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-
-      - name: Install workspace dependencies
-        run: npm ci
-
-      - name: Deploy stack container
-        # Root cwd + relative -c: wrangler resolves image / image_build_context
-        # relative to the config file, and both containers pin the build
-        # context to the repo root in wrangler.toml (image_build_context).
-        # Never add working-directory here — `npm ci` and the -c path assume
-        # the repo root (#4046).
+      - run: npm ci
+      - name: "Deploy stack container"
+        run: npm run deploy --workspace digithings-stack-cloudflare
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy -c apps/digithings-stack-cloudflare/wrangler.toml

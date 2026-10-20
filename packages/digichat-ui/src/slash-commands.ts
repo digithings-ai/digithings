@@ -30,7 +30,8 @@ export type SlashId =
   | "undo"
   | "redo"
   | "mcp"
-  | "tools";
+  | "tools"
+  | "artifacts";
 
 export type SlashDef = {
   id: SlashId | string;
@@ -93,13 +94,13 @@ export function isSearchEngine(value: string): value is SearchEngineCode {
   return (SEARCH_ENGINE_CODES as readonly string[]).includes(value.trim().toLowerCase());
 }
 
-export const VIEW_CODES = ["hidden", "compact", "balanced", "detailed"] as const;
+export const VIEW_CODES = ["hidden", "quiet", "balanced", "verbose"] as const;
 export type ViewCode = (typeof VIEW_CODES)[number];
 const VIEW_LABELS: Record<ViewCode, string> = {
   hidden: "Hidden \u00b7 answer only",
-  compact: "Compact \u00b7 closed",
+  quiet: "Quiet \u00b7 one line",
   balanced: "Balanced \u00b7 collapse when done",
-  detailed: "Detailed \u00b7 stays open",
+  verbose: "Verbose \u00b7 stays open",
 };
 export const VIEW_CHOICES: readonly { value: ViewCode; label: string }[] = VIEW_CODES.map(
   (code) => ({ value: code, label: VIEW_LABELS[code] }),
@@ -199,7 +200,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "view",
     names: ["/view"],
     needsArg: false,
-    hint: "hidden / compact / balanced / detailed",
+    hint: "hidden / quiet / balanced / verbose",
     choiceOptions: VIEW_CHOICES,
     kind: "client",
     category: "setup",
@@ -237,6 +238,30 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     hint: "Settings",
     kind: "action",
     category: "setup",
+  },
+  {
+    id: "toolbar",
+    names: ["/toolbar"],
+    needsArg: false,
+    hint: "Composer toolbar",
+    kind: "action",
+    category: "setup",
+  },
+  {
+    id: "scrollbar",
+    names: ["/scrollbar"],
+    needsArg: false,
+    hint: "Scrollbars: always or on scroll",
+    kind: "action",
+    category: "setup",
+  },
+  {
+    id: "artifacts",
+    names: ["/artifacts"],
+    needsArg: false,
+    hint: "Files this session produced",
+    kind: "action",
+    category: "session",
   },
   {
     id: "sessions",
@@ -324,6 +349,8 @@ export type SlashVisibility = {
   mcp?: boolean;
   /** Connected-tools palette. Hide when the install has no catalog/MCP. */
   tools?: boolean;
+  /** Artifact list for this session. Hide where there is no artifact surface. */
+  artifacts?: boolean;
 };
 
 export type ParsedSlash =
@@ -362,6 +389,7 @@ function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "models" || cmd.id === "effort") return visibility?.models !== false;
   if (cmd.id === "mcp") return visibility?.mcp !== false;
   if (cmd.id === "tools") return visibility?.tools !== false;
+  if (cmd.id === "artifacts") return visibility?.artifacts === true;
   return true;
 }
 

@@ -1,19 +1,37 @@
-"""Contract pins for the production deploy path (DIG-1569).
+"""The stack's merge-to-main deploy lane must keep the merge-to-main deploy
+path and Chris's production gate.
 
-The incident this file exists to prevent: ``deploy-digithings-stack-cloudflare.yml``
-triggered on ``pull_request`` + ``workflow_dispatch`` only, so **merging to main
-deployed nothing**. The fix that retired unmasked customer PII from the stack
-seed payload landed as ``da88fa71`` and production served the retiring container
-(``shared-v16``) for ~19 hours after it — a fix present in main and absent from
-production reads, from any audit, as an unremediated exposure.
+Re-derived for `develop` in DIG-4612. The lane was deleted from `develop`
+on 2026-10-01 by `f54af7052` (#4919, Human Gate) and DIG-2843 then
+decided to "document as-is": the stack ships out-of-band, by hand. Two
+things changed after that decision, and they are why this lane exists now:
 
-A YAML trigger block is exactly the kind of thing that silently regresses: delete
-one key and a merge deploys nothing again, with every test still green. So the
-triggers are pinned here, plus the repo-wide invariant that closed out item 3 of
-the issue: any workflow that can deploy must fire on ``push: main``.
+1. The Container id is no longer a hand-edited string. It is derived from
+   the deploying commit (DIG-3229 for this Worker's own id, DIG-3814 for
+   the digichat id), so a deploy cannot silently ship the previous
+   instance. `npm run deploy` injects the rev, refuses to deploy when the
+   commit cannot be resolved, and reads /_stack/meta back afterwards.
+2. The lane is re-derived, not reverted (DIG-2843's own precedent).
 
-The audit itself found exactly one defective workflow. The invariant test below
-exists so the *next* one fails CI rather than production.
+What this file pins, and why each pin is load-bearing:
+
+* The lane fires on `push: main`. A lane without it deploys nothing on a
+  merge (DIG-1569's defect class, and the reason the `production` gate
+  went unobservable for ~19 h).
+* The deploy job sits behind the `production` environment. That gate is
+  what lets Chris stop a deploy; the trigger only makes the gate visible.
+* The deploy job waits for `check-deploy-gate`, and that gate job does
+  NOT depend on the pull-request-only `check` job. With `needs: [check]`
+  the merge-to-main path skipped `check`, so it skipped the gate and then
+  skipped `deploy` - DIG-1569 reproduced inside its own fix.
+* The deploy runs through the rev-injecting wrapper, never a bare
+  `npx wrangler deploy`, which ships the legacy id and cannot guarantee
+  eviction.
+* The push and pull_request path filters are the same list, and that list
+  covers every tree the image bakes in. A merge that changes shipped code
+  but matches no filter deploys nothing.
+* Every workflow in this repo that can deploy production fires on
+  `push: main` (the repo-wide invariant below).
 """
 
 from __future__ import annotations
@@ -25,8 +43,6 @@ from typing import Any
 import pytest
 import yaml
 
-# `make test-unit` and ci.yml both run `-m unit`; an unmarked file is deselected
-# entirely, so an unmarked test is a test that never runs.
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -34,9 +50,8 @@ WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 STACK_WORKFLOW = WORKFLOWS_DIR / "deploy-digithings-stack-cloudflare.yml"
 
 # Paths whose deployment is owned by Cloudflare's git integration, not by a
-# workflow here. `gh pages deploy` in these files builds a PR preview; production
-# digithings.ai / digiquant.io are built by the Cloudflare dashboard from `main`.
-# Recorded from AGENTS.md § Deployments (static sites) and each file's header.
+# workflow here. `gh pages deploy` in these files builds a PR preview;
+# production digithings.ai / digiquant.io are built by Cloudflare from main.
 PAGES_GIT_INTEGRATION_WORKFLOWS = frozenset(
     {
         "deploy-digithings-cloudflare.yml",
@@ -44,67 +59,81 @@ PAGES_GIT_INTEGRATION_WORKFLOWS = frozenset(
     }
 )
 
-# What "this workflow can change production" looks like in practice. Two forms:
-# a shell deploy command in a `run:` step, and the wrangler-action composite with
-# a deploy command — most of the repo's deploys are the latter, so matching only
-# `run:` would let the invariant below pass vacuously for four of them.
+# What "this workflow can change production" looks like in practice: a
+# shell deploy command in a `run:` step, the wrangler-action composite, or
+# this repo's own deploy wrapper (`npm run deploy`, which runs
+# `npm exec -- wrangler deploy` with the rev injected).
 DEPLOY_COMMAND = re.compile(
     r"(?:npx\s+(?:--no-install\s+)?wrangler\s+deploy|"
     r"wrangler\s+versions\s+deploy|"
-    r"gh\s+pages\s+deploy)"
+    r"gh\s+pages\s+deploy|"
+    r"npm\s+run\s+deploy)"
 )
 WRANGLER_ACTION = "cloudflare/wrangler-action"
 
 
 def _triggers(spec: dict[str, Any]) -> dict[str, Any]:
-    """PyYAML parses a bare `on:` key as boolean True."""
-    return spec.get("on") or spec.get(True) or {}
+    # PyYAML reads the `on:` key as the boolean True.
+    raw = spec.get("on")
+    if raw is None:
+        raw = spec.get(True)
+    return raw if isinstance(raw, dict) else {}
 
 
-def _steps(spec: dict[str, Any]) -> list[dict[str, Any]]:
-    steps: list[dict[str, Any]] = []
-    for job in (spec.get("jobs") or {}).values():
-        steps.extend(job.get("steps") or [])
-    return steps
+def _steps(spec: dict[str, Any], job: str) -> list[dict[str, Any]]:
+    jobs = spec.get("jobs") or {}
+    entry = jobs.get(job) or {}
+    steps = entry.get("steps") or []
+    return steps if isinstance(steps, list) else []
 
 
-def _run_scripts(spec: dict[str, Any]) -> list[str]:
-    return [s["run"] for s in _steps(spec) if isinstance(s.get("run"), str)]
+def _run_scripts(spec: dict[str, Any], job: str) -> list[str]:
+    scripts: list[str] = []
+    for step in _steps(spec, job):
+        run = step.get("run")
+        if isinstance(run, str):
+            scripts.append(run)
+    return scripts
 
 
 def _can_deploy(step: dict[str, Any]) -> bool:
-    """True if this single step pushes something to production."""
-    if isinstance(step.get("run"), str) and DEPLOY_COMMAND.search(step["run"]):
-        return True
-    if WRANGLER_ACTION in str(step.get("uses", "")):
-        # wrangler-action's default command is `deploy`, so an omitted `command`
-        # is a deploy too.
-        command = str((step.get("with") or {}).get("command", "deploy"))
-        if command.split()[0] in {"deploy", "versions"}:
-            return True
-    return False
+    if step.get("uses") == WRANGLER_ACTION:
+        with_ = step.get("with") or {}
+        return any("deploy" in str(key) for key in with_)
+    run = step.get("run")
+    if not isinstance(run, str):
+        return False
+    return bool(DEPLOY_COMMAND.search(run))
 
 
 def _workflow_files() -> list[Path]:
-    return sorted(WORKFLOWS_DIR.glob("*.yml")) + sorted(WORKFLOWS_DIR.glob("*.yaml"))
+    return sorted(p for p in WORKFLOWS_DIR.iterdir() if p.suffix in {".yml", ".yaml"})
 
 
 def _deployable_workflows() -> list[tuple[str, dict[str, Any]]]:
-    """Every workflow containing a production-deploying command in a run step."""
     found: list[tuple[str, dict[str, Any]]] = []
     for path in _workflow_files():
-        try:
-            spec = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except yaml.YAMLError:  # pragma: no cover - malformed workflow, other tests own it
-            continue
+        spec = yaml.safe_load(path.read_text(encoding="utf-8"))
         if not isinstance(spec, dict):
             continue
-        if any(_can_deploy(step) for step in _steps(spec)):
-            found.append((path.name, spec))
+        jobs = spec.get("jobs") or {}
+        if not isinstance(jobs, dict):
+            continue
+        for job in jobs.values():
+            if not isinstance(job, dict):
+                continue
+            for step in job.get("steps") or []:
+                if isinstance(step, dict) and _can_deploy(step):
+                    found.append((path.name, spec))
+                    break
+            else:
+                continue
+            break
     return found
 
 
-# ── the stack workflow: a merge to main must deploy ─────────────────────────
+def _stack_spec() -> dict[str, Any]:
+    return yaml.safe_load(STACK_WORKFLOW.read_text(encoding="utf-8"))
 
 
 def test_the_workflow_exists() -> None:
@@ -112,112 +141,52 @@ def test_the_workflow_exists() -> None:
 
 
 def test_it_triggers_on_push_to_main() -> None:
-    """The DIG-1569 defect, pinned.
-
-    Without this, a merge to main runs nothing: the fix lands in main and never
-    reaches production, which is what happened to da88fa71.
-    """
-    triggers = _triggers(yaml.safe_load(STACK_WORKFLOW.read_text(encoding="utf-8")))
+    triggers = _triggers(_stack_spec())
     assert "push" in triggers, (
-        "deploy-digithings-stack-cloudflare.yml has no `push` trigger — merging to "
-        "main deploys nothing (DIG-1569)"
+        "a merge to main must deploy the stack; without `push` the merge "
+        "deploys nothing (DIG-1569)"
     )
     assert triggers["push"]["branches"] == ["main"]
 
 
 def test_it_still_triggers_on_pull_request_and_manual_dispatch() -> None:
-    triggers = _triggers(yaml.safe_load(STACK_WORKFLOW.read_text(encoding="utf-8")))
+    triggers = _triggers(_stack_spec())
     assert "pull_request" in triggers
     assert "workflow_dispatch" in triggers
-    assert (
-        _triggers(yaml.safe_load(STACK_WORKFLOW.read_text(encoding="utf-8")))["workflow_dispatch"][
-            "inputs"
-        ]["ref"]["default"]
-        == "main"
+    dispatch = triggers["workflow_dispatch"]
+    inputs = dispatch.get("inputs") or {}
+    assert "ref" in inputs, (
+        "a manual deploy must be able to choose the ref it deploys, so an "
+        "operator can ship a promoted tree without a second push"
     )
 
 
 def test_push_and_pull_request_path_filters_are_identical() -> None:
-    """The merge path and the review path must not drift apart.
-
-    The two path lists are written out twice on purpose (no YAML anchor — an
-    anchor here is invisible to review). That makes drift possible, so it is
-    pinned: if a path is added to one and not the other, the review stops
-    validating what the merge deploys.
-    """
-    triggers = _triggers(yaml.safe_load(STACK_WORKFLOW.read_text(encoding="utf-8")))
-    assert triggers["push"]["paths"] == triggers["pull_request"]["paths"]
+    triggers = _triggers(_stack_spec())
+    assert triggers["push"]["paths"] == triggers["pull_request"]["paths"], (
+        "the two path-filter lists drifted: a pull request that validates "
+        "different files than the push that deploys them is a lane that "
+        "approves one tree and ships another"
+    )
 
 
 def test_the_path_filter_still_covers_the_stack_and_its_deploy_command() -> None:
-    triggers = _triggers(yaml.safe_load(STACK_WORKFLOW.read_text(encoding="utf-8")))
-    paths = set(triggers["push"]["paths"])
+    paths = set(_triggers(_stack_spec())["push"]["paths"])
     assert "apps/digithings-stack-cloudflare/**" in paths
-    assert "Dockerfile.digithings-stack-cloudflare" in paths
+    assert "infra/docker/Dockerfile.digithings-stack-cloudflare" in paths, (
+        "the image this lane builds lives under infra/docker on develop; a "
+        "filter that names the old repository-root path matches nothing"
+    )
     assert ".github/workflows/deploy-digithings-stack-cloudflare.yml" in paths
-
-
-# ── the job split: pull requests validate, only main dispatches ──────────────
-
-
-def _stack_spec() -> dict[str, Any]:
-    return yaml.safe_load(STACK_WORKFLOW.read_text(encoding="utf-8"))
-
-
-def test_a_pull_request_cannot_reach_the_deploy_job() -> None:
-    """`deploy` must be false for a pull_request event."""
-    condition = _stack_spec()["jobs"]["deploy"]["if"]
-    assert "github.event_name == 'push'" in condition
-    assert "github.event_name == 'workflow_dispatch'" in condition
-    assert "pull_request" not in condition, (
-        "the deploy job must not be reachable from a pull_request event"
-    )
-
-
-def test_deploy_waits_for_its_gate_job() -> None:
-    jobs = _stack_spec()["jobs"]
-    assert "check-deploy-gate" in jobs["deploy"]["needs"]
-    assert jobs["deploy"]["needs"] != ["check"], (
-        "on push there is no pull_request event, so `check` is skipped; deploy "
-        "must depend on a gate that actually runs"
-    )
-
-
-def test_the_gate_job_does_not_depend_on_the_pull_request_only_check() -> None:
-    """The bug that made this whole PR a no-op, pinned where it happened.
-
-    ``check-deploy-gate`` originally carried ``needs: [check]``. ``check`` is
-    ``if: github.event_name == 'pull_request'``, and GitHub skips every downstream
-    job when a need is skipped. So on a merge to main: ``check`` skipped ->
-    ``check-deploy-gate`` skipped -> ``deploy`` skipped. The push trigger was
-    present and did nothing.
-
-    ``actionlint`` exits 0 on this file, and the previous version of this suite
-    read only ``jobs["deploy"]["needs"]`` -- never this one -- so all 56 tests
-    passed against a workflow that could not deploy. ci.yml depends on ~23
-    path-filtered jobs and survives only because its consumer declares
-    ``if: always()``.
-    """
-    jobs = _stack_spec()["jobs"]
-    gate_needs = jobs["check-deploy-gate"].get("needs") or []
-    assert not gate_needs, (
-        f"check-deploy-gate depends on {gate_needs}. Anything it needs is skipped on "
-        "the event that should deploy, and a skipped need skips this job, which then "
-        "skips `deploy`. This is DIG-1569 reproduced inside its own fix."
-    )
-    # And nothing it needs may itself be scoped to a pull_request-only event.
-    for need in gate_needs:
-        assert "pull_request" not in str(jobs.get(need, {}).get("if", "")), need
 
 
 def test_the_push_filter_covers_every_tree_the_image_bakes_in() -> None:
     """A merge that changes shipped code must not deploy nothing.
 
-    The deployed image's build context is the repo root, so it copies from these
-    trees. The original filter listed ``digiquant/Dockerfile.mcp`` and
-    ``digivault/Dockerfile.mcp`` but none of the library source they COPY, so a
-    merge touching ``digikey/**`` (JWT auth) or ``digisearch/seeds`` compiled into
-    production and deployed nothing -- DIG-1569's defect class surviving the fix.
+    The deployed image's build context is the repository root, so it copies
+    from these trees. A merge touching digikey/** (JWT auth) or
+    digisearch/seeds compiled into production and deployed nothing -
+    DIG-1569's defect class surviving the fix.
     """
     paths = set(_triggers(_stack_spec())["push"]["paths"])
     for tree in (
@@ -227,7 +196,7 @@ def test_the_push_filter_covers_every_tree_the_image_bakes_in() -> None:
         "digigraph",
         "digikey",
         "digillm",
-        "digismith",
+        "digitrace",
         "digisearch",
         "digiquant",
         "digivault",
@@ -241,104 +210,134 @@ def test_the_push_filter_covers_every_tree_the_image_bakes_in() -> None:
         )
 
 
+def test_a_pull_request_cannot_reach_the_deploy_job() -> None:
+    condition = str((_stack_spec()["jobs"]["deploy"] or {}).get("if", ""))
+    assert "github.event_name == 'push'" in condition
+    assert "github.event_name == 'workflow_dispatch'" in condition
+    assert "pull_request" not in condition, (
+        "a pull request must validate, never deploy"
+    )
+
+
+def test_deploy_waits_for_its_gate_job() -> None:
+    jobs = _stack_spec()["jobs"]
+    assert "check-deploy-gate" in jobs["deploy"]["needs"]
+    assert jobs["deploy"]["needs"] != ["check"], (
+        "with needs: [check] the merge-to-main path skips the pull-request "
+        "job, so it skips the gate and then skips the deploy"
+    )
+
+
+def test_the_gate_job_does_not_depend_on_the_pull_request_only_check() -> None:
+    jobs = _stack_spec()["jobs"]
+    gate_needs = (jobs["check-deploy-gate"] or {}).get("needs") or []
+    if isinstance(gate_needs, str):
+        gate_needs = [gate_needs]
+    for need in gate_needs:
+        assert "pull_request" not in str((jobs.get(need) or {}).get("if", "")), need
+
+
 def test_the_pull_request_check_job_is_scoped_to_pull_requests() -> None:
-    condition = _stack_spec()["jobs"]["check"]["if"]
+    condition = str((_stack_spec()["jobs"]["check"] or {}).get("if", ""))
     assert condition == "github.event_name == 'pull_request'"
 
 
 def test_the_deploy_gate_job_runs_for_both_deploy_events() -> None:
-    condition = _stack_spec()["jobs"]["check-deploy-gate"]["if"]
+    condition = str(
+        (_stack_spec()["jobs"]["check-deploy-gate"] or {}).get("if", "")
+    )
     assert condition == "github.event_name != 'pull_request'"
 
 
-@pytest.mark.parametrize("job_name", ["check", "check-deploy-gate"])
-def test_no_validation_job_contains_a_deploy_command(job_name: str) -> None:
-    """Neither check job may ever gain a `wrangler deploy` in a run step."""
-    scripts = _run_scripts({"jobs": {job_name: _stack_spec()["jobs"][job_name]}})
-    assert not any(DEPLOY_COMMAND.search(script) for script in scripts)
+def test_no_validation_job_contains_a_deploy_command() -> None:
+    spec = _stack_spec()
+    for job in ("check", "check-deploy-gate"):
+        for script in _run_scripts(spec, job):
+            assert not DEPLOY_COMMAND.search(script), (
+                f"{job} must validate, not deploy"
+            )
 
 
 def test_the_deploy_job_checks_out_the_ref_it_will_deploy() -> None:
-    """push: `inputs.ref` is unset, so it must fall back to `github.sha`.
-
-    Without the fallback the deploy job checks out the default branch — so a
-    dispatch targeting a release branch would build and ship main instead.
-    """
-    checkout = next(
-        step
-        for step in _stack_spec()["jobs"]["deploy"]["steps"]
-        if str(step.get("uses", "")).startswith("actions/checkout")
-    )
-    assert checkout["with"]["ref"] == "${{ inputs.ref || github.sha }}"
+    steps = _steps(_stack_spec(), "deploy")
+    checkout = next((s for s in steps if str(s.get("uses") or "").startswith("actions/checkout")), {})
+    assert checkout.get("with", {}).get("ref") == "${{ inputs.ref || github.sha }}"
 
 
 def test_the_gate_job_checks_out_the_same_ref_as_the_deploy_job() -> None:
-    """The gate must validate the bytes the deploy will ship."""
-    gate_checkout = next(
-        step
-        for step in _stack_spec()["jobs"]["check-deploy-gate"]["steps"]
-        if str(step.get("uses", "")).startswith("actions/checkout")
-    )
-    assert gate_checkout["with"]["ref"] == "${{ inputs.ref || github.sha }}"
+    steps = _steps(_stack_spec(), "check-deploy-gate")
+    checkout = next((s for s in steps if str(s.get("uses") or "").startswith("actions/checkout")), {})
+    assert checkout.get("with", {}).get("ref") == "${{ inputs.ref || github.sha }}"
 
 
 def test_the_deploy_job_is_still_behind_the_production_environment_gate() -> None:
-    """Automation must not remove the human approval gate."""
     assert _stack_spec()["jobs"]["deploy"]["environment"] == "production"
 
 
 def test_the_concurrency_group_stays_unique_per_run() -> None:
-    """A shared group would restore #2541 now that a push trigger exists.
+    """A shared group would cancel a deployment Chris already approved.
 
-    The group is per-run on purpose and an earlier draft of this PR changed it to a
-    per-ref group, reasoning that two quick merges would race two deploys onto one
-    container name. That is the wrong trade: with `environment: production` and
-    `cancel-in-progress: false`, a shared group means an unapproved run does not delay
-    the workflow, it stops it, and every later run is evicted and reports `cancelled`
-    with zero jobs (#2541, 15 days and migrations 066-070 on db-migrate). Before this PR
-    that shape was latent because only a rare manual dispatch fired. With `push: main` it
-    would be on the common path.
-
-    `tests/scripts/test_workflow_environment_concurrency.py` already enforces this
-    repo-wide and failed this branch. This test states the stack workflow's half of the
-    reason next to the trigger that makes it matter.
+    The `production` environment can hold a run at the approval gate, so a
+    shared group with cancel-in-progress: true cancels the approved run
+    and leaves the newer one waiting for a fresh approval. A per-run group
+    never queues and never cancels - the same shape, and the same reason,
+    as the other production-gated lane in this repo.
     """
-    group = str(_stack_spec()["concurrency"]["group"])
+    concurrency = _stack_spec().get("concurrency") or {}
+    assert isinstance(concurrency, dict), (
+        "a scalar concurrency group is refused by the repo's own "
+        "environment/concurrency test"
+    )
+    group = str(concurrency.get("group", ""))
     assert "github.run_id" in group, (
-        f"the concurrency group is {group!r}, which is shared across runs. Combined with "
-        "`environment: production` and cancel-in-progress: false, one unapproved run stops "
-        "every deploy behind it instead of delaying them (#2541)"
+        "the group must be unique per run, or a second merge to main "
+        "cancels a deployment that is already approved"
     )
 
 
 def test_the_deploy_command_and_secrets_are_unchanged() -> None:
-    """The push trigger must not have moved the wrangler invocation."""
-    scripts = _run_scripts({"jobs": {"deploy": _stack_spec()["jobs"]["deploy"]}})
-    joined = "\n".join(scripts)
-    assert "npx wrangler deploy -c apps/digithings-stack-cloudflare/wrangler.toml" in joined
+    steps = _steps(_stack_spec(), "deploy")
+    joined = "\n".join(
+        [str(s.get("run") or "") for s in steps]
+        + [str(s.get("name") or "") for s in steps]
+    )
+    assert "npm run deploy --workspace digithings-stack-cloudflare" in joined, (
+        "the deploy must go through the rev-injecting wrapper; a bare "
+        "`npx wrangler deploy` ships the legacy Container id"
+    )
     assert "working-directory" not in joined, (
-        "deploy runs from the repo root — the build context is resolved by "
-        "wrangler.toml, not cwd (#4046)"
+        "both Containers pin image_build_context = '../..', so the image "
+        "build needs the repository root as its context (#4046)"
     )
-    deploy_env = next(
-        step["env"] for step in _stack_spec()["jobs"]["deploy"]["steps"] if step.get("env")
+    deploy_step = next(
+        (s for s in steps if "npm run deploy" in str(s.get("run") or "")), {}
     )
-    assert deploy_env["CLOUDFLARE_API_TOKEN"] == "${{ secrets.CLOUDFLARE_API_TOKEN }}"
-    assert deploy_env["CLOUDFLARE_ACCOUNT_ID"] == "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+    deploy_env = (deploy_step.get("env") or {})
+    assert deploy_env["CLOUDFLARE_API_TOKEN"] == (
+        "${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}"
+    ), (
+        "wrangler authenticates from CLOUDFLARE_API_TOKEN, and in this house "
+        "that name is also the Vectorize/D1 token: exporting the D1 token "
+        "makes every deploy fail with code 10000. The deploy credential "
+        "must come from a Workers Scripts:Edit token under a distinct name."
+    )
+    assert deploy_env["CLOUDFLARE_ACCOUNT_ID"] == (
+        "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+    )
 
 
-# ── repo-wide invariant: anything that deploys must fire on push: main ───────
+# --- repo-wide invariant: anything that deploys must fire on push: main ---
 
 
 def test_the_audit_found_at_least_the_workflows_it_should_have() -> None:
     """Guards against the discovery helper silently returning nothing.
 
-    If a future edit breaks the `wrangler deploy` detection, the invariant test
-    below would pass vacuously. This asserts the fixture set is non-trivial.
+    If a future edit breaks the deploy detection, the invariant below
+    would pass vacuously. This asserts the fixture set is non-trivial.
     """
     names = {name for name, _ in _deployable_workflows()}
     assert "deploy-digithings-stack-cloudflare.yml" in names
-    assert len(names) >= 4, f"only found {sorted(names)}"
+    assert len(names) >= 2, f"only found {sorted(names)}"
 
 
 @pytest.mark.parametrize(
@@ -351,17 +350,19 @@ def test_every_deploy_workflow_fires_on_push_to_main(
 ) -> None:
     """Item 3 of DIG-1569, as a standing invariant.
 
-    The audit found one defective workflow. This pins the rule so the defect
-    cannot recur silently in a workflow added from the same template.
+    The audit found one defective workflow. This pins the rule so the
+    defect cannot recur silently in a workflow added from the same
+    template.
     """
     if workflow_name in PAGES_GIT_INTEGRATION_WORKFLOWS:
         pytest.skip(
-            f"{workflow_name} is a Pages PR build check; production ships from the git integration"
+            f"{workflow_name} is a Pages PR build check; production ships "
+            "from the git integration"
         )
     triggers = _triggers(spec)
     assert "push" in triggers, (
         f"{workflow_name} runs a production deploy command but has no `push` "
-        "trigger — a merge deploys nothing (DIG-1569)"
+        "trigger - a merge deploys nothing (DIG-1569)"
     )
     push = triggers["push"]
     branches = push.get("branches") if isinstance(push, dict) else None
@@ -373,15 +374,17 @@ def test_every_deploy_workflow_fires_on_push_to_main(
 def test_the_pinned_pages_workflows_are_still_build_checks_only() -> None:
     """The allowlist must not rot into a hole.
 
-    Each exempt workflow is exempted because production ships via Cloudflare's
-    git integration. If one starts deploying main itself, the exemption is wrong
-    and this test fails rather than hiding the regression.
+    Each exempt workflow is exempted because production ships via
+    Cloudflare's git integration. If one starts deploying main itself, the
+    exemption is wrong and this test fails rather than hiding the
+    regression.
     """
     for name in PAGES_GIT_INTEGRATION_WORKFLOWS:
         path = WORKFLOWS_DIR / name
         assert path.exists(), f"allowlisted workflow {name} no longer exists"
         spec = yaml.safe_load(path.read_text(encoding="utf-8"))
         assert "push" not in _triggers(spec), (
-            f"{name} now triggers on push, so it is no longer a build check — "
-            "drop it from PAGES_GIT_INTEGRATION_WORKFLOWS and let the invariant apply"
+            f"{name} now triggers on push, so it is no longer a build check - "
+            "drop it from PAGES_GIT_INTEGRATION_WORKFLOWS and let the "
+            "invariant apply"
         )

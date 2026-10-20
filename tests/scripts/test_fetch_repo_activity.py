@@ -122,9 +122,14 @@ def test_the_committed_snapshot_measures_issues_the_same_way_on_both_sides() -> 
     # The field name still appears in prose explaining why it is not used; what must
     # not appear is a read of it.
     assert 'get("open_issues_count"' not in source, (
-        "open_issues_count counts open issues PLUS open PRs — use the is:issue search"
+        "open_issues_count counts open issues PLUS open PRs — use the issue list"
     )
-    assert "is:issue+is:open" in source
+    assert '_issues("open")' in source and '_issues("closed")' in source
+    assert "is:issue+" not in source and "is:issue&" not in source, (
+        "the Search API gives this token pull requests for an is:issue query (run "
+        "35567282830 answered 3 open issues as the 3 open PRs) — every issue figure "
+        "must come from _issues()"
+    )
 
 
 @pytest.mark.unit
@@ -142,10 +147,9 @@ def test_the_windowed_and_unwindowed_queries_stay_deliberately_different() -> No
     inconsistency in either direction breaks a page claim, so it breaks here first.
     """
     source = SCRIPT.read_text(encoding="utf-8")
-    closed = next(line for line in source.splitlines() if "is:issue+is:closed" in line)
-    opened = next(line for line in source.splitlines() if "is:issue+is:open&" in line)
-    assert "closed:>=" in closed, "issuesClosed must stay windowed"
-    assert "created:" not in opened and "since" not in opened, (
+    windowed = source[source.index("closed_in_window = [") : source.index("year_closed = [")]
+    assert "since[:10]" in windowed, "issuesClosed must stay windowed"
+    assert '"issuesOpen": len(open_issues)' in source, (
         "issuesOpen must stay unbounded — it is current state, not velocity"
     )
 
@@ -160,12 +164,74 @@ def test_open_prs_are_unwindowed_current_state() -> None:
 
 
 @pytest.mark.unit
+def test_issues_reads_the_issue_list_and_keeps_only_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_issues` reads the typed issue list, where a PR cannot appear (#4093).
+
+    The `is:issue` Search query it replaced came back as this repo's open pull
+    requests for the Actions token (run 35567282830: "3 PRs open, 3 issues open"),
+    which emptied `openIssues` and failed the snapshot's own `--check`.
+    """
+    seen: list[tuple[str, ...]] = []
+
+    def fake(*args: str) -> object:
+        seen.append(args)
+        return [{"number": 1, "url": "https://x/issues/1"}, "not-a-row"]
+
+    monkeypatch.setattr(fra, "_gh", fake)
+    assert fra._issues("open") == [{"number": 1, "url": "https://x/issues/1"}]
+    assert seen == [
+        (
+            "issue",
+            "list",
+            "--repo",
+            fra.SLUG,
+            "--state",
+            "open",
+            "--limit",
+            str(fra.ISSUE_LIMIT),
+            "--json",
+            fra.ISSUE_FIELDS,
+        )
+    ]
+
+
+@pytest.mark.unit
 def test_recent_lists_come_from_search_items_not_commit_subjects() -> None:
+    # The row queries are deliberately OVER-fetched (per_page=25): the Search API
+    # has handed back wrong-kind rows (#4091) which the url_marker filter drops,
+    # and at per_page=6 that once emptied openIssues entirely (run 38211281127).
+    # _search_items still truncates to 6 rows, so the snapshot shape is unchanged.
     source = SCRIPT.read_text(encoding="utf-8")
     merged = next(line for line in source.splitlines() if "is:pr+is:merged" in line)
-    assert "per_page=6" in merged and "sort=updated" in merged
-    issues = next(line for line in source.splitlines() if "is:issue+is:open&" in line)
-    assert "sort=updated" in issues
+    assert "per_page=25" in merged and "sort=updated" in merged
+    assert '_search_items(merged, 6, "/pull/")' in source
+    # Open rows come from the issue list, most recently updated first — the order the
+    # old `sort=updated` search asked for — and truncated to the same six.
+    opened = source[source.index("open_rows = sorted(") : source.index("_require_list_rows(merged")]
+    assert "updatedAt" in opened and "reverse=True" in opened and "[:6]" in opened
+
+
+@pytest.mark.unit
+def test_require_list_rows_refuses_filtered_to_empty() -> None:
+    """Run 38211281127: totals said 932 merged / 130 open, the url_marker filter
+    dropped every openIssues row, and collect() wrote a file its own --check
+    rejects. Totals with no surviving rows must fail at build time instead."""
+    row = {
+        "number": 1,
+        "title": "x",
+        "url": "https://github.com/digithings-ai/digithings/pull/1",
+        "mergedAt": None,
+    }
+    fra._require_list_rows({"total_count": 932}, [row], 130, [row])
+    with pytest.raises(SystemExit):
+        fra._require_list_rows({"total_count": 932}, [row], 130, [])
+    with pytest.raises(SystemExit):
+        fra._require_list_rows({"total_count": 932}, [], 130, [row])
+    # Genuinely quiet repos (zero totals) still pass — the guard fires only when
+    # rows were expected but filtering ate them.
+    fra._require_list_rows({"total_count": 0}, [], 0, [])
 
 
 @pytest.mark.unit
@@ -230,8 +296,9 @@ def test_check_refuses_a_pull_request_in_open_issues(
 ) -> None:
     """A PR row in ``openIssues`` is a wrong figure, not a cosmetic slip (#4093).
 
-    The list is built from an `is:issue+is:open` search, so a PR can only arrive from
-    a snapshot written by an older generator — which is exactly how #4093 shipped, and
+    The list is built from the issue list, which is typed `Issue` and cannot return a
+    pull request, so a PR row can only arrive from a snapshot written by an older
+    generator — which is exactly how #4093 shipped, and
     the homepage vitest mirror (`apps/digithings-web/lib/repoActivity.test.ts`)
     requires every row to link ``/issues/{number}``.
     """
@@ -600,7 +667,7 @@ def test_search_dates_paginates_and_skips_missing_closed_at(
         {"items": []},
     ]
     monkeypatch.setattr(fra, "_gh", lambda *a: pages.pop(0))
-    assert fra._search_dates("repo:x+is:issue") == ["2026-08-21T10:00:00Z"]
+    assert fra._search_dates("repo:x+is:pr+is:merged") == ["2026-08-21T10:00:00Z"]
 
 
 @pytest.mark.unit

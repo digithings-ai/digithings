@@ -29,7 +29,11 @@ import {
   useComposerCopy,
   useSkinChrome,
 } from "../stock/skin-chrome";
-import { useDisclosureUi } from "../stock/deploy-ui-context";
+import {
+  useDeployUi,
+  useDisclosureUi,
+} from "../stock/deploy-ui-context";
+import { workVisibilityForView } from "../stock/skin-types";
 import {
   useStockComposerGateSubmit,
   useStockSendGate,
@@ -38,6 +42,7 @@ import {
   useEmbedChatPrefsOptional,
   type EmbedChatPrefsApi,
 } from "../stock/embed-chat-prefs";
+import { DigichatComposerToolbar } from "./digichat-composer-toolbar";
 
 /**
  * Product slash-command wiring injected by the host (WS4). Structural mirror
@@ -162,6 +167,8 @@ export function DigichatSkin({
   const { pageContext } = useSkinChrome();
   const reasoningUi = useDisclosureUi("reasoning");
   const toolCallsUi = useDisclosureUi("toolCalls");
+  // The raw view level is what decides how much of the work is shown.
+  const workVisibility = workVisibilityForView(useDeployUi().view);
   const gateSubmit = useStockComposerGateSubmit();
   const gate = useStockSendGate();
   const prefs = useEmbedChatPrefsOptional();
@@ -379,14 +386,20 @@ export function DigichatSkin({
           event.preventDefault();
           if (action.command.id === "copy") copyExport.copy();
           else if (action.command.id === "export") copyExport.exportThread();
-          else slashWiring.executeDef(action.command, action.arg, slashPrefs);
+          else if (action.command.id === "compact") {
+            // Palette compact serializes the thread and queues a summary.
+            // executeDef only resets prefs and opens an empty thread.
+            const compact = commands.find((command) => command.id === "compact");
+            if (compact) compact.execute();
+            else slashWiring.executeDef(action.command, action.arg, slashPrefs);
+          } else slashWiring.executeDef(action.command, action.arg, slashPrefs);
           aui.composer.setText("");
           return;
         }
       }
       gateSubmit?.(event);
     },
-    [slashPrefs, slashWiring, aui, gate, gateSubmit, copyExport, extra],
+    [slashPrefs, slashWiring, aui, gate, gateSubmit, copyExport, extra, commands],
   );
 
   return (
@@ -406,7 +419,13 @@ export function DigichatSkin({
       }
       reasoningMode={reasoningUi.mode}
       toolCallsMode={toolCallsUi.mode}
-
+      workVisibility={workVisibility}
+      composerToolbar={
+        prefs && prefs.prefs.toolbar !== false ? (
+          <DigichatComposerToolbar prefs={prefs} />
+        ) : undefined
+      }
+      scrollbars={prefs?.prefs.scrollbars ?? "always"}
     />
   );
 }

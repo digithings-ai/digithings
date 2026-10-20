@@ -96,7 +96,7 @@ Production data stack:
 - **Twelve Data** — price history and technicals. 800 API calls per day on the free tier.
 - **EdgarTools** — SEC filings and XBRL data. No rate limits. Includes an MCP server, so agents can query SEC filings directly without custom tooling.
 - **FRED** — macroeconomic data from the Federal Reserve. Free, authoritative, and comprehensive.
-- **CoinGecko** — cryptocurrency market data.
+- **Crypto** — cryptocurrency market data. Sourced by web search and the ingested layer; no key.
 - **Finnhub** — news feeds and sentiment signals.
 - **S3 / MinIO** — object storage for large datasets, backtest results, and research archives.
 
@@ -162,7 +162,7 @@ digiquant follows the digithings open-core model. The infrastructure layer is op
 - digiquant engine and CLI
 - NautilusTrader integration and adapter layer
 - Backtesting framework and VectorBT integration
-- Data connectors (OpenBB, Twelve Data, EdgarTools, FRED, CoinGecko, Finnhub)
+- Data connectors (OpenBB, Twelve Data, EdgarTools, FRED, Finnhub)
 - Strategy definition schema and export targets
 - Optimization engine implementations (grid, random, Bayesian)
 

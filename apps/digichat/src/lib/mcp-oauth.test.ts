@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildAuthorizationUrl,
   callbackHtml,
+  MCP_OAUTH_MESSAGE,
+  MCP_OAUTH_RESULT_COOKIE,
+  oauthResultCookieHeader,
+  discoverMcpAuthorization,
   exchangeAuthorizationCode,
   parseResourceMetadataUrl,
   pkceChallenge,
@@ -44,15 +48,26 @@ describe("mcp oauth helpers", () => {
     expect(verifyOAuthState(raw, "other")).toBeNull();
   });
 
-  it("callback HTML postMessages without logging extras", () => {
-    const html = callbackHtml({
-      origin: "http://127.0.0.1:3000",
-      id: "linear",
-      accessToken: "tok",
-    });
+  it("callback HTML postMessages without embedding the token", () => {
+    const html = callbackHtml();
     expect(html).toContain("digichat-mcp-oauth");
-    expect(html).toContain("tok");
     expect(html).toContain("window.opener.postMessage");
+    expect(html).toContain(MCP_OAUTH_RESULT_COOKIE);
+    expect(html).not.toContain("tok");
+    expect(html).not.toContain("</script><script>");
+  });
+
+  it("result cookie carries the token outside the html", () => {
+    const token = "tok</script>";
+    const cookie = oauthResultCookieHeader(
+      { type: MCP_OAUTH_MESSAGE, id: "linear", accessToken: token },
+      "https://chat.example/api/mcp/oauth/callback",
+    );
+    expect(cookie.startsWith(`${MCP_OAUTH_RESULT_COOKIE}=`)).toBe(true);
+    expect(cookie).toContain(encodeURIComponent(token));
+    expect(cookie).not.toContain(token);
+    expect(cookie).toContain("Secure");
+    expect(cookie).not.toContain("HttpOnly");
   });
 
   it("buildAuthorizationUrl uses PKCE S256", () => {
@@ -164,5 +179,64 @@ describe("mcp oauth helpers", () => {
       exchangeAuthorizationCode(state, "code-1", fetchImpl as unknown as typeof fetch),
     ).resolves.toBe("token-123");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("discoverMcpAuthorization", () => {
+  it("prefers the path-specific resource document and the RFC 8414 issuer URL", async () => {
+    const rfcAs = "https://auth.example/.well-known/oauth-authorization-server/realms/app";
+    const pathResource = "https://mcp.example/.well-known/oauth-protected-resource/mcp";
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "https://mcp.example/.well-known/oauth-protected-resource") {
+        return new Response(
+          JSON.stringify({ authorization_servers: ["https://wrong.example"] }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url === pathResource) {
+        return new Response(
+          JSON.stringify({ authorization_servers: ["https://auth.example/realms/app"] }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url === "https://auth.example/.well-known/oauth-authorization-server") {
+        return new Response(
+          JSON.stringify({
+            authorization_endpoint: "https://auth.example/wrong/authorize",
+            token_endpoint: "https://auth.example/wrong/token",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url === rfcAs) {
+        return new Response(
+          JSON.stringify({
+            authorization_endpoint: "https://auth.example/realms/app/protocol/openid-connect/auth",
+            token_endpoint: "https://auth.example/realms/app/protocol/openid-connect/token",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("no", { status: 404 });
+    });
+
+    const discovered = await discoverMcpAuthorization(
+      "https://mcp.example/mcp",
+      fetchImpl as typeof fetch,
+    );
+    expect(discovered.authorizationEndpoint).toBe(
+      "https://auth.example/realms/app/protocol/openid-connect/auth",
+    );
+    expect(discovered.tokenEndpoint).toBe(
+      "https://auth.example/realms/app/protocol/openid-connect/token",
+    );
+    const called = fetchImpl.mock.calls.map((call) => String(call[0]));
+    expect(called[0]).toBe(pathResource);
+    const asCalls = called.filter(
+      (url) =>
+        url.includes("oauth-authorization-server") || url.includes("openid-configuration"),
+    );
+    expect(asCalls[0]).toBe(rfcAs);
   });
 });

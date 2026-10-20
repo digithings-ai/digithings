@@ -9,6 +9,7 @@ import { isAllowedMcpServerUrl } from "@/lib/deploy-config/mcp-servers";
 import { sameOrigin } from "@/lib/fetch-guarded";
 
 export const MCP_OAUTH_COOKIE = "dc_mcp_oauth";
+export const MCP_OAUTH_RESULT_COOKIE = "dc_mcp_oauth_result";
 export const MCP_OAUTH_MESSAGE = "digichat-mcp-oauth";
 const STATE_TTL_MS = 10 * 60_000;
 
@@ -127,6 +128,36 @@ async function fetchJsonAllowed(
   return readJson(res);
 }
 
+/** RFC 9728: path-specific protected-resource metadata before the origin root. */
+function protectedResourceMetadataUrls(resource: URL): string[] {
+  const path = resource.pathname === "/" ? "" : resource.pathname.replace(/\/$/, "");
+  const specific = new URL(
+    `/.well-known/oauth-protected-resource${path}`,
+    resource.origin,
+  ).toString();
+  const root = new URL("/.well-known/oauth-protected-resource", resource.origin).toString();
+  return path ? [specific, root] : [root];
+}
+
+/**
+ * RFC 8414 inserts `/.well-known/oauth-authorization-server` before an issuer
+ * path. OIDC discovery appends `/.well-known/openid-configuration` to the
+ * issuer. Origin-root and suffix URLs stay as later fallbacks.
+ */
+function authorizationServerMetadataUrls(issuer: string): string[] {
+  const asUrl = new URL(issuer.endsWith("/") ? issuer : `${issuer}/`);
+  const path = asUrl.pathname === "/" ? "" : asUrl.pathname.replace(/\/$/, "");
+  const trimmed = issuer.replace(/\/$/, "");
+  const candidates = [
+    `${asUrl.origin}/.well-known/oauth-authorization-server${path}`,
+    `${trimmed}/.well-known/openid-configuration`,
+    `${asUrl.origin}/.well-known/oauth-authorization-server`,
+    `${asUrl.origin}/.well-known/openid-configuration`,
+    `${trimmed}/.well-known/oauth-authorization-server`,
+  ];
+  return [...new Set(candidates)];
+}
+
 export async function discoverMcpAuthorization(
   resourceUrl: string,
   fetchImpl: typeof fetch = fetch,
@@ -135,13 +166,7 @@ export async function discoverMcpAuthorization(
     throw new Error("blocked_url");
   }
   const resource = new URL(resourceUrl);
-  const wellKnown = [
-    new URL("/.well-known/oauth-protected-resource", resource.origin).toString(),
-    new URL(
-      `/.well-known/oauth-protected-resource${resource.pathname}`.replace(/\/$/, ""),
-      resource.origin,
-    ).toString(),
-  ];
+  const wellKnown = protectedResourceMetadataUrls(resource);
   let prm: Record<string, unknown> | null = null;
   for (const u of wellKnown) {
     prm = await fetchJsonAllowed(u, fetchImpl);
@@ -160,12 +185,7 @@ export async function discoverMcpAuthorization(
   if (!issuer || !isAllowedMcpServerUrl(issuer)) {
     throw new Error("oauth_metadata_missing");
   }
-  const asOrigin = new URL(issuer.endsWith("/") ? issuer : `${issuer}/`);
-  const asWellKnown = [
-    new URL("/.well-known/oauth-authorization-server", asOrigin.origin).toString(),
-    new URL("/.well-known/openid-configuration", asOrigin.origin).toString(),
-    `${issuer.replace(/\/$/, "")}/.well-known/oauth-authorization-server`,
-  ];
+  const asWellKnown = authorizationServerMetadataUrls(issuer);
   let asMeta: Record<string, unknown> | null = null;
   for (const u of asWellKnown) {
     asMeta = await fetchJsonAllowed(u, fetchImpl);
@@ -302,22 +322,40 @@ export function readOAuthCookie(req: Request): string | null {
   return null;
 }
 
-export function callbackHtml(opts: {
-  origin: string;
-  id: string;
-  accessToken?: string;
-  error?: string;
-}): string {
-  const msg = {
-    type: MCP_OAUTH_MESSAGE,
-    id: opts.id,
-    ...(opts.accessToken ? { accessToken: opts.accessToken } : {}),
-    ...(opts.error ? { error: opts.error } : {}),
-  };
+export function oauthResultCookieHeader(
+  msg: { type: string; id: string; accessToken?: string; error?: string },
+  reqUrl: string,
+): string {
+  const secure = new URL(reqUrl).protocol === "https:";
+  const parts = [
+    `${MCP_OAUTH_RESULT_COOKIE}=${encodeURIComponent(JSON.stringify(msg))}`,
+    "SameSite=Lax",
+    `Path=${p("/api/mcp/oauth/callback") || "/"}`,
+    "Max-Age=60",
+  ];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+/** Static callback page. The token rides in the result cookie, never in this HTML. */
+export function callbackHtml(): string {
   return `<!doctype html><html><body><script>
 (function(){
-  var msg = ${JSON.stringify(msg)};
-  if (window.opener) window.opener.postMessage(msg, ${JSON.stringify(opts.origin)});
+  var name = "dc_mcp_oauth_result=";
+  var raw = "";
+  var parts = document.cookie.split(";");
+  for (var i = 0; i < parts.length; i++) {
+    var part = parts[i];
+    var j = 0;
+    while (part.charCodeAt(j) === 32) j++;
+    part = part.slice(j);
+    if (part.indexOf(name) === 0) raw = part.slice(name.length);
+  }
+  var msg = { type: "digichat-mcp-oauth", error: "oauth_result_missing" };
+  if (raw) {
+    try { msg = JSON.parse(decodeURIComponent(raw)); } catch (e) {}
+  }
+  if (window.opener) window.opener.postMessage(msg, window.location.origin);
   window.close();
 })();
 </script><p>You can close this window.</p></body></html>`;

@@ -199,3 +199,26 @@ export function writeFailureStatus(
 ): void {
   writeGatedSpan(writer, ctx, { operation: "chat", status: "failed", label }, activityDetail);
 }
+
+/**
+ * Outbound request headers shared by the protocol adapters that post JSON and
+ * then read back an SSE stream.
+ *
+ * A2A and AG-UI differ only in the `Accept` value they ask for; the content
+ * type and the bearer construction are identical, so both now come from here.
+ * `langgraph` is deliberately not covered: it authenticates with an
+ * `x-api-key` header rather than a bearer token, which is a different
+ * credential and is left at its call site.
+ */
+export function protocolJsonHeaders(opts: {
+  /** Resolved by the caller from `backend.apiKeyEnv`; null when unset. */
+  apiKey: string | null;
+  accept: string;
+}): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: opts.accept,
+  };
+  if (opts.apiKey) headers.Authorization = `Bearer ${opts.apiKey}`;
+  return headers;
+}

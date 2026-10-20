@@ -850,7 +850,7 @@ def expand_mcp_disabled_tokens(
         if not key:
             continue
         prefix = f"{key}_"
-        out |= {n for n in extra if n == key or n.startswith(prefix)}
+        out |= {n for n in extra if n.lower() == key or n.lower().startswith(prefix)}
     return frozenset(out)
 
 
@@ -987,11 +987,11 @@ def _call_tool_blocking(server: dict[str, str], tool: str, args: dict[str, Any])
     try:
         return _run_async(_call_tool_async(server, tool, args))
     except Exception as exc:
-        detail = str(exc)
+        kind = type(exc).__name__
         if isinstance(exc, BaseExceptionGroup):
-            detail = "; ".join(f"{type(e).__name__}: {e}" for e in exc.exceptions)
-        log.warning("remote MCP call failed for %s: %s", tool, detail)
-        return {"error": "mcp_call_failed", "tool": tool, "message": detail}
+            kind = ",".join(type(item).__name__ for item in exc.exceptions)
+        log.warning("remote MCP call failed for %s: %s", tool, kind)
+        return {"error": "mcp_call_failed", "tool": tool, "message": kind}
 
 
 async def _list_tools_async(server: dict[str, str]) -> list[dict[str, Any]]:

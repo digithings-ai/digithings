@@ -17,6 +17,7 @@ import { selectBriefLedgerDayEvents } from '@/lib/brief-book-event';
 import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
 import { isCashTicker } from '@/lib/book-reconciliation';
 import { isLiveMarksOverlay } from '@/lib/performance-ssot';
+import { BriefDesk, deskShellEnabled } from '@/components/desk/panes/brief';
 // Performance SSOT (#3580): persisted headlines from the same accounting NAV
 // adapter as Tearsheet (`getPerformanceBundle` / public_accounting_nav_history).
 // Live marks are a badged overlay only — never a silent second truth.
@@ -24,6 +25,12 @@ import { isLiveMarksOverlay } from '@/lib/performance-ssot';
 // ─── Today ──────────────────────────────────────────────────────────────────────
 
 export default function OverviewPage() {
+  // Flag default off. Slice A mounts the same panes inside DeskShell.
+  if (deskShellEnabled()) return <BriefDesk />;
+  return <LegacyBriefPage />;
+}
+
+function LegacyBriefPage() {
   const { data, api, loading, error } = useDashboard();
   const dashboardDate = data?.portfolio?.meta.last_updated ?? null;
   const [runHealth, setRunHealth] = useState<BriefRunHealth | null>();

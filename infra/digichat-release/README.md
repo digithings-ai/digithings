@@ -21,7 +21,7 @@ Install unit: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (not npm, not `:latest`).
 | digichat | **GHCR** `ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` |
 | digichat-db | Public `postgres:16-alpine` |
 | digikey-blocklist-redis | Public `redis:7-alpine` |
-| litellm | Public `docker.litellm.ai/berriai/litellm:main-stable` |
+| digillm (alias `litellm`) | `ghcr.io/digithings-ai/digillm:0.1.0` — LiteLLM from the pinned PyPI wheel (`infra/docker/Dockerfile.digillm`, DIG-1780) |
 | digikey / digigraph / digivault | **GHCR** `ghcr.io/digithings-ai/<svc>:${DIGI_IMAGE_TAG}` |
 
 Pin stack and digichat tags separately (`DIGI_IMAGE_TAG` ≠ `DIGICHAT_VERSION`). Prefer
@@ -116,7 +116,7 @@ docker compose -f infra/digichat-release/compose.profile-a.yml \
   --env-file infra/digichat-release/.env.profile-a up -d
 ```
 
-Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
+Does **not** start digiquant / digisearch / digitrace / heartbeat / observability.
 
 Full monorepo stack (all Python services) alternative: [`docs/templates/self-host/README.md`](../../docs/templates/self-host/README.md)
 (`make up-ghcr` + `--profile digichat --profile digivault`).
@@ -124,7 +124,7 @@ Full monorepo stack (all Python services) alternative: [`docs/templates/self-hos
 ## Profile A bundle — one stack image (Cloudflare parity)
 
 Preferred **local** path for website digichat while CF backends use the same
-Dockerfile (`Dockerfile.digithings-stack-cloudflare` + supervisord): digikey +
+Dockerfile (`infra/docker/Dockerfile.digithings-stack-cloudflare` + supervisord): digikey +
 digigraph + digisearch + digivault + LiteLLM + Redis in **one** container.
 digichat (+ Postgres) stay separate.
 
@@ -199,6 +199,46 @@ docker compose -f infra/digichat-release/compose.profile-b.yml \
 
 Host must supply Azure identity for Foundry; do not put a Foundry API key in digichat env.
 
+## The tenant registry is composed, never applied from the repo
+
+The digichat Worker reads its tenant registry (`DIGICHAT_EMBED_TENANTS`) from a
+Worker secret. Every tenant entry carries a `token`, and the operator MCP rows
+carry their own credentials. The OCC token is a client secret, so the registry
+lives only in the host secret store, never in this repository.
+
+The repository may carry an **overlay**: the non-secret tenant fields (slug,
+corpus routing, presentation). The overlay is merged onto the live registry at
+apply time. An overlay can therefore never remove a tenant and can never change
+a token.
+
+```sh
+# plan only: offline, prints no secret value
+python3 scripts/digichat_tenant_registry.py compose \
+  --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
+  --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
+
+# write the Worker secret and recycle the container (human-gated, asks for a
+# typed confirmation before it writes)
+python3 scripts/digichat_tenant_registry.py apply \
+  --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
+  --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
+```
+
+The compose refuses, and names the reason: an overlay that drops a tenant, an
+overlay that carries a `token` or `mcp` rows, an overlay that adds a tenant the
+live registry does not have, an overlay key the runtime does not read, and a
+composed registry that routes a tenant to the retired OCC ticket corpus. The
+composed registry can also not be written inside the repository.
+
+The container reads its environment at boot, so a registry change needs the
+container recycle the script performs. A digichat release that carries
+`DIGICHAT_CONTAINER_REV` recycles the container by itself.
+
+See [`DIG-3556-digithings-tenant-prompt.md`](DIG-3556-digithings-tenant-prompt.md)
+for the staged overlay, and
+[`docs/ops/SECRETS_ROTATION.md`](../../docs/ops/SECRETS_ROTATION.md) for the
+rotation runbook.
+
 ## Command matrix
 
 | Goal | Command |
@@ -211,6 +251,7 @@ Host must supply Azure identity for Foundry; do not put a Foundry API key in dig
 | Profile B (Foundry) | `docker compose -f infra/digichat-release/compose.profile-b.yml --env-file infra/digichat-release/.env.profile-b up -d` |
 | Local monorepo build | `make up-digichat` |
 | Validate the deployment config | `make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml` |
+| Plan the digichat tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json` |
 | Client install guide | [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) |
 | Populate client docs (offline) | [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../docs/digichat/CLIENT-DOCS-ONBOARD.md) |
 | Post-publish smoke | [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md) |

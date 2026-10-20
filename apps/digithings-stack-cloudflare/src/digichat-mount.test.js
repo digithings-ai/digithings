@@ -4,12 +4,16 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DIGICHAT_PORT,
-  SHARED_DIGICHAT_CONTAINER_ID,
+  digichatContainerRev,
+  sharedDigichatContainerId,
   shouldProxyToDigiChat,
 } from "./digichat";
 import { shouldProxyToDigiChat as standalonePredicate } from "../../digichat-cloudflare/src/paths";
-import { SHARED_DIGICHAT_CONTAINER_ID as standaloneContainerId } from "../../digichat-cloudflare/src/paths";
-import { legacyEmbedEnabledValue } from "../../digichat-cloudflare/src/embed-flag";
+import {
+  digichatContainerRev as standaloneRev,
+  sharedDigichatContainerId as standaloneContainerId,
+  LEGACY_SHARED_DIGICHAT_CONTAINER_ID,
+} from "../../digichat-cloudflare/src/paths";
 import {
   getStackStatus,
   resetStackModuleHealth,
@@ -17,17 +21,16 @@ import {
 } from "./route-modules";
 
 /**
- * Folded digichat mount (slice 3, #4689).
+ * digichat adapter pins (slice 3, #4689; the stack fold was dropped 2026-10-19).
  *
- * Behavioral tests drive the folded digichat group the same way slices 1-2
- * do: the mount check proves the stack adapter reuses the standalone
- * worker's own predicate (same function, not a copy), and the fault-injection
- * checks prove a digichat failure degrades ONLY its own paths (503) while
- * every sibling group keeps serving.
+ * The stack Worker no longer mounts a digichat route group — the client surface
+ * lives on `digithings-digichat` (`apps/digichat-cloudflare`). What remains here
+ * is the adapter shim `digichat.ts`, which re-exports the standalone worker's own
+ * predicate/derivation (same functions, not copies), so the mount pins below
+ * prove the re-export and the separation pins prove index.ts does not mount it.
  *
- * Auth stays in-container: there is deliberately no edge-gating test here —
- * the stack worker applies no 401/JWT check on digichat paths (pinned by the
- * absence of any auth check in the digichat branch, see the index.ts pins).
+ * The `runIsolated` checks exercise the isolation primitive itself with the
+ * "digichat" group label; they do not assert that the group is still wired.
  *
  * Deliberately plain `.js`, same reason as stack-isolation.test.js:
  * tsconfig scopes `types` to @cloudflare/workers-types only.
@@ -44,12 +47,12 @@ function ok(text = "ok") {
   return new Response(text, { status: 200 });
 }
 
-describe("digichat mount (same predicate as the standalone worker)", () => {
+describe("digichat adapter (same predicate as the standalone worker)", () => {
   it("re-exports the standalone worker's shouldProxyToDigiChat (not a copy)", () => {
     expect(shouldProxyToDigiChat).toBe(standalonePredicate);
   });
 
-  it("matches every folded path from the standalone paths.test.ts contract", () => {
+  it("matches every digichat path from the standalone paths.test.ts contract", () => {
     for (const path of [
       "/embed",
       "/embed/",
@@ -82,10 +85,91 @@ describe("digichat mount (same predicate as the standalone worker)", () => {
     }
   });
 
-  it("pins the Next standalone port and the shared container id", () => {
+  it("pins the Next standalone port", () => {
     expect(DIGICHAT_PORT).toBe(3000);
-    expect(SHARED_DIGICHAT_CONTAINER_ID).toBe(standaloneContainerId);
-    expect(SHARED_DIGICHAT_CONTAINER_ID).toBe("shared-v9");
+  });
+});
+
+// DIG-3814: the Container id used to be a hand-edited literal this file pinned
+// twice — once for equality with the standalone worker, once for the value
+// "shared-v10". Both pins were the same manual step: the two literals had to
+// be bumped in step, by hand, and a stale instance was already the mitigation
+// for a warm container serving an old DIGICHAT_EMBED_TENANTS (DIG-1381 Act B1).
+//
+// The id is now derived from the deploying commit by the standalone worker's own
+// paths.ts, and this adapter re-exports that function. So the properties worth
+// pinning changed shape:
+//
+//   - EQUALITY BY CONSTRUCTION — the adapter's id IS the standalone derivation
+//     (same function object), not a second copy that can drift.
+//   - DERIVATION — the id is a function of the rev, and rev-less is the legacy
+//     fallback. This is the property the deleted literal used to fake: it
+//     asserted one hard-coded point, not the function that produced it.
+//
+// A test asserting `sharedDigichatContainerId(rev) === "shared-" + rev` is what
+// makes a hand-pinned id impossible to reintroduce: reintroducing one means the
+// function ignores its argument, and these die.
+describe("digichat container id is derived, not pinned (DIG-3814)", () => {
+  const REVS = [
+    "3528cf9f7ab1",
+    "0000000000",
+    "abcdef012345",
+    "fedcba987654",
+  ];
+
+  it("the adapter re-exports the standalone derivation itself, not a copy", () => {
+    // Object identity: the strongest available statement of "by construction".
+    // A fold that reimplemented the function would fail here even when both
+    // happened to return equal values today.
+    expect(sharedDigichatContainerId).toBe(standaloneContainerId);
+    expect(digichatContainerRev).toBe(standaloneRev);
+  });
+
+  it("derives the id from the deploying commit's rev", () => {
+    for (const rev of REVS) {
+      expect(sharedDigichatContainerId(rev)).toBe(`shared-${rev}`);
+    }
+  });
+
+  it("adapter and standalone agree on every rev (the property the literal replaced)", () => {
+    for (const rev of REVS) {
+      expect(sharedDigichatContainerId(rev)).toBe(standaloneContainerId(rev));
+      expect(digichatContainerRev(rev)).toBe(standaloneRev(rev));
+    }
+  });
+
+  it("falls back to the legacy id when a deploy carried no rev", () => {
+    // Unset is an honest state — a bare `npx wrangler deploy` — not an error.
+    for (const empty of [undefined, null, "", "   "]) {
+      expect(sharedDigichatContainerId(empty)).toBe(
+        LEGACY_SHARED_DIGICHAT_CONTAINER_ID,
+      );
+      expect(digichatContainerRev(empty)).toBeNull();
+    }
+  });
+
+  it("rejects anything that is not a hex rev instead of minting a new instance", () => {
+    // The derived string reaches getContainer as a Durable Object name, so a
+    // malformed value must degrade to the fallback rather than pass through.
+    expect(sharedDigichatContainerId("../../etc/passwd")).toBe(
+      LEGACY_SHARED_DIGICHAT_CONTAINER_ID,
+    );
+    expect(sharedDigichatContainerId("  3528CF9F7AB1  ")).toBe("shared-3528cf9f7ab1");
+  });
+
+  it("never declares a Container id constant in the adapter or the source module", () => {
+    // The literal is gone, not renamed: `export const SHARED_…_CONTAINER_ID` is
+    // what a future hand-pick would look like, and it must not come back.
+    const foldSource = readFileSync(join(here, "digichat.ts"), "utf-8");
+    const pathsSource = readFileSync(
+      join(here, "..", "..", "digichat-cloudflare", "src", "paths.ts"),
+      "utf-8",
+    );
+    expect(foldSource).not.toMatch(/SHARED_DIGICHAT_CONTAINER_ID(?!_LEGACY)/);
+    expect(foldSource).not.toMatch(/export\s+const\s+SHARED_/);
+    expect(pathsSource).not.toMatch(/export\s+const\s+SHARED_DIGICHAT_CONTAINER_ID/);
+    // Control: the matcher fires on the legacy constant's own line.
+    expect(pathsSource).toMatch(/export const LEGACY_SHARED_DIGICHAT_CONTAINER_ID/);
   });
 });
 
@@ -152,7 +236,7 @@ describe("digichat adapter source pins", () => {
   it("reuses the standalone worker's paths module instead of reimplementing routes", () => {
     expect(source).toContain('from "../../digichat-cloudflare/src/paths"');
     expect(source).toContain("shouldProxyToDigiChat");
-    expect(source).toContain("SHARED_DIGICHAT_CONTAINER_ID");
+    expect(source).toContain("sharedDigichatContainerId");
     expect(source).not.toContain('"/api/chat"');
     expect(source).not.toContain('"/api/embed/"');
     expect(source).not.toContain('"/api/byok/"');
@@ -160,38 +244,29 @@ describe("digichat adapter source pins", () => {
     expect(source).not.toContain('"/_dtchat/"');
   });
 
-  it("keeps the Next standalone port next to the predicate (one fold module)", () => {
+  it("keeps the Next standalone port next to the predicate (one adapter module)", () => {
     expect(source).toContain("DIGICHAT_PORT = 3000");
   });
 });
 
-describe("digichat index.ts wiring pins", () => {
+describe("digichat separation pins (Chris, 2026-10-19)", () => {
   const source = readFileSync(join(here, "index.ts"), "utf-8");
 
-  it("matches the branch on the standalone predicate (no copied path list)", () => {
-    expect(source).toContain("shouldProxyToDigiChat(url.pathname)");
-    const branch = source.slice(source.indexOf("shouldProxyToDigiChat(url.pathname)"));
-    expect(branch).not.toContain('"/api/chat"');
-    expect(branch).not.toContain('"/_dtchat');
+  it("does NOT mount a digichat branch — the surface stays on digithings-digichat", () => {
+    expect(source).not.toContain("shouldProxyToDigiChat(url.pathname)");
+    expect(source).not.toContain('() => import("./digichat")');
+    expect(source).not.toContain("getContainer(workerEnv.DIGICHAT");
+    expect(source).not.toContain("switchPort(request, DIGICHAT_PORT)");
+    // The orphaned class went with the fold (2026-10-19). Pinning its absence
+    // keeps a re-added container from shipping without a binding or a route —
+    // the exact dead-code shape this removal cleaned up.
+    expect(source).not.toContain("class DigiChatContainer");
+    expect(source).not.toContain("DurableObjectNamespace<DigiChatContainer>");
   });
 
-  it("proxies through the digichat container on :3000 with switchPort", () => {
-    expect(source).toContain('"digichat"');
-    expect(source).toContain('() => import("./digichat")');
-    expect(source).toContain("getContainer(workerEnv.DIGICHAT, SHARED_DIGICHAT_CONTAINER_ID)");
-    expect(source).toContain("switchPort(request, DIGICHAT_PORT)");
-  });
-
-  it("applies no edge gating on digichat paths (auth stays in-container)", () => {
-    const branchStart = source.indexOf("shouldProxyToDigiChat(url.pathname)");
-    expect(branchStart).toBeGreaterThan(-1);
-    const branchEnd = source.indexOf("Dedicated digiquant-mcp container", branchStart);
-    expect(branchEnd).toBeGreaterThan(branchStart);
-    const branch = source.slice(branchStart, branchEnd);
-    expect(branch).not.toContain("401");
-    expect(branch).not.toContain("unauthorized");
-    expect(branch).not.toContain("x-digi-mcp-key");
-    expect(branch).not.toContain("JWT");
+  it("does NOT gate the OCC shell here — the invite gate stays on the digichat worker", () => {
+    expect(source).not.toContain("occGate(");
+    expect(source).not.toContain("isOccShellPath(");
   });
 
   it("keeps the /_dtchat asset prefix (no clash with Pages /_next)", () => {
@@ -200,16 +275,9 @@ describe("digichat index.ts wiring pins", () => {
     expect(shouldProxyToDigiChat("/_dtchat/_next/static/x.js")).toBe(true);
   });
 
-  it("mounts the digichat branch before the container-routes catch-all", () => {
-    const chatBranch = source.indexOf("shouldProxyToDigiChat(url.pathname)");
-    const catchAll = source.indexOf('runIsolated("container-routes"');
-    expect(chatBranch).toBeGreaterThan(-1);
-    expect(catchAll).toBeGreaterThan(chatBranch);
-  });
-
   it("pins the digichat image bind (:3000 on 0.0.0.0, same as standalone)", () => {
     const dockerfile = readFileSync(
-      join(here, "..", "..", "..", "Dockerfile.digichat-cloudflare"),
+      join(here, "..", "..", "..", "infra/docker/Dockerfile.digichat-cloudflare"),
       "utf-8",
     );
     expect(dockerfile).toContain("EXPOSE 3000");
@@ -218,22 +286,3 @@ describe("digichat index.ts wiring pins", () => {
   });
 });
 
-describe("digichat embed-flag parity", () => {
-  it("the inline envVars derivation matches legacyEmbedEnabledValue for every input", () => {
-    // index.ts keeps the OR inline so the envVars key↔ref pin still pairs
-    // DIGICHAT_EMBED_ENABLED with its own entry (see DigiChatContainer.envVars
-    // in index.ts). This truth table pins the inline copy equal to the
-    // canonical helper for all 9 input combinations.
-    const source = readFileSync(join(here, "index.ts"), "utf-8");
-    expect(source).toContain(
-      'env.DIGICHAT_EMBED_ENABLED === "1" || env.DIGICHAT_LEGACY_EMBED_ENABLED === "1"',
-    );
-    const inline = (embed, legacy) =>
-      embed === "1" || legacy === "1" ? "1" : "0";
-    for (const embed of ["1", "0", undefined]) {
-      for (const legacy of ["1", "0", undefined]) {
-        expect(inline(embed, legacy)).toBe(legacyEmbedEnabledValue(legacy, embed));
-      }
-    }
-  });
-});

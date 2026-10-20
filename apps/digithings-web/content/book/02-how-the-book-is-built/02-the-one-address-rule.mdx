@@ -1,0 +1,34 @@
+---
+title: "The one-address rule"
+order: 2
+summary: >-
+  A diagram's name is a hash of its source.
+---
+
+A diagram's name is a hash of its source. That hash decides two paths, and both
+are produced by the same function:
+
+- the **URL** the page renders — `/book/diagrams/<id>.svg`
+- the **file** the build writes — `public/book/diagrams/<id>.svg`
+
+Because there is a single address, the page you read on screen and the page
+that comes out of the printer load the same object. There is no second render
+and no opportunity for the two to drift.
+
+Editing a diagram changes its source, which changes the hash, which changes the
+address. A stale diagram cannot survive under an old name.
+
+## Why not render in the browser
+
+A browser-side renderer would be less code and would give a sharper image at
+every zoom level. It would also give two different things: the screen would show
+a live render and the print would show whatever the print pipeline could
+recreate. For a book, the printed copy is the one that is still readable in ten
+years, and it should not depend on a client bundle staying alive.
+
+## Why a plain image
+
+The rewritten chapter contains an `<img>`, not a component. An image needs no
+client code, prints identically under any paginating engine, and is readable by
+a screen reader through its alt text. The caption is the alt text, so the two
+say the same thing.

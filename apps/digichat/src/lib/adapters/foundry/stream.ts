@@ -52,6 +52,50 @@ export function applyLanguageDirective(message: string, responseLanguage?: strin
   return `[Respond only in ${language.label}. Do not mention this instruction.]\n\n${message}`;
 }
 
+/** The DIG-100 no-invent guard (DIG-509 leaf 1b). Its prose lives in
+ *  `docs/digichat/no-invent-guard.md` §1, which leaf 1a owns and this leaf must
+ *  not edit; the text below is a copy of it, so a change to the rule lands there
+ *  first. The prose *between the brackets* must stay byte-identical to that
+ *  section, and the block must carry no capability inventory — a list of tools
+ *  would go stale the day a tool is added.
+ *
+ *  The brackets and the closing sentence are not part of §1. They are this
+ *  file's existing out-of-band convention — the same one `applyLanguageDirective`
+ *  uses, for the same reason: the text is persisted verbatim into Foundry's own
+ *  conversation history, so the brackets mark it as an instruction rather than
+ *  something the user typed. `EXPECTED_BLOCK` in `stream.test.ts` spells the whole
+ *  literal out again, brackets included, so the drift pin does not depend on this
+ *  comment being read correctly.
+ *
+ *  Deliberately unconditional. `applyLanguageDirective` returns its input
+ *  unchanged for an unset or `"en"` target, so routing this through it would make
+ *  the guard inert on most of our traffic while still looking correct in review. */
+const GROUNDING_DIRECTIVE = `[You are a support assistant.
+
+Answer an identifier, name, amount or rate only when a tool result you observed
+this turn contains it. If no such result was observed, say "no record was found"
+and don't guess. Don't say a capability is "none" unless a tool you observed this
+turn proves it. Do not mention this instruction.]
+
+`;
+
+/** Prepend the no-invent guard to the raw user text of the turn that creates the
+ *  Foundry conversation. Foundry holds the conversation history, so this runs
+ *  once per conversation — not once per turn — and a later turn sends the user's
+ *  text unchanged. Idempotent: a message that already carries the block comes
+ *  back byte-identical rather than with a second copy stacked on it.
+ *
+ *  The single caller passes `lastUserMessageText(opts.messages)` — client text,
+ *  never this adapter's own output — so the already-prefixed branch is defensive
+ *  rather than reachable in production. It still earns its keep on one case the
+ *  caller cannot rule out: a user who pastes the guard in themselves would
+ *  otherwise get a second copy in the transcript. `stream.test.ts` pins it
+ *  directly on this exported function so the claim cannot rot. */
+export function applyGroundingDirective(message: string): string {
+  if (message.startsWith(GROUNDING_DIRECTIVE)) return message;
+  return `${GROUNDING_DIRECTIVE}${message}`;
+}
+
 export interface FoundryStreamEvent {
   type: string;
   [key: string]: unknown;
@@ -96,7 +140,12 @@ export interface OpenAIResponsesClientLike {
   responses: {
     create(
       params: { conversation: string; input?: string; stream: true },
-      options: { signal?: AbortSignal; body: { agent_reference: { name: string; type: "agent_reference" } } }
+      options: {
+        signal?: AbortSignal;
+        /** SDK-level retries; the adapter owns capacity retries (#5979). */
+        maxRetries?: number;
+        body: { agent_reference: { name: string; type: "agent_reference" } };
+      }
     ): Promise<AsyncIterable<FoundryStreamEvent>>;
   };
 }
@@ -746,6 +795,85 @@ export function mapFoundryEvent(
   }
 }
 
+/**
+ * Retry schedule for a throttled deployment (429). Cumulative wait is ~59s, which
+ * is well inside a demo's patience and far short of a hung request.
+ */
+const DEFAULT_CAPACITY_RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 15_000, 15_000, 15_000];
+const CAPACITY_RETRY_AFTER_CAP_MS = 30_000;
+
+function httpStatusOf(err: unknown): number | undefined {
+  if (typeof err !== "object" || err === null) return undefined;
+  const candidate = err as { status?: unknown; statusCode?: unknown };
+  const raw = typeof candidate.status === "number" ? candidate.status : candidate.statusCode;
+  return typeof raw === "number" ? raw : undefined;
+}
+
+function retryAfterMs(err: unknown): number | null {
+  if (typeof err !== "object" || err === null) return null;
+  const headers = (err as { headers?: { get?: (name: string) => string | null } }).headers;
+  // Azure sends millisecond variants alongside the standard header; prefer the
+  // finer-grained one when both are present.
+  for (const name of ["retry-after-ms", "x-ms-retry-after-ms"]) {
+    const rawMs = headers?.get?.(name);
+    // Headers.get returns null when absent, and Number(null) is 0 — which would
+    // start every retry immediately and make the schedule dead code.
+    if (rawMs == null || rawMs.trim() === "") continue;
+    const ms = Number(rawMs);
+    if (Number.isFinite(ms) && ms >= 0) {
+      return Math.min(ms, CAPACITY_RETRY_AFTER_CAP_MS);
+    }
+  }
+  const raw = headers?.get?.("retry-after");
+  if (raw == null || raw.trim() === "") return null;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1000, CAPACITY_RETRY_AFTER_CAP_MS);
+  }
+  const asDate = Date.parse(raw);
+  if (Number.isNaN(asDate)) return null;
+  return Math.min(Math.max(asDate - Date.now(), 0), CAPACITY_RETRY_AFTER_CAP_MS);
+}
+
+/**
+ * Delay before retrying a capacity failure, or null when it is not retryable.
+ *
+ * 429 only. A 503 can arrive after Foundry has already committed the user item,
+ * and `responses.create` carries the input — retrying it there would append the
+ * user turn twice. Throttling happens before processing, so 429 is safe.
+ */
+export function capacityRetryDelayMs(
+  err: unknown,
+  attempt: number,
+  schedule: readonly number[],
+): number | null {
+  if (httpStatusOf(err) !== 429) return null;
+  const code = (err as { code?: unknown } | null)?.code;
+  // A hard quota/billing stop is not transient: retrying only burns the budget.
+  if (code === "insufficient_quota" || code === "billing_hard_limit_reached") return null;
+  if (attempt >= schedule.length) return null;
+  return retryAfterMs(err) ?? schedule[attempt];
+}
+
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export async function createFoundryStreamResponse(opts: {
   projectEndpoint: string;
   agentName: string;
@@ -758,6 +886,11 @@ export async function createFoundryStreamResponse(opts: {
   responseLanguage?: string;
   /** Default `send`. Regen/edit mutate Foundry items then create with no new user input (#3475). */
   turnMode?: DigiTurnMode;
+  /**
+   * Retry schedule for 429/503 on the model call (#5979). Overridable so tests
+   * do not spend the real backoff.
+   */
+  capacityRetryDelaysMs?: readonly number[];
 }): Promise<Response> {
   const turnMode: DigiTurnMode = opts.turnMode ?? "send";
   const openai = (opts.openAIClientFactory ?? defaultOpenAIClientFactory)(opts.projectEndpoint);
@@ -822,6 +955,11 @@ export async function createFoundryStreamResponse(opts: {
 
       try {
         let conversationId = opts.conversationId;
+        // The no-invent guard (DIG-509 leaf 1b) rides the turn that creates the
+        // conversation, so it lands once per conversation instead of once per
+        // user message. `opts.conversationId` is the id from before this turn,
+        // so this is true exactly when the branch below creates one.
+        const createdConversation = !conversationId;
         if (!conversationId) {
           const conversation = await openai.conversations.create();
           conversationId = conversation.id;
@@ -852,13 +990,65 @@ export async function createFoundryStreamResponse(opts: {
           stream: true,
         };
         if (turnMode === "send") {
-          createParams.input = message;
+          // Grounding goes here and not into `message` at the top: `message` is
+          // reused as `editedUserText` below, so prepending there would write the
+          // block into the conversation as a literal user utterance, brackets
+          // and all, on edit_last_user.
+          createParams.input = createdConversation ? applyGroundingDirective(message) : message;
         }
 
-        const responseStream = await openai.responses.create(createParams, {
-          signal: opts.signal,
-          body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
-        });
+        const responseStream = await (async () => {
+          const schedule = opts.capacityRetryDelaysMs ?? DEFAULT_CAPACITY_RETRY_DELAYS_MS;
+          for (let attempt = 0; ; attempt += 1) {
+            try {
+              const created = await openai.responses.create(createParams, {
+                signal: opts.signal,
+                // Our schedule owns the retries; the SDK's own retries would
+                // multiply them (up to 21 POSTs for one turn).
+                maxRetries: 0,
+                body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
+              });
+              if (attempt > 0) {
+                // Capacity is back: clear the waiting state before the answer
+                // starts, so the indicator does not sit on a stale message
+                // while the first tool call runs.
+                writer.write({
+                  type: "data-connection",
+                  id: "foundry-capacity",
+                  data: { state: "ready" },
+                });
+              }
+              return created;
+            } catch (err) {
+              const delay = capacityRetryDelayMs(err, attempt, schedule);
+              if (delay === null) {
+                if (attempt > 0) {
+                  // Exhausted, or no longer retryable: clear the waiting state
+                  // so the persisted turn does not carry a stale countdown.
+                  writer.write({
+                    type: "data-connection",
+                    id: "foundry-capacity",
+                    data: { state: "ready" },
+                  });
+                }
+                throw err;
+              }
+              writer.write({
+                type: "data-connection",
+                id: "foundry-capacity",
+                data: {
+                  state: "warming_up",
+                  message: `Waiting for model capacity — retrying in ${Math.max(
+                    1,
+                    Math.round(delay / 1000),
+                  )}s`,
+                },
+              });
+              await abortableSleep(delay, opts.signal);
+              if (opts.signal?.aborted) throw err;
+            }
+          }
+        })();
 
         const textFilter = new FoundryToolLeakFilter();
         const mapState: FoundryMapState = { sawSearchOutput: false };

@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BootLabOverlay } from "@digithings/ui/chat/boot-lab";
+import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
-import { readInviteToken } from "@/lib/inviteToken";
+import { readInviteToken, stripInviteTokenFromUrl } from "@/lib/inviteToken";
 
 const READY = "digichat:ready";
 const SEED = "digichat:seed";
@@ -28,41 +29,79 @@ export const WARMUP_DELAY_MS = 700;
 /** Must cover the overlay's opacity transition below. */
 export const WARMUP_FADE_MS = 360;
 
-/** Default embed host for digithings.ai/chat (client #0). */
-export const DEFAULT_CHAT_EMBED_HOST = "digithings.ai";
+/**
+ * Service warm-up (sleep-on-idle backends: auth, assistant, search). digichat
+ * serves `/api/embed/warmup` on the embed origin; it reports `ready` only once
+ * every service the tenant needs answers. The boot animation shows a
+ * "wake up services" step that completes on that edge, and the chat is not
+ * revealed before it, so nothing can be sent into a sleeping stack. A cold
+ * stack boot takes a few minutes, hence the budget; past it the chat is
+ * revealed anyway. Same path for the landing pop-up, /chat, and /chat/occ.
+ */
+export const WARMUP_PATH = "/api/embed/warmup";
+export const SERVICES_BUDGET_MS = 240_000;
+const SERVICES_POLL_MS = 3_000;
+const SERVICES_PROBE_TIMEOUT_MS = 60_000;
+/** Shown on the step before the first probe answers. */
+const DEFAULT_SERVICES = ["auth", "assistant"] as const;
 
-/** Virtual first-party host for digithings.ai/chat/occ (client #1). */
-export const OCC_CHAT_EMBED_HOST = "occ.digithings.ai";
+export type WarmupProbe = { ready?: boolean; services?: Record<string, string> };
+
+/** Poll warm-up until every service is ready or the budget is spent. */
+export async function waitForServices(
+  origin: string,
+  opts: {
+    isCancelled: () => boolean;
+    onServices?: (names: string[]) => void;
+    budgetMs?: number;
+    fetchImpl?: typeof fetch;
+    sleep?: (ms: number) => Promise<void>;
+    now?: () => number;
+  },
+): Promise<boolean> {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = opts.now ?? Date.now;
+  const t0 = now();
+  const budget = opts.budgetMs ?? SERVICES_BUDGET_MS;
+  while (!opts.isCancelled() && now() - t0 < budget) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), SERVICES_PROBE_TIMEOUT_MS);
+      const res = await doFetch(`${origin.replace(/\/$/, "")}${WARMUP_PATH}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      const body = (await res.json()) as WarmupProbe;
+      if (body.services) opts.onServices?.(Object.keys(body.services));
+      if (body.ready === true) return true;
+    } catch {
+      /* still waking (or the probe timed out) */
+    }
+    if (opts.isCancelled()) break;
+    await sleep(SERVICES_POLL_MS);
+  }
+  return false;
+}
 
 /**
- * Curated first-paint copy per host: the boot loader types it while the
- * container wakes, and the same strings ride the iframe URL so the ready hero
- * matches the loader it replaces. Keep every example a single line — the
- * chips render one row each.
+ * First-paint copy and the host keys it is indexed by now live in
+ * `@/lib/embedCopy`, so the landing page's FAQ band can mount the same
+ * conversation with the same welcome and the same examples. Re-exported here
+ * rather than moved away: this module's importers (the /chat routes, the
+ * contract test) keep the surface they already had.
  */
-export const EMBED_SHELL_COPY: Record<
-  string,
-  { welcome: string; suggestions: string[] }
-> = {
-  [DEFAULT_CHAT_EMBED_HOST]: {
-    welcome: "Ask about digithings",
-    suggestions: [
-      "What is digigraph?",
-      "Search the docs for NautilusTrader",
-      "How do I run the stack locally?",
-      "Summarize the digithings architecture",
-    ],
-  },
-  [OCC_CHAT_EMBED_HOST]: {
-    welcome: "Ask about Online Compliance Center",
-    suggestions: [
-      "How do I file a support ticket?",
-      "Search the help articles for onboarding",
-      "Show my open Zammad tickets",
-      "What is our data retention policy?",
-    ],
-  },
-};
+export {
+  DEFAULT_CHAT_EMBED_HOST,
+  EMBED_SHELL_COPY,
+  OCC_CHAT_EMBED_HOST,
+} from "@/lib/embedCopy";
+import {
+  DEFAULT_CHAT_EMBED_HOST,
+  EMBED_SHELL_COPY,
+} from "@/lib/embedCopy";
 
 export type EmbedShellTheme = "light" | "dark";
 
@@ -184,6 +223,13 @@ export function ChatEmbedShell({
   /** Only when iframe never loads — cannot deliver parent-error postMessage. */
   const [shellLoadError, setShellLoadError] = useState<string | null>(null);
   const [embedReady, setEmbedReady] = useState(false);
+  // Every sleep-on-idle service answered warm-up (or the budget was spent).
+  const [servicesReady, setServicesReady] = useState(false);
+  const [serviceNames, setServiceNames] = useState<string[]>([...DEFAULT_SERVICES]);
+  // Ready-timeout / load-error paths reveal the frame regardless of warm-up,
+  // so the in-chat error line is visible.
+  const [forceReveal, setForceReveal] = useState(false);
+  const revealed = (embedReady && servicesReady) || forceReveal;
   // Warmup overlay lifecycle: mounts only when ready is late (cold Container),
   // unmounts after the crossfade once ready lands.
   const [warmupMounted, setWarmupMounted] = useState(false);
@@ -227,6 +273,11 @@ export function ChatEmbedShell({
       const token = acceptsInviteToken
         ? readInviteToken(window.location.search)
         : undefined;
+      // The key has been read and now lives only in this effect's local state
+      // for the session, so it has no further reason to sit in the address bar
+      // (DIG-1437). Never a store, a cookie or sessionStorage.
+      const stripped = token ? stripInviteTokenFromUrl(window.location.href) : null;
+      if (stripped) window.history.replaceState(null, "", stripped);
       // The inline script above already rewrote the theme param when the
       // real theme is dark; only rebuild the src when the live attribute
       // still disagrees (client-only mounts, embed target changes).
@@ -246,11 +297,9 @@ export function ChatEmbedShell({
       if (next === themeRef.current) return;
       themeRef.current = next;
       setShellTheme(next);
-      // Rebuild the embed URL for the new theme: the theme message alone left
-      // the app on the old palette (dark composer on a light page). When the
-      // URL is unchanged React skips the attribute write, so this cannot
-      // reload an already-correct iframe.
-      setSrc(embedSrc(embedOrigin, embedHost, next));
+      // Live toggles post digichat:theme. Rebuilding `src` reloads the iframe
+      // and drops the session. The ready handler posts themeRef if the frame
+      // has not said ready yet, so a toggle during boot still lands.
       if (!embedReadyRef.current) return;
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
@@ -310,6 +359,7 @@ export function ChatEmbedShell({
         win.postMessage(buildEmbedParentErrorMessage("ready_timeout"), targetOrigin);
         // Reveal the iframe so the in-chat error line is visible.
         setEmbedReady(true);
+        setForceReveal(true);
         return;
       }
       // No browsing context to post into — terminal line in the iframe slot.
@@ -321,21 +371,46 @@ export function ChatEmbedShell({
     };
   }, [targetOrigin]);
 
+  // Wake every service before the chat is revealed (boot step "services").
+  // Same-origin only: the probe is a plain GET on the embed origin, and a
+  // cross-origin embed (local dev) skips the step rather than wait on CORS.
+  useEffect(() => {
+    if (!targetOrigin) return;
+    let cancelled = false;
+    const sameOrigin = targetOrigin === window.location.origin;
+    void (async () => {
+      if (sameOrigin) {
+        await waitForServices(targetOrigin, {
+          isCancelled: () => cancelled,
+          onServices: (names) => {
+            if (!cancelled && names.length) setServiceNames(names);
+          },
+        });
+      }
+      if (cancelled) return;
+      signalDigichatBootStep("services");
+      setServicesReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [targetOrigin]);
+
   // Cold-start cover: only after a warm load has had its chance
   // (WARMUP_DELAY_MS), so ordinary navigation never flashes a loader. setState
   // lives in the timer callback (react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (embedReady || shellLoadError) return;
+    if (revealed || shellLoadError) return;
     const t = window.setTimeout(() => setWarmupMounted(true), WARMUP_DELAY_MS);
     return () => window.clearTimeout(t);
-  }, [embedReady, shellLoadError]);
+  }, [revealed, shellLoadError]);
 
   // Unmount after the crossfade has run (the overlay is opacity-0 by then).
   useEffect(() => {
-    if (!warmupMounted || !embedReady) return;
+    if (!warmupMounted || !revealed) return;
     const t = window.setTimeout(() => setWarmupMounted(false), WARMUP_FADE_MS);
     return () => window.clearTimeout(t);
-  }, [warmupMounted, embedReady]);
+  }, [warmupMounted, revealed]);
 
   if (configError) {
     return (
@@ -371,11 +446,10 @@ export function ChatEmbedShell({
         width: "100%",
         // Full-bleed: the chat fills the page area edge-to-edge (the DataTap
         // layout), so the themed background reads as one solid surface.
-        // Transparent, not var(--bg): the page's fixed .grain/.glow layers (site.css,
-        // z-index 0) sit behind this shell, and an opaque fill here paints a visible
-        // rectangle over them. The white-flash guard lives on the frame itself
-        // (`.dc-chat-frame` paints --chat-frame-canvas pre-paint) and inside the
-        // iframe's own boot, so nothing here needs a solid fill.
+        // Transparent, not a second var(--bg) fill: the page ground is already
+        // that color, and an opaque rectangle here flashes when the embed loads.
+        // The white-flash guard lives on the frame itself (`.dc-chat-frame`
+        // paints --chat-frame-canvas pre-paint) and inside the iframe's own boot.
         background: "transparent",
         colorScheme: shellTheme,
       }}
@@ -399,19 +473,18 @@ export function ChatEmbedShell({
 
       {warmupMounted && !shellLoadError ? (
         <div
-          aria-busy={!embedReady}
+          aria-busy={!revealed}
           aria-live="polite"
-          aria-hidden={embedReady}
+          aria-hidden={revealed}
           style={{
             position: "absolute",
             inset: 0,
             zIndex: 1,
-            // Crossfade to the real frame on ready; transparent so the page's
-            // .grain/.glow layers keep showing through (same reasoning as the
-            // shell div above).
-            opacity: embedReady ? 0 : 1,
+            // Crossfade to the real frame on ready; transparent so the page
+            // ground keeps showing through (same reasoning as the shell above).
+            opacity: revealed ? 0 : 1,
             transition: "opacity 320ms ease",
-            pointerEvents: embedReady ? "none" : "auto",
+            pointerEvents: revealed ? "none" : "auto",
             background: "transparent",
           }}
         >
@@ -423,12 +496,15 @@ export function ChatEmbedShell({
             // Facts are the deployment's real values (never invented counts):
             // both live tenants run the digigraph backend.
             variant="tooltask"
-            ready={embedReady}
-            readyEdge={embedReady}
+            // The last rows wait on real edges: "wake up services" on the
+            // warm-up probe, "wire in the backend" on digichat:ready.
+            ready={revealed}
+            readyEdge={revealed}
             onSettled={() => {}}
             facts={{
               starters: EMBED_SHELL_COPY[embedHost]?.suggestions.length,
               backend: "digigraph",
+              services: serviceNames,
             }}
           />
         </div>
@@ -453,7 +529,7 @@ export function ChatEmbedShell({
             // and colour scheme live in globals.css (.dc-chat-frame, keyed on
             // the root [data-theme]) - component state must never disagree
             // with the page theme (dark page + light chat rectangle).
-            opacity: embedReady ? 1 : 0,
+            opacity: revealed ? 1 : 0,
             transition: "opacity 320ms ease",
             position: "relative",
             zIndex: 0,

@@ -10,7 +10,7 @@ relevance:
   - digigraph
   - digiquant
   - digisearch
-  - digismith
+  - digitrace
   - digikey
 ---
 # digibase

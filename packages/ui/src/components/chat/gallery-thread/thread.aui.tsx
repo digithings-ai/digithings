@@ -17,14 +17,20 @@ import {
   ReasoningRoot,
   ReasoningText,
   ReasoningTrigger,
-} from "./reasoning.aui";
+} from "../stock/reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
-import { ToolFallback } from "./tool-fallback.aui";
+import { WorkChain } from "./work-chain";
+import { WorkChainSummary } from "./work-chain-summary";
+import {
+  resolveWorkDisclosure,
+  type WorkVisibility,
+} from "../stock/skin-types";
+import { ToolFallback } from "../stock/tool-fallback.aui";
 import {
   ToolGroupContent,
   ToolGroupRoot,
   ToolGroupTrigger,
-} from "./tool-group.aui";
+} from "../stock/tool-group.aui";
 import {
   CheckActionIcon,
   CopyActionIcon,
@@ -52,12 +58,13 @@ import {
   type ToolCallMessagePartComponent,
   useAui,
   useAuiState,
-  useThreadViewport,
 } from "@assistant-ui/react";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
@@ -66,12 +73,14 @@ import {
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
-import { ThreadSource } from "./source";
 import { TypedWelcomeCopy } from "./typed-welcome-copy";
+import { useDigichatWarmupPhase } from "../use-warmup-phase";
+import { OverlayScrollbar } from "../overlay-scrollbar";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -164,6 +173,21 @@ export type ThreadProps = {
   reasoningMode?: GroupDisclosureMode | undefined;
   /** Disclosure mode for grouped tool-call runs. Default collapsed. */
   toolCallsMode?: GroupDisclosureMode | undefined;
+  /**
+   * How much of the agent's work the user sees: `quiet` (one summary line),
+   * `balanced` (open while it runs, collapsed when it finishes) or `verbose`
+   * (stays open). The client's `features.view` picks the default; the user can
+   * change it per session.
+   */
+  workVisibility?: WorkVisibility | undefined;
+  /**
+   * Rendered as a row inside the composer border, under the input. The
+   * digichat skin passes its model / tools / search / view / context chips;
+   * other hosts leave it unset.
+   */
+  composerToolbar?: ReactNode;
+  /** `always` reserves a scrollbar gutter; `auto` shows bars only on scroll. */
+  scrollbars?: "always" | "auto";
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -198,11 +222,13 @@ const ThreadComponentsContext =
 type ThreadGroupDisclosure = {
   reasoning: GroupDisclosureMode;
   toolCalls: GroupDisclosureMode;
+  visibility: WorkVisibility;
 };
 
 const DEFAULT_GROUP_DISCLOSURE: ThreadGroupDisclosure = {
   reasoning: "collapsed",
   toolCalls: "collapsed",
+  visibility: "balanced",
 };
 
 const ThreadGroupDisclosureContext = createContext<ThreadGroupDisclosure>(
@@ -229,6 +255,101 @@ const DEFAULT_CHROME: ThreadChrome = {
 
 const ThreadChromeContext = createContext<ThreadChrome>(DEFAULT_CHROME);
 
+/** The scroll viewport element, for footer widgets that live outside it. */
+const ThreadViewportElContext = createContext<HTMLElement | null>(null);
+
+/**
+ * Edit-in-composer: clicking edit on a user message loads its text into the
+ * main composer (the only place messages are typed or changed). Resubmitting
+ * replaces that message and regenerates from it; unchanged text is a no-op
+ * (treated as a misclick), as is an empty or whitespace-only composer.
+ * Escape or a click outside the composer cancels and restores whatever draft
+ * was there before. The composer itself carries no editing chrome: it looks
+ * like a normal text box while a message is being edited.
+ */
+type ComposerEditState = {
+  messageId: string;
+  original: string;
+  savedDraft: string;
+};
+type ComposerEditApi = {
+  editing: ComposerEditState | null;
+  begin: (messageId: string, text: string) => void;
+  cancel: () => void;
+  commit: (text: string) => void;
+};
+const ComposerEditContext = createContext<ComposerEditApi>({
+  editing: null,
+  begin: () => {},
+  cancel: () => {},
+  commit: () => {},
+});
+
+export function isUnchangedEdit(original: string, next: string): boolean {
+  return original.trim() === next.trim();
+}
+
+/**
+ * Should an in-composer edit be sent at all?
+ *
+ * No when the composer is empty or holds only whitespace (there is nothing to
+ * say), and no when the text is the message being edited (an edit that
+ * changes nothing is not worth a resend). Both cases end the edit without
+ * touching the message.
+ */
+export function shouldCommitEdit(original: string, next: string): boolean {
+  if (!next.trim()) return false;
+  return !isUnchangedEdit(original, next);
+}
+
+const ComposerEditProvider: FC<PropsWithChildren> = ({ children }) => {
+  const aui = useAui();
+  const [editing, setEditing] = useState<ComposerEditState | null>(null);
+  const editingRef = useRef<ComposerEditState | null>(null);
+  editingRef.current = editing;
+
+  const begin = useCallback(
+    (messageId: string, text: string) => {
+      const prev = editingRef.current;
+      const savedDraft = prev ? prev.savedDraft : aui.composer().getState().text;
+      aui.composer().setText(text);
+      setEditing({ messageId, original: text, savedDraft });
+    },
+    [aui],
+  );
+  const cancel = useCallback(() => {
+    const cur = editingRef.current;
+    if (!cur) return;
+    aui.composer().setText(cur.savedDraft);
+    setEditing(null);
+  }, [aui]);
+  const commit = useCallback(
+    (text: string) => {
+      const cur = editingRef.current;
+      if (!cur) return;
+      if (!shouldCommitEdit(cur.original, text)) {
+        cancel();
+        return;
+      }
+      const mc = aui.thread().message({ id: cur.messageId }).composer();
+      mc.beginEdit();
+      mc.setText(text);
+      mc.send();
+      aui.composer().setText(cur.savedDraft);
+      setEditing(null);
+    },
+    [aui, cancel],
+  );
+  const value = useMemo(
+    () => ({ editing, begin, cancel, commit }),
+    [editing, begin, cancel, commit],
+  );
+  return (
+    <ComposerEditContext.Provider value={value}>
+      {children}
+    </ComposerEditContext.Provider>
+  );
+};
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // Welcome docks in the footer above the composer. Loads after startup keep
 // the docked layout.
@@ -282,6 +403,9 @@ export const Thread: FC<ThreadProps> = ({
   hiddenAttachmentNames,
   reasoningMode = "collapsed",
   toolCallsMode = "collapsed",
+  workVisibility = "balanced",
+  composerToolbar,
+  scrollbars = "always",
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -302,13 +426,21 @@ export const Thread: FC<ThreadProps> = ({
         <ThreadActionsContext.Provider value={resolvedActions}>
           <ThreadComponentsContext.Provider value={components}>
             <ThreadGroupDisclosureContext.Provider
-              value={{ reasoning: reasoningMode, toolCalls: toolCallsMode }}
+              value={{
+                reasoning: reasoningMode,
+                toolCalls: toolCallsMode,
+                visibility: workVisibility,
+              }}
             >
-              <ThreadRoot
-                autoFocus={autoFocus}
-                placeholder={placeholder}
-                composerLayout={composerLayout}
-              />
+              <ComposerEditProvider>
+                <ThreadRoot
+                  autoFocus={autoFocus}
+                  placeholder={placeholder}
+                  composerLayout={composerLayout}
+                  composerToolbar={composerToolbar}
+                  scrollbars={scrollbars}
+                />
+              </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
           </ThreadComponentsContext.Provider>
         </ThreadActionsContext.Provider>
@@ -331,10 +463,18 @@ const ThreadRoot: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
   composerLayout: ComposerLayout;
-}> = ({ autoFocus, placeholder, composerLayout }) => {
+  composerToolbar?: ReactNode;
+  scrollbars: "always" | "auto";
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
+  const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
+  const viewportRef = useRef<HTMLElement | null>(null);
+  const attachViewport = useCallback((node: HTMLElement | null) => {
+    viewportRef.current = node;
+    setViewportEl(node);
+  }, []);
 
   return (
     <ThreadPrimitive.Root
@@ -350,6 +490,7 @@ const ThreadRoot: FC<{
       // /baseline catalog, the embed shell, and the production shells — instead
       // of each surface having to remember to wrap the Thread.
       data-thread-skin="digichat"
+      data-scrollbars={scrollbars}
       style={{
         ["--thread-max-width" as string]: "44rem",
         // `--card` (not `--color-card`) so a scoped palette wins: the
@@ -360,7 +501,14 @@ const ThreadRoot: FC<{
         ["--composer-padding" as string]: "8px",
       }}
     >
+      {/* The footer (composer + credit) sits outside the scroll viewport so
+          messages end above the text box. ViewportProvider keeps the
+          scroll-to-bottom control wired to the viewport store. */}
+      <ThreadPrimitive.ViewportProvider>
+      <ThreadViewportElContext.Provider value={viewportEl}>
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <ThreadPrimitive.Viewport
+        ref={attachViewport}
         turnAnchor="top"
         // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
         // so it does not sit flush against the viewport top. `tallerThan` scores
@@ -369,7 +517,7 @@ const ThreadRoot: FC<{
         // unchanged from before the padding was added.
         topAnchorMessageClamp={{ tallerThan: "11.5em", visibleHeight: "6em" }}
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
+        className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
         <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
           <AuiIf condition={isHistoryLoadingView}>
@@ -378,14 +526,18 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="mb-14 flex flex-col gap-y-6 empty:hidden"
+            className="mb-4 flex flex-col gap-y-6 empty:hidden"
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
           </div>
-
-          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer digichat-thread__footer bg-background sticky bottom-0 mt-auto flex flex-col gap-4 overflow-visible pb-2 md:pb-3">
+        </div>
+      </ThreadPrimitive.Viewport>
+      <OverlayScrollbar targetRef={viewportRef} width={10} />
+      </div>
+        <div className="mx-auto flex w-full max-w-(--thread-max-width) shrink-0 flex-col px-4">
+          <div className="aui-thread-viewport-footer digichat-thread__footer bg-background relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
             <AuiIf condition={isNewChatView}>
@@ -401,11 +553,13 @@ const ThreadRoot: FC<{
               autoFocus={autoFocus}
               placeholder={placeholder}
               layout={composerLayout}
+              toolbar={composerToolbar}
             />
             {Footer ? <Footer /> : null}
-          </ThreadPrimitive.ViewportFooter>
+          </div>
         </div>
-      </ThreadPrimitive.Viewport>
+      </ThreadViewportElContext.Provider>
+      </ThreadPrimitive.ViewportProvider>
     </ThreadPrimitive.Root>
   );
 };
@@ -414,15 +568,14 @@ const ThreadMessage: FC = () => {
   const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
     useContext(ThreadComponentsContext);
   const role = useAuiState((s) => s.message.role);
-  const isEditing = useAuiState((s) => s.message.composer.isEditing);
-
-  if (isEditing) return <EditComposer />;
+  // Edits happen in the main composer (ComposerEditProvider); a message's own
+  // edit composer is only opened transiently to submit, so never render it.
   if (role === "user") return <UserMessage />;
   return <AssistantMessageComponent />;
 };
 
 const ThreadScrollToBottom: FC = () => {
-  const viewportEl = useThreadViewport((s) => s.element.viewport);
+  const viewportEl = useContext(ThreadViewportElContext);
   const [revealSettled, setRevealSettled] = useState(false);
   const [scrolledAway, setScrolledAway] = useState(false);
 
@@ -466,9 +619,10 @@ const ThreadScrollToBottom: FC = () => {
       const group = viewportEl.querySelector<HTMLElement>(
         '[data-slot="aui_message-group"]',
       );
-      const composer = viewportEl.querySelector<HTMLElement>(
-        '[data-slot="aui_composer-shell"]',
-      );
+      // The composer sits below the scroll viewport, on the thread root.
+      const composer = (
+        viewportEl.closest(".aui-thread-root") ?? viewportEl
+      ).querySelector<HTMLElement>('[data-slot="aui_composer-shell"]');
       if (!group || !composer) {
         setScrolledAway(false);
         return;
@@ -606,10 +760,49 @@ const Composer: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
   layout: ComposerLayout;
-}> = ({ autoFocus, placeholder = "Send a message...", layout }) => {
+  toolbar?: ReactNode;
+}> = ({ autoFocus, placeholder = "Send a message...", layout, toolbar }) => {
   const compact = layout === "compact";
   const { onComposerSubmit, slash, mention } = useContext(ThreadChromeContext);
+  const edit = useContext(ComposerEditContext);
+  const aui = useAui();
   const inputWrapRef = useRef<HTMLDivElement | null>(null);
+  const composerRootRef = useRef<HTMLFormElement | null>(null);
+  const isEditingMessage = edit.editing !== null;
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    if (edit.editing) {
+      event.preventDefault();
+      edit.commit(aui.composer().getState().text);
+      return;
+    }
+    onComposerSubmit?.(event);
+  };
+
+  // Click outside the composer cancels an in-progress edit. The edit button
+  // itself is excluded so re-clicking edit on another message switches target.
+  useEffect(() => {
+    if (!isEditingMessage) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (!target) return;
+      if (composerRootRef.current?.contains(target)) return;
+      if (target.closest(".aui-user-action-edit, [data-radix-popper-content-wrapper]")) return;
+      edit.cancel();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [isEditingMessage, edit]);
+
+  // Focus the composer when an edit starts.
+  useEffect(() => {
+    if (!isEditingMessage) return;
+    const area = inputWrapRef.current?.querySelector<HTMLTextAreaElement>("textarea");
+    if (!area) return;
+    area.focus({ preventScroll: true });
+    const end = area.value.length;
+    area.setSelectionRange(end, end);
+  }, [isEditingMessage, edit.editing?.messageId]);
   const focusComposerInput = () => {
     inputWrapRef.current
       ?.querySelector<HTMLTextAreaElement>("textarea")
@@ -657,8 +850,16 @@ const Composer: FC<{
   };
   const bar = (
     <ComposerPrimitive.Root
+      ref={composerRootRef}
       className="aui-composer-root relative flex w-full flex-col"
-      onSubmit={onComposerSubmit}
+      onSubmit={handleSubmit}
+      onKeyDownCapture={(event) => {
+        if (isEditingMessage && event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          edit.cancel();
+        }
+      }}
     >
       <ComposerPrimitive.AttachmentDropzone asChild>
         <div
@@ -668,16 +869,13 @@ const Composer: FC<{
           className="border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
         >
           <ComposerAttachments />
-          <div
-            className={cn(
-              "aui-composer-main",
-              compact && "flex min-w-0 items-center gap-1",
-            )}
-          >
-            {compact ? <ComposerAddAttachment /> : null}
+          {/* One row: attach, input, send. The toolbar used to sit on a second
+              row inside the same border, which read as a two-line text box. */}
+          <div className="aui-composer-main flex min-w-0 items-end gap-1">
+            <ComposerAddAttachment />
             <div
               ref={inputWrapRef}
-              className={cn("aui-composer-input-wrap relative min-w-0", compact && "flex-1")}
+              className="aui-composer-input-wrap relative min-w-0 flex-1"
             >
               <ComposerPrimitive.Input
                 placeholder={placeholder}
@@ -696,11 +894,15 @@ const Composer: FC<{
               />
               <ComposerBlockCaret containerRef={inputWrapRef} />
             </div>
-            {compact ? <ComposerSendControls /> : null}
+            <ComposerSendControls />
           </div>
-          {compact ? null : <ComposerAction />}
         </div>
       </ComposerPrimitive.AttachmentDropzone>
+      {toolbar ? (
+        <div data-slot="aui_composer-toolbar" className="aui-composer-toolbar">
+          {toolbar}
+        </div>
+      ) : null}
       {slash ? (
         <ComposerTriggerPopover
           char="/"
@@ -739,8 +941,6 @@ const ComposerSendControls: FC = () => {
   const sendDisabled = useAuiState(
     (s) => !s.composer.canSend || (s.thread.isRunning && !s.thread.capabilities.queue),
   );
-  const sendRef = useRef<HTMLButtonElement | null>(null);
-
   // A `type="submit"` button already submits its form on activation, so the
   // click must not also do it: `preventDefault()` suppresses that implicit
   // submission, and the explicit `requestSubmit()` below replaces it with one
@@ -749,7 +949,7 @@ const ComposerSendControls: FC = () => {
   // turn more than once.
   const submitComposer = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    const form = sendRef.current?.closest("form");
+    const form = event.currentTarget.closest("form");
     if (form) {
       form.requestSubmit();
       return;
@@ -800,10 +1000,10 @@ const ComposerSendControls: FC = () => {
         </AuiIf>
       </AuiIf>
       <AuiIf condition={(s) => !s.thread.isRunning}>
-        <TooltipIconButton
-          ref={sendRef}
-          tooltip="Send (Enter)"
-          side="bottom"
+        {/* No tooltip/dropdown on send: the button submits on click and on
+            Enter, so the "Send (Enter)" popover was noise. */}
+        <Button
+          dress="chat"
           type="submit"
           variant="ghost"
           size="icon"
@@ -817,7 +1017,7 @@ const ComposerSendControls: FC = () => {
             label="Send"
             className="aui-composer-send-icon size-3.5"
           />
-        </TooltipIconButton>
+        </Button>
       </AuiIf>
       <AuiIf condition={(s) => s.thread.isRunning}>
         <ComposerPrimitive.Cancel asChild>
@@ -836,18 +1036,6 @@ const ComposerSendControls: FC = () => {
           </Button>
         </ComposerPrimitive.Cancel>
       </AuiIf>
-    </div>
-  );
-};
-
-const ComposerAction: FC = () => {
-  // Send controls pin themselves right with ml-auto (not just this
-  // justify-between): when the deployment disables attachments,
-  // AddAttachment renders null and a lone child would collapse left.
-  return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
-      <ComposerSendControls />
     </div>
   );
 };
@@ -872,6 +1060,18 @@ const AssistantWorkingIndicator: FC = () => {
     }
     return state;
   });
+  const connectionMessage = useAuiState((s) => {
+    let message: string | undefined;
+    for (const part of s.message.parts) {
+      if (part.type !== "data" || part.name !== "connection") continue;
+      const data = (part.data ?? {}) as { state?: string; message?: unknown };
+      if (data.state === "warming_up" && typeof data.message === "string" && data.message.length > 0) {
+        message = data.message;
+      }
+    }
+    return message;
+  });
+  const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
   return (
     <span
@@ -883,8 +1083,10 @@ const AssistantWorkingIndicator: FC = () => {
         label="Assistant is working"
         className="size-3.5"
       />
-      {connectionState === "warming_up" ? (
-        <span className="text-sm text-muted-foreground">Warming up…</span>
+      {wakePhase === "waking" ? (
+        <span className="text-sm text-muted-foreground">Waking up services…</span>
+      ) : connectionState === "warming_up" ? (
+        <span className="text-sm text-muted-foreground">{connectionMessage ?? "Warming up…"}</span>
       ) : connectionState === "connecting" ? (
         <span className="text-sm text-muted-foreground">Connecting…</span>
       ) : null}
@@ -897,11 +1099,16 @@ const AssistantMessage: FC = () => {
     ToolFallback: ToolFallbackComponent = ToolFallback,
     ToolGroup,
     ReasoningGroup,
-    Source: SourceComponent = ThreadSource,
   } = useContext(ThreadComponentsContext);
-  const { reasoning: reasoningMode, toolCalls: toolCallsMode } = useContext(
-    ThreadGroupDisclosureContext,
-  );
+  const {
+    reasoning: reasoningMode,
+    toolCalls: toolCallsMode,
+    visibility,
+  } = useContext(ThreadGroupDisclosureContext);
+  const disclosure = resolveWorkDisclosure(visibility);
+  // The whole turn, not just the group: the tools answer faster than the
+  // chain can fold, and a group that closes between two of them flickers.
+  const turnRunning = useAuiState((s) => s.thread.isRunning);
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -927,8 +1134,27 @@ const AssistantMessage: FC = () => {
           {({ part, children }) => {
             switch (part.type) {
               case "group-chainOfThought":
+                // Quiet clients see one line for the whole chain instead of
+                // the two collapsibles.
+                if (disclosure.summaryOnly) {
+                  return (
+                    <div data-slot="aui_chain-of-thought">
+                      <WorkChainSummary indices={part.indices} />
+                    </div>
+                  );
+                }
+                // One header for the whole chain: the reasoning and the tool
+                // calls collapse together.
                 return (
-                  <div data-slot="aui_chain-of-thought">{children}</div>
+                  <div data-slot="aui_chain-of-thought">
+                    <WorkChain
+                      openAtRest={disclosure.openAtRest}
+                      foldOnAnswer={disclosure.foldOnAnswer}
+                      running={part.status.type === "running"}
+                    >
+                      {children}
+                    </WorkChain>
+                  </div>
                 );
               case "group-tool": {
                 if (toolCallsMode === "off") return null;
@@ -936,13 +1162,16 @@ const AssistantMessage: FC = () => {
                   return <ToolGroup group={part}>{children}</ToolGroup>;
                 }
                 const locked = toolCallsMode === "locked_open";
+                const running = part.status.type === "running";
                 return (
                   <ToolGroupRoot
                     variant="ghost"
-                    defaultOpen={toolCallsMode === "expanded" || locked}
+                    defaultOpen={
+                      disclosure.openAtRest || toolCallsMode === "expanded" || locked
+                    }
                     streamingOpen={
-                      toolCallsMode === "balanced" &&
-                      part.status.type === "running"
+                      (disclosure.openWhileRunning || toolCallsMode === "balanced") &&
+                      (running || turnRunning)
                     }
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
@@ -967,10 +1196,17 @@ const AssistantMessage: FC = () => {
                 return (
                   <ReasoningRoot
                     variant="ghost"
-                    streaming={running && reasoningMode === "balanced"}
-                    defaultOpen={reasoningMode === "expanded" || locked}
+                    streaming={
+                      (running || turnRunning) &&
+                      (disclosure.openWhileRunning || reasoningMode === "balanced")
+                    }
+                    defaultOpen={
+                      disclosure.openAtRest || reasoningMode === "expanded" || locked
+                    }
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
+                    {/* Upstream's structure: the reasoning is a sub-step with
+                        its own disclosure inside the chain. */}
                     <ReasoningTrigger active={running} disabled={locked} />
                     <ReasoningContent aria-busy={running}>
                       <ReasoningText>{children}</ReasoningText>
@@ -1004,7 +1240,10 @@ const AssistantMessage: FC = () => {
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "source":
-                return <SourceComponent {...part} />;
+                // Citations are inline markdown links in the answer (DIG-1210);
+                // rendering source parts here stacked duplicate rows between
+                // tool groups on every retrieve span.
+                return null;
               default:
                 return null;
             }
@@ -1155,50 +1394,29 @@ const UserMessage: FC = () => {
 };
 
 const UserActionBar: FC = () => {
+  const aui = useAui();
+  const edit = useContext(ComposerEditContext);
+  const onEdit = () => {
+    const msg = aui.message().getState();
+    const text = msg.parts
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join("");
+    edit.begin(msg.id, text);
+  };
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
       className="aui-user-action-bar-root flex flex-row items-center"
     >
-      <ActionBarPrimitive.Edit asChild>
-        <TooltipIconButton tooltip="Edit" className="aui-user-action-edit">
-          <DotMatrix state="edit" label="Edit" className="size-3.5" />
-        </TooltipIconButton>
-      </ActionBarPrimitive.Edit>
+      <TooltipIconButton
+        tooltip="Edit"
+        className="aui-user-action-edit"
+        onClick={onEdit}
+      >
+        <DotMatrix state="edit" label="Edit" className="size-3.5" />
+      </TooltipIconButton>
     </ActionBarPrimitive.Root>
-  );
-};
-
-const EditComposer: FC = () => {
-  return (
-    <MessagePrimitive.Root
-      data-slot="aui_edit-composer-wrapper"
-      className="flex flex-col px-2 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
-    >
-      <ComposerPrimitive.Root className="aui-edit-composer-root border-border/60 dark:border-muted-foreground/15 flex w-full cursor-text flex-col rounded-(--composer-radius) border bg-(--composer-bg)">
-        <ComposerPrimitive.Input
-          className="aui-edit-composer-input text-foreground min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base outline-none"
-          autoFocus
-        />
-        <div className="aui-edit-composer-footer mx-2.5 mb-2.5 flex items-center gap-1.5 self-end">
-          <ComposerPrimitive.Cancel asChild>
-            <Button dress="chat"
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-full px-3.5"
-            >
-              Cancel
-            </Button>
-          </ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send asChild>
-            <Button dress="chat" size="sm" className="h-8 rounded-full px-3.5">
-              Update
-            </Button>
-          </ComposerPrimitive.Send>
-        </div>
-      </ComposerPrimitive.Root>
-    </MessagePrimitive.Root>
   );
 };
 

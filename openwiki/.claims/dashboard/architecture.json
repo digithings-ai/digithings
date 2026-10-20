@@ -36,25 +36,21 @@
     },
     {
       "id": "claim_fdbeba59985a4e768b2bc9d7cda48e4f",
-      "statement": "The root layout self-hosts a single Geist Mono face via next/font for CSP compliance (font-src 'self' data:) and scopes pages to the blueprint background (qn-blueprint-bg), wiring ThemeProvider, MotionLayer, AuthProvider, and AuthGate around the page; the version/env label (NEXT_PUBLIC_DASHBOARD_VERSION, fallback v0.1 · dev) is rendered in settings chrome, not the layout.",
+      "statement": "app/fonts.ts self-hosts a single Geist Mono face via next/font as --font-mono-face for CSP compliance (font-src 'self' data:), and the root layout applies that class on html while scoping the body to qn-blueprint-bg and wiring ThemeProvider, MotionLayer, AuthProvider, and AuthGate.",
       "evidence": [
         {
-          "resource": "repo://apps/dashboard/app/globals.css#L114-L128",
-          "version": "repo-lines-v1:sha256:03704815aa12668c96cad8710542698f48fce6e5059ab338c0d5936d92830089:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiZWI4NmUzYjAwYmEwNWU5ZjY5Y2JkODU2ZGIwYWY0ZGQwZjlkOWVjNDU4NDQ4N2NmYzZlMjE5YTg0YWJlZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFkMWYxNTM0MTFiYjdiZTM4NDE4MmQ0NDI3NGUwNjJhZGRiYjIyMjIwOTMzYzhkZmEzYzY2NzE5NjU3YjE3MjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhNDQyMzZhNzliMTYzM2Q4NDc2ODhhNDAzZTBiMWJiODhhMzVkNjQyM2U2ZTZlZWNjYmI2MDU5OTc1Nzg4Y2YifQ"
+          "resource": "repo://apps/dashboard/app/fonts.ts#L1-L24",
+          "version": "repo-lines-v1:sha256:24f7b94dc1557dd123e36b23c18bb0af11636cf47be26532d21e475056b8e93d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlODM0YmQ5MTJhNGU0MTg4NDAzMWY0ZTQwYTNjN2U3OWQzODc2NmQ1ZjI4OWE5YjdkODdlNjJiMTVhMGM1MzMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyOWJmZjgzY2Q3MTVjNGUzNzBkZjdmOTk5NWU4NGJiZTU1NzExYmUzMjA2NjJmNGU4OGQ2OWRlMjUxMjg3OGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
-          "resource": "repo://apps/dashboard/app/layout.tsx#L13-L67",
-          "version": "repo-lines-v1:sha256:400712c69c68fcb46934f432ccb2c5db0f004d1f7e697b3cd390c11ddd58c85d:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwOTM4MWEyNDg1OWM0N2M5N2ExYjk0ZGMxZDFjMTc5N2M1ZDBkZGU2NjgzZDY2ZDY4YTc2NmZlZGEyNmE1MTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzODE4Zjk5ZDQ5M2ZiNWNjYmEyZmM0MTdlOWQ2ZTFiYzczOTE5MmM0N2Q2NzU1MmMxMzQxMDc2Y2YzNDVmNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMwOGUzODRjYTY3ZWQ2MTBhZDQ4YTI3OGE2MzUwZmE0YmQ3OTMzNTBjMWE4OWRiZjUxODM0ZTA4NGIwOGM2YjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM1ODRhODM2Y2ZjZmIyZjVmYjI1M2M3MmEyMGU5ZDk1NDY0MmMwYjM5MWJkNWVmOTZlMDgwZGJhZDMyMGQxMjAifQ"
-        },
-        {
-          "resource": "repo://apps/dashboard/components/sidebar-settings.tsx#L72-L72",
-          "version": "repo-lines-v1:sha256:dd549724620cad2ce9b5935b4758a50be91c2a07d889150f43099715772b762d:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGQ1NDk3MjQ2MjBjYWQyY2U5YjU5MzViNDc1OGE1MGJlOTFjMmEwN2Q4ODkxNTBmNDMwOTk3MTU3NzJiNzYyZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGQ1NDk3MjQ2MjBjYWQyY2U5YjU5MzViNDc1OGE1MGJlOTFjMmEwN2Q4ODkxNTBmNDMwOTk3MTU3NzJiNzYyZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjgwODA3MWQ4MGUwZmQ0MTNlNTFlYzExYjlkOWFiY2YxYmUyNmFhNWJjYjIyNGY0YWYxMjFlMWRmOWRkNzkyNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDQxMDBlNzJlMWEwOTEwOGVhZTk0NTRmZDAyN2EzZGMzNWUzNzA4ZTZhYTMxNGZkY2YzZWE0N2Y2MmJkYTNlNyJ9"
+          "resource": "repo://apps/dashboard/app/layout.tsx#L38-L60",
+          "version": "repo-lines-v1:sha256:912dffeb9dacf2bd02deed1ab1c3d80d90b14861f3c72c1aa48afcc92a1a49b9:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjNzBjYWQ1MTQ2OWMyNDhhOWEzOGMwMjViMmQzZWNlYmUzZDJhNTA1MTM4ZjM2N2I0ZWZjYTE1MTBmNDU4MTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1ZWYwMWJjMDhkYmMzYjYzZTRlNzVlYTNkMjZhNWI5NDE4OTE4NzdlMjdhZDg5MTMyOWM4NDExZDdkOGRjNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhMzhlZTljYzczYzlmMWYyYzhmOGM1NmQwMGJkMDBkZTViMDczNjlmMTJlMDgwYWJiZDc5YzhjNDM3NTZjMTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
         }
       ]
     },
     {
       "id": "claim_cea8d7c3e4194ad2bf4f17014d8c241c",
-      "statement": "Route groups under app/ cover research, portfolio (absorbing legacy performance), library, pipeline (absorbing why/system/observability/architecture), strategy, house, auth/login/signup, settings, and twelve-x; lib/ owns book reconciliation, accounting views, auth context/gate, and entitlements, with fail-closed accounting unit tests.",
+      "statement": "Route groups under app/ cover research, portfolio (absorbing legacy performance), library, pipeline (absorbing why/system/observability/architecture), strategy, house, auth/login/signup, settings; lib/ owns book reconciliation, accounting views, auth context/gate, and entitlements, with fail-closed accounting unit tests.",
       "evidence": [
         {
           "resource": "repo://apps/dashboard/lib/accounting-views.ts#L8-L18",
@@ -72,7 +68,7 @@
     },
     {
       "id": "claim_d911bc04ab4d46e8a84b9f521a6b886b",
-      "statement": "The plan ladder is Observer (free) → Brief → Desk → Studio / Enterprise, driven by the plan-tier → artifact-class matrix in lib/entitlements.ts; effectivePlanTier elevates the JWT claim by a creator/ops plan_floor, and when auth is off (pre-cutover) tierFromSession returns enterprise so the operator UI stays fully visible.",
+      "statement": "The plan ladder is Observer (free) \u2192 Brief \u2192 Desk \u2192 Studio / Enterprise, driven by the plan-tier \u2192 artifact-class matrix in lib/entitlements.ts; effectivePlanTier elevates the JWT claim by a creator/ops plan_floor, and when auth is off (pre-cutover) tierFromSession returns enterprise so the operator UI stays fully visible.",
       "evidence": [
         {
           "resource": "repo://apps/dashboard/lib/entitlements.ts#L117-L132",
@@ -89,7 +85,7 @@
       "statement": "Billing (dashboard Settings) links Stripe checkout/portal for Brief / Desk / Studio with a display catalog in lib/pricing-catalog.ts (Brief $10/mo or $96/yr, Desk $30/mo or $288/yr, Studio $100/mo or $960/yr, annual = 20% off twelve months); annual is the default interval.",
       "evidence": [
         {
-          "resource": "repo://apps/dashboard/README.md#L354-L360",
+          "resource": "repo://apps/dashboard/README.md#L357-L363",
           "version": "repo-lines-v1:sha256:4b43ee11ecec4eccd6ae2419b77feebefc0ee7eed235f7d9dcf8fdc46ccbd51f:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTRhMjFlODY0MzQ5YzJkYjgyYWJhM2E3NGJmNmE0YjYyYjRkYTNlMTZiN2Q0ZmRjNTIzYjAxZDllZDhiZTAxNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDJmYjVmZjAyNmQwMTZhMGYwOWZmMzVlMzMxMzRhMDg1MzY4Zjk4ZGE3NDQ3YjNmODk5ZThhZTg3OTFhNTNjNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDNkNzVhMjk3ZTVkZGExNTc5ZWE3Y2YwMDRkNjg4NTY1ZWNmNzI2MWQ1MGZiNzFjOTZmNjQyNDgyMDkyZDM4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTgwNjExNDBkZDBmMzcwZTM0ZDVlM2E0YzQzMWI2Mjc0ZTY5YzA4MGQ3OGE1NzliNjNhYWUzYjkyNjM4NmE1NyJ9"
         },
         {
@@ -100,7 +96,7 @@
     },
     {
       "id": "claim_331d316c011741c3ad4b604f3de70011",
-      "statement": "The Desk+ digichat popup gates on glassbox_economics (Desk+): Desk/Studio/Enterprise get full chat in an iframe of digichat /embed?layout=embed, while Brief/Observer see the same launcher with an upgrade CTA panel and no iframe; it sends sanitized page context (HTML ≤12k + text ≤8k chars) deduped by an FNV-1a signature.",
+      "statement": "The Desk+ digichat popup gates on glassbox_economics (Desk+): Desk/Studio/Enterprise get full chat in an iframe of digichat /embed?layout=embed, while Brief/Observer see the same launcher with an upgrade CTA panel and no iframe; it sends sanitized page context (HTML \u226412k + text \u22648k chars) deduped by an FNV-1a signature.",
       "evidence": [
         {
           "resource": "repo://apps/dashboard/components/digichat-popup.tsx#L109-L117",
@@ -121,7 +117,7 @@
       "statement": "digichat never trusts a client-asserted X-Embed-Plan-Tier header or ?plan_tier= query: after digichat:ready the dashboard posts digichat:plan-tier carrying the Supabase access_token (tier is a UI hint only), the embed exchanges it at POST /api/plan-proof (verifying app_metadata.plan_tier) for an HMAC proof sent as X-Embed-Plan-Proof on every chat request, using secret DIGICHAT_PLAN_PROOF_SECRET.",
       "evidence": [
         {
-          "resource": "repo://apps/dashboard/README.md#L300-L307",
+          "resource": "repo://apps/dashboard/README.md#L303-L310",
           "version": "repo-lines-v1:sha256:f9384d207ee3ee8e44a3d6d006bc1d5bdcf4776dc2f6d71ea4b1a18b39ecc0db:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2I1ZTU2ZGI3MjE3MzI0NjhkYmQ4ZDkyZGU4MGNiZDU0ZDA4Y2FjMzk1N2E0NDdiNmExZjU5ZDllNTQ2MTdjOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDJlMmI0NmJjZWI0NTAzYTc1OWQzNDFiYjc3Y2Y5MzkzNjBlZTNlNDkxYzI3ZDU4Y2VmMzg1YzgwNzM1ZDIxYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGU1ZDE4N2MzZTU4MmZkYmQwMTkyOGZlODRiMjViODkzY2YxNzNkOWY5ZTE0YTQzNTc3ZmI3YjFhNWJkNjczYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzlhZDY0ZjU2NmJlN2RiMDY3MzYyZDc5NWFkNjEwZWUxOWI3YjI2NjZiMTEwYmJhNzY0ZDJkY2I5ZmYxNzZkMiJ9"
         },
         {

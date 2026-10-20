@@ -3,11 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "description": "Shared React + Framer Motion component layer for the digithings marketing sites. Consumes @digithings/design tokens.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "packages/ui"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./chart-scale": "./src/components/finance-charts/chart-scale.ts",
+    "./cn": "./src/lib/utils.ts",
     "./styles/web-theme.css": "./src/styles/web-theme.css",
     "./styles/docs.css": "./src/styles/docs.css",
+    "./styles/diagrams.css": "./src/styles/diagrams.css",
     "./styles/nav-shell.css": "./src/styles/nav-shell.css",
     "./styles/pricing.css": "./src/styles/pricing.css",
     "./styles/stages.css": "./src/styles/stages.css",
@@ -26,12 +36,14 @@
     "./styles/digichat-app-theme.css": "./src/styles/digichat-app-theme.css",
     "./chat/thread": "./src/components/chat/DigichatThread.tsx",
     "./chat/boot-signal": "./src/components/chat/boot-signal.ts",
+    "./chat/use-warmup-phase": "./src/components/chat/use-warmup-phase.ts",
     "./chat/boot-loader": "./src/components/chat/DigichatBootLoader.tsx",
     "./chat/boot-lab": "./src/components/chat/boot-lab.tsx",
     "./chat/thread-list": "./src/components/chat/DigichatThreadList.tsx",
     "./chat/launcher": "./src/components/chat/DigichatLauncher.tsx",
     "./chat/surfaces": "./src/components/chat/chat-surfaces.ts",
     "./chat/dot-matrix": "./src/components/chat/DotMatrix.tsx",
+    "./chat/overlay-scrollbar": "./src/components/chat/overlay-scrollbar.tsx",
     "./chat/skins": "./src/components/chat/skins/index.ts",
     "./chat/skins/digichat": "./src/components/chat/skins/digichat.tsx",
     "./chat/stock": "./src/components/chat/stock/index.ts",
@@ -43,6 +55,7 @@
     "./styles/finance-tearsheet.css": "./src/styles/finance-tearsheet.css",
     "./styles/finance-tearsheet-overlay.css": "./src/styles/finance-tearsheet-overlay.css",
     "./styles/data-layout.css": "./src/styles/data-layout.css",
+    "./styles/card-rail.css": "./src/styles/card-rail.css",
     "./styles/repo-activity.css": "./src/styles/repo-activity.css",
     "./styles/deck.css": "./src/styles/deck.css",
     "./styles/effects-chrome.css": "./src/styles/effects-chrome.css",
@@ -50,11 +63,15 @@
     "./styles/account-auth.css": "./src/styles/account-auth.css",
     "./data/modules": "./src/data/modules.ts",
     "./data/subsystems": "./src/data/subsystems.ts",
-    "./ui": "./src/ui/index.ts"
+    "./ui": "./src/ui/index.ts",
+    "./lib/stub-payload": "./src/lib/stub-payload.ts",
+    "./pixel-wordmark": "./src/components/landing/PixelWordmark.tsx"
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "build": "tsup"
   },
   "peerDependencies": {
     "@assistant-ui/react": "^0.15.18",
@@ -65,6 +82,7 @@
     "@assistant-ui/react-markdown": "^0.14.14",
     "@base-ui/react": "^1.3.0",
     "@digithings/design": "*",
+    "@digithings/hero-banner": "*",
     "beautiful-mermaid": "^1.1.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -91,6 +109,7 @@
     "happy-dom": "^20.11.1",
     "jsdom": "^29.1.1",
     "typescript": "^6.0.2",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "tsup": "^8.5.0"
   }
 }

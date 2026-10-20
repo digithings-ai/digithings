@@ -25,6 +25,7 @@ import {
   iterateSse,
   parseSseJson,
   parseToolInput,
+  protocolJsonHeaders,
   stringField,
   writeFailureStatus,
   writeGatedSpan,
@@ -139,11 +140,10 @@ export async function createAgUiStreamResponse(opts: {
   apiKey: string | null;
   signal?: AbortSignal;
 }): Promise<Response> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "text/event-stream",
-  };
-  if (opts.apiKey) headers.Authorization = `Bearer ${opts.apiKey}`;
+  const headers = protocolJsonHeaders({
+    apiKey: opts.apiKey,
+    accept: "text/event-stream",
+  });
   const runId = crypto.randomUUID();
   const body = JSON.stringify({
     threadId: runId,
@@ -169,8 +169,11 @@ export async function createAgUiStreamResponse(opts: {
         });
         if (!res.ok || !res.body) {
           await res.body?.cancel().catch(() => {});
-          writeFailureStatus(writer, ctx, `AG-UI ${res.status}`, opts.activityDetail);
-          return;
+          const label = `AG-UI ${res.status}`;
+          writeFailureStatus(writer, ctx, label, opts.activityDetail);
+          // activityDetail "off" drops the status row. Throw so the UI stream
+          // still ends on an error part instead of a successful empty turn.
+          throw new Error(label);
         }
         for await (const evt of iterateSse(res.body, opts.signal)) {
           const json = parseSseJson(evt.data);

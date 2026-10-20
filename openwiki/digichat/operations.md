@@ -155,7 +155,7 @@ checked with constant-time comparison) for CI/local without Postgres.
 | `DIGIKEY_BFF_TOKEN` | Shared secret for `grant_type=bff_session` |
 | `DIGIGRAPH_INTERNAL_URL` | digigraph base URL |
 | `DIGIQUANT_INTERNAL_URL` | digiquant base URL |
-| `DIGISMITH_INTERNAL_URL` | digismith base URL |
+| `DIGITRACE_INTERNAL_URL` | digitrace base URL |
 | `DIGISEARCH_INTERNAL_URL` | digisearch base URL |
 | `DIGICHAT_DATABASE_URL` | Postgres connection (optional) |
 | `DIGICHAT_AUTO_MIGRATE` | Auto-apply Drizzle migrations on boot (`=1`) |
@@ -164,7 +164,7 @@ checked with constant-time comparison) for CI/local without Postgres.
 
 | Variable | Purpose |
 |---|---|
-| `DIGICHAT_ENABLED_SERVICES` | Comma-separated capability list (default: all four: `digigraph,digisearch,digiquant,digismith`) |
+| `DIGICHAT_ENABLED_SERVICES` | Comma-separated capability list (default: all four: `digigraph,digisearch,digiquant,digitrace`) |
 
 ### Embed / tenant
 
@@ -228,11 +228,11 @@ admit new parents without rebuild.
 
 ## Health endpoint
 
-`GET /api/health` is the only public route. It probes:
+`GET /api/health` is the public health probe. It probes:
 
 - **digigraph** — `GET {digigraphUrl}/health` (4 s timeout), gated by `DIGICHAT_ENABLED_SERVICES`
 - **digiquant** — same pattern
-- **digismith** — same pattern
+- **digitrace** — same pattern
 - **digisearch** — probed only when `digisearchUrl` is set
 - **database** — `SELECT 1` when `DIGICHAT_DATABASE_URL` is configured; `skipped` otherwise
 
@@ -243,16 +243,9 @@ or the database errors. The `version` field reads `DIGICHAT_VERSION` env, then
 
 ## Release artifacts
 
-Releases install from GHCR (`ghcr.io/digithings-ai/digichat:vX.Y.Z`), not npm.
-Tags are cut by release-please on `develop`; a human-pushed `digichat-vX.Y.Z`
-tag publishes the image via `publish-digichat-image.yml`.
+Install digichat from a built image, not npm. `.github/workflows/publish-digichat-image.yml` publishes on a `digichat-vX.Y.Z` tag. The runbook records that no `ghcr.io/digithings-ai/digichat` image was published as of 2026-10-06, so until the next tag, build locally with `docker build -f apps/digichat/Dockerfile .`.
 
-Local Compose builds from the monorepo (`make up-digichat`). To pull a pinned
-GHCR release:
-
-```bash
-make digichat-release-up VERSION=2.3.2
-```
+Local Compose builds from the monorepo (`make up-digichat`).
 
 ## Troubleshooting
 

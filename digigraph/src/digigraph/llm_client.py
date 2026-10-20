@@ -27,6 +27,7 @@ from typing import (
 )
 from uuid import uuid4
 
+from digibase.audit import emit_event as _emit_audit_event
 from digillm import (  # telemetry + message types for the wrappers below
     CacheStatus,
     CallPurpose,
@@ -47,9 +48,11 @@ from digillm import (
     provider_call_context as _digillm_provider_call_context,
 )
 from digillm import run_tools as _digillm_run_tools
+from digillm import set_egress_observer as _set_egress_observer
 from digillm import set_fan_out_detach_hook as _set_fan_out_detach_hook
 from digillm import set_telemetry_observer as _set_telemetry_observer
 from digillm import set_usage_observer as _set_usage_observer
+from digillm.egress_record import EgressRecord
 from openai.types.chat import ChatCompletion
 
 from digigraph import usage as _usage
@@ -81,6 +84,38 @@ _set_telemetry_observer(_usage.DETAILED_USAGE_OBSERVER)
 # handle and interleave their telemetry. Registered alongside the observers above, and for
 # the same reason: llm_client is the module every digigraph LLM call imports.
 _set_fan_out_detach_hook(_usage.detach_logical_call_context)
+
+# ``event_type`` an egress record carries in the fleet audit stream. Callers reconstructing
+# the stream filter on this, so it is deliberately distinct from digibase's own event types.
+_EGRESS_AUDIT_EVENT_TYPE = "digillm.egress"
+
+
+def _record_egress_to_audit_stream(record: EgressRecord) -> None:
+    """Mirror one digillm egress record into the fleet audit stream.
+
+    digillm builds an :class:`~digillm.egress_record.EgressRecord` for every physical
+    outbound attempt but only persists it to its own process-local JSONL sink, which no
+    fleet-wide reader consumes. Routing it through ``digibase.audit.emit_event`` -- the
+    documented sole fleet emitter -- is what makes the record reconstructable after the
+    fact from the shared audit log.
+
+    Two deliberate choices:
+
+    - The payload is ``record.model_dump(mode="json")``, so the audit line cannot drift
+      from the record shape digillm defines: adding or renaming a field there changes this
+      line too, by construction.
+    - This is deliberately NOT wrapped in a ``try``/``except``. digillm already swallows a
+      raising observer, and a second swallow here would both duplicate that contract and
+      hide a broken audit destination behind the same debug-level log. Letting it propagate
+      keeps ``emit_event``'s own failure mode observable.
+    """
+    _emit_audit_event(_EGRESS_AUDIT_EVENT_TYPE, payload=record.model_dump(mode="json"))
+
+
+# Registered alongside the observers above, and for the same reason: llm_client is the
+# module every digigraph LLM call imports, so this covers every outbound attempt digigraph
+# makes without any call site having to opt in.
+_set_egress_observer(_record_egress_to_audit_stream)
 
 
 @contextmanager

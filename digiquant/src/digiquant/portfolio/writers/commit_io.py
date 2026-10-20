@@ -21,6 +21,7 @@ from digiquant.dashboard.overlay.persist import (
 from digiquant.dashboard.tenancy import resolved_workspace_id
 from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
 from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.ledger_replay import fetch_ledger_state, reconcile_book
 from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
 from digiquant.portfolio.risk_envelope import risk_horizon_days
 from digiquant.portfolio.sector_map import sector_bucket
@@ -683,6 +684,19 @@ def book_portfolio(
                 "category": "fixed_income_cash",
             }
         )
+
+    # DIG-2816: reconcile the committed book against ``position_events`` BEFORE it is
+    # persisted. ``positions.weight_pct`` is a drift-carrying actual; the ledger holds
+    # the operator's intended target, so anchoring here is what makes the committed book
+    # and the ledger describe the same thing. A book holding a ticker the ledger EXITed
+    # is refused here rather than persisted and left for ``_prune_orphan_positions``.
+    ledger_report = reconcile_book(
+        pos_rows,
+        fetch_ledger_state(client, workspace_id, date_str),
+        writer="commit_io",
+        mode="anchor",
+    )
+    logger.info("commit_io: %s", ledger_report.summary())
 
     for row in pos_rows:
         row["workspace_id"] = workspace_id

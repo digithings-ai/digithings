@@ -1,13 +1,8 @@
 "use client";
 
 import { memo, useCallback, useRef, useState } from "react";
-import {
-  AlertCircleIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  LoaderIcon,
-  XCircleIcon,
-} from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
+import { DotMatrix, type DotMatrixState } from "../DotMatrix";
 import {
   toolApprovalAcceptsText,
   useScrollLock,
@@ -140,11 +135,11 @@ function ToolFallbackRoot({
 
 type ToolStatus = ToolCallMessagePartStatus["type"];
 
-const statusIconMap: Record<ToolStatus, React.ElementType> = {
-  running: LoaderIcon,
-  complete: CheckIcon,
-  incomplete: XCircleIcon,
-  "requires-action": AlertCircleIcon,
+const statusMatrix: Record<ToolStatus, DotMatrixState> = {
+  running: "tool",
+  complete: "success",
+  incomplete: "error",
+  "requires-action": "warning",
 };
 
 function ToolFallbackDuration({
@@ -186,12 +181,19 @@ function ToolFallbackTrigger({
   const isErrorStatus =
     status?.type === "incomplete" && status.reason === "error";
 
-  const Icon = statusIconMap[statusType];
+  // Upstream assistant-ui wording, one word per state.
   const label = isCancelled
     ? "Cancelled tool"
     : isErrorStatus
       ? "Failed tool"
-      : "Used tool";
+      : statusType === "running"
+        ? "Running tool"
+        : statusType === "requires-action"
+          ? "Waiting on tool"
+          : "Used tool";
+  const matrixState: DotMatrixState = isCancelled
+    ? "idle"
+    : statusMatrix[statusType];
 
   return (
     <CollapsibleTrigger
@@ -202,18 +204,15 @@ function ToolFallbackTrigger({
       )}
       {...props}
     >
-      <Icon
-        data-slot="tool-fallback-trigger-icon"
-        className={cn(
-          "aui-tool-fallback-trigger-icon size-4 shrink-0",
-          isCancelled && "text-muted-foreground",
-          isRunning && "animate-spin [animation-duration:0.6s]",
-        )}
+      <DotMatrix
+        state={matrixState}
+        label={label}
+        className="aui-tool-fallback-trigger-icon size-4 shrink-0"
       />
       <span
         data-slot="tool-fallback-trigger-label"
         className={cn(
-          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none",
+          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none text-foreground",
           isCancelled && "text-muted-foreground line-through",
           isRunning && "shimmer motion-reduce:animate-none",
         )}
@@ -221,16 +220,12 @@ function ToolFallbackTrigger({
         {label}: <b>{title ?? toolName}</b>
       </span>
       <ToolFallbackDuration />
-      <ChevronDownIcon
+      <span
         data-slot="tool-fallback-trigger-chevron"
-        className={cn(
-          "aui-tool-fallback-trigger-chevron size-4 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          "-rotate-90",
-          "group-data-open/trigger:rotate-0",
-          "group-data-panel-open/trigger:rotate-0",
-        )}
-      />
+        className="aui-tool-fallback-trigger-chevron inline-flex shrink-0"
+      >
+        <DotMatrix state="expand" label="Toggle tool" className="size-4" />
+      </span>
     </CollapsibleTrigger>
   );
 }
@@ -423,10 +418,11 @@ const offersInterruptAction = (
   approval: ToolCallMessagePart["approval"],
   interrupt: ToolCallMessagePart["interrupt"],
 ) =>
-  status?.type !== "requires-action" ||
-  status.reason !== "interrupt" ||
-  approval != null ||
-  interrupt != null;
+  // Only an explicit approval/interrupt request is a human gate. A server-run
+  // tool whose output never arrived (stream cut by a cold start / restart) is
+  // also "requires-action" (reason "tool-calls"); never offer Allow/Deny for it
+  // -- digichat tools are server-executed and read-only.
+  status?.type === "requires-action" && (approval != null || interrupt != null);
 
 function ToolFallbackApproval({
   className,

@@ -64,8 +64,14 @@ jobs:
       - name: Test @digithings/ui
         run: npm run test --workspace @digithings/ui
 
+      - name: Lint @digithings/ui
+        run: npm run lint --workspace @digithings/ui
+
       - name: Test @digithings/digichat-ui
         run: npm run test --workspace @digithings/digichat-ui
+
+      - name: Lint @digithings/digichat-ui
+        run: npm run lint --workspace @digithings/digichat-ui
 
       # digithings-cron owns production clocks formerly declared in workflow
       # `schedule:` blocks. Its source and wrangler trigger map must stay typed
@@ -75,6 +81,18 @@ jobs:
 
       - name: Typecheck digithings-cron
         run: npm run typecheck --workspace digithings-cron
+
+      # digiquant-runner is the private container behind digithings-cron
+      # kind: container (#4761). Same lane as the cron Worker: root npm ci
+      # already installed the workspace.
+      - name: Test digiquant-runner
+        run: npm run test --workspace digiquant-runner
+
+      - name: Typecheck digiquant-runner
+        run: npm run typecheck --workspace digiquant-runner
+
+      - name: Test digiquant-runner allowlist
+        run: python3 apps/digiquant-runner/container/exec_job_test.py
 
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web
@@ -120,8 +138,8 @@ jobs:
       # typecheck. It belongs in this lane rather than one of its own because the root
       # `npm ci` above already wires the @digithings/design and @digithings/ui symlinks
       # it declares.
-      - name: Lint design-reference
-        run: npm run lint --workspace design-reference
+      - name: Lint @digithings/reference
+        run: npm run lint --workspace @digithings/reference
 
       # Type-checked as well as linted, because eslint-config-next does not type-check:
       # a bad prop type or a broken import in the reference passes `eslint .` clean.
@@ -147,8 +165,8 @@ jobs:
       # next-env.d.ts, and note Next rewrites that line itself on upgrade
       # (`next dev` writes .next/dev/types, `next build` writes .next/types).
       # Same pair apps/reference/README.md documents as the local gate.
-      - name: Typecheck design-reference
-        run: npm run typecheck --workspace design-reference
+      - name: Typecheck @digithings/reference
+        run: npm run typecheck --workspace @digithings/reference
 
       # The reference is the component source of truth for the whole rebuild, and its
       # test suite is the guard on that canon — the route smoke test, the specimen
@@ -161,8 +179,8 @@ jobs:
       # against tracked paths), not build output — verified by running the suite with
       # `out/` and `.next/` removed. So this step stays cheap, and sits here rather than
       # behind a build that this workspace deliberately does not run in CI.
-      - name: Test design-reference
-        run: npm run test --workspace design-reference
+      - name: Test @digithings/reference
+        run: npm run test --workspace @digithings/reference
 
       # digithings-stack-cloudflare is in this lane's path filter (ci.yml's `web`)
       # but had no step here, so a var added to the hand-kept `Env` interface and
@@ -181,7 +199,55 @@ jobs:
       # regress green (#4322). Same worker shape as digithings-stack-cloudflare
       # above; the root `npm ci` already links it as a workspace.
       - name: Typecheck digichat-cloudflare
-        run: npm run typecheck --workspace digithings-digichat-cloudflare
+        run: npm run typecheck --workspace digichat-cloudflare
 
       - name: Test digichat-cloudflare
-        run: npm run test --workspace digithings-digichat-cloudflare
+        run: npm run test --workspace digichat-cloudflare
+
+      # digitrace-langfuse (#4930 Phase 1): CF Containers Worker for self-hosted
+      # Langfuse Web+Worker. Same install-input / web-lane cover as digichat.
+      - name: Typecheck digitrace-langfuse
+        run: npm run typecheck --workspace digitrace-langfuse
+
+      - name: Test digitrace-langfuse
+        run: npm run test --workspace digitrace-langfuse
+
+      # dashboard-api (#4651) is the central read-only dashboard Worker. Until now
+      # its path was in ci.yml's `ruff_and_scripts` filter and nowhere else, so it
+      # declared `test`/`typecheck` with no lane invoking either: its vitest suite
+      # (236 tests in 20 files on develop) and its tsc program could regress green
+      # and no PR would notice (#358). That filter entry's own comment claimed "an
+      # edit here must redden a lane that runs"; none did.
+      #
+      # Typecheck before the suite, matching the sibling workers above. Without
+      # this step `tsc --noEmit` never ran on this package at all, and its tsconfig
+      # pins `types: ["@cloudflare/workers-types"]` — a workspace-local devDependency,
+      # so a reused node_modules missing it fails as TS2688 "cannot find type
+      # definition file", which reads as "the code is broken" when the code is fine
+      # (reported on DIG-193). The root `npm ci` above installs it from the
+      # lockfile, so a failure here means a real type error.
+      - name: Typecheck dashboard-api
+        run: npm run typecheck --workspace dashboard-api
+
+      - name: Test dashboard-api
+        run: npm run test --workspace dashboard-api
+
+      # digidata-api (DIG-2895) is the Worker data API with the D1/Supabase
+      # backend switch. Same reasoning as dashboard-api above, and it was the
+      # same gap: the package declares `test`/`typecheck` and no lane invoked
+      # either, so its suite only ever ran on the author's machine. The root
+      # `npm ci` above installs the workspace from the lockfile.
+      - name: Typecheck digidata-api
+        run: npm run typecheck --workspace digidata-api
+
+      - name: Test digidata-api
+        run: npm run test --workspace digidata-api
+
+      # corpus-index is the daily corpus Worker. Same reasoning as digidata-api
+      # above: the package declares test and typecheck, and this lane already
+      # paid for the root npm ci that installs the workspace.
+      - name: Typecheck corpus-index
+        run: npm run typecheck --workspace corpus-index
+
+      - name: Test corpus-index
+        run: npm run test --workspace corpus-index

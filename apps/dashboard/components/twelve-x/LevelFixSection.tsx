@@ -71,6 +71,15 @@ export function LevelFixSection({
       </p>
     );
   }
+  // An unpublishable bracket keeps the region and says so, rather than drawing a
+  // chart with no levels (DIG-260 L5 follow-up). The internal status never renders.
+  if (series.levelsPending) {
+    return (
+      <p className="font-mono text-[10px] text-ink-mute" data-testid="level-fix-pending">
+        Levels pending
+      </p>
+    );
+  }
   return <LevelFixChart series={series} />;
 }
 

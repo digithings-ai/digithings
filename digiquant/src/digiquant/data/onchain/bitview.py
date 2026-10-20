@@ -28,6 +28,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.data.onchain._url_guard import is_allowed_base_url
+from digiquant.paths import resolve_under_data_root
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,7 @@ def series_data_to_frame(payload: object, *, series_id: str = "") -> pl.DataFram
 
 def write_series_parquet(frame: pl.DataFrame, path: Path | str) -> Path:
     """Persist ``date``/``value`` parquet under ``data/onchain/bitview/``."""
-    dest = Path(path)
+    dest = resolve_under_data_root(path, label="bitview_path")
     dest.parent.mkdir(parents=True, exist_ok=True)
     if "date" not in frame.columns or "value" not in frame.columns:
         raise ValueError(f"bitview frame needs date/value columns, got {frame.columns}")

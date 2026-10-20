@@ -7,10 +7,11 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
-import type {
-  ThinkingMode,
-  ViewMode,
-  SkinMcpServerConfig,
+import {
+  normalizeViewPref,
+  type ThinkingMode,
+  type ViewMode,
+  type SkinMcpServerConfig,
 } from "./skin-types";
 
 export type EmbedChatPrefs = {
@@ -30,6 +31,10 @@ export type EmbedChatPrefs = {
   effort: string;
   /** Web-search engine id (auto/internal/exa/tavily/parallel/firecrawl/tinyfish). */
   searchEngine: string;
+  /** The model/provider/MCP/context row under the composer. */
+  toolbar: boolean;
+  /** `always` keeps scrollbars in their reserved gutter; `auto` shows them on scroll. */
+  scrollbars: "always" | "auto";
 };
 
 export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
@@ -47,10 +52,11 @@ export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
   model: "",
   effort: "medium",
   searchEngine: "",
+  toolbar: true,
+  scrollbars: "always",
 };
 
 /**
- * Session-default factory with injectable language/view/thinking (WS4 Step 3).
  * The package cannot import `@/lib/languages` / `@/lib/view-modes`, so hosts
  * pass their own defaults; called with no overrides it returns the app
  * defaults above, byte-for-byte.
@@ -61,12 +67,18 @@ export function createDefaultEmbedChatPrefs(
   return {
     ...DEFAULT_EMBED_CHAT_PREFS,
     ...(defaults?.language !== undefined ? { language: defaults.language } : null),
-    ...(defaults?.view !== undefined ? { view: defaults.view } : null),
+    ...(defaults?.view !== undefined ? { view: normalizeViewPref(defaults.view) } : null),
     ...(defaults?.thinking !== undefined ? { thinking: defaults.thinking } : null),
   };
 }
 
-export type CatalogToolRow = { id: string; label?: string; default?: boolean };
+export type CatalogToolRow = {
+  id: string;
+  label?: string;
+  default?: boolean;
+  /** Individual tools under this entry (per-tool session toggles). */
+  tools?: Array<{ id: string; label?: string }>;
+};
 
 export type EmbedChatPrefsApi = {
   prefs: EmbedChatPrefs;
@@ -83,6 +95,8 @@ export type EmbedChatPrefsApi = {
   setModel: (id: string) => void;
   setEffort: (effort: string) => void;
   setSearchEngine: (engine: string) => void;
+  setToolbar: (visible: boolean) => void;
+  setScrollbars: (mode: "always" | "auto") => void;
   reset: () => void;
   tenantAllowsWeb: boolean;
   showByok: boolean;
@@ -90,6 +104,8 @@ export type EmbedChatPrefsApi = {
   hasDigisearch: boolean;
   hasVault: boolean;
   hasSessions: boolean;
+  /** A session artifact surface exists here. Gates the /artifacts row. */
+  hasArtifacts: boolean;
   allowUserMcp: boolean;
   allowAddMcp: boolean;
   catalogTools: CatalogToolRow[];
@@ -97,6 +113,8 @@ export type EmbedChatPrefsApi = {
   mcpServers: CatalogToolRow[];
   sessionKey: string;
   openSettings: () => void;
+  /** Dedicated help panel: what the assistant can do and how to use it. */
+  openHelp: () => void;
   openTools: () => void;
   openMcp: (seed?: string) => void;
   openByok: (seed?: string) => void;
@@ -107,6 +125,7 @@ export type EmbedChatPrefsApi = {
   openThinking: () => void;
   openLanguage: () => void;
   openSessions: () => void;
+  openArtifacts: () => void;
   newThread: () => void;
   compactThread: () => void | Promise<void>;
   undo: () => void;
@@ -165,6 +184,7 @@ export function catalogToolsFromClient(cfg: {
       id,
       ...(t.label ? { label: t.label } : {}),
       ...(typeof t.default === "boolean" ? { default: t.default } : {}),
+      ...(t.tools?.length ? { tools: t.tools.map((x) => ({ ...x })) } : {}),
     });
   }
   return out;

@@ -45,6 +45,8 @@ def test_half_open_probe_success_closes(monkeypatch: pytest.MonkeyPatch) -> None
     cb = CircuitBreaker("t", failure_threshold=1, recovery_timeout=10.0)
     with pytest.raises(RuntimeError), cb:
         raise RuntimeError("trip")
+    # NB: CodeQL py/unreachable-statement flags the next line as unreachable,
+    # but it runs: pytest.raises catches the raise above, so control reaches here.
     assert cb.state == "OPEN"
 
     clock["now"] = 1009.0  # still inside the open window
@@ -72,6 +74,8 @@ def test_half_open_probe_failure_reopens(monkeypatch: pytest.MonkeyPatch) -> Non
     clock["now"] = 5.0
     with pytest.raises(RuntimeError), cb:
         raise RuntimeError("probe still dead")
+    # NB: CodeQL py/unreachable-statement flags the next line as unreachable,
+    # but it runs: pytest.raises catches the raise above, so control reaches here.
     assert cb.state == "OPEN"
 
     # Still open until the *new* recovery window ends.
@@ -85,6 +89,8 @@ def test_circuit_breaker_open_is_not_counted_as_failure() -> None:
     cb = CircuitBreaker("t", failure_threshold=1, recovery_timeout=60.0)
     with pytest.raises(RuntimeError), cb:
         raise RuntimeError("trip")
+    # NB: CodeQL py/unreachable-statement flags the next line as unreachable,
+    # but it runs: pytest.raises catches the raise above, so control reaches here.
     assert cb.state == "OPEN"
     failures_after_trip = cb._failures
 

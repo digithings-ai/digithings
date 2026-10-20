@@ -93,6 +93,7 @@ import {
   resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
 import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
+import { startWarmup } from "@/lib/warmup-gate";
 import {
   formatParentErrorLine,
   parseParentErrorMessage,
@@ -125,6 +126,69 @@ const DEFAULT_WELCOME =
 function resolveAccent(raw: string | null | undefined): Accent {
   if (raw && (ACCENTS as readonly string[]).includes(raw)) return raw as Accent;
   return "digichat";
+}
+
+/**
+ * Trial proof channel (DIG-4523).
+ *
+ * The embedding page hands over a server-signed, host-scoped trial proof over
+ * postMessage. The proof is a short-lived bearer: it is held in memory only —
+ * never in storage, never in a URL — and read at send time, so a proof that
+ * arrives after mount still reaches the outgoing request.
+ *
+ * The message type carries no client name: the channel is shared by every
+ * embedding page.
+ */
+export const TRIAL_PROOF_MESSAGE_TYPE = "trial:proof";
+
+/** Origin of the page that embeds us — the only origin allowed to post a proof. */
+export function embedParentOrigin(host: string | undefined): string | null {
+  const raw = host?.trim();
+  if (!raw) return null;
+  try {
+    return raw.includes("://") ? new URL(raw).origin : `https://${raw}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Host part of a host string, to compare the host a proof was signed for. */
+function hostKey(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw.includes("://") ? raw : `https://${raw}`).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read a trial proof out of a postMessage.
+ *
+ * Returns the proof, or null when the message must be ignored: a foreign
+ * origin, a different message type, an empty value, or a proof that names a
+ * host other than the one we serve. The server re-verifies the proof against
+ * the host it serves — the client never papers over that.
+ */
+export function readTrialProofMessage(
+  event: { origin: string; data: unknown },
+  options: { parentOrigin: string; servingHost?: string },
+): string | null {
+  if (event.origin !== options.parentOrigin) return null;
+  const data = event.data as
+    | { type?: string; proof?: string; host?: string }
+    | null
+    | undefined;
+  if (!data || data.type !== TRIAL_PROOF_MESSAGE_TYPE) return null;
+  // The field name is fixed by the wire contract: the page posts
+  // `{ type: "trial:proof", proof }`. Any other spelling is not our proof.
+  const raw = data.proof;
+  if (typeof raw !== "string" || raw.trim().length === 0) return null;
+  const proof = raw.trim();
+  const named = data.host?.trim();
+  if (named && hostKey(named) !== hostKey(options.servingHost)) return null;
+  return proof;
 }
 
 /**
@@ -163,6 +227,22 @@ function EmbedPageInner({
   const token = searchParams.get("token") ?? undefined;
   const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
+
+  // Warm-up on load: wake sleeping services; chat sends wait on the gate.
+  useEffect(() => {
+    void startWarmup();
+  }, []);
+
+  // Track the visible viewport (mobile keyboard) for popup max-heights.
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const upd = () =>
+      document.documentElement.style.setProperty("--dc-vvh", `${Math.round(vv.height)}px`);
+    upd();
+    vv.addEventListener("resize", upd);
+    return () => vv.removeEventListener("resize", upd);
+  }, []);
 
   // Real boot milestone for the loader: the tenant/deploy config resolved.
   useEffect(() => {
@@ -377,6 +457,14 @@ function EmbedChat({
   const tenantLanguage = stockClient.chrome.defaultLanguage || DEFAULT_LANGUAGE_CODE;
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
+    // Start on the tenant's curated default so the first turn uses the model
+    // the picker shows as selected (v4.1-flash on OCC) instead of falling
+    // through to the digigraph operator default. Only tenants that publish a
+    // list can be picked, so only they get a preselected value.
+    model:
+      stockClient.models.available.length > 0
+        ? stockClient.models.default?.trim() || stockClient.models.available[0] || ""
+        : "",
     language: tenantLanguage,
     view: stockClient.features.view,
     thinking: stockClient.features.thinking,
@@ -406,6 +494,27 @@ function EmbedChat({
   // eslint-disable-next-line react-hooks/refs -- send-time HMAC proof (#1339)
   planProofRef.current = planProof ?? null;
   const getPlanProof = useCallback(() => planProofRef.current, []);
+
+  // Host-scoped trial proof (DIG-4523): the embedding page hands over a
+  // server-signed proof over postMessage. It is a short-lived bearer, so it is
+  // held in memory only — never in storage, never in a URL — and read at send
+  // time so a proof that arrives after mount still reaches the header.
+  const servingHost = resolveEmbedHost(host);
+  const trialProofRef = useRef<string | null>(null);
+  const getTrialProof = useCallback(() => trialProofRef.current, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // A proof is bound to one host: drop an earlier one when the host changes.
+    trialProofRef.current = null;
+    const parentOrigin = embedParentOrigin(servingHost);
+    if (!parentOrigin) return;
+    const onMessage = (event: MessageEvent) => {
+      const proof = readTrialProofMessage(event, { parentOrigin, servingHost });
+      if (proof) trialProofRef.current = proof;
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [servingHost]);
 
   const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
   const tenantAllowsWeb = uiFlags.webSearch;
@@ -577,6 +686,7 @@ function EmbedChat({
     getEffort,
     getSearchEngine,
     getPlanProof,
+    getTrialProof,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
     // Missing backendType (gated default) must not enable regen/edit.
@@ -675,11 +785,6 @@ function EmbedChat({
     gate,
     consumePageContext,
   ]);
-
-  const openByok = useCallback((seed?: string) => {
-    setProviderSeed(seed);
-    setComposerMenu("provider");
-  }, []);
 
   const onByokSaved = useCallback(
     (key: string, provider: BYOKProvider, model: string) => {
@@ -841,9 +946,8 @@ function EmbedChat({
   // render of its own. `sentHeld` is what makes the release idempotent, since
   // the effect re-runs on every chat identity change while the answer streams.
   //
-  // Call chat.send (not wrappedSend) here: wrappedSend is defined below and
-  // would re-capture this effect. Arm the deferred gate charge ourselves so
-  // the held fourth question counts the same as any other send (charged only
+  // Call chat.send directly. Arm the deferred gate charge ourselves so the
+  // held fourth question counts the same as any other send (charged only
   // once it settles without error — see the settle effect near `chat`).
   useEffect(() => {
     const question = heldQuestionRef.current;
@@ -932,42 +1036,7 @@ function EmbedChat({
   const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
   const headerTitle = tenantCfg.title;
 
-  const wrappedSend = useCallback(
-    (question: string, opts?: { forceTool?: string }) => {
-      // byok_only: require a key before any send
-      if (llmAccess === "byok_only" && !byokIsSet) {
-        heldQuestionRef.current = question;
-        heldForceToolRef.current = opts?.forceTool;
-        pendingByokRetryRef.current = true;
-        setComposerMenu("provider");
-        return;
-      }
-      // Out of free turns: HOLD the question and raise the form. Dropping it
-      // on the floor (what this did) meant the visitor's fourth question just
-      // vanished — they had typed it, pressed send, and got nothing back.
-      if ((gate.locked || trialLocked) && !ungated) {
-        heldQuestionRef.current = question;
-        heldForceToolRef.current = opts?.forceTool;
-        lastGatedPost.current = null;
-        setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
-        return;
-      }
-      const hadCtx = pageContextRef.current != null;
-      const ctx = consumePageContext();
-      void chat.send(question, { ...opts, pageContext: ctx });
-      emit("embed_turn_submitted", {
-        accent,
-        turn: gate.turns + 1,
-        byok: byokIsSet,
-        page_context: hadCtx,
-      });
-      if (!ungated) armGateCharge();
-    },
-    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess, consumePageContext],
-  );
-
-
-  // Stock Composer no longer calls wrappedSend — reattach hold/charge via sendGate.
+  // Hold and charge go through sendGate. The stock composer calls that, not a local wrapper.
   const sendGate = useMemo(
     () => ({
       shouldHold: (raw: string) => {
@@ -1059,6 +1128,8 @@ function EmbedChat({
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort: effort })),
       setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
+      setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
+      setScrollbars: (mode) => setChatPrefs((p) => ({ ...p, scrollbars: mode })),
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
@@ -1073,6 +1144,9 @@ function EmbedChat({
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
+      // The embed surface has no artifact panel. Gating the row off is why
+      // openArtifacts is never reached here.
+      hasArtifacts: false,
       allowUserMcp: stockClient.mcp.allowUserServers === true,
       allowAddMcp: stockClient.mcp.allowAddForm === true,
       catalogTools,
@@ -1080,6 +1154,9 @@ function EmbedChat({
       sessionKey: gate.host,
       openSettings: () => {
         setComposerMenu("settings");
+      },
+      openHelp: () => {
+        setComposerMenu("help");
       },
       openTools: () => {
         setComposerMenu("tools");
@@ -1111,6 +1188,7 @@ function EmbedChat({
         setComposerMenu("language");
       },
       openSessions: () => {},
+      openArtifacts: () => {},
       newThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
@@ -1291,6 +1369,7 @@ function EmbedChat({
         <EmbedComposerMenu
           kind={composerMenu}
           models={stockClient.models.available}
+          defaultModel={stockClient.models.default}
           onClose={() => {
             setComposerMenu(null);
             setProviderSeed(undefined);

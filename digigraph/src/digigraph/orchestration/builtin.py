@@ -36,8 +36,10 @@ from digigraph.orchestration.digistore_tools import (
 from digigraph.orchestration.digivault_tools import (  # noqa: F401
     _DIGIVAULT_GET_NOTE_NO_PREFIX_ERROR,
     _DIGIVAULT_SEARCH_NO_PREFIX_ERROR,
+    _handle_digivault_backlinks,
     _handle_digivault_get_note,
     _handle_digivault_search,
+    _handle_digivault_search_tag,
     _note_to_result_and_payload,
     _schema_from_digivault_manifest,
 )
@@ -128,6 +130,23 @@ def _register_tools() -> None:
         None,
         _handle_digivault_get_note,
         schema_factory=lambda ctx: _schema_from_digivault_manifest(ctx, "digivault_get_note"),
+    )
+    # The other two tools digivault's orchestrator manifest advertises (its
+    # build_orchestrator_tool_manifest lists four; only search_notes and get_note
+    # were wired). The OCC research prompt names digivault_search_tag and
+    # digivault_backlinks explicitly, so leaving them unregistered made the model
+    # call tools that resolved to "Unknown tool". Both are read-only.
+    register_tool(
+        "digivault_search_tag",
+        None,
+        _handle_digivault_search_tag,
+        schema_factory=lambda ctx: _schema_from_digivault_manifest(ctx, "digivault_search_tag"),
+    )
+    register_tool(
+        "digivault_backlinks",
+        None,
+        _handle_digivault_backlinks,
+        schema_factory=lambda ctx: _schema_from_digivault_manifest(ctx, "digivault_backlinks"),
     )
     register_tool(
         "visualization_agent",
@@ -237,7 +256,15 @@ def _register_skills() -> None:
     )
     register_skill(
         "digivault",
-        ["digivault_search_notes", "digivault_get_note"],
+        # All four manifest tools: registration alone does not expose a tool — the
+        # model only sees tools its active skills bundle (registry.get_tools), so the
+        # tag/backlink lookups must be listed here or they stay invisible.
+        [
+            "digivault_search_notes",
+            "digivault_get_note",
+            "digivault_search_tag",
+            "digivault_backlinks",
+        ],
         when=lambda ctx: _digivault_available(ctx),
     )
     register_skill(

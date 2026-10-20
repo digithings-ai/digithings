@@ -19,11 +19,11 @@
           "version": "repo-lines-v1:sha256:35309f87e9e3508b64220585022db5039d646ad3391b1937848fa1d6c2260baf:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExODY4MDJkZmQ0YzE4ODgyOGI0MzI1YWY1YjIxOTg5YjBhYzFkZTVkOTc1ZjE0ZWU0MWJkNjliNjVkNGMxNjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyOWExMmJmMDk2ZDA4OTYzMGZiOWEwMjgwMGI2N2Y1YzRkNTU0MTgxOWU5OGFlZDc5MzVjMzRkYzU5YTAyYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5NDYzMTA4NTg3ZmEwOTZlZjhjYzkyYzQxMjE2NDc0ODFiNTdmZDQ4OGIyNDBmOWEyN2I2ZjU3NzRkYWVhZGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
-          "resource": "repo://digifetch/src/digifetch/http.py#L40-L48",
+          "resource": "repo://digifetch/src/digifetch/http.py#L39-L47",
           "version": "repo-lines-v1:sha256:bd593f6c9e6344344953cc45b6c7c523ee2272ca794fbb4e598e715cc4563a92:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzBlMjU4OWVmOGExMmFlZmMyNTc0OTk5MTQ3YmNjZWM1NzQ2MWNkNTE2MzgxYzI4OGNhMjExZjJiZTUxMTRhMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWYzOGJmZTdhNTVmOTEzNDcxZDI4NDAzZmU3M2IzMDVhZWVmM2MyZTRkYmU3MzAxMzE0YTM3OWYyZmY2OTRmNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWRiOTg1MWE4ODQxM2U3NDA1ZjE3NGZlNWVlYjI5ODkxZmI2OGRjMGVlYTBjODFiMDkyYjg1MGJlNjNjZjY1OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzIzNmQ0MjBiYTQ3MWEyYzJlMWY0NjA1NzY4NWJmNTMzOTY5Y2Y0ZTRhMmRiYjFiZjFkM2VmOGUwNWQ3OTM0MSJ9"
         },
         {
-          "resource": "repo://digifetch/src/digifetch/http.py#L59-L92",
+          "resource": "repo://digifetch/src/digifetch/http.py#L134-L167",
           "version": "repo-lines-v1:sha256:adf31cd27db42f04c78a04f6cf8bb625f0a581e336b0504fe02e64fce12ec6a6:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJhMGVmY2FkNjNhZmU4MmZhZTJjMWE1Y2ZiNmMwMzdkNDI2NDY4Yzg3MjJlNTM4ZTBiODcwM2FlY2FlNTgyYTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMxZjg3M2Y5ZGUzMGM4NDNjZjJiMjM0YzhkNzM3MDQ0YzYwYWM5MmEyMjMwZjI1NWUwYmU5Y2FhOGRhMDUwNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3ODM3OWY0NGIzZGMwNGM0MmZjY2VkYzMwOGJhMWJhZWNiMjBlOWQwMTdjNTBhMGEwM2EyZGUwZGM0M2JlNjMifQ"
         },
         {
@@ -44,7 +44,7 @@
     },
     {
       "id": "claim_6073eb2612d3400791a571fb7bc14116",
-      "statement": "Browser symbols resolve through a lazy PEP 562 __getattr__ shim so import digifetch never launches or imports a browser, and the 0.1.0 interface is provisional with twelve-x as the single consumer.",
+      "statement": "Browser symbols resolve through a lazy PEP 562 __getattr__ shim so import digifetch never launches or imports a browser, and the 0.1.0 interface is provisional with a single consumer.",
       "evidence": [
         {
           "resource": "repo://digifetch/ARCHITECTURE.md#L10-L39",
@@ -66,10 +66,10 @@
     },
     {
       "id": "claim_6ea59a1f6e2e4d6caf2d38bf0b87987c",
-      "statement": "validate_fetch_url() in digifetch.ssrf is the single SSRF guard applied before every fetch/download request — initial URL and each redirect hop — refusing non-http(s) schemes, blocked literal hostnames (metadata, rebind suffixes, local suffixes), WHATWG-style IPv4 shorthand, and any host that resolves to a non-globally-routable address, with an operator-supplied allowed_hosts escape hatch.",
+      "statement": "validate_fetch_url() in digifetch.ssrf is the single SSRF guard applied before every fetch/download request \u2014 initial URL and each redirect hop \u2014 refusing non-http(s) schemes, blocked literal hostnames (metadata, rebind suffixes, local suffixes), WHATWG-style IPv4 shorthand, and any host that resolves to a non-globally-routable address, with an operator-supplied allowed_hosts escape hatch.",
       "evidence": [
         {
-          "resource": "repo://digifetch/src/digifetch/http.py#L189-L191",
+          "resource": "repo://digifetch/src/digifetch/http.py#L276-L278",
           "version": "repo-lines-v1:sha256:1f7fdf796a2204d0b44f1f31ba9c3b551ba7524292abf6c7a3604c6de3d4f9be:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzllMjM2NjVkOGM4ODMzMWQ3ZGE2ZTUzZTExN2U0MjkwNDIxMDdhOTRmYTM5ZmQxMDc0ZDE1MThkMGI3ZjQ3MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDZkZWY3ODhiMzQ5MmU4MDk1NDAwMzNlYTlkN2JlMGE2ZDg0MGU0MDU5YzdhZTc0M2RkNWE4NWZhN2U5YzU1NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjE1YmI4MmI5MTc2YTM1Mjc5MGEyOWU2YmE2OWIzYjY4ODY5M2YzMjMxY2Q3YmEzM2EzZjRhZmYyYzEwNTRlYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWJmMWNkNzI0NWRmY2Y3NWFlYWY5ZDc1ZDE0N2M5OGU3ODc2NWFiMGU0YzI0MGFjNWQ4NjIxZmJhNmVmM2Y3ZCJ9"
         },
         {
@@ -84,7 +84,7 @@
     },
     {
       "id": "claim_6d5c53f246b349b981882a51e4bcb2c1",
-      "statement": "HttpFetcher.fetch() and .download() follow redirects manually per-hop (capped at MAX_REDIRECTS=5), re-validating each target through the SSRF guard, and per-call cookies are forwarded only to same-origin hops — a cross-origin redirect drops them to prevent session credential leakage.",
+      "statement": "HttpFetcher.fetch() and .download() follow redirects manually per-hop (capped at MAX_REDIRECTS=5), re-validating each target through the SSRF guard, and per-call cookies are forwarded only to same-origin hops \u2014 a cross-origin redirect drops them to prevent session credential leakage.",
       "evidence": [
         {
           "resource": "repo://digifetch/src/digifetch/http.py#L204-L262",
@@ -95,22 +95,22 @@
           "version": "repo-lines-v1:sha256:35309f87e9e3508b64220585022db5039d646ad3391b1937848fa1d6c2260baf:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExODY4MDJkZmQ0YzE4ODgyOGI0MzI1YWY1YjIxOTg5YjBhYzFkZTVkOTc1ZjE0ZWU0MWJkNjliNjVkNGMxNjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyOWExMmJmMDk2ZDA4OTYzMGZiOWEwMjgwMGI2N2Y1YzRkNTU0MTgxOWU5OGFlZDc5MzVjMzRkYzU5YTAyYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5NDYzMTA4NTg3ZmEwOTZlZjhjYzkyYzQxMjE2NDc0ODFiNTdmZDQ4OGIyNDBmOWEyN2I2ZjU3NzRkYWVhZGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
-          "resource": "repo://digifetch/src/digifetch/http.py#L46-L48",
+          "resource": "repo://digifetch/src/digifetch/http.py#L45-L47",
           "version": "repo-lines-v1:sha256:10de20dcabdd54589a920ba2703696d6ecd66dd94d88efd9e5189a3693a0022f:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTE3ODE4NjNhYmQ5ZTJjYTBhYjRmNjcyNzdiYWM3ZjdjNmFjZjkyZjQ0ODZmN2EyMGQ2NjJhNmRmODc1YTZhNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWYzOGJmZTdhNTVmOTEzNDcxZDI4NDAzZmU3M2IzMDVhZWVmM2MyZTRkYmU3MzAxMzE0YTM3OWYyZmY2OTRmNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTVlNTlmMThhNmQxNjdmNWI3MzYyY2Q5ZWJhODM4NDkyZDkyMjdhOTQwZjcyZTczZjg5NzM1ZmZjODQ5YWY1ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzIzNmQ0MjBiYTQ3MWEyYzJlMWY0NjA1NzY4NWJmNTMzOTY5Y2Y0ZTRhMmRiYjFiZjFkM2VmOGUwNWQ3OTM0MSJ9"
         },
         {
-          "resource": "repo://digifetch/tests/test_http.py#L175-L206",
+          "resource": "repo://digifetch/tests/test_http.py#L177-L208",
           "version": "repo-lines-v1:sha256:1fb342f9d0d28776c37a97a8ec77fd8ff68362fa6ed9a9dda372f9d0b39098ea:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3MWJjODc1NDZkOWVmMzc1N2Q0YjQ5MmI1NTdiZTY4YjUyNTJmZmQxOTdlZjkxYWZjYWFmMGE4YmY2MmM0NDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmZDgxNzY2YjdkOTJlOWQwY2MwMjZhY2MwMzdlYzFjZjVkYzdiZTJiNzkxOWIxMGE0NzU2ZTA4NzJjMmI5Y2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFiMmRhOTgzYmY4OTZlZWQ3Y2RhMTQ2NzExZDZmNzcyNzJkMTAzNzAxNGNlMWYwZGYyN2ExODdjNGQ4YzA4MTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNiNTcyMzU4YTFmYWE3OTMwMmVjOTA3NDFmYTlkOGI0YjFjM2Q4ODQxY2NjMGVmM2E3YzNlOWI5MDkzMDliODIifQ"
         },
         {
-          "resource": "repo://digifetch/tests/test_http.py#L209-L223",
+          "resource": "repo://digifetch/tests/test_http.py#L211-L225",
           "version": "repo-lines-v1:sha256:f39dc2b176bfe2e3d1c90e347cd6ea82fb34a43c40453362526817de3bca20dd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ3MDE1MjYwMWY0OTM1MjU1ZmYwNmUyYzFmYjM5YWI0YTBjNjBlMGMwMWZlNzAwYTU0ODczYzc2Yjk3OTE4MTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA3ZGE0MTZhZmU4N2UyMTE0MjIxZjAwZTRiYWRjMWI5ODNjMWEwMzUxMTFjNzhhNTc2MTlmM2ZjNDM5ODRhMzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3OWQwYzQzMDQ1ZGMxYTE3YzZiOTE4YzBmYWZjOGQ0Zjk0YjhmMzk3ZjVhMjM2NTk3YjY3OTc5MzU2MzBlZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
     {
       "id": "claim_7a5cbfced4064cfe9a007fedb564cc07",
-      "statement": "HttpFetcher.download() streams the response body via iter_bytes(), accumulating chunks and aborting mid-stream with DownloadTooLargeError when total exceeds the configured max_bytes cap (default 32 MiB) — the payload is never fully buffered for an oversized response.",
+      "statement": "HttpFetcher.download() streams the response body via iter_bytes(), accumulating chunks and aborting mid-stream with DownloadTooLargeError when total exceeds the configured max_bytes cap (default 32 MiB) \u2014 the payload is never fully buffered for an oversized response.",
       "evidence": [
         {
           "resource": "repo://digifetch/src/digifetch/http.py#L264-L324",

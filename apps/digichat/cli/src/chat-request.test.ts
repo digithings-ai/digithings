@@ -78,3 +78,31 @@ describe("assertCliEnabled", () => {
     expect(() => assertCliEnabled(null)).toThrow(/cli\.enabled/);
   });
 });
+
+describe("x-external-conversation", () => {
+  it("is written when the session has a conversation id", () => {
+    const headers = buildDigichatChatHeaders({
+      baseUrl: "http://127.0.0.1:3005",
+      auth: { kind: "api_key", apiKey: "digi_live_k" },
+      conversationId: "11111111-2222-3333-4444-555555555555",
+    });
+    expect(headers["x-external-conversation"]).toBe(
+      "11111111-2222-3333-4444-555555555555",
+    );
+  });
+
+  it("is omitted when absent or blank, so a live chat turn is unchanged", () => {
+    const base = {
+      baseUrl: "http://127.0.0.1:3005",
+      auth: { kind: "none" } as const,
+    };
+    expect(
+      buildDigichatChatHeaders(base)["x-external-conversation"],
+    ).toBeUndefined();
+    expect(
+      buildDigichatChatHeaders({ ...base, conversationId: "  " })[
+        "x-external-conversation"
+      ],
+    ).toBeUndefined();
+  });
+});

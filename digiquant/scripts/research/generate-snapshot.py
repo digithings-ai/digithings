@@ -17,11 +17,12 @@ import json, re, sys, os
 from pathlib import Path
 from datetime import datetime
 
-ROOT = Path(__file__).parent.parent
-DAILY_DIR = ROOT / "data" / "agent-cache" / "daily"
-PORTFOLIO_JSON = ROOT / "config" / "portfolio.json"
+from lib.roots import AGENT_CACHE_ROOT, RESEARCH_CONFIG, SNAPSHOT_SCHEMA
 
-SCHEMA_PATH = ROOT / "templates" / "snapshot-schema.json"
+DAILY_DIR = AGENT_CACHE_ROOT / "daily"
+PORTFOLIO_JSON = RESEARCH_CONFIG / "portfolio.json"
+
+SCHEMA_PATH = SNAPSHOT_SCHEMA
 
 
 def load_portfolio_json():
@@ -195,8 +196,13 @@ def parse_market_data(content):
             val = m.group(1).replace(",", "")
             try:
                 data[key] = float(val)
-            except ValueError:
-                pass
+            except ValueError as exc:
+                # A capture the regex allows but float() rejects (e.g. a bare
+                # "," run, or ",.1" where the digits sit after the point).
+                # Legacy DIGEST.md only - drop the key, as before, but say so
+                # rather than leaving a silently missing series.
+                print(f"   ⚠️  Unparseable {key} capture {val!r} in digest text "
+                      f"({exc})", file=sys.stderr)
     return data
 
 

@@ -16,6 +16,11 @@ Two data paths:
      2018, EU/JP/GB end ~2023), so the recent composite is unreliable. The script
      prints each component's coverage so the staleness is explicit.
 
+Research one-off (not the production panel): the sealed macro panel moved to
+gloomberb ``econ_series`` in docs/superpowers/plans/2026-09-29-gloomberb-macro-ingest.md
+(#4794 PR3). This script intentionally still reads keyless fredgraph.csv for
+its validation comparison — do not silently switch it to gloomberb.
+
 Output: a parquet with columns [date, total, total_shifted, roc_sig, roc_plot]
 joined with the asset close, ready for digiquant.indicators.m2_signals.M2SignalComputer.
 

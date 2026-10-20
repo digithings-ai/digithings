@@ -159,6 +159,65 @@ function relayableUpstreamCode(body: string): string | null {
 export const DIGIGRAPH_UNAVAILABLE_MESSAGE =
   "The assistant is unavailable right now. Please try again shortly.";
 
+/**
+ * digigraph refuses an optional hosted capability the license does not
+ * entitle (`insufficient_license_scope`). Web search is optional: the turn
+ * retries once as plain inference. Corpus grounding is not optional and is
+ * not stripped here.
+ */
+export const INSUFFICIENT_LICENSE_SCOPE_CODE = "insufficient_license_scope";
+export const HOSTED_WEB_SEARCH_SCOPE = "hosted-web-search";
+
+const HOSTED_WEB_SEARCH_HEADER_NAMES = new Set([
+  "x-digi-enable-web-search",
+  "x-digi-search-engine",
+]);
+
+/** Missing scope named by a 403 body, or null when this is not that refusal. */
+export function insufficientLicenseScopeName(bodyText: string): string | null {
+  if (!bodyText.length) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bodyText);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const outer = parsed as { error?: unknown; code?: unknown; message?: unknown };
+  const nested =
+    typeof outer.error === "object" && outer.error !== null
+      ? (outer.error as { code?: unknown; message?: unknown })
+      : undefined;
+  const code =
+    typeof outer.error === "string"
+      ? outer.error
+      : typeof nested?.code === "string"
+        ? nested.code
+        : typeof outer.code === "string"
+          ? outer.code
+          : null;
+  if (code !== INSUFFICIENT_LICENSE_SCOPE_CODE) return null;
+  const message =
+    typeof outer.message === "string"
+      ? outer.message
+      : typeof nested?.message === "string"
+        ? nested.message
+        : "";
+  const named = message.match(/license scope '([^']+)'/);
+  return named?.[1] ?? "";
+}
+
+/** Drop hosted web-search headers. Returns false when none were present. */
+export function stripHostedWebSearchHeaders(headers: Record<string, string>): boolean {
+  let stripped = false;
+  for (const key of Object.keys(headers)) {
+    if (!HOSTED_WEB_SEARCH_HEADER_NAMES.has(key.toLowerCase())) continue;
+    delete headers[key];
+    stripped = true;
+  }
+  return stripped;
+}
+
 class DigigraphStreamContractError extends Error {
   constructor(payload: string) {
     super(payload);
@@ -315,6 +374,12 @@ export async function createDigigraphTraceStreamResponse(opts: {
   upstreamHeaders: Record<string, string>;
   responseHeaders: Record<string, string>;
   activityDetail: ActivityDetail;
+  /**
+   * House model for the request body. Defaults to ``digigraphModelName()``;
+   * the route passes the tenant's curated ``models.default`` so the first
+   * turn runs the same model the picker shows (OCC: v4.1-flash).
+   */
+  model?: string;
   /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
   signal?: AbortSignal;
 }) {
@@ -327,7 +392,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
     ignoreIncompleteToolCalls: true,
   });
   const url = digigraphChatCompletionsUrl(opts.digigraphBaseUrl);
-  const model = digigraphModelName();
+  const model = opts.model?.trim() || digigraphModelName();
 
   const stream = createUIMessageStream({
     onError: (error) => (error instanceof Error ? error.message : "digigraph stream error"),
@@ -375,6 +440,8 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let attempt = 0;
       let bootAttempts = 0;
       let warmingReported = false;
+      let droppedHostedWebSearch = false;
+      const requestHeaders: Record<string, string> = { ...opts.upstreamHeaders };
       const loopStartedAtMs = Date.now();
       for (;;) {
         if (opts.signal?.aborted) {
@@ -393,7 +460,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
               // is why route.ts's unconditional set is pinned by a test rather than
               // left to inspection: if it ever becomes conditional, this adapter must
               // regain a fallback or digigraph gets an unauthenticated request (#2537).
-              ...opts.upstreamHeaders,
+              ...requestHeaders,
               // After upstreamHeaders so dogfood never inherits Open WebUI format.
               // Belt-and-suspenders: digigraph's Open WebUI chrome is opt-in only
               // (X-Response-Format: openwebui or openwebui_format=true), never implied
@@ -457,6 +524,23 @@ export async function createDigigraphTraceStreamResponse(opts: {
           }
           await abortableSleep(retryDelayMs(attempt), opts.signal);
           continue;
+        }
+        // Optional hosted web search: a license that lacks the scope must not
+        // fail the turn. Retry once as plain inference (the 403 says so).
+        // Corpus headers stay — an ungrounded answer is not a silent fallback.
+        if (res.status === 403 && !droppedHostedWebSearch) {
+          const probe = (await res.clone().text().catch(() => "")).slice(0, 4000);
+          if (
+            insufficientLicenseScopeName(probe) === HOSTED_WEB_SEARCH_SCOPE &&
+            stripHostedWebSearchHeaders(requestHeaders)
+          ) {
+            droppedHostedWebSearch = true;
+            console.error(
+              `[digigraph] upstream 403 ${INSUFFICIENT_LICENSE_SCOPE_CODE} ` +
+                `(${HOSTED_WEB_SEARCH_SCOPE}); retrying once without hosted web-search headers`,
+            );
+            continue;
+          }
         }
         break;
       }

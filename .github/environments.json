@@ -1,0 +1,33 @@
+{
+  "note": "Protection rules for every GitHub environment a workflow may declare. Read by tests/scripts/test_workflow_environment_concurrency.py to decide which gated jobs may sit in a queueing concurrency group, and re-checked against the live API by scripts/secret_staleness_check.py so this file cannot quietly become a lie. Update it in the same change that arms a reviewer, a wait timer or a branch policy. `deployment_branches: null` means no branch restriction.",
+  "verified_at": "2026-10-04",
+  "verified_via": "gh api /repos/digithings-ai/digithings/environments",
+  "environments": {
+    "copilot": {
+      "wait_timer_minutes": 0,
+      "required_reviewers": [],
+      "deployment_branches": null
+    },
+    "cron": {
+      "wait_timer_minutes": 0,
+      "required_reviewers": [],
+      "deployment_branches": null
+    },
+    "github-pages": {
+      "wait_timer_minutes": 0,
+      "required_reviewers": [],
+      "deployment_branches": [
+        "develop"
+      ]
+    },
+    "production": {
+      "wait_timer_minutes": 0,
+      "required_reviewers": [
+        "chrizefan"
+      ],
+      "deployment_branches": [
+        "main"
+      ]
+    }
+  }
+}

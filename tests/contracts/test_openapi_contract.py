@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,7 +13,13 @@ from tests.digi_test_jwt import auth_headers
 # digisearch startup gate
 os.environ.setdefault("DIGISEARCH_ALLOW_STUB", "1")
 os.environ.setdefault("DIGIKEY_ALLOW_EPHEMERAL_KEY", "1")
-os.environ.setdefault("DIGIKEY_DATABASE_URL", "sqlite:////tmp/digikey-openapi-contract.sqlite")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_digikey_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "DIGIKEY_DATABASE_URL", f"sqlite:///{tmp_path}/digikey-openapi-contract.sqlite"
+    )
 
 
 @pytest.mark.unit
@@ -60,8 +67,8 @@ def test_digisearch_openapi_has_query_and_ingest() -> None:
 
 
 @pytest.mark.unit
-def test_digismith_openapi_has_status() -> None:
-    from digismith.server import app as sm_app
+def test_digitrace_openapi_has_status() -> None:
+    from digitrace.server import app as sm_app
 
     schema = sm_app.openapi()
     paths = schema.get("paths", {})
@@ -88,7 +95,7 @@ def test_digivault_openapi_has_notes() -> None:
         "digiquant.server:app",
         "digikey.server:app",
         "digisearch.server:app",
-        "digismith.server:app",
+        "digitrace.server:app",
         "digivault.server:app",
     ],
 )

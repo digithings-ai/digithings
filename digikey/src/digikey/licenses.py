@@ -118,6 +118,7 @@ def insert_license_row(
     services: Sequence[str] | None,
     expires_at: int,
     label: str | None,
+    terms_version: str | None = None,
 ) -> LicenseRow:
     """Insert a live license row. Mint is append-only — never upsert."""
     row = LicenseRow(
@@ -127,6 +128,7 @@ def insert_license_row(
         services=list(services) if services is not None else None,
         expires_at=expires_at,
         label=(label or "").strip() or None,
+        terms_version=(terms_version or "").strip() or None,
     )
     session.add(row)
     session.commit()

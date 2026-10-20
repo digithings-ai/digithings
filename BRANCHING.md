@@ -16,6 +16,10 @@ branch protection**, which the rulesets endpoint does not report at all — see 
 table below, and query `…/branches/<name>/protection` before concluding a branch
 is unguarded.
 
+## Origin drafts
+
+Agent iterations use a local branch named `origin/<slug>` and `origin push local`. Those refs live only on the Origin `/local` endpoint and do not sync to GitHub. They are not part of the taxonomy below. Promoting a draft means copying its tip onto a `task/`, `module/`, or `release/` branch and pushing that branch. See [AGENTS.md](AGENTS.md#origin-iteration-github-promotion).
+
 ## Three-tier branching model
 
 ```
@@ -51,7 +55,14 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
 (belt-and-suspenders on top of the PR gate).
 
-**Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith`, `module/digiclaw`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
+Local pushes to `develop` require `ALLOW_DEVELOP_PUSH=1` as an environment
+variable. Unlike `main`, `develop` has no server-side PR gate
+(`required_pull_request_reviews` is `null`), so the client pre-push hook is the
+only guard. The usual accident is a branch tracking `develop` upstream, so a
+bare `git push` lands there — repair it with
+`git branch --set-upstream-to=github/<branch> <branch>`, then push that branch.
+
+**Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith` (remote branch predates the #4929 digitrace rename; see `scripts/module_branches.sh`), `module/digiclaw`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
 
 Other `module/*` branches exist on `origin` outside that set and are not managed by any
 command here. As of 2026-08 that was `module/website`, `module/dashboard`,
@@ -89,15 +100,49 @@ module branch being force-pushed also stops it being quietly dropped.
 | `codex/<slug>` | Work driven by ChatGPT Codex. | `codex/refactor-rag-chunker` |
 | `cursor/<slug>` | Work driven by Cursor Agent. | `cursor/docs-migration` |
 | `copilot/<slug>` | Work driven by GitHub Copilot. | `copilot/fix-import-order` |
-| `bot/<slug>` | Opened by a repo workflow, not a person — `project-stub-fields.yml` pushes one per issue it fields. | `bot/stub-tsv-2459` |
-| `release-please--branches--<target>--components--<component>` | Auto-created by the `release-please-*.yml` workflows to propose a version-bump PR — one per component, against that component's own target branch (digichat → `develop`, digiskills → `module/digiskills`). Not something a human creates; the taxonomy just needs to admit what the bot already pushes, so a maintainer can `git push` a follow-up fix commit onto it (e.g. a lockfile resync) without `--no-verify`. | `release-please--branches--develop--components--digichat` |
+| `bot/<slug>` | Opened by a repo workflow, not a person. Live publishers are `agent-backlog-snapshot.yml` (`bot/agent-backlog-snapshot`) and `pipeline-provider-review.yml` (`bot/provider-review-*`). `project-stub-fields.yml` used to push `bot/stub-tsv-*` and was removed in #4919; those leftover refs stay deletable. | `bot/agent-backlog-snapshot` |
+| `release-please--branches--<target>--components--<component>` | The pattern stays so a leftover release-please ref can still be pushed. The `release-please-*.yml` workflows that used to create these branches were removed in #4919; none remain under `.github/workflows/`. | `release-please--branches--develop--components--digichat` |
 | `<handle>/<slug>` | Direct human commits by a named contributor (GitHub login). | `chrizefan/vision-pass` |
 | `feat/<slug>` | Feature work not bound to a single Issue. | `feat/model-picker` |
 | `fix/<slug>` | Bug fix not bound to a single Issue. | `fix/auth-retry` |
 | `docs/<slug>` | Docs-only change (eligible for auto-merge via the `automerge-docs` label). | `docs/vision-update` |
 | `chore/<slug>` | Tooling, CI, config. | `chore/bump-pydantic` |
+| `DIG-<n>-<slug>` | A Paperclip **execution workspace**. Paperclip checks the workspace out on `DIG-<n>-<title-slug>`, so this is not a branch a human creates — the taxonomy has to admit what the harness already produces, or every commit made there is unpushable. See [Execution-workspace branches](#execution-workspace-branches-never-blanket-push) before pushing one. | `DIG-1122-pre-push-taxonomy-has-no-dig-slug-rule` |
 
 Slugs: lowercase, dashes, no underscores. Numbers permitted.
+
+### Execution-workspace branches: never blanket-push
+
+A `DIG-<n>-<slug>` branch is a **workspace**, not a unit of work. It accumulates
+whatever commits the agents working in it produce, which routinely includes
+commits belonging to other issues, merges of other people's PRs, and copies of
+changes that already landed on `develop` by another route.
+
+So `git push` on such a branch is not a save operation — it publishes the whole
+accumulation. Concretely, on the DIG-47 workspace (snapshot taken 2026-10-04,
+DIG-1122): one of its commits, `6d3789d9a` (a DIG-361 docs change), was a *stale
+duplicate* — the same change had reached `develop` by another route, squash-merged
+as `6c0de7e89` through PR #5094, so the two copies do not share a sha or a
+patch-id. The stale copy *deleted* the DIG-258 inventory row and the entire
+DIG-526 section that `develop` had gained since. Measured against `develop` at
+that point, the workspace branch deleted 166 lines and added 19 to
+`docs/ops/SECRETS_INVENTORY.md` — 185 changed lines carrying nothing but the loss
+of what `develop` already had.
+
+Two safe shapes:
+
+- **Re-home the commits** onto a branch whose whole history is yours — normally
+  `task/<N>-<slug>` or `feat/<slug>` — and push that. This is the normal path.
+- **Push an explicit per-commit refspec** when you only want to preserve a
+  specific commit on the workspace branch without moving its tip, e.g.
+  `git push origin <sha>:refs/heads/<taxonomy-legal-name>`.
+
+Avoid the third path: cherry-picking the same commits onto a legal branch
+*without* dropping the local ones is how a patch ends up on two refs with
+different SHAs. That happened on DIG-47.10 (`b6a3154d6`/`9b90f2a1c` locally,
+`99e3d8618`/`8cc861931` remotely, identical patch-ids). Two patch streams mean
+"which ref holds this fix?" has two answers and the contract review is in no
+ref at all.
 
 ## Adding a human contributor
 
@@ -148,7 +193,7 @@ while being tree-identical to the tag.
 The branch is **not** where the release is stabilised: by the time it exists,
 that version is already on `main` and deployed. Its job is to keep carrying
 fixes for *that* version after `main` has moved on — pinned clients (self-host
-stacks, DataTap on `ghcr.io/digithings-ai/digichat:v0.9.3`) keep consuming it.
+stacks, clients pinned on `ghcr.io/digithings-ai/digichat:v0.9.3`) keep consuming it.
 
 Do not delete the branch when the next release ships. There is one branch per
 released version, and the older ones are the reason you can still patch them.
@@ -198,6 +243,14 @@ git push origin --delete <branch>
 git branch -d <branch>                          # local
 ```
 
+**Branches with no PR are not covered by this section.** A branch that nobody
+merged and nobody referenced is *stranded*, and it is disposed of under a separate
+policy: [`docs/ops/branch-hygiene-policy.md`](docs/ops/branch-hygiene-policy.md).
+That policy measures the branch by `git cherry` (unmerged patches, not commit
+count), assigns it a tier, and names the agent allowed to delete it. It also turns
+on the prevention side — `delete_branch_on_merge`, a branch-age guard, and a
+pre-push age warning. Read it before deleting anything that never had a PR.
+
 `main` and `develop` are protected server-side against deletion. Release
 branches are policy-protected — one per released version, and an old one is the
 only way to patch a client still pinned to it — but that is not yet enforced
@@ -209,10 +262,12 @@ taxonomy, or one a workflow created outside it, must still be deletable — refu
 the delete only strands the branches the rule meant to discourage. Until #2463 the
 hook checked the name first and `exit 1`ed before it reached the deletion skip, so
 `git push origin --delete bot/stub-tsv-2459` failed with a name-taxonomy error and
-no server-side cause, and `bot/*` refs had piled up on `origin` behind it (~100 as
-of 2026-08-18; #2465 reaped them on 2026-08-19 and 5 heads remain). The `main`
+no server-side cause, and `bot/*` refs had piled up on the GitHub repo behind it
+(~100 as of 2026-08-18; #2465 reaped them on 2026-08-19 and bot/* heads remained).
+The `main`
 guard still covers deletions — deleting `main` is at least as serious as pushing
-to it, so it needs the same `ALLOW_MAIN_PUSH=1`.
+to it, so it needs the same `ALLOW_MAIN_PUSH=1`. The `develop` guard works the
+ same way: deleting `develop` needs `ALLOW_DEVELOP_PUSH=1`.
 
 ## What is not allowed
 
@@ -222,9 +277,10 @@ to it, so it needs the same `ALLOW_MAIN_PUSH=1`.
   declares the same regex (bar the `main`/`develop` arms, which its
   `conditions.ref_name.exclude` covers instead) and reads `"enforcement":
   "active"`, but that file is desired state that was never applied — the only
-  ruleset on `origin` is `module-branch-protection`. Nothing currently proves this
+  ruleset on the GitHub repo is `module-branch-protection` (`origin` is the Cursor
+  mirror, not that repo). Nothing currently proves this
   the way the `release-please--branches--*--components--*` refs used to: those were
-  live on `origin` while the taxonomy still rejected them client-side, meaning the
+  live on GitHub while the taxonomy still rejected them client-side, meaning the
   hook was blocking even a maintainer's own follow-up push (e.g. a lockfile resync)
   onto a branch the bot itself had already pushed with no server-side rule stopping
   it — proof the JSON was never applied, found the hard way. The taxonomy now admits

@@ -139,3 +139,27 @@ def test_print_mode_does_not_write(
     out = capsys.readouterr().out
     assert "digikey:" in out
     assert ci.read_text(encoding="utf-8") == original
+
+
+def _glob_matches(pattern: str, path: str) -> bool:
+    """Match a dorny-style glob (** = any depth) against a repo-relative path."""
+    import fnmatch
+
+    if pattern.endswith("/**"):
+        prefix = pattern[: -len("/**")]
+        return path == prefix or path.startswith(prefix + "/")
+    return fnmatch.fnmatch(path, pattern)
+
+
+def test_docs_openapi_files_match_digigraph_filter() -> None:
+    data = gpf.load_filters()
+    assert "digigraph" in data
+    patterns = data["digigraph"]
+    openapi_dir = REPO_ROOT / "docs" / "openapi"
+    files = sorted(p for p in openapi_dir.glob("*.json"))
+    assert files, "expected generated OpenAPI artifacts under docs/openapi/"
+    for f in files:
+        rel = f.relative_to(REPO_ROOT).as_posix()
+        assert any(
+            _glob_matches(pat, rel) for pat in patterns
+        ), f"{rel} matches no digigraph filter pattern {patterns}"

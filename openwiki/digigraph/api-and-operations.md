@@ -143,7 +143,7 @@ hardcoded strings.
 Metrics, CORS, request-ID correlation, error envelopes, and optional OTel
 come from digibase like every service. The Compose service binds
 `127.0.0.1:8000`, healthchecks `/healthz`, and carries the reserved
-`DIGISMITH_URL` for future status polling. `DIGI_CHECKPOINTER`
+`DIGITRACE_URL` for future status polling. `DIGI_CHECKPOINTER`
 (`memory|sqlite|postgres`) selects LangGraph checkpoint persistence —
 `memory` does not survive restarts; `sqlite` (default when a
 `digiproject.yaml` is active) survives restarts but is single-process;

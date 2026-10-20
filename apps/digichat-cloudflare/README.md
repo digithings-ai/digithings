@@ -12,6 +12,7 @@ Requires **Workers Paid** (Containers are not on Free).
 |---|---|---|
 | `digithings.ai/chat` | Pages shell → iframe `/embed?host=digithings.ai` | digithings |
 | `digithings.ai/chat/occ` | Pages shell → iframe `/embed?host=occ.digithings.ai` | occ |
+| `digithings.ai/chat/occ?token=<key>` | same, plus the invite key forwarded to digichat (DIG-1210) | occ |
 | `digithings.ai/embed*` | Worker → Container | selected by `host` |
 | `digithings.ai/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health` | Worker → Container | — |
 | `digithings.ai/_dtchat*` | Worker → Container (assetPrefix) | — |
@@ -47,7 +48,12 @@ Mac Compose remains **dev-only** — see
 
 ## Deploy
 
-Canonical deploy is the digithings-stack worker ([`deploy-digithings-stack-cloudflare.yml`](../../.github/workflows/deploy-digithings-stack-cloudflare.yml)) — the standalone below stays until cutover.
+> **There is no CI deploy lane for this Worker** (DIG-2843). The
+> `deploy-digithings-stack-cloudflare.yml` referenced here was deleted on 2026-10-01 by
+> `f54af7052` (#4919, Human Gate), so the recipe below is the whole deploy path. The build
+> half is still gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for
+> this app on every PR. See
+> [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
 
 From **repo root** (Dockerfile context is monorepo root):
 
@@ -61,6 +67,7 @@ npx wrangler secret put DIGIGRAPH_INTERNAL_URL   # https://graph.digithings.ai
 npx wrangler secret put DIGIKEY_URL              # https://key.digithings.ai
 npx wrangler secret put DIGIKEY_BFF_TOKEN
 npx wrangler secret put DIGICHAT_PLAN_PROOF_SECRET
+npx wrangler secret put DIGICHAT_MONITOR_TOKENS   # optional (DIG-613); omit => free-turn gate applies to all
 npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_URL
 npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
 
@@ -112,12 +119,14 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
 
 Tenant entries may also carry the same operator-only `mcp.servers` entries as
 the deploy YAML — `{ id, url, label?, default?, token?, tokenEnv?, authHeader? }`
-— e.g. the OCC Zammad server via the key-gated stack route
-(`url: https://graph.digithings.ai/_stack/mcp/zammad/mcp`,
-`token: <MCP_EDGE_KEY value>`, `authHeader: x-digi-mcp-key`). Use a literal
+— e.g. the OCC Zammad server, served by this Worker's own key-gated route
+(`url: https://digithings.ai/api/mcp/zammad/mcp`,
+`token: <ZAMMAD_EDGE_KEY value>`, `authHeader: x-digi-mcp-key`). Use a literal
 `token`: `tokenEnv` only resolves variables present in the Container's own
-environment, and the stack Worker's `MCP_EDGE_KEY` secret is not forwarded
-there. They are resolved server-side and stripped by the browser projections
+environment, and the Worker's `ZAMMAD_EDGE_KEY` secret is not forwarded there.
+The in-container zammad-mcp authenticates to Zammad with its own environment, so
+it needs `ZAMMAD_API_TOKEN` (and optionally `ZAMMAD_BASE_URL`) as Container
+secrets. They are resolved server-side and stripped by the browser projections
 (see `apps/digichat/ARCHITECTURE.md`).
 
 `DIGICHAT_EMBED_HOSTS` is already set in `wrangler.toml` `[vars]` (CSP
@@ -127,7 +136,7 @@ there. They are resolved server-side and stripped by the browser projections
 |---|---|
 | Host keys | `DIGICHAT_EMBED_TENANTS` object keys (and `aliases`) must match iframe `?host=` / `X-Embed-Host`. `X-Embed-Host` only selects the tenant — it never authorizes (see below). |
 | `DIGICHAT_EMBED_HOSTS` | Comma-separated parent hostnames allowed to frame `/embed`. Must include every live parent (marketing `digithings.ai` / `www` / `occ.digithings.ai`, plus `digiquant.io` if the dashboard popup iframes this origin). Not a secret. |
-| First-party token | `digithings.ai`, `www.digithings.ai`, and `occ.digithings.ai` skip `X-Embed-Token` when registered **and** the request carries a first-party browser-attested origin (`Origin`/`Referer`). A spoofed `X-Embed-Host` alone does not qualify. The JSON schema still requires a `token` field — use a non-secret placeholder; do not invent or commit a real secret. |
+| First-party token | `digithings.ai` and `www.digithings.ai` skip `X-Embed-Token` when registered **and** the request carries a first-party browser-attested origin (`Origin`/`Referer`). A spoofed `X-Embed-Host` alone does not qualify. `occ.digithings.ai` is **not** on the first-party allowlist (DIG-1210 Act B2). OCC is gated by an **invite key**, carried as `?token=<key>` on `digithings.ai/chat/occ` and forwarded as `X-Embed-Token`. That key is a **bearer capability, not authentication** — anyone holding the link can use the tenant. The JSON schema still requires a `token` field — use a non-secret placeholder for a tenant with no live customer data, and a real secret via `wrangler secret put` for one that has; do not commit one. **Mint, rotate, revoke and verify the OCC key: [`docs/ops/OCC_INVITE_KEY.md`](../../docs/ops/OCC_INVITE_KEY.md).** The `/chat/occ` shell is also gated at the edge (`OCC_INVITE_KEY` on the Worker, and the Pages function) so the chat page is not served without the key or the `occ_invite` cookie. |
 | First-party skin | Unset `skin` on those hosts defaults to `digichat` (DigichatThread). Set `"skin": "digichat"` in the wrangler secret anyway so the live JSON matches the YAML examples. Third-party tenants still default to catalog `base`. |
 | Legacy anonymous embed | The flag is deliberately **unset** in `wrangler.toml` `[vars]` (OFF). A stock deploy refuses unregistered hosts. To opt in, add `DIGICHAT_LEGACY_EMBED_ENABLED = "1"` to `[vars]` (the Worker forwards it; deprecated alias `DIGICHAT_EMBED_ENABLED` is also honored) — only on a deployment **without** `DIGICHAT_EMBED_TENANTS`; with tenants configured the flag is ignored and unregistered hosts get 503. |
 | Other hosts | Parent snippet / `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` must equal that tenant’s registry `token`. Put the real JSON only via `wrangler secret put DIGICHAT_EMBED_TENANTS`. |
@@ -176,4 +185,3 @@ npm test
 
 - [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
 - [`docs/adr/0018-digichat-path-routing.md`](../../docs/adr/0018-digichat-path-routing.md)
-- OCC: [`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md)

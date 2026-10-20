@@ -10,6 +10,7 @@ import {
   normalizeOpenRouterModel,
 } from "@/lib/byok-openrouter";
 import { byokRequiresModel } from "@/lib/byok-providers";
+import { byokModelExample } from "@/lib/byok-model-example";
 import {
   AI_SDK_PROTOCOLS,
   NON_AI_SDK_PROTOCOLS,
@@ -20,6 +21,7 @@ import {
   isNonAiSdkConfig,
 } from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
+import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
 import {
   DigigraphUpstreamAuthError,
   resolveDigigraphUpstreamAuth,
@@ -42,6 +44,10 @@ import {
   isOverEmbedTrialLimit,
   unlockEmbedTrial,
 } from "@/lib/embed-turn-quota";
+import {
+  EMBED_MONITOR_TOKEN_HEADER,
+  isAllowlistedMonitorToken,
+} from "@/lib/embed-monitor-token";
 import { consumeChatAccess } from "@/lib/embed-gate-provider";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import {
@@ -50,9 +56,10 @@ import {
   resolveAnonymousInstallChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
-import { isPlanTierSatisfied } from "@/lib/embed-tenants";
+import { isPlanTierSatisfied, normalizeEmbedHost } from "@/lib/embed-tenants";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
+import { verifyTrialProof } from "@/lib/trial-proof";
 import {
   acquireChatRunLock,
   releaseChatRunLockOnResponseEnd,
@@ -152,6 +159,13 @@ export async function POST(req: Request) {
     req.headers.get("x-byok-model")?.trim() ?? ""
   );
   const languageCode = resolveLanguageCode(req.headers.get("x-digi-language"));
+
+  // Dev-only: a canned reply so the tool chain (reasoning, grouped tool
+  // calls, the banners around them) can be reviewed in the local embed
+  // without a model behind it. Never in production.
+  if (isDemoChatEnabled() && !byokKey) {
+    return demoChatResponse();
+  }
 
   const sessionId =
     req.headers.get("x-digichat-session") ??
@@ -261,7 +275,8 @@ export async function POST(req: Request) {
   // turns, defers the locked presentation to the embedding page (which shows the
   // trial form) rather than the BYOK/contact card. Enforced per client IP in
   // memory — best-effort anti-abuse per the design spec. Fail open on any internal
-  // error so an infra hiccup never blocks a legitimate visitor.
+  // error in the per-IP quota check so an infra hiccup never blocks a legitimate
+  // visitor; the monitor-allowlist check below is the exception and fails closed.
   // When the tenant configures gate.consumeUrl and the client presents a chat
   // token, server-side quota supersedes the unlock header and the IP quota.
   let quotaSatisfied = false;
@@ -281,6 +296,66 @@ export async function POST(req: Request) {
         );
       }
       quotaSatisfied = true;
+    }
+
+    if (!quotaSatisfied) {
+      try {
+        // An allowlisted internal monitor (DIG-613) holds a server-side secret
+        // and is exempt from the per-IP free-turn budget, so an hourly check can
+        // run every hour without spending the window's 3 turns in the first hour
+        // and then reporting 402 for the next 24. The secret is not
+        // X-Embed-Token — that one is a publishable key served in the embedding
+        // page (DIG-619), so a bypass keyed on it would be public. Fails open:
+        // no allowlist configured means this is false and the quota below runs
+        // exactly as before. Scope is this gate only — every other check in this
+        // route, and tenant resolution itself, is unchanged.
+        if (isAllowlistedMonitorToken(req.headers.get(EMBED_MONITOR_TOKEN_HEADER))) {
+          quotaSatisfied = true;
+        }
+      } catch (e) {
+        // Fails CLOSED for the bypass: the assignment above never ran, so
+        // quotaSatisfied stays false and the per-IP quota below applies to this
+        // caller exactly as it did before the monitor check existed. Do not set
+        // quotaSatisfied here to "reconcile" this log with the wording it replaced
+        // ("failing open") — that would turn a safe fallback into a real quota
+        // bypass (DIG-1165).
+        console.warn(
+          "[trial-gate] monitor allowlist error, falling back to the per-IP cap:",
+          e,
+        );
+      }
+    }
+
+    if (!quotaSatisfied) {
+      // A trial proof is a server-signed token (lib/trial-proof.ts) that this
+      // server mints for an embed host, so a visitor who has completed the
+      // trial form can be let through the free-turn cap without a client-
+      // asserted header. Unlike x-embed-trial-unlock below — which the client
+      // asserts and anyone can send — a proof cannot be forged: the signature
+      // covers host|exp and only this server holds DIGICHAT_TRIAL_PROOF_SECRET,
+      // so only it can produce a token that verifies. A raw client-asserted
+      // X-Embed-Trial-Proof value is NEVER trusted.
+      // The proof binds host|exp|sig only — no tenant, no nonce — so the gate
+      // compares the VERIFIED host itself and a valid proof for another host
+      // buys nothing. The proof's host is the canonical bare registry host
+      // while the browser sends the embed origin as a URL, so compare the
+      // canonical forms. A sanctioned bypass must not spend the visitor's
+      // budget, so once a proof is accepted the per-IP quota below is not
+      // consulted at all. No proof, no bypass: an absent, malformed, expired,
+      // wrongly-signed or wrong-host proof leaves the gate exactly as it was.
+      const proofToken = req.headers.get("x-embed-trial-proof")?.trim();
+      const proofSecret = process.env.DIGICHAT_TRIAL_PROOF_SECRET?.trim();
+      if (proofToken && proofSecret) {
+        const proofHost = verifyTrialProof(proofToken, proofSecret);
+        const embedHost = normalizeEmbedHost(req.headers.get("x-embed-host"));
+        if (
+          proofHost &&
+          embedHost &&
+          normalizeEmbedHost(proofHost) === embedHost
+        ) {
+          quotaSatisfied = true;
+        }
+      }
     }
 
     if (!quotaSatisfied) {
@@ -347,8 +422,32 @@ export async function POST(req: Request) {
   // before the backend branch so it applies to foundry too, not just digigraph.
   // Prefer X-Digi-Model on the house path. Bound BYOK spends the visitor's
   // provider models — the CI picker must not reject those ids (#3829).
-  let modelId = digigraphModelName();
-  const requestedModel = req.headers.get("x-digi-model")?.trim() || undefined;
+  // The tenant's curated default wins over the deployment-wide fallback:
+  // `models.default` is what the picker shows as selected, so using it here
+  // keeps the first turn on the same model the visitor sees (v4.1-flash for
+  // OCC) instead of the digigraph operator default. Only a slug the tenant
+  // actually offers is trusted; anything else falls back.
+  const curatedDefault = dep?.models?.default?.trim();
+  const tenantDefaultModel =
+    curatedDefault &&
+    ((dep?.models?.available?.length ?? 0) === 0 ||
+      dep!.models!.available!.includes(curatedDefault))
+      ? curatedDefault
+      : undefined;
+  let modelId = tenantDefaultModel || digigraphModelName();
+  // A tenant with lockSessionControls pins the house default model (DIG-1210):
+  // a visitor's /model pick or session_set_model result is never forwarded.
+  // Exception: a locked tenant that curates its own `models.available` list
+  // lets the visitor pick from exactly that list (allowlist enforced below).
+  const lockedWithoutModelList =
+    embedConfig?.lockSessionControls === true &&
+    (embedConfig.models?.available?.length ?? 0) === 0;
+  const requestedModel = lockedWithoutModelList
+    ? undefined
+    : req.headers.get("x-digi-model")?.trim() || undefined;
+  // House-path session model (non-BYOK, allowlisted). digigraph only binds it
+  // when the slug is also on its own DIGI_SESSION_MODEL_ALLOWLIST.
+  let houseSessionModel: string | undefined;
   try {
     const { allowlistModelId } = await import("@/lib/deploy-config");
     if (byokKey) {
@@ -366,6 +465,7 @@ export async function POST(req: Request) {
         );
       }
       if (allowed) modelId = allowed;
+      if (requestedModel && allowed) houseSessionModel = allowed;
     } else if (configFailed && requestedModel) {
       // The deployment config could not be read, so we cannot prove the model
       // is allowed → fail closed rather than forward an unverified id.
@@ -501,7 +601,7 @@ export async function POST(req: Request) {
     return new Response(
       JSON.stringify({
         error: "byok_model_required",
-        message: `${byokProvider} BYOK requires X-BYOK-Model (e.g. openai/gpt-4o-mini, claude-…, gemini/…).`,
+        message: `${byokProvider} BYOK requires X-BYOK-Model (e.g. ${byokModelExample(byokProvider) ?? "your provider's model id"}).`,
       }),
       { status: 400, headers: { "content-type": "application/json" } }
     );
@@ -643,6 +743,9 @@ export async function POST(req: Request) {
   }
 
   // BYOK: forward per-request key to digigraph; never log or persist.
+  if (!byokKey && houseSessionModel) {
+    upstreamHeaders["X-Digi-House-Model"] = houseSessionModel;
+  }
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;
     if (byokProvider) {
@@ -670,6 +773,10 @@ export async function POST(req: Request) {
           upstreamHeaders,
           responseHeaders,
           activityDetail,
+          // BYOK models travel in their own header; only the house model
+          // belongs in the request body. `modelId` is the pick (when the
+          // tenant curates a list) or the curated default.
+          model: byokKey ? undefined : modelId,
           signal: req.signal,
         }),
       );

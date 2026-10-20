@@ -9,7 +9,6 @@ exposure beats research fan-out): USO is a commodity, QQQ is broad equity.
 from __future__ import annotations
 
 import pytest
-from digiquant.portfolio import sector_map
 from digiquant.portfolio.sector_map import (
     UNKNOWN_BUCKET,
     UNKNOWN_CLASS,
@@ -107,9 +106,3 @@ def test_every_sector_single_name_is_equity() -> None:
         b = bucket(ticker)
         assert b.sector in slugs, f"{ticker} → {b.sector}, expected one of {slugs}"
         assert b.asset_class == "EQUITY", ticker
-
-
-def test_module_exports_are_callable() -> None:
-    assert callable(sector_map.bucket)
-    assert callable(sector_map.sector_bucket)
-    assert callable(sector_map.asset_class)

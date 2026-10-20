@@ -187,6 +187,8 @@ export function useStockChatPrefs({
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort })),
       setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
+      setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
+      setScrollbars: (mode) => setChatPrefs((p) => ({ ...p, scrollbars: mode })),
       reset: () =>
         setChatPrefs({
           ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
@@ -208,6 +210,9 @@ export function useStockChatPrefs({
       sessionKey,
       openSettings: () => {
         setComposerMenu("settings");
+      },
+      openHelp: () => {
+        setComposerMenu("help");
       },
       openTools: () => {
         setComposerMenu("tools");

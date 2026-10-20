@@ -18,17 +18,29 @@ import argparse
 import json
 import math
 import sys
+import warnings
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+from lib.roots import RESEARCH_CONFIG  # noqa: E402
 
 # Load .env if present (repo root carries the R2 credentials this read needs).
 try:
     from dotenv import load_dotenv
     load_dotenv(ROOT / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 
 def lookup_close(ticker: str, entry_date: str) -> float | None:
@@ -78,7 +90,7 @@ def main():
     )
     args = parser.parse_args()
 
-    portfolio_path = ROOT / "config" / "portfolio.json"
+    portfolio_path = RESEARCH_CONFIG / "portfolio.json"
     if not portfolio_path.exists():
         print(f"❌ Not found: {portfolio_path}", file=sys.stderr)
         sys.exit(1)

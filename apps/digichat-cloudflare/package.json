@@ -1,9 +1,17 @@
 {
-  "name": "digithings-digichat-cloudflare",
+  "name": "digichat-cloudflare",
+  "description": "Cloudflare container worker for digichat.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digichat-cloudflare"
+  },
   "private": true,
   "type": "module",
   "scripts": {
-    "deploy": "wrangler deploy",
+    "deploy": "node scripts/deploy.mjs",
     "dev": "wrangler dev",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

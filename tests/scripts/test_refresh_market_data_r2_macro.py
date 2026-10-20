@@ -184,11 +184,20 @@ def test_registry_declares_cadences_for_slow_series() -> None:
         assert "cadence: weekly" in _series_block(text, series), series
 
 
-def test_daily_series_carry_no_cadence() -> None:
-    """Daily is the default, so the daily block should stay unannotated."""
+def test_daily_series_declare_daily_explicitly() -> None:
+    """Daily is the default, but it is now declared rather than inferred.
+
+    DIG-2406 gave all 17 fetched daily FRED ids an explicit ``cadence: daily``.
+    Leaving them unannotated made them ride the fallback by accident, and the
+    fallback is the *narrowest* window, so the accident cost patience rather than
+    granting it. Declaring the default keeps the two cases distinguishable:
+    a deliberate ``daily`` and a genuinely undeclared series (a Yahoo FX symbol
+    or a ``--macro-series`` override), which is what
+    ``test_cli_specs_default_to_daily`` and the Yahoo block still pin.
+    """
     text = MACRO_YAML.read_text()
     for series in ("DGS10", "DFF", "SOFR", "VIXCLS", "DCOILWTICO"):
-        assert "cadence:" not in _series_block(text, series), series
+        assert "cadence: daily" in _series_block(text, series), series
 
 
 def test_resolver_carries_the_manifest_cadence() -> None:
@@ -196,8 +205,52 @@ def test_resolver_carries_the_manifest_cadence() -> None:
     by_series = {series: cadence for _source, series, cadence in specs}
     assert by_series["PCEPI"] == "monthly"
     assert by_series["ICSA"] == "weekly"
-    assert by_series["DGS10"] is None
+    # Declared daily, and declared *as* daily -- not absent. See DIG-2406.
+    assert by_series["DGS10"] == "daily"
 
 
 def test_cli_specs_default_to_daily() -> None:
     assert refresh._resolve_macro_specs(["fred:PCEPI"], "unused") == [("fred", "PCEPI", None)]
+
+
+# -- unreadable manifest is reported, not raised or discarded (DIG-1371) -----
+
+
+def test_resolver_reports_an_unreadable_manifest_without_raising(tmp_path: Path) -> None:
+    """The resolver must not raise, and must not just return ``[]``.
+
+    A raise here would abort ``main`` *before* ``refresh_universe``, turning a
+    broken manifest into a total market-data outage; a bare ``[]`` is what made
+    the run report fresh. The empty spec list therefore carries the cause, and
+    ``main`` turns it into a loud outcome after the price leg has run.
+    """
+    missing = tmp_path / "no-such-directory" / "macro_series.yaml"
+
+    result = refresh._resolve_macro_specs([], str(missing))  # must not raise
+
+    assert list(result) == [], "an unreadable manifest resolves to no series"
+    assert result.manifest_error, (
+        "the resolver discarded the failure: main cannot tell a deliberate "
+        "price-only run from a manifest it could not read"
+    )
+    assert "FileNotFoundError" in result.manifest_error, result.manifest_error
+    assert str(missing) in result.manifest_error, result.manifest_error
+
+
+def test_resolver_manifest_error_is_empty_on_every_readable_path(tmp_path: Path) -> None:
+    """Only the except arm may manufacture a ``manifest_error``.
+
+    Two failure modes the readable paths would each introduce if they did:
+    a ``--skip-macro``-style price-only run turning loud, and the shipped
+    panel's daily run failing every day. The result also stays a plain ``list``
+    so every existing caller — ``main``'s refresh loop, ``_slow_macro_exempt_ids``
+    and the digiquant test doubles that substitute this resolver — keeps working.
+    """
+    from_cli = refresh._resolve_macro_specs(["fred:PCEPI"], "unused")
+    from_manifest = refresh._resolve_macro_specs([], str(MACRO_YAML))
+
+    assert from_cli.manifest_error == ""
+    assert from_manifest.manifest_error == ""
+    assert from_manifest, "the shipped manifest must still resolve a panel"
+    for result in (from_cli, from_manifest):
+        assert isinstance(result, list)

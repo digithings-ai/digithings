@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   buildLevelFixSeries,
   composeFixSeries,
@@ -7,7 +8,8 @@ import {
   pairFixSpec,
   type FxFixPoint,
 } from './level-vs-fix';
-import type { FxIdeaEvalRow, FxTradeIdeaRow } from './types';
+import type { FxIdeaEvalRow, FxTradeIdeaRow, FxTradeLevels } from './types';
+import { buildIdeaDetailModel } from './trade-levels';
 
 describe('normalizeFixPair', () => {
   it('normalizes compact and dashed forms to BASE/QUOTE', () => {
@@ -149,6 +151,22 @@ function evalRow(partial: Partial<FxIdeaEvalRow> = {}): FxIdeaEvalRow {
   };
 }
 
+/**
+ * A bracket with every slot populated, at an arbitrary status. The guard is
+ * about publishability, so status is the only thing that should change the
+ * result — the shape is held constant on purpose.
+ */
+function bracket(status: string) {
+  return {
+    entry_low: { value: '1.0800', provenance: 'broker_quoted', source_ref: 'desk' },
+    entry_high: { value: '1.0850', provenance: 'broker_quoted', source_ref: 'desk' },
+    stop: { value: '1.0700', provenance: 'broker_quoted', source_ref: 'desk' },
+    targets: [{ value: '1.1000', provenance: 'broker_quoted', source_ref: 'desk' }],
+    risk_reward: 2,
+    status,
+  };
+}
+
 describe('buildLevelFixSeries', () => {
   it('combines flat published levels with the table fix history and anchors', () => {
     const s = buildLevelFixSeries(
@@ -175,13 +193,160 @@ describe('buildLevelFixSeries', () => {
     ]);
   });
 
+  it('withholds the whole ladder until the bracket is publishable', () => {
+    // A non-publishable bracket can still carry a surviving target — the ladder
+    // is all-or-nothing, so no single leg may reach the chart on its own. The
+    // fix history is not part of the ladder and must survive either way.
+    const bracket: FxTradeLevels = {
+      entry_low: { value: '1.0800', provenance: 'broker_quoted', source_ref: 'desk' },
+      entry_high: { value: '1.0850', provenance: 'broker_quoted', source_ref: 'desk' },
+      stop: { value: '1.0700', provenance: 'broker_quoted', source_ref: 'desk' },
+      targets: [{ value: '1.1000', provenance: 'broker_quoted', source_ref: 'desk' }],
+      risk_reward: 2,
+      status: 'partial',
+    };
+    const fixes = pts(['2026-06-13', '2026-06-14'], [1.082, 1.086]);
+
+    const withheld = buildLevelFixSeries(idea({ trade_levels: bracket }), evalRow(), fixes);
+    expect(withheld.entryLow).toBeNull();
+    expect(withheld.entryHigh).toBeNull();
+    expect(withheld.stop).toBeNull();
+    expect(withheld.targets).toEqual([]);
+    expect(withheld.points).toHaveLength(2);
+
+    const published = buildLevelFixSeries(
+      idea({ trade_levels: { ...bracket, status: 'complete' } }),
+      evalRow(),
+      fixes,
+    );
+    expect(published.entryLow).toBeCloseTo(1.08, 10);
+    expect(published.entryHigh).toBeCloseTo(1.085, 10);
+    expect(published.stop).toBeCloseTo(1.07, 10);
+    expect(published.targets).toEqual([1.1]);
+  });
+
   it('handles missing levels and missing eval gracefully', () => {
     const s = buildLevelFixSeries(idea({ trade_levels: null }), null, []);
     expect(s.entryLow).toBeNull();
     expect(s.targets).toEqual([]);
     expect(s.points).toEqual([]);
     expect(s.anchorsOnly).toBe(false);
+    // No bracket at all is not "pending" — there is nothing to wait for.
+    expect(s.levelsPending).toBe(false);
   });
+
+  it('withholds the level series when the bracket is not complete', () => {
+    const s = buildLevelFixSeries(
+      idea({
+        trade_levels: {
+          targets: [{ value: '1.1000', provenance: 'broker_quoted', source_ref: 'desk' }],
+          status: 'partial',
+        },
+      }),
+      evalRow(),
+      pts(['2026-06-13', '2026-06-14'], [1.082, 1.086]),
+    );
+    // A target with no entry band and no stop is a half ladder: publish none of it.
+    expect(s.entryLow).toBeNull();
+    expect(s.entryHigh).toBeNull();
+    expect(s.stop).toBeNull();
+    expect(s.targets).toEqual([]);
+    expect(s.levelsPending).toBe(true);
+    // The fix line itself is real data and still renders.
+    expect(s.points).toHaveLength(2);
+  });
+
+  it('flags an incomplete (statusless) bracket as pending, not published', () => {
+    // No `status` coerces to 'incomplete' — populated, but not publishable.
+    const { status: _status, ...populated } = idea().trade_levels!;
+    const s = buildLevelFixSeries(idea({ trade_levels: populated }), evalRow(), []);
+    expect(s.entryLow).toBeNull();
+    expect(s.targets).toEqual([]);
+    expect(s.levelsPending).toBe(true);
+  });
+
+  it('keeps levelsPending false for a complete bracket', () => {
+    const s = buildLevelFixSeries(idea(), evalRow(), []);
+    expect(s.entryLow).toBeCloseTo(1.08, 10);
+    expect(s.levelsPending).toBe(false);
+  });
+
+  // ---- publishability gate (DIG-260 L5, widened leaf) ----
+  // The component gates `LevelFixSection` on `levelsPublished`, which masked
+  // this hole rather than closing it: a half bracket drawn inside the chart
+  // carries an axis and a legend, so it reads as actionable. These pin the
+  // gate at the layer it belongs to, so widening the component gate can never
+  // resurrect the ladder.
+  it.each(['partial', 'incomplete', 'draft'])(
+    'withholds every level from a %s bracket even when all four slots are populated',
+    (status) => {
+      const s = buildLevelFixSeries(idea({ trade_levels: bracket(status) }), evalRow(), []);
+      expect(s.entryLow).toBeNull();
+      expect(s.entryHigh).toBeNull();
+      expect(s.stop).toBeNull();
+      expect(s.targets).toEqual([]);
+    },
+  );
+
+  it('keeps levels for a complete bracket with the same shape', () => {
+    const s = buildLevelFixSeries(idea({ trade_levels: bracket('complete') }), evalRow(), []);
+    expect(s.entryLow).toBeCloseTo(1.08, 10);
+    expect(s.entryHigh).toBeCloseTo(1.085, 10);
+    expect(s.stop).toBeCloseTo(1.07, 10);
+    expect(s.targets).toEqual([1.1]);
+  });
+
+  it('leaves the fix line and eval anchors intact when the bracket is withheld', () => {
+    // The gate is about the ladder, not the chart's other subject: the fix
+    // history and the entry/exit anchors come from the eval row and must
+    // survive so the chart can still render them.
+    const s = buildLevelFixSeries(idea({ trade_levels: bracket('partial') }), evalRow(), []);
+    expect(s.points).toEqual([
+      { date: '2026-06-13', fix: 1.082 },
+      { date: '2026-06-18', fix: 1.095 },
+    ]);
+    expect(s.anchorsOnly).toBe(true);
+    expect(s.entryFix).toBeCloseTo(1.082, 10);
+    expect(s.exitFix).toBeCloseTo(1.095, 10);
+    expect(s.entryDate).toBe('2026-06-13');
+    expect(s.exitDate).toBe('2026-06-18');
+    expect(s.pair).toBe('EUR/USD');
+  });
+
+  it('treats a complete but slotless bracket as empty rather than as withheld data', () => {
+    const s = buildLevelFixSeries(idea({ trade_levels: { status: 'complete' } }), evalRow(), []);
+    expect(s.entryLow).toBeNull();
+    expect(s.entryHigh).toBeNull();
+    expect(s.stop).toBeNull();
+    expect(s.targets).toEqual([]);
+  });
+
+  // This file used to carry a byte-identical copy of the publishability
+  // predicate, and the guard for that was a cross-check of the two gates
+  // against each other. Now that both import one exported predicate the
+  // cross-check compares a function with itself, so it would pass no matter
+  // how the predicate changed. What is left to guard is the duplication
+  // itself: a future re-copy would reintroduce exactly the drift.
+  it('imports the publishability predicate instead of redeclaring it', () => {
+    const src = readFileSync(new URL('./level-vs-fix.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/import\s*\{[^}]*\bisPublishableBracket\b[^}]*\}\s*from '\.\/trade-levels'/);
+    expect(src).not.toMatch(/^\s*(export\s+)?function isPublishableBracket\b/m);
+  });
+
+  it.each(['complete', 'partial', 'incomplete', 'draft'])(
+    'agrees with the IdeaDetail model gate on a %s bracket',
+    (status) => {
+      const ideaRow = idea({ trade_levels: bracket(status) });
+      const series = buildLevelFixSeries(ideaRow, evalRow(), []);
+      const model = buildIdeaDetailModel(ideaRow);
+      const chartShowsLevels = series.entryLow !== null || series.targets.length > 0;
+      // All slots are populated, so the model publishes rows iff the bracket is
+      // publishable; its `levelsPending` is therefore the model-side publish flag.
+      const modelPublishes = !model.levelsPending;
+      expect(model.levelRows.length > 0).toBe(modelPublishes);
+      expect(chartShowsLevels).toBe(modelPublishes);
+    },
+  );
 });
 
 describe('fixWindowDays', () => {

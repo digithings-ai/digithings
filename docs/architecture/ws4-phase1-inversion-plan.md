@@ -39,7 +39,7 @@ stylesheet/`@source` changes. Anywhere else costs a contract + host-CSS update.
 
 MOVABLE-AS-IS: `stock-send-gate.tsx` (already injected `handlers` — the pattern to
 copy); `deploy-ui-context.tsx` (type-only lib imports; host injects value at
-`product-shell.tsx:454`); `credit-footer.tsx` (conditional: co-move `cn` +
+`product-shell.tsx:404`); `credit-footer.tsx` (conditional: co-move `cn` +
 `skin-chrome`, add `"use client"` — it consumes context but declares none).
 
 NEEDS-INTERFACE (minimal, mechanical):
@@ -73,13 +73,12 @@ props with same defaults (already shadowed by context). `tool-fallback.aui.tsx`:
    `skins.source.test.ts`); no behavior change.
 2. **Pure moves** — `stock-send-gate`, `deploy-ui-context`, `credit-footer`,
    registry `thread-skins.ts` (plain module; 14 app importers re-point — incl.
-   server `page.tsx:9` and `deploy-config/schema.ts:13`, both fine importing a
+   server `page.tsx:13` and `deploy-config/schema.ts:13`, both fine importing a
    package), WS3 contract. Rewire `cn` → `src/lib/utils`, kit `Button`/`Tooltip`.
 3. **Interface cuts** — the four NEEDS-INTERFACE modules above; hosts provide values
-   at the 3 mount points (product-shell `:455` area, baseline-client `:126/127`,
-   embed-client `:1243` area). Delete the dead `welcome` prop (declared in
-   `ThreadSkinViewProps`, never forwarded — remove at type + `product-shell:531`
-   call site; behavior-neutral).
+   at the 3 mount points (product-shell `:405` area, baseline-client `:182-184`,
+   embed-client `:1251`). Dead `welcome` on `ThreadSkinViewProps` already removed
+   (`3994d20a6`); live call is `digichat-host.tsx:273-276`.
 4. **Skin + stock move** — `git mv` the trees; mechanical import rewrites
    (`@/lib/utils` → relative, `@/app/(baseline)/stock/*` → relative,
    `@/components/stock/*` → sibling/context, `@/lib/*` → props per above).

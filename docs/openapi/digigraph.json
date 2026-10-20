@@ -473,6 +473,24 @@
             "description": "Per-request digisearch index. Client-writable on this model but, when DIGI_TENANT_CORPUS_MAP is set, overwritten server-side from the authenticated tenant's map entry (headers/body cannot select another tenant's corpus). When the map is unset, X-Digi-Corpus-Index may set it.",
             "title": "digisearch index"
           },
+          "digisearch_tools": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tenant map digisearchTools (DIG-3269): dedicated per-index search tools. Overwritten server-side from the tenant map, never trusted from the client.",
+            "title": "Digisearch Tools"
+          },
           "disabled_tools": {
             "anyOf": [
               {
@@ -532,6 +550,12 @@
             ],
             "description": "Optional per-request locate tool to run with the user string as its query (X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. Extra operator MCP server ids (from X-Digi-Mcp-Servers) are also accepted: those hint the model with tool_choice=required rather than injecting a locate call.",
             "title": "Force Tool"
+          },
+          "lock_session_controls": {
+            "default": false,
+            "description": "Tenant map lockSessionControls (DIG-1210). Overwritten server-side by _with_digi_request_context, never trusted from the client.",
+            "title": "Lock Session Controls",
+            "type": "boolean"
           },
           "mcp_servers": {
             "anyOf": [
@@ -885,7 +909,7 @@
     },
     "/healthz": {
       "get": {
-        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nContract: returns HTTP 200 with ``{\"ok\": true}``. Intended for load\nbalancers and k8s probes. For richer diagnostics, see digismith's\n``/v1/status``.",
+        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nContract: returns HTTP 200 with ``{\"ok\": true}``. Intended for load\nbalancers and k8s probes. For richer diagnostics, see digitrace's\n``/v1/status``.",
         "operationId": "healthz_healthz_get",
         "responses": {
           "200": {
@@ -1145,6 +1169,27 @@
         "tags": [
           "openai-compatible"
         ]
+      }
+    },
+    "/v1/mcp/decisions": {
+      "post": {
+        "description": "Apply one human decision to one recorded call, at most once.",
+        "operationId": "post_mcp_decision_v1_mcp_decisions_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Mcp Decision V1 Mcp Decisions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Post Mcp Decision"
       }
     },
     "/v1/model-info": {

@@ -308,6 +308,11 @@
   }
 }
 
+.digichat-launcher [data-slot="aui_composer-shell"] {
+  --composer-bg: transparent;
+  background: transparent;
+}
+
 /* Compact Thread inside the panel: one input row until a newline.
    Overrides registry min-h-7 / leading-7 / gap-2 / 8px composer padding.
    Empty and one-line typed share 1lh — do not shorten :placeholder-shown. */

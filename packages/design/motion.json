@@ -1,0 +1,6 @@
+{
+  "ease": { "house": [0.22, 1, 0.36, 1] },
+  "duration": { "hover": 180, "reveal": 600, "copied": 1500, "build": 1400 },
+  "frame": { "tick": 40, "spinner": 80, "caret": 530, "type": 16, "clock": 100 },
+  "reduced": { "duration": 0, "frame": null }
+}

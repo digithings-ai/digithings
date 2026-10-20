@@ -55,7 +55,6 @@ try:
     from alpaca.common.exceptions import APIError as _AlpacaAPIError
     from alpaca.trading.client import TradingClient as _TradingClient
     from alpaca.trading.enums import OrderSide as _AlpacaOrderSide
-    from alpaca.trading.enums import OrderStatus as _AlpacaOrderStatus
     from alpaca.trading.enums import QueryOrderStatus as _QueryOrderStatus
     from alpaca.trading.enums import TimeInForce as _AlpacaTimeInForce
     from alpaca.trading.requests import GetOrdersRequest as _GetOrdersRequest
@@ -65,7 +64,6 @@ except ImportError:  # pragma: no cover - exercised by the no-extra import test
     _AlpacaAPIError = None  # type: ignore[assignment, misc]
     _TradingClient = None  # type: ignore[assignment, misc]
     _AlpacaOrderSide = None  # type: ignore[assignment, misc]
-    _AlpacaOrderStatus = None  # type: ignore[assignment, misc]
     _QueryOrderStatus = None  # type: ignore[assignment, misc]
     _AlpacaTimeInForce = None  # type: ignore[assignment, misc]
     _GetOrdersRequest = None  # type: ignore[assignment, misc]

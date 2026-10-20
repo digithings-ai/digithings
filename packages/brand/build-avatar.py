@@ -31,7 +31,8 @@ import sys
 from pathlib import Path
 
 BRAND = Path(__file__).resolve().parent
-REPO_ROOT = BRAND.parents[2]
+# packages/brand sits one directory under the repo root (parents[0] is packages/).
+REPO_ROOT = BRAND.parents[1]
 SOURCE_TILE = REPO_ROOT / "apps" / "digithings-web" / "public" / "favicon-dg.svg"
 OUT_DIR = BRAND / "avatar"
 

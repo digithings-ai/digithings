@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef, type ComponentPropsWithoutRef, type FC } from "react";
+import { memo, useEffect, useRef, type ComponentPropsWithoutRef, type FC } from "react";
 import {
   ComposerPrimitive,
   unstable_defaultDirectiveFormatter,
@@ -9,6 +9,8 @@ import {
   type Unstable_TriggerItem,
 } from "@assistant-ui/react";
 import { cn } from "./cn";
+import { DotMatrix } from "../DotMatrix";
+import { OverlayScrollbar } from "../overlay-scrollbar";
 
 type IconComponent = FC<{ className?: string }>;
 
@@ -65,13 +67,16 @@ type ItemsProps = {
 
 const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
   const { isLoading } = unstable_useTriggerPopoverScopeContext();
+  const listRef = useRef<HTMLDivElement | null>(null);
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverItems>
       {(items) => (
+        <div className="relative min-h-0">
         <div
           data-slot="composer-trigger-popover-items"
           className="flex max-h-[min(50vh,22rem)] flex-col overflow-y-auto py-1"
           ref={(node) => {
+            listRef.current = node;
             node
               ?.querySelector<HTMLElement>("[data-highlighted]")
               ?.scrollIntoView({ block: "nearest" });
@@ -82,11 +87,16 @@ const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
               key={item.id}
               item={item}
               index={index}
-              className="flex w-full cursor-pointer items-baseline justify-between gap-4 px-3 py-1.5 text-start outline-none outline-offset-[-1px] data-[highlighted]:outline data-[highlighted]:outline-1"
+              className="flex w-full cursor-pointer items-center gap-2 px-2 py-1 text-start text-sm outline-none"
             >
-              <span className="shrink-0 text-sm font-medium">{item.label}</span>
+              {/* Same mark language as the composer menu: the highlighted
+                  row gets the user-message chevron and shifts right. */}
+              <span className="aui-menu-cursor" aria-hidden>
+                <DotMatrix state="user" className="size-3.5" />
+              </span>
+              <span className="shrink-0 font-medium">{item.label}</span>
               {item.description ? (
-                <span className="text-muted-foreground min-w-0 truncate text-end text-xs leading-tight">
+                <span className="text-muted-foreground ml-auto min-w-0 truncate text-end text-xs leading-tight">
                   {item.description}
                 </span>
               ) : null}
@@ -97,6 +107,8 @@ const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
               {isLoading ? loadingLabel : emptyLabel}
             </div>
           )}
+        </div>
+        <OverlayScrollbar targetRef={listRef} width={6} />
         </div>
       )}
     </ComposerPrimitive.Unstable_TriggerPopoverItems>
@@ -130,6 +142,31 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
       "[assistant-ui] ComposerTriggerPopover requires exactly one of `directive` or `action` props.",
     );
   }
+
+  // Focus stays in the composer textarea while the picker is open, so the
+  // keys are caught at document level (capture) rather than on the popover.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      const popover = document.querySelector<HTMLElement>(
+        '[data-slot="composer-trigger-popover"]',
+      );
+      if (!popover) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "ArrowRight") {
+        // Same as Enter: submit the highlighted row.
+        popover.querySelector<HTMLElement>("[data-highlighted]")?.click();
+        return;
+      }
+      // Same as Escape: go back / close the picker.
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, []);
 
   return (
     <ComposerPrimitive.Unstable_TriggerPopover

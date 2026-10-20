@@ -42,7 +42,7 @@ The platform integrates with and extends the open-source tools clients may alrea
 Shipped and in active use:
 
 ### digigraph — agent orchestration hub
-LangGraph-based workflow engine with a supervisor node, research and analysis sub-graphs, dynamic tool registry, OpenAI-compatible API, server-sent event (SSE) streaming, JWT auth, per-IP rate limiting, LLM routing (LiteLLM today, migrating to the shared digillm library), digismith tracing, and an MCP server. Parallel tool execution and tool allowlist/policy enforcement included.
+LangGraph-based workflow engine with a supervisor node, research and analysis sub-graphs, dynamic tool registry, OpenAI-compatible API, server-sent event (SSE) streaming, JWT auth, per-IP rate limiting, LLM routing through the shared [[digillm|digillm]] library, digitrace tracing, and an MCP server. Parallel tool execution and tool allowlist/policy enforcement included.
 
 ### digiquant — quantitative finance platform
 NautilusTrader-backed strategy engine with backtest and optimisation nodes wired into digigraph. Connects to OpenBB for market data. Research, portfolio, and execution sub-graphs are in active development.
@@ -51,12 +51,12 @@ NautilusTrader-backed strategy engine with backtest and optimisation nodes wired
 Document ingestion, chunking, embedding, and hybrid vector/keyword search. Pluggable backends. Powers the client pilot's internal document search deployment.
 
 ### digichat — chat interface and BFF
-Next.js production chat UI (`apps/digichat`) — BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level. Not deployed publicly yet; the digithings.ai demo still runs a separate bespoke widget pending the gateway cutover ([ADR-0018](../adr/0018-digichat-path-routing.md), epic [#1248](https://github.com/digithings-ai/digithings/issues/1248)).
+Next.js production chat UI (`apps/digichat`) — BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level. Deployed publicly: the digichat Worker owns the `digithings.ai` zone routes for the app and its APIs (`/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*`) and proxies them to the digichat Cloudflare Container, while the Pages site serves the `/chat` shell that embeds it ([ADR-0018](../adr/0018-digichat-path-routing.md)). The earlier bespoke OpenRouter widget is retired — its Pages Function now answers `410 chat_migrated`. Epic [#1248](https://github.com/digithings-ai/digithings/issues/1248) is closed; route map and evidence in [digichat](digichat.md).
 
 ### digikey — auth control plane
 JWT-based authentication with scoped API keys (RS256, JWKS endpoint), SSO federation groundwork, org and project membership model.
 
-### digismith — observability
+### digitrace — observability
 LangSmith tracing, Prometheus metrics, correlation IDs (workflow, request, session). `/v1/status` public endpoint.
 
 ### digiclaw — always-on agent orchestration
@@ -97,7 +97,7 @@ Human-facing operator surface (`apps/dashboard`) for research, portfolio deliber
 - digigraph engine, tool registry, LangGraph integration, OpenAI-compatible API, MCP server
 - digisearch ingestion and retrieval pipeline
 - digikey auth primitives
-- digismith tracing helpers
+- digitrace tracing helpers
 - digiclaw heartbeat and audit core
 - digibase shared library
 - digillm LLM client library
@@ -122,6 +122,6 @@ The open core is the infrastructure. The proprietary layer is the domain experti
 One document per module — positioning, current state, 12-month roadmap, and open vs. proprietary split:
 
 - [[digigraph|digigraph]] · [[digiquant|digiquant]] · [[digisearch|digisearch]] · [[digichat|digichat]]
-- [[digikey|digikey]] · [[digismith|digismith]] · [[digiclaw|digiclaw]] · [[digibase|digibase]] · [[digivault|digivault]]
+- [[digikey|digikey]] · [[digitrace|digitrace]] · [[digiclaw|digiclaw]] · [[digibase|digibase]] · [[digivault|digivault]]
 - [[digillm|digillm]] · [[digifetch|digifetch]] · [[digidev|digidev]] · [[dashboard|digiquant dashboard]]
 - [[digilink|digilink]] · [[digistore|digistore]] *(designed, not yet shipped)*

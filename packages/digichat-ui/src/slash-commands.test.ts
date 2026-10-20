@@ -241,3 +241,15 @@ describe("SLASH_COMMANDS", () => {
     });
   });
 });
+
+describe("/artifacts visibility", () => {
+  it("lists /artifacts only when the surface is declared", () => {
+    const withSurface = matchingSlashCommands("/", { artifacts: true }).map((c) => c.id);
+    expect(withSurface).toContain("artifacts");
+    // Without the flag the row is hidden, so a surface can never be implied.
+    expect(matchingSlashCommands("/", {}).map((c) => c.id)).not.toContain("artifacts");
+    expect(matchingSlashCommands("/", { artifacts: false }).map((c) => c.id)).not.toContain(
+      "artifacts",
+    );
+  });
+});

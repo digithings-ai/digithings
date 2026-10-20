@@ -23,6 +23,8 @@ jobs:
   bitview-ingest:
     name: Bitview on-chain ingest
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     timeout-minutes: 15
     env:
       CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
@@ -35,6 +37,7 @@ jobs:
           ref: main
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra prices

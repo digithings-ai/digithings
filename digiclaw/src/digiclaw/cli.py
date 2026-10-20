@@ -107,11 +107,15 @@ def _scheduler_from_args(args: argparse.Namespace) -> Scheduler:
 
 
 def _dispatch_agent(agent: AgentDefinition) -> None:
-    """Run a known scheduled agent; unknown names keep the scheduler's no-op default."""
+    """Run a known scheduled agent; unknown names fail loudly (#3881)."""
     if agent.name == "web-watch-tick":
         from digiclaw.monitors_tick import run_due_monitors
 
         run_due_monitors()
+        return
+    from digiclaw.scheduler import default_agent_runner
+
+    default_agent_runner(agent)
 
 
 def _cmd_heartbeat(_args: argparse.Namespace) -> int:
@@ -166,12 +170,14 @@ def _cmd_schedule_tick(args: argparse.Namespace) -> int:
     if not outcomes:
         print("no due jobs")
         return 0
+    failed = False
     for outcome in outcomes:
         if outcome.ok:
             print(f"ran {outcome.name}: ok")
         else:
+            failed = True
             print(f"ran {outcome.name}: error ({outcome.error})")
-    return 0
+    return 1 if failed else 0
 
 
 def _fmt_dt(value: datetime | None) -> str:

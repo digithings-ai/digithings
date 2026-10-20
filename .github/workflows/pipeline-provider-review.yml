@@ -13,6 +13,11 @@ name: "Pipeline: provider review"
 
 on:
   workflow_dispatch:        # Manual trigger anytime
+    inputs:
+      start_key:
+        description: "Dedupe key from digithings-cron: <job.id>:<scheduledTime>. Blank when dispatched by hand."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -29,6 +34,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       # Installs from the committed uv.lock rather than resolving fresh (#1715).
@@ -49,6 +55,8 @@ jobs:
       pull-requests: write      # Step 3b opens a PR for the pushed bot/ branch
     name: Weekly provider review
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     timeout-minutes: 30
 
     steps:
@@ -77,6 +85,7 @@ jobs:
         if: steps.keycheck.outputs.present == 'true'
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       - name: Install dependencies from lockfile

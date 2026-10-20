@@ -6,6 +6,9 @@ P2). Owns everything about *which model string* a request should use:
 - ``model_modes.yaml`` loading + ``test`` / ``medium`` / ``best`` fallbacks
   (:func:`get_model_for_mode`, :func:`get_model_for_phase`). ``llm_mode: free`` is
   policy-only (no product slug pin); require ``agents.llm`` / ``DIGI_LLM_*``.
+- ``config/model-policy.json`` — the flagship classification markers and the mode
+  ladder's configured last resort (:class:`ModelPolicyConfig`). Loaded once at import,
+  fail-loud; no model id is a literal in this module (#5029).
 - :func:`resolve_effective_model` — ``OLLAMA_MODEL`` / mode-YAML selection,
   normalized for the active ``OPENAI_API_BASE`` (strips the LiteLLM ``ollama/``
   prefix when talking directly to Ollama's OpenAI shim).
@@ -26,8 +29,10 @@ BYOK) lives in :mod:`digigraph.llm_auth`.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
+from contextvars import ContextVar, Token
 from pathlib import Path
 
 import yaml
@@ -36,7 +41,14 @@ from digillm import (
     get_provider_api_key_env,
     is_registered_provider,
 )
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from digigraph.llm_auth import (
     byok_default_model_refusal,
@@ -53,34 +65,12 @@ logger = logging.getLogger(__name__)
 _MODEL_MODES_LOAD_ERRORS = (OSError, yaml.YAMLError)
 
 # Open-weight-only policy for dashboard / OpenRouter. Blocks frontier providers and IDs.
+#
+# A provider *prefix* is a routing fact about the endpoint, not a model id, so these
+# two stay in code; the model-id markers and the mode ladder's last resort moved to
+# config/model-policy.json (#5029). See ModelPolicyConfig for that file's schema and
+# why its load is fail-loud.
 _FLAGSHIP_PROVIDER_PREFIXES = frozenset({"openai/", "anthropic/"})
-_FLAGSHIP_MODEL_ID_MARKERS = frozenset(
-    {
-        "gpt-5",
-        "gpt-4o",
-        "gpt-4.1",
-        "gpt-4-turbo",
-        "o1-",
-        "o1/",
-        "o3-",
-        "o3/",
-        "o4-",
-        "claude-opus",
-        "claude-sonnet",
-        "claude-3-opus",
-        "claude-3-5-sonnet",
-        "claude-4",
-    }
-)
-# Mid-tier OpenAI/Anthropic slugs permitted on ``balanced`` (not ``cheap``). Google and
-# xAI models never reach this check — they're never classified flagship (see
-# _FLAGSHIP_PROVIDER_PREFIXES / _FLAGSHIP_MODEL_ID_MARKERS above), so they're already
-# unrestricted on ``balanced``.
-_BALANCED_FLAGSHIP_MARKERS = frozenset(
-    {
-        "gpt-5.6-luna",
-    }
-)
 _NATIVE_SEARCH_ONLY_PREFIXES = frozenset({"perplexity/"})
 
 
@@ -241,6 +231,115 @@ class DigiquantModelsConfig(BaseModel):
     phase_capability_prefixes: dict[str, str] = Field(default_factory=dict)
 
 
+class ModelPolicyConfig(BaseModel):
+    """Parsed ``config/model-policy.json`` — the model *policy* routing reads from.
+
+    Unknown keys are preserved (a file this heavily annotated wants to carry
+    ``_comment``), so the strictness is in the validators, not in ``extra``.
+
+    Every field here is fail-loud, which is the opposite of the ``model_modes.yaml``
+    loaders above and deliberate. Those degrade because a missing default just means
+    "use the ladder"; a missing *classification* does not degrade, it inverts:
+
+    - no ``flagship_model_id_markers`` (or an empty set) classifies every model as
+      non-flagship, so every frontier model silently becomes eligible on ``cheap``
+      and ``balanced`` — a spend and a routing-policy change with no error anywhere;
+    - a blank marker is worse still: ``"" in slug`` is true for every slug, so it
+      flags everything;
+    - no ``fallback_model`` leaves :func:`_fallback_model_for_mode` with no last
+      resort, and the next thing it could return would be a different hardcoded id.
+
+    So each raises. Markers are lowercased on load because matching lowercases the
+    slug — a padded or mixed-case marker in the config would otherwise silently never
+    match. ``fallback_model`` keeps its case: it is handed to digillm verbatim.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    flagship_model_id_markers: list[str]
+    balanced_flagship_markers: list[str] = []
+    fallback_model: str
+
+    @field_validator("flagship_model_id_markers")
+    @classmethod
+    def _normalize_flagship_markers(cls, v: list[str]) -> list[str]:
+        return _normalize_markers(v, key="flagship_model_id_markers", required=True)
+
+    @field_validator("balanced_flagship_markers")
+    @classmethod
+    def _normalize_balanced_markers(cls, v: list[str]) -> list[str]:
+        """May be empty — see the class docstring; emptiness here is the safe direction."""
+        return _normalize_markers(v, key="balanced_flagship_markers", required=False)
+
+    @field_validator("fallback_model")
+    @classmethod
+    def _strip_fallback_model(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("fallback_model must be a non-empty model id")
+        return stripped
+
+
+def _normalize_markers(markers: list[str], *, key: str, required: bool) -> list[str]:
+    """Strip + lowercase *markers*, refusing blanks and (when *required*) emptiness."""
+    normalized: list[str] = []
+    for marker in markers:
+        cleaned = marker.strip().lower()
+        if not cleaned:
+            raise ValueError(f"{key} contains a blank marker, which would match every model id")
+        normalized.append(cleaned)
+    if required and not normalized:
+        raise ValueError(
+            f"{key} is empty, which would classify every model as non-flagship "
+            "and silently re-route phase models onto a tier never cleared for them"
+        )
+    return normalized
+
+
+def _resolve_model_policy_path() -> Path:
+    """Policy path: ``DIGI_CONFIG_PATH`` override, else the repo's ``config/``.
+
+    Same convention as :func:`digigraph.llm_auth._resolve_byok_catalog_path`, and for
+    the same reason: this file is required, so resolution must not depend on the
+    process's working directory. It deliberately does NOT use the bare
+    ``Path(DIGI_CONFIG_PATH or "config")`` that :func:`_load_model_modes` uses — that
+    form resolves relative to CWD, which is fine for an optional lenient file and wrong
+    for a required one.
+    """
+    config_dir_override = os.environ.get("DIGIQUANT_CONFIG_DIR") or os.environ.get("DIGI_CONFIG_PATH")
+    if config_dir_override:
+        return Path(config_dir_override) / "model-policy.json"
+    return Path(__file__).resolve().parents[3] / "config" / "model-policy.json"
+
+
+def _load_model_policy(path: Path) -> ModelPolicyConfig:
+    """Load the model policy from *path*. Raises on missing, malformed, or unusable.
+
+    Raises rather than warns-and-defaults; see :class:`ModelPolicyConfig`.
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"Model policy file not found at {path}")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Model policy at {path} is not valid JSON: {e}") from e
+    if not isinstance(raw, dict):
+        raise ValueError(f"Model policy at {path} must be a JSON object")
+    try:
+        return ModelPolicyConfig.model_validate(raw)
+    except ValidationError as e:
+        raise ValueError(f"Model policy at {path} is invalid: {e}") from e
+
+
+# Loaded ONCE at import time, not mtime-rechecked per call, and not lazily on first
+# use. This is policy, not deployment config: it changes at the pace of a code review,
+# not a redeploy (the reasoning in llm_auth's catalog load, which this mirrors). The
+# alternative — read on demand — makes the *first request* after a bad edit the thing
+# that fails, in whichever worker thread happened to get there first.
+_MODEL_POLICY_PATH = _resolve_model_policy_path()
+_MODEL_POLICY = _load_model_policy(_MODEL_POLICY_PATH)
+
+
 _EMPTY_MODEL_MODES = ModelModesConfig()
 _model_modes_cache: tuple[float, ModelModesConfig] | None = None
 _EMPTY_DIGIQUANT_MODELS = DigiquantModelsConfig()
@@ -252,7 +351,7 @@ _VALID_CAPABILITIES = frozenset({"extraction", "research", "reasoning"})
 def _load_model_modes() -> ModelModesConfig:
     """Load model modes YAML (mtime-cached). ``DIGI_MODEL_MODES_FILE`` overrides filename."""
     global _model_modes_cache
-    config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
+    config_dir = os.environ.get("DIGIQUANT_CONFIG_DIR") or os.environ.get("DIGI_CONFIG_PATH", "config")
     fname = (
         os.environ.get("DIGI_MODEL_MODES_FILE") or "model_modes.yaml"
     ).strip() or "model_modes.yaml"
@@ -282,7 +381,7 @@ def _load_model_modes() -> ModelModesConfig:
 
 
 def _digiquant_models_path() -> Path:
-    config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
+    config_dir = os.environ.get("DIGIQUANT_CONFIG_DIR") or os.environ.get("DIGI_CONFIG_PATH", "config")
     return Path(config_dir) / "digiquant_models.yaml"
 
 
@@ -323,14 +422,17 @@ def _openrouter_slug(model: str) -> str:
 
 
 def is_flagship_openrouter_model(model: str) -> bool:
-    """True when *model* names a blocked frontier provider or model family."""
+    """True when *model* names a blocked frontier provider or model family.
+
+    Markers come from :data:`_MODEL_POLICY`, read from ``config/model-policy.json``.
+    """
     slug = _openrouter_slug(model).strip().lower()
     if not slug:
         return False
     for prefix in _FLAGSHIP_PROVIDER_PREFIXES:
         if slug.startswith(prefix):
             return True
-    for marker in _FLAGSHIP_MODEL_ID_MARKERS:
+    for marker in _MODEL_POLICY.flagship_model_id_markers:
         if marker in slug:
             return True
     return False
@@ -343,9 +445,15 @@ def is_native_search_only_model(model: str) -> bool:
 
 
 def _balanced_allows_flagship_model(model: str) -> bool:
-    """Mid-tier frontier models allowed on ``balanced`` but not ``cheap``."""
+    """Mid-tier frontier models allowed on ``balanced`` but not ``cheap``.
+
+    From ``balanced_flagship_markers`` in ``config/model-policy.json``. Google and xAI
+    models never reach this check — they're never classified flagship (see
+    :data:`_FLAGSHIP_PROVIDER_PREFIXES` and ``flagship_model_id_markers``), so they're
+    already unrestricted on ``balanced``.
+    """
     slug = _openrouter_slug(model).strip().lower()
-    return any(marker in slug for marker in _BALANCED_FLAGSHIP_MARKERS)
+    return any(marker in slug for marker in _MODEL_POLICY.balanced_flagship_markers)
 
 
 def tier_allows_phase_model(model: str, tier: str) -> bool:
@@ -396,11 +504,24 @@ def get_digiquant_tier() -> str:
 
     Sole-read since #3784: ``DIGIQUANT_MODEL_TIER`` is the only key that selects
     a tier here, and no ``OLYMPUS_*`` alias is read anywhere (#4295).
+
+    An empty value is the kill switch: it forces ``cheap`` even when the yaml
+    ``default_tier`` is something else. A typo does the same, with a warning,
+    so it cannot silently follow a non-cheap yaml default. An unset variable
+    still uses that yaml default.
     """
+    if "DIGIQUANT_MODEL_TIER" not in os.environ:
+        return _load_digiquant_models().default_tier or "cheap"
     raw = os.environ.get("DIGIQUANT_MODEL_TIER", "").strip().lower()
     if raw in _VALID_MODEL_TIERS:
         return raw
-    return _load_digiquant_models().default_tier or "cheap"
+    if raw:
+        logger.warning(
+            "DIGIQUANT_MODEL_TIER=%r is not one of %s; using cheap",
+            raw,
+            ", ".join(sorted(_VALID_MODEL_TIERS)),
+        )
+    return "cheap"
 
 
 def _capability_for_phase(phase_slug: str, cfg: DigiquantModelsConfig) -> str | None:
@@ -601,7 +722,9 @@ def _fallback_model_for_mode(mode: str) -> tuple[str, str]:
     if data.default_model:
         return str(data.default_model), "model_modes.default_model"
     # ``free`` is policy-only — never read a product slug from defaults.free.
-    resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
+    # Last resort is ``fallback_model`` in config/model-policy.json, never a literal
+    # here: a product id in code is one nobody updates when the provider retires it.
+    resolved = data.defaults.get(mode) or data.defaults.get("test") or _MODEL_POLICY.fallback_model
     return resolved, ("model_modes" if data.defaults else "default")
 
 
@@ -614,7 +737,6 @@ def effective_llm_settings() -> dict[str, object]:
     """
     mode = _get_llm_mode()
     provider, model, api_key_env = _explicit_llm_config()
-    source = "default"
     resolved = _resolve_explicit_model(provider, model)
     if resolved is not None:
         source = "agents.llm" if os.environ.get("DIGI_PROJECT_CONFIG") else "env"
@@ -677,6 +799,34 @@ def operator_default_model() -> str:
     return _refuse_paid_in_free_mode(resolved, mode)
 
 
+# Session house-model pick (OCC model picker). Only a slug on the operator's
+# ``DIGI_SESSION_MODEL_ALLOWLIST`` (comma list, house upstream models only) is
+# ever bound; anything else is ignored and the operator default stays. BYOK wins:
+# a bound user key is never redirected by this.
+_house_model_override: ContextVar[str | None] = ContextVar(
+    "dg_house_model_override", default=None
+)
+
+
+def session_model_allowlist() -> frozenset[str]:
+    raw = os.environ.get("DIGI_SESSION_MODEL_ALLOWLIST") or ""
+    return frozenset(p.strip() for p in raw.split(",") if p.strip())
+
+
+def push_house_model(value: str | None) -> Token[str | None]:
+    """Bind an allowlisted session model for this request (None when not allowed)."""
+    slug = (value or "").strip()
+    return _house_model_override.set(slug if slug and slug in session_model_allowlist() else None)
+
+
+def pop_house_model(token: Token[str | None]) -> None:
+    _house_model_override.reset(token)
+
+
+def get_house_model_override() -> str | None:
+    return _house_model_override.get()
+
+
 def get_model_for_mode() -> str:
     """Return the fallback model for phases without a phase_models entry.
 
@@ -686,13 +836,18 @@ def get_model_for_mode() -> str:
        no shared product slug in ``model_modes.yaml``).
     3. ``default_model`` in model_modes.yaml — optional explicit fallback (non-free).
     4. ``defaults[llm_mode]`` for ``test`` / ``medium`` / ``best`` — mode-keyed fallback.
-    5. ``"gpt-4o-mini"`` — hard last resort (non-free modes only).
+    5. ``fallback_model`` from ``config/model-policy.json`` — configured last resort
+       (non-free modes only).
 
     OpenRouter paid/dashboard auto-override is **not** applied here. dashboard/research
     phases use :func:`get_model_for_phase`. Having ``OPENROUTER_API_KEY`` set alone
     must not swap a free/local digithings install onto paid dashboard models.
     ``llm_mode: free`` refuses non-``:free`` (non-Ollama) model ids.
     """
+    override = _house_model_override.get()
+    if override and not get_byok_override():
+        # The session pick obeys the same free-mode refusal as the operator default.
+        return _refuse_paid_in_free_mode(override, _get_llm_mode())
     return _apply_byok_model_override(operator_default_model())
 
 
@@ -790,7 +945,7 @@ def resolve_request_model(request_model: str) -> str:
       default can't override an explicit cloud model.
     - bare / non-prefixed slug with an active BYOK override **for a routable
       provider** → returned unchanged. ``openai`` is not a digillm-registered
-      prefix, so OpenAI BYOK models are bare (``gpt-4o-mini``).
+      prefix, so OpenAI BYOK models are bare (no provider prefix at all).
       ``resolve_effective_model`` prefers ``OLLAMA_MODEL`` over the request
       string; applying it under BYOK would send a local Ollama slug to the
       user's OpenAI (or other) endpoint while digillm still holds their key.

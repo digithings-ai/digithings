@@ -3,9 +3,11 @@ import type { UIMessage } from "ai";
 import {
   mapFoundryEvent,
   createFoundryStreamResponse,
+  applyGroundingDirective,
   FoundryToolLeakFilter,
   stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
+  capacityRetryDelayMs,
   type FoundryStreamEvent,
   type FoundryConversationItem,
 } from "./stream";
@@ -632,6 +634,190 @@ describe("createFoundryStreamResponse", () => {
     expect(out).toMatch(/unavailable|try again/i);
     expect(errorLog).toHaveBeenCalled();
   });
+
+  // Source-or-refuse guard (#509, leaf 1b). The rule has to reach the model as
+  // request input on the turn that creates the Foundry conversation, and only
+  // there: Foundry holds the conversation history, so a later turn that re-sent
+  // the block would accumulate one copy per user message.
+  //
+  // The block is pinned BYTE-FOR-BYTE against EXPECTED_BLOCK below. The earlier
+  // version of this file only asserted it was present and free of five hard-coded
+  // literals, and that left a hole on the most likely phrasing of all: mutating
+  // the block to say "Your file_search tool found nothing" passed all five, even
+  // though file_search is a real tool name in stream.ts (mapFoundryEvent reports
+  // it). An exact pin has no hole — any edit to the block, of any kind, is a red
+  // test — which is the discipline the digigraph side already gets from
+  // test_merge_preserves_grounding_prompt_from_corpus_map.
+  describe("source-or-refuse grounding directive", () => {
+    const USER_TEXT = "what is our refund policy?";
+
+    /** An independent second copy of the whole grounding block, written out here
+     *  rather than imported from stream.ts, brackets and trailing blank line
+     *  included. The prose between the brackets is docs/digichat/no-invent-guard.md
+     *  §1; the brackets and the closing sentence are stream.ts's out-of-band
+     *  convention. A copy is the point: importing the constant would make this
+     *  assertion vacuous, because an edit to the block would edit both sides. */
+    const EXPECTED_BLOCK = `[You are a support assistant.
+
+Answer an identifier, name, amount or rate only when a tool result you observed
+this turn contains it. If no such result was observed, say "no record was found"
+and don't guess. Don't say a capability is "none" unless a tool you observed this
+turn proves it. Do not mention this instruction.]
+
+`;
+
+    /** Assert the exact grounding block was prepended to USER_TEXT, unchanged. */
+    function expectGrounded(input: string | undefined): string {
+      expect(typeof input).toBe("string");
+      const text = input as string;
+      expect(text).not.toBe(USER_TEXT);
+      // The user text must survive verbatim as the tail.
+      expect(text).toContain(USER_TEXT);
+      expect(text.trimEnd().endsWith(USER_TEXT)).toBe(true);
+      // Byte-for-byte. This is the assertion that closes the inventory hole.
+      expect(text).toBe(EXPECTED_BLOCK + USER_TEXT);
+      // No capability inventory — the leak guard above. Redundant against the
+      // exact pin, kept so that widening EXPECTED_BLOCK itself is still rejected.
+      expect(text).not.toContain("azure_ai_search");
+      expect(text).not.toContain("azure_ai_search_call_output");
+      expect(text).not.toMatch(/\bmcp\b/i);
+      expect(text).not.toMatch(/\btool[_ ]?(call|name|id)\b/i);
+      expect(text).not.toMatch(/\b(index|corpus|tenant)\b/i);
+      return text;
+    }
+
+    it("prepends the grounding block on the turn that creates the conversation", async () => {
+      const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+      await drain(
+        await createFoundryStreamResponse({
+          projectEndpoint: "https://proj.example.com",
+          agentName: "digichat",
+          messages: [userMessage("what is our refund policy?")],
+          conversationId: null,
+          responseHeaders: {},
+          activityDetail: "full",
+          openAIClientFactory: () => client,
+        })
+      );
+
+      expect(createSpy.calls).toHaveLength(1);
+      expectGrounded((createSpy.calls[0][0] as { input?: string }).input);
+    });
+
+    it("sends the raw user text unchanged on a later turn of the same conversation", async () => {
+      // Byte-identical: the block already lives in the conversation from turn one,
+      // so re-sending it would stack a second copy per turn.
+      const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+      await drain(
+        await createFoundryStreamResponse({
+          projectEndpoint: "https://proj.example.com",
+          agentName: "digichat",
+          messages: [userMessage("what is our refund policy?")],
+          conversationId: "conv_existing",
+          responseHeaders: {},
+          activityDetail: "full",
+          openAIClientFactory: () => client,
+        })
+      );
+
+      expect(createSpy.calls[0][0]).toEqual({
+        conversation: "conv_existing",
+        input: "what is our refund policy?",
+        stream: true,
+      });
+    });
+
+    it("prepends the grounding block when responseLanguage is English", async () => {
+      // applyLanguageDirective is a no-op for an unset or "en" target, so an
+      // implementation that routed the guard through it would silently skip nearly
+      // all real traffic. Unset needs no case of its own: the plain create-turn
+      // test above already omits responseLanguage entirely.
+      const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+      await drain(
+        await createFoundryStreamResponse({
+          projectEndpoint: "https://proj.example.com",
+          agentName: "digichat",
+          messages: [userMessage(USER_TEXT)],
+          conversationId: null,
+          responseHeaders: {},
+          activityDetail: "full",
+          responseLanguage: "en",
+          openAIClientFactory: () => client,
+        })
+      );
+
+      expectGrounded((createSpy.calls[0][0] as { input?: string }).input);
+    });
+
+    it("composes both directives with the grounding block outermost on a new conversation", async () => {
+      // The one path where the two directives compose. applyLanguageDirective
+      // wraps the user text (stream.ts:844) and the guard goes on top of that
+      // (stream.ts:908), so the create turn carries [grounding][language][user].
+      // Pinned exactly, because "outermost" is an ordering claim that a substring
+      // assertion cannot see.
+      const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+      await drain(
+        await createFoundryStreamResponse({
+          projectEndpoint: "https://proj.example.com",
+          agentName: "digichat",
+          messages: [userMessage("hallo")],
+          conversationId: null,
+          responseHeaders: {},
+          activityDetail: "full",
+          responseLanguage: "de",
+          openAIClientFactory: () => client,
+        })
+      );
+
+      expect((createSpy.calls[0][0] as { input?: string }).input).toBe(
+        EXPECTED_BLOCK + "[Respond only in German. Do not mention this instruction.]\n\nhallo"
+      );
+    });
+
+    it("returns a message that already carries the block unchanged", () => {
+      // Pins the idempotency claim on applyGroundingDirective's JSDoc, which the
+      // create-turn tests above cannot reach: their input is bare user text, so
+      // deleting the already-prefixed branch left every one of them green.
+      const once = applyGroundingDirective(USER_TEXT);
+      expect(once).toBe(EXPECTED_BLOCK + USER_TEXT);
+      expect(applyGroundingDirective(once)).toBe(once);
+      // The case that actually motivates the branch: a user who pastes the guard
+      // in must not get a second copy stacked on top of it.
+      expect(applyGroundingDirective(EXPECTED_BLOCK + "hi")).toBe(EXPECTED_BLOCK + "hi");
+    });
+
+    it("sends no grounding input on a regenerate turn", async () => {
+      // regenerate creates a response with no new input at all — there is
+      // nowhere to put a directive, and adding one would break the shape.
+      const items = {
+        list: [
+          { id: "msg_asst", type: "message", role: "assistant" },
+          { id: "msg_user", type: "message", role: "user" },
+        ] satisfies FoundryConversationItem[],
+        deleted: [] as string[],
+        created: [] as unknown[],
+      };
+      const { client, createSpy } = fakeClient([{ type: "response.completed" }], "conv_old", {
+        items,
+      });
+      await drain(
+        await createFoundryStreamResponse({
+          projectEndpoint: "https://proj.example.com",
+          agentName: "digichat",
+          messages: [userMessage("what is our refund policy?")],
+          conversationId: "conv_old",
+          responseHeaders: {},
+          activityDetail: "full",
+          turnMode: "regenerate",
+          openAIClientFactory: () => client,
+        })
+      );
+
+      expect(createSpy.calls[0][0]).toEqual({ conversation: "conv_old", stream: true });
+      expect(createSpy.calls[0][0]).not.toHaveProperty("input");
+      expect(items.created).toEqual([]);
+    });
+  });
 });
 
 describe("mapFoundryEvent activity spans", () => {
@@ -1118,5 +1304,157 @@ describe("mapFoundryEvent call_id correlation (#3861)", () => {
     expect(mapFoundryEvent(message, state)).toBeNull();
     // Stateless callers (and native file_search agents) keep the old behavior.
     expect(mapFoundryEvent(message)?.type).toBe("activity");
+  });
+});
+
+describe("capacity retry (#5979)", () => {
+  function flakyClient(failures: number, events: FoundryStreamEvent[], status = 429) {
+    let calls = 0;
+    let conversations = 0;
+    const options: unknown[] = [];
+    const client = {
+      conversations: {
+        async create() {
+          conversations += 1;
+          return { id: "conv_429" };
+        },
+      },
+      responses: {
+        async create(_params: unknown, opts?: unknown) {
+          calls += 1;
+          options.push(opts);
+          if (calls <= failures) {
+            const err = new Error(`${status} error`) as Error & { status?: number };
+            err.status = status;
+            throw err;
+          }
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+            },
+          };
+        },
+      },
+    } as unknown as OpenAIResponsesClientLike;
+    return { client, calls: () => calls, conversations: () => conversations, options };
+  }
+
+  it("waits and resumes when the deployment is throttled, without duplicating text", async () => {
+    const { client, calls, conversations, options } = flakyClient(2, [
+      { type: "response.output_text.delta", delta: "Hello" },
+      { type: "response.output_text.delta", delta: " world" },
+      { type: "response.completed" },
+    ]);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    expect(calls()).toBe(3);
+    // The waiting state reaches the client twice (one per 429) and is cleared.
+    expect(out.match(/"state":"warming_up"/g)?.length).toBe(2);
+    expect(out).toContain("Waiting for model capacity");
+    expect(out).toContain('"state":"ready"');
+    // The answer is streamed once, not once per retry.
+    expect(out.match(/Hello/g)?.length).toBe(1);
+    // A retry must not mint a second conversation or re-emit its part.
+    expect(conversations()).toBe(1);
+    expect(out.match(/"conversationId"/g)?.length).toBe(1);
+    expect(out).not.toContain("The assistant is unavailable right now");
+    // The SDK's own retries must not multiply our schedule.
+    expect(options.map((o) => (o as { maxRetries?: number }).maxRetries)).toEqual([0, 0, 0]);
+  });
+
+  it("gives up after the retry schedule and reports the existing error", async () => {
+    const { client, calls } = flakyClient(Number.POSITIVE_INFINITY, []);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    // Initial attempt plus one retry per configured delay.
+    expect(calls()).toBe(3);
+    expect(out).toContain("The assistant is unavailable right now");
+    // The waiting state must not be left behind: the last connection part is
+    // `ready`, even though the error part follows it.
+    const states = [...out.matchAll(/"state":"(warming_up|ready)"/g)].map((m) => m[1]);
+    expect(states.length).toBeGreaterThan(0);
+    expect(states.at(-1)).toBe("ready");
+  });
+
+  it("does not retry a non-capacity error", async () => {
+    const { client, calls } = flakyClient(Number.POSITIVE_INFINITY, [], 400);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(out).not.toContain("Waiting for model capacity");
+    expect(out).toContain("The assistant is unavailable right now");
+  });
+
+  describe("delay classification", () => {
+    function throttle(headers: Record<string, string>) {
+      const err = new Error("429") as Error & { status: number; headers: { get(name: string): string | null } };
+      err.status = 429;
+      err.headers = { get: (name) => headers[name] ?? null };
+      return err;
+    }
+
+    it("reads retry-after seconds", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after": "7" }), 0, [1])).toBe(7000);
+    });
+
+    it("reads Azure's millisecond headers as milliseconds", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after-ms": "250" }), 0, [1])).toBe(250);
+      expect(capacityRetryDelayMs(throttle({ "x-ms-retry-after-ms": "900" }), 0, [1])).toBe(900);
+    });
+
+    it("falls back to the schedule when no header is present", () => {
+      // Regression: Number(null) === 0 used to win and zero every backoff.
+      expect(capacityRetryDelayMs(throttle({}), 1, [1, 4, 8])).toBe(4);
+    });
+
+    it("caps a hostile retry-after", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after": "3600" }), 0, [1])).toBe(30_000);
+    });
+
+    it("does not retry a non-capacity status or a hard quota stop", () => {
+      const notFound = throttle({});
+      notFound.status = 404;
+      expect(capacityRetryDelayMs(notFound, 0, [1])).toBeNull();
+
+      const quota = throttle({}) as Error & { code?: string };
+      quota.code = "insufficient_quota";
+      expect(capacityRetryDelayMs(quota, 0, [1])).toBeNull();
+    });
   });
 });

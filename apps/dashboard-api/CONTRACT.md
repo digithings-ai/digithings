@@ -70,7 +70,9 @@ All failures return HTTP status + this body (no other shape):
 Codes: `bad_request` (400, malformed `asOf`/`retrieval_pin`/params),
 `not_found` (404, no committed book or tip for `asOf`),
 `upstream_empty` (200-body is never empty-as-healthy; 502 when a required
-upstream read fails — never synthesize numbers), `internal` (500).
+upstream read fails — never synthesize numbers), `not_provisioned` (503, a
+write whose table is not migrated yet; nothing is written), `unauthorized` (401),
+`forbidden` (403), `internal` (500).
 Empty sessions (e.g. ledger with no events in range) are success with empty
 arrays plus honest `provenance`, never errors. Fail closed to `null`/`—`
 downstream — never invent P&L, fills, or weights.
@@ -163,15 +165,19 @@ Response `data`:
 
 ```json
 {
-  "book_as_of": "2026-09-24",
-  "invested_pct": 35.13,
-  "cash_pct": 64.87,
+  "book_as_of": "2026-09-28",
+  "invested_pct": 83.6,
+  "cash_pct": 16.4,
   "invested_definition": "accounting_nav_tip",
   "rows": [
     {
       "ticker": "DBO",
-      "weight_pct": 5.0031,
-      "scaled_weight_pct": 5.0031,
+      "weight_pct": 10.0,
+      "scaled_weight_pct": 23.8857,
+      "positions_weight_pct": 4.7194,
+      "weight_source": "ledger",
+      "ledger_weight_pct": 10.0,
+      "weight_drift_pp": -5.2806,
       "entry_price": 22.14,
       "current_price": null,
       "unrealized_pct": null,
@@ -179,9 +185,29 @@ Response `data`:
       "marks_as_of": null
     }
   ],
-  "marks_unstamped": true
+  "marks_unstamped": true,
+  "ledger_as_of": "2026-09-25",
+  "weights_reconciled": 3,
+  "weights_drifted": 3,
+  "ledger_conflicts": []
 }
 ```
+
+`weight_pct` vs `scaled_weight_pct` (DIG-2803) — two different quantities,
+both on the wire:
+
+- `weight_pct` is the row's own book weight as a % of NAV: the `position_events`
+  target where the ledger covers the ticker, else `positions.weight_pct`.
+- `scaled_weight_pct` is that weight laid inside the §6.1 envelope:
+  `weight_pct * (invested / heldSum)`. When `invested` comes from the NAV tip
+  rather than the book, the two differ by a factor (`scale`), and the factor is
+  large when the committed book's weights do not sum to `invested`.
+
+`positions_weight_pct` always preserves the raw `positions.weight_pct` that
+would have been used before DIG-2803, and `weight_drift_pp` is
+`positions_weight_pct - weight_pct` in percentage points (null when the ledger
+does not cover the ticker). Anchoring to the ledger therefore never hides the
+positions value: both are always reported.
 
 Rules: rows scale into the §6.1 envelope (`invested = min(100,
 investedPct ?? heldSum)`, CASH excluded, `scale = invested/heldSum`).
@@ -195,6 +221,29 @@ no Supabase fallback); fail closed to null without basis or mark.
 `invested_definition` names the §6.1 precedence winner
 (`accounting_nav_tip | book_weights | portfolio_metrics | unavailable`).
 Mid-session NULL marks affect marks only, never weights.
+
+Weights are ledger-anchored (DIG-2803): the route replays every
+`position_events` row dated on or before `book_as_of` into a per-ticker
+target — `OPEN`/`ADD`/`TRIM` set the target from `weight_pct`, `EXIT` clears
+it — and emits that target as `weight_pct` when the ticker is covered, before
+the envelope is computed, so `heldSum`/`scale`/`scaled_weight_pct` are all
+derived from the corrected book. `weight_source` is:
+
+- `ledger` — the emitted weight came from a replayed `position_events` target;
+- `positions` — the ticker has no target (never opened in the window), or the
+  ledger says it exited while the book still holds it, which is also reported
+  by name in `ledger_conflicts`;
+- `positions_no_ledger` — the ledger could not be read at all, or replayed to
+  an empty set; every row keeps its `positions` weight.
+
+Fail closed, degrade loudly: an absent, unreadable or unrecognised ledger never
+rejects the book and never invents or zeroes a weight. A `null`/negative/NaN
+event weight is skipped and the previous target is kept; an event dated after
+`book_as_of` is ignored (a committed snapshot is never reconciled against a
+later decision). `weights_reconciled` counts rows whose weight came from the
+ledger and `weights_drifted` counts those the book disagrees with — a conflict
+row is never counted as reconciled. `ledger_as_of` is the newest event date
+applied, or `null`.
 
 ### 6.3 `GET /brief`
 
@@ -301,6 +350,22 @@ Rules: computed by `computeLivePerformanceKpis` semantics (live quote vs
 Numbers here are `live marks` by definition and must never be labeled
 finalized accounting.
 
+Since-inception is defined once, identically to `GET /brief` (`/performance`,
+§6.4) and to the dashboard Brief desk: it is the **chained base-100 continuity
+index**, never a raw NAV ratio. The accounting rows are chained in date order
+into an index that starts at 100, each step taking the row's own
+`day_return_pct` when present (a step larger than 25% is treated as a level
+jump and clamped to 0) and otherwise the level ratio across non-seam,
+same-source consecutive rows (a legacy<->finalized flip is a seam and
+contributes 0). The live-vs-mark move is then applied to the **index tip**, and
+`since_inception_live_pct` is `index_tip_after_move - 100`. Raw
+`public_finalized_nav` levels carry flows and rebasing jumps that are not
+performance, so `nav / 100` is not a return and is not used anywhere on this
+route; `excess_live_pct` uses the same index figure for the portfolio leg (the
+benchmark leg stays level-based, since a price index has no flows). With fewer
+than two accounting rows the index has no return and every since-inception
+figure on this route is `null`.
+
 ### 6.6 `GET /nav-series`
 
 Shared NAV + close series. Replaces the `nav-seam.ts` ∥
@@ -313,6 +378,10 @@ Response `data`:
 
 ```json
 {
+  "plot": {
+    "series": "index",
+    "accounting_nav": { "contract": "legacy_estimate", "plottable": false, "reason": "all_legacy_estimate" }
+  },
   "tip": { "date": "2026-09-24", "contract": "legacy_estimate" },
   "points": [{ "index": 0, "date": "2026-09-24", "nav": 99.909, "day_return_pct": null, "contract": "legacy_estimate" }]
 }
@@ -322,6 +391,16 @@ Rules: same continuity-index semantics as §6.4 (per-row day returns,
 ≤ 4-day forward-fill, seam basis changes carry flat). Per-point contract
 labels preserved so consumers can badge tip flips (e.g.
 `finalized_accounting` → `legacy_estimate`).
+
+`plot` names the series a chart may draw, and separates the continuity
+`index` from the labeled accounting NAV (DIG-2802). `plot.series` is
+always `index`. `plot.accounting_nav.plottable` is `true` only when
+**every** point is `finalized_accounting`; an empty series is never
+`plottable`. Until the accounting NAV is whole — and while a date it does
+not carry is absent rather than filled from another scale — every NAV
+chart plots `points[].index` and never `points[].nav`.
+`plot.accounting_nav.contract` is `finalized_accounting`, `legacy_estimate`,
+`mixed` (both present) or `unavailable` (no points).
 
 ### 6.7 `GET /benchmarks`
 
@@ -338,9 +417,18 @@ Response `data`:
   "universe": ["SPY", "QQQ"],
   "series": { "SPY": [{ "date": "2026-09-24", "close": 512.3 }] },
   "aligned_start": "2025-09-24",
-  "overlap_days": 21
+  "overlap_days": 21,
+  "reason": null
 }
 ```
+
+`reason` is `null` when the overlap is healthy, and otherwise the cause of
+the empty series as a stable token a consumer may badge on: the source layer's
+own failure (`market_url_unset`, `market_universe_unavailable`,
+`market_closes_http_<status>`, `market_closes_unreachable`) wins verbatim, else
+`no_overlap` when some closes exist but the intersection never covers a NAV
+date, else `no_closes_in_window`. A loader cause is never relabelled as an
+alignment gap.
 
 Rules: an empty market-API answer falls back to the benchmark keys (#4053,
 R2-API-only, no Supabase fallback). Each series aligns to the NAV dates;
@@ -381,6 +469,31 @@ average entry (sold weight = `prev_weight_pct − weight_pct`); fail closed
 without fill price or cost basis. `cumulative_return_since_event_pct` is
 post-event drift and must not be presented as trade return. Empty range →
 success with `"events": []` plus honest `provenance`.
+
+### 6.9 `GET /access/manifest`
+
+Which desks, pages, blocks and data routes the caller may see. The single
+source of entitlements: the dashboard builds its sidebar, page guards and
+locked-block states from this response only.
+
+Caller identity comes from edge-injected `x-digi-tier` (`free|brief|desk|studio|enterprise`, rank order) and
+`x-digi-groups` (comma-separated). Absent/unknown → `free`, no groups (fail
+closed). The worker does not authenticate; only expose behind the edge.
+
+`data`: `{ caller: {tier, groups}, desks: Desk[], routes: string[] }`
+- `Desk`: `{ id, label, blurb, access, reason?, pages: Page[] }`
+- `Page`: `{ path, label, status?, access, reason?, blocks: Block[] }`
+- `Block`: `{ id, route, access, reason? }`
+- `access` is `granted` or `locked`. Locked nodes are shown with `reason`
+  (e.g. `Requires brief`, `Requires the 12x group`); a lock on a desk or page
+  cascades to everything beneath it. Nodes gated `hidden` are omitted.
+- `routes`: de-duplicated data routes of every granted block (no query strings).
+
+Policy lives in `src/access.ts` (`DESKS`); `baseline` is open with brief/desk
+parts, `fx` requires the `12x` group and is omitted from the manifest until that
+group is present. `12x` is the app-facing group name; the edge maps the
+product grant `fx_hub` (client_product_grants.product_key) to group `12x` when it injects
+`x-digi-groups`. The worker never sees product keys.
 
 ## 7. Generic table reads
 
@@ -431,3 +544,39 @@ subscriptions, and Edge Function calls (billing/Alpaca — stay direct).
 - Pagination beyond `GET /ledger` cursor (`limit`/`cursor` only there).
 - Any timeout, retry, rate-limit, or tool-call budget language — none
   specified, none implied.
+
+## 9. Phase 1–3 routes
+
+These sit on the registry, behind the same catalog gate as the sidebar.
+Success is still `{ data, as_of, retrieval_pin, provenance }`. A missing
+figure is `null` (the app shows "—"). An unconfigured reader is 502
+`upstream_empty`. A route the catalog does not grant is 403.
+
+Portfolio: `GET /allocations/enriched`, `/attribution`, `/theses`,
+`/theses/signals` (brief), `/ledger/cash`, `/performance/drawdown`,
+`/brief/decision`, `/brief/risks`, `/dossier/{ticker}`. Theses read the
+latest daily snapshot (`thesis_id`, `status` → active / watch / exited);
+signals are `CHALLENGED` theses. `/attribution` is the latest
+`position_attribution` date, a static-book lookback diagnostic (`basis`),
+not realized contribution. `/brief/risks` has no source table yet and is
+an empty list marked `unavailable`. Every `documents` read is pinned to the
+house workspace.
+
+Pipeline: `GET /pipeline/runs/latest/health` (optional `date=YYYY-MM-DD`),
+`/graph`, `/narrative`, `/trace`, `/artifacts`,
+`/nodes/selected/document` (optional `node=`). Cost and token fields on
+health stay null. The graph is the static ingest → research → decide →
+publish shape. Node state is the latest `node_runs` run's `outcome` for a
+node whose `node_name` matches the stage id exactly, else null; there is no
+guessed mapping. The narrative is the house `Daily Digest`.
+
+FX and rates (group `12x`): `GET /fx/summary`, `/fx/pairs`, `/fx/levels`,
+`/fx/sessions`, `/fx/ideas`, `/fx/ideas/{pair}`, `/fx/pairs/{pair}/path`,
+`/fx/flags/{pair}`, `/fx/paper-exposure`, `/fx/directives`,
+`/rates/summary`, `/rates/curve`, `/rates/watchlist`, `/rates/theses`.
+Bid, offer, and level pips stay null. Flags, paper exposure, and
+directives are typed empty until the draft tables exist.
+`flagged` is null until the flags table exists. The pair path is the newest
+500 one-hour Yahoo bars in time order. `PUT /fx/directives` returns 503
+`{ error.code: "not_provisioned" }` and does not write. Draft SQL: `migrations-draft/`. Do not apply it from this
+contract.

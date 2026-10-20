@@ -1,7 +1,7 @@
 # digiquant — Design & Implementation Gap (digichat / digigraph Vision)
 
 **Audience:** Engineering planning for the “investing copilot” flow: research → user profiling → baseline strategy → iterate/backtest → optimize → compare → export/deploy.  
-**Scope:** digiquant’s role inside **digithings** (digichat UI, digigraph orchestration, digisearch RAG, digismith observability, digiclaw gateway).  
+**Scope:** digiquant’s role inside **digithings** (digichat UI, digigraph orchestration, digisearch RAG, digitrace observability, digiclaw gateway).  
 **Status:** Gap analysis as of repo state (February 2026). Update this doc when capabilities land.
 
 ---
@@ -26,7 +26,7 @@
 | **digigraph** | LangGraph workflows, LLM calls, **when** to call quant vs search, session/workflow state, tool routing. |
 | **digisearch** | Ingestion, chunking, retrieval, citations for research steps. |
 | **digiquant** | **Deterministic** backtest/optimize/export, strategy registry, data loading (Polars), Nautilus execution, structured metrics. |
-| **digismith** | Traces/metrics for LLM and (optionally) quant spans. |
+| **digitrace** | Traces/metrics for LLM and (optionally) quant spans. |
 | **digiclaw** | Gateway, audit, heartbeat — policy and egress concerns. |
 
 **Rule:** Anything that must not hallucinate (Sharpe, PnL, trade list) belongs in **digiquant** (or downstream verified stores), not in the raw LLM transcript.

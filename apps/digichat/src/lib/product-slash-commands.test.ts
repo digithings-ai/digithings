@@ -31,6 +31,8 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setModel: vi.fn(),
     setEffort: vi.fn(),
     setSearchEngine: vi.fn(),
+    setToolbar: vi.fn(),
+    setScrollbars: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -38,6 +40,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     hasDigisearch: true,
     hasVault: true,
     hasSessions: false,
+    hasArtifacts: false,
     allowUserMcp: false,
     allowAddMcp: false,
     catalogTools: [
@@ -48,6 +51,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     mcpServers: [],
     sessionKey: "embed-host",
     openSettings: vi.fn(),
+    openHelp: vi.fn(),
     openTools: vi.fn(),
     openMcp: vi.fn(),
     openByok: vi.fn(),
@@ -58,6 +62,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openThinking: vi.fn(),
     openLanguage: vi.fn(),
     openSessions: vi.fn(),
+    openArtifacts: vi.fn(),
     newThread: vi.fn(),
     compactThread: vi.fn(),
     undo: vi.fn(),
@@ -246,10 +251,11 @@ describe("executeSlashDef", () => {
     expect(a.newThread).toHaveBeenCalledOnce();
   });
 
-  it("does not toggle tools on /help (palette is the help; do not dump into the composer)", () => {
+  it("opens the help panel on /help without touching tools", () => {
     const a = api();
     const def = { id: "help" as const, names: ["/help"], needsArg: false, hint: "" };
     executeSlashDef(def, "", a);
+    expect(a.openHelp).toHaveBeenCalledOnce();
     expect(a.openSettings).not.toHaveBeenCalled();
     expect(a.setDigisearch).not.toHaveBeenCalled();
   });
@@ -343,5 +349,88 @@ describe("executeSlashDef", () => {
       a,
     );
     expect(a.setExtraTool).toHaveBeenCalledWith("datatap", false);
+  });
+});
+
+describe("/artifacts", () => {
+  const ids = (over: Partial<EmbedChatPrefsApi> = {}) =>
+    buildProductSlashCommands(api(over)).map((c) => c.id);
+
+  it("lists /artifacts when the session has an artifact surface", () => {
+    const listed = ids({ hasArtifacts: true });
+    // Guards the "passes only because the list is empty" trap: one visible row.
+    expect(listed.length).toBeGreaterThan(0);
+    expect(listed).toContain("artifacts");
+  });
+
+  it("hides /artifacts when there is no artifact surface", () => {
+    // Same api as the test above with one field flipped, so a listing that is
+    // empty for an unrelated reason cannot pass the previous test.
+    expect(ids({ hasArtifacts: false })).not.toContain("artifacts");
+  });
+
+  it("opens the artifact list on selection", () => {
+    const a = api({ hasArtifacts: true });
+    executeSlashDef(
+      {
+        id: "artifacts",
+        names: ["/artifacts"],
+        needsArg: false,
+        hint: "",
+        kind: "action",
+      },
+      "",
+      a,
+    );
+    expect(a.openArtifacts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("/toolbar and /scrollbar", () => {
+  const chrome = (prefs: Partial<EmbedChatPrefsApi["prefs"]> = {}) =>
+    api({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, toolbar: true, scrollbars: "always", ...prefs } });
+
+  it("lists both commands in the product palette", () => {
+    const ids = buildProductSlashCommands(chrome()).map((c) => c.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids).toContain("toolbar");
+    expect(ids).toContain("scrollbar");
+  });
+
+  it("describes the current values", () => {
+    const on = new Map(buildProductSlashCommands(chrome()).map((c) => [c.id, c]));
+    expect(on.get("toolbar")?.description).toBe("On · visible");
+    expect(on.get("scrollbar")?.description).toBe("always visible");
+
+    const off = new Map(
+      buildProductSlashCommands(chrome({ toolbar: false, scrollbars: "auto" })).map((c) => [
+        c.id,
+        c,
+      ]),
+    );
+    expect(off.get("toolbar")?.description).toBe("Off · hidden");
+    expect(off.get("scrollbar")?.description).toBe("on scroll");
+  });
+
+  it("flips the visible toolbar off", () => {
+    const a = chrome();
+    executeSlashDef({ id: "toolbar", names: ["/toolbar"], needsArg: false, hint: "" }, "", a);
+    expect(a.setToolbar).toHaveBeenCalledOnce();
+    expect(a.setToolbar).toHaveBeenCalledWith(false);
+  });
+
+  it("flips always scrollbars to on-scroll", () => {
+    const a = chrome();
+    executeSlashDef({ id: "scrollbar", names: ["/scrollbar"], needsArg: false, hint: "" }, "", a);
+    expect(a.setScrollbars).toHaveBeenCalledOnce();
+    expect(a.setScrollbars).toHaveBeenCalledWith("auto");
+  });
+
+  it("runs the same flip from the palette row", () => {
+    const a = chrome();
+    const row = buildProductSlashCommands(a).find((c) => c.id === "toolbar");
+    expect(row).toBeDefined();
+    row?.execute?.();
+    expect(a.setToolbar).toHaveBeenCalledWith(false);
   });
 });

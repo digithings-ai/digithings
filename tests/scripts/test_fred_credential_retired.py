@@ -100,13 +100,6 @@ ALLOWED_LIVE_MENTIONS = {
     ),
 }
 
-# Ported to main under DIG-1267. ``scripts/secret_staleness_check.py`` does not
-# exist on main (it arrived on develop after the merge-base), so its row is
-# dropped here rather than carried into a tree it cannot protect. If that script
-# is ever promoted to main, bring the row back with it.
-# The surviving row above is a human-owned placeholder (DIG-78 / PR #5034):
-# "…is exempt from the FRED guard but no longer exists -- drop the row".
-
 # Paths that keep the name on purpose, for a reason that is *not* a live
 # requirement. Anything added here is a decision to review, not a default.
 ALLOWED_ELSEWHERE = {
@@ -114,10 +107,48 @@ ALLOWED_ELSEWHERE = {
         "human lock held by DIG-124; the inventory records the exposure and "
         "must not be edited from this leaf"
     ),
-    # Ported to main under DIG-1267. The two ``apps/digiquant-runner/`` rows on
-    # develop are dropped: ``apps/digiquant-runner/`` does not exist on main at
-    # all, so they protect nothing here. Re-add them if that app reaches main.
 }
+
+# Rows that only exist on ONE of the two branches this guard ships to.
+# `scripts/secret_staleness_check.py` and `apps/digiquant-runner/` are tracked on
+# develop but absent from main (verified with `git ls-tree -r` against both), so
+# a fixed row for them is correct on one tree and a lie on the other: the
+# staleness assertion below fails on main with "exempt but no longer exists",
+# and dropping the row outright fails on develop with "these live surfaces still
+# reference it" (measured 2026-10-09, both directions, on clean worktrees).
+# Filtering by existence keeps the row honest on whichever tree is under test.
+BRANCH_SPECIFIC_LIVE_MENTIONS = {
+    "scripts/secret_staleness_check.py": (
+        {
+            "were `CURSOR_API_KEY` and `FRED_API_KEY` at 165 days.": (
+                "module docstring naming FRED_API_KEY as one of the oldest org "
+                "secret names in a hand-recorded rotation audit. Prose about a "
+                "past measurement, not a read: the script only calls `gh secret "
+                "list` / `gh api .../actions/secrets`, which return names and "
+                "dates, never values. Added 2026-10-05 when develop's 8d7c5edbf "
+                "brought it in and the guard correctly failed closed on it"
+            ),
+        }
+    ),
+}
+
+BRANCH_SPECIFIC_ELSEWHERE = {
+    "apps/digiquant-runner/src/commands.test.ts": (
+        "negative assertion -- asserts FRED_API_KEY is absent from the spec"
+    ),
+    "apps/digiquant-runner/src/runner.test.ts": (
+        "negative assertion -- asserts FRED_API_KEY is not forwarded"
+    ),
+}
+
+
+def _present(mapping):
+    """Rows whose exempt path exists on this tree; the rest are dropped."""
+    return {k: v for k, v in mapping.items() if (REPO_ROOT / k).exists()}
+
+
+ALLOWED_LIVE_MENTIONS = {**ALLOWED_LIVE_MENTIONS, **_present(BRANCH_SPECIFIC_LIVE_MENTIONS)}
+ALLOWED_ELSEWHERE = {**ALLOWED_ELSEWHERE, **_present(BRANCH_SPECIFIC_ELSEWHERE)}
 
 # FRED splits its API in two. ``api.stlouisfed.org`` is the JSON/CSV
 # observations API and it *requires* a key; ``fred.stlouisfed.org/graph/...csv``
@@ -417,3 +448,97 @@ def test_cloudflare_worker_does_not_forward_the_retired_key() -> None:
         f"{pin} still pins FRED_API_KEY as an MCP-scoped var (DIG-335); the "
         "pin has to move in the same commit as the Worker envVars block."
     )
+
+# --- markdown surface (DIG-336) -------------------------------------------
+#
+# The code globs above cannot see prose, and prose is how a retired credential
+# comes back: `digiquant/ARCHITECTURE.md:436` on `main` still carries a
+# copy-pasteable `npx wrangler secret put FRED_API_KEY`. A reader following it
+# would re-create the very exposure DIG-335 removed, and no CI job could notice:
+# `ruff_and_scripts` in ci.yml path-filters `digiquant/**` and `tests/**` but
+# not `docs/**`, and no workflow names this guard.
+#
+# So the scan surface grows to `*.md`. The predicate stays NARROW on purpose --
+# it must fire on an instruction that SUPPLIES the key, never on a record that
+# merely mentions it. Measured 2026-10-08: `develop` has 53 markdown lines
+# naming FRED_API_KEY and exactly 1 supply instruction; `main` has 26 and 4.
+# A broad "mentions the name" rule would fail on 53 lines and teach the team to
+# ignore the guard. This one is silent on history and loud on instructions.
+
+LIVE_DOC_GLOBS = ("**/*.md",)
+
+PROVISIONING_PATTERNS = (
+    # `wrangler secret put FRED_API_KEY` / `gh secret set FRED_API_KEY`
+    ("secret-put", re.compile(r"secret\s+(?:put|add|set)\b[^|\n]*" + RETIRED_NAME, re.I)),
+    # "Owner actions: `FRED_API_KEY` + ..." -- an instruction to obtain it.
+    ("owner-action", re.compile(r"owner actions?[^\n]*" + RETIRED_NAME, re.I)),
+    # "`FRED_API_KEY` in GitHub Actions, `export`, or config/mcp.secrets.env"
+    # -- the "here is how you get the key" shape.
+    ("supply-instruction",
+     re.compile(RETIRED_NAME + r"[^\n|]{0,60}\b(?:in GitHub Actions|,\s*`?export`?"
+                r"|export it|set it|provide it|you (?:will|should|must) need)\b", re.I)),
+    # `FRED_API_KEY: ${{ secrets.FRED_API_KEY }}` / `FRED_API_KEY=` -- an
+    # assignment an operator can copy verbatim into a workflow or env block.
+    ("assignment",
+     re.compile(r"^\s*(?:#{1,6}\s*|[-*]\s*|>\s*)?`?" + RETIRED_NAME + r"`?\s*[:=]")),
+)
+
+# Exact (path, line text) rows, same shape as ALLOWED_LIVE_MENTIONS and for the
+# same reason: the exception is the line, never the path. A path-level skip is
+# a hole -- proven 2026-10-05, in ALLOWED_LIVE_MENTIONS' own comment.
+# Empty on current develop: the single 2026-09-09 plan exemption was dropped on
+# rebase because #5693 deleted that path (its own test prescribes dropping it).
+ALLOWED_DOC_MENTIONS: dict[str, dict[str, str]] = {}
+
+
+def _doc_supply_instructions() -> list[tuple[str, int, str, tuple[str, ...]]]:
+    """(path, line, text, matched rule names) for every markdown supply instruction."""
+    found = []
+    for path in _tracked_matching(LIVE_DOC_GLOBS):
+        for lineno, line in _lines_with_name(path):
+            rules = tuple(name for name, rx in PROVISIONING_PATTERNS if rx.search(line))
+            if rules:
+                found.append((path, lineno, line, rules))
+    return found
+
+
+@pytest.mark.unit
+def test_no_markdown_instructs_an_operator_to_supply_the_retired_key() -> None:
+    """No tracked markdown may tell a reader how to put FRED_API_KEY back.
+
+    Fail closed on every instruction and make each exception an explicit,
+    reviewed line -- the same contract as the code globs above, extended to the
+    surface where the retirement actually leaked back on `main`.
+    """
+    allowed = {(p, t) for p, rows in ALLOWED_DOC_MENTIONS.items() for t in rows}
+    offenders = [
+        f"{path}:{lineno}: [{', '.join(rules)}] {line}"
+        for path, lineno, line, rules in _doc_supply_instructions()
+        if (path, line) not in allowed
+    ]
+    assert not offenders, (
+        "Markdown still instructs an operator to supply the retired FRED_API_KEY "
+        "(DIG-335/DIG-336). Remove the instruction, or add an exact-line entry to "
+        "ALLOWED_DOC_MENTIONS with a reason:\n  " + "\n  ".join(offenders)
+    )
+
+
+@pytest.mark.unit
+def test_allowed_doc_mentions_are_all_documented() -> None:
+    """Every markdown exemption must be justified and still present.
+
+    A stale exemption is a silent hole, so this asserts both directions: the
+    reason is non-empty, the path exists, and the exact line still appears.
+    """
+    for path, allowed_lines in ALLOWED_DOC_MENTIONS.items():
+        assert (REPO_ROOT / path).exists(), (
+            f"{path} is exempt from the markdown FRED guard but no longer exists "
+            "-- drop the row"
+        )
+        present = {line for _, line in _lines_with_name(path)}
+        for line_text, reason in allowed_lines.items():
+            assert reason.strip(), f"{path}:{line_text!r} is exempt with no reason"
+            assert line_text in present, (
+                f"{path}: exempt line no longer appears in the file, so the "
+                f"exemption is stale -- drop it: {line_text!r}"
+            )

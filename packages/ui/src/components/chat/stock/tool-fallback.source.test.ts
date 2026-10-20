@@ -18,4 +18,20 @@ describe("stock ToolFallback source guard", () => {
     expect(source).not.toContain("Data delayed up to 15 minutes");
     expect(source).not.toContain("https://term.gloom.sh");
   });
+
+  it("names the status icon through the shared DotMatrix (DIG-3449)", () => {
+    expect(source).toMatch(/from ["']\.\.\/DotMatrix["']/);
+    expect(source).toMatch(/<DotMatrix/);
+    expect(source).toMatch(/label=\{label\}/);
+    expect(source).not.toMatch(/LoaderIcon/);
+    expect(source).not.toMatch(/CheckIcon/);
+    expect(source).not.toMatch(/XCircleIcon/);
+    expect(source).not.toMatch(/AlertCircleIcon/);
+  });
+
+  it("gives the trigger label the foreground token for contrast (DIG-3449)", () => {
+    expect(source).toMatch(
+      /tool-fallback-trigger-label-wrapper[^"]*text-foreground/,
+    );
+  });
 });

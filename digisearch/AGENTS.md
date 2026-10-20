@@ -38,13 +38,15 @@ Before making any change to `digisearch/`:
 
 Beyond root `AGENTS.md`:
 
+- **No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).** OCC, digichat, digisearch and Zammad ticket text is indexed as written. Do not add a masker, a redaction pass, or a PII fixture for that text. Secret scrubbing and gitleaks stay.
+
 - **Backend registry only**: New index backends must register via `search/_stub.py` returning `None` when not configured. Never add `if backend == "x":` dispatch logic directly in the query path.
 - **No production stub**: `DIGISEARCH_ALLOW_STUB=1` is for unit tests only. `_require_real_search_backend()` enforces this at startup — do not bypass it.
 - **Entity naming**: Class and model names drop the `Digi` prefix: `Document`, `Chunk`, `Query`, `Result` — not `DigiDocument`. Follow this for all new models.
 - **Structured filters over raw OData**: New query callers must use `filters: list[dict]` not raw `filter: str`. Raw OData requires `allow_raw_filter` flag and is only safe for trusted internal callers.
 - **Ingest source is a filesystem path**: `POST /ingest` `source` field is a server-side path. Never accept a raw URL in this field. URL ingest is the separate, SSRF-guarded path `POST /ingest/url` / CLI `ingest-url`, implemented in `pipeline/url_ingest.py` (digifetch `validate_fetch_url` + `HttpFetcher`) — do not fetch URLs anywhere else.
 - **Scope enforcement**: All new endpoints require the appropriate `digisearch:query` or `digisearch:ingest` scope via digikey middleware.
-- **No full doc bodies in spans**: digismith trace attributes must not carry raw document text or chunk content.
+- **No full doc bodies in spans**: digitrace trace attributes must not carry raw document text or chunk content.
 - **bulk ingest worker is a stub**: `ingest_worker.py` logs and exits. Do not add a queue consumer there until Phase 2 is scoped.
 - **Chunker selection is config-only**: use `DIGISEARCH_CHUNKER` or per-index `chunker:` — do not fork ingest code to swap backends.
 - **Single filesystem ingest path**: CLI, `POST /ingest`, and tests call `digisearch.pipeline.ingest.ingest_source` (or `ingest_paths`). Do not re-implement parse → sidecar → chunk → index in `server.py` / `cli.py`. research flat payloads stay on `research_ingest.py` (no segment wrapper) but share `index_chunks` for the backend write.
@@ -139,3 +141,5 @@ DIGISEARCH_ALLOW_STUB=1 digisearch query --index test --text "revenue growth"
 ## More
 
 Extension patterns, anti-patterns, and integration boundaries live in [`ARCHITECTURE.md`](ARCHITECTURE.md). Update that doc when changing interfaces or behavior.
+
+**Grokopedia spike (HOLD):** `digisearch/grokipedia/` is an unofficial read-only JSON client (`grokipedia_search`, `grokipedia_get_page`) over grokipedia.com. Do not scrape `/page/{slug}` HTML. `robots.txt` currently `Disallow: /api/` — legal/product call sits with One/Chris; do not treat this as a production attach. Unit tests stay offline (`tests/ds/test_grokipedia.py`).

@@ -8,6 +8,7 @@ config write. Challenger remains unreachable from the production graph.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from datetime import date
@@ -31,6 +32,8 @@ from digiquant.dashboard.replay.models import (
     max_drawdown_from_nav_path,
 )
 from digiquant.portfolio.allocation_hashes import sha256_hex
+
+_logger = logging.getLogger(__name__)
 
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 FiniteDec: TypeAlias = Annotated[Decimal, Field(allow_inf_nan=False)]
@@ -596,7 +599,13 @@ def write_comparison_report(
         try:
             os.unlink(tmp_name)
         except OSError:
-            pass
+            # Best-effort cleanup: never let a failed unlink mask the write
+            # failure we are about to re-raise, but record the orphaned temp file.
+            _logger.warning(
+                "allocation_comparison: failed to remove temp file %s after a failed write",
+                tmp_name,
+                exc_info=True,
+            )
         raise
     return out
 

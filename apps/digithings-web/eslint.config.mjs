@@ -1,21 +1,6 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+// Thin per-app config: shared preset + prebuild-copy ignores (DIG-3396).
+// `public/swagger-ui` / `public/openapi` are gitignored prebuild copies —
+// never lint vendored swagger-ui or synced specs.
+import { nextApp } from "../../eslint.base.mjs";
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-    // Prebuild copies (gitignored) — never lint vendored swagger-ui / synced specs.
-    "public/swagger-ui/**",
-    "public/openapi/**",
-  ]),
-]);
-
-export default eslintConfig;
+export default nextApp(["public/swagger-ui/**", "public/openapi/**"]);

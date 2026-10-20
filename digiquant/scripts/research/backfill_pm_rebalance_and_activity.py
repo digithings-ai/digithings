@@ -38,6 +38,7 @@ import json
 import re
 import subprocess
 import sys
+import warnings
 from datetime import date as dt_date
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -48,8 +49,15 @@ try:
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 try:
     import jsonschema  # type: ignore
@@ -70,10 +78,12 @@ def _ensure_importable() -> None:
 
 _ensure_importable()
 from digiquant.dashboard.tenancy import eq_house_workspace  # noqa: E402
+from lib.roots import schema_file  # noqa: E402
+from lib.roots import research_script  # noqa: E402
 
 
 def _load_execute_at_open():
-    path = ROOT / "scripts" / "execute_at_open.py"
+    path = research_script("execute_at_open.py")
     spec = importlib.util.spec_from_file_location("execute_at_open", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Cannot load {path}")
@@ -96,7 +106,7 @@ def _load_reasons_module():
     global _reasons_mod
     if _reasons_mod is not None:
         return _reasons_mod
-    path = ROOT / "scripts" / "backfill_position_event_reasons.py"
+    path = research_script("backfill_position_event_reasons.py")
     spec = importlib.util.spec_from_file_location("backfill_position_event_reasons", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Cannot load {path}")
@@ -328,7 +338,7 @@ def _event_to_rebalance_action(ev: str) -> str:
 def _validate_rebalance_payload(payload: Dict[str, Any]) -> None:
     if not _HAS_JSONSCHEMA:
         return
-    schema_path = ROOT / "templates" / "schemas" / "rebalance-decision.schema.json"
+    schema_path = schema_file("rebalance-decision.schema.json")
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     jsonschema.validate(instance=payload, schema=schema)
 
@@ -570,8 +580,8 @@ def main() -> int:
         print("No trading days in range.")
         return 0
 
-    exe_script = ROOT / "scripts" / "execute_at_open.py"
-    price_script = ROOT / "scripts" / "backfill_execution_prices.py"
+    exe_script = research_script("execute_at_open.py")
+    price_script = research_script("backfill_execution_prices.py")
     py = sys.executable
 
     print(f"Trading days: {len(days)} ({days[0]} … {days[-1]})")
