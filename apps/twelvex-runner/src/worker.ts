@@ -152,6 +152,7 @@ async function publishAlert(
       exitCode: result.exit_code,
       bucket: body.bucket,
       reason: route === "ingest" ? verdictLine(result.log_tail ?? "") : "session probe failed",
+      logTail: result.log_tail,
       now,
       open,
     });
