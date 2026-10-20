@@ -530,3 +530,116 @@ def test_from_store_still_reads_one_prefix(tool, monkeypatch):
     assert tool.from_store("NAME", "digithings/", allow_prompt=False) == "value-for-digithings/"
     monkeypatch.setattr(tool, "_from_one_store", lambda name, prefix: None)
     assert tool.from_store("NAME", "digithings/", allow_prompt=False) is None
+
+
+# ------------------------------- the shared namespace is not a local source
+
+
+def test_an_operator_prompt_value_never_comes_from_the_shared_namespace(
+    tool, manifest, entries, monkeypatch
+):
+    """The repro: a production value in the shared namespace must not be used.
+
+    The shared namespace ("digithings/") holds production material. An
+    operator-prompt entry is a locally-issued or per-workspace credential, so a
+    local render that found one there would wire the local stack to a
+    production key without ever asking the operator (DIG-4659).
+    """
+    entry = next(e for e in entries if e["name"] == "DIGISEARCH_SEED_API_KEY")
+    asked: list = []
+
+    def fake_one_store(name, prefix):
+        return "production-value" if prefix == "digithings/" else None
+
+    def fake_prompt(label):
+        asked.append(label)
+        return "typed"
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "_from_one_store", fake_one_store)
+    monkeypatch.setattr(tool, "prompt", fake_prompt)
+
+    # A scripted render reports it as missing rather than using the production value.
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) is None
+    assert asked == []
+
+    # An interactive render asks the operator rather than using the production value.
+    assert tool.resolve(manifest, entry, {}, allow_prompt=True) == "typed"
+    assert asked == ["DIGISEARCH_SEED_API_KEY: "]
+
+
+def test_an_operator_prompt_value_is_read_from_the_local_namespace(
+    tool, manifest, entries, monkeypatch
+):
+    """The local namespace stays the first place the value is looked for."""
+    entry = next(e for e in entries if e["name"] == "DIGISEARCH_SEED_API_KEY")
+    seen: list = []
+
+    def fake_one_store(name, prefix):
+        seen.append(prefix)
+        return "local-value" if prefix == "digithings-local/" else None
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "_from_one_store", fake_one_store)
+
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) == "local-value"
+    assert seen == ["digithings-local/"]
+
+
+def test_the_shared_namespace_is_never_an_operator_prompt_prefix(tool, manifest, monkeypatch):
+    """No prefix list for an operator value ever holds the shared namespace."""
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    assert tool.operator_prompt_prefixes(manifest) == ("digithings-local/",)
+
+    # Without an override the local namespace is still the local one.
+    monkeypatch.delenv(tool.KEYCHAIN_PREFIX_ENV, raising=False)
+    assert tool.operator_prompt_prefixes(manifest) == (tool.DEFAULT_LOCAL_KEYCHAIN_PREFIX,)
+    assert "digithings/" not in tool.operator_prompt_prefixes(manifest)
+
+    # An override that points back at the shared namespace is refused: the rule
+    # holds whatever the operator typed.
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings/")
+    assert tool.operator_prompt_prefixes(manifest) == ()
+
+
+def test_a_keychain_value_still_falls_back_to_the_shared_namespace(
+    tool, manifest, entries, monkeypatch
+):
+    """A shared secret belongs to everyone, so the shared namespace is read for it."""
+    entry = next(e for e in entries if e["name"] == "DIGIKEY_ADMIN_TOKEN")
+    seen: list = []
+
+    def fake_one_store(name, prefix):
+        seen.append(prefix)
+        return "shared-value" if prefix == "digithings/" else None
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "_from_one_store", fake_one_store)
+
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) == "shared-value"
+    assert seen == ["digithings-local/", "digithings/"]
+
+
+def test_the_manifest_says_an_operator_prompt_value_is_not_a_shared_secret(manifest):
+    """The rule the tool enforces is the one the contract states."""
+    description = manifest["sources"]["operator-prompt"]["description"]
+    assert "not a shared digithings secret" in description
+
+
+def test_a_missing_operator_value_names_the_local_namespace(tool, manifest, entries, monkeypatch):
+    """The report tells the operator where the value belongs."""
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    note = tool.operator_prompt_note(["E2E_BEARER_TOKEN"], entries, manifest)
+    assert note is not None
+    assert "'digithings-local/'" in note
+    assert "'digithings/'" in note
+
+    # A missing value that is not operator-supplied gets no note.
+    assert tool.operator_prompt_note(["AUTH_SECRET"], entries, manifest) is None
+
+
+def test_the_default_local_namespace_is_the_one_the_local_stack_uses(tool):
+    """Two places name the local namespace; they must not drift apart."""
+    from scripts.localstack import localenv
+
+    assert tool.DEFAULT_LOCAL_KEYCHAIN_PREFIX == localenv.DEFAULT_KEYCHAIN_PREFIX
