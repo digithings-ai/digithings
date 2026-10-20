@@ -1,0 +1,109 @@
+"use client";
+
+import { useEffect, useState, type ReactNode } from "react";
+import { useAuiState } from "@assistant-ui/react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "../../../ui/collapsible";
+import { DotMatrix } from "../DotMatrix";
+import { cn } from "./cn";
+
+/**
+ * How long the chain waits before it folds away once the turn is over.
+ *
+ * The tools answer faster than the eye can follow: without this the block
+ * shuts between two tool calls and opens again, which reads as a glitch.
+ */
+const SETTLE_MS = 600;
+
+/** The upstream disclosure duration. */
+const ANIMATION_DURATION = 200;
+
+/**
+ * The whole chain of reasoning and tool calls under one header.
+ *
+ * assistant-ui keeps the reasoning disclosure and the tool-group disclosure
+ * independent. We put them under a single "Working" header so the chain
+ * collapses as one unit, and the header stays open for the whole turn (not
+ * only while a group happens to be running) so the block never flickers shut
+ * between two tool calls.
+ *
+ * The first manual toggle wins, as it does upstream.
+ */
+export function WorkChain({
+  children,
+  defaultOpen = false,
+  running = false,
+  className,
+}: {
+  children: ReactNode;
+  /** Open at rest (the verbose level). */
+  defaultOpen?: boolean;
+  /** The chain group is running (a tool or the reasoning is streaming). */
+  running?: boolean;
+  className?: string;
+}) {
+  const turnRunning = useAuiState((s) => s.thread.isRunning);
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    if (running || turnRunning) {
+      setSettled(false);
+      return;
+    }
+    const id = setTimeout(() => setSettled(true), SETTLE_MS);
+    return () => clearTimeout(id);
+  }, [running, turnRunning]);
+
+  const busy = running || turnRunning;
+  const open = userOpen ?? (defaultOpen || (!settled && busy));
+
+  return (
+    <Collapsible
+      data-slot="aui_work-chain"
+      open={open}
+      onOpenChange={setUserOpen}
+      className={cn("aui-work-chain", className)}
+      style={{ "--animation-duration": `${ANIMATION_DURATION}ms` } as React.CSSProperties}
+    >
+      <CollapsibleTrigger
+        data-slot="aui_work-chain-trigger"
+        className="aui-work-chain-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]"
+      >
+        <DotMatrix
+          state={busy ? "loading" : "success"}
+          label="Working"
+          className="size-4 shrink-0"
+        />
+        <span
+          data-slot="aui_work-chain-label"
+          className="aui-work-chain-label inline-block leading-none"
+        >
+          {busy ? "Working" : "Worked"}
+        </span>
+        <span
+          data-slot="aui_work-chain-chevron"
+          className="aui-work-chain-chevron inline-flex shrink-0"
+        >
+          <DotMatrix
+            state="expand"
+            label="Toggle the work"
+            className="size-4 shrink-0"
+          />
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent
+        // Kept mounted: the rows inside keep their own state (and the DOM
+        // stays stable) while the chain is folded away.
+        keepMounted
+        data-slot="aui_work-chain-content"
+        className="aui-work-chain-content overflow-hidden ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none data-closed:animate-collapsible-up data-open:animate-collapsible-down data-closed:fill-mode-forwards data-closed:pointer-events-none [--tw-duration:var(--animation-duration)]"
+      >
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}

@@ -19,6 +19,7 @@ import {
   ReasoningTrigger,
 } from "../stock/reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
+import { WorkChain } from "./work-chain";
 import { WorkChainSummary } from "./work-chain-summary";
 import {
   resolveWorkDisclosure,
@@ -1105,6 +1106,9 @@ const AssistantMessage: FC = () => {
     visibility,
   } = useContext(ThreadGroupDisclosureContext);
   const disclosure = resolveWorkDisclosure(visibility);
+  // The whole turn, not just the group: the tools answer faster than the
+  // chain can fold, and a group that closes between two of them flickers.
+  const turnRunning = useAuiState((s) => s.thread.isRunning);
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -1139,8 +1143,17 @@ const AssistantMessage: FC = () => {
                     </div>
                   );
                 }
+                // One header for the whole chain: the reasoning and the tool
+                // calls collapse together.
                 return (
-                  <div data-slot="aui_chain-of-thought">{children}</div>
+                  <div data-slot="aui_chain-of-thought">
+                    <WorkChain
+                      defaultOpen={disclosure.openAtRest}
+                      running={part.status.type === "running"}
+                    >
+                      {children}
+                    </WorkChain>
+                  </div>
                 );
               case "group-tool": {
                 if (toolCallsMode === "off") return null;
@@ -1157,7 +1170,7 @@ const AssistantMessage: FC = () => {
                     }
                     streamingOpen={
                       (disclosure.openWhileRunning || toolCallsMode === "balanced") &&
-                      running
+                      (running || turnRunning)
                     }
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
