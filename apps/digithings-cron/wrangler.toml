@@ -4,7 +4,8 @@
 # not run Containers itself. wrangler deploy is the source of truth for
 # [triggers] crons. The set matches uniqueEnabledCrons() in src/jobs.ts.
 # DigiQuant clocks resumed 2026-10-01; house-run is weekly Monday only.
-# twelve-x FX Hub clocks live. Path A traps restored (dispatch-only YAML).
+# twelve-x FX Hub clocks live. Path A traps restored (dispatch-only YAML);
+# agent-pr-finalizer held off by the 2026-10-14 GitHub lock (DIG-4364).
 name = "digithings-cron"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"
@@ -30,6 +31,10 @@ BACKFILL_ENABLED = "0"
 #                         defaultBranchRef) fails with it. See docs/ops/SECRETS_INVENTORY.md.
 #   CRON_KICK_SECRET    — optional; enables POST /kick and GET /runs/:id
 #   RUNNER_AUTH_TOKEN   — Bearer for the digiquant-runner service binding
+#   TWELVEX_RUNNER_AUTH — Bearer cron sends to twelvex-runner; must equal that
+#                         Worker's RUNNER_AUTH_TOKEN. Separate from
+#                         RUNNER_AUTH_TOKEN so rotating one cannot break the other.
+#                         Empty falls back to RUNNER_AUTH_TOKEN.
 #
 # printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
 
@@ -42,15 +47,31 @@ DT_BASE_URL = "https://digithings.ai"
 binding = "RUNNER"
 service = "digiquant-runner"
 
+[[services]]
+binding = "TWELVEX_RUNNER"
+service = "twelvex-runner"
+
 # Per-date remediation ledger for POST /backfill. No cron trigger attaches to
 # it; POST /backfill is its only entry point.
 [[durable_objects.bindings]]
 name = "BACKFILL_LEDGER"
 class_name = "BackfillLedger"
 
+# Cron-tick claim ledger (DIG-4384). One instance, `cron-ticks`. Cloudflare
+# delivers a Cron Trigger at least once, and on 14-17 Oct 2026 every tick of
+# this Worker arrived twice with a different scheduledTime each copy, so each
+# job claimed its own slot before dispatching. No cron trigger attaches to it.
+[[durable_objects.bindings]]
+name = "START_COUNTER"
+class_name = "StartCounter"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["BackfillLedger"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["StartCounter"]
 
 [triggers]
 crons = [
@@ -70,14 +91,11 @@ crons = [
   "8 22 * * SUN",      # continuous-improvement
   "8 8 * * MON",       # maintenance
   "9 0 * * SUN",       # provider-review
-  "11 7 * * *",        # agent-pr-finalizer
   "13 6 * * MON",      # agent-backlog-snapshot
-  "21 6 * * *",        # ci-pr-hygiene
+  "29 6 * * *",        # branch-age-guard (DIG-1578)
   "10 6 * * MON",      # refresh-repo-activity
   "23 9 * * *",        # project-enforce-assignment
   "27 7 * * *",        # smoke-stack
-  "33 6 * * MON",      # security-pip-audit
-  "37 6 * * MON",      # security-npm-audit
   "41 6 * * *",        # token-canary
   "0 8 * * MON",       # openwiki-update
   "17,47 * * * *",     # production-deploy-gate-watchdog
@@ -98,6 +116,7 @@ crons = [
   "8 9 * * MON",       # twelve-x-digisearch-parity (GHA was 0 9 * * 1; :08 offset)
   "41 14 * * MON-FRI",  # twelve-x-feed-confirm (DIG-1073: detect an unpublished day)
   "23 16 * * MON-FRI",  # twelve-x-feed-confirm-watchdog (DIG-1073: detect no detection)
-  "23 * * * *",        # digiquant-house-run-watch (lost house-run watcher, DIG-3065)
-  "40 */6 * * *"       # twelve-x-session-heartbeat-watchdog (moved off GHA schedule)
+  "22 * * * *",        # digiquant-house-run-watch (DIG-3065; Monday confirm arm DIG-4416)
+  "40 */6 * * *",      # twelve-x-session-heartbeat-watchdog (moved off GHA schedule)
+  "23 7 * * MON",      # occ-help-recrawl (OCC help-docs weekly, DIG-3576)
 ]

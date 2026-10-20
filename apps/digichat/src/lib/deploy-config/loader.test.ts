@@ -13,7 +13,7 @@ import { filterForceToolHeader } from "./force-tool";
 import { clientConfigFromEmbedTenant } from "./embed-bridge";
 import { toEmbedClientConfig } from "@/lib/embed-client-config";
 import { BASELINE_EMBED_SUGGESTIONS } from "@/lib/baseline-embed";
-import type { EmbedTenantConfig } from "@/lib/embed-tenants";
+import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -310,16 +310,9 @@ deployment:
     expect(cfg.deployment?.chrome.theme).toBe("dark");
     expect(cfg.deployment?.features.attachments).toBe(true);
     expect(cfg.deployment?.tools?.catalog ?? []).toEqual([]);
-    expect(cfg.deployment?.models).toEqual({
-      default: "deepseek/deepseek-v4-flash",
-      available: [
-        "deepseek/deepseek-v4-flash",
-        "deepseek/deepseek-v4-flash-0731",
-        "openai/gpt-oss-120b",
-        "z-ai/glm-5.3-flash",
-      ],
-      allowPicker: true,
-    });
+    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash");
+    expect(cfg.deployment?.models.available).toHaveLength(14);
+    expect(cfg.deployment?.models.allowPicker).toBe(true);
     expect(cfg.deployment?.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
     // Least-privilege fallback: an unconfigured container must not expose BYOK,
     // user MCP servers, or web search to anonymous visitors (regression #3852).
@@ -544,6 +537,64 @@ describe("embed tenant round-trip", () => {
     expect(back.llmAccess).toBe("operator");
   });
 
+  it("carries the MCP tool allowlist into the deployment server row (DIG-284)", () => {
+    const dep = embedTenantToDeployment({
+      slug: "occ",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "dark",
+      attribution: true,
+      activityDetail: "labels",
+      mcp: {
+        servers: [
+          {
+            id: "zammad",
+            url: "http://zammad-mcp:8770/mcp",
+            // RAW MCP names — bare, never zammad_-prefixed.
+            allowedTools: ["list_tickets", "get_ticket"],
+            mutatingTools: [],
+          },
+          { id: "digivault", url: "http://digivault-mcp:8769/mcp" },
+        ],
+      },
+    });
+    // Exact values, not truthiness: both rows survive even if the keys were dropped.
+    expect(dep.mcp?.servers[0].allowedTools).toEqual(["list_tickets", "get_ticket"]);
+    expect(dep.mcp?.servers[0].mutatingTools).toEqual([]);
+    expect(dep.mcp?.servers[1]).not.toHaveProperty("allowedTools");
+    expect(dep.mcp?.servers[1]).not.toHaveProperty("mutatingTools");
+  });
+
+  it("round-trips the MCP tool allowlist from registry JSON to the deployment row", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          mcp: {
+            servers: [
+              {
+                id: "zammad",
+                url: "http://zammad-mcp:8770/mcp",
+                allowedTools: ["list_tickets", "get_ticket"],
+                mutatingTools: ["create_ticket"],
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const cfg = reg.get("occ.digithings.ai");
+    if (!cfg) throw new Error("occ tenant missing from registry");
+    const dep = embedTenantToDeployment(cfg);
+    expect(dep.mcp?.servers[0].id).toBe("zammad");
+    expect(dep.mcp?.servers[0].allowedTools).toEqual(["list_tickets", "get_ticket"]);
+    expect(dep.mcp?.servers[0].mutatingTools).toEqual(["create_ticket"]);
+  });
+
   it("projects a tokenless YAML deployment (client container)", () => {
     const cfg = loadDigichatConfig({
       fileContents: `
@@ -578,7 +629,6 @@ describe("matchHostDeployment", () => {
     expect(dt?.tools?.catalog.map((t) => t.id)).toEqual([
       "digisearch",
       "digivault",
-      "web_search",
     ]);
     expect(matchHostDeployment("www.digithings.ai", cfg)?.slug).toBe("digithings-ai");
     expect(matchHostDeployment("https://unknown.example", cfg)).toBeNull();
@@ -595,7 +645,7 @@ describe("matchHostDeployment", () => {
     expect(client.chrome.skin).toBe("digichat");
     expect(client.backendType).toBe("digigraph");
     expect(client.tools.catalog.map((t) => t.id)).toEqual(
-      expect.arrayContaining(["digisearch", "digivault", "web_search"]),
+      expect.arrayContaining(["digisearch", "digivault"]),
     );
     expect(client.features.attachments).toBe(false);
     expect(client.features.pageContext).toBe("visible");

@@ -406,6 +406,10 @@ export const ToolCatalogEntrySchema = z
     id: z.string().min(1),
     default: z.boolean().optional(),
     label: z.string().optional(),
+    /** Individual tools under this entry, for per-tool session toggles. */
+    tools: z
+      .array(z.object({ id: z.string().min(1), label: z.string().optional() }).strict())
+      .optional(),
   })
   .strict();
 
@@ -524,6 +528,7 @@ export const GateSchema = z
     lockedContact: z.string().optional(),
     showByok: z.boolean().optional(),
     showLanguageSelector: z.boolean().optional(),
+    lockSessionControls: z.boolean().optional(),
     /** Legacy embed field — also implies tools.catalog web_search when true */
     webSearch: z.boolean().optional(),
     /** Default web_search engine for this tenant (projected to the browser as

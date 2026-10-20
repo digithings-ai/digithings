@@ -34,6 +34,8 @@ from pathlib import Path
 import polars as pl
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from digiquant.paths import resolve_under_data_root
+
 logger = logging.getLogger(__name__)
 
 # Standard convention for public BTC power-law valuation models (e.g. Giovanni
@@ -221,7 +223,7 @@ def load_coefficients(path: Path | None = None) -> BtcPowerLawCoefficients:
     warning. Re-fit via ``digiquant_fit_btc_power_law`` (or ``fit_btc_power_law``
     + ``save_coefficients``) when new history should move the window.
     """
-    p = path or (_COEFFICIENTS_PATH if _COEFFICIENTS_PATH.exists() else _COEFFICIENTS_EXAMPLE_PATH)
+    p = resolve_under_data_root(path, label="coefficients_path") if path else (_COEFFICIENTS_PATH if _COEFFICIENTS_PATH.exists() else _COEFFICIENTS_EXAMPLE_PATH)
     if not p.exists():
         raise FileNotFoundError(p)
     # model_validate_json (not model_validate(json.loads(...))): JSON mode parses

@@ -634,7 +634,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 full_tearsheet=bt_req.full_tearsheet,
             )
         except (ValueError, RuntimeError) as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": type(e).__name__}
         return {
             "ok": True,
             "service": "digiquant",
@@ -650,8 +650,8 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         if args.get("constraints"):
             try:
                 constraints = OptimizationConstraints.model_validate(args["constraints"])
-            except ValidationError as e:
-                return {"ok": False, "error": f"invalid constraints: {e}"}
+            except ValidationError:
+                return {"ok": False, "error": "invalid constraints"}
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:
                 return {"ok": False, "error": "data_path or data_dir required"}
@@ -675,7 +675,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 ),
             )
         except RuntimeError as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": type(e).__name__}
         return {
             "ok": True,
             "service": "digiquant",
@@ -694,7 +694,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 target=str(args.get("target") or "nautilus"),
             )
         except ValueError as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": type(e).__name__}
         return {
             "ok": True,
             "service": "digiquant",
@@ -747,8 +747,8 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         if args.get("constraints"):
             try:
                 constraints = OptimizationConstraints.model_validate(args["constraints"])
-            except ValidationError as e:
-                return {"ok": False, "error": f"invalid constraints: {e}"}
+            except ValidationError:
+                return {"ok": False, "error": "invalid constraints"}
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:
                 return {"ok": False, "error": "data_path or data_dir required"}
@@ -771,7 +771,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 }
             )
         except (ValueError, RuntimeError) as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": type(e).__name__}
         if raw.get("error"):
             return {"ok": False, "error": str(raw["error"]), "data": raw}
         dq_audit_log(
@@ -875,7 +875,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 run_id=(str(args["run_id"]) if args.get("run_id") else None),
             )
         except (LookupError, ValueError) as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": type(e).__name__}
         return {
             "ok": True,
             "service": "digiquant",
@@ -890,7 +890,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         try:
             summary = service_get_policy_replay(run_id)
         except (LookupError, ValueError) as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": type(e).__name__}
         return {
             "ok": True,
             "service": "digiquant",
@@ -905,7 +905,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         try:
             summary = service_get_policy_comparison(comparison_id)
         except (LookupError, ValueError) as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": type(e).__name__}
         return {
             "ok": True,
             "service": "digiquant",
@@ -924,7 +924,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 criteria_version_id=criteria_version_id,
             )
         except (LookupError, ValueError) as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": type(e).__name__}
         return {
             "ok": True,
             "service": "digiquant",
@@ -939,7 +939,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         try:
             summary = service_get_policy_gate_evaluation(evaluation_id)
         except (LookupError, ValueError) as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": type(e).__name__}
         return {
             "ok": True,
             "service": "digiquant",
@@ -1210,7 +1210,7 @@ async def api_backtest_progress(job_id: str) -> StreamingResponse:
             except Empty:
                 yield 'data: {"event": "heartbeat"}\n\n'
             except Exception as e:
-                yield f'data: {{"event": "error", "detail": "{e}"}}\n\n'
+                yield 'data: {"event": "error", "detail": "%s"}\n\n' % type(e).__name__
                 break
 
     return StreamingResponse(

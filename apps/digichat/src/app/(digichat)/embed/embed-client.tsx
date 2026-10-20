@@ -93,6 +93,7 @@ import {
   resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
 import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
+import { startWarmup } from "@/lib/warmup-gate";
 import {
   formatParentErrorLine,
   parseParentErrorMessage,
@@ -163,6 +164,22 @@ function EmbedPageInner({
   const token = searchParams.get("token") ?? undefined;
   const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
+
+  // Warm-up on load: wake sleeping services; chat sends wait on the gate.
+  useEffect(() => {
+    void startWarmup();
+  }, []);
+
+  // Track the visible viewport (mobile keyboard) for popup max-heights.
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const upd = () =>
+      document.documentElement.style.setProperty("--dc-vvh", `${Math.round(vv.height)}px`);
+    upd();
+    vv.addEventListener("resize", upd);
+    return () => vv.removeEventListener("resize", upd);
+  }, []);
 
   // Real boot milestone for the loader: the tenant/deploy config resolved.
   useEffect(() => {
@@ -377,6 +394,14 @@ function EmbedChat({
   const tenantLanguage = stockClient.chrome.defaultLanguage || DEFAULT_LANGUAGE_CODE;
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
+    // Start on the tenant's curated default so the first turn uses the model
+    // the picker shows as selected (v4.1-flash on OCC) instead of falling
+    // through to the digigraph operator default. Only tenants that publish a
+    // list can be picked, so only they get a preselected value.
+    model:
+      stockClient.models.available.length > 0
+        ? stockClient.models.default?.trim() || stockClient.models.available[0] || ""
+        : "",
     language: tenantLanguage,
     view: stockClient.features.view,
     thinking: stockClient.features.thinking,
@@ -1043,6 +1068,9 @@ function EmbedChat({
       openSettings: () => {
         setComposerMenu("settings");
       },
+      openHelp: () => {
+        setComposerMenu("help");
+      },
       openTools: () => {
         setComposerMenu("tools");
       },
@@ -1254,6 +1282,7 @@ function EmbedChat({
         <EmbedComposerMenu
           kind={composerMenu}
           models={stockClient.models.available}
+          defaultModel={stockClient.models.default}
           onClose={() => {
             setComposerMenu(null);
             setProviderSeed(undefined);

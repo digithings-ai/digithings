@@ -440,6 +440,8 @@ export interface DigichatBootLoaderProps {
   placeholder?: string;
   /** Accessible status text (visually hidden). */
   label?: string;
+  /** Visible boot step under the welcome, e.g. "Waking up services…" (null hides). */
+  statusText?: string | null;
   /** Chat accent for the loader cursor; falls back to the accent/ink chain. */
   accent?: string;
   /** Render the attach plus glyph in the mock composer; mirrors the tenant attachments flag. */
@@ -455,6 +457,7 @@ export function DigichatBootLoader({
   suggestions = DEFAULT_SUGGESTIONS,
   placeholder = DEFAULT_PLACEHOLDER,
   label = "Loading chat",
+  statusText = null,
   accent,
   showAttachment = true,
   className,
@@ -605,8 +608,13 @@ export function DigichatBootLoader({
       style={accent ? ({ "--dboot-caret": accent } as CSSProperties) : undefined}
     >
       <span className="dboot-sr" role="status">
-        {label}
+        {statusText ?? label}
       </span>
+      {statusText ? (
+        <div className="dboot-status" data-slot="digichat-boot-status" aria-hidden="true">
+          {statusText}
+        </div>
+      ) : null}
       <div className="dboot-dock" aria-hidden="true">
         <div className="dboot-welcome">
           <TypedText text={welcome} active={welcomeTyping} speedMs={TYPE.WELCOME} instant={instant} />

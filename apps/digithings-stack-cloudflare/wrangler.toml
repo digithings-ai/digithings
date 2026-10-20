@@ -37,7 +37,7 @@ bucket_name = "digithings-archive"
 # on APIs. Auth-exempt on each host is only the shared service allowlist
 # (/health, /healthz, /metrics, /docs, /redoc, /openapi.json, OPTIONS
 # preflights) plus the Worker-served /_stack/meta and /v1/market/tickers|closes,
-# and /_stack/key/* which proxies to digikey. /_stack/mcp/zammad/* is not
+# and /_stack/key/* which proxies to digikey. /_stack/mcp/* is not
 # auth-exempt: it is key-gated (x-digi-mcp-key vs the MCP_EDGE_KEY secret,
 # fail-closed 401).
 [[routes]]
@@ -78,32 +78,18 @@ custom_domain = true
 # zone_name = "digithings.ai"
 # custom_domain = true
 
-# DigiChat cutover (cost epic): zone routes moved here from digithings-digichat so the
-# folded DigiChatContainer serves them and the duplicate container goes idle.
-# DEPLOY ORDER: deploy digithings-digichat (routes removed) first, then this worker.
-# Precondition: the digichat secrets listed in apps/digichat-cloudflare/wrangler.toml
-# exist on this worker (wrangler secret list) before deploy.
-[[routes]]
-pattern = "digithings.ai/embed*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/chat*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/embed*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/byok*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/plan-proof*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/health"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/_dtchat*"
-zone_name = "digithings.ai"
+# The digichat product surface is deliberately NOT served from this Worker.
+# Decision (Chris, 2026-10-19): OCC is client work and must not ride the base
+# digithings platform. Every digithings.ai digichat path (embed, api/chat,
+# api/embed, api/byok, api/plan-proof, api/health, _dtchat, chat/occ) is owned
+# by apps/digichat-cloudflare / the `digithings-digichat` Worker and its own
+# container. The earlier fold (cost epic, #5411) moved those routes here to
+# idle a duplicate container; that mixed the client surface into the base tool,
+# so it was dropped. This Worker serves ONLY its own custom domains below.
+#
+# Consequence: a deploy of this Worker no longer claims any digithings.ai path,
+# which is what made every stack deploy fail with
+# `Can't deploy routes that are assigned to another worker`.
 
 [[containers]]
 class_name = "DigiStackContainer"
@@ -112,7 +98,7 @@ class_name = "DigiStackContainer"
 # own directory (`dirname(image)`); pinned to the monorepo root explicitly so
 # the COPY digibase/ / digikey/ / ... lines can never drift to a narrower
 # context (#4046).
-image = "../../Dockerfile.digithings-stack-cloudflare"
+image = "../../infra/docker/Dockerfile.digithings-stack-cloudflare"
 image_build_context = "../.."
 # Cost minimum (Cloudflare cost epic): one replica; traffic is ~2k req/day.
 max_instances = 1
@@ -149,24 +135,13 @@ max_instances = 1
 # on standard-2 — re-check latency after deploy.
 instance_type = "standard-1"
 
-# Folded digichat (#4689). Same image as the standalone digichat worker
-# (Next standalone on :3000, one shared instance for digithings + OCC + future
-# tenants via the embed registry) — NOT part of the Profile A image above.
-# Auth stays in-container: the Worker applies no edge gating on digichat
-# paths. The standalone digichat worker stays deployed until cutover; no
-# DNS/Pages/route changes in this slice.
-[[containers]]
-class_name = "DigiChatContainer"
-# Build context MUST be the monorepo root (same #4046 lesson as above):
-# Dockerfile.digichat-cloudflare COPYs package.json, apps/digichat and
-# packages/* with repo-root-relative paths. Resolved relative to this config
-# file: ../.. is the repo root.
-image = "../../Dockerfile.digichat-cloudflare"
-image_build_context = "../.."
-max_instances = 2
-# Next standalone: basic = 1 GiB (lite = 256MiB is far too small). Typical Next
-# standalone RSS is 200-500 MiB; revert to standard-1 if OOM.
-instance_type = "basic"
+# The folded DigiChatContainer is GONE from this Worker (Chris, 2026-10-19):
+# the digichat product (and OCC, one of its tenants) runs only in
+# apps/digichat-cloudflare on the `digithings-digichat` Worker's own container.
+# The container app that used to back this class
+# (digithings-stack-digichatcontainer) is deleted; the class, its Durable
+# Object binding and the digichat image COPY/untar in
+# infra/docker/Dockerfile.digithings-stack-cloudflare are removed with it.
 
 # Ops SSH debug key removed (cost/hygiene epic). Re-add [[containers.authorized_keys]]
 # temporarily only for a live debugging session.
@@ -179,10 +154,9 @@ class_name = "DigiStackContainer"
 name = "MCP_STACK"
 class_name = "DigiQuantMcpContainer"
 
-[[durable_objects.bindings]]
-name = "DIGICHAT"
-class_name = "DigiChatContainer"
-
+# v3 (DigiChatContainer) is left in the migration history deliberately: the DO
+# namespace it created is unbound now, and rewriting an applied migration tag
+# is not a supported operation.
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["DigiStackContainer"]
@@ -194,6 +168,14 @@ new_sqlite_classes = ["DigiQuantMcpContainer"]
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["DigiChatContainer"]
+
+# v4 completes the fold: the live Worker still holds a Durable Object instance of
+# the folded class, and Cloudflare refuses a script that no longer exports it
+# (error 10064). The namespace was unbound by the fold, so those instances are
+# orphans; deleting them is what the fold means. Tags are never rewritten.
+[[migrations]]
+tag = "v4"
+deleted_classes = ["DigiChatContainer"]
 
 # Secrets (wrangler secret put) — never commit values:
 #   DIGIKEY_BFF_TOKEN
@@ -210,7 +192,6 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   CHEAPERINFERENCE_API_BASE # optional; default https://api.cheaperinference.com/v1
 #   DIGI_HOUSE_UPSTREAM       # optional; set "openrouter" to force OpenRouter
 #   LITELLM_PROXY_API_KEY     # optional shared proxy key
-#   ZAMMAD_API_TOKEN          # read-only Zammad helpdesk MCP (zammad-mcp program, OCC tickets)
 #   GLOOMBERB_SESSION_COOKIE  # digiquant-mcp session-gated digifetch tools (#4260)
 #   R2_ACCOUNT_ID             # digiquant-mcp market-data history reads
 #   R2_BUCKET                 # digiquant-mcp (same digithings-archive bucket)
@@ -274,6 +255,18 @@ new_sqlite_classes = ["DigiChatContainer"]
 # (DIGICHAT_DATABASE_URL stays intentionally unset: the Cloudflare deployment
 # is DB-less, same as the standalone worker — see apps/digichat-cloudflare/wrangler.toml.)
 
+# Tenant/client configuration. Chris ruling 2026-10-15 01:26: tenant configs live in
+# Cloudflare KV only, never as repo files. The namespace already exists, so this adds
+# no Cloudflare resource and needs no new binding grant; key layout is Counsel's
+# (DIG-3567).
+# BOUND BUT INERT: readTenantConfig() is not yet called from src/index.ts, so nothing
+# reads this binding at runtime today. See src/tenant-config.ts and DIG-3699.
+# The account resource id lives HERE and never in config/contract/ -- an account id is
+# not a reproducible config value (DIG-3699 ruling element 1).
+[[kv_namespaces]]
+binding = "TENANT_CONFIG"
+id = "361b710bee56466097053275404535ba"
+
 [vars]
 # Canonical Supabase project ref (#4700): public value, same as the standalone
 # dashboard-api worker's [vars]; doubles as the fallback source for the legacy
@@ -317,8 +310,12 @@ DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiqu
 # Profile A: digisearch/digivault are loopback inside the stack container;
 # digichat only talks to digigraph (+ digikey for bff_session).
 DIGICHAT_ENABLED_SERVICES = "digigraph"
+# Session model picker (OCC settings): the house-upstream slugs a visitor may
+# pick per session. digigraph binds X-Digi-House-Model only for a slug on this
+# list (digigraph/src/digigraph/model_config.py); BYOK is unaffected.
+DIGI_SESSION_MODEL_ALLOWLIST = "deepseek/deepseek-v4.1-flash,z-ai/glm-5.3-flash,qwen/qwen3.8-flash,google/gemma-4-31b-it,xiaomi/mimo-v2.6-flash,z-ai/glm-4.7-flash"
 # Defense-in-depth corpus map (headers from digichat still win).
-DIGI_TENANT_CORPUS_MAP = "{\"digithings\": {\"digisearchIndex\": \"digithings_docs\", \"vaultPathPrefix\": \"clients/digithings\"}, \"occ\": {\"digisearchIndex\": \"occ_help\", \"vaultPathPrefix\": \"clients/online-compliance-center\", \"researchSystemPrompt\": \"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch_semantic, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\\"truncated\\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket content is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly if they do not ground the answer.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for summaries or trends, find-precedent-tickets for how a similar issue was solved) and follow it. Always get_skill present-results before writing the final answer and follow its display rules.\"}}"
+DIGI_TENANT_CORPUS_MAP = "{\"digithings\": {\"digisearchIndex\": \"digithings_docs\", \"vaultPathPrefix\": \"clients/digithings\"}, \"occ\": {\"digisearchIndex\": \"occ_help\", \"vaultPathPrefix\": \"clients/online-compliance-center\", \"researchSystemPrompt\": \"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\\"truncated\\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nChoosing a search tool: use digisearch with index `occ_help` for how-to questions, features, settings, manuals and any policy or procedure question. The help corpus does not contain support tickets; for live ticket lists, counts, status or details use the read-only zammad tools, and say so clearly when they do not ground the answer.\\n\\nLanguage of shown terms: the chat language is the language the user writes in (or the response language set for this chat). Whenever your answer, or your description of what you searched, shows any word in a different language from the chat language (search queries you ran, ticket statuses or labels, ticket or article titles, UI terms, error messages, quoted snippets from tickets or docs), give the translation in the chat language every time: translated term first, then the original in parentheses and quotes, for example: in progress (\\\"in Bearbeitung\\\"), or: I searched for mailbox (\\\"Postfach\\\"). This applies to every non-chat-language word or phrase you show, including inside lists and tables. Do not add a translation when the source text is already in the chat language.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for themes and grouping, find-precedent-tickets for how a similar issue was solved) and follow it. For a how-to or documentation question, get_skill guide-help-docs and follow its map. Always get_skill present-results before writing the final answer and follow its display rules.\\n\\nCitations: there is no automatic source list. When you use retrieved content, cite it inline in the answer: put a markdown link on the relevant words when the source has an http(s) URL (for example [activation steps](https://help.online-compliance-center.com/...)), otherwise add a short reference in parentheses, such as (Portal manual, 2.2) or (ticket #28394). Only http(s) URLs may be links: never put repo://, vault paths or other non-web paths inside a markdown link. Do not add a separate Sources section or list.\\n\\nIdentity: you are the digichat assistant for Online Compliance Center. Do not claim to be Claude, GPT, DeepSeek or any other named model or vendor; if asked which model you run on, say you are the digichat assistant and that the model is managed by the operator.\",\"lockSessionControls\":true}}"
 
 # Market-data base for GET /v1/market/closes and /v1/market/tickers (declared in
 # config/contract/contract.yaml). The standalone dashboard-api worker already

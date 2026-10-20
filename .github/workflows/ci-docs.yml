@@ -34,6 +34,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       # Installs from the committed uv.lock rather than resolving fresh (#1715).
@@ -43,6 +44,16 @@ jobs:
 
       - name: Check internal markdown links
         run: uv run --frozen --no-sync python scripts/check_doc_links.py
+
+      - name: Check OpenWiki claim sidecars match the page manifest
+        # Any claim sidecar openwiki 0.5.0 rejects at preflight (no pageVersion, no
+        # claims array, wrong schemaVersion, unknown keys, bad verification) makes
+        # `openwiki code --update` short-circuit into "Invalid claim sidecar ...",
+        # so the scheduled wiki update never opens its PR; a claim-bearing sidecar
+        # with no durable verification fails later at page coverage. DIG-4382.
+        # Structural only: page bytes may lag the manifest until the run's planner
+        # regenerates them, so the checker does not re-hash Markdown.
+        run: uv run --frozen --no-sync python scripts/check_openwiki_claims_state.py
 
       - name: Check ADR numbering
         # docs/adr/NNNN-*.md must stay zero-padded, unique and gap-free (#3524).

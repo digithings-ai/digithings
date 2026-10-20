@@ -71,6 +71,11 @@ digigraph:
   - tests/dg/**
   - tests/contracts/**
   - .github/workflows/test-digigraph.yml
+  # The OpenAPI drift check (scripts/export_openapi.py --check) runs in the
+  # digigraph lane, so artifact-only edits must fire it (DIG-513). Without
+  # this entry a docs/openapi/** change skips every lane while the aggregate
+  # still reports success because skips count as success.
+  - docs/openapi/**
   # config/ is loaded at digigraph runtime (model_modes.yaml, byok-providers.json,
   # mcp_servers.yaml, digiquant_models.yaml -- all read by tests/dg/*), and
   # infra/digichat-release/config/ is its vendored copy for the Profile A release
@@ -138,7 +143,7 @@ web:
   # because it already installs the root npm workspaces.
   - apps/digithings-cron/**
   - apps/digiquant-runner/**
-  - Dockerfile.digiquant-runner
+  - infra/docker/Dockerfile.digiquant-runner
   # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
   # session.css + cursor.css, so a change there is a change to this app.
   - packages/digichat-ui/**
@@ -176,7 +181,7 @@ web:
   # two compose: that PR's union guard reads every glob in this file, so this directory
   # entry independently satisfies it.
   - apps/reference/**
-  # digichat Containers Worker + Dockerfile (workspace digithings-digichat-cloudflare).
+  # digichat Containers Worker + Dockerfile (workspace digichat-cloudflare).
   # Pages does not build it; vitest/wrangler live in that package. Keep on the web lane
   # so package.json is never an orphan install-input (#2073 / #2074).
   - apps/digichat-cloudflare/**
@@ -185,8 +190,8 @@ web:
   - apps/digithings-stack-cloudflare/**
   # digitrace Langfuse Web+Worker Containers (#4930 Phase 1).
   - apps/digitrace-langfuse/**
-  - Dockerfile.digitrace-langfuse-web
-  - Dockerfile.digitrace-langfuse-worker
+  - infra/docker/Dockerfile.digitrace-langfuse-web
+  - infra/docker/Dockerfile.digitrace-langfuse-worker
   # Central read-only dashboard API worker (workspace `dashboard-api`, #4651).
   # Same lane, same reason, as the Cloudflare Workers above: Pages does not build
   # it, its vitest/wrangler live in that package, and this lane already pays the
@@ -212,6 +217,11 @@ web:
   # devDependencies. Without it, apps/digidata-api/package.json was an orphan
   # install input and no lane ran its suite (#5404 review).
   - apps/digidata-api/**
+  # corpus-index Worker. Same lane, same reason, as digidata-api above: its
+  # vitest and tsc live in that package, and this lane already pays the root
+  # npm ci. Without this entry apps/corpus-index/package.json is an orphan
+  # install input and no lane runs the suite.
+  - apps/corpus-index/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
@@ -313,6 +323,10 @@ ruff_and_scripts:
   # the cron entry above: the root npm install resolves this workspace's
   # manifest, so an edit here must redden a lane that runs.
   - apps/dashboard-api/**
+  # corpus-index Worker. The web lane runs its vitest; this entry reddens the
+  # script guards (registry, parity baseline, worker build matrix) when the
+  # worker or its wrangler config changes.
+  - apps/corpus-index/**
   # This job's "Validate model routing (config only)" step runs
   # scripts/validate_model_routing.py --routing against the REAL
   # config/model_modes.yaml -- the only CI check that does; tests/dg/test_model_config.py
@@ -402,3 +416,21 @@ npm_audit:
   - npm-audit-ignore.txt
   - scripts/classify_npm_audit.py
   - .github/workflows/security-npm-audit.yml
+
+# Worker dry-run build gate (DIG-3770). One glob per matrix app dir plus the
+# wrangler.toml catch-all and the install inputs: `npm ci` resolves the hoisted
+# wrangler, so a lockfile change is a build input. A per-app wrangler.toml
+# entry would be a dead duplicate of the catch-all, same as the matrix test
+# pins for the standalone trigger it replaces.
+workers:
+  - apps/digithings-cron/**
+  - apps/dashboard-api/**
+  - apps/digidata-api/**
+  - apps/digiquant-runner/**
+  - apps/digitrace-langfuse/**
+  - apps/digichat-cloudflare/**
+  - apps/digithings-stack-cloudflare/**
+  - apps/twelvex-runner/**
+  - apps/**/wrangler.toml
+  - package.json
+  - package-lock.json

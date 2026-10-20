@@ -18,7 +18,7 @@ license = { text = "MIT" }
 # surface and install extras". The running service installs
 # [server,ingestion,azure,chroma,web-search].
 dependencies = [
-    "polars>=1.0",
+    "polars>=1.43,<2",
     "pydantic>=2",
     "httpx>=0.27",
     "pyyaml>=6",
@@ -65,7 +65,7 @@ chroma = ["chromadb>=0.4"]
 # [server,ingestion,azure,chroma,web-search] and not this extra, so digillm stays out of
 # the container: the board ruled that the image does not need the remote embedding path
 # (DIG-1407), and installing digillm would drag openai in with it and enable that path
-# for the first time. Dockerfile.digithings-stack-cloudflare, which does use digillm,
+# for the first time. infra/docker/Dockerfile.digithings-stack-cloudflare, which does use digillm,
 # installs it as its own sibling.
 embedding = ["openai>=1.0", "digillm>=0.1.0"]
 # Small multilingual ONNX path (#4756): paraphrase-multilingual-MiniLM-L12-v2

@@ -82,6 +82,18 @@ afterEach(() => {
 });
 
 describe("gallery composer send control", () => {
+  it("keeps attach, input and send on one row", async () => {
+    // The toolbar used to sit below the input inside the same border, which
+    // read as a two-line text box. All three controls now share the row.
+    const { host, unmount } = await mount(vi.fn());
+    const main = host.querySelector(".aui-composer-main");
+    expect(main).toBeTruthy();
+    expect(host.querySelector(".aui-composer-action-wrapper")).toBeNull();
+    expect(main?.querySelector("textarea")).toBeTruthy();
+    expect(main?.querySelector(".aui-composer-send-controls")).toBeTruthy();
+    unmount();
+  });
+
   it("pins the send controls right when no attachment adapter is mounted", async () => {
     // This harness runs adapter-less, so AddAttachment renders null — the
     // reported product-mode state. justify-between alone would collapse the

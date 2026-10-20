@@ -11,6 +11,9 @@ sources:
   - id: openwiki-source-digivoice-pyproject
     resource: repo://digivoice/pyproject.toml
 generated: { by: "DIG-3433", at: "2026-10-14T05:10:00.000Z" }
+verified:
+  - by: DIG-3433
+    at: 2026-10-14T05:10:00.000Z
 ---
 
 # digivoice Quickstart

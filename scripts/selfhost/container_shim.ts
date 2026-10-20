@@ -93,7 +93,7 @@ export const SELF_HOST_CLASSES: Readonly<
 	DigiQuantRunnerContainer: {
 		ports: {},
 		neededService: "digiquant-runner",
-		note: "Dockerfile.digiquant-runner exposes 8080 in-container; compose publishes no 8080.",
+		note: "infra/docker/Dockerfile.digiquant-runner exposes 8080 in-container; compose publishes no 8080.",
 	},
 	LangfuseWebContainer: {
 		ports: {},
@@ -222,6 +222,9 @@ export class SelfHostContainer {
 				duplex: "half",
 			}));
 		} catch (cause) {
+			console.error(
+				`selfhost: upstream unreachable for ${resolution.className}: ${cause instanceof Error ? cause.message : "unknown error"}`,
+			);
 			return new Response(
 				JSON.stringify(
 					{
@@ -231,7 +234,6 @@ export class SelfHostContainer {
 						composeService: upstream.service,
 						hostPort: upstream.hostPort,
 						hint: upstream.profile ? `docker compose --profile ${upstream.profile} up -d ${upstream.service}` : `docker compose up -d ${upstream.service}`,
-						cause: String(cause),
 					},
 					null,
 					2,

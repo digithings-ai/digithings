@@ -32,6 +32,7 @@ import argparse
 import json
 import math
 import sys
+import warnings
 from datetime import date as dt_date
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -43,8 +44,15 @@ try:
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
@@ -206,7 +214,7 @@ def _desk_weight_unchanged(weight_pct: Optional[float], prev_weight_pct: Optiona
     if weight_pct is None or prev_weight_pct is None:
         return False
     delta = float(weight_pct) - float(prev_weight_pct)
-    if not (delta == delta):  # NaN
+    if math.isnan(delta):
         return False
     return round(delta, _DESK_PP_DECIMALS) == 0.0
 
@@ -528,37 +536,6 @@ def _prior_position_weight(sb, prior_date: Optional[str], ticker: str) -> Option
         return None
     return _parse_pct(rows[0].get("weight_pct"))
 
-
-# Compatibility projection labels (#2422 / Task 2.5). Historical prose rows stay
-# ``legacy`` permanently; ledger paper-fill projections stamp ``authoritative``.
-    res = (
-        _eq_house(sb.table("positions").select("ticker,weight_pct")).eq("date", book_date).execute()
-    )
-    out: Dict[str, Optional[float]] = {}
-    for row in getattr(res, "data", None) or []:
-        if not isinstance(row, dict):
-            continue
-        tk = row.get("ticker")
-        if not tk or str(tk).upper() == "CASH":
-            continue
-        out[str(tk).upper()] = _parse_pct(row.get("weight_pct"))
-
-    state = fetch_ledger_state(sb, _house_id(), book_date)
-    if not state.covered:
-        return out
-    anchored: List[str] = []
-    for tk, target in state.targets.items():
-        if tk not in out:
-            continue
-        out[tk] = target.weight_pct
-        anchored.append(tk)
-    print(
-        f"🔎 prior-book ledger anchor: basis={book_date} anchored={len(anchored)}"
-        f"/{len(state.targets)} ledger_targets applied={state.applied}"
-        f" ignored={state.ignored} future={state.future}"
-        f" unusable_weight={state.unusable_weight} exited={len(state.exited)}"
-    )
-    return out
 
 
 # Compatibility projection labels (#2422 / Task 2.5). Historical prose rows stay

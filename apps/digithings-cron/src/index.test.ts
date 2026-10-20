@@ -209,6 +209,261 @@ describe("scheduled", () => {
   });
 });
 
+/**
+ * Fake START_COUNTER namespace backed by one Map. Every stub talks to the same
+ * store, which is what makes a claim by a second `scheduled()` call visible to
+ * the first — the cross-invoke guarantee the real Durable Object provides.
+ */
+function startCounter() {
+  const store = new Map<string, string>();
+  const events: string[] = [];
+  let sequence = 0;
+  const slotId = (key: string, slot: string) => `${key}@${slot}`;
+  const stub = {
+    async claimSlot(key: string, slot: string) {
+      events.push(`claim:${key}@${slot}`);
+      const id = slotId(key, slot);
+      if (store.has(id)) return null;
+      const token = `token-${++sequence}`;
+      store.set(id, token);
+      return token;
+    },
+    async markDispatching(key: string, slot: string, token: string) {
+      events.push(`dispatching:${key}@${slot}`);
+      return store.get(slotId(key, slot)) === token;
+    },
+    async confirmSlot(key: string, slot: string, token: string) {
+      events.push(`confirm:${key}@${slot}`);
+      if (store.get(slotId(key, slot)) === token) store.set(slotId(key, slot), "confirmed");
+    },
+    async releaseSlot(key: string, slot: string, token: string) {
+      events.push(`release:${key}@${slot}`);
+      if (store.get(slotId(key, slot)) === token) store.delete(slotId(key, slot));
+    },
+  };
+  const namespace = {
+    idFromName: (name: string) => name,
+    get: () => stub,
+  } as unknown as DurableObjectNamespace;
+  return { namespace, store, events, stub };
+}
+
+describe("scheduled tick idempotency (DIG-4384)", () => {
+  // Cloudflare delivers a cron tick at least once. On 14-17 Oct 2026 it
+  // delivered every tick of this Worker twice, 7-29s apart, each copy with its
+  // own scheduledDatetime (e.g. 00:52:48 and 00:52:55). Both copies reached
+  // dispatch, so every workflow started twice. The slot is the cron's minute,
+  // not the delivery second: the two copies must share one claim.
+  it("dispatches once when the same tick is delivered twice", async () => {
+    const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", githubFetch);
+    const { namespace, events } = startCounter();
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      START_COUNTER: namespace,
+    };
+
+    for (const second of [48, 55]) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        {
+          // token-canary, one of the rows observed dispatching twice.
+          cron: "41 6 * * *",
+          scheduledTime: Date.UTC(2026, 9, 15, 6, 41, second),
+        } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+    }
+
+    expect(githubFetch).toHaveBeenCalledOnce();
+    // Both writes are load-bearing: without dispatching the slow-call lease is
+    // never armed, and without confirm the claim expires after its short lease.
+    // Either omission lets the second delivery dispatch again.
+    expect(events.some((event) => event.startsWith("dispatching:"))).toBe(true);
+    expect(events.some((event) => event.startsWith("confirm:"))).toBe(true);
+  });
+
+  it("uses the cron minute, so a pair straddling a minute boundary is the known limit", async () => {
+    // 0 of 514 measured duplicate pairs straddled a minute. If that changes,
+    // the slot unit has to change with it: for an every-minute clock a copy at
+    // :00:05 cannot be told apart from the next legitimate tick, so this test
+    // records the limit instead of pretending it is covered.
+    const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", githubFetch);
+    const { namespace } = startCounter();
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      START_COUNTER: namespace,
+    };
+
+    for (const scheduledTime of [
+      Date.UTC(2026, 9, 15, 6, 41, 58),
+      Date.UTC(2026, 9, 15, 6, 42, 5),
+    ]) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        { cron: "41 6 * * *", scheduledTime } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+    }
+
+    expect(githubFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("still dispatches the next tick of the same row", async () => {
+    const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", githubFetch);
+    const { namespace } = startCounter();
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      START_COUNTER: namespace,
+    };
+
+    // A claim belongs to one slot, never to the row: the hourly rows must keep
+    // firing every hour.
+    for (const hour of [6, 7]) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        {
+          cron: "17 * * * *",
+          scheduledTime: Date.UTC(2026, 9, 15, hour, 17, 0),
+        } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+    }
+
+    expect(githubFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("claims by job, so two rows firing in one minute both dispatch", async () => {
+    // production-deploy-gate-watchdog (`17,47 * * * *`) and datatap-answer-check
+    // (`17 * * * *`) both fire at :17. They are different jobs, and the shared
+    // workflow-file case works the same way: market_context_ingest.yml is
+    // dispatched by three rows with three ids.
+    const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", githubFetch);
+    const { namespace, events } = startCounter();
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      START_COUNTER: namespace,
+    };
+
+    for (const cron of ["17,47 * * * *", "17 * * * *"]) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        { cron, scheduledTime: Date.UTC(2026, 9, 15, 0, 17, 0) } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+    }
+
+    expect(githubFetch).toHaveBeenCalledTimes(2);
+    // Pin the key shape as well: the id is in the claim, so a row that shares
+    // a workflow file with another row still gets its own start.
+    expect(events).toContain(
+      "claim:17,47 * * * *\nproduction-deploy-gate-watchdog@2026-10-15T00:17",
+    );
+    expect(events).toContain("claim:17 * * * *\ndatatap-answer-check@2026-10-15T00:17");
+  });
+
+  it("releases the claim when the dispatch fails, so a retry can still start the run", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("forbidden", { status: 403 })),
+    );
+    const { namespace, events } = startCounter();
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      START_COUNTER: namespace,
+    };
+
+    const first: Promise<unknown>[] = [];
+    await worker.scheduled(
+      { cron: "41 6 * * *", scheduledTime: Date.UTC(2026, 9, 15, 6, 41, 48) } as ScheduledController,
+      env,
+      executionContext(first),
+    );
+    await expect(first[0]).rejects.toThrow(/HTTP 403/);
+    expect(events.some((event) => event.startsWith("release:"))).toBe(true);
+
+    // The second delivery of the same slot finds the key free and dispatches.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    );
+    const second: Promise<unknown>[] = [];
+    await worker.scheduled(
+      { cron: "41 6 * * *", scheduledTime: Date.UTC(2026, 9, 15, 6, 41, 55) } as ScheduledController,
+      env,
+      executionContext(second),
+    );
+    expect(second).toHaveLength(1);
+    await expect(second[0]).resolves.toBeDefined();
+  });
+
+  it("fails open when the counter binding is absent, never dropping a tick", async () => {
+    const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", githubFetch);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "github-token" };
+
+    for (const second of [48, 55]) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        {
+          cron: "41 6 * * *",
+          scheduledTime: Date.UTC(2026, 9, 15, 6, 41, second),
+        } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+    }
+
+    expect(githubFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails open when the counter namespace throws, never dropping a tick", async () => {
+    const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", githubFetch);
+    // idFromName succeeds and get throws: the new Error path is synchronous,
+    // before the claim's own await, and must still be caught.
+    const namespace = {
+      idFromName: (name: string) => name,
+      get: () => {
+        throw new Error("namespace unavailable");
+      },
+    } as unknown as DurableObjectNamespace;
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "github-token", START_COUNTER: namespace };
+
+    for (const second of [48, 55]) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        {
+          cron: "41 6 * * *",
+          scheduledTime: Date.UTC(2026, 9, 15, 6, 41, second),
+        } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+    }
+
+    expect(githubFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
 const WINTER_BEFORE_OPEN = Date.UTC(2026, 0, 15, 13, 40, 0);
 
 function kick(body: unknown, secret = "kick-secret"): Request {
@@ -515,6 +770,7 @@ describe("POST /kick", () => {
       DRY_RUN: "0",
       CRON_KICK_SECRET: "kick-secret",
       GH_DISPATCH_TOKEN: "token",
+      GITHUB_OVERRIDE_JOBS: "twelve-x-market-context-daily",
     };
 
     const res = await worker.fetch(
@@ -531,6 +787,56 @@ describe("POST /kick", () => {
     );
     expect(JSON.parse(String(init.body)).inputs).toEqual({ bucket: "weekly" });
   });
+
+  it("kick carries a caller-supplied run_date onto the twelve-x backfill row", async () => {
+    // DIG-1335 (CTO verdict on DIG-1272): a run_date given to the Worker must
+    // arrive as an input on the dispatched workflow_dispatch run. Today the
+    // row does not exist, so the kick maps to no job and dispatches nothing.
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      GH_DISPATCH_TOKEN: "token",
+    };
+
+    const res = await worker.fetch(
+      kick({ cron: "41 3 * * *", args: { run_date: "2026-10-05" } }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain(
+      "/repos/digithings-ai/twelve-x/actions/workflows/daily_run.yml/dispatches",
+    );
+    expect(JSON.parse(String(init.body)).inputs).toEqual({ run_date: "2026-10-05" });
+  });
+
+  it("kick without args derives run_date for the twelve-x backfill row", async () => {
+    // Same row, no caller date: the Worker stamps the scheduled day instead
+    // of dispatching inputs {} (the Oct-6 defect shape: date dropped on floor).
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      GH_DISPATCH_TOKEN: "token",
+    };
+
+    const res = await worker.fetch(
+      kick({ cron: "41 3 * * *", scheduledTime: Date.UTC(2026, 9, 15, 3, 41) }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).inputs).toEqual({ run_date: "2026-10-15" });
+  });
   it("answers 400 when GitHub refuses an undeclared workflow input", async () => {
     const fetchMock = vi.fn(
       async () =>
@@ -546,11 +852,12 @@ describe("POST /kick", () => {
       DRY_RUN: "0",
       CRON_KICK_SECRET: "kick-secret",
       GH_DISPATCH_TOKEN: "github-token",
+      GITHUB_OVERRIDE_JOBS: "twelve-x-market-context-daily",
     };
 
-    // twelve-x-market-context-daily is the only row on this cron. It is a
-    // workflow_dispatch with inputs { bucket: "daily" }, so GitHub refusing
-    // "bucket" is a real shape for this route.
+    // twelve-x-market-context-daily is the only row on this cron. It is kind
+    // twelvex, and GITHUB_OVERRIDE_JOBS sends it back to workflow_dispatch.
+    // GitHub refusing "bucket" is still the shape of that fallback.
     const res = await worker.fetch(kick({ cron: "30 5 * * *" }), env, executionContext([]));
 
     expect(res.status).toBe(400);

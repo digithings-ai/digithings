@@ -171,7 +171,7 @@ so: *"Production clock: Cloudflare Worker digithings-cron. Schedule removed
   branch is also `develop`.
 
 **The clock already exists.** [`apps/digithings-cron/src/jobs.ts`](../../apps/digithings-cron/src/jobs.ts)
-line 271 registers:
+registers:
 
 ```
 wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml")
@@ -182,6 +182,13 @@ a daily 06:21 UTC `workflow_dispatch` against `develop`. So the new job block
 workflow file.** `workflow_dispatch`, `start_key` and `concurrency` are all
 already in that file, which is what the issue noticed — it read the shape right
 and the reason wrong.
+
+> **2026-10-19 update (DIG-4364):** that `ci-pr-hygiene` clock no longer fires.
+> The 2026-10-14 GitHub cost lock set `ci-pr-hygiene.yml` to `disabled_manually`,
+> so the Worker's row now carries `enabled: false` and its `[triggers].crons`
+> line is gone. Any new job block that assumed it could ride the 06:21 dispatch
+> must first confirm the workflow is re-enabled on GitHub (or add its own clock
+> row); otherwise it is dispatched by a lane that is deliberately silent.
 
 Two wiring details that follow from the existing file, not from the issue:
 

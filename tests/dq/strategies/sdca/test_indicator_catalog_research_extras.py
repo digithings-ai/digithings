@@ -27,6 +27,7 @@ Scope discipline, asserted here rather than only described:
 from __future__ import annotations
 
 import datetime as _dt
+import math
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -212,17 +213,25 @@ class TestDormantNames:
         )
         assert name not in published
 
-    def test_published_tuples_are_exactly_develops(self) -> None:
-        assert MACRO_INDICATOR_NAMES == ("m2", "rs_eth", "dxy")
-        assert PRICE_OSCILLATOR_NAMES == ("weekly_rsi", "weekly_macd", "sma_band")
-        assert EXTRA_INDICATOR_NAMES == (
+    def test_published_tuples_are_pinned(self) -> None:
+        """develop's BTC tuples plus the gold_sdca macro family (#4804, DIG-1581)."""
+        macro = (
             "m2",
             "rs_eth",
             "dxy",
-            "weekly_rsi",
-            "weekly_macd",
-            "sma_band",
+            "uup",
+            "gvz",
+            "walcl",
+            "hy_oas",
+            "ig_oas",
+            "breakeven_5y",
+            "nfci",
+            "gdx_gld",
+            "gld_slv",
         )
+        assert MACRO_INDICATOR_NAMES == macro
+        assert PRICE_OSCILLATOR_NAMES == ("weekly_rsi", "weekly_macd", "sma_band")
+        assert EXTRA_INDICATOR_NAMES == macro + PRICE_OSCILLATOR_NAMES
 
 
 class TestDisplayNames:
@@ -374,7 +383,7 @@ class TestOnchainNonPositiveValues:
         n = 120
         values = pl.Series("value", [bad] * 10 + [2.0 + 0.01 * i for i in range(n - 10)])
         z = _z_list(onchain_mvrv_z(_dates(n), _dates(n), values, window=_W, min_samples=_M))  # type: ignore[arg-type]
-        assert all(value is None or value == value for value in z)
+        assert all(value is None or not math.isnan(value) for value in z)
         present = [v for v in z if v is not None]
         assert present
         assert all(-3.0 <= v <= 3.0 for v in present)
@@ -423,7 +432,7 @@ class TestOnchainAddrRatio:
         z = _z_list(
             onchain_addr_ratio_z(_dates(n), price, _dates(n), addr, window=_W, min_samples=_M)  # type: ignore[arg-type]
         )
-        assert all(value is None or value == value for value in z)
+        assert all(value is None or not math.isnan(value) for value in z)
         present = [v for v in z if v is not None]
         assert present
         assert all(-3.0 <= v <= 3.0 for v in present)

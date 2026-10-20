@@ -122,8 +122,15 @@ def _build_raw_provider(name: str, model: str | None) -> EmbeddingProvider:
         from digisearch.embedding.providers.openai import OpenAIEmbedder
 
         return OpenAIEmbedder(model=model or "text-embedding-3-small", api_key=api_key)
+    # Query-side twin of the corpus-index worker. Same model id, 1024-dim.
+    # Called before the unknown-provider error so bge-m3 is not a silent miss.
+    from digisearch.embedding.providers.workers_ai import provider_for
+
+    workers = provider_for(name, model)
+    if workers is not None:
+        return workers
     raise EmbeddingConfigError(
-        f"unknown embedding provider {name!r}; expected minilm, openai, "
+        f"unknown embedding provider {name!r}; expected minilm, openai, bge-m3, "
         "or a model id (e.g. 'Xenova/paraphrase-multilingual-MiniLM-L12-v2')"
     )
 

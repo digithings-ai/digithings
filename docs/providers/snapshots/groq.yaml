@@ -1,5 +1,5 @@
 provider: groq
-last_checked: 2026-10-11
+last_checked: 2026-10-18
 source: agent-research
 
 free_tier:
@@ -17,8 +17,8 @@ free_tier:
       max_output_tokens: 32768
       status: deprecated        # hard cutover reached; Groq's own June 17 2026 notice said "by August 2026 requests will no longer be served" for free/developer tier
       verified: false
-      last_verified: 2026-10-11
-      last_verified_latency_ms: 228
+      last_verified: 2026-10-18
+      last_verified_latency_ms: 92
       verification_error: "Error code: 404 - {'error': {'message': 'The model `llama-3.3-70b-versatile` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}"
     - name: llama-4-scout-17b-16e-instruct
       context_window: 131072

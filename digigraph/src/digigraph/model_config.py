@@ -32,6 +32,7 @@ import hashlib
 import json
 import logging
 import os
+from contextvars import ContextVar, Token
 from pathlib import Path
 
 import yaml
@@ -305,7 +306,7 @@ def _resolve_model_policy_path() -> Path:
     form resolves relative to CWD, which is fine for an optional lenient file and wrong
     for a required one.
     """
-    config_dir_override = os.environ.get("DIGI_CONFIG_PATH")
+    config_dir_override = os.environ.get("DIGIQUANT_CONFIG_DIR") or os.environ.get("DIGI_CONFIG_PATH")
     if config_dir_override:
         return Path(config_dir_override) / "model-policy.json"
     return Path(__file__).resolve().parents[3] / "config" / "model-policy.json"
@@ -350,7 +351,7 @@ _VALID_CAPABILITIES = frozenset({"extraction", "research", "reasoning"})
 def _load_model_modes() -> ModelModesConfig:
     """Load model modes YAML (mtime-cached). ``DIGI_MODEL_MODES_FILE`` overrides filename."""
     global _model_modes_cache
-    config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
+    config_dir = os.environ.get("DIGIQUANT_CONFIG_DIR") or os.environ.get("DIGI_CONFIG_PATH", "config")
     fname = (
         os.environ.get("DIGI_MODEL_MODES_FILE") or "model_modes.yaml"
     ).strip() or "model_modes.yaml"
@@ -380,7 +381,7 @@ def _load_model_modes() -> ModelModesConfig:
 
 
 def _digiquant_models_path() -> Path:
-    config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
+    config_dir = os.environ.get("DIGIQUANT_CONFIG_DIR") or os.environ.get("DIGI_CONFIG_PATH", "config")
     return Path(config_dir) / "digiquant_models.yaml"
 
 
@@ -736,7 +737,6 @@ def effective_llm_settings() -> dict[str, object]:
     """
     mode = _get_llm_mode()
     provider, model, api_key_env = _explicit_llm_config()
-    source = "default"
     resolved = _resolve_explicit_model(provider, model)
     if resolved is not None:
         source = "agents.llm" if os.environ.get("DIGI_PROJECT_CONFIG") else "env"
@@ -799,6 +799,34 @@ def operator_default_model() -> str:
     return _refuse_paid_in_free_mode(resolved, mode)
 
 
+# Session house-model pick (OCC model picker). Only a slug on the operator's
+# ``DIGI_SESSION_MODEL_ALLOWLIST`` (comma list, house upstream models only) is
+# ever bound; anything else is ignored and the operator default stays. BYOK wins:
+# a bound user key is never redirected by this.
+_house_model_override: ContextVar[str | None] = ContextVar(
+    "dg_house_model_override", default=None
+)
+
+
+def session_model_allowlist() -> frozenset[str]:
+    raw = os.environ.get("DIGI_SESSION_MODEL_ALLOWLIST") or ""
+    return frozenset(p.strip() for p in raw.split(",") if p.strip())
+
+
+def push_house_model(value: str | None) -> Token[str | None]:
+    """Bind an allowlisted session model for this request (None when not allowed)."""
+    slug = (value or "").strip()
+    return _house_model_override.set(slug if slug and slug in session_model_allowlist() else None)
+
+
+def pop_house_model(token: Token[str | None]) -> None:
+    _house_model_override.reset(token)
+
+
+def get_house_model_override() -> str | None:
+    return _house_model_override.get()
+
+
 def get_model_for_mode() -> str:
     """Return the fallback model for phases without a phase_models entry.
 
@@ -816,6 +844,10 @@ def get_model_for_mode() -> str:
     must not swap a free/local digithings install onto paid dashboard models.
     ``llm_mode: free`` refuses non-``:free`` (non-Ollama) model ids.
     """
+    override = _house_model_override.get()
+    if override and not get_byok_override():
+        # The session pick obeys the same free-mode refusal as the operator default.
+        return _refuse_paid_in_free_mode(override, _get_llm_mode())
     return _apply_byok_model_override(operator_default_model())
 
 

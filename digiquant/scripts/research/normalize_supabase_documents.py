@@ -18,12 +18,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple  # score:allow untyped any — duck-typed PostgREST rows
+
+logger = logging.getLogger(__name__)
 
 try:
     import jsonschema
@@ -991,7 +994,7 @@ def _render_digest_markdown_optional(snapshot: Dict[str, Any]) -> Optional[str]:
         if callable(fn):
             return str(fn(snapshot))
     except Exception:
-        pass
+        logger.debug("digest markdown render unavailable", exc_info=True)
     return None
 
 
@@ -1107,7 +1110,7 @@ def migrate_row(row: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str
     return new_payload, []
 
 
-# Must match chk_documents_doc_type (see supabase/migrations/014_documents_research_delta_doc_type.sql, 019).
+# Must match chk_documents_doc_type (see supabase/migrations/engine/014_documents_research_delta_doc_type.sql, engine/019).
 DOC_TYPE_DB_COLUMN: Dict[str, str] = {
     "digest_snapshot": "Daily Digest",
     "delta_digest": "Daily Delta",

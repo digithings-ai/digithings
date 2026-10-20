@@ -560,7 +560,7 @@ describe("dispatch", () => {
     );
     const job: Job = {
       id: "digiquant-house-run-watch",
-      cron: "23 * * * *",
+      cron: "22 * * * *",
       repo: "digithings-ai/digithings",
       kind: "watch",
       workflow: "pipeline-digiquant.yml",
@@ -595,7 +595,14 @@ describe("dispatch", () => {
     expect(result.ok).toBe(true);
     // The deadline came from house-run-09's own timeoutSeconds plus the grace.
     expect(result.watch?.deadline_seconds).toBe(14400 + 120);
-    expect(result.watch).toMatchObject({ ok: true, open: 0, lost: [], unreadable: [], neverDispatched: [] });
+    expect(result.watch).toMatchObject({
+      ok: true,
+      open: 0,
+      lost: [],
+      unreadable: [],
+      neverLanded: [],
+      missingDispatch: [],
+    });
   });
 
   it("forwards opts.args into the workflow_dispatch body", async () => {
@@ -621,9 +628,13 @@ describe("dispatch", () => {
     const job = JOBS.find(
       (row) => row.id === "twelve-x-market-context-daily",
     ) as Job;
-    expect(job.kind).toBe("workflow_dispatch");
+    expect(job.kind).toBe("twelvex");
     expect(job.inputs).toEqual({ bucket: "daily" });
-    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "token",
+      GITHUB_OVERRIDE_JOBS: job.id,
+    };
     await dispatch(env, job, job.cron, 0, { args: { bucket: "weekly" } });
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({
@@ -693,5 +704,56 @@ describe("dispatch", () => {
     expect(JSON.parse(String(init.body)).args).toEqual({
       refresh_scope: "all",
     });
+  });
+
+  it("occ-help-recrawl dry-run writes nothing and calls no network", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const runnerFetch = vi.fn();
+    const job = JOBS.find((row) => row.id === "occ-help-recrawl") as Job;
+    expect(job.kind).toBe("occ-recrawl");
+    const env: Env = {
+      DRY_RUN: "1",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron);
+    expect(result).toEqual({ ok: true, status: 0, dry_run: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(runnerFetch).not.toHaveBeenCalled();
+    expect(logSpy.mock.calls.map((call) => String(call[0])).join("\n")).toContain("occ-help-recrawl");
+  });
+
+  it("occ-help-recrawl fails closed while the store is unwired", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const runnerFetch = vi.fn();
+    const job = JOBS.find((row) => row.id === "occ-help-recrawl") as Job;
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron);
+    expect(result).toEqual({ ok: false, status: 0, dry_run: false });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(runnerFetch).not.toHaveBeenCalled();
+    expect(errorSpy.mock.calls.map((call) => String(call[0])).join("\n")).toContain("store_unwired");
+  });
+
+  it("occ-help-recrawl ignores GITHUB_OVERRIDE_JOBS (worker-native, no workflow)", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn();
+    const job = JOBS.find((row) => row.id === "occ-help-recrawl") as Job;
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "token",
+      GITHUB_OVERRIDE_JOBS: "occ-help-recrawl",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    await dispatch(env, job, job.cron);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(runnerFetch).not.toHaveBeenCalled();
   });
 });

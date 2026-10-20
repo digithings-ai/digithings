@@ -15,8 +15,8 @@ list_families, get_family. #4844 companions: edge_symbols, edge_presets,
 edge_report (preset reads with the honesty disclaimer) and
 trackers_datasets, trackers_latest, trackers_ticker (freshness/ad-hoc
 lookups over the CC0-1.0 dumps — never pipeline primaries; the grant does not
-clear congress-trades, restricted by 5 U.S.C. 13107, nor short-volume, whose
-FINRA upstream terms remain unresolved). All keyless
+clear congress-trades, restricted by 5 U.S.C. 13107, nor short-volume,
+PROHIBITED by DIG-1521 on FINRA's own terms). All keyless
 (``free``), read-scope, default-ON behind ``LUXALGO_ENABLED``.
 """
 

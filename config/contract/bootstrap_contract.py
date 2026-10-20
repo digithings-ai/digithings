@@ -403,10 +403,8 @@ def main() -> int:
         ),
         "generated_by": "config/contract/bootstrap_contract.py (checked in; edit the YAML, not the script)",
         "notes": [
-            "The brief cited ~/local-stack-plan.md sections 0/1/8. That file does not exist; "
-            "this contract was derived from the repository itself.",
-            "wrangler.toml does not declare secrets. The secrets section is transcribed from the "
-            "documented per-worker checklists and is NOT mechanically verified by check_contract.py.",
+            "The brief cited ~/local-stack-plan.md sections 0/1/8. That file does not exist; this contract was derived from the repository itself.",
+            "wrangler.toml does not declare secrets. The secrets section is transcribed from the documented per-worker checklists and is NOT mechanically verified by check_contract.py.",
         ],
         "services": service_rows(),
         "ports": port_rows(),

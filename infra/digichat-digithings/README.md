@@ -129,8 +129,9 @@ Stack oneshot seeds **`digithings_docs` + `occ_help`** FAQ/showcase notes into C
 (and refreshes vault `seed-*.md` under both client prefixes) so digithings.ai/chat
 and `/chat/occ` have grounded retrieval before a full docs_onboard apply.
 **before** supervisord starts digisearch (avoids multi-process SQLite locks).
-Full crawl of help.online-compliance-center.com remains **HOLD** until approval
-([GAPLOG](../../docs/projects/online-compliance-center/GAPLOG.md)).
+Full crawl of help.online-compliance-center.com remains **HOLD** until approval.
+The GAPLOG entry that recorded that approval was removed with the client docs
+project directory (DIG-3394), so this paragraph is the hold of record.
 
 **CF secret retarget:** only after `graph.digithings.ai` / `key.digithings.ai`
 healthz succeed — never Mac `*.trycloudflare.com` tunnels.
@@ -201,11 +202,24 @@ digichat runtime embed registry (never a Docker build-arg — tokens leak in lay
 ```bash
 export DIGICHAT_REQUIRE_ROOT_AUTH=0
 export DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai,occ.digithings.ai
-export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":true,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<unused-for-first-party>","mcp":{"servers":[{"id":"zammad","url":"http://zammad-mcp:8770/mcp","label":"Zammad tickets","default":true}]},"backend":{"type":"digigraph","digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}}'
+export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":true,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<unused-for-first-party>","mcp":{"servers":[{"id":"zammad","url":"http://zammad-mcp:8770/mcp","label":"Zammad tickets","default":true,"allowedTools":["search_tickets","list_tickets","get_ticket","ticket_report","aggregate_tickets"],"mutatingTools":[]}]},"backend":{"type":"digigraph","digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}}'
 ```
 
-OCC uses virtual host `occ.digithings.ai` (no DNS) for `/chat/occ` — see
-[`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md).
+`allowedTools` is **required** on any row that should expose tools. digraph denies
+by default per server: an absent or empty list (`mcp_client.py:738-746`) drops every
+tool of that server, so the assistant is offered nothing from it and each call comes
+back `tool_not_allowed` (or `Unknown tool` when the model guesses a name from prose).
+The names are the **raw** MCP tool names — `list_tickets`, never the prefixed
+addressable form `zammad_list_tickets`, because the filter compares against the raw
+name (`mcp_client.py:768`). `mutatingTools: []` is meaningful: it declares the row
+offers nothing that mutates.
+
+Production differs from this local example in two ways: the zammad MCP now runs
+**inside the digichat image** (it left the base stack on 2026-10-19), so the row
+points at `https://digithings.ai/api/mcp/zammad/mcp`, and it carries
+`"authHeader":"x-digi-mcp-key"` with the digichat worker's `ZAMMAD_EDGE_KEY`.
+
+OCC uses virtual host `occ.digithings.ai` (no DNS) for `/chat/occ`.
 
 ## digithings.ai `/chat` and `/chat/occ`
 

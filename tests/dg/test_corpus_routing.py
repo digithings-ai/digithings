@@ -444,3 +444,33 @@ def test_resolve_map_accepts_comma_separated_fan_out() -> None:
             },
         )
         assert out.digisearch_index is None
+def test_digithings_tenant_parses_scoped_prompt() -> None:
+    """DIG-3556: the digithings tenant carries a scoped research prompt."""
+    m = load_tenant_corpus_map(
+        '{"digithings": {"digisearchIndex": "digithings_docs", '
+        '"vaultPathPrefix": "clients/digithings", '
+        '"researchSystemPrompt": "Answer only about digithings."}}'
+    )
+    assert m["digithings"].digisearch_index == "digithings_docs"
+    assert m["digithings"].vault_path_prefix == "clients/digithings"
+    assert m["digithings"].research_system_prompt == "Answer only about digithings."
+
+
+def test_tenant_map_parses_lock_session_controls() -> None:
+    mapped = load_tenant_corpus_map(json.dumps({"occ": {"lockSessionControls": True}}))
+    assert mapped["occ"].lock_session_controls is True
+
+
+def test_tenant_map_defaults_lock_session_controls_off() -> None:
+    from digigraph.corpus_routing import _parse_map
+
+    mapped = _parse_map(json.dumps({"occ": {"digisearchIndex": "occ_help"}}))
+    assert mapped["occ"].lock_session_controls is False
+
+
+def test_resolve_override_carries_lock_session_controls() -> None:
+    mapped = load_tenant_corpus_map(
+        json.dumps({"occ": {"lockSessionControls": True, "digisearchIndex": "occ_help"}})
+    )
+    override = resolve_corpus_override(tenant_slug="occ", corpus_map=mapped)
+    assert override.lock_session_controls is True

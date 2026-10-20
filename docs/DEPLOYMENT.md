@@ -71,7 +71,7 @@ digichat needs `AUTH_SECRET`, `AUTH_URL`, and `DIGIKEY_BFF_TOKEN` in `.env`. Aut
 
 ## LiteLLM
 
-LiteLLM is the only LLM router. Compose runs the `digillm` service (`ghcr.io/digithings-ai/digillm:0.1.0`, built from `Dockerfile.digillm`: `litellm[proxy]==1.83.14` from PyPI, never the vendor image — DIG-1780; network alias `litellm`, port 4000) with explicit `--config` and a `/health/liveliness` healthcheck.
+LiteLLM is the only LLM router. Compose runs the `digillm` service (`ghcr.io/digithings-ai/digillm:0.1.0`, built from `infra/docker/Dockerfile.digillm`: `litellm[proxy]==1.83.14` from PyPI, never the vendor image — DIG-1780; network alias `litellm`, port 4000) with explicit `--config` and a `/health/liveliness` healthcheck.
 
 **Auth modes:**
 
@@ -163,7 +163,7 @@ digichat Node for digithings still runs on operator Compose + Cloudflare Tunnel;
 different surface from the `digichat-cloudflare` Worker.
 
 The Worker fronts the `DigiChatContainer` Container (`apps/digichat-cloudflare/wrangler.toml`,
-`Dockerfile.digichat-cloudflare`); deploying it by hand is `npx wrangler deploy` from
+`infra/docker/Dockerfile.digichat-cloudflare`); deploying it by hand is `npx wrangler deploy` from
 `apps/digichat-cloudflare/` with the build context at the monorepo root, per
 [`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md). No workflow
 deploys it — the section below measures exactly that.
@@ -174,7 +174,7 @@ deploys it — the section below measures exactly that.
 - **Deployment:** **Cloudflare Pages** via `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
 - **Legacy:** the `static.yml` GitHub Pages workflow and the pre-migration `cloudflare/digithings/` static HTML tree were both **removed** — the former in the 2026-06 workflow cleanup, the latter in #1240 once `apps/digithings-web` (Next.js) fully replaced it as the build source; do not use GitHub Pages for this domain.
 - **Nav link:** the landing page links to `/chat` (Pages shell that iframes digichat `/embed`).
-- **Deploy freshness (#1759):** `scripts/build-digithings.sh` writes `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) via `scripts/write-build-info.sh`, and hard-fails the build if it is absent. A Pages project that stops producing deployments keeps serving the last good build with a `200` and no `last-modified` header, so the asset probes below pass throughout a freeze; the `freshness-digithings` job in `smoke-site.yml` reads the live stamp through `scripts/check_deploy_freshness.py` and fails when it is missing or older than 7 days. This is **detection only** — *why* a Pages project stopped building is visible only in the Cloudflare dashboard (deployment list, build log, production branch, watch paths).
+- **Deploy freshness (#1759):** `scripts/build-digithings.sh` writes `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) via `scripts/write-build-info.sh`, and hard-fails the build if it is absent. A Pages project that stops producing deployments keeps serving the last good build with a `200` and no `last-modified` header, so the asset probes below pass throughout a freeze; `scripts/check_deploy_freshness.py` is what fails a missing or >7-day stamp. The daily `freshness-digithings` job lived in `smoke-site.yml`, removed in #4919; the remaining callers are the build-stamp asserts in `deploy-digithings-cloudflare.yml` and `deploy-digiquant-cloudflare.yml`. This is **detection only** — *why* a Pages project stopped building is visible only in the Cloudflare dashboard (deployment list, build log, production branch, watch paths).
 
 To update the landing page: edit `apps/digithings-web/`, run the build script locally, and let Cloudflare Pages deploy from the connected branch.
 
@@ -323,7 +323,7 @@ Read the routes column as "what `wrangler.toml` declares", not as a claim about 
 currently serving. Both are Workers **Containers**: both need **Workers Paid**, and both need
 a Docker CLI locally for `wrangler deploy` to build the image.
 
-Both `Dockerfile.digichat-cloudflare` and `Dockerfile.digithings-stack-cloudflare` are live at
+Both `infra/docker/Dockerfile.digichat-cloudflare` and `infra/docker/Dockerfile.digithings-stack-cloudflare` are live at
 the repo root. It is the workflow YAML that is missing, not the build.
 
 #### Why the lane is missing — it was deleted, not never written

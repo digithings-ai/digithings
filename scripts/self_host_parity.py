@@ -46,7 +46,7 @@ CONTRACT_DIR = REPO_ROOT / "config" / "contract"
 # Discovered by census on 2026-10-10 (`git ls-files`). tests/scripts/
 # test_self_host_parity.py pins these three counts, so a new compose or
 # .env.example file cannot slip in uncovered without turning the test red.
-EXPECTED_WRANGLER_FILES = 8
+EXPECTED_WRANGLER_FILES = 9
 COMPOSE_FILES = (
     "docker-compose.yml",
     "apps/digitrace-langfuse/docker-compose.local.yml",
@@ -109,11 +109,13 @@ BINDING_KINDS = {
 # through the DO binding that names it (see durable_object_classes). Drift mode
 # still records these, so a new or removed container class is still surfaced.
 CLASS_NAME_KINDS = frozenset({"container"})
-# Container and DO namespacing tables: key is a table name, value is a per-entry key.
-NAMESPACED_BINDING_TABLES = {
-    "durable_objects": "bindings",
-    "kv_namespaces": "id",
-}
+# No namespaced second-name recording: every binding table is recorded by its
+# runtime binding NAME plus kind only (DIG-3759). Recording a second per-entry
+# key was wrong twice over: `kv_namespaces.id` is a Cloudflare account resource
+# id, not a surface name, so it made the contract arm unmappable and would have
+# written the id into the baseline against this file's own docstring (names and
+# kinds only, never an id); the `durable_objects.bindings` entry was dead code
+# (a `[[durable_objects.bindings]]` row carries no `bindings` key).
 
 
 class ComposeLoader(yaml.SafeLoader):
@@ -169,8 +171,10 @@ def wrangler_surface() -> dict[str, dict[str, str]]:
         # Pages projects keep vars at top level; Workers use [[workers]] or [vars].
         for key, value in (data.get("vars") or {}).items():
             entries[key] = "var"
+        # Top-level worker keys are environment facts and are never recorded
+        # in the surface, even if a [vars] table ever reuses one of the names.
         for key in ("main", "name", "compatibility_date", "pages_build_output_dir", "account_id"):
-            del key  # never recorded: values of these are environment facts
+            entries.pop(key, None)
         if isinstance(workers, list):
             for entry in workers:
                 for key, _ in (entry.get("vars") or {}).items():
@@ -201,9 +205,6 @@ def wrangler_surface() -> dict[str, dict[str, str]]:
                     name = row.get("binding") or row.get("name")
                 if name:
                     entries[str(name)] = kind
-                inner = NAMESPACED_BINDING_TABLES.get(table)
-                if inner and inner in row:
-                    entries[str(row[inner])] = kind
         surface[rel] = dict(sorted(entries.items()))
     return surface
 

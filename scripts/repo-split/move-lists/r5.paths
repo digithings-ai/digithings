@@ -1,0 +1,52 @@
+# R5 digithings-stack — shared production platform (DIG-3566 rev 6, DIG-3518).
+# Rev 3: -7 OCC scripts + OCC_INVITE_KEY.md (all R6, overlap item 1); -5 workflows
+# (global rule); +infra/self-host 2 files (D-R5-2 inferred) + zammad gold.json.
+# infra/local-proxy/Caddyfile contested (H7), unassigned, excluded.
+# Verified present at github/develop d227b6ed5 (2026-10-14). One path per line.
+# NOTE: apps/digithings-stack-cloudflare keeps 47 of 57 files; the 10 OCC seed
+# files move to R6 and are removed by a second filter-repo pass (see r5.drop).
+apps/digithings-stack-cloudflare
+apps/digichat-cloudflare
+apps/digitrace-langfuse
+apps/digithings-cron
+infra/docker/Dockerfile.digithings-stack-cloudflare
+infra/docker/Dockerfile.digichat-cloudflare
+infra/docker/Dockerfile.digitrace-langfuse-web
+infra/docker/Dockerfile.digitrace-langfuse-worker
+infra/digichat-release
+infra/digichat-digithings
+scripts/zammad_mcp
+tests/scripts/test_zammad_mcp.py
+tests/scripts/test_zammad_mcp_exports.py
+tests/scripts/test_zammad_mcp_no_mask.py
+tests/scripts/test_zammad_mcp_stack.py
+tests/scripts/test_zammad_semantic_eval.py
+config/litellm.cheaperinference.yaml
+config/litellm.omniroute.yaml
+config/dogfood-digiproject.yaml
+scripts/merge_litellm_cheaperinference.py
+docs/ops/2026-10-06-stranded-branch-triage.tsv
+docs/ops/2026-10-06-stranded-work-and-backup-report.md
+docs/ops/2026-10-06-t2-branch-decisions.md
+docs/ops/CLIENT_PIPELINES.md
+docs/ops/SECRETS_INVENTORY.md
+docs/ops/SECRETS_ROTATION.md
+docs/ops/branch-hygiene-policy.md
+docs/ops/credential-ownership.md
+docs/ops/datatap-azure-az-guard.md
+docs/ops/digichat-aca-secret-fingerprints.json
+docs/ops/digichat-datatap-aca.md
+docs/ops/digifetch-post-deploy-verification.md
+docs/ops/digiquant-digikey-service-key.md
+docs/ops/digiquant-runner.md
+docs/ops/digithings-cron.md
+docs/ops/digitrace-langfuse.md
+docs/ops/gloomberb-session-cookie.md
+docs/ops/local-deploy-parity.md
+docs/ops/paperclip-routine-watch.md
+docs/ops/policy-check-credential.md
+docs/ops/supabase-exit-twelve-x-cutover-runbook.md
+docs/ops/vectorize-cutover.md
+infra/self-host/compose.ghcr.yml
+infra/self-host/routine-watch/com.digithings.routine-watch.plist
+tests/scripts/data/zammad_semantic_gold.json

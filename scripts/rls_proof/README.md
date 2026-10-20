@@ -23,7 +23,7 @@ real `core` Supabase project.
 ## Migration apply order
 
 1. **Shim** (`00_supabase_shim.sql`)
-2. **develop** top-level `digiquant/supabase/migrations/*.sql` (001…115, lexicographic `sort` — same as `db-migrate.yml`). Includes `109_authenticated_house_teaser_read` (pre-cutover Auth Pages JWT hotfix), `110_anon_house_only_private_books` (anon house-only on overlay-capable book tables), and `115_plan_tier_brief_desk_studio` (D1 `baseline`/`custom` → Brief/Desk/Studio).
+2. **develop** top-level `digiquant/supabase/migrations/*.sql` (every file, lexicographic `sort` — the same glob `run.sh` applies). The chain does not stop at 115; it currently continues through `143_accounting_nav_history_finalized_only.sql`. `db-migrate.yml` was removed in #4919 and is not the apply list. Still in that glob: `109_authenticated_house_teaser_read` (pre-cutover Auth Pages JWT hotfix), `110_anon_house_only_private_books` (anon house-only on overlay-capable book tables), and `115_plan_tier_brief_desk_studio` (D1 `baseline`/`custom` → Brief/Desk/Studio).
 3. **Seed** (`01_seed.sql`)
 4. **Pre-cutover 110 proof** (`02_pre_cutover_110.sql`) — anon sees house book (1 position) and zero overlay rows. This is the persist-safety contract 900 cannot prove (900 drops `anon_read`).
 5. **Cutover** `digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql` (staged; not auto-applied in CI). Section A2 restores 098 membership-only SELECT on the house book tables so 109's teaser does not leak weights to free JWTs after `anon_read` is dropped.
@@ -45,7 +45,7 @@ LOG=/opt/cursor/artifacts/rls_isolation_proof.log ./scripts/rls_proof/run.sh
 | Shim | Production (Supabase `core`) | Notes |
 |------|------------------------------|-------|
 | Roles `anon` / `authenticated` / `service_role` | Platform roles | `service_role` created with `BYPASSRLS` |
-| `authenticator` login role | PostgREST `authenticator` (login) | `NOINHERIT LOGIN`; password `rls_proof_local` is a **local stand-in only** — not production |
+| `authenticator` login role | PostgREST `authenticator` (login) | `NOINHERIT LOGIN` with no password (DIG-379) — harness runs as superuser and uses `SET ROLE`, so no credential is stored |
 | `auth.users(id)` | Full Auth schema | Minimal PK-only stub for membership FKs / proof inserts |
 | `auth.uid()` / `auth.jwt()` | Auth helpers | Read `request.jwt.claims` JSON (`sub`, `app_metadata`, …) |
 | `pgcrypto` / `moddatetime` | Usually pre-enabled | Enabled explicitly here |

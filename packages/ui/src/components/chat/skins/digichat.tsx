@@ -38,6 +38,7 @@ import {
   useEmbedChatPrefsOptional,
   type EmbedChatPrefsApi,
 } from "../stock/embed-chat-prefs";
+import { DigichatComposerToolbar } from "./digichat-composer-toolbar";
 
 /**
  * Product slash-command wiring injected by the host (WS4). Structural mirror
@@ -412,7 +413,7 @@ export function DigichatSkin({
       }
       reasoningMode={reasoningUi.mode}
       toolCallsMode={toolCallsUi.mode}
-
+      composerToolbar={prefs ? <DigichatComposerToolbar prefs={prefs} /> : undefined}
     />
   );
 }

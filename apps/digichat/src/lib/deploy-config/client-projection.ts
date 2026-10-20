@@ -81,11 +81,27 @@ export type DigichatClientModels = {
   allowPicker: boolean;
 };
 
+export type DigichatClientSubTool = { id: string; label?: string };
+
 export type DigichatClientTool = {
   id: string;
   default: boolean;
   label?: string;
+  /** Individual tools under this entry (per-tool session toggles). */
+  tools?: DigichatClientSubTool[];
 };
+
+/** MCP allowlist → per-tool ids as digigraph offers them (`<server>_<tool>`). */
+export function mcpSubTools(
+  serverId: string,
+  allowedTools: readonly string[] | undefined,
+): DigichatClientSubTool[] | undefined {
+  if (!allowedTools?.length) return undefined;
+  return allowedTools.map((t) => ({
+    id: `${serverId}_${t.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64)}`.toLowerCase(),
+    label: t,
+  }));
+}
 
 export type DigichatClientConfig = {
   slug: string;
@@ -103,7 +119,12 @@ export type DigichatClientConfig = {
   };
   /** MCP server ids/labels only — never URLs */
   mcp: {
-    servers: Array<{ id: string; label?: string; default?: boolean }>;
+    servers: Array<{
+      id: string;
+      label?: string;
+      default?: boolean;
+      tools?: DigichatClientSubTool[];
+    }>;
     allowUserServers: boolean;
     allowAddForm: boolean;
   };
@@ -173,6 +194,7 @@ function projectCatalog(entries: ToolCatalogEntry[] | undefined): DigichatClient
     // Only explicit `default: true` starts the tool on.
     default: e.default === true,
     ...(e.label ? { label: e.label } : {}),
+    ...(e.tools?.length ? { tools: e.tools.map((t) => ({ ...t })) } : {}),
   }));
 }
 
@@ -233,11 +255,15 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       catalog,
     },
     mcp: {
-      servers: (dep.mcp?.servers ?? []).map((s) => ({
-        id: s.id,
-        ...(s.label ? { label: s.label } : {}),
-        ...(typeof s.default === "boolean" ? { default: s.default } : {}),
-      })),
+      servers: (dep.mcp?.servers ?? []).map((s) => {
+        const tools = mcpSubTools(s.id, s.allowedTools);
+        return {
+          id: s.id,
+          ...(s.label ? { label: s.label } : {}),
+          ...(typeof s.default === "boolean" ? { default: s.default } : {}),
+          ...(tools ? { tools } : {}),
+        };
+      }),
       allowUserServers: dep.mcp?.allowUserServers === true,
       allowAddForm: dep.mcp?.allowUserServers === true && dep.mcp?.allowAddForm === true,
     },

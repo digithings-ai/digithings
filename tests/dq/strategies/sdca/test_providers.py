@@ -42,6 +42,7 @@ class TestResolveSdcaRiskModel:
         with pytest.raises(ValueError, match="unknown risk_model 'not_a_provider'"):
             resolve_sdca_risk_model("not_a_provider", dates=dates, price=price)
 
+    @pytest.mark.usefixtures("coefficients_root")
     def test_btc_power_law_loads_coefficients(self) -> None:
         dates, price = _series(n=20)
         model = resolve_sdca_risk_model(
@@ -71,6 +72,7 @@ class TestResolveSdcaRiskModel:
 
 
 class TestBuildRiskIndexViaSelector:
+    @pytest.mark.usefixtures("coefficients_root")
     def test_each_provider_builds_a_risk_index(self) -> None:
         btc_dates, btc_price = _series(n=30, start=date(2020, 1, 1))
         btc_model = resolve_sdca_risk_model(

@@ -40,7 +40,7 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTAINER = REPO_ROOT / "apps" / "digithings-stack-cloudflare"
 RELEASE = REPO_ROOT / "infra" / "digichat-release"
-DOCKERFILE = REPO_ROOT / "Dockerfile.digithings-stack-cloudflare"
+DOCKERFILE = REPO_ROOT / "infra/docker/Dockerfile.digithings-stack-cloudflare"
 SUPERVISORD = CONTAINER / "container" / "supervisor" / "supervisord.conf"
 CONTAINER_SCRIPTS = CONTAINER / "container"
 
@@ -286,7 +286,7 @@ def test_ticket_seed_script_is_not_shipped() -> None:
 
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     offenders = [
-        f"Dockerfile.digithings-stack-cloudflare:{lineno}: {line.strip()}"
+        f"infra/docker/Dockerfile.digithings-stack-cloudflare:{lineno}: {line.strip()}"
         for lineno, line in enumerate(dockerfile.splitlines(), start=1)
         if "seed_occ_tickets" in line and not line.strip().startswith("#")
     ]
@@ -305,7 +305,7 @@ def test_dockerfile_has_a_rebuild_marker_for_the_removal() -> None:
     still contains the seeder and its supervisord block — keeps being tagged.
     """
     assert re.search(r"^# Rebuild marker v17 ", DOCKERFILE.read_text(encoding="utf-8"), re.M), (
-        "Dockerfile.digithings-stack-cloudflare has no v17 rebuild marker. The ticket "
+        "infra/docker/Dockerfile.digithings-stack-cloudflare has no v17 rebuild marker. The ticket "
         "seeder was removed from the image, which is a build-context change wrangler "
         "cannot detect; bump the marker or the old image is reused."
     )
@@ -325,7 +325,6 @@ def test_dockerfile_has_a_rebuild_marker_for_the_removal() -> None:
         "infra/digichat-release/.env.profile-a-bundle.example",
         "apps/digichat/config/examples/occ-embed.yaml",
         "apps/digichat-cloudflare/README.md",
-        "docs/projects/online-compliance-center/README.md",
         "infra/digichat-digithings/README.md",
     ],
 )
@@ -341,10 +340,11 @@ def test_no_layer_fans_out_to_occ_tickets(rel: str) -> None:
     Pinned on the bare index name rather than on the comma pair, because prose
     drifted too: a summary row that reads "``occ_help`` docs + ``occ_tickets``
     fan-out" carries the same routing with no comma in it, and that is how the
-    row in ``docs/projects/online-compliance-center/README.md`` survived an
-    earlier pass at this file. The one historical mention that must stay — the
-    ``occ_tickets.jsonl`` payload retired in DIG-1380 — is deliberately absent
-    from every layer listed above.
+    summary row in a client docs project directory survived an earlier pass
+    at this file. That directory was removed in DIG-3394, so the lesson is kept
+    without naming a path that no longer exists. The one historical mention
+    that must stay — the ``occ_tickets.jsonl`` payload retired in DIG-1380 —
+    is deliberately absent from every layer listed above.
     """
     path = REPO_ROOT / rel
     offenders = [
@@ -381,7 +381,6 @@ def _prose_lines(path: Path) -> list[tuple[int, str]]:
     "rel",
     [
         "apps/digichat-cloudflare/README.md",
-        "docs/projects/online-compliance-center/README.md",
         "infra/digichat-digithings/README.md",
         "scripts/zammad_mcp/README.md",
     ],

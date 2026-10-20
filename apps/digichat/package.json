@@ -1,6 +1,14 @@
 {
   "name": "digichat",
-  "version": "2.4.0",
+  "description": "Web client for digichat.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digichat"
+  },
+  "version": "2.5.1",
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",

@@ -296,7 +296,7 @@ def test_seed_sql_ids_match_the_python_derivation():
 def test_brief_doc_type_is_inside_the_schema_allow_list():
     """`chk_documents_doc_type` (migration 023) rejects anything else at INSERT."""
     migration = (
-        REPO_ROOT / "digiquant" / "supabase" / "migrations" / "023_pipeline_review_doc_type.sql"
+        REPO_ROOT / "digiquant" / "supabase" / "migrations" / "engine" / "023_pipeline_review_doc_type.sql"
     ).read_text()
     allowed = set(re.findall(r"'([^']+)'", migration.split("doc_type IN (")[1].split(")")[0]))
     assert allowed, "failed to parse the doc_type allow-list from migration 023"
@@ -537,7 +537,7 @@ def _documents_insert_columns():
 
 #: NOT NULL, no-default columns on `documents` after the whole migration chain
 #: applies, measured with information_schema.columns on a clean database built
-#: from `digiquant/supabase/migrations/*.sql` (126/137 applied; the 11 gaps are
+#: from `digiquant/supabase/migrations/{engine,prod}/*.sql` (126/137 applied; the 11 gaps are
 #: Supabase-platform objects `auth.users`, schema `net` and the
 #: `supabase_realtime` publication, none of which this table depends on).
 DOCUMENTS_REQUIRED = ("date", "document_key", "title", "workspace_id")
@@ -549,7 +549,7 @@ def test_the_documents_insert_supplies_every_required_column():
     It was omitted from all six inserts, so `supabase db reset` failed with
     `null value in column "title"`. Nothing caught it: the file was never
     applied anywhere, and the CI job that looks like it applies it reads only
-    `migrations/*.sql` (scripts/self_host_migrations_check.sh line 168 says so).
+    `migrations/{engine,prod}/*.sql` (scripts/self_host_migrations_check.sh says so).
     """
     columns = _documents_insert_columns()
 
@@ -577,3 +577,44 @@ def test_the_python_brief_rows_supply_every_required_column():
     for row in rows:
         missing = set(DOCUMENTS_REQUIRED) - set(row)
         assert not missing, f"brief row omits required column(s): {sorted(missing)}"
+
+
+def test_the_client_path_sends_every_required_documents_column(monkeypatch):
+    """`tenants.apply` projects each brief row before the upsert.
+
+    `brief_documents` already carried `title`, but the projection in
+    `tenants.apply` dropped it, so the client path still failed with
+    `null value in column "title"` against a migrated database.
+    """
+    import supabase
+
+    from scripts.seed import tenants
+
+    sent: dict[str, list[dict]] = {}
+
+    class _Table:
+        def __init__(self, name):
+            self.name = name
+
+        def upsert(self, rows, on_conflict):
+            sent[self.name] = rows if isinstance(rows, list) else [rows]
+            return self
+
+        def execute(self):
+            return type("R", (), {"data": sent[self.name]})()
+
+    class _Client:
+        def table(self, name):
+            return _Table(name)
+
+    monkeypatch.setattr(supabase, "create_client", lambda url, key: _Client())
+    tenants.apply(
+        supabase_url="http://127.0.0.1:54321",
+        service_key="test-only",
+        documents=brief_documents(),
+    )
+    # Control: the fake really captured the documents upsert.
+    assert sent.get("documents"), "documents upsert was not captured"
+    for row in sent["documents"]:
+        missing = set(DOCUMENTS_REQUIRED) - set(row)
+        assert not missing, f"client-path documents row omits: {sorted(missing)}"

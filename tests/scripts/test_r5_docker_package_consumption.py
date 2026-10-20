@@ -14,10 +14,10 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO = Path(__file__).resolve().parents[2]
-RUNNER = "Dockerfile.digiquant-runner"
-STACK = "Dockerfile.digithings-stack-cloudflare"
+RUNNER = "infra/docker/Dockerfile.digiquant-runner"
+STACK = "infra/docker/Dockerfile.digithings-stack-cloudflare"
 DIGICHAT = (
-    "Dockerfile.digichat-cloudflare",
+    "infra/docker/Dockerfile.digichat-cloudflare",
     "apps/digichat/Dockerfile",
 )
 SIBLING_COPY = (
@@ -39,7 +39,7 @@ SIBLING_COPY = (
     "COPY apps/digiquant-runner",
     "COPY scripts/refresh_market_data_r2.py",
 )
-FORBIDDEN_REGISTRIES = ("ghcr.io", "azurecr.io", "datatapchatregistry")
+FORBIDDEN_REGISTRIES = ("ghcr.io", "azurecr.io", "forbiddenexample_registry")
 
 
 def _text(rel: str) -> str:

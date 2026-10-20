@@ -30,6 +30,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       - name: Run pip-audit
@@ -353,6 +354,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       # pyyaml from the lock instead of an unpinned `pip install` (#1715).

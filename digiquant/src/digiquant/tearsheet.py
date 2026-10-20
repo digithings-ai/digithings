@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from pathlib import Path
 from typing import Any  # score:allow untyped any — tearsheet HTML assembly
 
@@ -39,6 +40,7 @@ from digiquant.charts import (
     section_unavailable_html,
 )
 from digiquant.models import BacktestResult
+from digiquant.paths import resolve_under
 from digiquant.tearsheet_extract import (
     _compute_drawdown,
     _extract_equity_curve,
@@ -78,7 +80,9 @@ def create_tearsheet(
     except ImportError as e:
         raise ImportError("Tearsheet requires plotly. pip install digiquant[visualization]") from e
 
-    out = Path(output_path)
+    # The hub already confines tearsheet_path. This check is in the function
+    # that writes, which is the check CodeQL counts (DIG-4057 batch B).
+    out = resolve_under(Path.cwd() / "backtest_results", output_path, label="tearsheet_path")
     out.parent.mkdir(parents=True, exist_ok=True)
 
     timestamps, balances = _extract_equity_curve(account_report)

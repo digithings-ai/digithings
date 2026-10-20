@@ -34,7 +34,7 @@ renamed `core`** (Supabase display name; `config.toml` keeps the stable local al
 `project_id "digiquant-atlas"`). twelve-x stays a separate project.
 
 - **Add** the strategy store via an **additive-only** migration in this project's existing
-  sequence: [`digiquant/supabase/migrations/046_strategy_store.sql`](../../digiquant/supabase/migrations/046_strategy_store.sql)
+  sequence: [`digiquant/supabase/migrations/prod/046_strategy_store.sql`](../../digiquant/supabase/migrations/prod/046_strategy_store.sql)
   — `CREATE TABLE IF NOT EXISTS` + `CREATE POLICY` on the five new tables, with **no**
   `DROP`/`ALTER`/`TRUNCATE` and zero references to existing objects.
 - **No data migration.** The market datasets already reside here; nothing is moved or
@@ -87,6 +87,6 @@ renamed `core`** (Supabase display name; `config.toml` keeps the stable local al
   cross-project copy in [#1065](https://github.com/digithings-ai/digithings/issues/1065);
   consumed by [#1066](https://github.com/digithings-ai/digithings/issues/1066),
   [#1069](https://github.com/digithings-ai/digithings/issues/1069).
-- Migration: [`digiquant/supabase/migrations/046_strategy_store.sql`](../../digiquant/supabase/migrations/046_strategy_store.sql).
+- Migration: [`digiquant/supabase/migrations/prod/046_strategy_store.sql`](../../digiquant/supabase/migrations/prod/046_strategy_store.sql).
 - Accessor: [`digiquant/src/digiquant/data/store/`](../../digiquant/src/digiquant/data/store/).
-- RLS idiom precedent: [migration 033](../../digiquant/supabase/migrations/033_revoke_anon_run_diagnostics.sql).
+- RLS idiom precedent: [migration 033](../../digiquant/supabase/migrations/engine/033_revoke_anon_run_diagnostics.sql).

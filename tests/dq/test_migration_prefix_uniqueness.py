@@ -24,12 +24,18 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
 VERIFY_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "research" / "verify-supabase-migrations.sh"
-CALENDAR_CREATOR = MIGRATIONS_DIR / "111_trading_calendar.sql"
-POLICY_CONSUMER = MIGRATIONS_DIR / "116_authenticated_read_public_reference.sql"
+CALENDAR_CREATOR = MIGRATIONS_DIR / "engine" / "111_trading_calendar.sql"
+POLICY_CONSUMER = MIGRATIONS_DIR / "prod" / "116_authenticated_read_public_reference.sql"
+
+
+def _layer_files() -> list:
+    return sorted((MIGRATIONS_DIR / "engine").glob("*.sql")) + sorted(
+        (MIGRATIONS_DIR / "prod").glob("*.sql")
+    )
 
 
 def _prefixes() -> list[str]:
-    return [p.stem.split("_", 1)[0] for p in sorted(MIGRATIONS_DIR.glob("*.sql"))]
+    return [p.stem.split("_", 1)[0] for p in _layer_files()]
 
 
 def _declared_cutover() -> list[str]:
@@ -51,6 +57,7 @@ def _fake_chain(
     config: str | None = None,
     cutover: list[str] | None = None,
     declare_extra: list[str] | None = None,
+    prod: list[str] | None = None,
 ) -> Path:
     """Build a throwaway migration tree the guard can run against, untouched repo.
 
@@ -73,11 +80,21 @@ def _fake_chain(
         source = head + 'CUTOVER_ORDER=(\n' + f'  "{extra}"\n' + rest[:close] + "\n)\n" + rest[close + 3 :]
     script.write_text(source, encoding="utf-8")
     mig = pkg / "supabase" / "migrations"
-    mig.mkdir(parents=True)
+    (mig / "engine").mkdir(parents=True)
+    (mig / "prod").mkdir(parents=True)
     cfg = "[db]\nmajor_version = 17\n" if config is None else config
     (pkg / "supabase" / "config.toml").write_text(cfg, encoding="utf-8")
     for name in names:
-        (mig / name).write_text("SELECT 1;\n", encoding="utf-8")
+        (mig / "engine" / name).write_text("SELECT 1;\n", encoding="utf-8")
+    for name in prod or []:
+        (mig / "prod" / name).write_text("SELECT 1;\n", encoding="utf-8")
+    # The guard requires both layers present; backfill whichever side the test
+    # leaves empty with a valid placeholder that collides with nothing.
+    for layer in ("engine", "prod"):
+        if not list((mig / layer).glob("*.sql")):
+            (mig / layer / "000_layer_placeholder.sql").write_text(
+                "SELECT 1;\n", encoding="utf-8"
+            )
     files = _declared_cutover() if cutover is None else cutover
     if files:
         cut = mig / "cutover"
@@ -100,7 +117,8 @@ def test_no_duplicate_version_prefixes() -> None:
 
 def test_025_collision_resolved() -> None:
     assert not (MIGRATIONS_DIR / "025_trading_calendar.sql").exists()
-    assert (MIGRATIONS_DIR / "025_thesis_daily_fields.sql").is_file()
+    assert not (MIGRATIONS_DIR / "engine" / "025_trading_calendar.sql").exists()
+    assert (MIGRATIONS_DIR / "engine" / "025_thesis_daily_fields.sql").is_file()
     assert CALENDAR_CREATOR.is_file()
     assert (
         "111_trading_calendar.sql" in CALENDAR_CREATOR.read_text(encoding="utf-8").splitlines()[0]
@@ -122,12 +140,19 @@ def test_verify_guard_has_no_grandfather_exemptions() -> None:
 def test_verify_guard_passes_unique_chain(tmp_path: Path) -> None:
     result = _run_guard(_fake_chain(tmp_path, ["001_a.sql", "002_b.sql"]))
     assert result.returncode == 0, result.stderr
-    assert "prefixes unique" in result.stdout
+    assert "prefixes globally unique" in result.stdout
 
 
 def test_verify_guard_fails_on_duplicate_prefix(tmp_path: Path) -> None:
     result = _run_guard(_fake_chain(tmp_path, ["025_a.sql", "025_b.sql"]))
     assert result.returncode == 1, result.stdout + result.stderr
+
+
+def test_verify_guard_fails_on_cross_layer_duplicate_prefix(tmp_path: Path) -> None:
+    """Prefixes are globally unique: an engine/prod collision fails (D-Q6′)."""
+    result = _run_guard(_fake_chain(tmp_path, ["025_a.sql"], prod=["025_b.sql"]))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "025" in (result.stdout + result.stderr)
     assert "Duplicate migration prefix 025" in result.stderr
 
 

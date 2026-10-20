@@ -34,6 +34,8 @@ from __future__ import annotations
 
 import logging
 import math
+import os
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -46,6 +48,7 @@ import polars as pl
 
 from digiquant.constraints import normalize_drawdown_pct
 from digiquant.models import BacktestResult
+from digiquant.paths import resolve_under_data_root
 from digiquant.stats import HonestRateBlock, normalize_series, stability_split
 
 if TYPE_CHECKING:
@@ -128,16 +131,16 @@ def _default_trade_size(first_price: float, balance: float, fraction: float) -> 
 
 def _resolve_tearsheet_output(path: str | Path) -> Path:
     """Resolve tearsheet path under BACKTEST_RESULTS_DIR (reject path traversal)."""
-    out = Path(path)
-    if not out.is_absolute():
-        out = Path(BACKTEST_RESULTS_DIR) / out
-    base = Path(BACKTEST_RESULTS_DIR).resolve()
-    resolved = out.resolve()
-    try:
-        resolved.relative_to(base)
-    except ValueError as exc:
-        raise ValueError(f"tearsheet_path must resolve under {BACKTEST_RESULTS_DIR!r}") from exc
-    return resolved
+    base = os.path.normpath(os.path.abspath(BACKTEST_RESULTS_DIR))
+    raw = os.fspath(path)
+    joined = raw if os.path.isabs(raw) else os.path.join(base, raw)
+    candidate = os.path.normpath(joined)
+    real_base = os.path.realpath(base)
+    real = os.path.realpath(candidate)
+    prefix = real_base if real_base.endswith(os.sep) else real_base + os.sep
+    if real != real_base and not real.startswith(prefix):
+        raise ValueError(f"tearsheet_path must resolve under {BACKTEST_RESULTS_DIR!r}")
+    return Path(real)
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +175,14 @@ def _infer_bar_period_nautilus(ts_series: pl.Series) -> str:
 # ---------------------------------------------------------------------------
 
 
+_RUNNER_SYMBOL_RE = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def _runner_symbol_matches(sym: object) -> bool:
+    """True only for bounded symbol slugs usable as a filename segment."""
+    return isinstance(sym, str) and _RUNNER_SYMBOL_RE.fullmatch(sym) is not None
+
+
 def _load_ohlcv_for_backtest(
     data_path: str | Path | None = None,
     data_dir: str | Path | None = None,
@@ -187,7 +198,7 @@ def _load_ohlcv_for_backtest(
     from digiquant.data.loader import load_ohlcv_csv
 
     if data_path is not None:
-        path = Path(data_path)
+        path = resolve_under_data_root(data_path, label="data_path")
         if not path.exists():
             return None
         df = load_ohlcv_csv(path)
@@ -195,18 +206,17 @@ def _load_ohlcv_for_backtest(
         return df, str(symbol)
 
     if data_dir is not None and symbols:
-        data_dir = Path(data_dir)
-        if not data_dir.is_dir():
+        resolved_dir = resolve_under_data_root(data_dir, label="data_dir")
+        if not resolved_dir.is_dir():
             return None
-        data_dir_resolved = data_dir.resolve()
         for sym in symbols:
-            for candidate in (data_dir / f"{sym}.csv", data_dir / f"{sym}_ohlcv.csv"):
-                resolved_candidate = candidate.resolve()
-                if not resolved_candidate.is_relative_to(data_dir_resolved):
-                    logger.warning("Symbol path escapes data_dir, skipping: %s", candidate)
-                    continue
-                if resolved_candidate.exists():
-                    df = load_ohlcv_csv(resolved_candidate)
+            if not _runner_symbol_matches(sym):
+                logger.warning("Refusing unsafe symbol %r for path build", sym)
+                continue
+            for name in (f"{sym}.csv", f"{sym}_ohlcv.csv"):
+                candidate = resolved_dir / name
+                if candidate.exists():
+                    df = load_ohlcv_csv(candidate)
                     return df, sym
     return None
 
@@ -218,21 +228,20 @@ def _load_all_ohlcv_for_backtest(
     """Load all available symbol CSVs from data_dir. Returns {symbol: df} for found symbols."""
     from digiquant.data.loader import load_ohlcv_csv
 
-    data_dir = Path(data_dir)
-    if not data_dir.is_dir():
+    resolved_dir = resolve_under_data_root(data_dir, label="data_dir")
+    if not resolved_dir.is_dir():
         return {}
-    data_dir_resolved = data_dir.resolve()
     loaded: dict[str, pl.DataFrame] = {}
     for sym in symbols:
-        for candidate in (data_dir / f"{sym}.csv", data_dir / f"{sym}_ohlcv.csv"):
-            resolved_candidate = candidate.resolve()
-            if not resolved_candidate.is_relative_to(data_dir_resolved):
-                logger.warning("Symbol path escapes data_dir, skipping: %s", candidate)
-                continue
-            if resolved_candidate.exists():
+        if not _runner_symbol_matches(sym):
+            logger.warning("Refusing unsafe symbol %r for path build", sym)
+            continue
+        for name in (f"{sym}.csv", f"{sym}_ohlcv.csv"):
+            candidate = resolved_dir / name
+            if candidate.exists():
                 try:
-                    loaded[sym] = load_ohlcv_csv(resolved_candidate)
-                    logger.debug("Loaded OHLCV for %s from %s", sym, resolved_candidate)
+                    loaded[sym] = load_ohlcv_csv(candidate)
+                    logger.debug("Loaded OHLCV for %s from %s", sym, candidate)
                 except _OHLCV_LOAD_ERRORS as e:
                     logger.warning("Failed to load OHLCV for %s: %s", sym, e)
                 break

@@ -26,7 +26,10 @@ this Worker, including weekly `twelve-x-digisearch-parity` at `8 9 * * MON`
 (Mon 09:08 UTC; prior GHA `0 9 * * 1`). Path A traps (`agent-pr-finalizer`,
 `agent-backlog-snapshot`, `refresh-repo-activity`, `project-enforce-assignment`)
 were restored after #4967 with matching YAML (`workflow_dispatch` only; no
-GHA `schedule:`).
+GHA `schedule:`). `agent-pr-finalizer` is held off the clock by the 2026-10-14
+GitHub cost lock (DIG-4364): the workflow is `disabled_manually`, so its tick
+was a 422 on every run, and the row now carries `enabled: false` with its
+`[triggers]` line removed.
 Operator full refresh remains manual `workflow_dispatch` / `POST /kick` only.
 GHA `schedule:` stays off. Leftover sweep after #4970: develop YAML has
 zero `on.schedule` keys (`tests/scripts/test_no_gha_schedules.py`).

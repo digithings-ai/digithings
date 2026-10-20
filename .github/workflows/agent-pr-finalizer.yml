@@ -10,6 +10,8 @@
 # Cursor-agent fix-dispatch path (scripts/finalize_agent_prs.py:evaluate_pr), everything
 # else just gets a "needs fix" comment with no automated remediation attempted.
 # Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
+# DIG-4364: this workflow was set `disabled_manually` by the 2026-10-14 GitHub cost lock, so the
+# Worker's 07:11 UTC clock is held off (`enabled: false` in jobs.ts) until the workflow is re-enabled.
 name: "Agent: PR finalizer"
 
 on:

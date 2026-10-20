@@ -203,7 +203,7 @@ ROWS: tuple[Row, ...] = (
         "R5",
         ".github/workflows/publish-digichat-image.yml",
         "local-ci",
-        anchor="Dockerfile.digichat-cloudflare",
+        anchor="infra/docker/Dockerfile.digichat-cloudflare",
         note="Tag digichat-v*. Image publish, not the digichat Worker deploy.",
     ),
     Row(

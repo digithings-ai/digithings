@@ -169,9 +169,6 @@ def run_watch(
             error=str(exc),
         )
         store.append_run(run)
-        logger.warning(
-            "monitor run failed watch_id=%s run_id=%s error=%s", watch_id, run.run_id, exc
-        )
         raise MonitorRunError(str(exc), run_id=run.run_id) from exc
 
     results_all = [dict(result) for result in data.results]
@@ -220,9 +217,6 @@ def run_watch(
     store.append_run(run)
 
     if status == "failed":
-        logger.warning(
-            "monitor run failed watch_id=%s run_id=%s error=%s", watch_id, run.run_id, error
-        )
         raise MonitorRunError(error or "monitor run failed", run_id=run.run_id)
 
     if deliver_after_persist:

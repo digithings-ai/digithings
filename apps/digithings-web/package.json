@@ -1,5 +1,13 @@
 {
   "name": "digithings-web",
+  "description": "Marketing site and digibook for digithings.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digithings-web"
+  },
   "version": "1.0.0",
   "private": true,
   "scripts": {

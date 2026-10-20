@@ -24,33 +24,32 @@ function sliceBetween(css: string, from: string, to: string): string {
   return css.slice(start, end);
 }
 
-describe("gallery-thread composer renders the Safari block-caret overlay", () => {
+describe("gallery-thread composer renders the painted block caret", () => {
   it("mounts ComposerBlockCaret next to the composer input", () => {
     const source = read("thread.aui.tsx");
     expect(source).toContain('import { ComposerBlockCaret } from "./block-caret";');
     expect(source).toMatch(/<ComposerBlockCaret containerRef=\{/);
   });
 
-  it("documents the Safari fallback before the feature guard", () => {
+  it("paints the block on every engine, not only where caret-shape is missing", () => {
     const css = readPackageCss();
-    const comment = css.indexOf("Painted block caret");
-    const guard = css.indexOf("@supports not (caret-shape: block)");
-    expect(comment).toBeGreaterThanOrEqual(0);
-    expect(guard).toBeGreaterThan(comment);
+    expect(css).not.toContain("@supports not (caret-shape: block)");
+    expect(css).not.toContain("@supports (caret-shape: block)");
+    expect(css).toContain("Painted block caret");
   });
 
-  it("hides the overlay where the native block caret works", () => {
+  it("hides the native caret and shows the block only while focused", () => {
     const css = readPackageCss();
-    const hideBlock = sliceBetween(css, "@supports (caret-shape: block)", "@supports not (caret-shape: block)");
-    expect(hideBlock).toContain(".aui-block-caret");
-    expect(hideBlock).toMatch(/display:\s*none/);
+    const paintBlock = sliceBetween(css, "/* Painted block caret", "@keyframes aui-caret-blink");
+    expect(paintBlock).toMatch(/caret-color:\s*transparent\s*!important/);
+    expect(paintBlock).toMatch(/\.aui-block-caret\s*\{[^}]*display:\s*none/);
+    expect(paintBlock).toMatch(/\.aui-composer-input:focus[\s\S]*?display:\s*block/);
   });
 
-  it("paints the block and hides the native caret only without caret-shape support", () => {
-    const css = readPackageCss();
-    const paintBlock = sliceBetween(css, "@supports not (caret-shape: block)", "@keyframes aui-caret-blink");
-    expect(paintBlock).toMatch(/\.aui-composer-input\s*\{[^}]*caret-color:\s*transparent/);
-    expect(paintBlock).toMatch(/\.aui-block-caret\s*\{[^}]*display:\s*block/);
+  it("draws an ink-height block, not a full line-height column", () => {
+    const caret = read("block-caret.tsx");
+    expect(caret).toContain("fontSize * 0.8");
+    expect(caret).toContain("topOffset");
   });
 
   it("keeps the block static under reduced motion", () => {

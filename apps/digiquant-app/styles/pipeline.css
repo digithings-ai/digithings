@@ -1,0 +1,2 @@
+/* Pipeline + strategies blocks. Everything else composes existing classes. */
+.pl-note { color: var(--ink-mute); font-size: 11.5px; margin-top: 6px; overflow-wrap: anywhere; }

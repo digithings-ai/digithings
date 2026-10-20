@@ -23,7 +23,7 @@ need a file that lives elsewhere, take it from the path given.
 | **company email sign-off** | `email/signoff.{txt,html}` | lowercase digithings, tagline, digithings.ai |
 
 The same bytes are previewed on the local design-reference at `/brand`
-(`npm run dev --workspace design-reference` → http://127.0.0.1:4013/brand/).
+(`npm run dev --workspace @digithings/reference` → http://127.0.0.1:4013/brand/).
 That page is a `--check` mirror, not a second set of logos, and it is **not**
 shipped on digithings.ai.
 

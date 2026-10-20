@@ -6,13 +6,16 @@
  * kind "probe" fetches public URLs inside this Worker. It does not call
  * RUNNER or api.github.com unless that same override list names the job id.
  * kind "watch" (DIG-3065) READS digiquant-runner over the RUNNER binding and
- * raises on GitHub when a run is open past its deadline. It never POSTs to
- * /v1/jobs, so it has nothing to start, re-kick or re-run.
+ * raises on GitHub when a run is open past its deadline, when Monday's POST
+ * never reached the runner (DIG-4416), or when an accepted run never landed
+ * (DIG-3456). It never POSTs to /v1/jobs, so it has nothing to start, re-kick or
+ * re-run.
  */
 import type { Env } from "./env";
 import { houseRunDeadlineSeconds, type Job } from "./jobs";
 import { checkHouseRuns, WATCH_TARGET, type HouseRunCheckResult } from "./house-run-watch";
 import { probeUrls, runProbe } from "./probe";
+import { dispatchTwelvex } from "./twelvex-dispatch";
 import { runTwelvexWatch, sessionCatchupDue, type WatchOutcome } from "./twelvex-watch";
 
 const GH_API = "https://api.github.com";
@@ -168,9 +171,16 @@ function usesGithub(job: Job, env: Env): boolean {
     job.kind === "container" ||
     job.kind === "probe" ||
     job.kind === "watch" ||
-    job.kind === "twelvex-watch"
+    job.kind === "twelvex-watch" ||
+    job.kind === "twelvex"
   ) {
     return githubOverrideIds(env).includes(job.id);
+  }
+  // "occ-recrawl" (DIG-3576) never uses GitHub: there is no workflow behind the
+  // id, so even a GITHUB_OVERRIDE_JOBS listing must not redirect it into
+  // dispatchGithub with an undefined workflow. Worker-native, always.
+  if (job.kind === "occ-recrawl") {
+    return false;
   }
   return true;
 }
@@ -378,6 +388,8 @@ async function dispatchWatch(
     lost: watch.lost.length,
     unreadable: watch.unreadable.length,
     raised: watch.raised.filter((entry) => entry.raised).length,
+    missing_dispatch: watch.missingDispatch.length,
+    never_landed: watch.neverLanded.length,
   });
   // ok mirrors whether the check completed, not whether it found something. A
   // tick that reads the runner cleanly and finds one lost run is a healthy tick
@@ -417,7 +429,8 @@ export async function dispatch(
       job.kind === "container" ||
       job.kind === "probe" ||
       job.kind === "watch" ||
-      job.kind === "twelvex-watch"
+      job.kind === "twelvex-watch" ||
+      job.kind === "twelvex"
     ) {
       console.error(
         JSON.stringify({
@@ -437,6 +450,9 @@ export async function dispatch(
   if (job.kind === "watch") {
     return dispatchWatch(env, job, cron, scheduledTime);
   }
+  if (job.kind === "twelvex") {
+    return dispatchTwelvex(env, job, cron);
+  }
   if (job.kind === "twelvex-watch") {
     if (!job.twelvexWatch) throw new Error(`job ${job.id}: twelvex-watch requires twelvexWatch`);
     if (env.DRY_RUN === "1") {
@@ -451,6 +467,21 @@ export async function dispatch(
     );
     logLine({ cron, repo: job.repo, job: job.id, twelvex_watch: job.twelvexWatch, ...out });
     return { ok: out.ok, status: out.ok ? 200 : 0, dry_run: false, twelvex: out };
+  }
+  if (job.kind === "occ-recrawl") {
+    if (!job.occRecrawl) throw new Error(`job ${job.id}: occ-recrawl requires occRecrawl`);
+    if (env.DRY_RUN === "1") {
+      logLine({ cron, repo: job.repo, job: job.id, occ_recrawl: job.occRecrawl, dry_run: true });
+      return { ok: true, status: 0, dry_run: true };
+    }
+    // Live crawl + D1/Vectorize store land once the Vectorize token prerequisite
+    // is granted (ticket prerequisite; Chris grants). Fail closed until then:
+    // a weekly tick that cannot reach its store must read as a failure, never
+    // as a silent green week.
+    console.error(
+      JSON.stringify({ cron, repo: job.repo, job: job.id, occ_recrawl: job.occRecrawl, error: "store_unwired" }),
+    );
+    return { ok: false, status: 0, dry_run: false };
   }
   return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
 }

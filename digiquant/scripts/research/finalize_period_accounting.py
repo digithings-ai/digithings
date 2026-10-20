@@ -39,6 +39,7 @@ import argparse
 import logging
 import os
 import sys
+import warnings
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -119,8 +120,15 @@ try:
 
     load_dotenv(Path(__file__).resolve().parents[2] / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 
 def _sb():
@@ -192,14 +200,15 @@ def _opening_cash(*, client: Any, period_date: date) -> Decimal:
         head = period_head(client=client, period_date=day)
         if head is not None:
             cash = _decimal(head.get("closing_cash"))
-            if cash is not None and cash >= 0:
-                return cash
-            if cash is not None and cash < 0:
+            if cash is None:
+                continue
+            if cash < 0:
                 raise FinalizerDeclined(
                     f"prior accounting tip {day.isoformat()} has negative "
                     f"closing_cash={cash} — decline finalization for "
                     f"{period_date.isoformat()} (no fabricated cash stub, #4105)"
                 )
+            return cash
     resp = (
         _eq_house(client.table("nav_history").select("date, nav, cash_pct"))
         .lt("date", period_date.isoformat())

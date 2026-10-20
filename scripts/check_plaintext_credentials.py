@@ -230,12 +230,11 @@ STRUCTURAL_CHARS = ('"', "{", "}", "[", "]", "|", "$")
 # carries its reason; `_assert_allowlist_is_reviewed` fails the run if one loses
 # its reason, and `test_check_plaintext_credentials.py` fails if the list grows
 # past ALLOWLIST_CAP without a deliberate edit here.
-ALLOWLIST: dict[str, str] = {
-    "scripts/rls_proof/00_supabase_shim.sql:52": (
-        "local-only stand-in role password for an offline RLS proof; no remote "
-        "system is reachable with it (raised by this guard on DIG-179)"
-    ),
-}
+#
+# Empty since DIG-379: the former rls_proof shim entry was removed with the
+# literal itself (authenticator role now has no PASSWORD clause), so nothing
+# in the tree needs an exemption.
+ALLOWLIST: dict[str, str] = {}
 ALLOWLIST_CAP = 10
 
 
@@ -484,7 +483,9 @@ def tracked_files(root: Path) -> list[Path]:
                 check=True,
             )
             return [root / name for name in result.stdout.split("\0") if name]
-    except Exception:
+    except (subprocess.CalledProcessError, OSError, ValueError):
+        # Not a git checkout (or git failed / undecodable output): fall back
+        # to a full-tree walk. Anything else is a real bug and must surface.
         pass
     return sorted(p for p in root.rglob("*") if p.is_file())
 

@@ -8,7 +8,9 @@ export type JobKind =
   | "container"
   | "probe"
   | "watch"
-  | "twelvex-watch";
+  | "twelvex-watch"
+  | "occ-recrawl"
+  | "twelvex";
 
 export type Job = {
   id: string;
@@ -30,6 +32,8 @@ export type Job = {
   codeRef?: "main";
   /** Set when kind is "probe". Worker fetch; does not start the container. */
   probe?: "site" | "stack";
+  /** Set when kind is "twelvex". POST /run/{route} on twelvex-runner. */
+  route?: "ingest" | "heartbeat";
   /**
    * Set when kind is "watch". The service this job only READS. There is no
    * `command`: a watch job has nothing to start, and nothing to time out. Its
@@ -39,6 +43,8 @@ export type Job = {
   watch?: "digiquant-runner";
   /** Set when kind is "twelvex-watch". Worker-only read of twelve-x Actions history. */
   twelvexWatch?: "feed-confirm" | "session-heartbeat";
+  /** Set when kind is "occ-recrawl". Which OCC corpus this row recrawls. */
+  occRecrawl?: "help-docs";
   /**
    * Worker-side pre-check before a workflow_dispatch. "twelvex-session-due" skips
    * session_catchup.yml when no session can be due (see twelvex-watch.ts).
@@ -131,6 +137,23 @@ function tw(
   return { id, cron, repo: TWELVE_X, kind: "twelvex-watch", workflow, ref: DEVELOP, enabled: true, twelvexWatch };
 }
 
+/**
+ * OCC worker-native recrawl row (DIG-3576). Runs inside this Worker (no GitHub
+ * runner): crawl the public help site, idempotent upsert keyed by URL +
+ * content hash, Vectorize write only for changed docs. `workflow` is omitted
+ * on purpose — there is no GHA workflow behind this id, so GITHUB_OVERRIDE_JOBS
+ * cannot redirect it. `ref` stays so `jobs.test.ts` (ref === "develop" on every
+ * non-repository_dispatch row) keeps pinning the row shape.
+ */
+function ow(
+  id: string,
+  cron: string,
+  occRecrawl: "help-docs",
+  opts: { enabled?: boolean } = {},
+): Job {
+  return { id, cron, repo: MONOREPO, kind: "occ-recrawl", ref: DEVELOP, enabled: opts.enabled ?? true, occRecrawl };
+}
+
 /** Container job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
 function cj(
   id: string,
@@ -159,6 +182,31 @@ function cj(
     concurrency,
     timeoutSeconds,
     codeRef: "main",
+  };
+}
+
+/** twelve-x container job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
+function tx(
+  id: string,
+  cron: string,
+  route: "ingest" | "heartbeat",
+  workflow: string,
+  opts: {
+    inputs?: Record<string, string>;
+    timeoutSeconds?: number;
+  } = {},
+): Job {
+  return {
+    id,
+    cron,
+    repo: TWELVE_X,
+    kind: "twelvex",
+    route,
+    workflow,
+    inputs: opts.inputs,
+    ref: DEVELOP,
+    enabled: true,
+    timeoutSeconds: opts.timeoutSeconds ?? (route === "ingest" ? 1200 : 300),
   };
 }
 
@@ -321,11 +369,29 @@ export const JOBS: readonly Job[] = [
   // Path A traps restored after #4967 (Approve-full). YAML is workflow_dispatch
   // only; clocks live here. dry_run must be false: workflow defaults dispatch
   // to dry_run=true and only forced live on the old GHA schedule event.
+  //
+  // DIG-4364 (2026-10-19): the 2026-10-14 GitHub-exit cost lock set this workflow
+  // to `disabled_manually` on GitHub. A dispatch to a disabled workflow is a 422
+  // ("Cannot trigger a 'workflow_dispatch' on a disabled workflow") that
+  // `isBenign422` deliberately does not match, so every 07:11 tick surfaced as a
+  // `scheduled` exception. The row keeps its cron and inputs so lifting the lock is
+  // one flag, not a re-registration; the trigger line is gone from wrangler.toml,
+  // so the tick no longer fires at all. Restoring the lane is a GitHub settings
+  // decision, not this seat's.
   wd("agent-pr-finalizer", "11 7 * * *", MONOREPO, "agent-pr-finalizer.yml", {
     inputs: { dry_run: "false" },
+    enabled: false,
   }),
   wd("agent-backlog-snapshot", "13 6 * * MON", MONOREPO, "agent-backlog-snapshot.yml"),
-  wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml"),
+  // DIG-4364: disabled_manually on GitHub since the 2026-10-14 cost lock; the
+  // daily 06:21 tick answered 422 every day. See agent-pr-finalizer above.
+  wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml", { enabled: false }),
+  // DIG-1578: daily census of remote branches carrying no open PR whose head is
+  // over 10 days old (docs/ops/branch-hygiene-policy.md §6.2 item 2). Report only —
+  // it never deletes and never gates CI; deletion is the tiered run on DIG-1575 and
+  // the rebuild stop is the branch-filtered push triggers, pinned in
+  // tests/scripts/test_branch_age_guard.py. Off-grid minute, siblings at :41/:33/:37.
+  wd("branch-age-guard", "29 6 * * *", MONOREPO, "branch-age-guard.yml"),
   wd("refresh-repo-activity", "10 6 * * MON", MONOREPO, "refresh-repo-activity.yml"),
   wd(
     "project-enforce-assignment",
@@ -334,8 +400,15 @@ export const JOBS: readonly Job[] = [
     "project-enforce-assignment.yml",
   ),
   pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"),
-  wd("security-pip-audit", "33 6 * * MON", MONOREPO, "security-pip-audit.yml"),
-  wd("security-npm-audit", "37 6 * * MON", MONOREPO, "security-npm-audit.yml"),
+  // DIG-4364: both audits are `disabled_manually` on GitHub since the 2026-10-14
+  // cost lock; the Monday 06:33 / 06:37 ticks answered 422. See agent-pr-finalizer
+  // above. The audits still run on PR and `workflow_call` from ci.yml.
+  wd("security-pip-audit", "33 6 * * MON", MONOREPO, "security-pip-audit.yml", {
+    enabled: false,
+  }),
+  wd("security-npm-audit", "37 6 * * MON", MONOREPO, "security-npm-audit.yml", {
+    enabled: false,
+  }),
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
   wd("token-canary", "41 6 * * *", MONOREPO, "token-canary.yml"),
@@ -385,21 +458,25 @@ export const JOBS: readonly Job[] = [
   wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
   // Weekday FX Hub clock; house-run-12 stays a disabled daily retry slot.
   wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml"),
-  wd("twelve-x-market-context-intraday", "4 */4 * * *", TWELVE_X, "market_context_ingest.yml", {
+  tx("twelve-x-market-context-intraday", "4 */4 * * *", "ingest", "market_context_ingest.yml", {
     inputs: { bucket: "intraday" },
+    timeoutSeconds: 1200,
   }),
-  wd("twelve-x-market-context-daily", "30 5 * * *", TWELVE_X, "market_context_ingest.yml", {
+  tx("twelve-x-market-context-daily", "30 5 * * *", "ingest", "market_context_ingest.yml", {
     inputs: { bucket: "daily" },
+    timeoutSeconds: 1200,
   }),
-  wd("twelve-x-market-context-weekly", "8 7 * * SAT", TWELVE_X, "market_context_ingest.yml", {
+  tx("twelve-x-market-context-weekly", "8 7 * * SAT", "ingest", "market_context_ingest.yml", {
     inputs: { bucket: "weekly" },
+    timeoutSeconds: 1200,
   }),
   wd("twelve-x-performance-eval", "30 17 * * MON-FRI", TWELVE_X, "performance_eval.yml"),
-  wd(
+  tx(
     "twelve-x-primemarket-heartbeat",
     "3 6,18 * * *",
-    TWELVE_X,
+    "heartbeat",
     "primemarket_session_heartbeat.yml",
+    { timeoutSeconds: 300 },
   ),
   // Gated in the Worker: most hourly ticks found nothing due and still billed a
   // private-repo Actions job. The gate only skips when every due slot is covered.
@@ -455,12 +532,15 @@ export const JOBS: readonly Job[] = [
   // missed outright is caught the same day, not the next morning.
   // Runs in this Worker now (twelvex-watch.ts); GITHUB_OVERRIDE_JOBS falls back to GHA.
   tw("twelve-x-feed-confirm-watchdog", "23 16 * * MON-FRI", "feed_confirm_watchdog.yml", "feed-confirm"),
-  // Hourly lost-house-run watcher (DIG-3065). Appended last so the deploy-config
+  // Hourly house-run watcher (DIG-3065), plus the Monday dispatch-confirmation
+  // and never-landed arms (DIG-4416, DIG-3456). Appended last so the deploy-config
   // contract, which compares wrangler.toml [triggers].crons to uniqueEnabledCrons()
-  // in order, needs no reshuffle. Minute :23 is clear of the :17 cluster
+  // in order, needs no reshuffle. Minute :22 is five minutes after the Monday
+  // 09:17 house-run start, so a POST that never arrived is raised inside the
+  // grace DIG-4416 sets; it is also clear of the :17 cluster
   // (production-deploy-gate-watchdog, datatap-answer-check, smoke-site), :41
-  // (token-canary) and :47, and clear of the 09:17 house-run start it watches.
-  wj("digiquant-house-run-watch", "23 * * * *", "digiquant-runner"),
+  // (token-canary) and :47.
+  wj("digiquant-house-run-watch", "22 * * * *", "digiquant-runner"),
   // Was the GHA `schedule: 40 */6 * * *` on primarketet_heartbeat_watchdog.yml.
   tw(
     "twelve-x-session-heartbeat-watchdog",
@@ -468,6 +548,31 @@ export const JOBS: readonly Job[] = [
     "primarketet_heartbeat_watchdog.yml",
     "session-heartbeat",
   ),
+  // Dated twelve-x backfill (DIG-1335, CTO verdict on DIG-1272). Manual-only
+  // by design: dated backfills are on-demand, one missed date per kick, so a
+  // standing clock would re-dispatch one date every day. enabled:false keeps
+  // the cron out of uniqueEnabledCrons() — the deploy contract asserts
+  // wrangler.toml [triggers] equals that list in order, so no cron line is
+  // added there either — while POST /kick still addresses the row by cron
+  // (it resolves with includeDisabled). run_date reaches GitHub via
+  // backfillArgs() in index.ts: a caller-supplied date always wins, a missing
+  // one falls back to the scheduled day. No static inputs here: pinning a
+  // date on the row would re-dispatch that same date on every kick.
+  // ref is develop like every other twelve-x row: the wrapper file lives on
+  // develop while daily_run_reusable.yml checks out main, so that split is
+  // the pipeline's shape, not a defect.
+  wd("twelve-x-backfill", "41 3 * * *", TWELVE_X, "daily_run.yml", {
+    enabled: false,
+  }),
+  // OCC help-docs weekly recrawl (DIG-3576, Chris 14 Oct 18:26: WEEKLY, not
+  // daily; freshness alert > 8 days; tickets stay DAILY on DIG-3578). Worker-
+  // native row (ow): crawl help.online-compliance-center.com, idempotent upsert
+  // keyed by URL + content hash, Vectorize write only for changed docs.
+  // The cron string is unique in this file (exact-match routing), clear of the
+  // :11 daily finalizer and the Saturday weekly context job. Appended last so
+  // the deploy-config contract (wrangler.toml order == uniqueEnabledCrons()
+  // order) needs no reshuffle.
+  ow("occ-help-recrawl", "23 7 * * MON", "help-docs"),
 ];
 
 /**
