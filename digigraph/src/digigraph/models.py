@@ -211,6 +211,17 @@ class WorkflowRequest(BaseModel):
             "configured), so a caller cannot inject its own system prompt."
         ),
     )
+    lock_session_controls: bool = Field(
+        default=False,
+        description=(
+            "Hide model/MCP/tool session controls (session_set_model, "
+            "session_upsert_mcp, session_remove_mcp, session_toggle_tool) for this "
+            "tenant. Operator-only: resolved server-side from the tenant corpus map "
+            "(DIGI_TENANT_CORPUS_MAP lockSessionControls) and written "
+            "unconditionally by _digi_fields_from_request, so a client body can "
+            "neither unlock nor lock these controls."
+        ),
+    )
     response_language: str | None = Field(
         None,
         description=(

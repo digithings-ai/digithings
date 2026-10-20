@@ -374,6 +374,10 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["digisearch_index"] = req.digisearch_index
     initial["vault_path_prefix"] = req.vault_path_prefix
     initial["research_system_prompt_override"] = req.research_system_prompt_override
+    # Tenant map lockSessionControls: hide model/MCP/tool session controls for this
+    # tenant. Unconditional like the corpus keys above, so a prior turn's lock does
+    # not stay sticky on a reused session_id.
+    initial["lock_session_controls"] = bool(req.lock_session_controls)
     initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool
