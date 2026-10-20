@@ -177,18 +177,15 @@ export function readTrialProofMessage(
 ): string | null {
   if (event.origin !== options.parentOrigin) return null;
   const data = event.data as
-    | { type?: string; proof?: string; token?: string; host?: string }
+    | { type?: string; proof?: string; host?: string }
     | null
     | undefined;
   if (!data || data.type !== TRIAL_PROOF_MESSAGE_TYPE) return null;
-  // `proof` is the canonical field; `token` is the spelling the sibling
-  // unlock message uses for its credential, so both are accepted and the
-  // two leaves can land independently.
-  const raw = [data.proof, data.token].find(
-    (value) => typeof value === "string" && value.trim().length > 0,
-  );
-  const proof = raw?.trim();
-  if (!proof) return null;
+  // The field name is fixed by the wire contract: the page posts
+  // `{ type: "trial:proof", proof }`. Any other spelling is not our proof.
+  const raw = data.proof;
+  if (typeof raw !== "string" || raw.trim().length === 0) return null;
+  const proof = raw.trim();
   const named = data.host?.trim();
   if (named && hostKey(named) !== hostKey(options.servingHost)) return null;
   return proof;

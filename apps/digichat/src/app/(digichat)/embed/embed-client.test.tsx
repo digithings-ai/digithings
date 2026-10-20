@@ -109,7 +109,7 @@ describe("readTrialProofMessage", () => {
     expect(proof).toBeNull();
   });
 
-  it("accepts the proof under the sibling unlock field name", () => {
+  it("rejects a proof sent under another field name", () => {
     const proof = readTrialProofMessage(
       {
         origin: "https://tenant.example",
@@ -117,7 +117,7 @@ describe("readTrialProofMessage", () => {
       },
       options,
     );
-    expect(proof).toBe("hmac.trial.proof");
+    expect(proof).toBeNull();
   });
 
   it("ignores a proof that names another host", () => {
@@ -172,6 +172,15 @@ describe("trial proof is held in memory only", () => {
     expect(embedClientSrc).toMatch(/useRef<string \| null>\(null\)/);
     expect(embedClientSrc).toMatch(/const getTrialProof = useCallback\(\(\) => trialProofRef\.current/);
     expect(embedClientSrc).toMatch(/getTrialProof,/);
+  });
+
+  it("never clears the proof on the unlock path", () => {
+    // The page posts the proof before the unlock, so the proof is still
+    // needed when the unlock arrives: no line that touches the proof may
+    // be driven by the unlock.
+    for (const line of proofCodeLines) {
+      expect(line).not.toMatch(/unlock/i);
+    }
   });
 
   it("uses a message type that names no client", () => {
