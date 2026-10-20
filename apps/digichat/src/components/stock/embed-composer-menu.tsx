@@ -153,10 +153,10 @@ const SEARCH_ENGINE_LABELS: Record<string, string> = {
 };
 
 const VIEW_LABELS: Record<string, string> = {
-  hidden: "Hidden · answer only",
-  quiet: "Quiet · one line",
-  balanced: "Balanced · collapse when done",
-  verbose: "Verbose · stays open",
+  hidden: "Hidden · one line",
+  quiet: "Quiet · titles only",
+  balanced: "Balanced · open while it runs",
+  verbose: "Verbose · everything open",
 };
 
 const THINKING_LABELS: Record<string, string> = {

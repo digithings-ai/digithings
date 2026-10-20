@@ -34,13 +34,17 @@ const ANIMATION_DURATION = 200;
  */
 export function WorkChain({
   children,
-  defaultOpen = false,
+  openAtRest = false,
   running = false,
   className,
 }: {
   children: ReactNode;
-  /** Open at rest (the verbose level). */
-  defaultOpen?: boolean;
+  /**
+   * The chain stays open: the row titles are always visible. The balanced
+   * level instead opens the chain while the turn runs and folds it away when
+   * the turn ends.
+   */
+  openAtRest?: boolean;
   /** The chain group is running (a tool or the reasoning is streaming). */
   running?: boolean;
   className?: string;
@@ -59,7 +63,7 @@ export function WorkChain({
   }, [running, turnRunning]);
 
   const busy = running || turnRunning;
-  const open = userOpen ?? (defaultOpen || (!settled && busy));
+  const open = userOpen ?? (openAtRest ? true : !settled && busy);
 
   return (
     <Collapsible
