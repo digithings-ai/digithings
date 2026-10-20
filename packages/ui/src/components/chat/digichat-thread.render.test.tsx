@@ -386,6 +386,20 @@ describe("DigichatThread", () => {
     unmount();
   });
 
+  it("folds the quiet chain as soon as the answer has started", async () => {
+    // The titles are there while the agent works; when the answer streams
+    // they get out of its way.
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      workVisibility: "quiet",
+    });
+    await act(async () => {});
+    const chain = host.querySelector('[data-slot="aui_work-chain"]');
+    expect(chain).toBeTruthy();
+    expect(chain?.hasAttribute("data-closed")).toBe(true);
+    unmount();
+  });
+
   it("keeps the chain open when the client is verbose", async () => {
     const { host, unmount } = await mount({
       initialMessages: TOOL_MESSAGES,
