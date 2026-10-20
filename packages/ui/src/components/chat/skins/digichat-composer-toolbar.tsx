@@ -8,18 +8,19 @@ import { DigichatContextMeter } from "./digichat-context-meter";
  * model and the active backend on the left and the context fill on the
  * right. Clicking the model opens the full settings menu — that is the only
  * control here; the settings button and the per-control chips are gone.
+ *
+ * The backend chip is a backend indicator, so it appears only where BYOK is
+ * on the table (`showByok`) and the host named the backend that serves the
+ * chat (`providerLabel`). The label is the host's: this package holds no
+ * provider vocabulary, and a host that cannot name the backend shows no
+ * chip rather than a wrong one.
  */
-export function DigichatComposerToolbar({
-  prefs,
-  providerLabel = "cheaperinference",
-}: {
-  prefs: EmbedChatPrefsApi;
-  /** Active backend: Cheaper Inference for house models, or a BYOK provider. */
-  providerLabel?: string;
-}) {
+export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi }) {
   const rawModel = prefs.prefs.model.trim();
   // Routing names, not presentation: the backend sees the full model id.
   const modelLabel = rawModel || "auto";
+  const providerLabel = prefs.providerLabel?.trim() ?? "";
+  const showProvider = prefs.showByok && providerLabel.length > 0;
 
   // Connected MCP servers and the tools inside them: one ticket server with
   // five tools reads "1 MCP / 5 tools", not "5 MCPs". A server with no
@@ -58,17 +59,21 @@ export function DigichatComposerToolbar({
       ) : (
         <span className="aui-composer-meta">{modelLabel}</span>
       )}
-      <span className="aui-composer-meta-sep" aria-hidden>
-        /
-      </span>
-      <button
-        type="button"
-        className="aui-composer-meta aui-composer-meta-action"
-        onClick={() => prefs.openByok()}
-        aria-label="Open provider menu"
-      >
-        {providerLabel}
-      </button>
+      {showProvider ? (
+        <>
+          <span className="aui-composer-meta-sep" aria-hidden>
+            /
+          </span>
+          <button
+            type="button"
+            className="aui-composer-meta aui-composer-meta-action"
+            onClick={() => prefs.openByok()}
+            aria-label="Open provider menu"
+          >
+            {providerLabel}
+          </button>
+        </>
+      ) : null}
       {mcpCounts.servers > 0 ? (
         <>
           <span className="aui-composer-meta-sep" aria-hidden>

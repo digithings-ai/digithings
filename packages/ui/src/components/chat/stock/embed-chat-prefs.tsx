@@ -92,6 +92,13 @@ export type EmbedChatPrefsApi = {
   reset: () => void;
   tenantAllowsWeb: boolean;
   showByok: boolean;
+  /**
+   * The backend that serves this chat, as a display label (an own-key
+   * provider id, or the house backend id). The host owns the provider
+   * vocabulary; absent means unknown, so the composer chip stays hidden
+   * rather than naming a backend that may be wrong.
+   */
+  providerLabel?: string;
   showModels: boolean;
   hasDigisearch: boolean;
   hasVault: boolean;

@@ -645,6 +645,35 @@ The public embed `/provider` path uses `EmbedComposerMenu` (provider list →
 token field → model when required) and the same `validateBYOKKey` /
 `pingByokKey` / `useBYOKKey` contract.
 
+#### The composer provider chip names the backend that serves the chat
+
+The digichat composer footer carries a provider chip: a backend indicator
+sitting next to the model chip. It follows the same two rules the model chip
+already follows, one for the model chip and one for this one.
+
+- **The chip appears only where BYOK is on the table.** The gate is the
+  `showByok` preference the `/byok` slash command uses
+  (`src/lib/product-slash-commands.ts`), so a surface that does not offer
+  BYOK shows no provider chip at all.
+- **The label is derived from the backend that actually serves the chat.**
+  The host names it: `EmbedChatPrefsApi.providerLabel` carries the own-key
+  provider id while the session carries a key, else the house backend id
+  (`src/lib/provider-label.ts` — `backendLabel()` and `HOUSE_BACKEND_ID`).
+  Absent means unknown, and an unknown backend renders no chip rather than
+  a wrong one.
+
+`packages/ui` cannot import app code, so the package holds **no provider
+vocabulary**: it renders the label it is handed, and the app owns the
+names. The static surfaces (home, baseline, devkit) have no BYOK state of
+their own — the provider menu they render cannot activate an own key — so
+they name the house backend; the embed surface names its own provider while
+a key is set.
+
+The house backend id appears a second time inline in the provider menu
+(`src/components/stock/embed-composer-menu.tsx`), which lists the house
+backend as one provider choice among the own-key ones. That copy is the one
+to watch for drift.
+
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 (stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
 opens BYOK mode):
