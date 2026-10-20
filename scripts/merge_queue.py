@@ -969,6 +969,32 @@ def merge_one(repo: str, verdict: Verdict, authority: Authority, policy: Policy)
         raise QueueError(f"merge of #{verdict.number} failed: {proc.stderr.strip()}")
 
 
+def stale_candidates(verdicts: list[Verdict], limit: int) -> list[Verdict]:
+    """Return up to ``limit`` branches that are stale only because the base moved.
+
+    A PR whose *only* reason for being refused is a moved base is not broken: a
+    merge of the base into its branch puts it back in flight, and its checks
+    run again against the base the queue is on. That is the only action that can
+    clear it, so the update step is what keeps the queue draining.
+
+    The list is FIFO — the same order the queue merges in — because an update
+    spends a full CI run, and the oldest PR is the one that has been waiting
+    longest for it. The order is taken from the verdicts themselves rather than
+    from the order they arrive in, so a caller that hands the list over in any
+    other order still refreshes the oldest first. ``limit`` is the number of
+    branches one tick may refresh: each one costs a CI run, and refreshing more
+    than the checks can absorb turns the queue into a treadmill of runs that all
+    finish at once.
+
+    A limit of zero or less returns nothing, so a caller that does not want to
+    update anything does not have to special-case it.
+    """
+    if limit <= 0:
+        return []
+    stale = sorted((v for v in verdicts if v.stale_base_only), key=Verdict.order_key)
+    return stale[:limit]
+
+
 def update_branch(repo: str, verdict: Verdict) -> bool:
     """Bring a stale PR's branch onto the base, so its checks run against it.
 
@@ -1055,12 +1081,12 @@ def print_queue(verdicts: list[Verdict], *, queued_only: bool) -> None:
     # Stale, not blocked: named separately and before the blocked list, because the
     # action on them is different — nobody has to fix anything, a run tick clears
     # them — and reporting them as blocked is what made 10 green PRs look like work.
-    stale = [v for v in verdicts if v.stale_base_only]
+    stale = stale_candidates(verdicts, len(verdicts))
     if stale and not queued_only:
         print(
             f"\nstale ({len(stale)}) — green against a base we have left, and counted "
-            "below as not eligible; nobody has to fix these, a run tick updates one "
-            "branch, oldest first:"
+            "below as not eligible; nobody has to fix these, a run tick updates "
+            "branches, oldest first, up to --max-updates of them:"
         )
         for v in stale:
             print(f"  #{v.number} {v.head_ref} — {v.title}")
@@ -1218,7 +1244,7 @@ def main(argv: list[str] | None = None) -> int:
             # read, so this costs no extra API call, and a PR that only became stale
             # *because* of this tick's merge is not in it — it still read CLEAN — so it is
             # picked up on the next tick instead of being updated twice.
-            for candidate in [v for v in verdicts if v.stale_base_only][: args.max_updates]:
+            for candidate in stale_candidates(verdicts, args.max_updates):
                 if not update_branch(args.repo, candidate):
                     # Refused: the branch is exactly as it was, so this is not an update
                     # and must not be reported, counted or dropped from the dump as one.
