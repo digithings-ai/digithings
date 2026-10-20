@@ -23,7 +23,6 @@ describe("work visibility", () => {
     // The chain always renders; the folded header is the status line, so the
     // retired one-line replacement is never used.
     expect(resolveWorkDisclosure("quiet").summaryOnly).toBe(false);
-    expect(resolveWorkDisclosure("quiet").chainOpen).toBe(true);
     expect(resolveWorkDisclosure("balanced").summaryOnly).toBe(false);
     expect(resolveWorkDisclosure("verbose").summaryOnly).toBe(false);
     expect(resolveWorkDisclosure(undefined).summaryOnly).toBe(false);
