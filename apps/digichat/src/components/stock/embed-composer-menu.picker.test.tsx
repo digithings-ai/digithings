@@ -40,6 +40,7 @@ function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     mcpServers: [],
     sessionKey: "t",
     openSettings: vi.fn(),
+    openHelp: vi.fn(),
     openTools: vi.fn(),
     openMcp: vi.fn(),
     openByok: vi.fn(),
@@ -178,6 +179,73 @@ describe("EmbedComposerMenu exclusive pickers", () => {
       </EmbedChatPrefsProvider>,
     );
     expect(await screen.findByText("/search-engine")).not.toBeNull();
+    unmount();
+  });
+
+  it("offers auto in /models when the deployment default is auto", async () => {
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu
+          kind="models"
+          models={["alpha", "beta"]}
+          defaultModel="auto"
+          onClose={onClose}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(await screen.findByRole("menuitemradio", { name: /auto/ })).not.toBeNull();
+    unmount();
+  });
+
+  it("does not offer auto when a model is pinned", async () => {
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu
+          kind="models"
+          models={["alpha", "beta"]}
+          defaultModel="alpha"
+          onClose={onClose}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+    await screen.findByRole("menuitemradio", { name: "alpha" });
+    expect(screen.queryByRole("menuitemradio", { name: /auto/ })).toBeNull();
+    unmount();
+  });
+
+  it("lists cheaperinference as a provider choice", async () => {
+    const onClose = vi.fn();
+    const onClearProvider = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu
+          kind="provider"
+          onClose={onClose}
+          onClearProvider={onClearProvider}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(
+      await screen.findByRole("menuitemradio", { name: /cheaperinference/ }),
+    ).not.toBeNull();
+    unmount();
+  });
+
+  it("renders the /help panel with examples, commands and the contact address", async () => {
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu kind="help" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+    const panel = await screen.findByText(/Ask about OCC policies/);
+    expect(panel).not.toBeNull();
+    expect(screen.getByText(/How do I raise a support ticket\?/)).not.toBeNull();
+    expect(screen.getByText(/\/models/)).not.toBeNull();
+    const contact = screen.getByRole("link", { name: "contact@digithings.ai" });
+    expect(contact.getAttribute("href")).toBe("mailto:contact@digithings.ai");
     unmount();
   });
 });

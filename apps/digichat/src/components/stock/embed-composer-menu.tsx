@@ -5,7 +5,7 @@
  * slash palette: opaque, composer-width, command/label left, value right.
  * Arrow keys move; Enter toggles, opens a nested list, or commits an exclusive
  * pick (then the menu closes). Escape closes. Left/Right on `/language` cycles
- * the full ISO list. Exclusive rows reuse the dropdown radio disc (`CircleIcon`),
+ * the full ISO list. Exclusive rows mark the selection with a 3x3 cube diamond,
  * not the word “on”.
  */
 
@@ -19,7 +19,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { CircleIcon } from "lucide-react";
 import { Button, Input, Label } from "@digithings/ui/ui";
 import { nextPaletteIndex } from "@digithings/digichat-ui";
 import { useEmbedChatPrefs } from "@digithings/ui/chat/stock";
@@ -78,7 +77,8 @@ export type ComposerMenuKind =
   | "search-engine"
   | "view"
   | "thinking"
-  | "provider";
+  | "provider"
+  | "help";
 
 type MenuView =
   | "main"
@@ -93,7 +93,8 @@ type MenuView =
   | "mcp-edit"
   | "provider"
   | "provider-key"
-  | "provider-model";
+  | "provider-model"
+  | "help";
 
 type MenuRow = {
   id: string;
@@ -165,6 +166,7 @@ function initialView(kind: ComposerMenuKind): MenuView {
   if (kind === "tools") return "tools";
   if (kind === "mcp") return "mcp";
   if (kind === "provider") return "provider";
+  if (kind === "help") return "help";
   return "main";
 }
 
@@ -178,6 +180,7 @@ function composerHost(): HTMLElement | null {
 export function EmbedComposerMenu({
   kind,
   models,
+  defaultModel,
   onClose,
   onActivateProvider,
   onClearProvider,
@@ -189,6 +192,8 @@ export function EmbedComposerMenu({
 }: {
   kind: ComposerMenuKind;
   models?: readonly string[];
+  /** Deployment default: `auto` (or empty) makes Auto the checked first row. */
+  defaultModel?: string;
   onClose: () => void;
   onActivateProvider?: (key: string, provider: BYOKProvider, model: string) => void;
   onClearProvider?: () => void;
@@ -449,7 +454,30 @@ export function EmbedComposerMenu({
   );
 
   const modelRows = useMemo((): MenuRow[] => {
+    // Auto is only a real option when the deployment default is Auto (no
+    // pinned model); a tenant that pins a default should not offer a way to
+    // silently leave it.
+    const defaultIsAuto =
+      !providerActive &&
+      defaultModel !== undefined &&
+      (!defaultModel.trim() || defaultModel.trim() === "auto");
+    const autoRows: MenuRow[] = defaultIsAuto
+      ? [
+          {
+            id: "auto",
+            label: "auto",
+            value: "deployment default",
+            checked: !api.prefs.model || api.prefs.model === "auto",
+            exclusive: true,
+            activate: () => {
+              api.setModel("");
+              onClose();
+            },
+          },
+        ]
+      : [];
     if (!available.length) {
+      if (autoRows.length) return autoRows;
       return [
         {
           id: "none",
@@ -462,19 +490,22 @@ export function EmbedComposerMenu({
         },
       ];
     }
-    return available.map((id) => ({
-      id,
-      label: id,
-      value: "",
-      checked: (providerActive?.model || api.prefs.model) === id,
-      exclusive: true,
-      activate: () => {
-        api.setModel(id);
-        onPickSessionModel?.(id);
-        onClose();
-      },
-    }));
-  }, [available, api, onClose, onPickSessionModel, providerActive]);
+    return [
+      ...autoRows,
+      ...available.map((id) => ({
+        id,
+        label: id,
+        value: "",
+        checked: (providerActive?.model || api.prefs.model) === id,
+        exclusive: true,
+        activate: () => {
+          api.setModel(id);
+          onPickSessionModel?.(id);
+          onClose();
+        },
+      })),
+    ];
+  }, [available, api, defaultModel, onClose, onPickSessionModel, providerActive]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
@@ -763,10 +794,24 @@ export function EmbedComposerMenu({
   }, [activateProvider, keyDraft, providerPick]);
 
   const providerRows = useMemo((): MenuRow[] => {
-    const rows: MenuRow[] = PROVIDER_MENU_ORDER.map((id) => ({
+    // The house backend is a provider choice too: selecting it drops any BYOK
+    // key and returns routing to Cheaper Inference.
+    const rows: MenuRow[] = [
+      {
+        id: "cheaperinference",
+        label: slashName("cheaperinference"),
+        value: "Default · no key",
+        checked: !providerActive,
+        exclusive: true,
+        activate: () => {
+          onClearProvider?.();
+          onClose();
+        },
+      },
+      ...PROVIDER_MENU_ORDER.map((id) => ({
       id,
       label: slashName(id),
-      value: providerDisplayName(id),
+      value: `${providerDisplayName(id)} · own key`,
       checked: providerActive?.provider === id,
       exclusive: true,
       activate: () => {
@@ -778,18 +823,8 @@ export function EmbedComposerMenu({
         setLiveModels(undefined);
         setView("provider-key");
       },
-    }));
-    if (providerActive && onClearProvider) {
-      rows.push({
-        id: "provider-off",
-        label: slashName("provider off"),
-        value: "Remove key",
-        activate: () => {
-          onClearProvider();
-          onClose();
-        },
-      });
-    }
+      })),
+    ];
     return rows;
   }, [onClearProvider, onClose, providerActive, providerPick]);
 
@@ -854,7 +889,9 @@ export function EmbedComposerMenu({
                 ? "/provider"
                 : view === "search-engine"
                   ? "/search-engine"
-                  : "Settings";
+                  : view === "help"
+                    ? "/help"
+                    : "Settings";
 
   const safeCursor = rows.length ? Math.min(cursor, rows.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);
@@ -1451,9 +1488,39 @@ export function EmbedComposerMenu({
             ) : null}
           </div>
         ) : null}
+        {view === "help" ? (
+          <div className="flex flex-col gap-2 px-3 py-2 text-xs leading-relaxed" data-embed-help>
+            <p className="text-muted-foreground">
+              Ask about OCC policies, procedures and help articles, search internal
+              notes, or check live support tickets.
+            </p>
+            <div className="flex flex-col gap-1">
+              <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
+                Try asking
+              </span>
+              <span>How do I raise a support ticket?</span>
+              <span>What is our data retention policy?</span>
+              <span>Summarise my open support tickets.</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
+                Commands
+              </span>
+              <span className="font-mono">/models · /language · /tools · /mcp · /settings · /new</span>
+            </div>
+            <span className="text-muted-foreground">Enter sends · Shift+Enter adds a line</span>
+            <span>
+              Need a person?{" "}
+              <a className="underline underline-offset-2" href="mailto:contact@digithings.ai">
+                contact@digithings.ai
+              </a>
+            </span>
+          </div>
+        ) : null}
         {view !== "provider-key" &&
         !(view === "provider-model" && customModel) &&
-        view !== "mcp-edit"
+        view !== "mcp-edit" &&
+        view !== "help"
           ? rows.map((row, index) => {
               const toggle = typeof row.checked === "boolean" && (view === "main" || view === "tools");
               const exclusive = Boolean(row.exclusive);
@@ -1479,7 +1546,19 @@ export function EmbedComposerMenu({
                       {row.value ? <span className="truncate">{row.value}</span> : null}
                       {exclusive && row.checked ? (
                         <span data-slot="dropdown-menu-radio-item-indicator" className="inline-flex shrink-0">
-                          <CircleIcon className="size-2 fill-current" aria-hidden />
+                          <span
+                            className="aui-menu-mark inline-flex shrink-0"
+                            aria-hidden
+                          >
+                            {[0, 1, 0, 1, 1, 1, 0, 1, 0].map((on, cell) => (
+                              <span
+                                key={cell}
+                                className={
+                                  on ? "aui-menu-mark-cell is-on" : "aui-menu-mark-cell"
+                                }
+                              />
+                            ))}
+                          </span>
                         </span>
                       ) : null}
                     </span>

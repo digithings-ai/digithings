@@ -1023,6 +1023,23 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-highlighted],
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted],
+/* Selected row: a 3x3 cube diamond, the same grid motif as the context
+   meter, instead of the dropdown radio disc. */
+.aui-menu-mark {
+  display: grid;
+  grid-template-columns: repeat(3, 2px);
+  grid-auto-rows: 2px;
+  gap: 1px;
+}
+
+.aui-menu-mark-cell {
+  background: color-mix(in oklab, var(--ink-mute) 22%, transparent);
+}
+
+.aui-menu-mark-cell.is-on {
+  background: currentColor;
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [aria-selected="true"],
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [aria-selected="true"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [data-cursor="true"],
