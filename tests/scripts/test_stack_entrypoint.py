@@ -243,3 +243,62 @@ def test_a_failing_merge_aborts_the_boot_under_set_e():
     assert result.returncode != 0
     assert "REACHED" not in result.stdout
     assert "FATAL" in result.stdout
+
+
+def _no_overlay_branch(lines: list[str]) -> list[str]:
+    """The else branch of the cheaperinference merge block."""
+    start = next(
+        index
+        for index, line in enumerate(lines)
+        if "_ci_key" in line and "_force_or" in line
+    )
+    else_at = next(index for index in range(start, len(lines)) if lines[index] == "else")
+    block: list[str] = []
+    for line in lines[else_at:]:
+        block.append(line)
+        if line == "fi":
+            return block
+    raise AssertionError("the no-overlay branch is not closed by an fi")
+
+
+def test_the_no_overlay_path_names_the_missing_curated_models():
+    """The base config carries no curated model, so the gap must be named.
+
+    Without the overlay the boot serves a model_list that answers every
+    curated tenant model with model-not-found while /health stays green. The
+    boot must say which ids are missing instead of logging one INFO line and
+    continuing (DIG-4512).
+    """
+    text = "\n".join(_pre_exec_lines())
+    assert "--check-config" in text, (
+        "the boot must check the effective config for the curated ids"
+    )
+    assert "curated-models MISSING" in text, "the missing curated ids must be named"
+
+
+def test_the_no_overlay_path_does_not_abort_the_boot():
+    """A litellm-only fault must not take the whole stack down.
+
+    The container cold-starts on every request (ports.ts sleepAfter 1m), so an
+    abort on the no-overlay path would take digisearch, digivault and digikey
+    down for every request after an idle minute. The merge branch still
+    aborts: there the image is broken.
+    """
+    block = _no_overlay_branch(_pre_exec_lines())
+    assert not any("exit 1" in line for line in block), block
+    assert any("curated-models" in line for line in block), block
+
+
+def test_loud_boot_lines_reach_the_operator_log_file():
+    """The entrypoint's stderr is not captured by supervisord.
+
+    supervisord only manages its own program logs, so a boot line that only
+    reached stderr was invisible to every diagnostic except the container
+    console. The loud lines must also reach a file in the supervisor log
+    directory, where the operator looks for them (DIG-4512).
+    """
+    text = "\n".join(_pre_exec_lines())
+    assert "stack-entrypoint.log" in text, (
+        "the loud boot lines must also be written to a log file"
+    )
+

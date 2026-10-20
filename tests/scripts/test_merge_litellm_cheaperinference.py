@@ -176,3 +176,50 @@ def test_a_missing_overlay_file_fails_loudly(tmp_path):
     assert result.returncode != 0, result.stdout
     assert "no-such-overlay.yaml" in result.stderr, result.stderr
     assert not out.exists()
+
+def test_check_config_names_the_curated_ids_a_config_is_missing(tmp_path):
+    """--check-config reports the curated ids a single config does not carry.
+
+    The no-overlay boot path serves the base config, which carries none of the
+    curated house models, so the boot has to be able to name them (DIG-4512).
+    """
+    result = _run(
+        "--check-config",
+        str(IMAGE_BASE),
+        allowlist_env=",".join(CURATED_IDS),
+    )
+    assert result.returncode == 1, result.stderr
+    for curated in CURATED_IDS:
+        assert curated in result.stdout, f"{curated} is not named in {result.stdout!r}"
+    assert "curated model id(s)" in result.stderr, result.stderr
+
+
+def test_check_config_passes_on_a_config_that_carries_the_curated_ids(tmp_path):
+    """The merged config carries every curated id, so the check must pass."""
+    merged = tmp_path / "litellm.runtime.yaml"
+    merge = _run(
+        "--base",
+        str(IMAGE_BASE),
+        "--overlay",
+        str(REPO_OVERLAY),
+        "--require-curated-ids",
+        "-o",
+        str(merged),
+        allowlist_env=",".join(CURATED_IDS),
+    )
+    assert merge.returncode == 0, merge.stderr
+    check = _run("--check-config", str(merged), allowlist_env=",".join(CURATED_IDS))
+    assert check.returncode == 0, check.stderr
+    assert check.stdout.strip() == "", check.stdout
+
+
+def test_check_config_reports_a_config_it_cannot_read(tmp_path):
+    """A check that cannot run must say so, not claim the ids are present."""
+    result = _run(
+        "--check-config",
+        str(tmp_path / "no-such-config.yaml"),
+        allowlist_env=",".join(CURATED_IDS),
+    )
+    assert result.returncode == 2, result.stdout
+    assert "no-such-config.yaml" in result.stderr, result.stderr
+

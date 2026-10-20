@@ -118,7 +118,40 @@ def main(argv: list[str] | None = None) -> int:
             "ids are named on stderr and no config file is written."
         ),
     )
+    parser.add_argument(
+        "--check-config",
+        type=Path,
+        default=None,
+        help=(
+            "Check a single LiteLLM config for the curated house models. Exit 0 "
+            "when it carries them all, 1 when it is missing some (the missing "
+            "ids are printed on stdout), 2 when the check could not run. The "
+            "boot path that serves the base config uses this, because the base "
+            "file answers every curated tenant model with model-not-found while "
+            "/health stays green (DIG-4512)."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.check_config is not None:
+        try:
+            config = _load(args.check_config)
+        except SystemExit as exc:
+            print(
+                f"ERROR: cheaperinference: cannot check {args.check_config}: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+        missing = missing_curated_ids(config, args.allowlist)
+        if missing:
+            print(
+                "ERROR: cheaperinference: the litellm model_list in "
+                f"{args.check_config} is missing {len(missing)} curated model id(s): "
+                + ", ".join(missing),
+                file=sys.stderr,
+            )
+            print(",".join(missing))
+            return 1
+        return 0
     merged = merge(args.base, args.overlay)
     if args.require_curated_ids:
         missing = missing_curated_ids(merged, args.allowlist)
