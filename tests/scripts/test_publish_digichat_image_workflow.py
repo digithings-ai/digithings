@@ -599,3 +599,30 @@ def test_the_build_context_carries_the_packaged_inputs() -> None:
     # The refusal has to actually exit. A diagnostic without an exit behind it
     # leaves the step successful and the build runs on an empty context.
     assert _refuses(_no_comments(package["run"]), "image-packages/digichat/npm is empty")
+
+
+def test_a_multi_line_tags_value_is_written_with_the_heredoc_form() -> None:
+    """The release path publishes two names, so `tags` is a two-line value.
+
+    A plain ``echo "tags=$tags"`` writes the second name as its own line. The
+    runner reads every line of ``$GITHUB_OUTPUT`` as an output key, so that
+    line carries no ``=`` and the step dies with "Unable to process file
+    command 'output' successfully" and "Invalid format
+    'ghcr.io/digithings-ai/digichat:latest'" before anything is built (run
+    39334695847, 2026-10-19, DIG-4505). The multi-line form is ``key<<EOF``
+    … ``EOF``, which the runner reads back as one value.
+
+    The value cannot be made single-line by dropping the second name: the
+    release path must publish both the version tag and ``:latest`` from the
+    tag's commit, which the sibling test above already pins.
+    """
+    resolve = _no_comments(_step_by_id(_doc(), "version")["run"])
+    assert 'echo "tags<<EOF"' in resolve, (
+        "the release path publishes two names, so `tags` is a multi-line value "
+        "and must be written with the heredoc form (tags<<EOF ... EOF)"
+    )
+    assert 'echo "$tags"' in resolve, "the heredoc block must write the value itself"
+    assert 'echo "tags=$tags"' not in resolve, (
+        "a plain echo splits a multi-line value at the newline, and the runner "
+        "then reads the second name as an output key and rejects it"
+    )

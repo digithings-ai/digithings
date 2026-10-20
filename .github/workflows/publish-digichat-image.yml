@@ -212,7 +212,15 @@ jobs:
             echo "version=$version"
             echo "commit=$commit"
             echo "image=$image"
-            echo "tags=$tags"
+            # The release path publishes two names (the version tag and
+            # :latest), so `tags` is a two-line value and has to be written in
+            # the heredoc form. A plain `echo "tags=$tags"` writes the second
+            # name as its own line; the runner reads that line as an output
+            # key, finds no `=` in it, and fails the step with "Invalid
+            # format" before anything is built.
+            echo "tags<<EOF"
+            echo "$tags"
+            echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
       - name: Check if this version is already published
@@ -296,8 +304,8 @@ jobs:
             DIGICHAT_REVISION=${{ steps.version.outputs.commit }}
             DIGICHAT_SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
           # The names are decided once, in the resolve step, and handed over
-          # whole. A step output is a single line, so no consumer can tear a
-          # `${{ … }}` apart the way an inline multi-line list can.
+          # whole as one output value, so no consumer can tear a `${{ … }}`
+          # apart the way an inline multi-line list can.
           tags: ${{ steps.version.outputs.tags }}
 
       - name: Boot the image and probe it
