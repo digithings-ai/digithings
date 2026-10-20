@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -509,12 +510,53 @@ def test_manifest_refuses_a_shape_it_does_not_know(audit: object, tmp_path: Path
 
 
 @pytest.mark.unit
-def test_manifest_refuses_a_malformed_acceptance(audit: object, tmp_path: Path) -> None:
-    """An exemption that cannot be read must not quietly become a passing check."""
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("workflows", None),
+        ("workflows", []),
+        ("workflows", "not-a-list"),
+        ("reason", None),
+        ("owner", None),
+        ("since", None),
+        ("review_by", None),
+    ],
+    ids=[
+        "no-workflows",
+        "empty-workflows",
+        "workflows-not-a-list",
+        "no-reason",
+        "no-owner",
+        "no-since",
+        "no-review-by",
+    ],
+)
+def test_manifest_refuses_a_malformed_acceptance(
+    audit: object, tmp_path: Path, field: str, value: object
+) -> None:
+    """An exemption that cannot be read must not quietly become a passing check.
+
+    One field at a time, so a failure says WHICH field the parser refused. A
+    version that dropped two fields together could not tell a reader whether the
+    refusal was about the workflow scope or about the review date, and the two
+    are not the same kind of mistake: an empty scope tolerates the name
+    everywhere, a missing review date never expires.
+    """
     path = tmp_path / "secret-names.json"
     _write_manifest(audit, path, repo_secrets={"A"})
     payload = json.loads(path.read_text(encoding="utf-8"))
-    payload["accepted_missing"] = {"A": {"workflows": [], "reason": "x", "owner": "chris"}}
+    entry = {
+        "workflows": [".github/workflows/a.yml"],
+        "reason": "x",
+        "owner": "chris",
+        "since": "2026-10-20",
+        "review_by": "2026-11-03",
+    }
+    if value is None:
+        entry.pop(field)
+    else:
+        entry[field] = value
+    payload["accepted_missing"] = {"A": entry}
     path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(audit.ManifestError):
@@ -691,7 +733,7 @@ def test_write_manifest_keeps_the_acceptances_of_the_previous_file(
         manifest,
         repo_secrets={"ONLY_ONE"},
         environments={},
-        accepted={"ONLY_ONE": _acceptance(audit, "ONLY_ONE")},
+        accepted={"ONLY_ONE": _acceptance(audit, "ONLY_ONE", ".github/workflows/a.yml")},
     )
 
     monkeypatch.setattr(audit, "repo_secret_names", lambda root, secrets_file: {"ONLY_ONE"})
@@ -758,11 +800,21 @@ def test_every_acceptance_still_describes_a_real_gap(audit: object) -> None:
     manifest = audit.manifest_from_file(_COMMITTED_MANIFEST)
     reads = audit.extract_secret_reads(_REPO_ROOT)
 
-    assert manifest.accepted, (
-        "the committed manifest carries no acceptance. Either the gap is closed — "
-        "refresh the manifest so the name lands at a level — or the acceptance was "
-        "dropped before the gap was actually closed"
-    )
+    if not manifest.accepted:
+        # The happy path: the gap is closed, the manifest carries no acceptance,
+        # and nothing may be left unresolved. An assertion that the manifest MUST
+        # carry an acceptance would fail exactly when the work is done.
+        reads_all = set().union(*reads.values()) if reads else set()
+        assert reads_all - audit.IMPLICIT_SECRETS
+        unresolved = {
+            name
+            for name in reads_all - audit.IMPLICIT_SECRETS
+            if not manifest.surface.levels_of(name)
+        }
+        assert not unresolved, (
+            f"the manifest carries no acceptance, so nothing may be unresolved: {unresolved}"
+        )
+        return
 
     for name, acceptance in manifest.accepted.items():
         defined = manifest.surface.levels_of(name)
@@ -786,3 +838,367 @@ def test_every_acceptance_still_describes_a_real_gap(audit: object) -> None:
         assert acceptance.owner.strip(), name
         assert acceptance.since.strip(), name
         assert acceptance.review_by.strip(), name
+
+
+# --- the extractor: a read the YAML hides is still a read --------------------
+
+
+@pytest.mark.unit
+def test_a_read_behind_a_hash_in_a_quoted_scalar_is_still_found(audit: object) -> None:
+    """A `#` inside a quoted scalar is text, not a comment.
+
+    The line scanner this replaced cut the line at the first `#` outside an
+    expression, so `env: X: "# tag ${{ secrets.X }}"` lost the read and the
+    gate called a broken workflow clean. Parsing the document first means the
+    `#` is part of a string value, and the expression inside it is still an
+    expression.
+    """
+    body = 'env:\n  X: "# tag ${{ secrets.HIDDEN_ONE }}"\n'
+
+    assert audit.reads_in(body) == {"HIDDEN_ONE"}
+
+
+@pytest.mark.unit
+def test_a_read_inside_a_block_scalar_is_still_found(audit: object) -> None:
+    """A `run: |` block is one string, and its `#` lines are not comments."""
+    body = "steps:\n  - run: |\n      echo hi # ${{ secrets.IN_A_BLOCK }}\n"
+
+    assert audit.reads_in(body) == {"IN_A_BLOCK"}
+
+
+@pytest.mark.unit
+def test_a_read_split_across_two_lines_is_still_found(audit: object) -> None:
+    """An expression that wraps onto the next line is still one expression.
+
+    The old regex had no DOTALL, so `${{ format(...` on one line and the rest
+    on the next matched nothing at all — and the workflow read a secret that
+    the gate could not see.
+    """
+    body = "env:\n  X: >-\n    ${{ format('{0}{1}',\n    secrets.SPLIT_A, secrets.SPLIT_B) }}\n"
+
+    assert audit.reads_in(body) == {"SPLIT_A", "SPLIT_B"}
+
+
+@pytest.mark.unit
+def test_a_closing_brace_inside_a_string_does_not_end_the_expression(audit: object) -> None:
+    """`}}` inside a string literal does not close the expression."""
+    body = "env:\n  X: ${{ format('}}', secrets.BRACE_ONE) }}\n"
+
+    assert audit.reads_in(body) == {"BRACE_ONE"}
+
+
+@pytest.mark.unit
+def test_a_read_by_static_index_is_found(audit: object) -> None:
+    """`secrets['NAME']` reads a name too, and the gate has to see it."""
+    body = "env:\n  X: ${{ secrets['INDEXED_ONE'] }}\n"
+
+    assert audit.reads_in(body) == {"INDEXED_ONE"}
+
+
+@pytest.mark.unit
+def test_a_workflow_that_cannot_be_parsed_is_a_failure_not_a_pass(audit: object) -> None:
+    """A file the parser cannot read has unknown secret reads, not zero."""
+    with pytest.raises(audit.YamlError):
+        audit.reads_in("env:\n  A: [1, 2\n")
+
+
+@pytest.mark.unit
+def test_the_cli_fails_closed_on_a_workflow_it_cannot_parse(tmp_path: Path) -> None:
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "broken.yml").write_text("env:\n  A: [1, 2\n", encoding="utf-8")
+    names = tmp_path / "names.txt"
+    names.write_text("ONLY_ONE\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--root", str(tmp_path), "--secrets-file", str(names)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert "cannot parse" in result.stderr
+
+
+# --- an acceptance is a dated, scoped promise --------------------------------
+
+
+@pytest.mark.unit
+def test_an_expired_acceptance_no_longer_tolerates_the_read(
+    audit: object, tmp_path: Path
+) -> None:
+    """A dated decision nobody reviewed stops covering anything.
+
+    The acceptance is a promise that somebody looked at the gap on a date.
+    After the review date the promise is out of date, and an out-of-date
+    promise that still silences the gate is how a gap becomes permanent.
+    """
+    _workflow(tmp_path, "a.yml", "env:\n  A: ${{ secrets.GONE }}\n")
+    manifest = tmp_path / "secret-names.json"
+    expired = audit.Acceptance(
+        name="GONE",
+        workflows=(".github/workflows/a.yml",),
+        reason="the credential is a different one",
+        owner="chris",
+        since="2020-01-01",
+        review_by="2020-02-01",
+    )
+    _write_manifest(
+        audit,
+        manifest,
+        repo_secrets={"OTHER"},
+        environments={},
+        accepted={"GONE": expired},
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--root",
+            str(tmp_path),
+            "--manifest",
+            str(manifest),
+            "--strict-unresolved",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "EXPIRED" in result.stdout + result.stderr
+    assert "GONE" in result.stderr
+
+
+@pytest.mark.unit
+def test_a_refresh_that_cannot_list_a_level_leaves_the_manifest_alone(
+    audit: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refresh that sees less than the file it replaces must not write.
+
+    Writing a manifest with an unlistable level turns every read at that level
+    unresolved, so the next CI run fails on names that were fine a minute ago.
+    The old file stays, and the command says why.
+    """
+    _workflow(tmp_path, "a.yml", "env:\n  A: ${{ secrets.ONLY_ONE }}\n")
+    manifest = tmp_path / "secret-names.json"
+    _write_manifest(audit, manifest, repo_secrets={"ONLY_ONE"}, environments={})
+    before = manifest.read_bytes()
+
+    monkeypatch.setattr(audit, "repo_secret_names", lambda root, secrets_file: {"ONLY_ONE"})
+    monkeypatch.setattr(audit, "repo_variable_names", lambda root: None)
+    monkeypatch.setattr(audit, "org_secret_names", lambda org, root: set())
+    monkeypatch.setattr(audit, "repo_slug", lambda root: "digithings-ai/digithings")
+    monkeypatch.setattr(audit, "environment_secret_names", lambda root, repo: {})
+
+    assert audit.main(["--root", str(tmp_path), "--write-manifest", str(manifest)]) == 1
+    assert manifest.read_bytes() == before
+
+
+@pytest.mark.unit
+def test_a_refresh_without_a_github_token_fails_loudly(tmp_path: Path) -> None:
+    """`make secrets-audit-refresh` with no token must not exit 0 having done nothing."""
+    _workflow(tmp_path, "a.yml", "env:\n  A: ${{ secrets.ONLY_ONE }}\n")
+    manifest = tmp_path / "secret-names.json"
+
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--root", str(tmp_path), "--write-manifest", str(manifest)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={"PATH": ""},
+    )
+
+    assert result.returncode == 1
+    assert not manifest.exists()
+    assert "repo secret list unavailable" in result.stdout
+
+
+@pytest.mark.unit
+def test_a_missing_name_file_fails_without_a_traceback(tmp_path: Path) -> None:
+    _workflow(tmp_path, "a.yml", "env:\n  A: ${{ secrets.ONLY_ONE }}\n")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--root",
+            str(tmp_path),
+            "--secrets-file",
+            str(tmp_path / "nope.txt"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert "could not read a name file" in result.stderr
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "body",
+    ["", "[]", '{"schema_version": 1}', '{"schema_version": 2, "levels": {}}'],
+    ids=["empty", "a-json-list", "no-levels", "the-wrong-schema-version"],
+)
+def test_the_cli_refuses_a_manifest_it_does_not_understand(
+    tmp_path: Path, body: str
+) -> None:
+    """An unreadable manifest is a failure, not an empty surface.
+
+    A manifest that parses to nothing would make every read unresolved, and a
+    manifest that fails to parse at all must not read as "no findings".
+    """
+    _workflow(tmp_path, "a.yml", "env:\n  A: ${{ secrets.ONLY_ONE }}\n")
+    manifest = tmp_path / "secret-names.json"
+    manifest.write_text(body, encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--root", str(tmp_path), "--manifest", str(manifest)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert "secrets_audit:" in result.stderr
+
+
+@pytest.mark.unit
+def test_a_missing_manifest_is_a_failure_not_an_empty_surface(tmp_path: Path) -> None:
+    _workflow(tmp_path, "a.yml", "env:\n  A: ${{ secrets.ONLY_ONE }}\n")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--root",
+            str(tmp_path),
+            "--manifest",
+            str(tmp_path / "absent.json"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert "secrets_audit:" in result.stderr
+
+
+@pytest.mark.unit
+def test_reading_and_writing_a_manifest_at_once_is_refused(tmp_path: Path) -> None:
+    _workflow(tmp_path, "a.yml", "env:\n  A: ${{ secrets.ONLY_ONE }}\n")
+    manifest = tmp_path / "secret-names.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--root",
+            str(tmp_path),
+            "--manifest",
+            str(manifest),
+            "--write-manifest",
+            str(manifest),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "Pick one" in result.stderr
+
+
+# --- the manifest is a record, not a certificate -----------------------------
+
+
+@pytest.mark.unit
+def test_every_name_in_the_manifest_is_published_in_the_inventory(audit: object) -> None:
+    """A name only the manifest knows is a name nobody wrote down.
+
+    The manifest is what the gate reads, so a change that adds a name to
+    `levels.repo_secrets` makes the gate green without the secret existing.
+    The inventory is the second, independent record: a name that appears in
+    the manifest and nowhere else is a hand-edit that has not been reconciled
+    with the read-back.
+    """
+    manifest = audit.manifest_from_file(_COMMITTED_MANIFEST)
+    inventory = (_REPO_ROOT / "docs" / "ops" / "SECRETS_INVENTORY.md").read_text(
+        encoding="utf-8"
+    )
+
+    levels = {
+        "repo_secrets": manifest.surface.repo_secrets or set(),
+        "repo_variables": manifest.surface.repo_variables or set(),
+        "org_secrets": manifest.surface.org_secrets or set(),
+    }
+    unpublished: dict[str, list[str]] = {}
+    for level, names in levels.items():
+        missing = []
+        for name in sorted(names):
+            if name in inventory:
+                continue
+            # The eight `DIGI_*_PROJECT_NUMBER` variables are published in glob
+            # form, so the literal name is absent by design.
+            if (
+                level == "repo_variables"
+                and name.startswith("DIGI_")
+                and name.endswith("_PROJECT_NUMBER")
+                and "DIGI_*_PROJECT_NUMBER" in inventory
+            ):
+                continue
+            missing.append(name)
+        if missing:
+            unpublished[level] = missing
+
+    for environment, names in (manifest.surface.environment_secrets or {}).items():
+        missing = [name for name in sorted(names) if name not in inventory]
+        if missing:
+            unpublished[f"{environment} environment secrets"] = missing
+
+    assert not unpublished, (
+        "these names are in the manifest but not in docs/ops/SECRETS_INVENTORY.md, so the "
+        f"manifest is the only place they exist: {unpublished}. Add them to the inventory "
+        "in the same change, or take them out of the manifest"
+    )
+
+
+@pytest.mark.unit
+def test_the_manifest_holds_names_and_nothing_that_looks_like_a_credential() -> None:
+    """The manifest is committed, so it may hold names and never values.
+
+    A name is an uppercase identifier. Anything else in the file is either a
+    path, a date, or a sentence — and a run of forty token characters with no
+    separator in it is what a credential looks like.
+    """
+    text = _COMMITTED_MANIFEST.read_text(encoding="utf-8")
+    payload = json.loads(text)
+
+    runs = re.findall(r"[A-Za-z0-9+/=_-]{40,}", text)
+    credential_shaped = [run for run in runs if "/" not in run]
+    assert not credential_shaped, (
+        f"the manifest holds a run of token characters that is not a path: {credential_shaped}"
+    )
+    assert not re.findall(r"[0-9a-f]{32,}", text), "the manifest holds a long hex string"
+
+    levels = payload["levels"]
+    for level in ("repo_secrets", "repo_variables", "org_secrets"):
+        for name in levels[level]["names"]:
+            assert re.fullmatch(r"[A-Z][A-Z0-9_]*", name), (
+                f"{name} is in {level} and does not look like a name"
+            )
+    for environment, names in levels["environments"]["environments"].items():
+        for name in names:
+            assert re.fullmatch(r"[A-Z][A-Z0-9_]*", name), (
+                f"{name} is in the {environment} environment and does not look like a name"
+            )
+

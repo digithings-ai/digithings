@@ -76,11 +76,17 @@ the live read:
 So the manifest is the same pattern the repo already uses for `.github/environments.json`
 — a committed manifest, reconciled against the live API by an operator.
 
-**The manifest is names only.** `docs/ops/SECRETS_INVENTORY.md` already publishes every
-name in it, so committing it adds no new exposure. The check refuses to run when a level
-in the manifest could not be listed: a level the writer could not read is recorded as
-`"read": false`, and the audit then reports "levels: not checked" instead of pretending
-it looked at everything.
+**The manifest is names only.** It holds no value, and a name is not a secret.
+`docs/ops/SECRETS_INVENTORY.md` already publishes most of those names, so committing the
+manifest exposes little that is not public already — but it is **not** a subset of the
+inventory: a name can be new, and the inventory publishes the `DIGI_*_PROJECT_NUMBER`
+variables only in glob form. `tests/scripts/test_secrets_audit.py` therefore checks every
+name in the manifest against the inventory, so a hand-edit to the manifest has to show up
+in a second file.
+
+The check refuses to run when a level in the manifest could not be listed: a level the
+writer could not read is recorded as `"read": false`, and the audit then reports
+"levels: not checked" instead of pretending it looked at everything.
 
 ## Commands
 
@@ -100,6 +106,12 @@ make secrets-audit-refresh
 entries in the file it overwrites are carried over. A name that has become real stops
 being unresolved, and `tests/scripts/test_secrets_audit.py` then fails until the matching
 acceptance is deleted.
+
+All three commands need **PyYAML** (`python3 -m pip install pyyaml`). The audit parses
+the workflow YAML instead of scanning it as text, because a text scan cannot tell a
+comment from a `#` inside a string — and a `#` inside a string is how a secret read
+hides. Twelve house scripts already import yaml, and CI installs it the same way in
+three other jobs.
 
 ## The manifest goes stale, and what that means
 
@@ -142,6 +154,15 @@ must still be undefined at every level, and at least one of the workflows it nam
 still read it. When the secret is minted and the manifest refreshed, the acceptance stops
 being true and the test fails until it is deleted.
 
+An acceptance also expires. Past its `review_by` date it covers nothing: the read
+becomes unresolved again and the gate fails on it, and the run prints the entry as
+`accepted-missing EXPIRED` with its owner. A promise with a review date is only a promise
+while the date holds, and an entry whose date has passed is not allowed to sit there
+quietly.
+
+An acceptance must also name at least one workflow. An entry that covers every workflow
+is a blank cheque, not a decision, so the parser refuses it.
+
 ### The one open entry
 
 `CLOUDFLARE_WORKERS_API_TOKEN` exists at no level. The lane needs a Cloudflare API token
@@ -161,3 +182,14 @@ Minting the token is a human action. Until it exists, this entry is the record.
   `docs/ops/SECRETS_INVENTORY.md`.
 - It does not read values. Nothing in this path reads a secret value, and the manifest
   holds names only.
+- It does not check **variables** (`vars.*`). A variable may legitimately be absent
+  because the expression falls back to a literal, so "no level defines it" is not a defect
+  for a variable the way it is for a secret. Three variable reads resolve to nothing
+  today, and they are recorded here rather than in the gate:
+  `vars.DIGISEARCH_URL` (`pipeline-digiquant.yml:155`),
+  `vars.GATE_ALERT_EMAIL` (`production-deploy-gate-watchdog.yml:58`) and
+  `vars.TOKEN_CANARY_PROBE_WEEKDAY` (`token-canary.yml:85`). They are worth a look on
+  their own account; they are not part of DIG-4717.
+- It does not see a **whole-context dump**. `${{ toJSON(secrets) }}` hands every secret
+  to a step in one string, and the read has no name in it, so a name-based check cannot
+  see it. That is a different question — who can read everything — and not this one.
