@@ -32,18 +32,23 @@ export type ChainDisclosureMode =
  *   the reasoning are visible, and collapses when it finishes.
  * - `verbose` — the chain stays expanded; everything is readable.
  */
-export type WorkVisibility = "quiet" | "balanced" | "verbose";
+export type WorkVisibility = "hidden" | "quiet" | "balanced" | "verbose";
 
 /** What the disclosure policy resolves to for the thread components. */
 export type WorkDisclosure = {
-  /** The chain is open while the work runs. */
+  /**
+   * A single summary line replaces the chain: the trace is folded away and
+   * nothing of it is on screen.
+   */
+  summaryOnly: boolean;
+  /** The chain stays open, so the row titles are visible. */
+  chainOpen: boolean;
+  /** The rows expand while their work streams. */
   openWhileRunning: boolean;
-  /** The chain stays open once the work has finished. */
+  /** The rows stay open once the work has finished. */
   openAtRest: boolean;
   /** Per-tool detail (arguments, results) is rendered. */
   showDetails: boolean;
-  /** A single summary line replaces the chain. */
-  summaryOnly: boolean;
 };
 
 /**
@@ -55,6 +60,8 @@ export function workVisibilityForView(
   view: ViewMode | undefined,
 ): WorkVisibility {
   switch (view) {
+    case "hidden":
+      return "hidden";
     case "quiet":
       return "quiet";
     case "verbose":
@@ -69,27 +76,49 @@ export function resolveWorkDisclosure(
   visibility: WorkVisibility | undefined,
 ): WorkDisclosure {
   switch (visibility) {
-    case "quiet":
+    // Folded away: one line, nothing of the trace on screen.
+    case "hidden":
       return {
+        summaryOnly: true,
+        chainOpen: false,
         openWhileRunning: false,
         openAtRest: false,
         showDetails: false,
-        summaryOnly: true,
       };
-    case "verbose":
+    // The titles only: the chain and its rows are there, folded.
+    case "quiet":
       return {
-        openWhileRunning: true,
-        openAtRest: true,
-        showDetails: true,
         summaryOnly: false,
+        chainOpen: true,
+        openWhileRunning: false,
+        openAtRest: false,
+        showDetails: false,
       };
+    // Open while the work streams, folded when the turn ends.
     case "balanced":
-    default:
       return {
+        summaryOnly: false,
+        chainOpen: true,
         openWhileRunning: true,
         openAtRest: false,
         showDetails: true,
+      };
+    // Nothing ever folds: everything stays open and can be closed by hand.
+    case "verbose":
+      return {
         summaryOnly: false,
+        chainOpen: true,
+        openWhileRunning: true,
+        openAtRest: true,
+        showDetails: true,
+      };
+    default:
+      return {
+        summaryOnly: false,
+        chainOpen: true,
+        openWhileRunning: true,
+        openAtRest: false,
+        showDetails: true,
       };
   }
 }

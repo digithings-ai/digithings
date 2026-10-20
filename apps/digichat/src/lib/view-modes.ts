@@ -6,10 +6,10 @@
  * UI can both fold a view mode into the per-group disclosure modes the
  * gallery thread understands:
  *
- *   hidden   — tool calls and reasoning are not rendered, answer only
- *   quiet    — the chain collapses to one summary line and never expands
- *   balanced — groups open while in progress, collapse when completed
- *   verbose  — groups stay fully open
+ *   hidden   — the whole trace folds away to one summary line
+ *   quiet    — the titles only: the chain and its rows, folded
+ *   balanced — the rows open while their work streams, folded when it ends
+ *   verbose  — nothing ever folds: everything stays open
  *
  * `thinking` is the reasoning-only override on top of the view mode:
  * `auto` follows the view mode, `collapsed` pins reasoning closed and
