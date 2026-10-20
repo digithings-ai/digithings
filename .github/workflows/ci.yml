@@ -397,6 +397,35 @@ jobs:
       - name: Example-credentials guard
         run: python3 scripts/check_example_credentials.py
 
+  # ── R0 client-literal allowance growth guard (DIG-4577) ─────────────────────
+  # The allowance baseline (scripts/r0_client_literals_baseline.json) may only
+  # SHRINK: a client literal that shows up must be removed from the source, not
+  # added to the allowance. This job compares the branch's baseline with the base
+  # branch's baseline and fails when the branch grew it - more files listed, a
+  # higher count for a file, or an entry the base branch does not have. A smaller
+  # or identical baseline passes.
+  #
+  # `fetch-depth: 0` is load-bearing: the base branch's baseline is read from the
+  # base commit, so the checkout needs the history and the remote-tracking refs.
+  # Pull-request only: ci.yml also runs on push, where there is no base branch
+  # to compare against.
+  # Stdlib-only; no pip or npm install needed.
+  r0-client-literals-baseline-growth:
+    name: R0 client-literal baseline growth guard
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: R0 client-literal baseline growth guard
+        run: python3 scripts/check_r0_client_literals_baseline_growth.py --base-ref "origin/${{ github.base_ref }}"
+
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
