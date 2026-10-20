@@ -6,6 +6,10 @@
  * key dictionaries, then the network. The secret key reads `fx_hub_grants`
  * and asks GoTrue for a magic link; the publishable key redeems it. No
  * legacy anon / service_role variable is consulted.
+ *
+ * `fx_hub_grants` lives in the twelve-x project, so the project URL read
+ * here is `TWELVEX_SUPABASE_URL` (ADR 0022). The core project's
+ * `SUPABASE_URL` is never read by this module.
  */
 
 import { envGet, readApiKey, type FxHubEnv } from "./env";
@@ -35,12 +39,12 @@ export async function handleFxHubSession(req: Request, env: FxHubEnv): Promise<R
     return json({ ok: false, code: "EMAIL_REQUIRED" }, 400);
   }
 
-  const supabaseUrl = envGet(env, "SUPABASE_URL");
+  const twelvexUrl = envGet(env, "TWELVEX_SUPABASE_URL");
   const secretKey = readApiKey(env, "SUPABASE_SECRET_KEYS");
   const publishableKey = readApiKey(env, "SUPABASE_PUBLISHABLE_KEYS");
-  if (!supabaseUrl || !secretKey || !publishableKey) {
+  if (!twelvexUrl || !secretKey || !publishableKey) {
     const missing = [
-      !supabaseUrl ? "SUPABASE_URL" : null,
+      !twelvexUrl ? "TWELVEX_SUPABASE_URL" : null,
       !secretKey ? "SUPABASE_SECRET_KEYS[default]" : null,
       !publishableKey ? "SUPABASE_PUBLISHABLE_KEYS[default]" : null,
     ].filter((name): name is string => name !== null);
@@ -58,12 +62,12 @@ export async function handleFxHubSession(req: Request, env: FxHubEnv): Promise<R
     );
   }
 
-  const grant = await lookupGrant(supabaseUrl, secretKey, email);
+  const grant = await lookupGrant(twelvexUrl, secretKey, email);
   if (grant.error || !grant.data) {
     return json({ ok: false, code: "NOT_GRANTED" }, 403);
   }
 
-  const link = await generateMagicLink(supabaseUrl, secretKey, email);
+  const link = await generateMagicLink(twelvexUrl, secretKey, email);
   const hashedToken = link.data.properties?.hashed_token;
   // GoTrue's flow type for this token is not always "magiclink". A first-seen
   // email is a signup confirmation; verify rejects a mismatched type.
@@ -75,7 +79,7 @@ export async function handleFxHubSession(req: Request, env: FxHubEnv): Promise<R
     );
   }
 
-  const verified = await verifyOtp(supabaseUrl, publishableKey, {
+  const verified = await verifyOtp(twelvexUrl, publishableKey, {
     type: verificationType,
     tokenHash: hashedToken,
   });

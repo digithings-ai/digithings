@@ -244,6 +244,35 @@ jobs:
             exit 1
           fi
 
+      # The image's build context is the repo root, and the Dockerfile COPYs
+      # image-packages/digichat/ — a directory that is GENERATED, not committed
+      # (.gitignore: "/image-packages/"). A checkout therefore never carries
+      # it, so without this step the build context has no such directory and
+      # the build dies computing its cache key, before a single build step
+      # runs (run 39334821302, 2026-10-19). The digichat image installs npm
+      # tarballs and workspace manifests and no wheel, so only those are
+      # packaged: the wheels and the frozen exports under image-packages/
+      # belong to the stack and runner images, and packaging them here would
+      # make a release depend on uv and on unrelated Python packages building.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Package the image inputs
+        id: package
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          python3 scripts/package_r5_image_inputs.py --npm-only
+          if [ -z "$(ls -A image-packages/digichat/npm 2>/dev/null)" ]; then
+            echo "::error::image-packages/digichat/npm is empty — the build context would carry no packaged input"
+            exit 1
+          fi
+
       - name: Build and push
         if: steps.check.outputs.exists == 'false'
         id: build
