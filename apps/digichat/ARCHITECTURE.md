@@ -1015,8 +1015,8 @@ page without a single current value (the root, the on/off toggles, the tool and
 MCP lists) has no row to land on and starts at the top. A page with no rows at
 all (`/help`, whose panel is prose and links) has no cursor to seed and no row to
 commit: it renders no list and borrows no other page's rows, so Enter there
-changes nothing. The seed belongs to
-the page, not to the moment the menu opened: opening a sub-page from the root
+changes nothing. The seed belongs to the page, not to the moment the menu
+opened: opening a sub-page from the root
 re-seeds it, so `/view` lands on the current view mode even when the menu was
 opened on another page. Coming back from a provider form lands on the provider
 row the user opened, not on the connected one.
