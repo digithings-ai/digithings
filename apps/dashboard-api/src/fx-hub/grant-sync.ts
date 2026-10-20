@@ -2,8 +2,10 @@
  * fx-hub-grant-sync — mirrors an fx_hub grant into `fx_hub_grants`.
  *
  * Same caller boundary as fx-hub-session (POST, then `X-Sync-Secret`). This
- * function needs only `SUPABASE_URL` and `SUPABASE_SECRET_KEYS[default]`.
- * The upsert is the secret key on `apikey`, with `on_conflict=email`.
+ * function needs only `TWELVEX_SUPABASE_URL` and `SUPABASE_SECRET_KEYS[default]`.
+ * `fx_hub_grants` lives in the twelve-x project, so the core project's
+ * `SUPABASE_URL` is never read here. The upsert is the secret key on
+ * `apikey`, with `on_conflict=email`.
  */
 
 import { envGet, readApiKey, type FxHubEnv } from "./env";
@@ -35,11 +37,11 @@ export async function handleFxHubGrantSync(req: Request, env: FxHubEnv): Promise
     return json({ ok: false, code: "EMAIL_REQUIRED" }, 400);
   }
 
-  const supabaseUrl = envGet(env, "SUPABASE_URL");
+  const twelvexUrl = envGet(env, "TWELVEX_SUPABASE_URL");
   const secretKey = readApiKey(env, "SUPABASE_SECRET_KEYS");
-  if (!supabaseUrl || !secretKey) {
+  if (!twelvexUrl || !secretKey) {
     const missing = [
-      !supabaseUrl ? "SUPABASE_URL" : null,
+      !twelvexUrl ? "TWELVEX_SUPABASE_URL" : null,
       !secretKey ? "SUPABASE_SECRET_KEYS[default]" : null,
     ].filter((name): name is string => name !== null);
     console.error(
@@ -56,7 +58,7 @@ export async function handleFxHubGrantSync(req: Request, env: FxHubEnv): Promise
     );
   }
 
-  const result = await upsertGrant(supabaseUrl, secretKey, { email, note: SYNC_NOTE });
+  const result = await upsertGrant(twelvexUrl, secretKey, { email, note: SYNC_NOTE });
   if (result.error) {
     return json({ ok: false, code: "DB_ERROR", message: result.error.message }, 500);
   }

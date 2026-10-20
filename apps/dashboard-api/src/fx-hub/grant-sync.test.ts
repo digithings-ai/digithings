@@ -5,13 +5,13 @@ import { createFxHubFetch } from "./router";
 
 // Contract parity for the Workers port of fx-hub-grant-sync.
 // Same shared-secret boundary and new-key rules as fx-hub-session; this
-// function reads only SUPABASE_URL and SUPABASE_SECRET_KEYS[default].
+// function reads only TWELVEX_SUPABASE_URL and SUPABASE_SECRET_KEYS[default].
 
 const SYNC_SECRET = "test-sync-secret";
 const SECRET_KEY = "sb_secret_fakevalue";
 const PUBLISHABLE_KEY = "sb_publishable_fakevalue";
 const GRANTED_EMAIL = "granted@example.test";
-const SUPABASE_URL = "http://127.0.0.1:9";
+const TWELVEX_SUPABASE_URL = "http://127.0.0.1:9";
 
 type Seen = {
   path: string;
@@ -26,7 +26,7 @@ type Seen = {
 function newKeyEnv(extra: FxHubEnv = {}): FxHubEnv {
   return {
     FX_HUB_GRANT_SYNC_SECRET: SYNC_SECRET,
-    SUPABASE_URL,
+    TWELVEX_SUPABASE_URL,
     SUPABASE_SECRET_KEYS: JSON.stringify({ default: SECRET_KEY }),
     SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: PUBLISHABLE_KEY }),
     ...extra,
@@ -100,7 +100,7 @@ describe("fx-hub-grant-sync", () => {
     const seen = installFake();
     const res = await handleFxHubGrantSync(post({ email: GRANTED_EMAIL }), {
       FX_HUB_GRANT_SYNC_SECRET: SYNC_SECRET,
-      SUPABASE_URL,
+      TWELVEX_SUPABASE_URL,
       SUPABASE_SERVICE_ROLE_KEY: "legacy-service-role-jwt",
     });
     const body = (await res.json()) as { code: string; message: string };
