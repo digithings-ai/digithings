@@ -790,6 +790,66 @@ export function mapFoundryEvent(
   }
 }
 
+/**
+ * Retry schedule for a throttled deployment (429) or a momentarily unavailable
+ * service (503). Cumulative wait is ~59s, which is well inside a demo's
+ * patience and far short of a hung request.
+ */
+const DEFAULT_CAPACITY_RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 15_000, 15_000, 15_000];
+const CAPACITY_RETRY_AFTER_CAP_MS = 30_000;
+
+function httpStatusOf(err: unknown): number | undefined {
+  if (typeof err !== "object" || err === null) return undefined;
+  const candidate = err as { status?: unknown; statusCode?: unknown };
+  const raw = typeof candidate.status === "number" ? candidate.status : candidate.statusCode;
+  return typeof raw === "number" ? raw : undefined;
+}
+
+function retryAfterMs(err: unknown): number | null {
+  if (typeof err !== "object" || err === null) return null;
+  const headers = (err as { headers?: { get?: (name: string) => string | null } }).headers;
+  const raw = headers?.get?.("retry-after");
+  if (!raw) return null;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1000, CAPACITY_RETRY_AFTER_CAP_MS);
+  }
+  const asDate = Date.parse(raw);
+  if (Number.isNaN(asDate)) return null;
+  return Math.min(Math.max(asDate - Date.now(), 0), CAPACITY_RETRY_AFTER_CAP_MS);
+}
+
+/** Delay before retrying a capacity failure, or null when it is not retryable. */
+function capacityRetryDelayMs(
+  err: unknown,
+  attempt: number,
+  schedule: readonly number[],
+): number | null {
+  const status = httpStatusOf(err);
+  if (status !== 429 && status !== 503) return null;
+  if (attempt >= schedule.length) return null;
+  return retryAfterMs(err) ?? schedule[attempt];
+}
+
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export async function createFoundryStreamResponse(opts: {
   projectEndpoint: string;
   agentName: string;
@@ -802,6 +862,11 @@ export async function createFoundryStreamResponse(opts: {
   responseLanguage?: string;
   /** Default `send`. Regen/edit mutate Foundry items then create with no new user input (#3475). */
   turnMode?: DigiTurnMode;
+  /**
+   * Retry schedule for 429/503 on the model call (#5979). Overridable so tests
+   * do not spend the real backoff.
+   */
+  capacityRetryDelaysMs?: readonly number[];
 }): Promise<Response> {
   const turnMode: DigiTurnMode = opts.turnMode ?? "send";
   const openai = (opts.openAIClientFactory ?? defaultOpenAIClientFactory)(opts.projectEndpoint);
@@ -908,10 +973,44 @@ export async function createFoundryStreamResponse(opts: {
           createParams.input = createdConversation ? applyGroundingDirective(message) : message;
         }
 
-        const responseStream = await openai.responses.create(createParams, {
-          signal: opts.signal,
-          body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
-        });
+        const responseStream = await (async () => {
+          const schedule = opts.capacityRetryDelaysMs ?? DEFAULT_CAPACITY_RETRY_DELAYS_MS;
+          for (let attempt = 0; ; attempt += 1) {
+            try {
+              const created = await openai.responses.create(createParams, {
+                signal: opts.signal,
+                body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
+              });
+              if (attempt > 0) {
+                // Capacity is back: clear the waiting state before the answer
+                // starts, so the indicator does not sit on a stale message
+                // while the first tool call runs.
+                writer.write({
+                  type: "data-connection",
+                  id: "foundry-capacity",
+                  data: { state: "ready" },
+                });
+              }
+              return created;
+            } catch (err) {
+              const delay = capacityRetryDelayMs(err, attempt, schedule);
+              if (delay === null) throw err;
+              writer.write({
+                type: "data-connection",
+                id: "foundry-capacity",
+                data: {
+                  state: "warming_up",
+                  message: `Waiting for model capacity — retrying in ${Math.max(
+                    1,
+                    Math.round(delay / 1000),
+                  )}s`,
+                },
+              });
+              await abortableSleep(delay, opts.signal);
+              if (opts.signal?.aborted) throw err;
+            }
+          }
+        })();
 
         const textFilter = new FoundryToolLeakFilter();
         const mapState: FoundryMapState = { sawSearchOutput: false };

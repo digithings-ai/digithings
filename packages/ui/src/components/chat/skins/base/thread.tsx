@@ -619,14 +619,22 @@ const AssistantWorkingIndicator: FC = () => {
   const isEmpty = useAuiState((s) => s.message.content.length === 0);
   // Boot retries (#4753): the BFF replaces `connecting` with `warming_up`
   // while it waits out a booting upstream — say so instead of "Connecting".
-  const warmingUp = useAuiState((s) =>
-    s.message.parts.some(
-      (part) =>
-        part.type === "data" &&
-        part.name === "connection" &&
-        (part.data as { state?: string } | undefined)?.state === "warming_up",
-    ),
-  );
+  // A throttled model deployment (#5979) rides the same part with its own
+  // message ("Waiting for model capacity — retrying in 8s"), so prefer that
+  // text when the BFF sends one.
+  const warmingUpMessage = useAuiState((s) => {
+    let text: string | null = null;
+    for (const part of s.message.parts) {
+      if (part.type !== "data" || part.name !== "connection") continue;
+      const data = (part.data ?? {}) as { state?: string; message?: unknown };
+      if (data.state !== "warming_up") continue;
+      text =
+        typeof data.message === "string" && data.message.length > 0
+          ? data.message
+          : "Warming up…";
+    }
+    return text;
+  });
   const wakePhase = useDigichatWarmupPhase();
   if (isEmpty) {
     return (
@@ -636,7 +644,7 @@ const AssistantWorkingIndicator: FC = () => {
       >
         <DotMatrix state="connecting" aria-hidden />
         <span className="text-sm">
-          {wakePhase === "waking" ? "Waking up services…" : warmingUp ? "Warming up…" : "Connecting"}
+          {wakePhase === "waking" ? "Waking up services…" : (warmingUpMessage ?? "Connecting")}
         </span>
       </span>
     );
