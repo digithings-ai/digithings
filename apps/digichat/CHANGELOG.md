@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.6.1](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.0...digichat-v2.6.1) (2026-10-20)
+
+The trace of the agent's work gets one voice, and a tenant on an Azure AI
+Foundry agent stops advertising models it does not have.
+
+### Features
+
+* **chat:** the chain title follows the latest step — `Working — digisearch` while a tool runs, `Used 3 tools` when it is done — instead of a static word ([#6079](https://github.com/digithings-ai/digithings/pull/6079))
+* **foundry:** a tenant on an Azure AI Foundry agent shows no model list, names its real backend (`Azure AI Foundry`), and reports the token usage the Responses API gives it ([#6073](https://github.com/digithings-ai/digithings/pull/6073))
+* **chat:** the composer menu opens a sub-page on its current value ([#6064](https://github.com/digithings-ai/digithings/pull/6064))
+
+### Bug Fixes
+
+* **chat:** two work runs with nothing between them are one block, and the block stops working when the answer starts ([#6079](https://github.com/digithings-ai/digithings/pull/6079))
+* **chat:** the provider chip is named from the active backend ([#6025](https://github.com/digithings-ai/digithings/pull/6025))
+* **chat:** the context meter's shares stay inside the turn ([#6022](https://github.com/digithings-ai/digithings/pull/6022))
+* **digichat:** the image packages the `@digithings/catalog` workspace, so the build no longer dies on a missing module ([#6059](https://github.com/digithings-ai/digithings/pull/6059))
+* **ci:** the review-coverage check reads the check rollup through its contexts connection, so the required main check is posted again ([#6063](https://github.com/digithings-ai/digithings/pull/6063))
+
 ## [2.6.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.5.1...digichat-v2.6.0) (2026-10-20)
 
 The composer and the trace of the agent's work, rebuilt on assistant-ui's own
