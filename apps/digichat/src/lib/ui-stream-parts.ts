@@ -390,11 +390,15 @@ export function writePendingMcpApproval(
  * the AI SDK / assistant-ui tool part to an error state; a
  * `tool-output-available` with no result would render it as a success.
  */
-function writeAbandonedTool(writer: UiStreamWriter, id: string): void {
+function writeAbandonedTool(
+  writer: UiStreamWriter,
+  id: string,
+  errorText: string = ABANDONED_TOOL_ERROR,
+): void {
   writer.write({
     type: "tool-output-error",
     toolCallId: id,
-    errorText: ABANDONED_TOOL_ERROR,
+    errorText,
   });
 }
 
@@ -527,6 +531,11 @@ export function writeStandardActivity(
 export function finishStandardActivity(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
+  /**
+   * The upstream reason, when there is one. The row that failed for that
+   * reason carries it; the others keep the generic "no result" text.
+   */
+  failure?: { toolName?: string; errorText?: string },
 ): void {
   closeOpenReasoning(writer, ctx);
   const held = ctx.approvalsByToolCallId;
@@ -543,7 +552,11 @@ export function finishStandardActivity(
         ...(Object.keys(stored).length ? { toolInput: stored } : {}),
       };
       ensureToolInput(writer, ctx, id, name, span);
-      writeAbandonedTool(writer, id);
+      const specific =
+        failure?.errorText && failure.toolName === name
+          ? failure.errorText
+          : undefined;
+      writeAbandonedTool(writer, id, specific);
     }
   }
 }

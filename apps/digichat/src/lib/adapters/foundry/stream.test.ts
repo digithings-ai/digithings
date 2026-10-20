@@ -432,6 +432,51 @@ describe("createFoundryStreamResponse", () => {
     expect(out).toContain('"model":"gpt-4o"');
   });
 
+  it("surfaces a tool-invocation failure instead of the generic outage line", async () => {
+    // What the trial actually produced: the agent called the MCP tool
+    // with a number where the tool wants a string, the MCP refused, and the
+    // response died. The reader must see the tool's complaint, not "the
+    // assistant is unavailable".
+    const client = {
+      conversations: {
+        async create() {
+          return { id: "conv_fail" };
+        },
+      },
+      responses: {
+        async create() {
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield {
+                type: "response.output_item.added",
+                item: { type: "mcp_call", name: "list_collector_reports" },
+              } as unknown as FoundryStreamEvent;
+              throw new Error(
+                "An error occurred invoking 'list_collector_reports': 'pageSize' must be a string, but a number was provided.",
+              );
+            },
+          };
+        },
+      },
+    } as unknown as OpenAIResponsesClientLike;
+
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("show me the collector reports")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+
+    expect(out).toContain("pageSize");
+    expect(out).toContain("list_collector_reports");
+    // The generic line hid the real reason.
+    expect(out).not.toContain("The assistant is unavailable");
+  });
+
   it("flushes a held leak-prefix instead of silently dropping the tail of a reply", async () => {
     // The final delta ends the stream exactly on an incomplete leak-token
     // prefix ("(remote") — nothing downstream ever disambiguates it, so
