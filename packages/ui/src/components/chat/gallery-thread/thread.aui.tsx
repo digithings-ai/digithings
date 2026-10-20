@@ -248,8 +248,10 @@ const ThreadViewportElContext = createContext<HTMLElement | null>(null);
  * Edit-in-composer: clicking edit on a user message loads its text into the
  * main composer (the only place messages are typed or changed). Resubmitting
  * replaces that message and regenerates from it; unchanged text is a no-op
- * (treated as a misclick). Escape, the exit control, or a click outside the
- * composer cancels and restores whatever draft was there before.
+ * (treated as a misclick), as is an empty or whitespace-only composer.
+ * Escape or a click outside the composer cancels and restores whatever draft
+ * was there before. The composer itself carries no editing chrome: it looks
+ * like a normal text box while a message is being edited.
  */
 type ComposerEditState = {
   messageId: string;
@@ -271,6 +273,19 @@ const ComposerEditContext = createContext<ComposerEditApi>({
 
 export function isUnchangedEdit(original: string, next: string): boolean {
   return original.trim() === next.trim();
+}
+
+/**
+ * Should an in-composer edit be sent at all?
+ *
+ * No when the composer is empty or holds only whitespace (there is nothing to
+ * say), and no when the text is the message being edited (an edit that
+ * changes nothing is not worth a resend). Both cases end the edit without
+ * touching the message.
+ */
+export function shouldCommitEdit(original: string, next: string): boolean {
+  if (!next.trim()) return false;
+  return !isUnchangedEdit(original, next);
 }
 
 const ComposerEditProvider: FC<PropsWithChildren> = ({ children }) => {
@@ -298,7 +313,7 @@ const ComposerEditProvider: FC<PropsWithChildren> = ({ children }) => {
     (text: string) => {
       const cur = editingRef.current;
       if (!cur) return;
-      if (!text.trim() || isUnchangedEdit(cur.original, text)) {
+      if (!shouldCommitEdit(cur.original, text)) {
         cancel();
         return;
       }
@@ -818,7 +833,6 @@ const Composer: FC<{
     <ComposerPrimitive.Root
       ref={composerRootRef}
       className="aui-composer-root relative flex w-full flex-col"
-      data-editing={isEditingMessage ? "true" : undefined}
       onSubmit={handleSubmit}
       onKeyDownCapture={(event) => {
         if (isEditingMessage && event.key === "Escape") {
@@ -832,26 +846,9 @@ const Composer: FC<{
         <div
           data-slot="aui_composer-shell"
           data-layout={layout}
-          data-editing={isEditingMessage ? "true" : undefined}
           onMouseDown={handleShellMouseDown}
-          className="data-[editing=true]:border-primary/50 border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+          className="border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
         >
-          {isEditingMessage ? (
-            <div
-              data-slot="aui_composer-editing"
-              className="aui-composer-editing text-muted-foreground flex items-center justify-between gap-2 px-2.5 text-xs"
-            >
-              <span>Editing message · Enter to resend · Esc to cancel</span>
-              <button
-                type="button"
-                aria-label="Cancel edit"
-                className="hover:text-foreground rounded px-1 leading-none"
-                onClick={() => edit.cancel()}
-              >
-                ×
-              </button>
-            </div>
-          ) : null}
           <ComposerAttachments />
           {/* One row: attach, input, send. The toolbar used to sit on a second
               row inside the same border, which read as a two-line text box. */}
