@@ -156,10 +156,10 @@ The `prod` / `dev` pair above is history: neither app exists in that shape any m
 | app | `digichat-datatap-trial` |
 | region | West Europe |
 | revision mode | `Single` (no probes) |
-| image | `datatapregistry.azurecr.io/digichat:trial-1d0a8149-2.6.0` |
-| revision | `digichat-datatap-trial--0000008` |
+| image | `datatapregistry.azurecr.io/digichat:trial-1d0a8149-2.6.1` |
+| revision | `digichat-datatap-trial--0000009` |
 | fqdn | `digichat-datatap-trial.victoriouswater-cd6b01f3.westeurope.azurecontainerapps.io` |
-| `/api/health` | `200 {"ok":true,…,"version":"2.6.0"}` |
+| `/api/health` | `200 {"ok":true,…,"version":"2.6.1"}` |
 | `DIGICHAT_CONFIG_PATH` | `/app/config/datatap-trial-foundry.yaml` |
 
 **The tenant config must be rendered before the image is built.** The repository ships `apps/digichat/config/datatap-trial-foundry.yaml` as a *template*: `REPLACE-FOUNDRY-ACCOUNT`, `REPLACE-PROJECT` and `REPLACE-AGENT-NAME`. The loader fails closed on a `REPLACE-` placeholder (`apps/digichat/src/lib/deploy-config/loader.ts`), so an image built straight from the template **does not boot** — the container dies in the instrumentation hook with "render the tenant config before deploying" and the app answers 500. The per-trial values are substituted before the build:
@@ -367,11 +367,12 @@ The ACR is the ledger of record for what is deployed. Digests below are verified
 | `v2.3.2` | `sha256:c5708729fea2` | 2026-09-21T11:47Z | **prod** (`digichat--0000007`) |
 | `v2.3.3` | `sha256:fc06e0a57902` | 2026-09-21T20:46Z | dev (`digichat--0000040`) |
 | `trial-1d0a8149-2.5.1` | `sha256:b41f25e7afe7` | 2026-10-19 | trial (`digichat-datatap-trial--0000005`) |
-| `trial-1d0a8149-2.6.0` | `sha256:c85574ba24ed` | 2026-10-20 | **trial** (`digichat-datatap-trial--0000008`) |
+| `trial-1d0a8149-2.6.0` | `sha256:c85574ba24ed` | 2026-10-20 | superseded (`digichat-datatap-trial--0000008`) |
+| `trial-1d0a8149-2.6.1` | `sha256:6b8e5c492f4f` | 2026-10-21 | **trial** (revision `--0000009`) |
 
-`trial-1d0a8149-2.6.0` is built from the `digichat-v2.6.0` tag (`bfd87982ee289e3bbc1deef1aea08864865eb904`) and is bound to it: `scripts/check_digichat_image_binding.py --facts` reports `ok: true` against the image's own `org.opencontainers.image.revision` and version.
+`trial-1d0a8149-2.6.1` is built from the `digichat-v2.6.1` tag (`3e3c384c1ea37d855e084e34710c3735580a48ad`) and is bound to it: `scripts/check_digichat_image_binding.py --facts` reports `ok: true` against the image's own `org.opencontainers.image.revision` and version.
 
-The GHCR publish of the same release is `ghcr.io/digithings-ai/digichat:sha-bfd87982ee28` (VERSION 2.6.0, COMMIT bfd87982ee).
+The GHCR publish of the same release is `ghcr.io/digithings-ai/digichat:sha-3e3c384c1ea3` (VERSION 2.6.1, COMMIT 3e3c384c1ea3).
 
 ---
 
