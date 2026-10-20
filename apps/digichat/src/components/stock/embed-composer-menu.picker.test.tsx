@@ -147,6 +147,27 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("applies a model on ArrowRight and closes", async () => {
+    const user = userEvent.setup();
+    const api = prefs();
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu
+          kind="models"
+          models={["alpha", "beta"]}
+          onClose={onClose}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await screen.findByRole("menuitemradio", { name: "alpha" });
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowRight}");
+    expect(api.setModel).toHaveBeenCalledWith("beta");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("closes language pick on click and marks the current code with the diamond", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "en", model: "alpha" } });

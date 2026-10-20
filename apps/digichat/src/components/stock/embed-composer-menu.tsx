@@ -4,8 +4,8 @@
  * Session menu docked above the composer (#3736 UI pass). Same chrome as the
  * slash palette: opaque, composer-width, command/label left, value right.
  * Arrow keys move; Enter toggles, opens a nested list, or commits an exclusive
- * pick (then the menu closes). Escape closes. Left/Right on `/language` cycles
- * the full ISO list. The hovered or arrow-key row shows the same `>` chevron
+ * pick (then the menu closes). Escape or Left goes back; Enter or Right
+ * submits the row. The hovered or arrow-key row shows the same `>` chevron
  * as a user message and shifts its content right to make room for it.
  */
 
@@ -153,11 +153,6 @@ const MENU_ROW_CLASS =
 
 function slashName(id: string): string {
   return id.startsWith("/") ? id : `/${id}`;
-}
-
-function cycle<T extends string>(values: readonly T[], current: string, delta: number): T {
-  const i = Math.max(0, values.indexOf(current as T));
-  return values[nextPaletteIndex(i, delta, values.length)]!;
 }
 
 function initialView(kind: ComposerMenuKind): MenuView {
@@ -753,7 +748,7 @@ export function EmbedComposerMenu({
         const subOn = on && api.extraToolOn(sub.id);
         return {
           id: `${t.id}::${sub.id}`,
-          label: `  ↳ ${sub.label?.trim() || sub.id}`,
+          label: `  ../${sub.id}`,
           value: subOn ? "On" : "Off",
           checked: subOn,
           activate: () => {
@@ -1047,14 +1042,6 @@ export function EmbedComposerMenu({
     onClose();
   }, [customModel, kind, onClose, providerPick, view]);
 
-  const cycleLanguage = useCallback(
-    (delta: number) => {
-      if (!languageCodes.length) return;
-      api.setLanguage(cycle(languageCodes, api.prefs.language, delta));
-    },
-    [api, languageCodes],
-  );
-
   useEffect(() => {
     if (view === "provider-key") keyInputRef.current?.focus();
     if (view === "provider-model" && customModel) customModelRef.current?.focus();
@@ -1090,56 +1077,19 @@ export function EmbedComposerMenu({
         move(-1);
         return;
       }
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        const row = rows[cursor];
-        const delta = event.key === "ArrowRight" ? 1 : -1;
-        if (view === "main" && row?.id === "language") {
-          event.preventDefault();
-          event.stopPropagation();
-          cycleLanguage(delta);
-          return;
-        }
-        if (view === "main" && row?.id === "effort") {
-          event.preventDefault();
-          event.stopPropagation();
-          api.setEffort(cycle(EFFORTS, api.prefs.effort, delta));
-          return;
-        }
-        if (view === "main" && row?.id === "search-engine") {
-          event.preventDefault();
-          event.stopPropagation();
-          api.setSearchEngine(cycle(SEARCH_ENGINES, api.prefs.searchEngine || "auto", delta));
-          return;
-        }
-        if (view === "main" && row?.id === "view") {
-          event.preventDefault();
-          event.stopPropagation();
-          api.setView(cycle(VIEW_MODES, api.prefs.view, delta));
-          return;
-        }
-        if (view === "main" && row?.id === "thinking") {
-          event.preventDefault();
-          event.stopPropagation();
-          api.setThinking(cycle(THINKING_MODES, api.prefs.thinking, delta));
-          return;
-        }
-        if (
-          view === "language" ||
-          view === "effort" ||
-          view === "search-engine" ||
-          view === "view" ||
-          view === "thinking" ||
-          view === "models" ||
-          view === "tools" ||
-          view === "mcp" ||
-          view === "provider" ||
-          view === "provider-model"
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-          move(delta);
-          return;
-        }
+      // Left/right are actions, not scrolling: right submits like Enter and
+      // left goes back like Escape. The hint row spells this out.
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        event.stopPropagation();
+        rows[cursor]?.activate();
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        event.stopPropagation();
+        goBack();
+        return;
       }
       if (event.key === "Home") {
         event.preventDefault();
@@ -1164,7 +1114,6 @@ export function EmbedComposerMenu({
       closeMcpIdDropdown,
       cursor,
       customModel,
-      cycleLanguage,
       goBack,
       languageCodes.length,
       mcpIdDropdownOpen,
@@ -1200,27 +1149,7 @@ export function EmbedComposerMenu({
       role={formView ? "dialog" : "menu"}
       aria-label={title}
     >
-      <div className="text-muted-foreground flex items-center justify-between border-b px-3 py-1.5 text-xs tracking-wide uppercase">
-        <span>
-          {title}
-          {view === "provider-key" || view === "provider-model"
-            ? ` ${providerPick}`
-            : view === "mcp-edit" && mcpDraft.id
-              ? ` ${mcpDraft.id}`
-              : view === "mcp-edit"
-                ? " new"
-                : ""}
-        </span>
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          className="h-auto px-0 font-normal text-inherit hover:text-foreground tracking-normal normal-case underline-offset-2"
-          onClick={goBack}
-        >
-          escape
-        </Button>
-      </div>
+
       <div className="relative min-h-0">
         <div
           ref={menuBodyRef}
@@ -1677,6 +1606,9 @@ export function EmbedComposerMenu({
           ) : null}
         </div>
         <MenuScrollbar targetRef={menuBodyRef} />
+      </div>
+      <div className="text-muted-foreground px-3 py-1 font-mono text-[0.68rem]">
+        {title} · ↑↓ navigate · ⏎/→ submit · esc/← back
       </div>
     </div>
   );

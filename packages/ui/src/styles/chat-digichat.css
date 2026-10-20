@@ -1109,15 +1109,14 @@
   font-family: var(--font-mono);
 }
 
+/* The highlighted palette row is marked by the chevron only: no outline or
+   wash, exactly like the composer menu. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-highlighted],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [aria-selected="true"],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [aria-selected="true"] {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted] {
   background: transparent;
   background-color: transparent;
   color: var(--ink);
-  outline: 1px solid var(--hair);
-  outline-offset: -1px;
+  outline: none;
 }
 
 /* Selected row: a 3x3 cube diamond, the same grid motif as the context
@@ -1144,6 +1143,16 @@
   flex: none;
   align-items: center;
   justify-content: center;
+}
+
+/* Slash / mention palette: the chevron exists on every row but only the
+   highlighted one shows it, so that row shifts right like the menu. */
+.aui-composer-trigger-popover .aui-menu-cursor {
+  display: none;
+}
+
+.aui-composer-trigger-popover [data-highlighted] .aui-menu-cursor {
+  display: inline-flex;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings],
