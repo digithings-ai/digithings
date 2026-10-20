@@ -1,6 +1,6 @@
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { isServiceCapabilityEnabled } from "@/lib/capabilities";
-import { getDigichatConfig } from "@/lib/deploy-config/loader";
+import { configUsesDigigraph, getDigichatConfig } from "@/lib/deploy-config/loader";
 
 export const dynamic = "force-dynamic";
 
@@ -27,19 +27,22 @@ async function ping(url: string, ms: number): Promise<boolean> {
  * tenant — which services exist is deployment config, not a host branch.
  */
 /**
- * Whether this deployment talks to digigraph at all.
+ * Whether this install talks to digigraph at all.
  *
  * A Foundry-backed install has no digigraph to warm, but the default enabled
  * service set names it, so the gate used to probe an endpoint that does not
  * exist and park the UI on a boot screen (#6023). The old escape hatch --
  * DIGICHAT_ENABLED_SERVICES=foundry -- named a service outside the capability
- * list, so it silenced every probe rather than the right one. Fail open: an
- * unreadable config is probed as before.
+ * list, so it silenced every probe rather than the right one.
+ *
+ * Every deployment in the config counts: a single install, and a registry of
+ * hosts. An install that serves one digigraph tenant and one foundry tenant
+ * still needs digigraph, and a false "ready" is worse than a false "waking".
+ * Fail open: an unreadable config is probed as before.
  */
 function deploymentUsesDigigraph(): boolean {
   try {
-    const backend = getDigichatConfig().deployment?.backend;
-    return backend?.type !== "foundry";
+    return configUsesDigigraph(getDigichatConfig());
   } catch {
     return true;
   }
