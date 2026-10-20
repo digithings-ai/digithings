@@ -534,13 +534,20 @@ def _write_npm() -> None:
 def npm_input_paths() -> dict[str, Path]:
     """The npm subset of :func:`input_paths` — the inputs the digichat image installs.
 
-    The digichat image COPYs ``image-packages/digichat/`` and nothing else out of
-    the packaged tree, so these are the only packaged inputs it needs. The
-    wheels and the frozen exports under ``image-packages/`` belong to the stack
-    and runner images.
+    The scope is what the image's npm step consumes: every workspace manifest
+    the digichat Dockerfile COPYs out of ``image-packages/digichat/`` — the
+    four packed workspaces plus ``apps/dashboard``, which the root lockfile
+    installs from that copied manifest — together with the sources of the
+    tarballs it unpacks.
+
+    It is derived from ``NPM_MANIFESTS``, the one place that layout is
+    stated, and not from ``NPM_PACKAGES``, which lists the packed workspaces
+    only. A scope narrower than the tree's writes leaves a copied manifest
+    unfingerprinted, and the npm-scoped freshness check then reports a stale
+    tree as fresh.
     """
-    wanted = set(NPM_PACKAGES)
-    return {name: path for name, path in input_paths().items() if name in wanted}
+    manifest_sources = {manifest.parent for manifest in NPM_MANIFESTS.values()}
+    return {name: path for name, path in input_paths().items() if path in manifest_sources}
 
 
 def npm_only() -> int:
