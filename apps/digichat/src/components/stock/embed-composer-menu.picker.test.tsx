@@ -394,6 +394,101 @@ describe("EmbedComposerMenu current value", () => {
     expect(api.setEffort).not.toHaveBeenCalledWith("low");
   });
 
+  it("opens /language on the language that is set", async () => {
+    const user = userEvent.setup();
+    const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "nl", model: "alpha" } });
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="language" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    const dutch = await screen.findByRole("menuitemradio", { name: /nl\s+Dutch/i });
+    expect(hasChevron(dutch)).toBe(true);
+    expect(hasChevron(screen.getByRole("menuitemradio", { name: /en\s+English/i }))).toBe(false);
+
+    await user.keyboard("{Enter}");
+    expect(api.setLanguage).toHaveBeenCalledWith("nl");
+    expect(api.setLanguage).not.toHaveBeenCalledWith("en");
+  });
+
+  it("opens /thinking on the thinking mode that is set", async () => {
+    const user = userEvent.setup();
+    const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, thinking: "collapsed" } });
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="thinking" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    const collapsed = await screen.findByRole("menuitemradio", { name: /thinking collapsed/i });
+    expect(hasChevron(collapsed)).toBe(true);
+    expect(hasChevron(screen.getByRole("menuitemradio", { name: /thinking auto/i }))).toBe(false);
+
+    await user.keyboard("{Enter}");
+    expect(api.setThinking).toHaveBeenCalledWith("collapsed");
+    expect(api.setThinking).not.toHaveBeenCalledWith("auto");
+  });
+
+  it("opens /search-engine on the engine that is set", async () => {
+    const user = userEvent.setup();
+    const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, searchEngine: "exa" } });
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="search-engine" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    const exa = await screen.findByRole("menuitemradio", { name: /search-engine exa/i });
+    expect(hasChevron(exa)).toBe(true);
+    expect(hasChevron(screen.getByRole("menuitemradio", { name: /search-engine auto/i }))).toBe(false);
+
+    await user.keyboard("{Enter}");
+    expect(api.setSearchEngine).toHaveBeenCalledWith("exa");
+    expect(api.setSearchEngine).not.toHaveBeenCalledWith("auto");
+  });
+
+  it("opens /models on the model that is set, not on the first row", async () => {
+    const user = userEvent.setup();
+    const api = prefs();
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="models" models={["beta", "alpha"]} onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    const alpha = await screen.findByRole("menuitemradio", { name: "alpha" });
+    expect(hasChevron(alpha)).toBe(true);
+    expect(hasChevron(screen.getByRole("menuitemradio", { name: "beta" }))).toBe(false);
+
+    await user.keyboard("{Enter}");
+    expect(api.setModel).toHaveBeenCalledWith("alpha");
+    expect(api.setModel).not.toHaveBeenCalledWith("beta");
+  });
+
+  it("has no rows on /help, so Enter commits nothing", async () => {
+    const user = userEvent.setup();
+    const api = prefs();
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="help" models={["alpha", "beta"]} onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    // The help panel is not a list: it must not borrow the model rows.
+    expect(await screen.findByText(/Ask about OCC policies/)).not.toBeNull();
+    expect(screen.queryByRole("menuitemradio")).toBeNull();
+
+    await user.keyboard("{Enter}");
+    expect(api.setModel).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("puts the cursor on the active provider row, not on the row before it", async () => {
     const onClose = vi.fn();
     render(

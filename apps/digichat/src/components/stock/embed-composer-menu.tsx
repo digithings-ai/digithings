@@ -886,7 +886,9 @@ export function EmbedComposerMenu({
                           ? []
                           : view === "search-engine"
                             ? engineRows
-                            : modelRows;
+                            : view === "help"
+                              ? []
+                              : modelRows;
   const title =
     view === "language"
       ? "/language"
