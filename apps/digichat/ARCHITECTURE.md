@@ -381,6 +381,42 @@ digiquant payload evolution but also silently ignores malformed results.
 The `litellm_proxy_api_key` is forwarded to digigraph as `X-LiteLLM-Proxy-Key` when
 present, allowing LiteLLM to route models per-tenant.
 
+### Document identity (DIG-4591)
+
+A Sources row is a document, and the same document can reach the UI through
+more than one surface (a web URL and a vault path) and more than one tool
+(digisearch, digivault_get_note). A row is therefore identified by a SET of
+identity keys, and two rows are the same document when their key sets
+intersect. The contract lives in `src/lib/document-identity.ts`.
+
+- `doc:<handle>` — the source's own per-document handle, carried on the
+  document as `docId`. It outranks the path because it is the only key every
+  surface of one document shares.
+- `path:<path>` — a real LOCATION. A path that merely repeats the title is a
+  LABEL (a producer substitutes the title for the path when the source has no
+  usable path), so it identifies nothing.
+- `title:<title>|kind:<web|document>` — the last resort, for a document with
+  neither a handle nor a location.
+
+**Why a set, and not one key.** A path names a location, not a document: one
+document has several locations, and one location can be reported under several
+handles. A single key therefore merges too little or too much. With a set, the
+same document arriving under two paths merges on its handle, while two
+documents that merely share a title do not merge at all — the title is never a
+key while a handle or a location exists.
+
+**The handle is a token, not an id.** The activity payload is client facing, so
+the document id itself must not reach the browser. The adapter derives
+`doc-<16 hex>` from the source's per-document id (`doc_id`, or the `source_id`
+without its chunk rank) and the sanitizer only forwards a value that has the
+shape of a token. A DOI is deliberately not used: a DOI names a work, and one
+work can carry several documents.
+
+**The limit.** A document that arrives with neither a handle nor a location can
+only be identified by its title and its rendered kind, so two such documents
+with the same title remain one row. Recognising one document across two
+surfaces needs the handle; the path alone cannot do it.
+
 ---
 
 ## 5. Internal Architecture
