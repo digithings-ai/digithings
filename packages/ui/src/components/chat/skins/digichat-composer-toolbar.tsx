@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment, type ReactNode } from "react";
 import type { EmbedChatPrefsApi } from "../stock/embed-chat-prefs";
 import { DigichatContextMeter } from "./digichat-context-meter";
 
@@ -48,76 +49,92 @@ export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi })
   );
   const mcpToolTotal = mcpCounts.tools;
 
-  return (
-    <div data-slot="aui_composer-toolbar-inner" className="aui-composer-toolbar-inner">
-      {/* No model row without a picker: a tenant that publishes no model
-          list (a Foundry agent) has no model to name. */}
-      {prefs.showModels ? (
-        <button
-          type="button"
-          className="aui-composer-meta aui-composer-meta-action"
-          onClick={prefs.openModels}
-          aria-label="Open models"
-        >
-          {modelLabel}
-        </button>
-      ) : null}
-      {showProvider ? (
-        <>
-          <span className="aui-composer-meta-sep" aria-hidden>
-            /
-          </span>
-          {prefs.showByok ? (
-            <button
-              type="button"
-              className="aui-composer-meta aui-composer-meta-action"
-              onClick={() => prefs.openByok()}
-              aria-label="Open provider menu"
-            >
-              {providerLabel}
-            </button>
-          ) : (
-            <span className="aui-composer-meta">{providerLabel}</span>
-          )}
-        </>
-      ) : null}
-      {mcpCounts.servers > 0 ? (
-        <>
-          <span className="aui-composer-meta-sep" aria-hidden>
-            /
-          </span>
-          <button
-            type="button"
-            className="aui-composer-meta aui-composer-meta-action"
-            onClick={() => prefs.openMcp()}
-            aria-label="Open MCP servers"
-          >
-            {mcpCounts.servers} MCP{mcpCounts.servers === 1 ? "" : "s"}
-          </button>
-          <span className="aui-composer-meta-sep" aria-hidden>
-            /
-          </span>
-          <button
-            type="button"
-            className="aui-composer-meta aui-composer-meta-action"
-            onClick={() => prefs.openTools()}
-            aria-label="Open tools"
-          >
-            {mcpCounts.tools} tool{mcpCounts.tools === 1 ? "" : "s"}
-          </button>
-        </>
-      ) : null}
-      <span className="aui-composer-meta-sep" aria-hidden>
-        /
-      </span>
+  // The row is a list of facts separated by slashes. Build the list and
+  // join it, so a tenant that has no model (or no provider) never leaves a
+  // dangling separator at the front.
+  const items: ReactNode[] = [];
+
+  if (prefs.showModels) {
+    items.push(
       <button
+        key="model"
         type="button"
         className="aui-composer-meta aui-composer-meta-action"
-        onClick={() => prefs.openLanguage()}
-        aria-label="Open response language"
+        onClick={prefs.openModels}
+        aria-label="Open models"
       >
-        {prefs.prefs.language.slice(0, 2).toUpperCase()}
-      </button>
+        {modelLabel}
+      </button>,
+    );
+  }
+
+  if (showProvider) {
+    items.push(
+      prefs.showByok ? (
+        <button
+          key="provider"
+          type="button"
+          className="aui-composer-meta aui-composer-meta-action"
+          onClick={() => prefs.openByok()}
+          aria-label="Open provider menu"
+        >
+          {providerLabel}
+        </button>
+      ) : (
+        <span key="provider" className="aui-composer-meta">
+          {providerLabel}
+        </span>
+      ),
+    );
+  }
+
+  if (mcpCounts.servers > 0) {
+    items.push(
+      <button
+        key="mcp"
+        type="button"
+        className="aui-composer-meta aui-composer-meta-action"
+        onClick={() => prefs.openMcp()}
+        aria-label="Open MCP servers"
+      >
+        {mcpCounts.servers} MCP{mcpCounts.servers === 1 ? "" : "s"}
+      </button>,
+      <button
+        key="tools"
+        type="button"
+        className="aui-composer-meta aui-composer-meta-action"
+        onClick={() => prefs.openTools()}
+        aria-label="Open tools"
+      >
+        {mcpCounts.tools} tool{mcpCounts.tools === 1 ? "" : "s"}
+      </button>,
+    );
+  }
+
+  items.push(
+    <button
+      key="language"
+      type="button"
+      className="aui-composer-meta aui-composer-meta-action"
+      onClick={() => prefs.openLanguage()}
+      aria-label="Open response language"
+    >
+      {prefs.prefs.language.slice(0, 2).toUpperCase()}
+    </button>,
+  );
+
+  return (
+    <div data-slot="aui_composer-toolbar-inner" className="aui-composer-toolbar-inner">
+      {items.map((item, index) => (
+        <Fragment key={index}>
+          {index > 0 ? (
+            <span className="aui-composer-meta-sep" aria-hidden>
+              /
+            </span>
+          ) : null}
+          {item}
+        </Fragment>
+      ))}
       <span className="aui-composer-meta-spacer" aria-hidden />
       <DigichatContextMeter
         model={rawModel}

@@ -124,6 +124,20 @@ describe("DigichatComposerToolbar provider chip (#4597)", () => {
     expect(screen.queryByLabelText("Open provider menu")).toBeNull();
   });
 
+  it("never starts the row with a separator when there is no model", () => {
+    // A tenant with no model list (a Foundry agent) has no model chip, so the
+    // row must not open with a dangling slash.
+    const { container } = render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({ showModels: false, providerLabel: "cheaperinference" })}
+      />,
+    );
+    const row = container.querySelector('[data-slot="aui_composer-toolbar-inner"]');
+    const first = row?.firstElementChild;
+    expect(first?.className).not.toMatch(/aui-composer-meta-sep/);
+    expect((row?.textContent ?? "").trim().startsWith("/")).toBe(false);
+  });
+
   it("gates the provider chip on its own preference, not the model chip's", () => {
     render(
       <DigichatComposerToolbar
