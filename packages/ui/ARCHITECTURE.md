@@ -499,3 +499,29 @@ has to beat a utility stays unlayered and says so inline (the reference's
 block. The reference `(chatbot)` root, which themes vendor assistant-ui CSS,
 keeps its own unlayered cascade. Full rule and the pinned test:
 [MIGRATION.md § App family CSS layering](MIGRATION.md).
+
+## Overlay scrollbar pointer contract (DIG-4600)
+
+An overlay scrollbar is a **track** over the content edge and a **thumb** the
+user drags. `pointer-events` is inherited, so a track that declares
+`pointer-events: none` hands that value down to the thumb, which is a DOM
+child of the track: the thumb is then never a pointer target, its
+`onPointerDown` drag handler cannot fire, and its `:hover` affordance never
+paints. The scrollbar is in the DOM and invisible in effect.
+
+The contract is owned by the stylesheet layer and has **two halves that
+always travel together**: the track rule declares `pointer-events: none` so
+clicks pass through to the content beneath, and the thumb rule declares
+`pointer-events: auto` so the thumb is hit-testable. The composer menu
+scrollbar already carried both halves; the overlay scrollbar now carries the
+same pair.
+
+The check is a **source-text** test
+(`packages/ui/src/components/chat/overlay-scrollbar.pointer.test.ts`) because
+the `packages/ui` test environment is `node` with no CSS processing and no
+DOM, so the inherited effective value cannot be computed in a unit test. It
+parses the **rule body per selector** and checks **every** rule that
+renders the element, so a `pointer-events: auto` in another rule cannot
+satisfy it and a duplicated block cannot carry a stale value. Full rule and
+the pinned test:
+[MIGRATION.md § Overlay scrollbar pointer contract](MIGRATION.md).
