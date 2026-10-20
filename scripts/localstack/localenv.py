@@ -5,16 +5,35 @@ Supabase ports, the keychain namespace the local material actually lives in,
 and a ``.env`` docker compose can read. The compose services declare
 ``env_file: .env`` and compose itself needs that file present to interpolate
 ``${VAR}``, while the render step only ever writes ``.dev.vars``.
+
+The root ``.env`` is the operator's file. The values they put in it - the ones
+``docs/SELF_HOST.md`` 7.1 documents - survive a ``dt up``; before DIG-4662 the
+file was rebuilt from the render alone and every one of them was dropped on
+the next bring-up. Three sources meet in it, lowest precedence first:
+
+1. the rendered ``.dev.vars``,
+2. the operator's own values from the previous ``.env``,
+3. the local overrides (the local digikey DSN, the local Supabase URL, the
+   omniroute password), which always win.
+
+Which of the first two a value came from is recorded in a sidecar state file
+next to the ``.env`` (mode 0600, git-ignored with the rest of the ``.env*``
+family). The sidecar holds digests, never values: it says whether the value in
+the ``.env`` is the one the render wrote or one the operator changed. Without
+it - a lost or unreadable sidecar - the comparison against the render decides,
+so a value the operator edited still survives.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import secrets
 import stat
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, Mapping, Optional
+from typing import Dict, Mapping, Optional, Tuple
 
 try:  # imported as part of a package
     from .supabase_ports import PORT_ENV, api_port
@@ -47,6 +66,17 @@ LOCAL_DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
 #: keeps that home on the digisearch_monitors volume, so the store's own
 #: fallback resolves to this path.
 LOCAL_DIGISEARCH_MONITORS_DB = "/data/monitors/.digisearch/monitors.sqlite3"
+
+#: Where the provenance of the root .env is recorded, next to the .env
+#: itself. The .env* family is git-ignored, so this never gets committed.
+STATE_FILE = ".env.localstack-state.json"
+
+#: The value in the .env is the one the render wrote.
+SOURCE_RENDER = "render"
+#: The value in the .env is the operator's own.
+SOURCE_OPERATOR = "operator"
+#: The value in the .env is the local stack's own; it always wins.
+SOURCE_OVERRIDE = "override"
 
 
 def apply_defaults(root: Path, env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
@@ -110,29 +140,133 @@ def local_overrides(env: Mapping[str, str], existing: Mapping[str, str]) -> Dict
     return overrides
 
 
+def digest(value: str) -> str:
+    """The digest of a value. The sidecar stores these, never the values."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def read_state(path: Path) -> Dict[str, Dict[str, str]]:
+    """Read the provenance sidecar. A missing or broken file reads as empty."""
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    state: Dict[str, Dict[str, str]] = {}
+    for name, entry in raw.items():
+        if isinstance(entry, dict):
+            state[name] = {k: v for k, v in entry.items() if isinstance(v, str)}
+    return state
+
+
+def write_state(path: Path, sources: Mapping[str, str], values: Mapping[str, str]) -> Path:
+    """Record where every value in the .env came from, mode 0600."""
+    payload: Dict[str, Dict[str, str]] = {}
+    for name, source in sorted(sources.items()):
+        entry = {"source": source}
+        if source == SOURCE_RENDER:
+            # The digest of what we wrote, so the next run can tell whether
+            # the operator changed the value in the meantime.
+            entry["digest"] = digest(values.get(name, ""))
+        payload[name] = entry
+    _write_private(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return path
+
+
+def operator_owns(
+    value: str,
+    rendered_value: str,
+    entry: Optional[Mapping[str, str]] = None,
+) -> bool:
+    """Is the value in the .env the operator's own?"""
+    if entry:
+        source = entry.get("source")
+        if source == SOURCE_OPERATOR:
+            return True
+        known_digest = entry.get("digest")
+        if source == SOURCE_RENDER and known_digest:
+            # We wrote this value; the operator owns it only if they changed it.
+            return digest(value) != known_digest
+    # No usable record: the operator owns the value when it differs from the
+    # render. This is also how an edit made before the sidecar existed reads.
+    return value != rendered_value
+
+
+def compose_env(
+    rendered: Mapping[str, str],
+    existing: Mapping[str, str],
+    overrides: Mapping[str, str],
+    state: Mapping[str, Mapping[str, str]],
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Merge the rendered secrets, the operator's .env and the local overrides.
+
+    Returns the values to write and, for each of them, where it came from.
+    """
+    values: Dict[str, str] = {}
+    sources: Dict[str, str] = {}
+
+    for name, value in rendered.items():
+        values[name] = value
+        sources[name] = SOURCE_RENDER
+
+    for name, value in existing.items():
+        if name in overrides:
+            # The local stack decides this one; the operator's copy is not used.
+            continue
+        if name not in rendered:
+            # Not part of the render: the operator owns it.
+            values[name] = value
+            sources[name] = SOURCE_OPERATOR
+            continue
+        if operator_owns(value, rendered[name], state.get(name)):
+            values[name] = value
+            sources[name] = SOURCE_OPERATOR
+        else:
+            sources[name] = SOURCE_RENDER
+
+    for name, value in overrides.items():
+        values[name] = value
+        sources[name] = SOURCE_OVERRIDE
+
+    return values, sources
+
+
+def _write_private(path: Path, body: str) -> Path:
+    """Write a file atomically, mode 0600. The content is never echoed."""
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f"{path.name}.")
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(body)
+        os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    return path
+
+
 def write_env(root: Path, env: Optional[Mapping[str, str]] = None) -> Path:
     """Write the .env docker compose reads, mode 0600.
 
-    The rendered .dev.vars are the base; the local overrides win over them,
-    and the previous .env wins over the generated omniroute password so the
-    value stays stable across runs.
+    The rendered .dev.vars are the base, the operator's values from the
+    previous .env are kept, and the local overrides win over both.
     """
     env = os.environ if env is None else env
     root = Path(root)
     target = root / ".env"
     existing = read_env_file(target)
-    values = read_env_file(root / ".dev.vars")
-    values.update(local_overrides(env, existing))
+    rendered = read_env_file(root / ".dev.vars")
+    overrides = local_overrides(env, existing)
+    state = read_state(root / STATE_FILE)
+    values, sources = compose_env(rendered, existing, overrides, state)
     body = "".join(f"{name}={value}\n" for name, value in sorted(values.items()))
-    fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=".env.")
-    try:
-        with os.fdopen(fd, "w") as handle:
-            handle.write(body)
-        os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
-        os.replace(tmp, target)
-    finally:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
+    _write_private(target, body)
+    # The provenance is recorded after the .env is in place: a run that dies in
+    # between leaves the operator's values in place, not the render's.
+    write_state(root / STATE_FILE, sources, values)
     return target
 
 
