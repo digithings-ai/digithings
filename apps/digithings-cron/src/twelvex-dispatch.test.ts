@@ -35,9 +35,48 @@ describe("twelve-x runner jobs", () => {
       expect(job?.workflow).toBeTruthy();
       if (bucket) expect(job?.inputs?.bucket).toBe(bucket);
     }
-    for (const id of ["twelve-x-asia", "twelve-x-performance-eval", "twelve-x-archive-maintenance"]) {
+    for (const id of ["twelve-x-performance-eval", "twelve-x-archive-maintenance"]) {
       expect(JOBS.find((row) => row.id === id)?.kind).toBe("workflow_dispatch");
     }
+  });
+
+  it("points the FX research sessions at the runner with their session", () => {
+    for (const [id, session, cron] of [
+      ["twelve-x-asia", "asia", "7 0 * * MON-FRI"],
+      ["twelve-x-london", "london", "12 7 * * MON-FRI"],
+      ["twelve-x-new-york", "new_york", "17 12 * * MON-FRI"],
+    ] as const) {
+      expect(JOBS.find((row) => row.id === id)).toMatchObject({
+        kind: "twelvex",
+        route: "session",
+        cron,
+        repo: "digithings-ai/twelve-x",
+        ref: "develop",
+        enabled: true,
+        timeoutSeconds: 7200,
+        inputs: { session },
+      });
+    }
+  });
+
+  it("POSTs /run/session with the session the row carries", async () => {
+    const runnerFetch = vi.fn(async (_request: Request) =>
+      Response.json({ ok: true, exit_code: 0, duration_ms: 4, alert: "none" }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      TWELVEX_RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const job = JOBS.find((row) => row.id === "twelve-x-asia");
+    if (!job) throw new Error("missing asia job");
+    const result = await dispatchTwelvex(env, job, job.cron);
+    expect(result).toEqual({ ok: true, status: 200, dry_run: false });
+    const request = runnerFetch.mock.calls[0][0] as Request;
+    expect(request.url).toBe("https://twelvex-runner/run/session");
+    const forwarded = JSON.parse(await request.text()) as { session: string; timeout_seconds: number };
+    expect(forwarded.session).toBe("asia");
+    expect(forwarded.timeout_seconds).toBe(7200);
   });
 
   it("dispatch sends the daily row to the runner", async () => {
