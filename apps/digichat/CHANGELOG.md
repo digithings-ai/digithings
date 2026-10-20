@@ -8,7 +8,7 @@ Foundry agent stops advertising models it does not have.
 ### Features
 
 * **chat:** the chain title follows the latest step — `Working — digisearch` while a tool runs, `Used 3 tools` when it is done — instead of a static word ([#6079](https://github.com/digithings-ai/digithings/pull/6079))
-* **datatap:** a Foundry tenant shows no model list, names its real backend (`Azure AI Foundry`), and reports the token usage the Responses API gives it ([#6073](https://github.com/digithings-ai/digithings/pull/6073))
+* **foundry:** a tenant on an Azure AI Foundry agent shows no model list, names its real backend (`Azure AI Foundry`), and reports the token usage the Responses API gives it ([#6073](https://github.com/digithings-ai/digithings/pull/6073))
 * **chat:** the composer menu opens a sub-page on its current value ([#6064](https://github.com/digithings-ai/digithings/pull/6064))
 
 ### Bug Fixes
