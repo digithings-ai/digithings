@@ -23,7 +23,12 @@ describe("DigichatWordmark session", () => {
     sessionStorage.clear();
     // happy-dom has no canvas 2d context; without this the banner effect
     // returns before the session claim and the once-per-tab pin is void.
-    HTMLCanvasElement.prototype.getContext = function () {
+    // `getContext` is overloaded, so the stub is cast to the whole method:
+    // one implementation signature satisfies none of the overloads on its own.
+    // Only the 2d context is faked, the other ids get the null the real API
+    // returns, so the cast cannot hide a wrong context type.
+    HTMLCanvasElement.prototype.getContext = function (contextId: string) {
+      if (contextId !== "2d") return null;
       return new Proxy({}, { get: () => () => {} }) as unknown as CanvasRenderingContext2D;
     } as unknown as HTMLCanvasElement["getContext"];
     window.matchMedia = ((query: string) => ({
@@ -60,6 +65,12 @@ describe("DigichatWordmark session", () => {
     const canvas = container.querySelector("canvas");
     expect(canvas).not.toBeNull();
     expect(canvas?.getAttribute("aria-label")).toBe("digichat");
+  });
+
+  it("fakes the 2d context only, the other ids get the null of the real API", () => {
+    const canvas = document.createElement("canvas");
+    expect(canvas.getContext("2d")).not.toBeNull();
+    expect(canvas.getContext("webgl")).toBeNull();
   });
 
   it("plays loading once per tab through the component", () => {

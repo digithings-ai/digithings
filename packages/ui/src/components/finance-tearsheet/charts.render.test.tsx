@@ -26,6 +26,8 @@ describe('ContributionReturnChart', () => {
     expect(html.match(/2026-07-02/g)).toHaveLength(1);
     expect(html).toContain('ts-grid-zero');
     expect(html.match(/<svg/g)).toHaveLength(1);
+    // The svg carries role="img", so the label has to land on it.
+    expect(html).toMatch(/<svg[^>]*aria-label="Return contributions"/);
   });
 });
 describe('SignedBars labels (Q3b slice 4, #4443)', () => {
