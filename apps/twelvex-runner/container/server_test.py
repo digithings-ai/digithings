@@ -310,6 +310,43 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(payload, {"error": "invalid session"})
         run.assert_not_called()
+class LogTailTests(unittest.TestCase):
+    def test_a_short_log_is_kept_whole(self):
+        text = "MARKET_CONTEXT_VERDICT=source: 2 source(s) failed: dmx-overview\n"
+        self.assertEqual(server.clip(text), text)
+
+    def test_a_long_log_keeps_the_head_and_the_tail(self):
+        text = "HEAD-MARKER\n" + ("x" * 10000) + "\nTAIL-MARKER"
+        clipped = server.clip(text)
+        self.assertEqual(len(clipped), server.LOG_TAIL)
+        self.assertTrue(clipped.startswith("HEAD-MARKER"))
+        self.assertTrue(clipped.endswith("TAIL-MARKER"))
+        self.assertIn("truncated", clipped)
+
+    def test_a_noisy_run_keeps_the_verdict_line(self):
+        # stdout first, then stderr: the verdict line sits at the head, and a
+        # tail that kept only the end would drop it.
+        code = (
+            "import sys; print('MARKET_CONTEXT_VERDICT=source: dmx-overview failed');"
+            " sys.stderr.write('noise ' * 5000)"
+        )
+        steps = [([sys.executable, "-c", code], {}, True)]
+        payload = server.run_steps(steps, timeout=30, dry_run=False)
+        self.assertLessEqual(len(payload["log_tail"]), server.LOG_TAIL)
+        self.assertIn("MARKET_CONTEXT_VERDICT=source: dmx-overview failed", payload["log_tail"])
+
+    def test_the_tail_is_redacted_before_it_is_clipped(self):
+        steps = [
+            (
+                [sys.executable, "-c", "print('token=supersecret')"],
+                {},
+                True,
+            ),
+        ]
+        payload = server.run_steps(steps, timeout=30, dry_run=False)
+        self.assertNotIn("supersecret", payload["log_tail"])
+        self.assertIn("[redacted]", payload["log_tail"])
+
 
 
 if __name__ == "__main__":

@@ -249,6 +249,61 @@ describe("dispatchTwelvex", () => {
     );
   });
 
+  it("carries the reason of a failed run into the error the run watch reads", async () => {
+    const failed = vi.fn(async () =>
+      Response.json({
+        ok: false,
+        exit_code: 1,
+        log_tail:
+          "MARKET_CONTEXT_VERDICT=source: 2 source(s) failed: dmx-overview\ntoken=supersecret",
+        reason: "source: 2 source(s) failed: dmx-overview",
+      }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      TWELVEX_RUNNER: { fetch: failed } as unknown as Fetcher,
+    };
+    const job = ingestJob();
+    await expect(dispatchTwelvex(env, job, job.cron)).rejects.toThrow(
+      "twelvex-runner twelve-x-market-context-intraday exit 1: " +
+        "source: 2 source(s) failed: dmx-overview",
+    );
+  });
+
+  it("logs the reason of a failed run and never the log tail", async () => {
+    const failed = vi.fn(async () =>
+      Response.json({
+        ok: false,
+        exit_code: 1,
+        log_tail:
+          "MARKET_CONTEXT_VERDICT=source: 2 source(s) failed: dmx-overview\ntoken=supersecret",
+        reason: "source: 2 source(s) failed: dmx-overview",
+      }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      TWELVEX_RUNNER: { fetch: failed } as unknown as Fetcher,
+    };
+    const job = ingestJob();
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+      logged.push(String(line));
+    });
+    try {
+      await expect(dispatchTwelvex(env, job, job.cron)).rejects.toThrow("exit 1");
+    } finally {
+      spy.mockRestore();
+    }
+    const line = logged
+      .map((row) => JSON.parse(row) as Record<string, unknown>)
+      .find((row) => row.job === "twelve-x-market-context-intraday");
+    expect(line?.reason).toBe("source: 2 source(s) failed: dmx-overview");
+    expect(JSON.stringify(line)).not.toContain("supersecret");
+    expect(JSON.stringify(line)).not.toContain("MARKET_CONTEXT_VERDICT");
+  });
+
   it("prefers the twelve-x-only secret, and still accepts the shared token", async () => {
     const job = ingestJob();
     const makeRunner = () =>
