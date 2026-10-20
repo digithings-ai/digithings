@@ -13,6 +13,8 @@ export const WINDOW_MS = 24 * 60 * 60 * 1000;
 export const HEARTBEAT_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export const REPO = "digithings-ai/twelve-x";
 export const SESSION_OWNER = "chrizefan";
+/** Maximum characters of the container log tail carried in an alert body. */
+export const LOG_TAIL_LIMIT = 2000;
 
 export type Route = "ingest" | "heartbeat";
 
@@ -54,6 +56,7 @@ export function decideAlert(input: {
   exitCode: number;
   bucket?: string;
   reason: string;
+  logTail?: string;
   now: number;
   open: OpenIssue[];
 }): AlertDecision {
@@ -106,8 +109,19 @@ export function decideAlert(input: {
   };
 }
 
+/**
+ * The container log tail, so a failing run names its cause instead of only
+ * its exit code. The tail is already redacted inside the container.
+ */
+function logTailLines(logTail?: string): string[] {
+  if (!logTail) return [];
+  const trimmed =
+    logTail.length > LOG_TAIL_LIMIT ? logTail.slice(logTail.length - LOG_TAIL_LIMIT) : logTail;
+  return ["", `Log tail (last ${trimmed.length} characters):`, "````", trimmed, "````"];
+}
+
 function occurrenceBody(
-  input: { route: Route; exitCode: number; bucket?: string; reason: string },
+  input: { route: Route; exitCode: number; bucket?: string; reason: string; logTail?: string },
   escalate: boolean,
 ): string {
   const lines = [
@@ -117,6 +131,7 @@ function occurrenceBody(
     `- Reason: ${input.reason}`,
   ];
   if (input.bucket) lines.push(`- Bucket: ${input.bucket}`);
+  lines.push(...logTailLines(input.logTail));
   if (escalate) {
     lines.push(
       "",
@@ -133,6 +148,7 @@ function createBody(input: {
   exitCode: number;
   bucket?: string;
   reason: string;
+  logTail?: string;
 }): string {
   if (input.route === "heartbeat") {
     return [
@@ -144,6 +160,7 @@ function createBody(input: {
       `- Exit code: ${input.exitCode}`,
       `- Reason: ${input.reason}`,
       "- Workflow: primemarket_session_heartbeat.yml",
+      ...logTailLines(input.logTail),
     ].join("\n");
   }
   return [
@@ -152,6 +169,7 @@ function createBody(input: {
     `- Exit code: ${input.exitCode}`,
     `- Reason: ${input.reason}`,
     "- Workflow: market_context_ingest.yml",
+    ...logTailLines(input.logTail),
   ].join("\n");
 }
 
