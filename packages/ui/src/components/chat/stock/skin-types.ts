@@ -49,12 +49,15 @@ export type WorkDisclosure = {
   openAtRest: boolean;
   /** Per-tool detail (arguments, results) is rendered. */
   showDetails: boolean;
+<<<<<<< HEAD
   /**
    * The chain folds as soon as the answer starts streaming, rather than
    * waiting for the turn to end. The quiet level: the titles are there while
    * the agent works, then they get out of the way of the answer.
    */
   foldOnAnswer: boolean;
+=======
+>>>>>>> github/develop
 };
 
 /**
@@ -90,7 +93,10 @@ export function resolveWorkDisclosure(
         openWhileRunning: false,
         openAtRest: false,
         showDetails: false,
+<<<<<<< HEAD
         foldOnAnswer: false,
+=======
+>>>>>>> github/develop
       };
     // The titles only: the chain and its rows are there, folded.
     case "quiet":
@@ -100,7 +106,10 @@ export function resolveWorkDisclosure(
         openWhileRunning: false,
         openAtRest: false,
         showDetails: false,
+<<<<<<< HEAD
         foldOnAnswer: true,
+=======
+>>>>>>> github/develop
       };
     // Open while the work streams, folded when the turn ends.
     case "balanced":
@@ -110,7 +119,10 @@ export function resolveWorkDisclosure(
         openWhileRunning: true,
         openAtRest: false,
         showDetails: true,
+<<<<<<< HEAD
         foldOnAnswer: false,
+=======
+>>>>>>> github/develop
       };
     // Nothing ever folds: everything stays open and can be closed by hand.
     case "verbose":
@@ -120,7 +132,10 @@ export function resolveWorkDisclosure(
         openWhileRunning: true,
         openAtRest: true,
         showDetails: true,
+<<<<<<< HEAD
         foldOnAnswer: false,
+=======
+>>>>>>> github/develop
       };
     default:
       return {
@@ -129,7 +144,10 @@ export function resolveWorkDisclosure(
         openWhileRunning: true,
         openAtRest: false,
         showDetails: true,
+<<<<<<< HEAD
         foldOnAnswer: false,
+=======
+>>>>>>> github/develop
       };
   }
 }
