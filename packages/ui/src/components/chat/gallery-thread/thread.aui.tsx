@@ -1148,7 +1148,8 @@ const AssistantMessage: FC = () => {
                 return (
                   <div data-slot="aui_chain-of-thought">
                     <WorkChain
-                      openAtRest={disclosure.chainOpen}
+                      openAtRest={disclosure.openAtRest}
+                      foldOnAnswer={disclosure.foldOnAnswer}
                       running={part.status.type === "running"}
                     >
                       {children}

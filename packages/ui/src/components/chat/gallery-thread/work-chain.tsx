@@ -35,16 +35,23 @@ const ANIMATION_DURATION = 200;
 export function WorkChain({
   children,
   openAtRest = false,
+  foldOnAnswer = false,
   running = false,
   className,
 }: {
   children: ReactNode;
   /**
-   * The chain stays open: the row titles are always visible. The balanced
-   * level instead opens the chain while the turn runs and folds it away when
-   * the turn ends.
+   * The chain stays open for good: nothing ever folds (the verbose level).
+   * The balanced level instead opens the chain while the turn runs and folds
+   * it away when the turn ends.
    */
   openAtRest?: boolean;
+  /**
+   * Fold as soon as the answer starts streaming, rather than when the turn
+   * ends (the quiet level: the titles are there while the agent works, then
+   * they get out of the way of the answer).
+   */
+  foldOnAnswer?: boolean;
   /** The chain group is running (a tool or the reasoning is streaming). */
   running?: boolean;
   className?: string;
@@ -62,8 +69,24 @@ export function WorkChain({
     return () => clearTimeout(id);
   }, [running, turnRunning]);
 
+  // The answer has started: the text part of this message carries content.
+  const answerStarted = useAuiState((s) =>
+    s.message.parts.some(
+      (part) =>
+        part.type === "text" &&
+        typeof (part as { text?: string }).text === "string" &&
+        (part as { text?: string }).text !== "",
+    ),
+  );
+
   const busy = running || turnRunning;
-  const open = userOpen ?? (openAtRest ? true : !settled && busy);
+  const open = userOpen ?? (
+    openAtRest
+      ? true
+      : foldOnAnswer
+        ? busy && !answerStarted
+        : !settled && busy
+  );
 
   return (
     <Collapsible
