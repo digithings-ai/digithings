@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 from digigraph.corpus_routing import (
@@ -444,6 +445,8 @@ def test_resolve_map_accepts_comma_separated_fan_out() -> None:
             },
         )
         assert out.digisearch_index is None
+
+
 def test_digithings_tenant_parses_scoped_prompt() -> None:
     """DIG-3556: the digithings tenant carries a scoped research prompt."""
     m = load_tenant_corpus_map(
@@ -474,3 +477,78 @@ def test_resolve_override_carries_lock_session_controls() -> None:
     )
     override = resolve_corpus_override(tenant_slug="occ", corpus_map=mapped)
     assert override.lock_session_controls is True
+
+
+def test_unknown_map_key_warns_naming_slug_and_key_but_not_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An unrecognised entry key must be reported, not silently dropped.
+
+    DIG-4459 decision note D2: the map is read key by key and the override is
+    built from explicit keyword arguments, so an unknown key used to vanish with
+    no log line and no error — a renamed or misspelled field looked exactly like
+    a working map. The warning carries the tenant slug and the key name, never
+    the value.
+    """
+    raw = json.dumps(
+        {
+            "occ": {
+                "digisearchIndex": "occ_help",
+                "digisearchIndexTypo": "sensitive-value-do-not-log",
+            }
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        table = load_tenant_corpus_map(raw)
+    warnings = [r for r in caplog.records if "unknown key" in r.getMessage()]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "occ" in message
+    assert "digisearchIndexTypo" in message
+    assert "sensitive-value-do-not-log" not in caplog.text
+    # The known key still applies — an unknown key must not disturb the entry.
+    assert table["occ"].digisearch_index == "occ_help"
+
+
+def test_known_map_keys_do_not_warn(caplog: pytest.LogCaptureFixture) -> None:
+    """Every recognised spelling must stay silent — the warning is not noise."""
+    raw = json.dumps(
+        {
+            "occ": {
+                "digisearchIndex": "occ_help",
+                "vaultPathPrefix": "clients/occ",
+                "researchSystemPrompt": "Answer only about occ.",
+                "lockSessionControls": True,
+            },
+            "ok-tenant": {
+                "digisearch_index": "ok_docs",
+                "vault_path_prefix": "clients/ok",
+                "research_system_prompt": "Answer only about ok.",
+                "lock_session_controls": False,
+            },
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        table = load_tenant_corpus_map(raw)
+    assert not [r for r in caplog.records if "unknown key" in r.getMessage()]
+    assert table["occ"].lock_session_controls is True
+    assert table["ok-tenant"].digisearch_index == "ok_docs"
+
+
+def test_unknown_key_does_not_relax_fail_closed_on_known_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """D3: an unknown key is a forward-compatibility problem, a bad known value
+    stays a safety problem and is still refused."""
+    raw = json.dumps(
+        {
+            "occ": {
+                "digisearchIndex": "not a valid index!",
+                "someFutureKey": "x",
+            }
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        table = load_tenant_corpus_map(raw)
+        override = resolve_corpus_override(tenant_slug="occ", corpus_map=table)
+    assert override.digisearch_index is None
