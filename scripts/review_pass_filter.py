@@ -156,14 +156,38 @@ def show_identity(identity):
     return " ".join(parts) if parts else "nothing"
 
 
-def independence_reason(author, reviewer):
+def independence_reason(author, reviewer, require_markers=True):
     """Why a review is not independent of the PR's author, or ``None``.
 
-    Fails closed: without a named seat on both sides the two cannot be told
-    apart, and every seat posts under the author's login.
+    With ``require_markers`` on (the strict rule) the arm fails closed:
+    without a named seat on both sides the two cannot be told apart, and every
+    seat posts under the author's login.
+
+    With ``require_markers`` off the arm only refuses a *proven* self-review
+    — one that names the author's own seat, session or run. A missing marker
+    no longer refuses, because nothing writes one yet: the strict rule was
+    introduced without a producer (DIG-4646), so it refused every same-login
+    review in the fleet and emptied the queue. The overlap check is the part
+    that is always safe: it refuses a review that names the authoring seat
+    itself, whatever the flags say.
+
+    The caller's own gate decides when the strict rule applies; the switch
+    lives in the policy (``seat_independence``), not here.
     """
     author = author or {}
     reviewer = reviewer or {}
+    # The overlap check runs first and always: it is the one refusal that needs
+    # no marker to be present, because the marker that is present proves the
+    # review came from the author.
+    for kind in ("seat", "session", "run"):
+        shared = (author.get(kind) or frozenset()) & (reviewer.get(kind) or frozenset())
+        if shared:
+            return (
+                "the review comes from the authoring %s (%s); a different "
+                "reviewer seat has to review it" % (kind, ", ".join(sorted(shared)))
+            )
+    if not require_markers:
+        return None
     if not (author.get("seat") or author.get("session")):
         return (
             "the PR names no authoring seat or session (add a "
@@ -178,13 +202,6 @@ def independence_reason(author, reviewer):
             "and every seat posts under the author's login, so it may be the "
             "authoring session's own attestation"
         )
-    for kind in ("seat", "session", "run"):
-        shared = (author.get(kind) or frozenset()) & (reviewer.get(kind) or frozenset())
-        if shared:
-            return (
-                "the review comes from the authoring %s (%s); a different "
-                "reviewer seat has to review it" % (kind, ", ".join(sorted(shared)))
-            )
     kind = "seat" if author.get("seat") else "session"
     if not reviewer.get(kind):
         return (

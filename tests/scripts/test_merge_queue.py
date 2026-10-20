@@ -29,6 +29,7 @@ here would run these cases against the real twelve-x repo.
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import json
 import re
@@ -2145,6 +2146,16 @@ def _eval(pr: dict[str, Any]) -> Any:
     return mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
 
 
+def _eval_seat_independence(pr: dict[str, Any], on: bool) -> Any:
+    """Evaluate with the seat-independence rule forced on or off (DIG-4646).
+
+    The policy switch is off by default, so the strict rule is reached here
+    explicitly rather than by turning the whole policy on.
+    """
+    policy = dataclasses.replace(mq.load_policy(), seat_independence=on)
+    return mq.evaluate(pr, policy, acting_role="em", base="develop")
+
+
 def test_a_latest_formal_changes_requested_blocks_even_with_review_decision_empty() -> None:
     pr = _pr(
         1,
@@ -2154,11 +2165,49 @@ def test_a_latest_formal_changes_requested_blocks_even_with_review_decision_empt
     assert pr["reviewDecision"] == ""
     verdict = _eval(pr)
     assert not verdict.eligible
-    assert any(r.startswith("review verdict: someone's latest review") for r in verdict.reasons)
+    assert any(
+        r.startswith("review verdict: someone requested changes")
+        and "nothing since has cleared it" in r
+        for r in verdict.reasons
+    ), verdict.reasons
 
 
-@pytest.mark.parametrize("later", ["APPROVED", "COMMENTED", "DISMISSED"])
-def test_a_later_review_from_the_same_reviewer_clears_their_block(later: str) -> None:
+def test_a_dismissed_change_request_clears_its_block() -> None:
+    """A dismissal names the review it dismisses, so it clears it."""
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[
+            _review("someone", "CHANGES_REQUESTED", "2026-10-17T01:00:00Z"),
+            _review("someone", "DISMISSED", "2026-10-17T02:00:00Z"),
+        ],
+    )
+    verdict = _eval(pr)
+    assert not any(r.startswith("review verdict") for r in verdict.reasons), verdict.reasons
+    assert verdict.eligible, verdict.reasons
+
+
+def test_the_same_seats_later_approval_clears_its_change_request() -> None:
+    """The same seat, saying so, clears the change request it made."""
+    stamp = f"<!-- dt-seat agent={REVIEWER_SEAT} -->"
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[
+            _review("someone", "CHANGES_REQUESTED", "2026-10-17T01:00:00Z", stamp),
+            _review("someone", "APPROVED", "2026-10-17T02:00:00Z", stamp),
+        ],
+    )
+    verdict = _eval(pr)
+    assert not any(r.startswith("review verdict") for r in verdict.reasons), verdict.reasons
+    assert verdict.eligible, verdict.reasons
+
+
+@pytest.mark.parametrize("later", ["APPROVED", "COMMENTED"])
+def test_an_unnamed_later_review_does_not_clear_an_unnamed_change_request(later: str) -> None:
+    """DIG-4646: one login is every seat, so an unnamed verdict cannot be keyed
+    by login alone. Two verdicts that name no seat cannot prove they are the same
+    seat, so the change request keeps blocking."""
     pr = _pr(
         1,
         approved=True,
@@ -2168,8 +2217,10 @@ def test_a_later_review_from_the_same_reviewer_clears_their_block(later: str) ->
         ],
     )
     verdict = _eval(pr)
-    assert not any(r.startswith("review verdict") for r in verdict.reasons), verdict.reasons
-    assert verdict.eligible, verdict.reasons
+    assert not verdict.eligible
+    assert any(
+        r.startswith("review verdict: someone requested changes") for r in verdict.reasons
+    ), verdict.reasons
 
 
 def test_a_dismissed_change_request_does_not_block() -> None:
@@ -2187,8 +2238,8 @@ def test_another_reviewers_approval_does_not_clear_a_change_request() -> None:
     )
     verdict = _eval(pr)
     assert not verdict.eligible
-    assert any("someone's latest review" in r for r in verdict.reasons)
-    assert not any("other's latest review" in r for r in verdict.reasons)
+    assert any("someone requested changes" in r for r in verdict.reasons)
+    assert not any("other requested changes" in r for r in verdict.reasons)
 
 
 def test_an_earlier_approval_does_not_clear_a_later_change_request() -> None:
@@ -2248,16 +2299,20 @@ def test_the_5863_shape_in_session_verdict_changes_blocks() -> None:
     ]
     verdict = _eval(pr)
     assert not verdict.eligible
-    assert any("chrizefan's latest review (in-session review comment" in r for r in verdict.reasons)
+    assert any(
+        "chrizefan requested changes" in r and "in-session review comment" in r
+        for r in verdict.reasons
+    ), verdict.reasons
 
 
 def test_a_later_in_session_approval_clears_an_in_session_changes() -> None:
+    """The same seat's later approval clears the change request it made."""
     pr = _labeled_pr(
         5863,
         [
             _finding_comment(),
-            _in_session("CHANGES", "2026-10-17T03:14:04Z"),
-            _in_session("APPROVE", "2026-10-17T05:00:00Z"),
+            _seat_in_session("CHANGES", "2026-10-17T03:14:04Z"),
+            _seat_in_session("APPROVE", "2026-10-17T05:00:00Z"),
         ],
     )
     verdict = _eval(pr)
@@ -2285,12 +2340,195 @@ def test_a_pending_review_is_not_a_verdict() -> None:
 
 
 def test_rows_without_timestamps_keep_github_order() -> None:
+    stamp = f"<!-- dt-seat agent={REVIEWER_SEAT} -->"
     pr = _pr(
         1,
         approved=True,
         reviews=[
-            {"author": {"login": "someone"}, "state": "CHANGES_REQUESTED"},
-            {"author": {"login": "someone"}, "state": "APPROVED"},
+            {"author": {"login": "someone"}, "state": "CHANGES_REQUESTED", "body": stamp},
+            {"author": {"login": "someone"}, "state": "APPROVED", "body": stamp},
+        ],
+    )
+    assert _eval(pr).eligible
+
+
+# --- DIG-4646: the fleet's real verdict lines, and what clears a change request --
+#
+# The QA lane writes its verdict as a sentence, not as a bold label: "Review
+# verdict: changes requested — #5968 @ <sha>" (comment 6280947283 on #5968) and
+# "Review verdict: approve - digithings #5990 @ <sha>" (comment 6285506816 on
+# #5990, the verdict on the first line and the marker below it). The old regex
+# read a line that starts with "verdict", so every real verdict read as a plain
+# comment: a change request was neither a block nor excluded from the review
+# evidence, and an approval was not an approval. The bodies below are those two
+# comments, trimmed to the lines the gate reads.
+
+_FLEET_CHANGES_BODY = (
+    "<!-- in-session-review -->\n"
+    "\n"
+    "Review verdict: changes requested — #5968 @ "
+    "`36fad1f939fbf9c2897894f205bfabc83c61096a`\n"
+    "\n"
+    "Reviewed: head `36fad1f939fbf9c2897894f205bfabc83c61096a` (base "
+    "`1e82af3ff5825e026f548c7c9b6f8a83d54dade2`), 6 files, +206/-6.\n"
+    "\n"
+    "## What this PR gets right\n"
+    "\n"
+    "- **The mechanism is confirmed in-tree.**\n"
+)
+
+_FLEET_APPROVE_BODY = (
+    "Review verdict: approve - digithings #5990 @ "
+    "`8e0750df22e626159cc4829b415dbffa2b0fc251`\n"
+    "\n"
+    "<!-- in-session-review -->\n"
+    "\n"
+    "Reviewed the diff for the two secret names this PR forwards into the "
+    "digichat container, and checked the names against the real consumers.\n"
+)
+
+
+def _fleet_comment(body: str, at: str = "2026-10-19T09:00:00Z") -> dict[str, Any]:
+    return {
+        "id": 6280947283,
+        "author": {"login": "chrizefan"},
+        "body": body,
+        "createdAt": at,
+    }
+
+
+def test_the_fleet_changes_requested_line_blocks() -> None:
+    """The real "Review verdict: changes requested" line is a change request."""
+    verdict = _eval(_agent_pr([_fleet_comment(_FLEET_CHANGES_BODY)]))
+    assert not verdict.eligible
+    assert any(
+        r.startswith("review verdict: chrizefan requested changes") for r in verdict.reasons
+    ), verdict.reasons
+
+
+def test_the_fleet_changes_requested_line_is_never_review_evidence() -> None:
+    """A change request blocks and is dropped from the evidence, as before."""
+    verdict = _eval(_agent_pr([_fleet_comment(_FLEET_CHANGES_BODY)]))
+    assert _coverage_reasons(verdict), verdict.reasons
+    assert "requests changes, which blocks and is never review evidence" in _coverage_reasons(
+        verdict
+    )[0]
+
+
+def test_the_fleet_approve_line_is_an_approval() -> None:
+    """The real "Review verdict: approve" line approves, wherever the marker sits."""
+    verdict = _eval(_agent_pr([_fleet_comment(_FLEET_APPROVE_BODY)]))
+    assert verdict.eligible, verdict.reasons
+    assert not any(r.startswith("review verdict") for r in verdict.reasons), verdict.reasons
+
+
+def test_a_verdict_sentence_is_read_however_it_is_wrapped() -> None:
+    """The words, not the decoration, decide: the same verdict written three ways."""
+    for body in (
+        "<!-- in-session-review -->\n\nReview verdict: changes requested — #5968 @ `abc`\n",
+        "<!-- in-session-review -->\n\n**Verdict: CHANGES**\n",
+        "<!-- in-session-review -->\n\nVerdict: changes_requested\n",
+    ):
+        assert mq._in_session_state(body) == "CHANGES_REQUESTED", body
+    for body in (
+        "<!-- in-session-review -->\n\nReview verdict: approve - digithings #5990 @ `abc`\n",
+        "<!-- in-session-review -->\n\n**Verdict: APPROVE**\n",
+        "<!-- in-session-review -->\n\nVerdict: approved\n",
+    ):
+        assert mq._in_session_state(body) == "APPROVED", body
+
+
+def test_prose_about_a_verdict_is_not_a_verdict() -> None:
+    """A line that talks about a verdict is not one."""
+    body = "<!-- in-session-review -->\n\nThe verdict: changes look fine\n"
+    assert mq._in_session_state(body) == "COMMENTED"
+
+
+def test_two_same_login_verdicts_from_different_seats_keep_the_change_request() -> None:
+    """DIG-4646: every seat posts under one login, so an unnamed verdict cannot be
+    keyed by the login. Two verdicts that name no seat cannot prove they are the
+    same seat, so the change request keeps blocking."""
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[
+            _review("chrizefan", "CHANGES_REQUESTED", "2026-10-20T08:00:00Z"),
+            _review("chrizefan", "APPROVED", "2026-10-20T09:00:00Z"),
+        ],
+    )
+    verdict = _eval(pr)
+    assert not verdict.eligible
+    assert len([r for r in verdict.reasons if r.startswith("review verdict")]) == 1, verdict.reasons
+
+
+def test_two_named_seats_keep_the_change_request() -> None:
+    """The control: two different seats, one change request, still one block."""
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[
+            _review(
+                "chrizefan",
+                "CHANGES_REQUESTED",
+                "2026-10-20T08:00:00Z",
+                f"<!-- dt-seat agent={REVIEWER_SEAT} -->",
+            ),
+            _review(
+                "chrizefan",
+                "APPROVED",
+                "2026-10-20T09:00:00Z",
+                "<!-- dt-seat agent=other-seat-0003 -->",
+            ),
+        ],
+    )
+    verdict = _eval(pr)
+    assert not verdict.eligible
+    assert len([r for r in verdict.reasons if r.startswith("review verdict")]) == 1, verdict.reasons
+
+
+def test_one_named_seat_clears_its_own_change_request() -> None:
+    """The control: the same seat approving clears the change request it made."""
+    stamp = f"<!-- dt-seat agent={REVIEWER_SEAT} -->"
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[
+            _review("chrizefan", "CHANGES_REQUESTED", "2026-10-20T08:00:00Z", stamp),
+            _review("chrizefan", "APPROVED", "2026-10-20T09:00:00Z", stamp),
+        ],
+    )
+    verdict = _eval(pr)
+    assert not any(r.startswith("review verdict") for r in verdict.reasons), verdict.reasons
+
+
+def test_an_approval_that_names_a_seat_clears_an_unnamed_change_request() -> None:
+    """An unnamed change request is cleared by an approval that names a seat: that
+    approval is the one thing on the PR that proves another seat spoke."""
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[
+            _review("chrizefan", "CHANGES_REQUESTED", "2026-10-20T08:00:00Z"),
+            _review(
+                "chrizefan",
+                "APPROVED",
+                "2026-10-20T09:00:00Z",
+                f"<!-- dt-seat agent={REVIEWER_SEAT} -->",
+            ),
+        ],
+    )
+    verdict = _eval(pr)
+    assert not any(r.startswith("review verdict") for r in verdict.reasons), verdict.reasons
+
+
+def test_a_bots_own_later_review_clears_its_change_request() -> None:
+    """A bot is one reviewer, so its own later review clears its change request."""
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[
+            _review("coderabbitai[bot]", "CHANGES_REQUESTED", "2026-10-17T01:00:00Z"),
+            _review("coderabbitai", "COMMENTED", "2026-10-17T02:00:00Z"),
         ],
     )
     assert _eval(pr).eligible
@@ -2385,10 +2623,36 @@ def test_a_change_request_then_the_same_seats_approval_merges_on_the_approval() 
 # --- (b) the author's own seat or session cannot review its PR ------------------
 
 
-def test_an_unstamped_same_login_in_session_review_is_refused() -> None:
-    verdict = _eval(_agent_pr([_seat_in_session("APPROVE", stamp=None)]))
+def test_an_unstamped_same_login_in_session_review_is_refused_when_the_rule_is_on() -> None:
+    verdict = _eval_seat_independence(
+        _agent_pr([_seat_in_session("APPROVE", stamp=None)]), True
+    )
     assert not verdict.eligible
     assert "names no reviewer seat" in _coverage_reasons(verdict)[0]
+
+
+def test_the_same_login_review_counts_as_evidence_while_the_rule_is_off() -> None:
+    """DIG-4646: nothing writes a seat marker yet, so demanding one refused every
+    same-login review in the fleet and left 17 open develop PRs with no review pass
+    at all. The rule is off until the DIG-4632 / DIG-4631 producer lands."""
+    verdict = _eval(_agent_pr([_seat_in_session("APPROVE", stamp=None)]))
+    assert verdict.eligible, verdict.reasons
+
+
+def test_the_seat_independence_rule_is_off_by_default() -> None:
+    policy = mq.load_policy()
+    assert policy.seat_independence is False
+    assert policy.seat_independence_for("digithings-ai/digithings") is False
+    assert policy.seat_independence_for(None) is False
+
+
+def test_a_proven_self_review_is_refused_while_the_rule_is_off() -> None:
+    """The overlap check always runs: a review that names the authoring seat is
+    dropped whether the marker rule is on or off."""
+    stamp = f"<!-- dt-seat agent={AUTHOR_SEAT} run=run-later-9 -->"
+    verdict = _eval(_agent_pr([_seat_in_session("APPROVE", stamp=stamp)]))
+    assert not verdict.eligible
+    assert f"authoring seat ({AUTHOR_SEAT})" in _coverage_reasons(verdict)[0]
 
 
 def test_the_authoring_seat_reviewing_its_own_pr_is_refused() -> None:
@@ -2406,7 +2670,9 @@ def test_a_shared_run_id_is_the_author_even_under_another_seat_name() -> None:
 
 
 def test_a_pr_that_names_no_authoring_seat_cannot_take_same_login_review() -> None:
-    verdict = _eval(_agent_pr([_seat_in_session("APPROVE")], body="No identity here."))
+    verdict = _eval_seat_independence(
+        _agent_pr([_seat_in_session("APPROVE")], body="No identity here."), True
+    )
     assert not verdict.eligible
     assert "PR names no authoring seat or session" in _coverage_reasons(verdict)[0]
 
@@ -2442,8 +2708,9 @@ def test_every_seat_that_committed_counts_as_an_author() -> None:
 def test_a_session_authored_pr_needs_a_reviewer_session_to_compare() -> None:
     body = "Session-Id: sess-author-1\n"
     seat_only = _agent_pr([_seat_in_session("APPROVE")], body=body)
-    assert not _eval(seat_only).eligible
-    assert "names no session" in _coverage_reasons(_eval(seat_only))[0]
+    verdict = _eval_seat_independence(seat_only, True)
+    assert not verdict.eligible
+    assert "names no session" in _coverage_reasons(verdict)[0]
     other_session = _agent_pr(
         [_seat_in_session("APPROVE", stamp="<!-- dt-seat seat=board session=sess-review-2 -->")],
         body=body,
@@ -2453,7 +2720,7 @@ def test_a_session_authored_pr_needs_a_reviewer_session_to_compare() -> None:
 
 def test_a_seat_authored_pr_needs_a_reviewer_seat_not_just_a_session() -> None:
     stamp = "<!-- dt-seat session=sess-review-2 -->"
-    verdict = _eval(_agent_pr([_seat_in_session("APPROVE", stamp=stamp)]))
+    verdict = _eval_seat_independence(_agent_pr([_seat_in_session("APPROVE", stamp=stamp)]), True)
     assert not verdict.eligible
     assert "names no seat" in _coverage_reasons(verdict)[0]
 
@@ -2489,7 +2756,7 @@ def test_the_author_seats_approval_does_not_clear_a_reviewer_seats_change_reques
     verdict = _eval(pr)
     assert not verdict.eligible
     assert any(
-        r.startswith("review verdict: chrizefan's latest review")
+        r.startswith("review verdict: chrizefan requested changes")
         and f"by seat {REVIEWER_SEAT}" in r
         for r in verdict.reasons
     ), verdict.reasons

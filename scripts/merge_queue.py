@@ -122,6 +122,14 @@ class Policy:
     #: repo whose CI does not post it (twelve-x, see the policy note).
     review_applied_context: str = "review-applied"
     review_applied_by_repo: Mapping[str, str] = field(default_factory=dict)
+    #: Whether same-login review evidence must prove it came from a different
+    #: seat. Off by default (DIG-4646): the identity a strict check needs is
+    #: written by nothing yet, so demanding it refused every same-login review
+    #: in the fleet and emptied the queue. The overlap check — a review that
+    #: names the authoring seat itself — always runs, so a proven self-review
+    #: is refused either way.
+    seat_independence: bool = False
+    seat_independence_by_repo: Mapping[str, bool] = field(default_factory=dict)
 
     def authority(self, role: str) -> Authority | None:
         return next((a for a in self.merge_authorities if a.role == role), None)
@@ -158,6 +166,18 @@ class Policy:
         if repo in self.review_applied_by_repo:
             return self.review_applied_by_repo[repo]
         return self.review_applied_context
+
+    def seat_independence_for(self, repo: str | None) -> bool:
+        """Whether this repo's review evidence must prove a different seat.
+
+        Off unless a repo asks for it. A repo's own entry switches it on for
+        that repo when its marker producer lands (DIG-4632 / DIG-4631); until
+        then the strict rule refuses every same-login review, and the queue
+        stops being a queue.
+        """
+        if repo and repo in self.seat_independence_by_repo:
+            return bool(self.seat_independence_by_repo[repo])
+        return self.seat_independence
 
     def for_repo(self, repo: str) -> Policy:
         """A copy whose `required_checks` are this repo's.
@@ -203,6 +223,18 @@ class Verdict:
         return (self.created_at, self.number)
 
 
+def _policy_bool(raw: Any, where: str) -> bool:
+    """A policy flag, read as a boolean or refused.
+
+    A string "false" is truthy, so a typo'd flag would switch a gate the wrong
+    way without anything saying so. The same care as the required-check names
+    (DIG-690): a flag that cannot be read must not be guessed.
+    """
+    if isinstance(raw, bool):
+        return raw
+    raise QueueError(f"{where}: expected a boolean, got {raw!r}")
+
+
 def load_policy(path: Path = POLICY_PATH) -> Policy:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if raw.get("schema") != 1:
@@ -237,6 +269,13 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
         review_applied_by_repo={
             str(repo): str(name)
             for repo, name in (raw.get("review_applied_context_by_repo") or {}).items()
+        },
+        seat_independence=_policy_bool(
+            defaults.get("seat_independence", False), f"{path}: defaults.seat_independence"
+        ),
+        seat_independence_by_repo={
+            str(repo): _policy_bool(value, f"{path}: seat_independence_by_repo[{repo}]")
+            for repo, value in (raw.get("seat_independence_by_repo") or {}).items()
         },
     )
 
@@ -681,22 +720,86 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
     return reasons
 
 
-# --- each reviewer's latest verdict ------------------------------------------
+# --- each reviewer's change request --------------------------------------------
 #
 # A review pass is evidence only if its conclusion is read. Every reviewer's
-# latest verdict is taken in time order across formal reviews (humans and bots
-# alike) and in-session review comments. A latest CHANGES_REQUESTED blocks until
-# the same reviewer posts a later APPROVED or COMMENTED review, or the review is
-# dismissed (GitHub reports a dismissed review with state DISMISSED). An
-# in-session review is read from its `Verdict:` line, and only in a comment that
-# carries the in-session marker, so ordinary prose never becomes a verdict.
+# change request is taken in time order across formal reviews (humans and bots
+# alike) and in-session review comments, and a change request blocks until
+# something clears it. What clears it is not "the same login" — every seat
+# posts under one login — but the seat the verdict names: the same seat's
+# later APPROVED or COMMENTED review clears its own change request, a review
+# that named no seat is cleared by an approval that names one, and a
+# dismissal clears the review it dismisses (GitHub reports a dismissed review
+# with state DISMISSED). Another seat's approval clears nothing: the author's
+# own approval must not clear a reviewer's block (DIG-4646).
+#
+# An in-session review is read from its `Review verdict:` line, and only in a
+# comment that carries the in-session marker, so ordinary prose never becomes
+# a verdict.
 
 IN_SESSION_REVIEW_MARKER = "<!-- in-session-review -->"
+# A verdict line, as the fleet writes it: "Review verdict: changes requested —
+# #5968 @ 36fad1f9". The leading word before "verdict" is part of the shape
+# (DIG-4646): the QA lane says "Review verdict:", not "Verdict:", so a regex
+# that anchors on the bare word read every real verdict as no verdict at all —
+# a real change request was then neither a block nor excluded from the review
+# evidence, and a real approval was not an approval. Up to two leading words
+# are allowed so "review verdict:" still reads; the verdict itself is the words
+# that follow the colon, on that line only.
 _IN_SESSION_VERDICT_RE = re.compile(
-    r"^[\s>#*_]*verdict\s*[:=]\s*[*_`]*\s*(?P<word>[A-Za-z][A-Za-z_ -]*)", re.I | re.M
+    r"^[\s>#*_]*(?:[A-Za-z][A-Za-z0-9_-]*[ \t]+){0,2}verdict\s*[:=][ \t]*(?P<rest>[^\n]*)",
+    re.I | re.M,
 )
-_BLOCKING_WORDS = ("changes", "request_changes", "changes_requested", "changes_needed", "block")
-_APPROVING_WORDS = ("approve", "approved", "lgtm", "pass", "ship")
+# The verdict words, read from the start of what follows the colon. A separator
+# ("-", an en or em dash) starts the review's own summary and ends the verdict:
+# "changes requested — #5968 @ 36fad1f9" is the verdict "changes requested".
+_VERDICT_SEPARATOR_RE = re.compile(r"\s[-–—]\s")
+#: Markdown decoration ends the verdict too: "**Verdict: CHANGES** (narrow)" says
+#: "CHANGES", not "CHANGES (narrow)".
+_VERDICT_DECORATOR_RE = re.compile(r"\*\*|__|[*`(]")
+_VERDICT_WORDS_RE = re.compile(r"[A-Za-z][A-Za-z_'-]*")
+#: The verdict words, read exactly. A phrase is a verdict when it is one of
+#: these, or when its first two words are (a real "changes requested because
+#: ..." still reads). A single word only counts when it is the whole phrase,
+#: so prose that happens to contain "changes" ("the verdict: changes look fine")
+#: is not a verdict.
+_VERDICT_BLOCKING_WORDS = frozenset(
+    {
+        "changes",
+        "change",
+        "block",
+        "blocked",
+        "reject",
+        "rejected",
+        "changes_requested",
+        "change_requested",
+        "changes_needed",
+        "changes_are_requested",
+        "request_changes",
+        "requests_changes",
+        "requested_changes",
+        "request_change",
+        "needs_changes",
+        "needs_change",
+    }
+)
+_VERDICT_APPROVING_WORDS = frozenset(
+    {
+        "approve",
+        "approves",
+        "approved",
+        "approval",
+        "lgtm",
+        "ok",
+        "okay",
+        "pass",
+        "passes",
+        "passed",
+        "ship",
+        "ships",
+        "shipped",
+    }
+)
 _REVIEW_STATES = frozenset({"APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"})
 
 
@@ -707,24 +810,55 @@ def _reviewer_key(login: Any) -> str:
     return key[: -len("[bot]")] if key.endswith("[bot]") else key
 
 
-def _in_session_state(body: str) -> str:
-    """CHANGES_REQUESTED / APPROVED / COMMENTED for an in-session review body."""
-    m = _IN_SESSION_VERDICT_RE.search(body)
-    if not m:
+def _verdict_phrase(rest: str) -> list[str]:
+    """The words of a verdict line, at most three of them.
+
+    "CHANGES**" is one word, "changes requested" is two, and the review's own
+    summary after the separator is not part of the verdict."""
+    head = _VERDICT_SEPARATOR_RE.split(str(rest or ""), maxsplit=1)[0]
+    head = _VERDICT_DECORATOR_RE.split(head, maxsplit=1)[0]
+    head = head.strip(" \t*_`\"'")
+    return _VERDICT_WORDS_RE.findall(head)[:3]
+
+
+def _verdict_state(words: list[str]) -> str:
+    """CHANGES_REQUESTED / APPROVED / COMMENTED for the words of a verdict line."""
+    if not words:
         return "COMMENTED"
-    word = m.group("word").strip().lower().replace("-", "_").replace(" ", "_")
-    if word.startswith(_BLOCKING_WORDS):
-        return "CHANGES_REQUESTED"
-    if word.startswith(_APPROVING_WORDS):
-        return "APPROVED"
+    normalised = [w.lower().replace("-", "_") for w in words]
+    candidates = ["_".join(normalised)]
+    if len(normalised) > 2:
+        candidates.append("_".join(normalised[:2]))
+    for candidate in candidates:
+        if candidate in _VERDICT_BLOCKING_WORDS:
+            return "CHANGES_REQUESTED"
+        if candidate in _VERDICT_APPROVING_WORDS:
+            return "APPROVED"
     return "COMMENTED"
 
 
-def _review_events(pr: dict[str, Any]) -> list[tuple[str, int, str, str, str]]:
-    """(at, seq, reviewer, state, where) for every readable review act, oldest first.
+def _in_session_state(body: str) -> str:
+    """CHANGES_REQUESTED / APPROVED / COMMENTED for an in-session review body.
 
-    `seq` keeps GitHub's own order for rows without a timestamp."""
-    events: list[tuple[str, int, str, str, str]] = []
+    The first *decisive* verdict line wins: a body that opens with a note
+    ("verdict: pending") and later states the verdict is read on the verdict,
+    not on the note. A body with no verdict line is a comment, not a verdict.
+    """
+    for match in _IN_SESSION_VERDICT_RE.finditer(body or ""):
+        state = _verdict_state(_verdict_phrase(match.group("rest")))
+        if state != "COMMENTED":
+            return state
+    return "COMMENTED"
+
+
+def _review_events(pr: dict[str, Any]) -> list[tuple[str, int, str, tuple[str, str], str, str]]:
+    """(at, seq, login, identity, state, where) for every readable review act, oldest first.
+
+    `seq` keeps GitHub's own order for rows without a timestamp. The identity
+    is kept beside the login instead of being folded into it: every board seat
+    posts under one login, so the login alone cannot say which seat spoke
+    (DIG-4646)."""
+    events: list[tuple[str, int, str, tuple[str, str], str, str]] = []
     seq = 0
     for review in pr.get("reviews") or []:
         seq += 1
@@ -742,7 +876,8 @@ def _review_events(pr: dict[str, Any]) -> list[tuple[str, int, str, str, str]]:
             (
                 at,
                 seq,
-                _seat_reviewer_key(login, body),
+                _reviewer_key(login),
+                _verdict_identity(body, review.get("author") or review.get("user")),
                 state,
                 f"review {review.get('id') or seq}{_seat_suffix(body)}",
             )
@@ -760,7 +895,8 @@ def _review_events(pr: dict[str, Any]) -> list[tuple[str, int, str, str, str]]:
             (
                 at,
                 seq,
-                _seat_reviewer_key(login, body),
+                _reviewer_key(login),
+                _verdict_identity(body, comment.get("author") or comment.get("user")),
                 _in_session_state(body),
                 f"in-session review comment {comment.get('id') or seq}{_seat_suffix(body)}",
             )
@@ -769,40 +905,101 @@ def _review_events(pr: dict[str, Any]) -> list[tuple[str, int, str, str, str]]:
     return events
 
 
-def _reviewer_verdict_reasons(pr: dict[str, Any]) -> list[str]:
-    """A refusal per reviewer whose latest verdict is CHANGES_REQUESTED."""
-    latest: dict[str, tuple[str, str, str]] = {}
-    for at, _seq, reviewer, state, where in _review_events(pr):
-        latest[reviewer] = (state, where, at)
-    return [
-        f"review verdict: {reviewer.split(_SEAT_KEY_SEP)[0] or '?'}'s latest review ({where}"
-        f"{' at ' + at if at else ''}) requests changes and no later approval, "
-        "comment-review or dismissal from that reviewer has cleared it"
-        for reviewer, (state, where, at) in sorted(latest.items())
-        if state == "CHANGES_REQUESTED"
-    ]
+def _clears_change_request(
+    state: str, identity: tuple[str, str], request_identity: tuple[str, str]
+) -> bool:
+    """Whether a later review act clears an outstanding change request.
 
-
-def _seat_reviewer_key(login: Any, body: str) -> str:
-    """The reviewer a verdict belongs to: the login, narrowed by the seat it names.
-
-    Every board seat posts as one GitHub login, so the login alone would let any
-    seat's later approval (the author's included) clear another seat's change
-    request. A verdict that names its seat (`_identity`) is keyed by login and
-    seat; one that names none keys by login alone, as before, so an unnamed block
-    is cleared only by an unnamed later verdict from that login.
+    A dismissal clears the review it dismisses, which carries that review's
+    own identity. An approval (or a comment-review) clears a change request
+    the same seat made, and clears a change request that named no seat at all
+    — an approval that names a seat is the only proof on the PR that a
+    different seat spoke. What it never clears is another seat's change
+    request: the author's own approval clearing a reviewer's block is exactly
+    what the login alone cannot explain (DIG-4646), and an unnamed approval
+    under the same login is no proof at all.
     """
-    seats = _identity(body).get("seat")
-    key = _reviewer_key(login)
-    return f"{key}{_SEAT_KEY_SEP}{','.join(sorted(seats))}" if seats else key
+    if state == "DISMISSED":
+        return identity == request_identity
+    if request_identity[0]:
+        # A named seat's change request is cleared by that seat and by nobody else.
+        return identity == request_identity
+    # An unnamed change request cannot be keyed by login, so only a verdict
+    # that names a seat can clear it.
+    return bool(identity[0])
+
+
+def _reviewer_verdict_reasons(pr: dict[str, Any]) -> list[str]:
+    """A refusal per change request that nothing since has cleared."""
+    open_requests: list[list[str]] = []
+    for at, _seq, login, identity, state, where in _review_events(pr):
+        if state == "CHANGES_REQUESTED":
+            # One change request per reviewer and seat: a later one from the
+            # same seat replaces the earlier one, so a reviewer who asks twice
+            # is one block, not two.
+            open_requests = [r for r in open_requests if not (r[0] == login and r[1] == identity)]
+            open_requests.append([login, identity, where, at])
+            continue
+        open_requests = [
+            r
+            for r in open_requests
+            if not (
+                r[0] == login and _clears_change_request(state, identity, r[1])
+            )
+        ]
+    reasons: list[str] = []
+    for login, identity, where, at in open_requests:
+        kind, values = identity
+        at_part = f" at {at}" if at else ""
+        if kind:
+            how = (
+                f"a later approval or comment-review from the same {kind} ({values}), "
+                "or a dismissal of that review"
+            )
+        else:
+            how = (
+                "a later approval or comment-review that names a seat, or a dismissal "
+                "of that review"
+            )
+        reasons.append(
+            f"review verdict: {login or '?'} requested changes ({where}{at_part}) and "
+            f"nothing since has cleared it: it is cleared by {how}"
+        )
+    return reasons
+
+
+def _verdict_identity(body: str, author: Any = None) -> tuple[str, str]:
+    """The seat (else the session) a verdict names; ("", "") when it names neither.
+
+    Every board seat posts under one GitHub login, so the login cannot tell
+    two seats apart. What tells them apart is what a verdict writes about
+    itself: a `<!-- dt-seat ... -->` marker or a `Paperclip-Agent-Id:` /
+    `Session-Id:` trailer. An unnamed verdict names no seat, and an unnamed
+    verdict may not clear another seat's change request (DIG-4646).
+
+    A bot is the one reviewer that needs no marker: it has no seats, so its
+    login is its own identity and a later review by that bot clears the
+    change request the bot made. `check_review_coverage.is_bot_login` is the
+    one rule for "this login is a bot", so the queue and the promotion gate
+    read a bot the same way.
+    """
+    identity = _identity(body)
+    for kind in ("seat", "session"):
+        values = identity.get(kind)
+        if values:
+            return (kind, ",".join(sorted(values)))
+    if isinstance(author, Mapping):
+        login = str((author or {}).get("login") or "")
+    else:
+        login = str(author or "")
+    if login and _coverage_module().is_bot_login(login):
+        return ("bot", _reviewer_key(login))
+    return ("", "")
 
 
 def _seat_suffix(body: str) -> str:
     seats = _identity(body).get("seat")
     return f" by seat {','.join(sorted(seats))}" if seats else ""
-
-
-_SEAT_KEY_SEP = "\x1f"
 
 
 # --- review evidence: never a change request, never the author's own seat ----
@@ -871,14 +1068,18 @@ def _show(identity: dict[str, frozenset[str]]) -> str:
 
 
 def _not_independent(
-    author: dict[str, frozenset[str]], reviewer: dict[str, frozenset[str]]
+    author: dict[str, frozenset[str]],
+    reviewer: dict[str, frozenset[str]],
+    require_markers: bool = True,
 ) -> str | None:
     """Why a same-login review cannot be shown to come from another seat, or None.
 
     The rule lives in `review_pass_filter` (DIG-4631) so the merge queue and
-    the host CI producer apply one version of it.
+    the host CI producer apply one version of it. `require_markers` is the
+    policy switch: with it off, only a review that names the authoring seat
+    itself is refused (DIG-4646).
     """
-    return rpf.independence_reason(author, reviewer)
+    return rpf.independence_reason(author, reviewer, require_markers=require_markers)
 
 
 def _comment_verdict(body: str) -> str | None:
@@ -910,7 +1111,9 @@ def _review_state(review: Mapping[str, Any]) -> str:
     return state
 
 
-def _evidence_comments(pr: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+def _evidence_comments(
+    pr: dict[str, Any], enforce_independence: bool = False
+) -> tuple[list[dict[str, Any]], list[str]]:
     """(comments the coverage gate may score, why each dropped one was dropped).
 
     Dropped: any comment whose verdict is a change request (a), and any in-session
@@ -918,6 +1121,11 @@ def _evidence_comments(pr: dict[str, Any]) -> tuple[list[dict[str, Any]], list[s
     from a different seat (b). Everything else passes through untouched, so the
     CodeRabbit and marker matching in check_review_coverage stays the one source
     of truth for what counts.
+
+    `enforce_independence` is the policy switch (DIG-4646). Off, a same-login
+    review is not dropped for naming no seat: nothing writes a seat marker yet,
+    and demanding one refused every same-login review in the fleet. A review
+    that names the author's own seat is still dropped either way.
     """
     author_login = _reviewer_key((pr.get("author") or {}).get("login"))
     author_id: dict[str, frozenset[str]] | None = None
@@ -936,7 +1144,7 @@ def _evidence_comments(pr: dict[str, Any]) -> tuple[list[dict[str, Any]], list[s
             if not login or login == author_login:
                 if author_id is None:
                     author_id = _author_identity(pr)
-                why = _not_independent(author_id, _identity(body))
+                why = _not_independent(author_id, _identity(body), enforce_independence)
                 if why:
                     dropped.append(f"{where}: {why}")
                     continue
@@ -1291,11 +1499,15 @@ def _label_names(pr: dict[str, Any]) -> set[str]:
     return names
 
 
-def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
-    return _review_coverage(pr, repo)[0]
+def _gate_review_coverage(
+    pr: dict[str, Any], repo: str | None, policy: Policy | None = None
+) -> list[str]:
+    return _review_coverage(pr, repo, policy)[0]
 
 
-def _review_coverage(pr: dict[str, Any], repo: str | None) -> tuple[list[str], str]:
+def _review_coverage(
+    pr: dict[str, Any], repo: str | None, policy: Policy | None = None
+) -> tuple[list[str], str]:
     """The promotion gate's evidence, enforced at merge time.
 
     `scripts/check_review_coverage.py` refuses an unreviewed commit at promotion;
@@ -1357,8 +1569,10 @@ def _review_coverage(pr: dict[str, Any], repo: str | None) -> tuple[list[str], s
         "agent_tool": [],
         "agent_review": None,
     }
+    enforce_independence = policy.seat_independence_for(repo) if policy else False
     evidence, dropped = _evidence_comments(
-        {**pr, "comments": comments if isinstance(comments, list) else []}
+        {**pr, "comments": comments if isinstance(comments, list) else []},
+        enforce_independence=enforce_independence,
     )
     crc._apply_reviews_checks_comments(
         state,
@@ -1431,7 +1645,7 @@ def evaluate(
     if unreadable:
         reasons.append(unreadable)
     reasons.extend(_gate_review(pr))
-    coverage_reasons, review_evidence = _review_coverage(pr, repo)
+    coverage_reasons, review_evidence = _review_coverage(pr, repo, policy)
     reasons.extend(coverage_reasons)
     # The review evidence itself has to be a real review pass (DIG-4631): not a
     # copy of another PR's review, and not a review posted seconds after the

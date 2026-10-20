@@ -29,8 +29,12 @@
     ],
     "required_checks_note": "Fallback for any repo with no entry in required_checks_by_repo. No current repo relies on it: digithings-ai/digithings is named explicitly (DIG-690) and digithings-ai/twelve-x is named explicitly (DIG-4454).",
     "review_applied_context": "review-applied",
-    "review_applied_context_note": "The local-ci status (DIG-3842) the queue requires SUCCESS on the exact head it merges (merge_queue._gate_review_applied). A repo with no entry in review_applied_context_by_repo inherits this, so a new repo gets the gate; only an explicit empty string switches it off."
+    "review_applied_context_note": "The local-ci status (DIG-3842) the queue requires SUCCESS on the exact head it merges (merge_queue._gate_review_applied). A repo with no entry in review_applied_context_by_repo inherits this, so a new repo gets the gate; only an explicit empty string switches it off.",
+    "seat_independence": false,
+    "seat_independence_note": "Whether a review has to name a seat to be counted as review evidence (merge_queue._evidence_comments, review_pass_filter.independence_reason). Off by default: nothing in the house writes a `<!-- dt-seat ... -->` marker or a `Paperclip-Agent-Id:` / `Session-Id:` trailer yet, so demanding one refused every same-login review in the fleet and left 17 open develop PRs with no review pass at all (DIG-4646). A review that names the author's own seat is dropped either way \u2014 the overlap check always runs. Switch this on for a repo once the DIG-4632 / DIG-4631 marker producer lands and real reviews carry an identity."
   },
+  "seat_independence_by_repo": {},
+  "seat_independence_by_repo_note": "Per-repo override of defaults.seat_independence, the same shape as review_applied_context_by_repo: a repo named here wins, any other repo inherits the default. Empty on purpose \u2014 no repo has a producer of seat markers yet, and turning the rule on before the producer lands is what refused the whole develop queue (DIG-4646).",
   "required_checks_by_repo": {
     "digithings-ai/digithings": [
       "local-ci"

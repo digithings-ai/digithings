@@ -84,8 +84,8 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
 | Review | No outstanding `CHANGES_REQUESTED` review and no posted verdict of `changes_requested`. Review *evidence* is the row below: the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. |
-| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. Two exclusions (#5863 follow-up): a **change request is never evidence** — a formal `CHANGES_REQUESTED`, an in-session `Verdict: CHANGES` or a power-pack `verdict=changes_requested` only blocks — and an in-session review under the PR author's own login counts only when it **names a reviewer seat that is not the author's** (see "Who reviewed it" below). |
-| Each reviewer's latest verdict | Every reviewer's latest verdict is read in time order across formal reviews and in-session review comments; a latest change request blocks until that same reviewer (login, narrowed by the seat it names) approves, comment-reviews, or the review is dismissed. |
+| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. Two exclusions (#5863 follow-up): a **change request is never evidence** — a formal `CHANGES_REQUESTED`, an in-session `verdict: changes requested` or a power-pack `verdict=changes_requested` only blocks — and an in-session review under the PR author's own login counts only when the seat rule below accepts it as independent (see "Who reviewed it"). The seat rule is behind the `seat_independence` policy switch, which is **off** today (DIG-4646), so a same-login in-session review is evidence until the DIG-4632 / DIG-4631 marker producers land. |
+| Each reviewer's change request | Every reviewer's verdicts are read in time order across formal reviews and in-session review comments. A change request blocks until it is cleared: by **the same identity** approving or comment-reviewing later (the seat or session it names), or by that review being dismissed. A change request that names **no** seat or session is cleared only by a later approval or comment-review that **names a seat**, or by a dismissal — one seat's unnamed approval never clears another seat's change request. |
 | Review applied on the merged tip | `review-applied` (local-ci, DIG-3842) must be `SUCCESS` on the exact head SHA being merged. The queue reads it from the row's rollup and then from `GET /repos/{repo}/commits/{head}/status`, whose `sha` must equal the head; `merge_one` pins that head with `--match-head-commit`. A green verdict on an earlier commit does not count. Per repo in `review_applied_context_by_repo`: on for `digithings`, off for `twelve-x` (its mirror does not post it). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
 | Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested` still scoped to the branch, blocks. |
@@ -208,15 +208,38 @@ session from a reviewer. The queue reads the identity each seat writes down inst
 - **Reviewer** — the same marker or trailers inside the in-session review comment (or as
   `agent=` / `session=` fields on the power-pack marker).
 
-A same-login review counts only when the author is named, the reviewer is named, no seat,
-session or run they name coincides, and the reviewer names the strongest kind the author
-does (a seat if the author names one, otherwise a session). A run id alone never
-identifies a seat. Anything unnamed is refused, and the refusal says what to add. A review
-from a different login (a human, a reviewer bot) is judged by its login as before.
+A same-login review has to clear two halves, and they are switched separately.
 
-This is a record, not an enforcement mechanism — the same credential can write any
-marker — but it turns "the authoring session attested its own work seconds after opening
-the PR" into a refusal instead of a merge.
+**The overlap check always runs.** If the reviewer names a seat, session or run that the
+author also names, the review is refused: it is the authoring session attesting its own
+work. This half needs no marker producer to work, because it only fires on a positive
+match — a review that names nothing shares nothing.
+
+**The marker rule is behind a policy switch, and the switch is off by default.** When
+`seat_independence` is on for the repo, a same-login review counts only when the author
+is named, the reviewer is named, no seat, session or run they name coincides, and the
+reviewer names the strongest kind the author does (a seat if the author names one,
+otherwise a session). A run id alone never identifies a seat. Anything unnamed is
+refused, and the refusal says what to add. A review from a different login (a human, a
+reviewer bot) is judged by its login as before.
+
+The switch lives in `scripts/merge_queue_policy.json` as `defaults.seat_independence`,
+with `seat_independence_by_repo` overriding it per repo. It is **off** because the rule
+has no producer yet: nothing in the house writes a `dt-seat` marker or a
+`Paperclip-Agent-Id:` / `Session-Id:` trailer, and the QA lane's in-session review
+comments carry the `<!-- in-session-review -->` marker but name no seat. With the rule
+off, a same-login in-session review is evidence — the author can attest its own work —
+and the coverage gate would refuse nearly every agent PR in the fleet (measured on
+`develop`: 17 of 30 open PRs flipped from covered to refused). That is the trade the
+board took for the gap between the rule and its producer. It closes when the DIG-4632 /
+DIG-4631 producers land and the switch is turned on for the repo; until then the gate is
+deliberately weaker than the rule above it, and this document says so rather than
+pretending otherwise.
+
+The identity a seat writes down is a record, not a credential — the same credential can
+write any marker — but the overlap check turns "the authoring session attested its own
+work seconds after opening the PR" into a refusal instead of a merge, and the marker
+rule refuses the unnamed near-misses once its producer exists.
 
 ## Running it
 

@@ -232,3 +232,56 @@ def test_the_corpus_path_can_be_overridden(monkeypatch, tmp_path):
     target = tmp_path / "elsewhere.json"
     monkeypatch.setenv(rpf.CORPUS_PATH_ENV, str(target))
     assert rpf.corpus_path() == str(target)
+
+
+# --------------------------------------------------------------------------
+# The independence arm: strict by default, off the switch for now
+# --------------------------------------------------------------------------
+
+
+def _identity(text):
+    return rpf.identity_from_text(text)
+
+
+def test_a_strict_rule_refuses_a_pr_that_names_no_authoring_seat():
+    reason = rpf.independence_reason({}, _identity("<!-- dt-seat agent=seat-b -->"))
+    assert reason is not None
+    assert "names no authoring seat or session" in reason
+
+
+def test_the_strict_rule_refuses_a_review_that_names_no_seat():
+    reason = rpf.independence_reason(
+        _identity("<!-- dt-seat agent=seat-a -->"), _identity("nothing here")
+    )
+    assert reason is not None
+    assert "names no reviewer seat" in reason
+
+
+def test_the_strict_rule_refuses_a_review_that_shares_the_authoring_seat():
+    reason = rpf.independence_reason(
+        _identity("<!-- dt-seat agent=seat-a -->"), _identity("<!-- dt-seat agent=seat-a -->")
+    )
+    assert reason is not None
+    assert "authoring seat (seat-a)" in reason
+
+
+def test_a_missing_marker_does_not_refuse_when_the_switch_is_off():
+    assert rpf.independence_reason({}, {}, require_markers=False) is None
+    assert (
+        rpf.independence_reason(
+            _identity("<!-- dt-seat agent=seat-a -->"),
+            _identity("nothing here"),
+            require_markers=False,
+        )
+        is None
+    )
+
+
+def test_a_proven_self_review_is_refused_even_when_the_switch_is_off():
+    reason = rpf.independence_reason(
+        _identity("<!-- dt-seat agent=seat-a -->"),
+        _identity("<!-- dt-seat agent=seat-a -->"),
+        require_markers=False,
+    )
+    assert reason is not None
+    assert "authoring seat (seat-a)" in reason
