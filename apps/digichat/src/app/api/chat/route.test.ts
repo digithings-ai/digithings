@@ -1504,7 +1504,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     // The proof binds host|exp|sig only - no tenant, no nonce - so the route
     // has to compare the verified host itself: a valid signature for a
     // different host must buy nothing. And the proof's host is the CANONICAL
-    // bare registry host ("datatap.stream"), while the browser sends the embed
+    // bare registry host (the registered tenant host), while the browser sends the embed
     // origin as a URL, so the comparison is against the canonical form of
     // x-embed-host (embed-tenants.normalizeEmbedHost), not the raw header.
     // Expiry, a wrong secret and a tampered token are already pinned by
@@ -1512,7 +1512,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     describe("trial proof (DIG-3797 leaf 3)", () => {
       const PROOF_SECRET = "trial-proof-secret-0123456789abcdef0123456789abcdef";
       const OTHER_SECRET = "other-secret-0123456789abcdef0123456789abcdef";
-      const PROOF_HOST = "datatap.stream";
+      const PROOF_HOST = new URL(trialReq().headers.get("x-embed-host") ?? "").hostname;
       const OTHER_HOST = "other.example";
 
       it("admits a request carrying a valid proof for this host, and never consults the per-IP quota", async () => {

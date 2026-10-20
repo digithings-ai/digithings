@@ -4,12 +4,12 @@
  * Branch B leaf 2 of 3 (parent DIG-634 plan, CTO B1 approval 2026-10-15).
  * Companion to `POST /api/plan-proof` (#3662), which signs a plan TIER from a
  * user's Supabase claims. This route signs a HOST instead, for a monitor that
- * already knows which embed host it is checking: the DataTap answer-integrity
+ * already knows which embed host it is checking: the tenant's answer-integrity
  * check needs a verifiable trial proof for a named host and has no dashboard
  * session to present.
  *
  * Request:  Header: x-embed-monitor-token: <server-side monitor secret>
- *           Body: { host: "datatap.stream" }
+ *           Body: { host: "tenant.example.com" }
  * Response: 200 { proof: "<base64url-signed-token>" }
  *           401 monitor credential missing, too short, or not allowlisted
  *

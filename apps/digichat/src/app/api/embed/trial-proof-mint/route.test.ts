@@ -12,7 +12,7 @@ function mintRequest(headers: Record<string, string>, body: unknown): Request {
 
 describe("trial proof mint endpoint", () => {
   it("refuses anonymous minting", async () => {
-    const res = await POST(mintRequest({}, { host: "datatap.stream" }));
+    const res = await POST(mintRequest({}, { host: "tenant.example.com" }));
     expect(res.status).toBe(401);
   });
 
@@ -37,7 +37,7 @@ describe("trial proof mint endpoint", () => {
     const res = await POST(
       mintRequest(
         { "x-embed-monitor-token": MONITOR_TOKEN },
-        { host: "datatap.stream" },
+        { host: "tenant.example.com" },
       ),
     );
     expect(res.status).toBe(200);
@@ -47,7 +47,7 @@ describe("trial proof mint endpoint", () => {
     // secret the verifier side uses. A 200 carrying any string at all would
     // pass a status-only check, so pin the round trip instead.
     expect(verifyTrialProof(body.proof as string, SIGNING_SECRET)).toBe(
-      "datatap.stream",
+      "tenant.example.com",
     );
     // ...and must not verify under a different secret (i.e. it is really
     // HMAC-bound, not a bare host echo).
@@ -60,7 +60,7 @@ describe("trial proof mint endpoint", () => {
     const res = await POST(
       mintRequest(
         { "x-embed-monitor-token": MONITOR_TOKEN },
-        { host: "datatap.stream" },
+        { host: "tenant.example.com" },
       ),
     );
     const raw = JSON.stringify(await res.json());
@@ -83,7 +83,7 @@ describe("trial proof mint endpoint", () => {
     const res = await POST(
       mintRequest(
         { "x-embed-monitor-token": FORGED_TOKEN },
-        { host: "datatap.stream" },
+        { host: "tenant.example.com" },
       ),
     );
     expect(res.status).toBe(401);
@@ -94,7 +94,7 @@ describe("trial proof mint endpoint", () => {
     const res = await POST(
       mintRequest(
         { "x-embed-monitor-token": MONITOR_TOKEN },
-        { host: "datatap.stream" },
+        { host: "tenant.example.com" },
       ),
     );
     // Never 200: minting with an empty secret would yield a token whose
