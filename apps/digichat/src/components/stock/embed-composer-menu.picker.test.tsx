@@ -11,6 +11,11 @@ import {
   type EmbedChatPrefsApi,
 } from "@digithings/ui/chat/stock";
 
+/** The selected row's only mark is the user-message chevron on the left. */
+function hasChevron(row: HTMLElement): boolean {
+  return (row.querySelector(".aui-menu-cursor")?.childElementCount ?? 0) > 0;
+}
+
 function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
   return {
     prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "alpha" },
@@ -90,10 +95,17 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const selected = await screen.findByRole("menuitemradio", { name: "alpha" });
     expect(selected).toHaveAttribute("aria-checked", "true");
     expect(selected.textContent).not.toMatch(/\bon\b/i);
-    expect(selected.querySelector("[data-slot='dropdown-menu-radio-item-indicator']")).not.toBeNull();
+    expect(hasChevron(selected)).toBe(true);
 
     const other = screen.getByRole("menuitemradio", { name: "beta" });
-    expect(other.querySelector("[data-slot='dropdown-menu-radio-item-indicator']")).toBeNull();
+    expect(hasChevron(other)).toBe(false);
+
+    // Hover moves the keyboard cursor, never the selection mark: the reported
+    // regression was the chevron hopping to the hovered row and looking broken.
+    await user.hover(other);
+    expect(hasChevron(selected)).toBe(true);
+    expect(hasChevron(other)).toBe(false);
+
     await user.click(other);
     expect(api.setModel).toHaveBeenCalledWith("beta");
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -120,7 +132,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("closes language pick on click and marks the current code with the radio disc", async () => {
+  it("closes language pick on click and marks the current code with the chevron", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "en", model: "alpha" } });
     const onClose = vi.fn();
@@ -133,7 +145,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const english = await screen.findByRole("menuitemradio", { name: /en\s+English/i });
     expect(english).toHaveAttribute("aria-checked", "true");
     expect(english.textContent).not.toMatch(/\bon\b/i);
-    expect(english.querySelector("[data-slot='dropdown-menu-radio-item-indicator']")).not.toBeNull();
+    expect(hasChevron(english)).toBe(true);
 
     const dutch = screen.getByRole("menuitemradio", { name: /nl\s+Dutch/i });
     await user.click(dutch);
@@ -141,7 +153,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("closes search-engine pick on click and marks the current engine with the radio disc", async () => {
+  it("closes search-engine pick on click and marks the current engine with the chevron", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, searchEngine: "auto" } });
     const onClose = vi.fn();
