@@ -31,6 +31,8 @@ import type { ThinkingMode, ViewMode } from "./skin-types";
 /** Narrow structural config: only the fields the prefs hook reads. */
 export type StockChatPrefsConfig = {
   catalog: CatalogToolRow[];
+  /** The tenant's backend discriminator ("digigraph" | "foundry" | ...). */
+  backendType?: string;
   servers: CatalogToolRow[];
   defaultLanguage?: string;
   defaultModel?: string;
@@ -199,6 +201,7 @@ export function useStockChatPrefs({
       tenantAllowsWeb,
       showByok,
       showModels,
+      backendType: config.backendType,
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions,

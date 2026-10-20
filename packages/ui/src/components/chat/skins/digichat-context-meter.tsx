@@ -23,8 +23,18 @@ const CONTEXT_WINDOWS: Record<string, number> = {
   "google/gemma-4-31b-it": 262_144,
   "xiaomi/mimo-v2.6-flash": 1_050_000,
   "z-ai/glm-4.7-flash": 200_000,
+  // The OpenAI models an Azure AI Foundry agent is usually deployed on. The
+  // window is the published one; a deployment whose id is not listed here
+  // gets no bar at all (see the unknown-window rule below).
+  "gpt-4o": 128_000,
+  "gpt-4o-mini": 128_000,
+  "gpt-4.1": 1_047_576,
+  "gpt-4.1-mini": 1_047_576,
+  "gpt-4.1-nano": 1_047_576,
+  "o3": 200_000,
+  "o3-mini": 200_000,
+  "o4-mini": 200_000,
 };
-const DEFAULT_WINDOW = 1_048_576;
 /** Rough tokens per tool schema (name, description, JSON schema). */
 const TOKENS_PER_TOOL = 220;
 
@@ -77,6 +87,25 @@ export function DigichatContextMeter({
     }
     return undefined;
   });
+  // The model the backend says it served the turn with. A tenant whose
+  // session model is empty (a Foundry agent) is named here instead.
+  const reportedModel = useAuiState((s) => {
+    const messages = s.thread.messages;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const custom = (
+        messages[index]?.metadata as {
+          custom?: { usage?: { inputTokens?: unknown }; model?: unknown };
+        }
+      )?.custom;
+      if (
+        typeof custom?.usage?.inputTokens === "number" &&
+        typeof custom.model === "string"
+      ) {
+        return custom.model;
+      }
+    }
+    return undefined;
+  });
   const userChars = useAuiState((s) => {
     let total = 0;
     for (const message of s.thread.messages) {
@@ -87,7 +116,14 @@ export function DigichatContextMeter({
     return total;
   });
 
-  const window = CONTEXT_WINDOWS[model] ?? DEFAULT_WINDOW;
+  // The window must be known: a bar drawn against a guessed window is a lie
+  // about how full the context is, so an unknown model gets no bar at all.
+  const window =
+    CONTEXT_WINDOWS[model] ??
+    (reportedModel ? CONTEXT_WINDOWS[reportedModel] : undefined);
+  // No bar without a known window: the fill is a fraction of it.
+  if (window === undefined) return null;
+
   // No fabricated fill: until a turn reports usage the grid stays empty.
   const input = reportedInput ?? 0;
   const ratio = Math.min(1, input / window);

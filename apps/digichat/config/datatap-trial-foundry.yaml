@@ -11,8 +11,20 @@ deployment:
     theme: dark
     skin: digichat
     title: ask datatap
-    welcome: Ask about your pipelines.
-    placeholder: Ask a question
+    # Client-facing copy for the trial: this tenant is a DataTap trial, and
+    # the agent reaches the enterprise database through the DataTap MCP.
+    welcome:
+      title: Ask about your DataTap trial.
+      body:
+        - This is a DataTap trial. The agent reaches your enterprise database
+          through the DataTap MCP, so it can answer with your own data.
+    suggestions:
+      - Which tables hold our customer data?
+      - What feeds the revenue mart?
+      - Who owns the orders table, and how fresh is it?
+      - Which pipelines failed in the last 24 hours?
+      - How do I add a new column to the marketing model?
+    placeholder: Ask about your data, your pipelines or the platform
   persistence: none
   auth: anonymous
   features:

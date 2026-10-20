@@ -46,29 +46,37 @@ export function DigichatComposerToolbar({
 
   return (
     <div data-slot="aui_composer-toolbar-inner" className="aui-composer-toolbar-inner">
+      {/* No model row without a picker: a tenant that publishes no model
+          list (a Foundry agent) has no model to name. */}
       {prefs.showModels ? (
+        <>
+          <button
+            type="button"
+            className="aui-composer-meta aui-composer-meta-action"
+            onClick={prefs.openModels}
+            aria-label="Open models"
+          >
+            {modelLabel}
+          </button>
+          <span className="aui-composer-meta-sep" aria-hidden>
+            /
+          </span>
+        </>
+      ) : null}
+      {/* The provider is a label when the tenant cannot switch it: the
+          backend is fixed, so there is no menu to open. */}
+      {prefs.showByok ? (
         <button
           type="button"
           className="aui-composer-meta aui-composer-meta-action"
-          onClick={prefs.openModels}
-          aria-label="Open models"
+          onClick={() => prefs.openByok()}
+          aria-label="Open provider menu"
         >
-          {modelLabel}
+          {providerLabel}
         </button>
       ) : (
-        <span className="aui-composer-meta">{modelLabel}</span>
+        <span className="aui-composer-meta">{providerLabel}</span>
       )}
-      <span className="aui-composer-meta-sep" aria-hidden>
-        /
-      </span>
-      <button
-        type="button"
-        className="aui-composer-meta aui-composer-meta-action"
-        onClick={() => prefs.openByok()}
-        aria-label="Open provider menu"
-      >
-        {providerLabel}
-      </button>
       {mcpCounts.servers > 0 ? (
         <>
           <span className="aui-composer-meta-sep" aria-hidden>

@@ -1141,6 +1141,9 @@ function EmbedChat({
       tenantAllowsWeb,
       showByok,
       showModels,
+      // The composer footer names the backend from this: a Foundry tenant is
+      // served by its own agent, not by the house model provider.
+      backendType: stockClient.backendType,
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
