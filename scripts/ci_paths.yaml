@@ -106,6 +106,10 @@ digichat:
   # feed renders on its chat primitives. Without them an edit to
   # ChatMarkdownSource or ChatMermaidBlock changed the embed transcript and
   # fired no digichat lint, test or build.
+  # @digithings/catalog supplies digichat's BYOK provider table and its
+  # page-context sanitizer (apps/digichat/src/lib/byok-providers.ts and
+  # page-context-sanitize.ts), so an edit there changes what digichat ships.
+  - packages/catalog/**
   - packages/digichat-ui/**
   - packages/ui/**
   - packages/design/**
@@ -121,6 +125,9 @@ dashboard:
   # check while measurably changing what the dashboard ships — the `.chat-md h5` selector
   # added in #1948 lands in the dashboard's built stylesheet. Not digichat-ui: the
   # dashboard does not consume it.
+  # apps/dashboard/lib/digichat-popup.ts imports @digithings/catalog's
+  # page-context sanitizer, so a change there changes the dashboard's output.
+  - packages/catalog/**
   - packages/ui/**
   - packages/design/**
   - package.json
@@ -146,6 +153,9 @@ web:
   - infra/docker/Dockerfile.digiquant-runner
   # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
   # session.css + cursor.css, so a change there is a change to this app.
+  # apps/digithings-web/lib/openapiCatalog.ts imports @digithings/catalog's
+  # openapi and byok-providers exports, so the catalog is a build input here too.
+  - packages/catalog/**
   - packages/digichat-ui/**
   - packages/ui/**
   - packages/design/**

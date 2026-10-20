@@ -117,6 +117,7 @@ jobs:
               - '.github/workflows/test-digifetch.yml'
             digichat:
               - 'apps/digichat/**'
+              - 'packages/catalog/**'
               - 'packages/digichat-ui/**'
               - 'packages/ui/**'
               - 'packages/design/**'
@@ -125,6 +126,7 @@ jobs:
               - '.github/workflows/test-digichat.yml'
             dashboard:
               - 'apps/dashboard/**'
+              - 'packages/catalog/**'
               - 'packages/ui/**'
               - 'packages/design/**'
               - 'package.json'
@@ -138,6 +140,7 @@ jobs:
               - 'apps/digithings-cron/**'
               - 'apps/digiquant-runner/**'
               - 'infra/docker/Dockerfile.digiquant-runner'
+              - 'packages/catalog/**'
               - 'packages/digichat-ui/**'
               - 'packages/ui/**'
               - 'packages/design/**'
