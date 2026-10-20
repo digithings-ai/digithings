@@ -979,16 +979,20 @@ def stale_candidates(verdicts: list[Verdict], limit: int) -> list[Verdict]:
 
     The list is FIFO — the same order the queue merges in — because an update
     spends a full CI run, and the oldest PR is the one that has been waiting
-    longest for it. ``limit`` is the number of branches one tick may refresh:
-    each one costs a CI run, and refreshing more than the checks can absorb
-    turns the queue into a treadmill of runs that all finish at once.
+    longest for it. The order is taken from the verdicts themselves rather than
+    from the order they arrive in, so a caller that hands the list over in any
+    other order still refreshes the oldest first. ``limit`` is the number of
+    branches one tick may refresh: each one costs a CI run, and refreshing more
+    than the checks can absorb turns the queue into a treadmill of runs that all
+    finish at once.
 
     A limit of zero or less returns nothing, so a caller that does not want to
     update anything does not have to special-case it.
     """
     if limit <= 0:
         return []
-    return [v for v in verdicts if v.stale_base_only][:limit]
+    stale = sorted((v for v in verdicts if v.stale_base_only), key=Verdict.order_key)
+    return stale[:limit]
 
 
 def update_branch(repo: str, verdict: Verdict) -> bool:
@@ -1081,8 +1085,8 @@ def print_queue(verdicts: list[Verdict], *, queued_only: bool) -> None:
     if stale and not queued_only:
         print(
             f"\nstale ({len(stale)}) — green against a base we have left, and counted "
-            "below as not eligible; nobody has to fix these, a run tick updates one "
-            "branch, oldest first:"
+            "below as not eligible; nobody has to fix these, a run tick updates "
+            "branches, oldest first, up to --max-updates of them:"
         )
         for v in stale:
             print(f"  #{v.number} {v.head_ref} — {v.title}")

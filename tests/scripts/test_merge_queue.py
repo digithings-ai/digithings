@@ -2081,13 +2081,19 @@ def test_an_unreadable_comments_fetch_is_refused(gh_stub: Any) -> None:
     ), verdict.reasons
 
 
-def _verdict(number: int, *, stale: bool, eligible: bool = False) -> Any:
+def _verdict(
+    number: int,
+    *,
+    stale: bool,
+    eligible: bool = False,
+    created_at: str = "2026-10-01T00:00:00Z",
+) -> Any:
     """A verdict with only the fields the stale selection reads."""
     return mq.Verdict(
         number=number,
         title=f"PR {number}",
         head_ref=f"task/{number}-slug",
-        created_at="2026-10-01T00:00:00Z",
+        created_at=created_at,
         head_sha="a" * 40,
         eligible=eligible,
         stale_base_only=stale,
@@ -2105,6 +2111,9 @@ def test_only_a_branch_stale_because_the_base_moved_is_offered_for_an_update() -
         _verdict(2, stale=True),
         _verdict(3, stale=False),
         _verdict(4, stale=True),
+        # A PR that is eligible is not stale: refreshing it would spend a CI run
+        # on a branch the queue can merge as it stands.
+        _verdict(5, stale=False, eligible=True),
     ]
     offered = mq.stale_candidates(verdicts, 10)
     assert [v.number for v in offered] == [2, 4]
@@ -2119,10 +2128,15 @@ def test_the_number_of_branches_offered_for_an_update_is_bounded() -> None:
 
 
 def test_the_branches_offered_for_an_update_are_the_oldest_first() -> None:
-    """The oldest PR has been waiting longest for the CI run an update spends."""
+    """The oldest PR has been waiting longest for the CI run an update spends.
+
+    The order comes from when the PR was created, not from the order the caller
+    happened to hand the list over in: a caller that sorted the list any other
+    way would otherwise refresh a different set than the queue merges first.
+    """
     verdicts = [
-        _verdict(7, stale=True),
-        _verdict(3, stale=True),
-        _verdict(5, stale=True),
+        _verdict(7, stale=True, created_at="2026-10-05T00:00:00Z"),
+        _verdict(3, stale=True, created_at="2026-10-01T00:00:00Z"),
+        _verdict(5, stale=True, created_at="2026-10-03T00:00:00Z"),
     ]
-    assert [v.number for v in mq.stale_candidates(verdicts, 2)] == [7, 3]
+    assert [v.number for v in mq.stale_candidates(verdicts, 2)] == [3, 5]
