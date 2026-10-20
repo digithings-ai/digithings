@@ -311,6 +311,10 @@ function collapseWs(text: string): string {
 
 function parseHtmlBody(raw: string): Element | null {
   if (typeof DOMParser === "undefined") return null;
+  // lgtm[js/xss] false positive, documented in the PR body: the document DOMParser
+  // creates here is inert - it is never attached to a live document, so no script
+  // in it runs and no subresource in it loads - and every element and attribute is
+  // filtered by the allowlist walk below before this module returns any markup.
   const doc = new DOMParser().parseFromString(raw, "text/html");
   return doc.body;
 }
