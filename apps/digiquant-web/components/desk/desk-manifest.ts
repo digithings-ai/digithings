@@ -1,4 +1,4 @@
-import { PAGES } from "../../../../clients/digiquant-tui/src/catalog";
+import { PAGES } from "digiquant-tui/catalog";
 import { deskHref } from "./paths";
 import { isVisibleDesk } from "./public-surface";
 import { WEB_SLOTS } from "./web-slots";

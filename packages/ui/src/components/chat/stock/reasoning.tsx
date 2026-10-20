@@ -10,13 +10,14 @@ import {
   useState,
 } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import { DotMatrix } from "../DotMatrix";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
+import { OverlayScrollbar } from "../overlay-scrollbar";
 
 export const ANIMATION_DURATION = 200;
 
@@ -176,34 +177,30 @@ function ReasoningTrigger({
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
       className={cn(
-        "aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground flex max-w-[75%] origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground flex max-w-[75%] origin-left items-center gap-2 py-1.5 text-xs transition-[color,scale] active:scale-[0.98]",
         className,
       )}
       {...props}
     >
-      <BrainIcon
-        data-slot="reasoning-trigger-icon"
+      <DotMatrix
+        state={active ? "thinking" : "thought"}
+        label="Reasoning"
         className="aui-reasoning-trigger-icon size-4 shrink-0"
       />
       <span
         data-slot="reasoning-trigger-label"
         className={cn(
           "aui-reasoning-trigger-label-wrapper inline-block leading-none tabular-nums",
-          active && "shimmer motion-reduce:animate-none",
         )}
       >
         Reasoning{durationText}
       </span>
-      <ChevronDownIcon
+      <span
         data-slot="reasoning-trigger-chevron"
-        className={cn(
-          "aui-reasoning-trigger-chevron mt-0.5 size-4 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          "-rotate-90",
-          "group-data-open/trigger:rotate-0",
-          "group-data-panel-open/trigger:rotate-0",
-        )}
-      />
+        className="aui-reasoning-trigger-chevron mt-0.5 inline-flex shrink-0"
+      >
+        <DotMatrix state="expand" label="Toggle reasoning" className="size-4" />
+      </span>
     </CollapsibleTrigger>
   );
 }
@@ -291,6 +288,7 @@ function ReasoningText({
   }, [isPreview]);
 
   return (
+    <div className="relative">
     <div
       ref={scrollRef}
       data-slot="reasoning-text"
@@ -315,6 +313,8 @@ function ReasoningText({
       <div ref={contentRef} className="aui-reasoning-text-content space-y-4">
         {children}
       </div>
+    </div>
+    <OverlayScrollbar targetRef={scrollRef} width={4} className="aui-reasoning-scroll" />
     </div>
   );
 }

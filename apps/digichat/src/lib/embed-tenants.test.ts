@@ -82,6 +82,8 @@ describe("parseEmbedTenants", () => {
                 default: true,
                 token: "edge-test-token",
                 authHeader: "x-digi-mcp-key",
+                allowedTools: ["search_tickets", "get_ticket"],
+                mutatingTools: [],
               },
               {
                 id: "digivault",
@@ -106,6 +108,8 @@ describe("parseEmbedTenants", () => {
           default: true,
           token: "edge-test-token",
           authHeader: "x-digi-mcp-key",
+          allowedTools: ["search_tickets", "get_ticket"],
+          mutatingTools: [],
         },
         {
           id: "digivault",
@@ -600,8 +604,8 @@ describe("parseEmbedTenants", () => {
           ...keys,
         },
       });
-    const reg = parseEmbedTenants(entry({ view: "detailed", thinking: "open" }));
-    expect(reg.get("example.com")?.view).toBe("detailed");
+    const reg = parseEmbedTenants(entry({ view: "verbose", thinking: "open" }));
+    expect(reg.get("example.com")?.view).toBe("verbose");
     expect(reg.get("example.com")?.thinking).toBe("open");
     expect(() => parseEmbedTenants(entry({ view: "expanded" }))).toThrow(/view/);
     expect(() => parseEmbedTenants(entry({ thinking: "yes" }))).toThrow(/thinking/);

@@ -91,6 +91,7 @@ import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/st
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
 import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
+import { signTrialProof } from "@/lib/trial-proof";
 import { streamText, createUIMessageStreamResponse } from "ai";
 import { parseDigichatConfig } from "@/lib/deploy-config";
 import {
@@ -1492,6 +1493,85 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         const gated = await POST(trialReq({ "x-embed-monitor-token": MONITOR_SECRET }));
         expect(gated.status).toBe(402);
         expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+    });
+
+    // DIG-3797 leaf 3: the trial_form gate must honour a server-signed trial
+    // proof (apps/digichat/src/lib/trial-proof.ts), minted by the embed mint
+    // endpoint (apps/digichat/src/app/api/embed/trial-proof-mint/route.ts) with
+    // the shared DIGICHAT_TRIAL_PROOF_SECRET.
+    //
+    // The proof binds host|exp|sig only - no tenant, no nonce - so the route
+    // has to compare the verified host itself: a valid signature for a
+    // different host must buy nothing. And the proof's host is the CANONICAL
+    // bare registry host (the registered tenant host), while the browser sends the embed
+    // origin as a URL, so the comparison is against the canonical form of
+    // x-embed-host (embed-tenants.normalizeEmbedHost), not the raw header.
+    // Expiry, a wrong secret and a tampered token are already pinned by
+    // lib/trial-proof.test.ts; what is left for the route is the gate itself.
+    describe("trial proof (DIG-3797 leaf 3)", () => {
+      const PROOF_SECRET = "trial-proof-secret-0123456789abcdef0123456789abcdef";
+      const OTHER_SECRET = "other-secret-0123456789abcdef0123456789abcdef";
+      const PROOF_HOST = new URL(trialReq().headers.get("x-embed-host") ?? "").hostname;
+      const OTHER_HOST = "other.example";
+
+      it("admits a request carrying a valid proof for this host, and never consults the per-IP quota", async () => {
+        process.env.DIGICHAT_TRIAL_PROOF_SECRET = PROOF_SECRET;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq())).status).toBe(200);
+        }
+        // Spy only after the free turns are burnt: a plain turn does consult and
+        // record the per-IP quota, a proof-carrying turn must not.
+        const quotaModule = await import("@/lib/embed-turn-quota");
+        const overSpy = vi.spyOn(quotaModule, "isOverEmbedTrialLimit");
+        const recordSpy = vi.spyOn(quotaModule, "recordEmbedTrialTurn");
+        try {
+          const admitted = await POST(
+            trialReq({ "x-embed-trial-proof": signTrialProof(PROOF_HOST, PROOF_SECRET) }),
+          );
+          expect(admitted.status).toBe(200);
+          expect(overSpy).not.toHaveBeenCalled();
+          expect(recordSpy).not.toHaveBeenCalled();
+          expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT + 1);
+        } finally {
+          overSpy.mockRestore();
+          recordSpy.mockRestore();
+        }
+      });
+
+      it("still gates a request whose proof is valid for a different host", async () => {
+        process.env.DIGICHAT_TRIAL_PROOF_SECRET = PROOF_SECRET;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq())).status).toBe(200);
+        }
+        const gated = await POST(
+          trialReq({ "x-embed-trial-proof": signTrialProof(OTHER_HOST, PROOF_SECRET) }),
+        );
+        expect(gated.status).toBe(402);
+        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+
+      it("still gates a request whose proof was signed with another secret", async () => {
+        process.env.DIGICHAT_TRIAL_PROOF_SECRET = PROOF_SECRET;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq())).status).toBe(200);
+        }
+        const gated = await POST(
+          trialReq({ "x-embed-trial-proof": signTrialProof(PROOF_HOST, OTHER_SECRET) }),
+        );
+        expect(gated.status).toBe(402);
+        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+
+      it("treats a bare proof header exactly like no header at all", async () => {
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq())).status).toBe(200);
+        }
+        const withoutHeader = await POST(trialReq());
+        const withHeader = await POST(trialReq({ "x-embed-trial-proof": "not-a-proof" }));
+        expect(withHeader.status).toBe(402);
+        expect(withHeader.status).toBe(withoutHeader.status);
+        expect(await withHeader.json()).toEqual(await withoutHeader.json());
       });
     });
 

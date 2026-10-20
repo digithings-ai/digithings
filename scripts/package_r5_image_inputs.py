@@ -66,14 +66,23 @@ NPM_PACKAGES = (
     "@digithings/ui",
     "@digithings/digichat-ui",
     "@digithings/hero-banner",
+    # apps/digichat imports the BYOK provider catalog and the page-context
+    # sanitizer from here (2026-10-20): without it in the image the digichat
+    # build failed with "Module not found: @digithings/catalog/...".
+    "@digithings/catalog",
 )
 NPM_MANIFESTS = {
     "design": REPO / "packages" / "design" / "package.json",
     "ui": REPO / "packages" / "ui" / "package.json",
     "digichat-ui": REPO / "packages" / "digichat-ui" / "package.json",
     "hero-banner": REPO / "packages" / "hero-banner" / "package.json",
+    "catalog": REPO / "packages" / "catalog" / "package.json",
     "dashboard": REPO / "apps" / "dashboard" / "package.json",
 }
+#: The scope name recorded on a provenance that covers only the npm inputs.
+#: It is what lets a reader — and ``check_only`` — tell a tree packaged for one
+#: image apart from a tree that is missing a changed source.
+NPM_SCOPE = "npm-only"
 RUNNER_FILES = (
     "scripts/refresh_market_data_r2.py",
     "scripts/backfill_market_data_r2.py",
@@ -259,17 +268,28 @@ def _combined(packages: dict[str, str]) -> str:
     return hashlib.sha256(pairs.encode("utf-8")).hexdigest()
 
 
-def provenance_document(paths: dict[str, Path] | None = None) -> dict[str, object]:
-    """The provenance record written next to the packaged artifacts."""
+def provenance_document(
+    paths: dict[str, Path] | None = None, scope: str | None = None
+) -> dict[str, object]:
+    """The provenance record written next to the packaged artifacts.
+
+    ``scope`` names the subset the record covers when it does not cover
+    everything: ``"npm-only"`` for the digichat image's inputs. It is absent on
+    a full record, so a reader can tell "this tree is partial" from "this tree
+    is the whole thing" without comparing key sets.
+    """
     selected = input_paths() if paths is None else paths
     packages = {name: content_digest(path) for name, path in sorted(selected.items())}
-    return {
+    document: dict[str, object] = {
         "version": PROVENANCE_VERSION,
         "packages": packages,
         "combined": _combined(packages),
         "head": _git_head(),
         "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
+    if scope is not None:
+        document["scope"] = scope
+    return document
 
 
 def _provenance_path() -> Path:
@@ -281,8 +301,10 @@ def _provenance_path() -> Path:
     return OUT / PROVENANCE_NAME
 
 
-def _write_provenance() -> None:
-    document = provenance_document()
+def _write_provenance(
+    paths: dict[str, Path] | None = None, scope: str | None = None
+) -> None:
+    document = provenance_document(paths, scope)
     _provenance_path().write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
 
@@ -319,6 +341,16 @@ def check_only(paths: dict[str, Path] | None = None, provenance: Path | None = N
     if not (added or removed or changed):
         print(f"ok: image-packages provenance matches {len(current)} packaged input(s)")
         return 0
+    if document.get("scope") == NPM_SCOPE and added:
+        # A tree packaged for one image is not a tree for another. The reason
+        # this refuses is INCOMPLETENESS, not staleness, and a reader who is
+        # told "stale" looks for a changed source instead of a missing wheel.
+        print("ABORT: image-packages/ carries only the digichat image's npm inputs —")
+        print("       it does not cover every packaged input, so a deploy built on it")
+        print("       would ship an image without its wheels.")
+        print(f"  missing: {', '.join(added)}")
+        print(f"  rebuild: {REMEDIATION}")
+        return 1
     print("ABORT: image-packages/ is stale — it would install software that is not")
     print("       the working tree, so the image would ship a stale package.")
     for label, names in (("added", added), ("removed", removed), ("changed", changed)):
@@ -504,12 +536,56 @@ def _write_npm() -> None:
         shutil.copy2(src, dest / "package.json")
 
 
+def npm_input_paths() -> dict[str, Path]:
+    """The npm subset of :func:`input_paths` — the inputs the digichat image installs.
+
+    The scope is what the image's npm step consumes: every workspace manifest
+    the digichat Dockerfile COPYs out of ``image-packages/digichat/`` — the
+    four packed workspaces plus ``apps/dashboard``, which the root lockfile
+    installs from that copied manifest — together with the sources of the
+    tarballs it unpacks.
+
+    It is derived from ``NPM_MANIFESTS``, the one place that layout is
+    stated, and not from ``NPM_PACKAGES``, which lists the packed workspaces
+    only. A scope narrower than the tree's writes leaves a copied manifest
+    unfingerprinted, and the npm-scoped freshness check then reports a stale
+    tree as fresh.
+    """
+    manifest_sources = {manifest.parent for manifest in NPM_MANIFESTS.values()}
+    return {name: path for name, path in input_paths().items() if path in manifest_sources}
+
+
+def npm_only() -> int:
+    """Package only the npm inputs, for the digichat image.
+
+    The digichat image installs npm tarballs and workspace manifests. It
+    installs no wheel, so packaging the wheels would make the publish lane
+    depend on tools (uv) and on a network the image does not need, and it would
+    make a release depend on unrelated Python packages building.
+
+    The provenance written here covers ONLY these inputs and says so, so a full
+    ``--check-only`` still refuses this tree for a worker deploy: a partial tree
+    must never read as a complete one.
+    """
+    _write_npm()
+    _write_provenance(npm_input_paths(), scope=NPM_SCOPE)
+    print(f"wrote {OUT / 'digichat'} (npm inputs only)")
+    print("  the stack and runner inputs are NOT in this tree; a worker deploy")
+    print("  needs the full generator:")
+    print(f"    {REMEDIATION}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if args == ["--check-only"]:
         return check_only()
+    if args == ["--npm-only"]:
+        return npm_only()
     if args:
-        raise SystemExit(f"unknown argument(s): {' '.join(args)} (want --check-only)")
+        raise SystemExit(
+            f"unknown argument(s): {' '.join(args)} (want --check-only or --npm-only)"
+        )
 
     if OUT.exists():
         shutil.rmtree(OUT)

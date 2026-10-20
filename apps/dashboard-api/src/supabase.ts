@@ -31,6 +31,8 @@ import type { NavRowInput } from './ssot';
 import type { CommittedBookSnapshot, EnvelopeSource } from './envelope';
 import type { LedgerWeightEvent } from './ledger-weights';
 
+import { isNewFormatKey } from './fx-hub/http';
+
 export const HOUSE_WORKSPACE_ID = '6b753576-ced9-5319-9bfa-c5d0aacd9319' as const;
 
 const POSITIONS_PAGE = 5000;
@@ -72,12 +74,13 @@ function restBase(env: SupabaseEnv): string {
 
 /** PostgREST GET with the service-role key. Non-OK throws `UpstreamError`. */
 export async function supaGet(env: SupabaseEnv, path: string): Promise<unknown> {
-  const res = await fetch(`${restBase(env)}/${path}`, {
-    headers: {
-      apikey: env.SUPABASE_SERVICE_ROLE_KEY!,
-      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY!}`,
-    },
-  });
+  const key = env.SUPABASE_SERVICE_ROLE_KEY!;
+  // A new-format key is not a JWT: it belongs on the `apikey` header only, so
+  // it is not sent as `Authorization: Bearer`. A legacy key (the core project)
+  // keeps its `Authorization` header.
+  const headers: Record<string, string> = { apikey: key };
+  if (!isNewFormatKey(key)) headers.Authorization = `Bearer ${key}`;
+  const res = await fetch(`${restBase(env)}/${path}`, { headers });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new UpstreamError(`supabase ${res.status} for ${path.split('?')[0]}`, res.status, body);

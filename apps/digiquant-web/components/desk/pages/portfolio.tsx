@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRefreshGeneration } from "../app-settings-store";
-import { BLOCKS, layoutFor, type BlockKind } from "../../../../../clients/digiquant-tui/src/catalog";
-import { EMPTY_READ, STUB_READ, isStubEnvelope, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
-import { attributionBody } from "../../../../../clients/digiquant-tui/src/pages/attribution-format";
-import { holdingsBody } from "../../../../../clients/digiquant-tui/src/pages/holdings-format";
-import { ledgerBody } from "../../../../../clients/digiquant-tui/src/pages/ledger-format";
-import { portfolioBody } from "../../../../../clients/digiquant-tui/src/pages/portfolio-format";
-import { tearsheetBody } from "../../../../../clients/digiquant-tui/src/pages/tearsheet-format";
-import { thesesBody } from "../../../../../clients/digiquant-tui/src/pages/theses-format";
-import { shapeLines, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
+import { BLOCKS, layoutFor, type BlockKind } from "digiquant-tui/catalog";
+import { EMPTY_READ, STUB_READ, isStubEnvelope, type ReadResult } from "digiquant-tui/read";
+import { attributionBody } from "digiquant-tui/pages/attribution-format";
+import { holdingsBody } from "digiquant-tui/pages/holdings-format";
+import { ledgerBody } from "digiquant-tui/pages/ledger-format";
+import { portfolioBody } from "digiquant-tui/pages/portfolio-format";
+import { tearsheetBody } from "digiquant-tui/pages/tearsheet-format";
+import { thesesBody } from "digiquant-tui/pages/theses-format";
+import { shapeLines, type PaneBody } from "digiquant-tui/pages/shape";
 import { readDeskBlock, readOfficial, type OfficialRead } from "../read-block";
 import { DESK_TILE, DeskPane, PANE_MOSAIC, useDeskMosaic } from "./pane";
 

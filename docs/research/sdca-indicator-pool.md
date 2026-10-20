@@ -75,7 +75,7 @@ signal delay** is later — not this note.
 | Daily technicals | [`technicals.py`](../../digiquant/src/digiquant/data/prices/technicals.py) | RSI(7/14/21), MACD(12,26,9), SMA 20/50/**200**, `% vs SMA200`, **zscore vs SMA200**. **Daily only** — no weekly resample. |
 | Bar-by-bar RSI | [`oscillators.py`](../../digiquant/src/digiquant/indicators/oscillators.py) | Nautilus `rsi_momentum` path. Not a batch weekly series. |
 | M2 vote (separate strategy) | [`m2_signals.py`](../../digiquant/src/digiquant/indicators/m2_signals.py), [`m2_liquidity.py`](../../digiquant/src/digiquant/strategies/m2_liquidity.py) | Five sub-indicators on **M2 ROC**, including RSI and MACD **of M2**, not of BTC. Expects a precomputed parquet. Planned `digiquant.data.m2` **never landed**. |
-| FRED ingest | [`macro_ingest.py`](../../digiquant/src/digiquant/data/prices/macro_ingest.py), [`macro_series.yaml`](../../digiquant/src/digiquant/research/config/macro_series.yaml) | Free FRED + Yahoo FX. Stores `realtime_start` in row meta. **`M2SL` is not in the default YAML** (research skills still mention it). Present and useful: `DTWEXBGS` (broad USD), `WALCL` (Fed assets, weekly), HY/IG OAS, VIX, yields. |
+| FRED ingest | [`macro_ingest.py`](../../digiquant/src/digiquant/data/prices/macro_ingest.py), [`macro_series.yaml`](../../digiquant/src/digiquant/research/config/macro_series.yaml) | Yahoo FX now that the FRED panel was retired to gloomberb `econ_series`. **`M2SL` is not in the default YAML** (research skills still mention it). Present and useful: `DTWEXBGS` (broad USD), `WALCL` (Fed assets, weekly), HY/IG OAS, VIX, yields. |
 | Relative strength | [`relative_strength.py`](../../digiquant/src/digiquant/data/prices/relative_strength.py) | Sector ETF vs **SPY**. Not BTC/ETH. RS-driven SDCA risk is [#1084](https://github.com/digithings-ai/digithings/issues/1084) / leftover #1082 item 4. |
 | On-chain in-repo | [`hyperdash.py`](../../digiquant/src/digiquant/data/onchain/hyperdash.py) | Hyperliquid **perp cohort positioning** (smart vs rekt). Snapshot overlay for research, fail-soft, **not** a long MVRV/NUPL history. |
 | ETF “flows” | [`etf_flows.py`](../../digiquant/src/digiquant/data/prices/etf_flows.py) | Dollar-volume z + OBV **proxy**. Explicitly not IBIT creations. Too noisy / not valuation. |
@@ -243,8 +243,8 @@ Monday-aligned): one weekly bar = **last daily close of that week**.
 ### Macro alignment (M2 / DXY) — publication, not period date
 
 FRED `M2SL` is **monthly** and revised. The ingest writes `obs_date` = period
-date and stashes `realtime_start` in meta
-([`fred_observations_to_rows`](../../digiquant/src/digiquant/data/prices/macro_ingest.py)).
+date and stashes `realtime_start` in meta. The FRED row mapper was removed
+when the ingest moved to gloomberb `econ_series` (gloomberb_macro).
 Aligning M2 to BTC on `obs_date` **is lookahead** (you would use September M2
 on 1 September, before FRED published it).
 

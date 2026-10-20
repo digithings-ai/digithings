@@ -262,7 +262,7 @@ JWT revocation before natural expiry is a roadmap item (tracked under the [digik
 If you believe you have found a security vulnerability in digithings:
 
 1. **Do not** open a public GitHub issue.
-2. Email **dany.stefan@matador.ai** with `[digithings Security]` in the subject.
+2. Email **contact@digithings.ai** with `[digithings Security]` in the subject.
 3. Include steps to reproduce, affected component(s), and any known impact.
 4. Expect an acknowledgement within 72 hours and a coordinated-disclosure timeline within 7 days.
 

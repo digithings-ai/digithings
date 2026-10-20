@@ -943,7 +943,7 @@ export function DevkitEditors({
         <SelectRow
           label="chain-of-thought view"
           value={features?.view ?? "balanced"}
-          options={["hidden", "compact", "balanced", "detailed"]}
+          options={["hidden", "quiet", "balanced", "verbose"]}
           onCommit={(v) => scalar(["features", "view"], v)}
         />
         <SegRow

@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.6.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.5.1...digichat-v2.6.0) (2026-10-20)
+
+The composer and the trace of the agent's work, rebuilt on assistant-ui's own
+structure: one vocabulary for how much of the work a user sees, one block for
+the whole chain, and one voice across the trace.
+
+### Features
+
+* **chat:** the trace is a four-rung ladder — `hidden` folds it to one line, `quiet` shows the titles only, `balanced` opens the rows while they stream, `verbose` leaves everything open ([#6048](https://github.com/digithings-ai/digithings/pull/6048))
+* **chat:** the composer footer shows the model, the provider, the connected MCPs and the context fill, and each of them opens the right panel ([#5967](https://github.com/digithings-ai/digithings/pull/5967))
+* **chat:** `/help` opens a panel with the commands, the shortcuts and how to reach a person ([#5971](https://github.com/digithings-ai/digithings/pull/5971))
+* **chat:** the model picker offers `auto` when the deployment pins no model, and the provider list names the in-house default beside the bring-your-own-key ones ([#5971](https://github.com/digithings-ai/digithings/pull/5971))
+* **chat:** the block cursor stands on the measured text baseline and centres on the letters ([#6034](https://github.com/digithings-ai/digithings/pull/6034))
+* **digichat:** the first turn runs on the tenant's curated default model ([#5957](https://github.com/digithings-ai/digithings/pull/5957))
+* **digichat:** a model at capacity is waited out instead of failing the turn ([#5981](https://github.com/digithings-ai/digithings/pull/5981))
+
+### Bug Fixes
+
+* **chat:** the reasoning and the tool calls live under one "Working" block that folds as one, and it stays open for the whole turn, so it no longer flickers shut between two tool calls ([#6036](https://github.com/digithings-ai/digithings/pull/6036), [#6039](https://github.com/digithings-ai/digithings/pull/6039), [#6049](https://github.com/digithings-ai/digithings/pull/6049))
+* **chat:** the trace keeps its place — the marks are always there, the counts no longer move the arrow, and every arrow sits next to its own text ([#6037](https://github.com/digithings-ai/digithings/pull/6037), [#6040](https://github.com/digithings-ai/digithings/pull/6040), [#6043](https://github.com/digithings-ai/digithings/pull/6043), [#6046](https://github.com/digithings-ai/digithings/pull/6046))
+* **chat:** the scrollbars are square everywhere, and the menu keeps its cursor in view ([#5972](https://github.com/digithings-ai/digithings/pull/5972), [#5973](https://github.com/digithings-ai/digithings/pull/5973), [#5980](https://github.com/digithings-ai/digithings/pull/5980))
+* **chat:** the composer is a single row and carries no editing chrome — Escape cancels, and an empty or unchanged edit is never sent ([#5961](https://github.com/digithings-ai/digithings/pull/5961))
+* **chat:** the menu moves with the arrow keys, the right arrow submits and the left one goes back, and the command palette matches the menu ([#5978](https://github.com/digithings-ai/digithings/pull/5978))
+
 ## [2.5.1](https://github.com/digithings-ai/digithings/compare/digichat-v2.5.0...digichat-v2.5.1) (2026-10-19)
 
 Restores the OCC chat behaviour the 14 Oct build had, which the Cloudflare

@@ -19,10 +19,19 @@
 #   TWELVEX_SUPABASE_SERVICE_KEY — ingest writes, forwarded into the container
 #   TWELVEX_SUPABASE_URL         — optional; twelve-x has a code default
 #
-# Not required for these two jobs (checked against the workflow env blocks
-# and twelve_x market_context / heartbeat): CHEAPERINFERENCE_API_KEY,
-# TWELVEX_R2_*, SUPABASE_DB_URL. Ingest writes Supabase. It does not call
-# an LLM and it does not write R2.
+# Required by the FX research session route (route "session", the asia,
+# london and new_york clocks). The session runs twelve_x.graph, which calls
+# the model and writes the shared core calendar, so it needs:
+#
+#   CHEAPERINFERENCE_API_KEY  — the model key, forwarded into the container as
+#                               OPENAI_API_KEY
+#   CORE_SUPABASE_SERVICE_KEY — the shared core calendar writes
+#   OPENAI_API_BASE           — the model endpoint the house path uses
+#
+# Not required for the ingest and heartbeat jobs (checked against the
+# workflow env blocks and twelve_x market_context / heartbeat): TWELVEX_R2_*,
+# SUPABASE_DB_URL. Ingest writes Supabase. It does not call an LLM and it
+# does not write R2.
 name = "twelvex-runner"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"

@@ -46,7 +46,7 @@ import {
   toolsMenuSummary,
   type SessionMcpConfig,
 } from "@/components/stock/embed-mcp-flow";
-import { languageSelectOptions } from "@/lib/product-slash-commands";
+import { buildProductSlashCommands, languageSelectOptions } from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
 import {
   byokRequiresModel,
@@ -108,6 +108,28 @@ type MenuRow = {
   exclusive?: boolean;
 };
 
+/**
+ * The menu is a tree, not a set of modes: every page has exactly one parent.
+ * Back is `MENU_PARENT[view]`; only the root closes. Adding a page means adding
+ * one entry here, and it inherits Esc / ← behaviour.
+ */
+const MENU_PARENT: Record<MenuView, MenuView | null> = {
+  main: null,
+  language: "main",
+  models: "main",
+  effort: "main",
+  "search-engine": "main",
+  view: "main",
+  thinking: "main",
+  tools: "main",
+  mcp: "main",
+  "mcp-edit": "mcp",
+  provider: "main",
+  "provider-key": "provider",
+  "provider-model": "provider",
+  help: "main",
+};
+
 const EFFORTS = ["low", "medium", "high"] as const;
 
 const SEARCH_ENGINES = [
@@ -131,10 +153,10 @@ const SEARCH_ENGINE_LABELS: Record<string, string> = {
 };
 
 const VIEW_LABELS: Record<string, string> = {
-  hidden: "Hidden · answer only",
-  compact: "Compact · closed",
-  balanced: "Balanced · collapse when done",
-  detailed: "Detailed · stays open",
+  hidden: "Hidden · one line",
+  quiet: "Quiet · titles only",
+  balanced: "Balanced · open while it runs",
+  verbose: "Verbose · everything open",
 };
 
 const THINKING_LABELS: Record<string, string> = {
@@ -399,120 +421,44 @@ export function EmbedComposerMenu({
     setMcpIdDropdownOpen(false);
   }
 
+  /**
+   * The root is the same command list the `/` palette filters — one source of
+   * truth, so going back never lands on a second, shorter "main". Rows that
+   * name a page open it in place; actions run and close the menu.
+   */
   const mainRows = useMemo((): MenuRow[] => {
-    const rows: MenuRow[] = [];
-    if (toolRows.length > 0) {
-      rows.push({
-        id: "tools",
-        label: slashName("tools"),
-        value: toolsMenuSummary(toolRows, (id) => connectedToolIsOn(id, toolOnInput)),
-        activate: () => {
-          setCursor(0);
-          setView("tools");
-        },
+    const NODE_BY_ID: Partial<Record<string, MenuView>> = {
+      models: "models",
+      mcp: "mcp",
+      tools: "tools",
+      language: "language",
+      view: "view",
+      thinking: "thinking",
+      effort: "effort",
+      "search-engine": "search-engine",
+      byok: "provider",
+      help: "help",
+    };
+    return buildProductSlashCommands(api)
+      .filter((command) => command.id !== "settings")
+      .map((command) => {
+        const node = NODE_BY_ID[command.id];
+        return {
+          id: command.id,
+          label: command.label ?? `/${command.id}`,
+          value: command.description ?? "",
+          activate: node
+            ? () => {
+                setCursor(0);
+                setView(node);
+              }
+            : () => {
+                command.execute();
+                onClose();
+              },
+        };
       });
-    }
-    if (mcpConfigs.length > 0 || api.allowUserMcp) {
-      rows.push({
-        id: "mcp",
-        label: slashName("mcp"),
-        value: mcpMenuSummaryFromConfigs(mcpConfigs, api.extraToolOn),
-        activate: () => {
-          setCursor(0);
-          setView("mcp");
-        },
-      });
-    }
-    rows.push({
-      id: "view",
-      label: slashName("view"),
-      value: api.prefs.view,
-      activate: () => {
-        setCursor(Math.max(0, VIEW_MODES.indexOf(api.prefs.view)));
-        setView("view");
-      },
-    });
-    rows.push({
-      id: "thinking",
-      label: slashName("thinking"),
-      value: api.prefs.thinking,
-      activate: () => {
-        setCursor(Math.max(0, THINKING_MODES.indexOf(api.prefs.thinking)));
-        setView("thinking");
-      },
-    });
-    rows.push({
-      id: "language",
-      label: slashName("language"),
-      value: languageDisplayName(api.prefs.language),
-      activate: () => {
-        const idx = Math.max(0, languageCodes.indexOf(api.prefs.language));
-        setCursor(idx);
-        setView("language");
-      },
-    });
-    if (api.showModels) {
-      rows.push({
-        id: "model",
-        label: slashName("models"),
-        value: api.prefs.model || available[0] || "Default",
-        activate: () => {
-          setCursor(0);
-          setView("models");
-        },
-      });
-      rows.push({
-        id: "effort",
-        label: slashName("effort"),
-        value: api.prefs.effort,
-        activate: () => {
-          setCursor(Math.max(0, EFFORTS.indexOf(api.prefs.effort as (typeof EFFORTS)[number])));
-          setView("effort");
-        },
-      });
-    }
-    if (api.tenantAllowsWeb) {
-      rows.push({
-        id: "search-engine",
-        label: slashName("search-engine"),
-        value: SEARCH_ENGINE_LABELS[api.prefs.searchEngine || "auto"] ?? api.prefs.searchEngine,
-        activate: () => {
-          setCursor(
-            Math.max(
-              0,
-              SEARCH_ENGINES.indexOf(api.prefs.searchEngine as (typeof SEARCH_ENGINES)[number]),
-            ),
-          );
-          setView("search-engine");
-        },
-      });
-    }
-    if (onActivateProvider) {
-      rows.push({
-        id: "provider",
-        label: slashName("provider"),
-        value: providerActive ? providerDisplayName(providerActive.provider) : "Off",
-        checked: Boolean(providerActive),
-        activate: () => {
-          const current = defaultProviderPick(providerActive?.provider, initialProvider);
-          setProviderPick(current);
-          setCursor(Math.max(0, PROVIDER_MENU_ORDER.indexOf(current)));
-          setView("provider");
-        },
-      });
-    }
-    return rows;
-  }, [
-    api,
-    toolRows,
-    toolOnInput,
-    mcpConfigs,
-    available,
-    onActivateProvider,
-    languageCodes,
-    providerActive,
-    initialProvider,
-  ]);
+  }, [api, onClose]);
 
   const languageRows = useMemo(
     (): MenuRow[] =>
@@ -977,6 +923,14 @@ export function EmbedComposerMenu({
   const safeCursor = rows.length ? Math.min(cursor, rows.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);
 
+  // Form pages own the arrow keys and read-only pages have no rows; neither
+  // can advertise "↑↓ navigate". Only the back gesture is true there.
+  const formPage =
+    view === "provider-key" ||
+    (view === "provider-model" && customModel) ||
+    view === "mcp-edit";
+  const canNavigate = rows.length > 0 && !formPage && view !== "help";
+
   const move = useCallback(
     (delta: number) => {
       if (!rows.length) return;
@@ -986,61 +940,26 @@ export function EmbedComposerMenu({
   );
 
   const goBack = useCallback(() => {
-    if (view === "provider-key") {
-      setView("provider");
-      setCursor(Math.max(0, PROVIDER_MENU_ORDER.indexOf(providerPick)));
+    // A custom-model draft is a sub-state of provider-model, not a page.
+    if (view === "provider-model" && customModel) {
+      setCustomModel(false);
       return;
     }
-    if (view === "provider-model") {
-      if (customModel) {
-        setCustomModel(false);
-        return;
-      }
-      setView("provider-key");
+    const parent = MENU_PARENT[view];
+    if (!parent) {
+      onClose();
       return;
     }
     if (view === "mcp-edit") {
       setMcpIdDropdownOpen(false);
       setMcpSuggestIndex(-1);
-      setView("mcp");
-      setCursor(0);
       setMcpError(null);
-      return;
     }
-    if (view === "mcp") {
-      if (kind === "mcp") {
-        onClose();
-        return;
-      }
-      setView("main");
-      setCursor(0);
-      return;
-    }
-    if (view === "tools") {
-      if (kind === "tools") {
-        onClose();
-        return;
-      }
-      setView("main");
-      setCursor(0);
-      return;
-    }
-    if (view === "provider") {
-      if (kind === "provider") {
-        onClose();
-        return;
-      }
-      setView("main");
-      setCursor(0);
-      return;
-    }
-    if (view !== "main") {
-      setView("main");
-      setCursor(0);
-      return;
-    }
-    onClose();
-  }, [customModel, kind, onClose, providerPick, view]);
+    setView(parent);
+    setCursor(
+      parent === "provider" ? Math.max(0, PROVIDER_MENU_ORDER.indexOf(providerPick)) : 0,
+    );
+  }, [customModel, onClose, providerPick, view]);
 
   useEffect(() => {
     if (view === "provider-key") keyInputRef.current?.focus();
@@ -1059,12 +978,8 @@ export function EmbedComposerMenu({
         goBack();
         return;
       }
-      const typing =
-        view === "provider-key" ||
-        (view === "provider-model" && customModel) ||
-        view === "mcp-edit";
       // mcp-edit owns its keys (id-list arrows/Enter, auth radios). Do not steal them.
-      if (typing) return;
+      if (formPage) return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
         event.stopPropagation();
@@ -1113,7 +1028,7 @@ export function EmbedComposerMenu({
       api,
       closeMcpIdDropdown,
       cursor,
-      customModel,
+      formPage,
       goBack,
       languageCodes.length,
       mcpIdDropdownOpen,
@@ -1168,7 +1083,7 @@ export function EmbedComposerMenu({
       <div className="relative min-h-0">
         <div
           ref={menuBodyRef}
-          className="dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col overflow-y-auto py-0.5"
+          className="dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col overflow-y-auto pt-0.5 pb-1.5"
         >
           {view === "provider-key" ? (
             <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5" htmlFor={keyFormId}>
@@ -1330,7 +1245,7 @@ export function EmbedComposerMenu({
                                 onMouseEnter={() => setMcpSuggestIndex(index)}
                                 onClick={() => applyMcpSuggestion(row.id)}
                               >
-                                <span className="min-w-0 shrink-0 font-medium">{row.id}</span>
+                                <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.id}</span>
                                 <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
                                   {wellKnownMcpHost(row.url) || row.auth}
                                 </span>
@@ -1575,18 +1490,17 @@ export function EmbedComposerMenu({
                     onClick={() => row.activate()}
                     onKeyDown={(e) => onRowKey(e, index)}
                   >
-                    {/* The user-message chevron marks the hovered / arrow-key
-                        row and pushes that row's content right to make room.
-                        A checked row keeps its right-hand diamond instead: no
-                        chevron, so the two marks never double up. */}
-                    {index === cursor && !(exclusive && row.checked) ? (
+                    {/* The user-message chevron marks the cursor on every page,
+                        including a checked radio row; the value mark (diamond)
+                        stays on the right, so the two never collide. */}
+                    {index === cursor ? (
                       <span className="aui-menu-cursor" aria-hidden>
                         <DotMatrix state="user" className="size-3.5" />
                       </span>
                     ) : null}
-                    <span className="min-w-0 shrink-0 font-medium">{row.label}</span>
+                    <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.label}</span>
                     {row.value || (exclusive && row.checked) ? (
-                      <span className="text-muted-foreground ml-auto flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
+                      <span className="text-muted-foreground ml-auto flex min-w-0 max-w-[45%] items-center justify-end gap-2 truncate text-right text-xs">
                         {row.value ? <span className="truncate">{row.value}</span> : null}
                         {exclusive && row.checked ? (
                           <span
@@ -1621,7 +1535,7 @@ export function EmbedComposerMenu({
         <MenuScrollbar targetRef={menuBodyRef} />
       </div>
       <div className="text-muted-foreground px-3 py-1 font-mono text-[0.68rem]">
-        {title} · ↑↓ navigate · ⏎/→ submit · esc/← back
+        {title} · {canNavigate ? "↑↓ navigate · ⏎/→ submit · " : ""}esc/← back
       </div>
     </div>
   );

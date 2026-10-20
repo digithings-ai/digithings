@@ -23,6 +23,8 @@ import { LANGUAGES } from "@/lib/languages";
 import {
   THINKING_MODES,
   VIEW_MODES,
+  isLegacyViewMode,
+  normalizeViewMode,
   type ThinkingMode,
   type ViewMode,
 } from "@/lib/view-modes";
@@ -180,8 +182,9 @@ export type EmbedTenantConfig = {
   webSearch?: boolean;
   /**
    * Chain-of-thought view mode for this tenant's embeds (digichat skin):
-   * hidden / compact / balanced / detailed. `balanced` (default) opens
+   * hidden / quiet / balanced / verbose. `balanced` (default) opens
    * reasoning + tool groups while they stream and collapses them when done.
+   * The retired ids `compact` / `detailed` are folded to `quiet` / `verbose`.
    */
   view?: ViewMode;
   /**
@@ -608,8 +611,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
-  if (v.view !== undefined && !VIEW_MODES.includes(v.view as ViewMode)) {
-    throw new Error(`${ctx}: view must be "hidden", "compact", "balanced", or "detailed"`);
+  if (
+    v.view !== undefined &&
+    !VIEW_MODES.includes(v.view as ViewMode) &&
+    !isLegacyViewMode(v.view)
+  ) {
+    throw new Error(`${ctx}: view must be "hidden", "quiet", "balanced", or "verbose"`);
   }
   if (v.thinking !== undefined && !THINKING_MODES.includes(v.thinking as ThinkingMode)) {
     throw new Error(`${ctx}: thinking must be "auto", "collapsed", or "open"`);
@@ -803,7 +810,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
     ...(v.lockSessionControls === true ? { lockSessionControls: true } : {}),
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
-    view: VIEW_MODES.includes(v.view as ViewMode) ? (v.view as ViewMode) : undefined,
+    view: v.view !== undefined ? normalizeViewMode(v.view) : undefined,
     thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)
       ? (v.thinking as ThinkingMode)
       : undefined,

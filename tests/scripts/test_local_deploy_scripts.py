@@ -148,3 +148,18 @@ def test_readme_maps_every_disabled_lane() -> None:
         "publish-digillm-image",
     ):
         assert lane in body, f"README does not map {lane}"
+
+
+def test_publish_image_packages_the_digichat_inputs_before_it_builds() -> None:
+    """The local lane builds the same image the CI lane publishes.
+
+    Its build context is the repo root and the Dockerfile COPYs
+    image-packages/digichat/, so the local lane needs the same packaging step
+    the CI lane now has — otherwise the local rehearsal fails exactly where
+    the CI one did.
+    """
+    body = read("publish_image.sh")
+    pack = body.index("package_r5_image_inputs.py --npm-only")
+    build = body.index("docker build")
+    assert pack < build, "the inputs must be packaged before the build"
+    assert "--npm-only" in body, "only the npm inputs are packaged for this image"

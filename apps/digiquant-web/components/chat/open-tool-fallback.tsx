@@ -8,7 +8,7 @@ import {
   ToolFallbackResult,
   ToolFallbackRoot,
   ToolFallbackTrigger,
-} from "../../../../packages/ui/src/components/chat/stock/tool-fallback.aui";
+} from "@digithings/ui/chat/stock";
 
 /**
  * The digichat tool row, held open so an example result is on screen.

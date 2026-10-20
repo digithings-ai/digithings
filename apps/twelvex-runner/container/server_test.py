@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 
@@ -36,6 +37,53 @@ class CommandTests(unittest.TestCase):
     def test_unknown_bucket_is_rejected(self):
         with self.assertRaises(ValueError):
             server.command_for("ingest", "hourly")
+
+    def test_session_argv_matches_the_workflow(self):
+        self.assertEqual(
+            server.command_for("session", None, "asia"),
+            ["python", "-m", "twelve_x.graph"],
+        )
+
+    def test_unknown_session_is_rejected(self):
+        with self.assertRaises(ValueError):
+            server.command_for("session", None, "hourly")
+
+    def test_session_runs_the_calendar_first_and_the_graph_fatal(self):
+        steps = server.steps_for("session", None, "london")
+        self.assertEqual(len(steps), 2)
+        self.assertEqual(steps[0][0], ["python", "-m", "twelve_x.scripts.ingest_calendar"])
+        self.assertFalse(steps[0][2])
+        self.assertEqual(steps[1][0], ["python", "-m", "twelve_x.graph"])
+        self.assertTrue(steps[1][2])
+        self.assertEqual(steps[1][1]["FX_SESSION"], "london")
+        self.assertEqual(steps[1][1]["TRADE_INTELLIGENCE_MODE"], "alongside")
+
+    def test_a_failed_calendar_step_does_not_fail_the_run(self):
+        steps = [
+            ([sys.executable, "-c", "raise SystemExit(3)"], {}, False),
+            ([sys.executable, "-c", "print('graph ok')"], {}, True),
+        ]
+        payload = server.run_steps(steps, timeout=30, dry_run=False)
+        self.assertEqual(payload["exit_code"], 0)
+        self.assertTrue(payload["ok"])
+        self.assertIn("graph ok", payload["log_tail"])
+
+    def test_a_failing_fatal_step_stops_the_run(self):
+        steps = [
+            ([sys.executable, "-c", "print('first')"], {}, True),
+            ([sys.executable, "-c", "print('second')"], {}, True),
+        ]
+        payload = server.run_steps(
+            [
+                (steps[0][0], {}, True),
+                ([sys.executable, "-c", "raise SystemExit(2)"], {}, True),
+            ],
+            timeout=30,
+            dry_run=False,
+        )
+        self.assertEqual(payload["exit_code"], 2)
+        self.assertFalse(payload["ok"])
+        self.assertNotIn("second", payload["log_tail"])
 
     def test_dry_run_does_not_need_a_process(self):
         payload = server.run_command(

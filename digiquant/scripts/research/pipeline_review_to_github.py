@@ -37,6 +37,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple  # score:allow untyped 
 
 logger = logging.getLogger(__name__)
 
+# `gh issue create` talks to the GitHub API: bound it so a hung
+# child cannot wedge the whole review run forever.
+GH_TIMEOUT_SECONDS = 120
+
 try:
     from dotenv import load_dotenv  # type: ignore
 
@@ -121,12 +125,18 @@ def _gh_available() -> bool:
 
 
 def _gh_json(args: List[str]) -> Any:
-    r = subprocess.run(
-        ["gh", *args],
-        capture_output=True,
-        text=True,
-        cwd=str(ROOT),
-    )
+    try:
+        r = subprocess.run(
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            cwd=str(ROOT),
+            timeout=GH_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"gh timed out after {GH_TIMEOUT_SECONDS}s: {' '.join(args)}"
+        ) from exc
     if r.returncode != 0:
         raise RuntimeError(f"gh failed: {' '.join(args)}\n{r.stderr or r.stdout}")
     return json.loads(r.stdout or "[]")
@@ -232,7 +242,18 @@ def _create_issue(title: str, body: str, labels: List[str], dry_run: bool) -> No
         cmd = ["gh", "issue", "create", "--title", title, "--body-file", tmp_path]
         for lb in labels:
             cmd.extend(["--label", lb])
-        r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(ROOT))
+        try:
+            r = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=str(ROOT),
+                timeout=GH_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            raise SystemExit(
+                f"gh issue create timed out after {GH_TIMEOUT_SECONDS}s"
+            )
         if r.returncode != 0:
             raise SystemExit(f"gh issue create failed: {r.stderr or r.stdout}")
         print((r.stdout or "").strip())

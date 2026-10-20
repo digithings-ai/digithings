@@ -12,18 +12,24 @@
       "lockSessionControls": true
     }
   },
-  "DIGICHAT_EMBED_TENANTS_note": "STAGED for Chris approval, NOT applied. Apply via: wrangler secret put DIGICHAT_EMBED_TENANTS (digichat container) / env DIGI_TENANT_CORPUS_MAP (digigraph). No KV binding exists in tree: worker uses secrets, not KV.",
+  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json. This file carries no token and no mcp rows: the OCC token is a client secret and lives only in the host secret store. Never write this file to the worker secret. The digigraph half (DIGI_TENANT_CORPUS_MAP) still goes to the digigraph env.",
   "DIGICHAT_EMBED_TENANTS": {
     "digithings.ai": {
       "slug": "digithings",
       "gateMode": "ungated",
+      "webSearch": false,
       "backend": {
         "type": "digigraph",
         "digisearchIndex": "digithings_docs",
         "vaultPathPrefix": "clients/digithings"
-      },
-      "gate": {
-        "webSearch": false
+      }
+    },
+    "occ.digithings.ai": {
+      "slug": "occ",
+      "gateMode": "ungated",
+      "webSearch": false,
+      "backend": {
+        "type": "digigraph"
       }
     }
   }
