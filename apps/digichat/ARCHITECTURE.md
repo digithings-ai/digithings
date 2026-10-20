@@ -999,6 +999,25 @@ list when the provider requires one. PaywallCard / ChatShell still use `ByokCliF
 (tools ON + English — not localStorage); catalog and auth toggles persist to
 localStorage. No sign-in is required for these session prefs.
 
+**Decision — the composer menu cursor is the current value, and it is indexed
+against the rows the page renders** (#4666, #4598). The cursor marks the row
+Enter commits, so a page with a single choice (`/models`, `/effort`,
+`/search-engine`, `/language`, `/view`, `/thinking`, `/provider`) opens on the
+value that is set, and Enter re-commits that value instead of the first row.
+The index comes from the rows the page renders — `cursorOnCurrentRow` in
+`embed-composer-menu.tsx` takes the first row that is both exclusive and
+checked — and never from a separate order constant: the list a page shows and
+the list it indexes are the same list by construction, so a rendered row can
+never sit one off from the cursor. The provider roster was exactly that
+off-by-one: it renders a `cheaperinference` row before the providers, so an
+index into the provider *order* landed on the row before the connected one. A
+page without a single current value (the root, the on/off toggles, the tool and
+MCP lists) has no row to land on and starts at the top. The seed belongs to
+the page, not to the moment the menu opened: opening a sub-page from the root
+re-seeds it, so `/view` lands on the current view mode even when the menu was
+opened on another page. Coming back from a provider form lands on the provider
+row the user opened, not on the connected one.
+
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup?, allowedTools?, mutatingTools? }` is
 forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?,allowedTools?,mutatingTools?}`). `setup` is the
 operator's tool-registration values (digisearch `index_name`, digivault `path_prefix`); digigraph merges it over the

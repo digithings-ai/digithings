@@ -98,7 +98,7 @@ type MenuView =
   | "provider-model"
   | "help";
 
-type MenuRow = {
+export type MenuRow = {
   id: string;
   label: string;
   value: string;
@@ -107,6 +107,20 @@ type MenuRow = {
   /** Single-choice list: radio disc, not On/Off. */
   exclusive?: boolean;
 };
+
+/**
+ * The cursor is the row Enter commits, so a page that has a current value
+ * opens on it. The index is read from the rows the page renders, so the list
+ * a page shows and the list it indexes are the same list by construction and
+ * no separate order constant can drift out of step with the rendering.
+ *
+ * A page without a current value (the root, the on/off toggles, the tool and
+ * server lists) has no row to land on and starts at the top.
+ */
+export function cursorOnCurrentRow(rows: MenuRow[]): number {
+  const index = rows.findIndex((row) => row.exclusive === true && row.checked === true);
+  return index >= 0 ? index : 0;
+}
 
 /**
  * The menu is a tree, not a set of modes: every page has exactly one parent.
@@ -322,10 +336,11 @@ export function EmbedComposerMenu({
     () => connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom),
     [api.mcpServers, api.prefs.mcpCustom],
   );
-  const languageCodes = useMemo(() => languages.map((o) => o.value), [languages]);
 
   const [view, setView] = useState<MenuView>(() => initialView(kind));
   const [cursor, setCursor] = useState(0);
+  /** The page the cursor was last seeded for; a page change seeds it again. */
+  const [seededView, setSeededView] = useState<MenuView | null>(null);
   const [providerPick, setProviderPick] = useState<BYOKProvider>(
     () =>
       tryResolveProviderInput(providerSeed ?? "") ??
@@ -372,41 +387,19 @@ export function EmbedComposerMenu({
     if (providerSeeded) {
       setView("provider-key");
       setProviderPick(providerSeeded);
-      setCursor(0);
     } else if (mcpOpened === "new") {
       setMcpDraft(emptyMcpConfig());
       setView("mcp-edit");
-      setCursor(0);
     } else if (typeof mcpOpened === "string") {
       const hit =
         connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom).find((s) => s.id === mcpOpened) ??
         applyWellKnownMcp({ ...emptyMcpConfig(), label: mcpOpened }, mcpOpened);
       setMcpDraft(hit);
       setView("mcp-edit");
-      setCursor(0);
     } else {
       setView(next);
-      if (kind === "language") {
-        setCursor(Math.max(0, languageCodes.indexOf(api.prefs.language)));
-      } else if (kind === "effort") {
-        setCursor(Math.max(0, EFFORTS.indexOf(api.prefs.effort as (typeof EFFORTS)[number])));
-      } else if (kind === "search-engine") {
-        setCursor(
-          Math.max(
-            0,
-            SEARCH_ENGINES.indexOf(api.prefs.searchEngine as (typeof SEARCH_ENGINES)[number]),
-          ),
-        );
-      } else if (kind === "view") {
-        setCursor(Math.max(0, VIEW_MODES.indexOf(api.prefs.view)));
-      } else if (kind === "thinking") {
-        setCursor(Math.max(0, THINKING_MODES.indexOf(api.prefs.thinking)));
-      } else if (kind === "provider") {
-        const current = defaultProviderPick(providerActive?.provider, initialProvider);
-        setProviderPick(current);
-        setCursor(Math.max(0, PROVIDER_MENU_ORDER.indexOf(current)));
-      } else {
-        setCursor(0);
+      if (kind === "provider") {
+        setProviderPick(defaultProviderPick(providerActive?.provider, initialProvider));
       }
     }
     setKeyDraft("");
@@ -449,7 +442,7 @@ export function EmbedComposerMenu({
           value: command.description ?? "",
           activate: node
             ? () => {
-                setCursor(0);
+                // The page seeds its own cursor: it opens on the current value.
                 setView(node);
               }
             : () => {
@@ -512,7 +505,6 @@ export function EmbedComposerMenu({
           value: "",
           activate: () => {
             setView("main");
-            setCursor(0);
           },
         },
       ];
@@ -674,7 +666,6 @@ export function EmbedComposerMenu({
             if (kind === "tools") onClose();
             else {
               setView("main");
-              setCursor(0);
             }
           },
         },
@@ -809,7 +800,6 @@ export function EmbedComposerMenu({
     }
     setView("provider-model");
     setCustomModel(false);
-    setCursor(0);
     if (wantsProviderKeyPing(providerPick)) {
       setProviderPending(true);
       void pingByokKey(keyDraft, providerPick, "", { requireModel: false }).then((result) => {
@@ -923,6 +913,26 @@ export function EmbedComposerMenu({
   const safeCursor = rows.length ? Math.min(cursor, rows.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);
 
+  /**
+   * The cursor belongs to the page, not to the moment the menu opened: a
+   * page with a current value opens on it, so Enter commits what is set
+   * instead of the first row. The seed is read from the rows the page
+   * renders, so the list a page shows and the list it indexes are the same
+   * list by construction.
+   */
+  if (seededView !== view) {
+    const from = seededView;
+    setSeededView(view);
+    let seed = cursorOnCurrentRow(rows);
+    if (view === "provider" && (from === "provider-key" || from === "provider-model")) {
+      // Back from a provider form: land on the provider the user opened, not
+      // on the one that happens to be connected.
+      const picked = providerRows.findIndex((row) => row.id === providerPick);
+      if (picked >= 0) seed = picked;
+    }
+    setCursor(seed);
+  }
+
   // Form pages own the arrow keys and read-only pages have no rows; neither
   // can advertise "↑↓ navigate". Only the back gesture is true there.
   const formPage =
@@ -955,11 +965,10 @@ export function EmbedComposerMenu({
       setMcpSuggestIndex(-1);
       setMcpError(null);
     }
+    // The page we land on seeds its own cursor (the current value, or the
+    // provider row the user drilled into).
     setView(parent);
-    setCursor(
-      parent === "provider" ? Math.max(0, PROVIDER_MENU_ORDER.indexOf(providerPick)) : 0,
-    );
-  }, [customModel, onClose, providerPick, view]);
+  }, [customModel, onClose, view]);
 
   useEffect(() => {
     if (view === "provider-key") keyInputRef.current?.focus();
@@ -1030,7 +1039,6 @@ export function EmbedComposerMenu({
       cursor,
       formPage,
       goBack,
-      languageCodes.length,
       mcpIdDropdownOpen,
       move,
       rows,
