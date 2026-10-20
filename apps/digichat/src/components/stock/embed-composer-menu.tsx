@@ -19,6 +19,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { DotMatrix } from "@digithings/ui/chat/dot-matrix";
 import { Button, Input, Label } from "@digithings/ui/ui";
 import { nextPaletteIndex } from "@digithings/digichat-ui";
 import { useEmbedChatPrefs } from "@digithings/ui/chat/stock";
@@ -145,7 +146,7 @@ const THINKING_LABELS: Record<string, string> = {
 // their own pointer cursor because the kit owns no equivalent row.
 const MCP_SUGGEST_ROW_CLASS = "hover:bg-muted/50 flex w-full cursor-pointer items-baseline justify-between gap-4 rounded-none px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px]"; // canon-allow: digichat-local composer menu; kit owns no equivalent
 
-const MENU_ROW_CLASS = "flex w-full cursor-pointer items-baseline justify-between gap-4 px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px]"; // canon-allow: digichat-local composer menu; kit owns no equivalent
+const MENU_ROW_CLASS = "flex w-full cursor-pointer items-center gap-2 px-2 py-1 text-start text-sm outline-none"; // canon-allow: digichat-local composer menu; kit owns no equivalent
 
 function slashName(id: string): string {
   return id.startsWith("/") ? id : `/${id}`;
@@ -1136,7 +1137,7 @@ export function EmbedComposerMenu({
         </Button>
       </div>
       <div
-        className={`flex max-h-[min(50vh,22rem)] flex-col py-1 ${
+        className={`dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col py-0.5 ${
           view === "mcp-edit" ? "overflow-visible" : "overflow-y-auto"
         }`}
       >
@@ -1540,9 +1541,14 @@ export function EmbedComposerMenu({
                   onClick={() => row.activate()}
                   onKeyDown={(e) => onRowKey(e, index)}
                 >
+                  {/* Selection is the user-message chevron, in a fixed slot:
+                      the cursor never reflows or resizes a row. */}
+                  <span className="aui-menu-cursor" aria-hidden>
+                    {index === cursor ? <DotMatrix state="user" className="size-3.5" /> : null}
+                  </span>
                   <span className="min-w-0 shrink-0 font-medium">{row.label}</span>
                   {row.value || (exclusive && row.checked) ? (
-                    <span className="text-muted-foreground flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
+                    <span className="text-muted-foreground ml-auto flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
                       {row.value ? <span className="truncate">{row.value}</span> : null}
                       {exclusive && row.checked ? (
                         <span data-slot="dropdown-menu-radio-item-indicator" className="inline-flex shrink-0">

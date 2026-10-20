@@ -160,6 +160,70 @@
   overflow-x: hidden;
 }
 
+/* Scrollbars: square, and slimmer with depth. The thread is the outer
+   surface (10px), menus and the composer sit inside it (6px), and the
+   tool-call dumps are the deepest scroll (4px). Styling ::-webkit-scrollbar
+   also makes the thumb square on macOS, whose overlay bar is rounded. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"] {
+  scrollbar-width: auto;
+  scrollbar-color: color-mix(in oklab, var(--ink-mute) 38%, transparent) transparent;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-track,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--ink-mute) 30%, transparent) transparent;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--ink-mute) 24%, transparent) transparent;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-thumb,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar-thumb,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar-thumb,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar-thumb,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-thumb:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar-thumb:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar-thumb:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar-thumb:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input {
   font-family: var(--font-mono);
   font-size: 0.88rem;
@@ -214,20 +278,9 @@
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-context-meter {
-  display: inline-grid;
-  grid-template-columns: repeat(5, 2px);
+  display: inline-flex;
+  align-items: center;
   gap: 1px;
-  align-content: center;
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-context-cell {
-  width: 2px;
-  height: 2px;
-  background: color-mix(in oklab, var(--ink-mute) 22%, transparent);
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-context-cell.is-lit {
-  background: color-mix(in oklab, var(--ink-soft) 85%, transparent);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-context-meter-wrap {
@@ -240,7 +293,7 @@
   outline: none;
 }
 
-/* Hover/focus breakdown card, opening upward from the grid. */
+/* Hover/focus legend, opening upward from the bar. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-context-card {
   display: none;
   position: absolute;
@@ -1041,14 +1094,27 @@
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [aria-selected="true"],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [aria-selected="true"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [data-cursor="true"],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [data-cursor="true"] {
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [aria-selected="true"] {
   background: transparent;
   background-color: transparent;
   color: var(--ink);
   outline: 1px solid var(--hair);
   outline-offset: -1px;
+}
+
+/* Cursor row: no outline, wash or size change. The chevron is the only
+   mark, and it sits in a slot reserved on every row so nothing reflows. */
+.aui-menu-cursor {
+  display: inline-flex;
+  width: 1rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  visibility: hidden;
+}
+
+.dc-composer-menu [data-cursor="true"] .aui-menu-cursor {
+  visibility: visible;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings],
