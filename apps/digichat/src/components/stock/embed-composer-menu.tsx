@@ -1245,7 +1245,7 @@ export function EmbedComposerMenu({
                                 onMouseEnter={() => setMcpSuggestIndex(index)}
                                 onClick={() => applyMcpSuggestion(row.id)}
                               >
-                                <span className="min-w-0 shrink-0 font-medium">{row.id}</span>
+                                <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.id}</span>
                                 <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
                                   {wellKnownMcpHost(row.url) || row.auth}
                                 </span>
@@ -1498,9 +1498,9 @@ export function EmbedComposerMenu({
                         <DotMatrix state="user" className="size-3.5" />
                       </span>
                     ) : null}
-                    <span className="min-w-0 shrink-0 font-medium">{row.label}</span>
+                    <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.label}</span>
                     {row.value || (exclusive && row.checked) ? (
-                      <span className="text-muted-foreground ml-auto flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
+                      <span className="text-muted-foreground ml-auto flex min-w-0 max-w-[45%] items-center justify-end gap-2 truncate text-right text-xs">
                         {row.value ? <span className="truncate">{row.value}</span> : null}
                         {exclusive && row.checked ? (
                           <span

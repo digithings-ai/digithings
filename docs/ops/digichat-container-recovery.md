@@ -1,6 +1,6 @@
 # Recovering a wedged digichat container
 
-How to recover `digithings-digichat` when its single Container instance stops
+How to recover `digithings-digichat` when a Container instance stops
 serving and will not be reclaimed. Written 2026-10-19 after the fourth
 occurrence, with the reset lever added the same day.
 
@@ -19,8 +19,12 @@ Two things that are **not** signals, measured on 2026-10-19:
   normal steady state while running — it reported exactly that after a
   perfectly successful cold start. It reports `healthy: 1` only while
   stopped/inactive. Do not page on this field.
-- **A 5xx within ~90 seconds of a deploy.** That is a rollout artefact. Wait it
-  out; do not reset a container that is still starting.
+- **A 5xx within ~90 seconds of a deploy.** That is a rollout artefact. The
+  deploy resets the Durable Object and signals the instance to exit, so the
+  request in flight fails. The Worker now answers that with a retryable 503
+  and a `Retry-After` header, and retries a request without a body once
+  itself. Back off and repeat the request; do not reset a container that is
+  still starting.
 
 ## Application ids
 
@@ -101,10 +105,11 @@ instances but not stop one, and the REST API exposes only listing and SSH.
 
 ## Why it happens
 
-`max_instances = 1` (`apps/digichat-cloudflare/wrangler.toml`), so one bad
-instance is the entire capacity. The only reaper is `sleepAfter = "1m"` via the
-base `onActivityExpired()`, which calls `stop()` — and `stop()` is a no-op
-unless the container is `running`.
+`max_instances = 2` (`apps/digichat-cloudflare/wrangler.toml`, DIG-4487), so
+one bad instance still leaves a slot for a cold start; **two** bad instances
+are the entire capacity, and then the pool is exhausted. The only reaper is
+`sleepAfter = "1m"` via the base `onActivityExpired()`, which calls `stop()` —
+and `stop()` is a no-op unless the container is `running`.
 
 **Hypothesis, not yet proven:** `isActivityExpired()` returns false while
 `inflightRequests > 0`, and that counter is incremented in `containerFetch` but

@@ -24,10 +24,46 @@ export const nextBuildIgnores = [".next/**", ".next-*/**", "out/**", "build/**",
 // `typescript: false` exists for one app only (dashboard predates the TS
 // preset); new apps use the default. Do not flip dashboard to `true` in a
 // config refactor — that enables new rules and belongs in its own PR.
+// Repo-split boundary (DIG-3695): apps import shared code only through
+// package exports — never by relative path into `packages/*/src`,
+// `clients/*`, or a sibling app. Relative imports inside the app itself
+// (`@/…`, `./…`) are unaffected.
+const packageBoundaryRules = {
+  "no-restricted-imports": [
+    "error",
+    {
+      patterns: [
+        {
+          group: [
+            "../../packages/*/src",
+            "../../packages/*/src/**",
+            "../../../packages/*/src",
+            "../../../packages/*/src/**",
+            "../../../../packages/*/src",
+            "../../../../packages/*/src/**",
+          ],
+          message: "Import via the package exports instead (e.g. `@digithings/ui/chat/stock`), not `packages/*/src` — see DIG-3695.",
+        },
+        {
+          group: ["../../../clients/*", "../../../../clients/*", "../../../../../clients/*"],
+          message: "Import via the package exports instead (e.g. `digiquant-tui/catalog`), not a relative `clients/*` path — see DIG-3695.",
+        },
+        {
+          // Code only: config JSON reads (e.g. digichat-deploy-models.json, deliberately
+          // owned by digichat per #5029 with fail-closed consumers) stay where they are.
+          group: ["../../dashboard/src/**", "../../../dashboard/src/**", "../../digithings-web/src/**", "../../../digithings-web/src/**", "../../digichat/src/**", "../../../digichat/src/**"],
+          message: "Sibling-app imports are not allowed: move the shared module into a package and import it via exports — see DIG-3695.",
+        },
+      ],
+    },
+  ],
+};
+
 export function nextApp(extraIgnores = [], { typescript = true } = {}) {
   return defineConfig([
     ...nextVitals,
     ...(typescript ? nextTs : []),
+    { rules: { ...packageBoundaryRules } },
     globalIgnores([...nextBuildIgnores, ...extraIgnores]),
   ]);
 }

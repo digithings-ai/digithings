@@ -171,6 +171,16 @@ function tickCounter(env: Env): TickCounter | undefined {
 let warnedUnboundCounter = false;
 
 /**
+ * Consecutive claim failures in this isolate.
+ *
+ * A broken counter fails OPEN, so every tick still dispatches and the only
+ * trace is one log line per tick that reads the same. The count makes the
+ * degradation visible: a counter that has failed N times in a row is a
+ * counter that is not deduping, and the log line says how long it has been.
+ */
+let counterFailures = 0;
+
+/**
  * The claim token when this delivery owns the slot, `{owned: false}` when
  * another delivery of the same tick already claimed it.
  *
@@ -195,14 +205,17 @@ async function claimTick(
       return { owned: true, token: null };
     }
     const token = await counter.claimSlot(tickKey(cron, job), tickSlot(scheduledTime));
+    counterFailures = 0;
     return token === null ? { owned: false, token: null } : { owned: true, token };
   } catch (err) {
+    counterFailures += 1;
     console.error(
       JSON.stringify({
         cron,
         job: job.id,
         error: "start_counter_unreachable",
         detail: err instanceof Error ? err.message : String(err),
+        consecutive_failures: counterFailures,
       }),
     );
     return { owned: true, token: null };

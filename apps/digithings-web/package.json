@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.18",
+    "@digithings/catalog": "*",
     "@digithings/design": "*",
     "@digithings/digichat-ui": "*",
     "@digithings/hero-banner": "*",

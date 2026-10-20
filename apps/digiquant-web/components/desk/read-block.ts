@@ -1,5 +1,5 @@
-import type { BlockKind } from "../../../../clients/digiquant-tui/src/catalog";
-import { presentResponse, type ReadResult } from "../../../../clients/digiquant-tui/src/read";
+import type { BlockKind } from "digiquant-tui/catalog";
+import { presentResponse, type ReadResult } from "digiquant-tui/read";
 import { officialApiBase } from "@/lib/official-api";
 
 export type OfficialRead = { result: ReadResult; data: unknown };

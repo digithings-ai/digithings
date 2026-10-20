@@ -505,7 +505,9 @@ def run_staging_e2e(
         return 3
     jwt = resolved.token
     if jwt:
-        log("execution_staging_e2e: Observer hops (Settings + checkout, no vendor secrets required)")
+        log(
+            "execution_staging_e2e: Observer hops (Settings + checkout, no vendor secrets required)"
+        )
         results = run_observer_hops(
             http=http,
             jwt=jwt,

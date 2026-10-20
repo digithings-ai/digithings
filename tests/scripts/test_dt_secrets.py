@@ -457,3 +457,76 @@ def test_check_reports_missing_without_writing(tmp_path):
     assert "Traceback" not in proc.stderr, proc.stderr
     assert "resolved," in proc.stdout and "missing: CHEAPERINFERENCE_API_KEY" in proc.stdout
     assert not out.exists()
+
+
+# ------------------------------------------------- the local keychain prefix
+
+
+def test_the_keychain_prefix_override_comes_first(tool, manifest, monkeypatch):
+    """The local stack's material lives under another prefix; the override wins.
+
+    The contract keeps the production prefix, so the local bring-up finds its
+    own values without the contract changing (DIG-4501).
+    """
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    assert tool.keychain_prefixes(manifest) == ("digithings-local/", "digithings/")
+    monkeypatch.delenv(tool.KEYCHAIN_PREFIX_ENV, raising=False)
+    assert tool.keychain_prefixes(manifest) == ("digithings/",)
+
+
+def test_a_keychain_value_is_read_through_the_prefix_list(tool, manifest, entries, monkeypatch):
+    entry = next(e for e in entries if e["name"] == "DIGIKEY_ADMIN_TOKEN")
+    seen: dict = {}
+
+    def fake_stores(name, prefixes, allow_prompt):
+        seen["prefixes"] = prefixes
+        return "value"
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "from_stores", fake_stores)
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) == "value"
+    assert seen["prefixes"] == ("digithings-local/", "digithings/")
+
+
+def test_an_operator_prompt_value_is_read_from_the_store_before_it_is_asked_for(
+    tool, manifest, entries, monkeypatch
+):
+    """A value that is in the credential store must not need the operator.
+
+    The local stack's operator-supplied values (the digikey API key the local
+    digikey mints, the digigraph upstream key, the digisearch seed key, the
+    e2e bearer token) are in the store under the local prefix, so a scripted
+    render (--no-prompt) finds them instead of failing on them.
+    """
+    entry = next(e for e in entries if e["name"] == "E2E_BEARER_TOKEN")
+    asked: list = []
+
+    def fake_stores(name, prefixes, allow_prompt):
+        return "from-the-store"
+
+    def fake_prompt(label):
+        asked.append(label)
+        return "typed"
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "from_stores", fake_stores)
+    monkeypatch.setattr(tool, "prompt", fake_prompt)
+
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) == "from-the-store"
+    assert asked == []
+
+    # a value that is nowhere in the store still falls back to the prompt
+    monkeypatch.setattr(tool, "from_stores", lambda name, prefixes, allow_prompt: None)
+    assert tool.resolve(manifest, entry, {}, allow_prompt=True) == "typed"
+    assert asked == ["E2E_BEARER_TOKEN: "]
+    # and a scripted render reports it as missing rather than blocking
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) is None
+
+
+def test_from_store_still_reads_one_prefix(tool, monkeypatch):
+    """The single-prefix entry point keeps its behaviour (it is the only caller
+    of the store lookups outside the prefix list)."""
+    monkeypatch.setattr(tool, "_from_one_store", lambda name, prefix: f"value-for-{prefix}")
+    assert tool.from_store("NAME", "digithings/", allow_prompt=False) == "value-for-digithings/"
+    monkeypatch.setattr(tool, "_from_one_store", lambda name, prefix: None)
+    assert tool.from_store("NAME", "digithings/", allow_prompt=False) is None

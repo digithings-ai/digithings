@@ -272,14 +272,14 @@ def test_generate_log_win_rate_refused_below_floor() -> None:
     assert "REFUSED" in s  # n=5
 
 
-# --- L7: surfaces read k/n off the honest block, never off the fill count ---
+# --- L7: surfaces read k/n off the honest block, never off num_trades ---
 
 
 def test_categorized_stats_n_comes_from_the_block() -> None:
-    """Block (30, 50) over 900 fills renders the block's n, not 900."""
+    """Block (30, 50) over 900 num_trades renders the block's n, not 900."""
     html = _build_categorized_stats(None, None, {"Win Rate": 0.6}, _honest_result(30, 50, 900))
     assert "60.0% (30/50" in html  # n=50
-    assert "n=900" not in html  # n=50: the fill count is not a denominator
+    assert "n=900" not in html  # n=50: num_trades is not a denominator
 
 
 def test_risk_metrics_n_comes_from_the_block() -> None:
@@ -297,11 +297,11 @@ def test_full_stats_n_comes_from_the_block() -> None:
 
 
 def test_kpi_n_comes_from_the_block() -> None:
-    """KPI WIN RATE reads n off the block; the fills get their own card."""
+    """KPI WIN RATE reads n off the block; the trade count gets its own card."""
     html = _page(0.6, 900, result=_honest_result(30, 50, 900))
     assert "60.0% (30/50" in html  # n=50
     assert "n=900" not in html  # n=50
-    assert "TOTAL FILLS" in html  # n=50: fills still shown, under their own name
+    assert "TOTAL TRADES" in html  # n=50: trades shown, under their own name
     # The colour band is driven by wilson(k, n) on the same n. On the block's
     # n=50 the lower bound is 0.46, which sits between the two thresholds and
     # so carries no class; on the 900-fill denominator it would be 0.02 and
@@ -412,16 +412,23 @@ def test_caller_counted_wins_are_refused_not_paired_with_fills() -> None:
     assert resolve_win_rate(_result(5), 0.6).refused is True  # n=5
 
 
-def test_trade_count_rows_are_labelled_as_fills() -> None:
-    """The counts that read num_trades say they are fill counts."""
+def test_trade_count_rows_say_trades_and_the_nautilus_key_still_says_fills() -> None:
+    """The KPI over num_trades says TRADES; the Nautilus stats key says fills.
+
+    Two different surfaces, and only one moved (DIG-1808). ``num_trades`` now
+    counts closed round trips, so the KPI reading it is ``TOTAL TRADES``. The
+    stats-table row is not that number: "Total Trades" there is a key Nautilus
+    puts in its own stats frame, which this leaf does not measure, so
+    FILL_COUNT_LABELS keeps naming it as a fill count.
+    """
+    page_html = _page(0.6, 900)
+    assert "TOTAL TRADES" in page_html  # n=900
+    assert "TOTAL FILLS" not in page_html  # n=900
     stats_html = _build_categorized_stats(None, None, {"Total Trades": 900}, _result(900))
     assert "# Fills" in stats_html  # n=900
     assert "# Trades" not in stats_html  # n=900
-    page_html = _page(0.6, 900)
-    assert "TOTAL FILLS" in page_html  # n=900
-    assert "TOTAL TRADES" not in page_html  # n=900
-    # The full-stats table prints Nautilus' key straight through, so a fill
-    # count sat beside a win rate reading n=50 under the name "Total Trades".
+    # The full-stats table prints Nautilus' key straight through, so the count
+    # under that name is still Nautilus' fill count, not our round trips.
     full_html = _build_full_stats_table(None, None, {"Total Trades": 900}, _result(900))
     assert "Total Fills" in full_html  # n=900
     assert "Total Trades" not in full_html  # n=900
