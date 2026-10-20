@@ -730,6 +730,31 @@ def test_the_missing_report_names_the_local_namespace(tmp_path, monkeypatch):
     assert "digithings-local/" in proc.stdout
 
 
+def test_the_unresolved_report_names_the_secret_and_never_a_value(tool, capsys, monkeypatch):
+    """The report that names an unresolved secret carries nothing else.
+
+    The name is an env var identifier that the manifest carries in the clear, so
+    it is public. A value is not, and this report is what the operator reads on
+    a shared screen. CodeQL's clear-text-logging rule flags the print, because
+    the manifest's whole "secrets" list is its taint source, so this test pins
+    the property the rule cannot see: the report prints a name, never a value.
+    """
+    monkeypatch.setattr(tool, "from_stores", lambda name, prefixes, allow_prompt: "a-value")
+
+    assert tool.main(["--manifest", str(MANIFEST), "check", "--only", "E2E_BEARER_TOKEN"]) == 0
+    out = capsys.readouterr().out
+    assert "0 missing" in out
+    assert "a-value" not in out, "the report echoed a value"
+
+    # and a value that is nowhere to be found is reported by name
+    monkeypatch.setattr(tool, "from_stores", lambda name, prefixes, allow_prompt: None)
+
+    assert tool.main(["--manifest", str(MANIFEST), "check", "--only", "E2E_BEARER_TOKEN"]) == 1
+    out = capsys.readouterr().out
+    assert "missing: E2E_BEARER_TOKEN" in out
+    assert "a-value" not in out, "the report echoed a value"
+
+
 def test_an_operator_prompt_value_is_read_from_the_store_before_it_is_asked_for(
     tool, manifest, entries, monkeypatch
 ):
