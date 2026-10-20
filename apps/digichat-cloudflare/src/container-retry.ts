@@ -130,19 +130,26 @@ function headersWithRetryAfter(headers: Headers): Headers {
 }
 
 /**
- * The body for a container that could not be reached at all. The platform
- * aborts the Durable Object and throws when the instance just restarted, so
- * there is no response body to carry; this keeps the cause for the client
- * log and for the operator reading it.
+ * The body a client receives when the container could not be reached at all.
+ * The platform aborts the Durable Object and throws when the instance just
+ * restarted, so there is no response body to carry.
+ *
+ * The cause is deliberately NOT in this body: a platform error can carry a
+ * stack trace, and internal detail must not leave the Worker. It is logged
+ * instead, where the operator reads it.
  */
-function containerUnavailableBody(cause: unknown): string {
+export const CONTAINER_UNAVAILABLE_BODY = JSON.stringify({
+  error: "container_unavailable",
+});
+
+/**
+ * The cause, for the Worker log only. Never returned to the client.
+ */
+function causeDetail(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause);
   const inner = (cause as { cause?: unknown })?.cause;
   const detail = inner instanceof Error ? inner.message : "";
-  return JSON.stringify({
-    error: "container_unavailable",
-    detail: detail ? message + ": " + detail : message,
-  });
+  return detail ? `${message}: ${detail}` : message;
 }
 
 /**
@@ -171,12 +178,16 @@ export async function fetchContainerWithRetry(
       // The container could not be reached at all. When the instance just
       // restarted the platform aborts the Durable Object and throws
       // ("Network connection lost."), so the request would end with NO
-      // answer. A retryable answer beats a dead connection, and the cause
-      // is kept in the body so the client can log why. The request is not
-      // replayed: the Durable Object was aborted, so a second attempt in
-      // this request would fail the same way. The client is told to come
+      // answer. A retryable answer beats a dead connection. The request is
+      // not replayed: the Durable Object was aborted, so a second attempt
+      // in this request would fail the same way. The client is told to come
       // back instead.
-      return new Response(containerUnavailableBody(cause), {
+      //
+      // The cause goes to the Worker log and never into the response: a
+      // platform error can carry a stack trace, and internal detail must
+      // not leave the Worker.
+      console.error("digichat: container could not be reached", causeDetail(cause));
+      return new Response(CONTAINER_UNAVAILABLE_BODY, {
         status: NO_INSTANCE_STATUS,
         headers: headersWithRetryAfter(new Headers()),
       });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  CONTAINER_UNAVAILABLE_BODY,
   DEFAULT_ATTEMPTS,
   RETRY_AFTER_SECONDS,
   fetchContainerWithRetry,
@@ -267,7 +268,7 @@ describe("fetchContainerWithRetry", () => {
 });
 
 describe("a container that cannot be reached at all", () => {
-  it("turns a rejected container fetch into a retryable 503", async () => {
+  it("turns a rejected container fetch into a retryable 503 without leaking the cause", async () => {
     // The platform aborts the Durable Object and throws when the instance
     // just restarted (@cloudflare/containers 0.3.7: "Network connection
     // lost."), so without this the request ends with no answer at all.
@@ -277,13 +278,26 @@ describe("a container that cannot be reached at all", () => {
     const fetchOnce = vi.fn(async () => {
       throw failure;
     });
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(" "));
+    });
     const res = await fetchContainerWithRetry(
       new Request("https://digithings.ai/api/chat"),
       fetchOnce,
     );
+    const body = await res.text();
+    spy.mockRestore();
+
     expect(res.status).toBe(503);
     expect(res.headers.get("Retry-After")).toBe(String(RETRY_AFTER_SECONDS));
-    expect(await res.text()).toContain("Network connection lost.");
+    // The cause is logged, not returned: a platform error can carry a
+    // stack trace, and internal detail must not reach the client.
+    expect(body).toBe(CONTAINER_UNAVAILABLE_BODY);
+    expect(body).not.toContain("Network connection lost.");
+    expect(body).not.toContain("There is no Container instance");
+    // The operator still gets the cause, in the Worker log.
+    expect(logged.join("\n")).toContain("Network connection lost.");
   });
 
   it("does not replay the request once the container is gone", async () => {
