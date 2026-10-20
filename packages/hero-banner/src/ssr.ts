@@ -54,7 +54,7 @@ function groupFrame(def: BannerDefinition, frame: Frame): Group[] {
         continue;
       }
       const tone = toneOf(def, pixel.tone);
-      const color = tone.css ?? tone.hex ?? "#ffffff";
+      const color = tone.css ?? tone.hex ?? "var(--ink)";
       const alpha = Math.min(1, pixel.alpha);
       const key = `${color}|${alpha}`;
       let group = groups.get(key);
@@ -67,7 +67,7 @@ function groupFrame(def: BannerDefinition, frame: Frame): Group[] {
         const next = frame.pixels[y * frame.width + x + w];
         if (!next || next.alpha <= 0) break;
         const nextTone = toneOf(def, next.tone);
-        const nextColor = nextTone.css ?? nextTone.hex ?? "#ffffff";
+        const nextColor = nextTone.css ?? nextTone.hex ?? "var(--ink)";
         if (`${nextColor}|${Math.min(1, next.alpha)}` !== key) break;
         w += 1;
       }
@@ -116,7 +116,7 @@ export function settledFrame(def: BannerDefinition, options: SettledOptions = {}
 export function settledSvg(def: BannerDefinition, options: SettledOptions = {}, colored = false): string {
   const { frame, groups } = build(def, options);
   const paths = groups
-    .map((group) => `<path d="${pathOf(group)}" fill="${colored ? (group.hex ?? "#ffffff") : "#000000"}" fill-opacity="${group.alpha}"/>`)
+    .map((group) => `<path d="${pathOf(group)}" fill="${colored ? (group.hex ?? "#ffffff") : "#000000"}" fill-opacity="${group.alpha}"/>`) // canon-allow: the SVG is a mask or a data-URI document and cannot read CSS tokens
     .join("");
   return svgDoc(frame, paths);
 }
@@ -126,7 +126,7 @@ export function settledFallback(def: BannerDefinition, options: SettledOptions =
   const { groups } = build(def, options);
   const colors = new Set(groups.map((group) => group.color));
   const multiTone = colors.size > 1;
-  const color = groups[0]?.color ?? "#ffffff";
+  const color = groups[0]?.color ?? "var(--ink)";
   const svg = multiTone ? settledSvg(def, options, true) : settledSvg(def, options);
   return { color, kind: multiTone ? "image" : "mask", url: dataUrl(svg), multiTone };
 }
