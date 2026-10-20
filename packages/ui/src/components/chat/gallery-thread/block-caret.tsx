@@ -68,6 +68,32 @@ function measureTextWidth(text: string, font: string): number | null {
 }
 
 /**
+ * The ink height of a capital/digit: how far the glyphs rise above the
+ * baseline. Measured from the font, not guessed, because the caret is placed
+ * against it.
+ */
+function fontInkAscent(font: string, fontSize: number): number {
+  const fallback = fontSize * 0.72;
+  try {
+    if (!measureCanvas && typeof document !== "undefined") {
+      measureCanvas = document.createElement("canvas");
+    }
+    const ctx = measureCanvas?.getContext("2d");
+    if (!ctx) return fallback;
+    ctx.font = font;
+    const digit = ctx.measureText("0").actualBoundingBoxAscent;
+    const cap = ctx.measureText("H").actualBoundingBoxAscent;
+    const ink = Math.max(
+      Number.isFinite(digit) ? digit : 0,
+      Number.isFinite(cap) ? cap : 0,
+    );
+    return ink > 0 ? ink : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * The font's own vertical metrics: the ascent and descent the browser uses to
  * place the baseline inside a line box. Measured, not guessed — the block
  * caret has to sit on the same baseline the text does, and a hardcoded
@@ -271,13 +297,17 @@ export function caretPx(
   const baseTop = (area.offsetTop || 0) + borderTop + paddingTop;
   void container;
 
-  // Native-cursor geometry, measured from the font itself: the caret is as
-  // tall as the font's ascent + descent (what a real text cursor spans) and
-  // its BOTTOM edge stands on the text's baseline, so the extra height is
-  // above the letters instead of hanging below them.
+  // Native-cursor geometry: the caret is as tall as the font's ascent +
+  // descent (what a real text cursor spans), and it is centred on the
+  // letters' ink box — half way between standing on the baseline and
+  // aligning with the top of the glyphs, so it neither hangs below the text
+  // nor floats above it.
   const { ascent, descent } = fontVerticalMetrics(font, fontSize);
   const contentHeight = ascent + descent;
   const caretHeight = Math.max(8, Math.round(contentHeight));
+  const inkAscent = fontInkAscent(font, fontSize);
+  // Distance from the baseline down to the caret's top edge.
+  const caretDrop = inkAscent / 2 + caretHeight / 2;
 
   const mirrored = mirrorCaretPx(area, cs);
   if (mirrored) {
@@ -289,7 +319,7 @@ export function caretPx(
         (area.offsetTop || 0) +
         borderTop +
         mirrored.baseline -
-        caretHeight -
+        caretDrop -
         (area.scrollTop || 0),
       height: caretHeight,
       width: Math.max(1, chWidth),
@@ -301,7 +331,7 @@ export function caretPx(
   const baseline = baseTop + row * lineHeight + halfLeading + ascent;
   return {
     left: baseLeft + textWidth - (area.scrollLeft || 0),
-    top: baseline - caretHeight - (area.scrollTop || 0),
+    top: baseline - caretDrop - (area.scrollTop || 0),
     height: caretHeight,
     width: Math.max(1, chWidth),
   };
