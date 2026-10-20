@@ -16,7 +16,7 @@ import {
   extractPageContext as extractPageContextShared,
   extractPageHtml as extractPageHtmlShared,
   sanitizePageHtml as sanitizePageHtmlShared,
-} from '@digithings/catalog/page-context-sanitize'; // canonical allowlist (#3602)
+} from '../../digichat/src/lib/page-context-sanitize'; // canonical allowlist (#3602)
 import { can, type PlanTier } from './entitlements';
 
 export type { PlanTier };

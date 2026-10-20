@@ -1,19 +1,17 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { HashScrollManager, MotionProvider, ThemeProvider } from "@digithings/ui";
-import { SiteChrome } from "@/components/site-chrome";
-import { HERO_PLAYED_SCRIPT } from "@/lib/hero-play";
-import { fontVariables } from "./fonts";
+import { GeistMono } from "geist/font/mono";
+import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager } from "@digithings/ui";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digiquant.io"),
   applicationName: "digiquant",
   title: "digiquant — a quant research desk in a glass box you own",
   description:
-    "A showcase of the digiquant dashboard, the product: the house book, the research pipeline, and the method behind it. "
-    + "Research runs daily, portfolio sizes the risk, and every run writes a decision log under its own "
-    + "run id, redacted on the way out. Open-source and self-hosted.",
+    "The research stack an institutional desk would build — research runs daily, portfolio sizes the risk, "
+    + "and every run writes a decision log under its own run id, redacted on the way out. Open-source "
+    + "and self-hosted, so work that once needed a team runs for one.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -38,8 +36,8 @@ export const metadata: Metadata = {
   openGraph: {
     title: "digiquant — a quant research desk in a glass box you own",
     description:
-      "See the digiquant dashboard at work: the house book, how a strategy is built, and the "
-      + "tooling underneath. Open-source, self-hosted, with a decision log per run.",
+      "Research runs daily, portfolio sizes the risk, and the deliberation stays on the record. Open-source, "
+      + "self-hosted, with a decision log per run.",
     url: "https://digiquant.io",
     images: [
       {
@@ -54,28 +52,26 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  // suppressHydrationWarning: the inline script sets data-theme before hydration;
-  // scoped to this element only.
+  // suppressHydrationWarning: themeInitScript legitimately flips data-theme
+  // pre-hydration for system-light visitors; scoped to this element only.
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${fontVariables} accent-digiquant no-js`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistMono.variable} no-js`}>
       <head>
-        {/* One solid black canvas: the page is pinned to the dark theme, so the
-            system-light flip themeInitScript does is deliberately not used. */}
-        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.setAttribute('data-theme','dark')" }} />
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals,
             the strategy deck); removed pre-paint when scripts run. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
-        {/* Later loads in this tab skip the secondary pixel-mark rise. The top hero builds on every load. */}
-        <script dangerouslySetInnerHTML={{ __html: HERO_PLAYED_SCRIPT }} />
-        
-        <meta name="theme-color" content="#000000" />{/* canon-allow: page canvas is solid black, see globals.css */}
+        {/* Single fallback; themeInitScript sets it to the active theme pre-paint. */}
+        <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
       </head>
       <body>
+        <div className="grain" aria-hidden="true" />
+        <div className="glow" aria-hidden="true" />
         <MotionProvider>
           <ThemeProvider>
             <HashScrollManager />
-            <SiteChrome>{children}</SiteChrome>
+            {children}
           </ThemeProvider>
         </MotionProvider>
       </body>
