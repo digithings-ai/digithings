@@ -90,7 +90,8 @@ function themedRoot(): string {
  */
 const FALLBACK_CHAIN = ["ui-monospace", "SF Mono", "Menlo", "DejaVu Sans Mono", "Segoe UI Symbol"];
 
-describe("font tokens contract", () => {
+// Several cases read every in-scope file synchronously, so they outgrow the 5s default as the repo grows.
+describe("font tokens contract", { timeout: 30_000 }, () => {
   it("loads Geist Mono once, in the shared design loader", () => {
     const source = at(LOADER);
     expect(source).toMatch(/from ["']next\/font/);
