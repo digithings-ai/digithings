@@ -19,4 +19,12 @@ describe("isIsoDate", () => {
     expect(isIsoDate("20-10-2026")).toBe(false);
     expect(isIsoDate("")).toBe(false);
   });
+
+  it("rejects a year the container cannot parse", () => {
+    // The container parses the value with Python's date.fromisoformat, which
+    // has no year 0.
+    expect(isIsoDate("0000-01-01")).toBe(false);
+    expect(isIsoDate("0000-02-29")).toBe(false);
+    expect(isIsoDate("0001-01-01")).toBe(true);
+  });
 });

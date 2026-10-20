@@ -33,7 +33,9 @@ function containerResult(over: Partial<RunResult> = {}): RunResult {
     duration_ms: 12,
     log_tail: "",
     dry_run: false,
-    command: ["python", "-m", "twelve_x.scripts.primemarket_session_heartbeat"],
+    // The real argv lives in container/server.py. It is not copied here, and
+    // no test asserts on it, so a placeholder keeps the shape of RunResult.
+    command: ["not-asserted"],
     alert: "none",
     ...over,
   };
@@ -86,7 +88,7 @@ describe("routing and auth", () => {
 
   it("rejects a run_date that is not a calendar date", async () => {
     const container = vi.fn();
-    for (const runDate of ["2026-13-01", "2026-02-30", "20261020", "01-10-2026", 7]) {
+    for (const runDate of ["2026-13-01", "2026-02-30", "20261020", "01-10-2026", "0000-01-01", 7]) {
       const res = await handle(
         post("session", { session: "asia", run_date: runDate }),
         env(),

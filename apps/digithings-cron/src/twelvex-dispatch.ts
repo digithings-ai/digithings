@@ -31,9 +31,16 @@ export async function dispatchTwelvex(
   }
   const bucket = job.inputs?.bucket;
   const session = job.inputs?.session;
-  // The workflow's optional backfill date. Absent on the daily crons, so the
-  // key is left out of the body entirely and the graph takes its forward path.
-  const runDate = job.inputs?.run_date;
+  // The workflow's optional backfill date. Only the session route takes it,
+  // and the daily crons carry none, so the key is left out of the body
+  // entirely and the graph takes its forward path. A malformed date in a job
+  // row fails the job here, before the runner is called.
+  const runDate = job.route === "session" ? job.inputs?.run_date : undefined;
+  if (runDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(runDate)) {
+    // The shape only. The runner is the authority on the date itself and
+    // answers 400 invalid_run_date for a day that does not exist.
+    throw new Error(`job ${job.id}: run_date must look like a calendar date (YYYY-MM-DD)`);
+  }
   const body = {
     job_id: job.id,
     bucket,

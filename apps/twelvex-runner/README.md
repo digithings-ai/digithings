@@ -40,10 +40,20 @@ the workflow's empty default. With no `run_date` the graph takes its forward
 high-water-mark path. The three daily session crons pass none, so they keep
 the forward path.
 
-The command each route runs lives in one place only: `container/server.py`.
-Do not copy an argv into the TypeScript. The pinned twelve-x ref carries
-`scripts/primemarket_session_heartbeat.py` and nothing else, so a second copy
-of the name would drift without any run failing.
+Only the session route takes a `run_date`. The Worker drops it on the
+ingest and heartbeat routes, and the dispatcher in `digithings-cron`
+sends it only for a session job. Only the graph step receives it: the
+calendar step runs without it. The graph step always carries `RUN_DATE`,
+empty for the forward path, and the container never inherits a date from
+its own environment.
+
+The code that runs each command lives in one place only: `container/server.py`.
+Do not copy an argv into the TypeScript. The tables above are a copy for
+humans. The pinned twelve-x ref carries exactly one heartbeat script,
+`scripts/primarket_session_heartbeat.py`, and no second spelling of that
+name, so a second copy of the name would drift without any run failing. A
+test in `container/server_test.py` scans the whole app and fails on any
+other module path or any copy of an argv.
 
 ## Auth
 

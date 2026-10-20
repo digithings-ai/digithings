@@ -112,6 +112,38 @@ describe("twelve-x runner jobs", () => {
     expect(JSON.parse(await request.text())).toMatchObject({ run_date: "2026-10-01" });
   });
 
+  it("drops the run_date on a route that does not take one", async () => {
+    const runnerFetch = vi.fn(async (_request: Request) =>
+      Response.json({ ok: true, exit_code: 0, duration_ms: 4, alert: "none" }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      TWELVEX_RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const job = ingestJob();
+    const withDate: Job = { ...job, inputs: { bucket: "intraday", run_date: "2026-10-01" } };
+    await dispatchTwelvex(env, withDate, withDate.cron);
+    const request = runnerFetch.mock.calls[0][0] as Request;
+    expect(JSON.parse(await request.text())).not.toHaveProperty("run_date");
+  });
+
+  it("fails the job on a malformed run_date without calling the runner", async () => {
+    const runnerFetch = vi.fn();
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      TWELVEX_RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const job = JOBS.find((row) => row.id === "twelve-x-asia");
+    if (!job) throw new Error("missing asia job");
+    const broken: Job = { ...job, inputs: { session: "asia", run_date: "20261020" } };
+    await expect(dispatchTwelvex(env, broken, broken.cron)).rejects.toThrow(
+      /run_date must look like a calendar date/,
+    );
+    expect(runnerFetch).not.toHaveBeenCalled();
+  });
+
   it("dispatch sends the daily row to the runner", async () => {
     const runnerFetch = vi.fn(async (_request: Request) =>
       Response.json({ ok: true, exit_code: 0, duration_ms: 4, alert: "none" }),

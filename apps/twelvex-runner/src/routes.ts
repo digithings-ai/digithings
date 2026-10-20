@@ -31,13 +31,18 @@ export function isSession(value: string): value is Session {
 /**
  * A calendar date in YYYY-MM-DD form, the only shape the workflow's run_date
  * input accepts. A real date only: 2026-02-30 is not a date.
+ *
+ * The year starts at 1. The container parses the same value with Python's
+ * date.fromisoformat, which has no year 0, so a date this module accepted
+ * would come back from the container as a 400 instead of a 400 from here.
  */
 export function isIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return false;
-  // The date parser normalizes an overflowing day (2026-02-30 becomes
-  // 2026-03-01), so the round trip is what proves the calendar date exists.
+  if (parsed.getUTCFullYear() < 1) return false;
+  // The date parser normalizes an overflowing day (2023-02-29 becomes
+  // 2023-03-01), so the round trip is what proves the calendar date exists.
   return parsed.toISOString().slice(0, 10) === value;
 }
 

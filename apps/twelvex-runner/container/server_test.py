@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import os
+import re
+import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 def load_server():
@@ -58,7 +63,10 @@ class CommandTests(unittest.TestCase):
         self.assertTrue(steps[1][2])
         self.assertEqual(steps[1][1]["FX_SESSION"], "london")
         self.assertEqual(steps[1][1]["TRADE_INTELLIGENCE_MODE"], "alongside")
-        self.assertNotIn("RUN_DATE", steps[1][1])
+        # The graph step always carries RUN_DATE, empty for the forward path,
+        # and the calendar step never carries one.
+        self.assertEqual(steps[1][1]["RUN_DATE"], "")
+        self.assertNotIn("RUN_DATE", steps[0][1])
 
     def test_a_valid_run_date_reaches_the_graph_step_only(self):
         steps = server.steps_for("session", None, "asia", "2026-10-01")
@@ -134,46 +142,159 @@ class CommandTests(unittest.TestCase):
 
 
 HEARTBEAT_MODULE = "twelve_x.scripts.primemarket_session_heartbeat"
+# The modules of the pinned twelve-x ref that the runner runs. A module path
+# anywhere in the app that is not on this list is a typo or a drifted copy.
+ALLOWED_MODULES = {
+    "twelve_x.graph",
+    "twelve_x.scripts.ingest_calendar",
+    "twelve_x.scripts.ingest_market_context",
+    HEARTBEAT_MODULE,
+}
+MODULE_PATH = re.compile(r"twelve_x(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
+# A copy of an argv in code: "python", "-m", "twelve_x...
+ARGV_COPY = re.compile(r"python\"?\s*,\s*\"?-m\"?\s*,\s*\"?twelve_x")
+SKIP_DIRS = {"node_modules", ".wrangler", "dist", "build", "__pycache__", ".git"}
 
 
 class OneCommandSourceTests(unittest.TestCase):
-    """The argv lives here and nowhere else.
+    """The argv lives in container/server.py and nowhere else.
 
     A second copy of a command would drift from the pinned twelve-x ref
-    without any run failing, so the app keeps one source of truth.
+    without any run failing, so the app keeps one source of truth. The scan
+    covers the whole app, not only the two folders that hold code today.
     """
 
     def setUp(self):
         self.app = Path(__file__).resolve().parent.parent
-        self.runtime_files = [
+        self.files = [
             path
-            for path in list((self.app / "src").rglob("*"))
-            + list((self.app / "container").rglob("*"))
+            for path in self.app.rglob("*")
             if path.is_file()
-            and path.suffix in {".ts", ".py"}
+            and not SKIP_DIRS & set(path.relative_to(self.app).parts)
             and not path.name.endswith((".test.ts", "_test.py"))
+            and not path.name.startswith("test_")
         ]
-        self.doc_files = [self.app / "README.md", self.app / "wrangler.toml"]
 
     def test_the_heartbeat_module_path_is_pinned_here(self):
         self.assertIn(f'"{HEARTBEAT_MODULE}"', (self.app / "container" / "server.py").read_text())
 
-    def test_no_other_runtime_module_carries_the_heartbeat_module_path(self):
+    def test_only_the_container_carries_a_command_argv(self):
         holders = [
             str(path.relative_to(self.app))
-            for path in self.runtime_files
-            if HEARTBEAT_MODULE in path.read_text()
+            for path in self.files
+            if ARGV_COPY.search(path.read_text())
         ]
         self.assertEqual(holders, [os.path.join("container", "server.py")])
 
+    def test_every_module_path_in_the_app_is_a_module_of_the_pinned_ref(self):
+        for path in self.files:
+            for module in MODULE_PATH.findall(path.read_text()):
+                self.assertIn(module, ALLOWED_MODULES, f"{path}: {module}")
+
     def test_no_typo_of_the_heartbeat_module_name(self):
-        for path in self.runtime_files + self.doc_files:
-            self.assertNotIn("primarketet", path.read_text(), str(path))
+        for path in self.files:
+            self.assertNotIn("primarketet_session_heartbeat", path.read_text(), str(path))
 
     def test_the_routing_module_carries_no_command_mirror(self):
         routes = (self.app / "src" / "routes.ts").read_text()
         self.assertNotIn("twelve_x", routes)
         self.assertNotIn("python", routes)
+
+
+class RunDateTests(unittest.TestCase):
+    """The run_date rules the Worker and the container share."""
+
+    def test_a_calendar_date_is_kept_as_written(self):
+        self.assertEqual(server.validate_run_date("2026-10-01"), "2026-10-01")
+
+    def test_an_absent_or_empty_run_date_is_absent(self):
+        self.assertIsNone(server.validate_run_date(None))
+        self.assertIsNone(server.validate_run_date(""))
+
+    def test_a_malformed_run_date_is_rejected(self):
+        for value in ["2026-13-01", "2026-02-30", "20261020", "01-10-2026", "2026-10-01T00:00:00Z", 7]:
+            with self.assertRaises(ValueError):
+                server.validate_run_date(value)
+
+    def test_a_year_the_graph_cannot_parse_is_rejected(self):
+        # Python's date.fromisoformat has no year 0, and so the Worker must
+        # not accept one either.
+        with self.assertRaises(ValueError):
+            server.validate_run_date("0000-01-01")
+
+    def test_the_trim_matches_the_worker(self):
+        # The Worker's String.trim() does not remove U+001C.
+        with self.assertRaises(ValueError):
+            server.validate_run_date("\u001c2026-10-01")
+        self.assertEqual(server.validate_run_date("\u00a02026-10-01"), "2026-10-01")
+
+    def test_the_graph_step_always_carries_run_date(self):
+        steps = server.steps_for("session", None, "asia")
+        self.assertEqual(steps[1][1]["RUN_DATE"], "")
+        steps = server.steps_for("session", None, "asia", "2026-10-01")
+        self.assertEqual(steps[1][1]["RUN_DATE"], "2026-10-01")
+
+    def test_the_calendar_step_carries_no_run_date(self):
+        steps = server.steps_for("session", None, "asia", "2026-10-01")
+        self.assertNotIn("RUN_DATE", steps[0][1])
+
+    def test_an_ambient_run_date_never_reaches_a_step(self):
+        os.environ["RUN_DATE"] = "2026-01-01"
+        try:
+            self.assertNotIn("RUN_DATE", server.step_env({}))
+            self.assertEqual(server.step_env({"RUN_DATE": ""})["RUN_DATE"], "")
+        finally:
+            os.environ.pop("RUN_DATE", None)
+
+
+class HandlerTests(unittest.TestCase):
+    """The HTTP handler, not only the pure functions."""
+
+    def post(self, path: str, body: dict) -> tuple[int, dict]:
+        raw = json.dumps(body).encode("utf-8")
+        handler = server.Handler.__new__(server.Handler)
+        handler.path = path
+        handler.command = "POST"
+        handler.request_version = "HTTP/1.1"
+        handler.requestline = f"POST {path} HTTP/1.1"
+        handler.headers = {"Content-Length": str(len(raw))}
+        handler.rfile = io.BytesIO(raw)
+        handler.wfile = io.BytesIO()
+        handler.do_POST()
+        response = handler.wfile.getvalue().decode("utf-8")
+        status = int(response.split(" ", 2)[1])
+        return status, json.loads(response.split("\r\n\r\n", 1)[1])
+
+    def test_a_malformed_run_date_is_a_400_and_starts_nothing(self):
+        with mock.patch.object(server.subprocess, "run") as run:
+            status, payload = self.post("/run/session", {"session": "asia", "run_date": "2026-02-30"})
+        self.assertEqual(status, 400)
+        self.assertEqual(payload, {"error": "invalid_run_date"})
+        run.assert_not_called()
+
+    def test_a_valid_run_date_reaches_the_graph_step(self):
+        with mock.patch.object(server.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            status, payload = self.post("/run/session", {"session": "asia", "run_date": "2026-10-01"})
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        env = run.call_args_list[-1].kwargs["env"]
+        self.assertEqual(env["RUN_DATE"], "2026-10-01")
+        self.assertEqual(env["FX_SESSION"], "asia")
+
+    def test_an_unknown_route_is_rejected_before_the_run_date(self):
+        with mock.patch.object(server.subprocess, "run") as run:
+            status, payload = self.post("/run/bogus", {"run_date": "nope"})
+        self.assertEqual(status, 400)
+        self.assertEqual(payload, {"error": "unknown route"})
+        run.assert_not_called()
+
+    def test_an_invalid_session_wins_over_an_invalid_run_date(self):
+        with mock.patch.object(server.subprocess, "run") as run:
+            status, payload = self.post("/run/session", {"session": "bogus", "run_date": "nope"})
+        self.assertEqual(status, 400)
+        self.assertEqual(payload, {"error": "invalid session"})
+        run.assert_not_called()
 
 
 if __name__ == "__main__":

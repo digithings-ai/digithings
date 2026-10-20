@@ -48,7 +48,8 @@ function authorized(request: Request, env: Env): boolean {
 
 /**
  * The workflow's run_date input: optional, a calendar date, empty means the
- * forward path. undefined means absent, null means malformed.
+ * forward path. A missing value or a JSON null is absent, the same as the
+ * workflow's empty default; a returned null means malformed.
  */
 function readRunDate(value: unknown): string | undefined | null {
   if (value === undefined || value === null) return undefined;
