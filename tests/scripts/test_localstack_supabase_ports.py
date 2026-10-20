@@ -152,3 +152,17 @@ def test_the_checked_in_config_toml_still_carries_the_canonical_ports():
     text = config.read_text(encoding="utf-8")
     assert f"port = {supabase_ports.CANONICAL_PORTS['api']}" in text
     assert f"port = {supabase_ports.CANONICAL_PORTS['db']}" in text
+
+
+def test_the_port_set_refuses_a_value_the_cli_cannot_bind():
+    """The set is the last line of defence, and it was never reached.
+
+    api_port resolves the knob first, so a test that only went through
+    api_port never reached the guard inside the set: a caller handing it an
+    unusable port - supabase_flat.py --api-port - would have written port 0
+    and a negative shadow_port into the generated config.
+    """
+    canonical = supabase_ports.ports_for_api_port(supabase_ports.DEFAULT_API_PORT)
+    for unusable in (0, -1, 99999, 65536):
+        assert supabase_ports.ports_for_api_port(unusable) == canonical
+    assert all(1 <= port <= 65535 for port in canonical.values())

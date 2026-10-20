@@ -16,12 +16,14 @@ the next bring-up. Three sources meet in it, lowest precedence first:
 3. the local overrides (the local digikey DSN, the local Supabase URL, the
    omniroute password), which always win.
 
-Which of the first two a value came from is recorded in a sidecar state file
-next to the ``.env`` (mode 0600, git-ignored with the rest of the ``.env*``
-family). The sidecar holds digests, never values: it says whether the value in
-the ``.env`` is the one the render wrote or one the operator changed. Without
-it - a lost or unreadable sidecar - the comparison against the render decides,
-so a value the operator edited still survives.
+Which of the first two a value came from is recorded in a managed block at the
+bottom of the ``.env`` itself (digests, never values). The block travels with
+the values it describes: it is written in the same atomic write, so it can
+never describe a file that is no longer there. A record in a second file
+could, and a stale record froze a rotated secret - the value in the ``.env``
+read as the operator's and the render's new value never reached compose. With
+the block in the same file the two cannot drift apart, and a value the
+operator changed is still theirs.
 """
 from __future__ import annotations
 
@@ -68,9 +70,12 @@ LOCAL_DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
 #: fallback resolves to this path.
 LOCAL_DIGISEARCH_MONITORS_DB = "/data/monitors/.digisearch/monitors.sqlite3"
 
-#: Where the provenance of the root .env is recorded, next to the .env
-#: itself. The .env* family is git-ignored, so this never gets committed.
-STATE_FILE = ".env.localstack-state.json"
+#: The provenance of the root .env travels with the values it describes: a
+#: managed block at the bottom of the same file, holding digests and never
+#: values. The .env is git-ignored, mode 0600, and written in one atomic
+#: write, so the block can never describe a file that is no longer there.
+STATE_HEADER = "# --- digithings localstack provenance (managed; do not edit) ---"
+STATE_MARKER = "# digithings-localstack-state:"
 
 #: The value in the .env is the one the render wrote.
 SOURCE_RENDER = "render"
@@ -142,58 +147,79 @@ def local_overrides(env: Mapping[str, str], existing: Mapping[str, str]) -> Dict
 
 
 def digest(value: str) -> str:
-    """The digest of a value. The sidecar stores these, never the values."""
+    """The digest of a value. The provenance block stores these, never the values."""
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def read_state(path: Path) -> Dict[str, Dict[str, str]]:
-    """Read the provenance sidecar. A missing or broken file reads as empty."""
+    """Read the provenance block out of the .env.
+
+    A missing or broken block reads as empty: the write still happens, the
+    render decides for the names it claims.
+    """
     if not path.exists():
         return {}
     try:
-        raw = json.loads(path.read_text())
-    except (OSError, ValueError):
+        raw = path.read_text()
+    except OSError:
         return {}
-    if not isinstance(raw, dict):
-        return {}
-    state: Dict[str, Dict[str, str]] = {}
-    for name, entry in raw.items():
-        if isinstance(entry, dict):
-            state[name] = {k: v for k, v in entry.items() if isinstance(v, str)}
-    return state
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(STATE_MARKER):
+            continue
+        try:
+            payload = json.loads(stripped[len(STATE_MARKER) :].strip())
+        except ValueError:
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        state: Dict[str, Dict[str, str]] = {}
+        for name, entry in payload.items():
+            if isinstance(entry, dict):
+                state[name] = {k: v for k, v in entry.items() if isinstance(v, str)}
+        return state
+    return {}
 
 
-def write_state(path: Path, sources: Mapping[str, str], values: Mapping[str, str]) -> Path:
-    """Record where every value in the .env came from, mode 0600."""
-    payload: Dict[str, Dict[str, str]] = {}
-    for name, source in sorted(sources.items()):
-        entry = {"source": source}
-        if source == SOURCE_RENDER:
-            # The digest of what we wrote, so the next run can tell whether
-            # the operator changed the value in the meantime.
-            entry["digest"] = digest(values.get(name, ""))
-        payload[name] = entry
-    _write_private(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
-    return path
+def state_block(sources: Mapping[str, str], values: Mapping[str, str]) -> str:
+    """The managed provenance block: sources and digests, never values.
+
+    The digest is of the value in the .env, so the next run can tell whether
+    the operator changed it in the meantime.
+    """
+    payload = {
+        name: {"source": source, "digest": digest(values.get(name, ""))}
+        for name, source in sorted(sources.items())
+    }
+    return f"{STATE_HEADER}\n{STATE_MARKER} {json.dumps(payload, sort_keys=True)}\n"
 
 
 def operator_owns(
     value: str,
-    rendered_value: str,
     entry: Optional[Mapping[str, str]] = None,
 ) -> bool:
-    """Is the value in the .env the operator's own?"""
-    if entry:
-        source = entry.get("source")
-        if source == SOURCE_OPERATOR:
-            return True
-        known_digest = entry.get("digest")
-        if source == SOURCE_RENDER and known_digest:
-            # We wrote this value; the operator owns it only if they changed it.
-            return digest(value) != known_digest
-    # No usable record: the operator owns the value when it differs from the
-    # render. This is also how an edit made before the sidecar existed reads.
-    return value != rendered_value
+    """Is the value in the .env the operator's own?
+
+    The provenance block says what was decided last time:
+
+    - the value in the .env is not the one we wrote -> the operator changed
+      it, so it is theirs;
+    - it is the one we wrote and we wrote the operator's -> it stays theirs;
+    - it is the one we wrote and we wrote the render's -> the render decides
+      again, so a rotated secret lands.
+
+    Without a record the render decides for the names it claims: a value
+    nobody recorded cannot be told apart from a stale copy of a rotated
+    secret, and the stale copy is the dangerous one.
+    """
+    if not entry:
+        return False
+    known = entry.get("digest")
+    if not known:
+        return False
+    if digest(value) != known:
+        return True
+    return entry.get("source") == SOURCE_OPERATOR
 
 
 def compose_env(
@@ -222,7 +248,7 @@ def compose_env(
             values[name] = value
             sources[name] = SOURCE_OPERATOR
             continue
-        if operator_owns(value, rendered[name], state.get(name)):
+        if operator_owns(value, state.get(name)):
             values[name] = value
             sources[name] = SOURCE_OPERATOR
         else:
@@ -261,13 +287,14 @@ def write_env(root: Path, env: Optional[Mapping[str, str]] = None) -> Path:
     existing = read_env_file(target)
     rendered = read_env_file(root / ".dev.vars")
     overrides = local_overrides(env, existing)
-    state = read_state(root / STATE_FILE)
+    state = read_state(target)
     values, sources = compose_env(rendered, existing, overrides, state)
     body = "".join(f"{name}={value}\n" for name, value in sorted(values.items()))
+    # The values and their provenance go out in one atomic write: a record in
+    # a second file can describe a file that is no longer there, and a stale
+    # record froze a rotated secret.
+    body += state_block(sources, values)
     _write_private(target, body)
-    # The provenance is recorded after the .env is in place: a run that dies in
-    # between leaves the operator's values in place, not the render's.
-    write_state(root / STATE_FILE, sources, values)
     return target
 
 
