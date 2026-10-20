@@ -59,25 +59,34 @@ if [ -n "$_ci_key" ] && [ "$_force_or" -eq 0 ]; then
     /app/config/litellm.yaml; do
     [ -f "$_asset" ] || _missing="$_missing $_asset"
   done
+  # A missing asset or a failed merge must NOT abort the boot. The container
+  # cold-starts on every request (ports.ts sleepAfter 1m), so a dead container
+  # takes digisearch, digivault and digikey down with it for every request
+  # after an idle minute - a wider outage than the curated-model 404 it
+  # prevents, on a live invite-gated tenant. The base config is a build-time
+  # COPY, so it is always present: degrade to it and keep the verdict loud
+  # in the log file instead of serving it silently (DIG-4512).
+  _merge_rc=0
+  _merge_detail=""
   if [ -n "$_missing" ]; then
-    _log "digithings-stack: FATAL cheaperinference: overlay asset missing:$_missing; curated-models CHECK-FAILED - refusing to boot"
-    exit 1
+    _merge_rc=1
+    _merge_detail="overlay asset missing:$_missing"
+  else
+    # The merge must produce a model_list that carries every curated house
+    # model. Its own message names the ones that are missing.
+    _merge_detail="$(python3 /app/scripts/merge_litellm_cheaperinference.py \
+      --base /app/config/litellm.yaml \
+      --overlay /app/config/litellm.cheaperinference.yaml \
+      --require-curated-ids \
+      -o /app/config/litellm.runtime.yaml 2>&1)" || _merge_rc=$?
   fi
-  # The merge must produce a model_list that carries every curated house model.
-  # If it does not, the boot stops here: serving the base file answers every
-  # curated tenant model with model-not-found while /health stays green
-  # (DIG-4512).
-  if ! python3 /app/scripts/merge_litellm_cheaperinference.py \
-    --base /app/config/litellm.yaml \
-    --overlay /app/config/litellm.cheaperinference.yaml \
-    --require-curated-ids \
-    -o /app/config/litellm.runtime.yaml; then
-    _log "digithings-stack: FATAL cheaperinference: merge failed; curated-models CHECK-FAILED - refusing to serve a model_list without the curated models"
-    exit 1
+  if [ "$_merge_rc" -eq 0 ]; then
+    export LITELLM_CONFIG=/app/config/litellm.runtime.yaml
+    export ENV_LITELLM_CONFIG=/app/config/litellm.runtime.yaml
+    _log "digithings-stack: INFO cheaperinference: curated-models OK (overlay merged into $LITELLM_CONFIG)"
+  else
+    _log "digithings-stack: ERROR cheaperinference: merge failed (${_merge_detail:-no detail}); curated-models CHECK-FAILED - serving the base config $LITELLM_CONFIG"
   fi
-  export LITELLM_CONFIG=/app/config/litellm.runtime.yaml
-  export ENV_LITELLM_CONFIG=/app/config/litellm.runtime.yaml
-  _log "digithings-stack: INFO cheaperinference: curated-models OK (overlay merged into $LITELLM_CONFIG)"
 else
   # No overlay: the effective config is the base file the image ships, and it
   # carries none of the curated house models, so every curated tenant model

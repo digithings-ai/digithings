@@ -8,6 +8,7 @@ must therefore be either deliberately fail-fast or best-effort.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -179,11 +180,12 @@ def test_a_failing_cp_aborts_set_e_unless_guarded(tmp_path):
 
 
 def test_cheaperinference_merge_must_not_fall_back_silently():
-    """A failed overlay merge must abort the boot, not warn and continue.
+    """A failed overlay merge must not be a SILENT fallback.
 
-    The base file the image ships carries no curated model, so continuing
-    after a failed merge leaves LiteLLM serving a model_list that 404s every
-    curated tenant model while the health probe stays green (DIG-4512).
+    The base file the image ships carries no curated model, so serving it
+    quietly leaves LiteLLM answering every curated tenant model with
+    model-not-found while the health probe stays green (DIG-4512). The
+    fallback is allowed to exist, but it must name its verdict.
     """
     text = "\n".join(_pre_exec_lines())
     assert "merge failed; using default litellm.yaml" not in text, (
@@ -194,19 +196,34 @@ def test_cheaperinference_merge_must_not_fall_back_silently():
     )
 
 
-def test_cheaperinference_merge_failure_aborts_the_boot():
+def test_cheaperinference_merge_failure_degrades_to_the_base_config():
+    """A failed merge must NOT take the container down.
+
+    The base config is a build-time COPY, so it is always present, and the
+    container cold-starts on every request (ports.ts sleepAfter 1m): a boot
+    abort would take digisearch, digivault and digikey down with it for every
+    request after an idle minute. The failure therefore degrades to the base
+    config and is named loudly in the log file (DIG-4512).
+    """
     lines = _pre_exec_lines()
-    block = _block_after(lines, "if ! python3 /app/scripts/merge_litellm_cheaperinference.py")
-    assert any("FATAL" in line for line in block), block
-    assert "exit 1" in block, f"the merge failure branch must exit non-zero: {block}"
+    block = _nested_if_block(lines, 'if [ -n "$_missing" ]')
+    assert "exit 1" not in block, f"the merge failure branch must not abort: {block}"
+    text = "\n".join(lines)
+    assert "curated-models CHECK-FAILED - serving the base config" in text, (
+        "the degraded path must name its verdict and the config it serves"
+    )
 
 
-def test_cheaperinference_missing_overlay_asset_aborts_the_boot():
+
+
+def test_cheaperinference_missing_overlay_asset_degrades_to_the_base_config():
     """A missing overlay asset used to skip the whole merge block silently."""
     lines = _pre_exec_lines()
-    block = _block_after(lines, 'if [ -n "$_missing" ]')
-    assert any("FATAL" in line for line in block), block
-    assert "exit 1" in block, f"the missing-asset branch must exit non-zero: {block}"
+    block = _nested_if_block(lines, 'if [ -n "$_missing" ]')
+    assert "exit 1" not in block, f"the missing-asset branch must not abort: {block}"
+    assert "overlay asset missing" in "\n".join(block), block
+
+
 
 
 def test_litellm_config_is_always_exported_for_supervisord():
@@ -231,34 +248,97 @@ def test_litellm_config_is_always_exported_for_supervisord():
         )
 
 
-def test_a_failing_merge_aborts_the_boot_under_set_e():
-    """Pins the shell semantics the merge guard relies on.
+def _nested_if_span(lines: list[str], needle: str) -> tuple[int, int]:
+    """The start and end index of the `if` block whose opening line has `needle`.
 
-    The guard is `if ! <merge>; then … exit 1; fi`: under `set -eu` a failing
-    command in an `if` condition does not abort by itself, so the branch has to
-    exit on purpose — and it must not fall through to the `exec` below it.
+    The merge block nests `if`s, so the first `fi` after the opening line is
+    not the end of the block.
     """
-    guarded = "set -eu\nif ! false; then echo FATAL; exit 1; fi\necho REACHED\n"
-    result = subprocess.run(["sh", "-c", guarded], capture_output=True, text=True)
-    assert result.returncode != 0
-    assert "REACHED" not in result.stdout
-    assert "FATAL" in result.stdout
+    start = next(index for index, line in enumerate(lines) if needle in line)
+    depth = 0
+    for index in range(start, len(lines)):
+        line = lines[index]
+        if line.startswith("if ") or line.startswith("if!"):
+            depth += 1
+        if line == "fi":
+            depth -= 1
+            if depth == 0:
+                return start, index
+    raise AssertionError(f"no matching `fi` for {needle!r}")
+
+
+def _nested_if_block(lines: list[str], needle: str) -> list[str]:
+    """The `if` block whose opening line contains `needle`, up to its MATCHING `fi`."""
+    start, end = _nested_if_span(lines, needle)
+    return lines[start:end + 1]
+
+
+def test_a_failed_merge_degrades_to_the_base_config_and_keeps_booting(tmp_path):
+    """The behaviour R1 asks for, run for real.
+
+    A merge that fails must leave supervisord pointing at the base config,
+    must not abort the boot, and must write the verdict - with the merge's
+    own missing-model list - into the log file the operator reads.
+    """
+    lines = _pre_exec_lines()
+    start = next(i for i, line in enumerate(lines) if "export LITELLM_CONFIG=" in line)
+    _outer_start, outer_end = _nested_if_span(lines, 'if [ -n "$_ci_key" ]')
+    block = lines[start:outer_end + 1]
+    assert block[-1] == "fi", block[-1]
+
+    app = tmp_path / "app"
+    (app / "config").mkdir(parents=True)
+    (app / "scripts").mkdir()
+    for name in ("litellm.yaml", "litellm.cheaperinference.yaml"):
+        (app / "config" / name).write_text("model_list: []\n")
+    (app / "scripts" / "merge_litellm_cheaperinference.py").write_text("# stub\n")
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    (stub / "python3").write_text(
+        "#!/bin/sh\necho 'ERROR: the merged litellm model_list is missing 1 curated"
+        " model id(s): deepseek/deepseek-v4.1-flash' >&2\nexit 1\n"
+    )
+    (stub / "python3").chmod(0o755)
+
+    body = "\n".join(block).replace("/app", str(app)).replace("/var/log/supervisor", str(logs))
+    script = tmp_path / "boot.sh"
+    script.write_text("set -eu\n" + body + '\necho "CFG=$ENV_LITELLM_CONFIG"\necho REACHED\n')
+    env = dict(os.environ)
+    env["PATH"] = str(stub) + ":" + env["PATH"]
+    env["CHEAPERINFERENCE_API_KEY"] = "k"
+    result = subprocess.run(["sh", str(script)], capture_output=True, text=True, env=env)
+    assert result.returncode == 0, result.stderr
+    assert "REACHED" in result.stdout, "the boot must continue past a failed merge"
+    assert f"CFG={app}/config/litellm.yaml" in result.stdout, result.stdout
+    verdict = (logs / "stack-entrypoint.log").read_text()
+    assert "curated-models CHECK-FAILED" in verdict, verdict
+    assert "deepseek/deepseek-v4.1-flash" in verdict, verdict
 
 
 def _no_overlay_branch(lines: list[str]) -> list[str]:
-    """The else branch of the cheaperinference merge block."""
-    start = next(
-        index
-        for index, line in enumerate(lines)
-        if "_ci_key" in line and "_force_or" in line
-    )
-    else_at = next(index for index in range(start, len(lines)) if lines[index] == "else")
-    block: list[str] = []
-    for line in lines[else_at:]:
-        block.append(line)
+    """The else branch of the OUTER cheaperinference merge block.
+
+    The merge block nests `if`s and now has an inner `else` of its own, so
+    the outer else has to be found by depth, not by being the first one.
+    """
+    outer_start, outer_end = _nested_if_span(lines, 'if [ -n "$_ci_key" ]')
+    outer = lines[outer_start:outer_end + 1]
+    depth = 0
+    for index, line in enumerate(outer):
+        if line.startswith("if ") or line.startswith("if!"):
+            depth += 1
+        elif line == "else" and depth == 1:
+            branch: list[str] = []
+            for candidate in outer[index:]:
+                branch.append(candidate)
+                if candidate == "fi":
+                    return branch
+            return branch
         if line == "fi":
-            return block
-    raise AssertionError("the no-overlay branch is not closed by an fi")
+            depth -= 1
+    raise AssertionError("no else branch in the merge block")
 
 
 def test_the_no_overlay_path_names_the_missing_curated_models():
