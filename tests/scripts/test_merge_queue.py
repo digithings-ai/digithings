@@ -2079,3 +2079,50 @@ def test_an_unreadable_comments_fetch_is_refused(gh_stub: Any) -> None:
     assert any(
         reason.startswith("the review record could not be read") for reason in verdict.reasons
     ), verdict.reasons
+
+
+def _verdict(number: int, *, stale: bool, eligible: bool = False) -> Any:
+    """A verdict with only the fields the stale selection reads."""
+    return mq.Verdict(
+        number=number,
+        title=f"PR {number}",
+        head_ref=f"task/{number}-slug",
+        created_at="2026-10-01T00:00:00Z",
+        head_sha="a" * 40,
+        eligible=eligible,
+        stale_base_only=stale,
+    )
+
+
+def test_only_a_branch_stale_because_the_base_moved_is_offered_for_an_update() -> None:
+    """A branch that is broken is not fixed by updating it.
+
+    Updating a branch costs a full CI run, so a PR that is blocked for a real
+    reason must not be refreshed: it would spend the run and stay blocked.
+    """
+    verdicts = [
+        _verdict(1, stale=False),
+        _verdict(2, stale=True),
+        _verdict(3, stale=False),
+        _verdict(4, stale=True),
+    ]
+    offered = mq.stale_candidates(verdicts, 10)
+    assert [v.number for v in offered] == [2, 4]
+
+
+def test_the_number_of_branches_offered_for_an_update_is_bounded() -> None:
+    """The limit is the number of CI runs one tick may spend."""
+    verdicts = [_verdict(n, stale=True) for n in (1, 2, 3, 4, 5)]
+    assert [v.number for v in mq.stale_candidates(verdicts, 3)] == [1, 2, 3]
+    assert mq.stale_candidates(verdicts, 0) == []
+    assert mq.stale_candidates(verdicts, -1) == []
+
+
+def test_the_branches_offered_for_an_update_are_the_oldest_first() -> None:
+    """The oldest PR has been waiting longest for the CI run an update spends."""
+    verdicts = [
+        _verdict(7, stale=True),
+        _verdict(3, stale=True),
+        _verdict(5, stale=True),
+    ]
+    assert [v.number for v in mq.stale_candidates(verdicts, 2)] == [7, 3]
