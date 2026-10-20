@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""fill-entry-prices.py — Back-fill entry_price_usd for portfolio positions.
+"""fill_entry_prices.py — Back-fill entry_price_usd for portfolio positions.
 
 Looks up each position's entry-date close in the sealed R2 generations (#4053),
 then writes the result back to config/portfolio.json.
 
 Usage:
-    python3 scripts/fill-entry-prices.py            # fill all null entry prices
-    python3 scripts/fill-entry-prices.py --dry-run  # show diff without writing
-    python3 scripts/fill-entry-prices.py --ticker IAU  # fill a single ticker only
+    python3 digiquant/scripts/research/fill_entry_prices.py            # fill all null entry prices
+    python3 digiquant/scripts/research/fill_entry_prices.py --dry-run  # show diff without writing
+    python3 digiquant/scripts/research/fill_entry_prices.py --ticker IAU  # fill a single ticker only
 
 Requires:
     R2 credentials (R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)
@@ -70,7 +70,7 @@ def lookup_close(ticker: str, entry_date: str) -> float | None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="fill-entry-prices.py — Back-fill entry_price_usd from sealed R2 closes",
+        description="fill_entry_prices.py — Back-fill entry_price_usd from sealed R2 closes",
         epilog=(
             "Requires R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID and "
             "R2_SECRET_ACCESS_KEY env vars."
