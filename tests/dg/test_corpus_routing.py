@@ -552,3 +552,63 @@ def test_unknown_key_does_not_relax_fail_closed_on_known_values(
         table = load_tenant_corpus_map(raw)
         override = resolve_corpus_override(tenant_slug="occ", corpus_map=table)
     assert override.digisearch_index is None
+
+
+def test_tenant_map_real_boolean_lock_passes_through() -> None:
+    """A real boolean is taken as written: true locks, false does not."""
+    locked = load_tenant_corpus_map(json.dumps({"occ": {"lockSessionControls": True}}))
+    unlocked = load_tenant_corpus_map(json.dumps({"occ": {"lockSessionControls": False}}))
+    assert locked["occ"].lock_session_controls is True
+    assert unlocked["occ"].lock_session_controls is False
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["true", "false", 1, 0, 1.0, None, [], {}],
+    ids=["str-true", "str-false", "int-1", "int-0", "float", "null", "list", "object"],
+)
+def test_tenant_map_non_boolean_lock_fails_closed_to_locked(value: object) -> None:
+    """DIG-4590: a non-boolean lock flag must never unlock the tenant.
+
+    The digichat registry validator rejects the same field ("lockSessionControls
+    must be a boolean"). The corpus map fails closed to LOCKED for that entry.
+    """
+    mapped = load_tenant_corpus_map(
+        json.dumps({"occ": {"lockSessionControls": value, "digisearchIndex": "occ_help"}})
+    )
+    assert mapped["occ"].lock_session_controls is True
+
+
+def test_tenant_map_bad_lock_keeps_the_entry() -> None:
+    """A bad lock value degrades the flag only: the entry and its corpus survive.
+
+    Dropping the entry would unlock the tenant *and* re-point its corpus.
+    """
+    mapped = load_tenant_corpus_map(
+        json.dumps(
+            {
+                "occ": {
+                    "lockSessionControls": "true",
+                    "digisearchIndex": "occ_help",
+                    "vaultPathPrefix": "clients/online-compliance-center",
+                }
+            }
+        )
+    )
+    assert mapped["occ"].digisearch_index == "occ_help"
+    assert mapped["occ"].vault_path_prefix == "clients/online-compliance-center"
+    assert mapped["occ"].lock_session_controls is True
+
+
+def test_tenant_map_bad_lock_warns_without_the_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The warning names the tenant and the JSON type, never the offending value."""
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        load_tenant_corpus_map(json.dumps({"occ": {"lockSessionControls": "yes-please"}}))
+    warnings = [r for r in caplog.records if "lockSessionControls" in r.getMessage()]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "occ" in message
+    assert "str" in message
+    assert "yes-please" not in message
