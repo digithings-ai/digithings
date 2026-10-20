@@ -21,6 +21,7 @@ import {
   isNonAiSdkConfig,
 } from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
+import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
 import {
   DigigraphUpstreamAuthError,
   resolveDigigraphUpstreamAuth,
@@ -157,6 +158,13 @@ export async function POST(req: Request) {
     req.headers.get("x-byok-model")?.trim() ?? ""
   );
   const languageCode = resolveLanguageCode(req.headers.get("x-digi-language"));
+
+  // Dev-only: a canned reply so the tool chain (reasoning, grouped tool
+  // calls, the banners around them) can be reviewed in the local embed
+  // without a model behind it. Never in production.
+  if (isDemoChatEnabled() && !byokKey) {
+    return demoChatResponse();
+  }
 
   const sessionId =
     req.headers.get("x-digichat-session") ??
@@ -732,9 +740,10 @@ export async function POST(req: Request) {
           upstreamHeaders,
           responseHeaders,
           activityDetail,
-          // BYOK models travel in their own header; only the house default
-          // belongs in the request body.
-          model: byokKey ? undefined : tenantDefaultModel,
+          // BYOK models travel in their own header; only the house model
+          // belongs in the request body. `modelId` is the pick (when the
+          // tenant curates a list) or the curated default.
+          model: byokKey ? undefined : modelId,
           signal: req.signal,
         }),
       );

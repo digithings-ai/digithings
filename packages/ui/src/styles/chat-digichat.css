@@ -183,6 +183,7 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklab, var(--ink-mute) 30%, transparent) transparent;
+  scrollbar-gutter: stable;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar,
@@ -192,6 +193,8 @@
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-content"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content {
   scrollbar-width: thin;
@@ -199,6 +202,8 @@
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"]::-webkit-scrollbar,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-content"]::-webkit-scrollbar,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar {
   width: 4px;
@@ -209,6 +214,8 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar-thumb,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar-thumb,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"]::-webkit-scrollbar-thumb,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-content"]::-webkit-scrollbar-thumb,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar-thumb,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar-thumb {
   border-radius: 0;
@@ -219,22 +226,126 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar-thumb:hover,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar-thumb:hover,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"]::-webkit-scrollbar-thumb:hover,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-content"]::-webkit-scrollbar-thumb:hover,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar-thumb:hover,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar-thumb:hover {
   background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
 }
 
-/* Menu body: Safari's overlay scrollbar is an OS capsule and ignores the
-   shape rules above, so the native bar is hidden and the menu paints this
-   square 6px thumb instead (MenuScrollbar in embed-composer-menu). */
+/* The menu keeps its bar in place: 6px track always shown, and the stable
+   gutter reserves that width so the thumb never sits over the row text. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+/* data-scrollbars="auto" — the native overlay bar, shown only while the
+   surface is scrolling or the pointer is over it, and never reserving a
+   gutter. Absent or "always" keeps every rule above: 6px/10px/4px square
+   bars in a stable gutter. The custom overlay bars are switched off here so
+   a surface never draws the native bar and the component bar together. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"]
+  [data-slot="aui_thread-viewport"] {
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"]
+  .aui-composer-input,
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"]
+  .dc-composer-menu-body {
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"]
+  [data-slot="tool-fallback-dump"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"]
+  [data-slot="reasoning-text"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"]
+  [data-slot="tool-group-content"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"]
+  .aui-tool-fallback-args-value,
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"]
+  .aui-tool-fallback-result-content {
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+}
+
+/* The palette list is portalled out of the thread root, so it is matched
+   through the document instead of by ancestry. */
+html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
+  [data-slot="composer-trigger-popover-items"] {
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+}
+
+/* One bar per surface: the React overlay bars are inert under "auto". */
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"] .aui-overlay-scroll,
+:is(.aui-theme-stage, [data-thread-skin="digichat"])[data-scrollbars="auto"] .dc-composer-menu-scroll {
+  display: none;
+}
+
+[data-slot="composer-trigger-popover-items"] {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--ink-mute) 30%, transparent) transparent;
+  scrollbar-gutter: stable;
+}
+
+[data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-slot="composer-trigger-popover-items"]::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+}
+
+[data-slot="composer-trigger-popover-items"]::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
+}
+
+/* Always mode paints a square overlay bar; the native bar must not draw a
+   second, rounded capsule underneath it (Safari ignores the webkit shape). */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"],
+[data-slot="composer-trigger-popover-items"] {
   scrollbar-width: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"]::-webkit-scrollbar,
+[data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
   display: none;
-  width: 0;
-  height: 0;
+}
+
+.aui-overlay-scroll {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  bottom: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.aui-overlay-thumb {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-radius: 0;
+  background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+}
+
+.aui-overlay-thumb:hover {
+  background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
 }
 
 [data-slot="composer-trigger-popover-items"] {
@@ -1183,6 +1294,13 @@
 }
 
 .aui-composer-trigger-popover [data-highlighted] .aui-menu-cursor {
+  display: inline-flex;
+}
+
+/* The settings menu reuses the popover class for placement, so the palette's
+   "only the highlighted row" rule would hide its own cursor row. The menu
+   marks the cursor with data-cursor on every page. */
+.dc-composer-menu [data-cursor="true"] .aui-menu-cursor {
   display: inline-flex;
 }
 

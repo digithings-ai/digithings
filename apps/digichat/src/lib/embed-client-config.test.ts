@@ -202,16 +202,16 @@ describe("toEmbedClientConfig", () => {
           gateMode: "ungated",
           attribution: false,
           token: "t",
-          view: "detailed",
+          view: "verbose",
           thinking: "open",
         },
       }),
     );
     const cfg = toEmbedClientConfig(registry.get("example.com")!);
-    expect(cfg.view).toBe("detailed");
+    expect(cfg.view).toBe("verbose");
     expect(cfg.thinking).toBe("open");
     const projected = clientConfigFromEmbedTenant(cfg);
-    expect(projected.features.view).toBe("detailed");
+    expect(projected.features.view).toBe("verbose");
     expect(projected.features.thinking).toBe("open");
   });
 

@@ -15,6 +15,7 @@ import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@digithings/ui/chat/skins";
 import {
   DEFAULT_THINKING_MODE,
   DEFAULT_VIEW_MODE,
+  LEGACY_VIEW_MODE_ALIASES,
   THINKING_MODES,
   VIEW_MODES,
 } from "@/lib/view-modes";
@@ -101,8 +102,19 @@ export const DisclosureModeSchema = z.enum([
 ]);
 export type DisclosureMode = z.infer<typeof DisclosureModeSchema>;
 
-/** Chain-of-thought view mode (reasoning + tool calls). See view-modes.ts. */
-export const ViewModeSchema = z.enum(VIEW_MODES);
+/**
+ * Chain-of-thought view mode (reasoning + tool calls). See view-modes.ts.
+ * Retired ids `compact` / `detailed` fold forward to `quiet` / `verbose`;
+ * every other unknown value still fails the enum (fail closed).
+ */
+export const ViewModeSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(LEGACY_VIEW_MODE_ALIASES, value)
+      ? LEGACY_VIEW_MODE_ALIASES[value as keyof typeof LEGACY_VIEW_MODE_ALIASES]
+      : value,
+  z.enum(VIEW_MODES),
+);
 /** Reasoning-only override on top of the view mode. */
 export const ThinkingModeSchema = z.enum(THINKING_MODES);
 
@@ -160,7 +172,7 @@ export const ChromeSchema = z
  * Legacy `features.reasoning` / `features.toolCalls` disclosure keys fold
  * forward onto the view-mode pair so older YAML keeps loading. Per-field:
  * a new-style value always wins; a legacy value maps to the closest mode
- * (toolCalls off→hidden / expanded→detailed / collapsed→compact; reasoning
+ * (toolCalls off→hidden / expanded→verbose / collapsed→quiet; reasoning
  * expanded→thinking open, anything else→pinned collapsed).
  */
 function foldLegacyDisclosure(value: unknown): unknown {
@@ -177,8 +189,8 @@ function foldLegacyDisclosure(value: unknown): unknown {
       toolCalls === false || toolCalls === "off"
         ? "hidden"
         : toolCalls === "expanded" || toolCalls === "locked_open"
-          ? "detailed"
-          : "compact";
+          ? "verbose"
+          : "quiet";
   }
   if (record.thinking == null && reasoning !== undefined) {
     record.thinking =
