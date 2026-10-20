@@ -162,6 +162,26 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      # Preflight (DIG-4717). Actions substitutes an EMPTY STRING for a secret
+      # name it cannot resolve, so a missing credential reaches the deploy as an
+      # empty environment variable and the failure lands on wrangler as an auth
+      # error instead of on the missing secret. That is how this lane came to
+      # ship with an empty Cloudflare token: #6013 added the read of
+      # `CLOUDFLARE_WORKERS_API_TOKEN`, the secret was never created, and
+      # nothing said so until wrangler refused. This step makes the gap loud at
+      # the point of use. It prints whether the variable is empty, never its
+      # value.
+      - name: "Preflight: the Cloudflare Workers token is present"
+        env:
+          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_WORKERS_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_WORKERS_API_TOKEN is empty. This lane needs a Cloudflare API token with the Workers Scripts:Edit permission, stored under the name CLOUDFLARE_WORKERS_API_TOKEN."
+            echo "::error::It must NOT be the repo's CLOUDFLARE_API_TOKEN: that name holds the Vectorize/D1 token, and exporting it makes wrangler fail with error 10000."
+            echo "::error::The gap is recorded in .github/secret-names.json under accepted_missing (owner: chris)."
+            exit 1
+          fi
+          echo "CLOUDFLARE_WORKERS_API_TOKEN is present (value not shown)."
       - name: "Deploy stack container"
         run: npm run deploy --workspace digithings-stack-cloudflare
         env:
