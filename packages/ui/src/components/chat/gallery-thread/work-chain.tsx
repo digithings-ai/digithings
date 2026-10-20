@@ -84,7 +84,7 @@ export function WorkChain({
           data-slot="aui_work-chain-label"
           className="aui-work-chain-label inline-block leading-none"
         >
-          Reasoning
+          {busy ? "Working" : "Worked"}
         </span>
         <span
           data-slot="aui_work-chain-chevron"
