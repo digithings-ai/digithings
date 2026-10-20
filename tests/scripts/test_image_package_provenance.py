@@ -44,13 +44,16 @@ pytestmark = pytest.mark.unit
 # provenance record against the function that produced it cannot see a scope
 # that is too narrow: the record and the scope agree while both are wrong.
 # apps/dashboard is in the set because the image copies that manifest and the
-# root lockfile installs the app from it.
+# root lockfile installs the app from it. @digithings/catalog is in the set
+# because the digichat image imports the BYOK provider catalog from it, so the
+# image copies that workspace's manifest too (#6059).
 NPM_SCOPE_INPUTS = frozenset(
     {
         "@digithings/design",
         "@digithings/ui",
         "@digithings/digichat-ui",
         "@digithings/hero-banner",
+        "@digithings/catalog",
         "dashboard",
     }
 )

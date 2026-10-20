@@ -338,6 +338,11 @@ def check_only(
     must never read as a complete one.
     """
     target = _provenance_path() if provenance is None else provenance
+    if scope is not None and paths is not None:
+        raise SystemExit(
+            "check_only() takes a scope OR an explicit path set, not both: a scope "
+            "already says which inputs the question is about"
+        )
     selected = input_paths() if paths is None else paths
     if scope == STACK_SCOPE:
         selected = stack_input_paths()
@@ -679,8 +684,18 @@ def main(argv: list[str] | None = None) -> int:
         if arg == "--check-only":
             check = True
         elif arg == "--npm-only":
+            if scope is not None and scope != NPM_SCOPE:
+                raise SystemExit(
+                    f"--{scope} and --npm-only ask for two different images' inputs; "
+                    "package one image at a time"
+                )
             scope = NPM_SCOPE
         elif arg == "--stack-only":
+            if scope is not None and scope != STACK_SCOPE:
+                raise SystemExit(
+                    f"--{scope} and --stack-only ask for two different images' inputs; "
+                    "package one image at a time"
+                )
             scope = STACK_SCOPE
         else:
             raise SystemExit(

@@ -67,11 +67,21 @@
 # "/image-packages/stack/digisearch-seeds: not found".
 #
 # The packaging is SCOPED to this image: the action runs the generator's
-# --stack-only mode, which writes the three paths above and nothing else. The
-# full generator would also build the runner project - a fresh, unpinned `uv
-# lock` against PyPI - and pack five npm workspaces this image never installs,
-# and a production deploy must not inherit a network-dependent resolution step
-# it does not use.
+# --stack-only mode, which writes the three paths above - plus the frozen
+# exports they are derived from and the provenance record - and nothing the
+# image does not read. The full generator would also build the runner project
+# - a fresh, unpinned `uv lock` against PyPI - and pack five npm workspaces
+# this image never installs, and a production deploy must not inherit a
+# network-dependent resolution step it does not use.
+#
+# SUPERSEDES #6068 AND #6087. Main took a first version of this step directly
+# (#6068, eb6f2b9493, 2026-10-20 22:01) while develop was still missing it, and
+# that version runs the FULL generator inline. #6087 brought the same step to
+# develop on 2026-10-21, also inline and also with the full generator, and only
+# in the deploy job. This one is the scoped, local-action form, in EVERY job
+# that leads to the image build. Both touch this file, so the promotion of this
+# PR conflicts with them on main: take THIS version of the file when the
+# promotion lands.
 #
 # Do not add `working-directory`: both Containers pin
 # `image_build_context = "../.."`, so the image build needs the repository
@@ -106,6 +116,11 @@ on:
       # too: it decides what the image carries. A change to it that matches no
       # filter would never be proven in CI, and the merge would deploy nothing.
       - ".github/actions/package-stack-image-inputs/action.yml"
+      # The frozen export the image installs is `uv export --frozen` of the
+      # ROOT uv.lock for the nine stack packages, so a merge that only bumps a
+      # transitive pin changes the image and matches no filter - it would
+      # deploy nothing and the image would keep the old pins.
+      - "uv.lock"
   pull_request:
     paths:
       - "infra/docker/Dockerfile.digithings-stack-cloudflare"
@@ -132,6 +147,11 @@ on:
       # too: it decides what the image carries. A change to it that matches no
       # filter would never be proven in CI, and the merge would deploy nothing.
       - ".github/actions/package-stack-image-inputs/action.yml"
+      # The frozen export the image installs is `uv export --frozen` of the
+      # ROOT uv.lock for the nine stack packages, so a merge that only bumps a
+      # transitive pin changes the image and matches no filter - it would
+      # deploy nothing and the image would keep the old pins.
+      - "uv.lock"
   workflow_dispatch:
     inputs:
       ref:

@@ -173,6 +173,26 @@ def _dockerignore_rules() -> list[tuple[str, bool]]:
     return rules
 
 
+def _pattern_matches(pattern: str, ancestor: str) -> bool:
+    """Whether a .dockerignore pattern matches a path or a directory.
+
+    Docker's matcher is not python's fnmatch: `**` crosses directory
+    boundaries, and `**/x` matches a ROOT-level `x` as well as a nested one.
+    The model here is deliberately the strict one - it says "excluded" when
+    docker would exclude - so a path the guard checks can never read as safe
+    because this matcher was more permissive than docker is.
+    """
+    if "/" not in pattern:
+        return fnmatch.fnmatch(ancestor.rsplit("/", 1)[-1], pattern)
+    if pattern.startswith("**/"):
+        rest = pattern[3:]
+        tail = ancestor.split("/")[-1]
+        if fnmatch.fnmatch(tail, rest):
+            return True
+        return fnmatch.fnmatch(ancestor, pattern) or fnmatch.fnmatch(ancestor, "**/" + rest)
+    return fnmatch.fnmatch(ancestor, pattern)
+
+
 def _excluded_by_dockerignore(path: str) -> bool:
     """Whether docker would drop ``path`` from the build context.
 
@@ -186,11 +206,7 @@ def _excluded_by_dockerignore(path: str) -> bool:
     excluded = False
     for pattern, negated in _dockerignore_rules():
         for ancestor in ancestors:
-            if "/" in pattern:
-                matched = fnmatch.fnmatch(ancestor, pattern)
-            else:
-                matched = fnmatch.fnmatch(ancestor.rsplit("/", 1)[-1], pattern)
-            if matched:
+            if _pattern_matches(pattern, ancestor):
                 excluded = not negated
     return excluded
 
@@ -435,10 +451,16 @@ def test_a_stack_only_tree_is_refused_by_a_full_check(
     provenance's scope. A full check - the one a runner deploy runs - must
     refuse that tree, because a runner deploy built on it would ship an image
     without its wheels.
+
+    The digests are stubbed: the decision under test is about the KEY SETS
+    (what the record covers, what the scope covers), and the real digest
+    shells out to git once per input path - 72 seconds of subprocesses for a
+    question about names.
     """
     module = _load_generator()
     out = tmp_path / "image-packages"
     monkeypatch.setattr(module, "OUT", out)
+    monkeypatch.setattr(module, "content_digest", lambda path: "digest")
     out.mkdir(parents=True, exist_ok=True)
     module._write_provenance(module.stack_input_paths(), scope=module.STACK_SCOPE)
     provenance = out / module.PROVENANCE_NAME
