@@ -315,9 +315,9 @@ function parseHtmlBody(raw: string): Element | null {
   // document, so no script in it runs and no subresource in it loads, and every
   // element and attribute is filtered by the allowlist walk before this module
   // returns any markup. The file is byte-identical to develop's pre-existing
-  // apps/digichat/src/lib/page-context-sanitize.ts apart from this comment:
-  // the alert appeared only because the module became an exported library
-  // package, where CodeQL models an exported function's parameters as remote.
+  // apps/digichat/src/lib/page-context-sanitize.ts apart from this comment.
+  // The alert appeared only because the module became an exported library
+  // package; it is dismissed as a false positive (code scanning alert #189).
   const doc = new DOMParser().parseFromString(raw, "text/html"); // codeql[js/xss]
   return doc.body;
 }
