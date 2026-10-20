@@ -162,6 +162,43 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+
+      # The image's build context is the repo root, and the Dockerfile COPYs
+      # image-packages/stack/{requirements.txt,wheels,digisearch-seeds} — a
+      # directory that is GENERATED, not committed (.gitignore: "/image-packages/").
+      # A checkout therefore never carries it, so without this step the build
+      # context has no such directory and the build dies computing its cache
+      # key, before a single build step runs (run 39485748555, 2026-10-20).
+      #
+      # The local deploy path has always packaged these inputs first
+      # (scripts/local-deploy/deploy_worker.sh) and the digichat publish lane
+      # got the same step in #5968 (DIG-4506). The stack lane never had one:
+      # it was red for an unrelated reason (the npm 10 lockfile gap) since
+      # before it could reach the build.
+      #
+      # The stack image installs wheels, so this is the full generator, not the
+      # --npm-only subset: it needs uv, and it builds the digibase, digikey,
+      # digifetch, digiquant, digigraph and digillm wheels it packages.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.24"
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Package the image build inputs"
+        run: |
+          set -euo pipefail
+          python3 scripts/package_r5_image_inputs.py
+          for required in stack/requirements.txt stack/wheels stack/digisearch-seeds; do
+            if [ ! -e "image-packages/$required" ]; then
+              echo "::error::image-packages/$required is missing — the build context would carry no packaged input"
+              exit 1
+            fi
+          done
+
       - name: "Deploy stack container"
         run: npm run deploy --workspace digithings-stack-cloudflare
         env:
