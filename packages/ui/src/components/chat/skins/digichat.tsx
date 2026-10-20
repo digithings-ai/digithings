@@ -29,7 +29,11 @@ import {
   useComposerCopy,
   useSkinChrome,
 } from "../stock/skin-chrome";
-import { useDisclosureUi } from "../stock/deploy-ui-context";
+import {
+  useDeployUi,
+  useDisclosureUi,
+} from "../stock/deploy-ui-context";
+import { workVisibilityForView } from "../stock/skin-types";
 import {
   useStockComposerGateSubmit,
   useStockSendGate,
@@ -163,6 +167,8 @@ export function DigichatSkin({
   const { pageContext } = useSkinChrome();
   const reasoningUi = useDisclosureUi("reasoning");
   const toolCallsUi = useDisclosureUi("toolCalls");
+  // The raw view level is what decides how much of the work is shown.
+  const workVisibility = workVisibilityForView(useDeployUi().view);
   const gateSubmit = useStockComposerGateSubmit();
   const gate = useStockSendGate();
   const prefs = useEmbedChatPrefsOptional();
@@ -413,6 +419,7 @@ export function DigichatSkin({
       }
       reasoningMode={reasoningUi.mode}
       toolCallsMode={toolCallsUi.mode}
+      workVisibility={workVisibility}
       composerToolbar={
         prefs && prefs.prefs.toolbar !== false ? (
           <DigichatComposerToolbar prefs={prefs} />

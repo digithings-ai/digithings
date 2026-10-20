@@ -7,10 +7,11 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
-import type {
-  ThinkingMode,
-  ViewMode,
-  SkinMcpServerConfig,
+import {
+  normalizeViewPref,
+  type ThinkingMode,
+  type ViewMode,
+  type SkinMcpServerConfig,
 } from "./skin-types";
 
 export type EmbedChatPrefs = {
@@ -56,7 +57,6 @@ export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
 };
 
 /**
- * Session-default factory with injectable language/view/thinking (WS4 Step 3).
  * The package cannot import `@/lib/languages` / `@/lib/view-modes`, so hosts
  * pass their own defaults; called with no overrides it returns the app
  * defaults above, byte-for-byte.
@@ -67,7 +67,7 @@ export function createDefaultEmbedChatPrefs(
   return {
     ...DEFAULT_EMBED_CHAT_PREFS,
     ...(defaults?.language !== undefined ? { language: defaults.language } : null),
-    ...(defaults?.view !== undefined ? { view: defaults.view } : null),
+    ...(defaults?.view !== undefined ? { view: normalizeViewPref(defaults.view) } : null),
     ...(defaults?.thinking !== undefined ? { thinking: defaults.thinking } : null),
   };
 }

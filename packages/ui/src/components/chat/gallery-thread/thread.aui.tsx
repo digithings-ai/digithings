@@ -17,14 +17,19 @@ import {
   ReasoningRoot,
   ReasoningText,
   ReasoningTrigger,
-} from "./reasoning.aui";
+} from "../stock/reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
+import { WorkChainSummary } from "./work-chain-summary";
+import {
+  resolveWorkDisclosure,
+  type WorkVisibility,
+} from "../stock/skin-types";
 import { ToolFallback } from "../stock/tool-fallback.aui";
 import {
   ToolGroupContent,
   ToolGroupRoot,
   ToolGroupTrigger,
-} from "./tool-group.aui";
+} from "../stock/tool-group.aui";
 import {
   CheckActionIcon,
   CopyActionIcon,
@@ -169,6 +174,13 @@ export type ThreadProps = {
   /** Disclosure mode for grouped tool-call runs. Default collapsed. */
   toolCallsMode?: GroupDisclosureMode | undefined;
   /**
+   * How much of the agent's work the user sees: `quiet` (one summary line),
+   * `balanced` (open while it runs, collapsed when it finishes) or `verbose`
+   * (stays open). The client's `features.view` picks the default; the user can
+   * change it per session.
+   */
+  workVisibility?: WorkVisibility | undefined;
+  /**
    * Rendered as a row inside the composer border, under the input. The
    * digichat skin passes its model / tools / search / view / context chips;
    * other hosts leave it unset.
@@ -210,11 +222,13 @@ const ThreadComponentsContext =
 type ThreadGroupDisclosure = {
   reasoning: GroupDisclosureMode;
   toolCalls: GroupDisclosureMode;
+  visibility: WorkVisibility;
 };
 
 const DEFAULT_GROUP_DISCLOSURE: ThreadGroupDisclosure = {
   reasoning: "collapsed",
   toolCalls: "collapsed",
+  visibility: "balanced",
 };
 
 const ThreadGroupDisclosureContext = createContext<ThreadGroupDisclosure>(
@@ -389,6 +403,7 @@ export const Thread: FC<ThreadProps> = ({
   hiddenAttachmentNames,
   reasoningMode = "collapsed",
   toolCallsMode = "collapsed",
+  workVisibility = "balanced",
   composerToolbar,
   scrollbars = "always",
 }) => {
@@ -411,7 +426,11 @@ export const Thread: FC<ThreadProps> = ({
         <ThreadActionsContext.Provider value={resolvedActions}>
           <ThreadComponentsContext.Provider value={components}>
             <ThreadGroupDisclosureContext.Provider
-              value={{ reasoning: reasoningMode, toolCalls: toolCallsMode }}
+              value={{
+                reasoning: reasoningMode,
+                toolCalls: toolCallsMode,
+                visibility: workVisibility,
+              }}
             >
               <ComposerEditProvider>
                 <ThreadRoot
@@ -1071,9 +1090,12 @@ const AssistantMessage: FC = () => {
     ReasoningGroup,
     Source: SourceComponent = ThreadSource,
   } = useContext(ThreadComponentsContext);
-  const { reasoning: reasoningMode, toolCalls: toolCallsMode } = useContext(
-    ThreadGroupDisclosureContext,
-  );
+  const {
+    reasoning: reasoningMode,
+    toolCalls: toolCallsMode,
+    visibility,
+  } = useContext(ThreadGroupDisclosureContext);
+  const disclosure = resolveWorkDisclosure(visibility);
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -1099,6 +1121,15 @@ const AssistantMessage: FC = () => {
           {({ part, children }) => {
             switch (part.type) {
               case "group-chainOfThought":
+                // Quiet clients see one line for the whole chain instead of
+                // the two collapsibles.
+                if (disclosure.summaryOnly) {
+                  return (
+                    <div data-slot="aui_chain-of-thought">
+                      <WorkChainSummary indices={part.indices} />
+                    </div>
+                  );
+                }
                 return (
                   <div data-slot="aui_chain-of-thought">{children}</div>
                 );
@@ -1108,13 +1139,16 @@ const AssistantMessage: FC = () => {
                   return <ToolGroup group={part}>{children}</ToolGroup>;
                 }
                 const locked = toolCallsMode === "locked_open";
+                const running = part.status.type === "running";
                 return (
                   <ToolGroupRoot
                     variant="ghost"
-                    defaultOpen={toolCallsMode === "expanded" || locked}
+                    defaultOpen={
+                      disclosure.openAtRest || toolCallsMode === "expanded" || locked
+                    }
                     streamingOpen={
-                      toolCallsMode === "balanced" &&
-                      part.status.type === "running"
+                      (disclosure.openWhileRunning || toolCallsMode === "balanced") &&
+                      running
                     }
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
@@ -1139,8 +1173,13 @@ const AssistantMessage: FC = () => {
                 return (
                   <ReasoningRoot
                     variant="ghost"
-                    streaming={running && reasoningMode === "balanced"}
-                    defaultOpen={reasoningMode === "expanded" || locked}
+                    streaming={
+                      running &&
+                      (disclosure.openWhileRunning || reasoningMode === "balanced")
+                    }
+                    defaultOpen={
+                      disclosure.openAtRest || reasoningMode === "expanded" || locked
+                    }
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
                     <ReasoningTrigger active={running} disabled={locked} />

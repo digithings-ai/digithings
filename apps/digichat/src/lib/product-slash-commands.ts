@@ -22,6 +22,10 @@ import {
   languageLabel,
   tryResolveLanguageInput,
 } from "@/lib/languages";
+import {
+  isLegacyViewMode,
+  normalizeViewMode,
+} from "@/lib/view-modes";
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
 
@@ -196,7 +200,9 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       return;
     case "view": {
       const mode = arg.trim().toLowerCase();
+      // `compact` / `detailed` are the retired ids; they fold forward.
       if (isViewCode(mode)) api.setView(mode);
+      else if (isLegacyViewMode(mode)) api.setView(normalizeViewMode(mode));
       else api.openView();
       return;
     }
