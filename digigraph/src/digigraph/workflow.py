@@ -374,6 +374,9 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["digisearch_index"] = req.digisearch_index
     initial["vault_path_prefix"] = req.vault_path_prefix
     initial["research_system_prompt_override"] = req.research_system_prompt_override
+    # Tenant session-control lock (same corpus map entry). Unconditional so a prior
+    # turn's True never sticks on the same thread (LangGraph checkpoints are
+    # per-key last-write-wins) and so an unlocked tenant clears it to False.
     initial["lock_session_controls"] = bool(req.lock_session_controls)
     initial["digisearch_tools"] = req.digisearch_tools
     initial["digi_subject"] = req.digi_subject
