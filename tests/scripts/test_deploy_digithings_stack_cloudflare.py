@@ -314,12 +314,20 @@ def test_the_deploy_command_and_secrets_are_unchanged() -> None:
     )
     deploy_env = (deploy_step.get("env") or {})
     assert deploy_env["CLOUDFLARE_API_TOKEN"] == (
-        "${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}"
+        "${{ secrets.CLOUDFLARE_API_TOKEN }}"
     ), (
-        "wrangler authenticates from CLOUDFLARE_API_TOKEN, and in this house "
-        "that name is also the Vectorize/D1 token: exporting the D1 token "
-        "makes every deploy fail with code 10000. The deploy credential "
-        "must come from a Workers Scripts:Edit token under a distinct name."
+        "wrangler authenticates from the CLOUDFLARE_API_TOKEN environment "
+        "variable, and the repo secret of that name is the Workers token this "
+        "lane deploys with - the lane was green on it on 2026-10-13 (run "
+        "7de39ec9a), and the cron and runner deploy lanes read the same "
+        "secret. This lane once read a distinct name, "
+        "CLOUDFLARE_WORKERS_API_TOKEN, on the theory that the name is also "
+        "the local developer's Vectorize/D1 token (the trap in "
+        "apps/digithings-stack-cloudflare/wrangler.toml). No secret of that "
+        "name exists, so wrangler was handed an empty token and the deploy "
+        "failed on auth (run 39482995993). If a Workers token ever has to "
+        "live under a different name, that secret has to be CREATED first - "
+        "a name with no secret behind it deploys nothing."
     )
     assert deploy_env["CLOUDFLARE_ACCOUNT_ID"] == (
         "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
