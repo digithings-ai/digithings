@@ -22,6 +22,22 @@ beforeEach(() => {
 });
 
 describe("loadDigichatConfig", () => {
+  it("refuses a config that still holds template placeholders", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+deployment:
+  slug: trial
+  backend:
+    type: foundry
+    projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/REPLACE-PROJECT
+    agentName: REPLACE-AGENT-NAME
+`,
+      }),
+    ).toThrow(/REPLACE- placeholder/);
+  });
+
   it("loads YAML from injected file contents", () => {
     const cfg = loadDigichatConfig({
       fileContents: `

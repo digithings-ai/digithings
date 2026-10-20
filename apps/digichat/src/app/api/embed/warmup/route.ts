@@ -1,5 +1,6 @@
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { isServiceCapabilityEnabled } from "@/lib/capabilities";
+import { getDigichatConfig } from "@/lib/deploy-config/loader";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,25 @@ async function ping(url: string, ms: number): Promise<boolean> {
  * readiness. No internals or secrets in the output. Same route for every
  * tenant — which services exist is deployment config, not a host branch.
  */
+/**
+ * Whether this deployment talks to digigraph at all.
+ *
+ * A Foundry-backed install has no digigraph to warm, but the default enabled
+ * service set names it, so the gate used to probe an endpoint that does not
+ * exist and park the UI on a boot screen (#6023). The old escape hatch --
+ * DIGICHAT_ENABLED_SERVICES=foundry -- named a service outside the capability
+ * list, so it silenced every probe rather than the right one. Fail open: an
+ * unreadable config is probed as before.
+ */
+function deploymentUsesDigigraph(): boolean {
+  try {
+    const backend = getDigichatConfig().deployment?.backend;
+    return backend?.type !== "foundry";
+  } catch {
+    return true;
+  }
+}
+
 export async function GET() {
   const eco = await getEcosystemEndpoints();
   const out: Record<string, "ready" | "waking"> = {};
@@ -34,7 +54,7 @@ export async function GET() {
       ? "ready"
       : "waking";
   }
-  if (isServiceCapabilityEnabled("digigraph")) {
+  if (isServiceCapabilityEnabled("digigraph") && deploymentUsesDigigraph()) {
     out.assistant = (await ping(`${eco.digigraphUrl.replace(/\/$/, "")}/health`, 25_000))
       ? "ready"
       : "waking";

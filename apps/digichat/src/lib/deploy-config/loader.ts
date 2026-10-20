@@ -328,6 +328,27 @@ export type LoadDigichatConfigOptions = {
  * Load + validate config. Throws on invalid content (fail closed).
  * Missing file is OK when allowMissingFile (default) and tenants/env provide shape.
  */
+/**
+ * A shipped template carries `REPLACE-` placeholders. Deployed as-is, the
+ * container boots and then fails every chat on a DNS lookup of
+ * `replace-foundry-account.services.ai.azure.com` (#6023). Refuse it at load
+ * time, naming the file, instead of at chat time with a name nobody can read.
+ */
+function assertRenderedDeployment(cfg: DigichatConfig, source: string): void {
+  const backend = cfg.deployment?.backend;
+  if (!backend || backend.type !== "foundry") return;
+  for (const [name, value] of [
+    ["projectEndpoint", backend.projectEndpoint],
+    ["agentName", backend.agentName],
+  ] as const) {
+    if (typeof value === "string" && value.includes("REPLACE-")) {
+      throw new Error(
+        `${source}: deployment.backend.${name} still holds a REPLACE- placeholder — render the tenant config before deploying`,
+      );
+    }
+  }
+}
+
 export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): DigichatConfig {
   const env = opts.env ?? process.env;
   const path = resolveConfigPath(env);
@@ -394,6 +415,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
     );
   }
 
+  assertRenderedDeployment(merged, path);
   return applyEnvOverlay(merged, env);
 }
 
