@@ -11,9 +11,14 @@ import {
   type EmbedChatPrefsApi,
 } from "@digithings/ui/chat/stock";
 
-/** The selected row's only mark is the user-message chevron on the left. */
+/** Navigated row: the user-message chevron on the left. */
 function hasChevron(row: HTMLElement): boolean {
   return (row.querySelector(".aui-menu-cursor")?.childElementCount ?? 0) > 0;
+}
+
+/** Configured value: the 3x3 cube diamond on the right. */
+function hasDiamond(row: HTMLElement): boolean {
+  return row.querySelector("[data-slot='dropdown-menu-radio-item-indicator']") !== null;
 }
 
 function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
@@ -78,7 +83,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     document.querySelector("[data-picker-test-host]")?.remove();
   });
 
-  it("applies a model on click and closes; selected row uses the radio disc, not on", async () => {
+  it("applies a model on click and closes; selected row uses the diamond, not on", async () => {
     const user = userEvent.setup();
     const api = prefs();
     const onClose = vi.fn();
@@ -95,16 +100,26 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const selected = await screen.findByRole("menuitemradio", { name: "alpha" });
     expect(selected).toHaveAttribute("aria-checked", "true");
     expect(selected.textContent).not.toMatch(/\bon\b/i);
-    expect(hasChevron(selected)).toBe(true);
+    expect(hasChevron(selected)).toBe(false);
+    expect(hasDiamond(selected)).toBe(true);
 
     const other = screen.getByRole("menuitemradio", { name: "beta" });
     expect(hasChevron(other)).toBe(false);
+    expect(hasDiamond(other)).toBe(false);
 
-    // Hover moves the keyboard cursor, never the selection mark: the reported
-    // regression was the chevron hopping to the hovered row and looking broken.
+    // The chevron follows hover / arrow keys; the configured value keeps its
+    // diamond, so the two marks mean different things.
     await user.hover(other);
-    expect(hasChevron(selected)).toBe(true);
-    expect(hasChevron(other)).toBe(false);
+    expect(hasChevron(other)).toBe(true);
+    expect(hasChevron(selected)).toBe(false);
+    expect(hasDiamond(selected)).toBe(true);
+    expect(hasDiamond(other)).toBe(false);
+
+    // Navigating the checked row does not add a chevron: the diamond stays
+    // and remains the only mark on that row.
+    await user.hover(selected);
+    expect(hasChevron(selected)).toBe(false);
+    expect(hasDiamond(selected)).toBe(true);
 
     await user.click(other);
     expect(api.setModel).toHaveBeenCalledWith("beta");
@@ -132,7 +147,28 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("closes language pick on click and marks the current code with the chevron", async () => {
+  it("applies a model on ArrowRight and closes", async () => {
+    const user = userEvent.setup();
+    const api = prefs();
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu
+          kind="models"
+          models={["alpha", "beta"]}
+          onClose={onClose}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await screen.findByRole("menuitemradio", { name: "alpha" });
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowRight}");
+    expect(api.setModel).toHaveBeenCalledWith("beta");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes language pick on click and marks the current code with the diamond", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "en", model: "alpha" } });
     const onClose = vi.fn();
@@ -145,7 +181,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const english = await screen.findByRole("menuitemradio", { name: /en\s+English/i });
     expect(english).toHaveAttribute("aria-checked", "true");
     expect(english.textContent).not.toMatch(/\bon\b/i);
-    expect(hasChevron(english)).toBe(true);
+    expect(hasChevron(english)).toBe(false);
+    expect(hasDiamond(english)).toBe(true);
 
     const dutch = screen.getByRole("menuitemradio", { name: /nl\s+Dutch/i });
     await user.click(dutch);

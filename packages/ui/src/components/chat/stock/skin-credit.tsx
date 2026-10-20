@@ -40,7 +40,7 @@ export const SkinCredit: FC<{
     <p
       data-testid="skin-credit"
       className={cn(
-        "aui-skin-credit pt-0.5 text-center text-xs leading-4",
+        "aui-skin-credit pt-0.5 text-center text-[0.6875rem] leading-3.5",
         className,
       )}
     >
