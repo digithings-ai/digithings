@@ -32,7 +32,7 @@ export function MemoryThreadListSidebar() {
           New
         </ThreadListPrimitive.New>
       </div>
-      <ThreadListPrimitive.Root className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1">
+      <ThreadListPrimitive.Root className="dc-thread-list flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1">
         <ThreadListPrimitive.Items>
           {() => (
             <ThreadListItemPrimitive.Root className="data-[active]:bg-muted hover:bg-muted/60 rounded px-2 py-1.5 text-sm">

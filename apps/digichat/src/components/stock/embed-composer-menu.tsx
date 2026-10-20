@@ -4,10 +4,9 @@
  * Session menu docked above the composer (#3736 UI pass). Same chrome as the
  * slash palette: opaque, composer-width, command/label left, value right.
  * Arrow keys move; Enter toggles, opens a nested list, or commits an exclusive
- * pick (then the menu closes). Escape closes. Left/Right on `/language` cycles
- * the full ISO list. Exclusive rows mark the selection with the same `>`
- * chevron as a user message, in a fixed left slot, and nothing else: hover
- * moves the keyboard cursor but never the mark.
+ * pick (then the menu closes). Escape or Left goes back; Enter or Right
+ * submits the row. The hovered or arrow-key row shows the same `>` chevron
+ * as a user message and shifts its content right to make room for it.
  */
 
 import {
@@ -154,11 +153,6 @@ const MENU_ROW_CLASS =
 
 function slashName(id: string): string {
   return id.startsWith("/") ? id : `/${id}`;
-}
-
-function cycle<T extends string>(values: readonly T[], current: string, delta: number): T {
-  const i = Math.max(0, values.indexOf(current as T));
-  return values[nextPaletteIndex(i, delta, values.length)]!;
 }
 
 function initialView(kind: ComposerMenuKind): MenuView {
@@ -754,7 +748,7 @@ export function EmbedComposerMenu({
         const subOn = on && api.extraToolOn(sub.id);
         return {
           id: `${t.id}::${sub.id}`,
-          label: `  ↳ ${sub.label?.trim() || sub.id}`,
+          label: `  ../${sub.id}`,
           value: subOn ? "On" : "Off",
           checked: subOn,
           activate: () => {
@@ -1048,14 +1042,6 @@ export function EmbedComposerMenu({
     onClose();
   }, [customModel, kind, onClose, providerPick, view]);
 
-  const cycleLanguage = useCallback(
-    (delta: number) => {
-      if (!languageCodes.length) return;
-      api.setLanguage(cycle(languageCodes, api.prefs.language, delta));
-    },
-    [api, languageCodes],
-  );
-
   useEffect(() => {
     if (view === "provider-key") keyInputRef.current?.focus();
     if (view === "provider-model" && customModel) customModelRef.current?.focus();
@@ -1091,56 +1077,19 @@ export function EmbedComposerMenu({
         move(-1);
         return;
       }
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        const row = rows[cursor];
-        const delta = event.key === "ArrowRight" ? 1 : -1;
-        if (view === "main" && row?.id === "language") {
-          event.preventDefault();
-          event.stopPropagation();
-          cycleLanguage(delta);
-          return;
-        }
-        if (view === "main" && row?.id === "effort") {
-          event.preventDefault();
-          event.stopPropagation();
-          api.setEffort(cycle(EFFORTS, api.prefs.effort, delta));
-          return;
-        }
-        if (view === "main" && row?.id === "search-engine") {
-          event.preventDefault();
-          event.stopPropagation();
-          api.setSearchEngine(cycle(SEARCH_ENGINES, api.prefs.searchEngine || "auto", delta));
-          return;
-        }
-        if (view === "main" && row?.id === "view") {
-          event.preventDefault();
-          event.stopPropagation();
-          api.setView(cycle(VIEW_MODES, api.prefs.view, delta));
-          return;
-        }
-        if (view === "main" && row?.id === "thinking") {
-          event.preventDefault();
-          event.stopPropagation();
-          api.setThinking(cycle(THINKING_MODES, api.prefs.thinking, delta));
-          return;
-        }
-        if (
-          view === "language" ||
-          view === "effort" ||
-          view === "search-engine" ||
-          view === "view" ||
-          view === "thinking" ||
-          view === "models" ||
-          view === "tools" ||
-          view === "mcp" ||
-          view === "provider" ||
-          view === "provider-model"
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-          move(delta);
-          return;
-        }
+      // Left/right are actions, not scrolling: right submits like Enter and
+      // left goes back like Escape. The hint row spells this out.
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        event.stopPropagation();
+        rows[cursor]?.activate();
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        event.stopPropagation();
+        goBack();
+        return;
       }
       if (event.key === "Home") {
         event.preventDefault();
@@ -1165,7 +1114,6 @@ export function EmbedComposerMenu({
       closeMcpIdDropdown,
       cursor,
       customModel,
-      cycleLanguage,
       goBack,
       languageCodes.length,
       mcpIdDropdownOpen,
@@ -1180,6 +1128,23 @@ export function EmbedComposerMenu({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [onKeyDown]);
 
+  // Keep the arrow-key cursor inside the scroll viewport. Without this the
+  // cursor walks past the fold on long pages (language, models) and the menu
+  // looks frozen because the row it moved to is out of sight.
+  useEffect(() => {
+    const body = menuBodyRef.current;
+    if (!body) return;
+    const row = body.querySelector<HTMLElement>('[data-cursor="true"]');
+    if (!row) return;
+    const rowRect = row.getBoundingClientRect();
+    const bodyRect = body.getBoundingClientRect();
+    if (rowRect.top < bodyRect.top) {
+      body.scrollTop -= bodyRect.top - rowRect.top;
+    } else if (rowRect.bottom > bodyRect.bottom) {
+      body.scrollTop += rowRect.bottom - bodyRect.bottom;
+    }
+  }, [cursor, view]);
+
   const onRowKey = (event: ReactKeyboardEvent, index: number) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -1192,42 +1157,18 @@ export function EmbedComposerMenu({
 
   const body = (
     <div
-      className={`dc-composer-menu aui-composer-trigger-popover absolute inset-x-0 bottom-full z-50 mb-1 w-full rounded-none border ${
-        view === "mcp-edit" ? "overflow-visible" : "overflow-hidden"
-      }`}
+      className="dc-composer-menu aui-composer-trigger-popover absolute inset-x-0 bottom-full z-50 mb-1 w-full overflow-hidden rounded-none border"
       data-thread-skin="digichat"
       data-embed-settings
       data-embed-composer-menu
       role={formView ? "dialog" : "menu"}
       aria-label={title}
     >
-      <div className="text-muted-foreground flex items-center justify-between border-b px-3 py-1.5 text-xs tracking-wide uppercase">
-        <span>
-          {title}
-          {view === "provider-key" || view === "provider-model"
-            ? ` ${providerPick}`
-            : view === "mcp-edit" && mcpDraft.id
-              ? ` ${mcpDraft.id}`
-              : view === "mcp-edit"
-                ? " new"
-                : ""}
-        </span>
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          className="h-auto px-0 font-normal text-inherit hover:text-foreground tracking-normal normal-case underline-offset-2"
-          onClick={goBack}
-        >
-          escape
-        </Button>
-      </div>
+
       <div className="relative min-h-0">
         <div
           ref={menuBodyRef}
-          className={`dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col py-0.5 ${
-            view === "mcp-edit" ? "overflow-visible" : "overflow-y-auto"
-          }`}
+          className="dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col overflow-y-auto py-0.5"
         >
           {view === "provider-key" ? (
             <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5" htmlFor={keyFormId}>
@@ -1634,18 +1575,34 @@ export function EmbedComposerMenu({
                     onClick={() => row.activate()}
                     onKeyDown={(e) => onRowKey(e, index)}
                   >
-                    {/* Selection is the user-message chevron, in a fixed slot:
-                      it marks the checked row only, so hover never moves it,
-                      reflows a row or resizes a row. */}
-                    <span className="aui-menu-cursor" aria-hidden>
-                      {exclusive && row.checked ? (
+                    {/* The user-message chevron marks the hovered / arrow-key
+                        row and pushes that row's content right to make room.
+                        A checked row keeps its right-hand diamond instead: no
+                        chevron, so the two marks never double up. */}
+                    {index === cursor && !(exclusive && row.checked) ? (
+                      <span className="aui-menu-cursor" aria-hidden>
                         <DotMatrix state="user" className="size-3.5" />
-                      ) : null}
-                    </span>
+                      </span>
+                    ) : null}
                     <span className="min-w-0 shrink-0 font-medium">{row.label}</span>
-                    {row.value ? (
+                    {row.value || (exclusive && row.checked) ? (
                       <span className="text-muted-foreground ml-auto flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
-                        <span className="truncate">{row.value}</span>
+                        {row.value ? <span className="truncate">{row.value}</span> : null}
+                        {exclusive && row.checked ? (
+                          <span
+                            data-slot="dropdown-menu-radio-item-indicator"
+                            className="inline-flex shrink-0"
+                          >
+                            <span className="aui-menu-mark inline-flex shrink-0" aria-hidden>
+                              {[0, 1, 0, 1, 1, 1, 0, 1, 0].map((on, cell) => (
+                                <span
+                                  key={cell}
+                                  className={on ? "aui-menu-mark-cell is-on" : "aui-menu-mark-cell"}
+                                />
+                              ))}
+                            </span>
+                          </span>
+                        ) : null}
                       </span>
                     ) : null}
                   </button>
@@ -1662,6 +1619,9 @@ export function EmbedComposerMenu({
           ) : null}
         </div>
         <MenuScrollbar targetRef={menuBodyRef} />
+      </div>
+      <div className="text-muted-foreground px-3 py-1 font-mono text-[0.68rem]">
+        {title} · ↑↓ navigate · ⏎/→ submit · esc/← back
       </div>
     </div>
   );
