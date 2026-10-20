@@ -48,23 +48,56 @@ export function signTrialProof(
 }
 
 /**
- * Verify a trial proof token and return the host, or null if
- * invalid/expired/malformed. Call server-side only.
+ * The outcome of inspecting a trial proof.
+ *
+ * `host` is only populated when the token is authentic - its signature
+ * verified against the server's secret - so it is safe to compare against
+ * the embed host a request came from. A rejected token carries no host
+ * except for the "expired" case, which is by definition an authentic token
+ * whose expiry has passed.
  */
-export function verifyTrialProof(
+export type TrialProofInspection =
+  | { ok: true; host: string }
+  | { ok: false; reason: "malformed" | "invalid_signature"; host: null }
+  | { ok: false; reason: "expired"; host: string };
+
+/**
+ * Response header that tells the embed client its trial proof has expired,
+ * so it can drop the dead proof and mint a fresh one. The client reads the
+ * header only; the reason behind it stays server-side.
+ */
+export const TRIAL_PROOF_EXPIRED_HEADER = "x-embed-trial-proof-expired";
+
+/**
+ * Inspect a trial proof and say WHY it fails, if it does.
+ *
+ * The signature is verified BEFORE the expiry, so a token that is both
+ * expired and tampered with is reported as invalid_signature rather than
+ * expired: the client must never be told to mint a new proof for a token
+ * this server did not sign.
+ */
+export function inspectTrialProof(
   token: string,
   secret: string,
-): string | null {
+): TrialProofInspection {
   try {
-    if (!token || !secret) return null;
+    if (!token || !secret) {
+      return { ok: false, reason: "malformed", host: null };
+    }
     const decoded = base64urlDecode(token);
     const parts = decoded.split("|");
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3) {
+      return { ok: false, reason: "malformed", host: null };
+    }
 
     const [host, expStr, sig] = parts;
-    if (!host || !host.trim()) return null;
+    if (!host || !host.trim()) {
+      return { ok: false, reason: "malformed", host: null };
+    }
     const exp = Number(expStr);
-    if (!Number.isFinite(exp) || Date.now() > exp) return null;
+    if (!Number.isFinite(exp)) {
+      return { ok: false, reason: "malformed", host: null };
+    }
 
     const expectedPayload = `${host}|${exp}`;
     const expectedSig = hmacSign(secret, expectedPayload);
@@ -72,11 +105,31 @@ export function verifyTrialProof(
     // Constant-time comparison
     const sigBuf = Buffer.from(sig, "base64url");
     const expectedBuf = Buffer.from(expectedSig, "base64url");
-    if (sigBuf.length !== expectedBuf.length) return null;
-    if (!timingSafeEqual(sigBuf, expectedBuf)) return null;
+    if (sigBuf.length !== expectedBuf.length) {
+      return { ok: false, reason: "invalid_signature", host: null };
+    }
+    if (!timingSafeEqual(sigBuf, expectedBuf)) {
+      return { ok: false, reason: "invalid_signature", host: null };
+    }
 
-    return host;
+    if (Date.now() > exp) {
+      return { ok: false, reason: "expired", host };
+    }
+
+    return { ok: true, host };
   } catch {
-    return null;
+    return { ok: false, reason: "malformed", host: null };
   }
+}
+
+/**
+ * Verify a trial proof token and return the host, or null if
+ * invalid/expired/malformed. Call server-side only.
+ */
+export function verifyTrialProof(
+  token: string,
+  secret: string,
+): string | null {
+  const inspection = inspectTrialProof(token, secret);
+  return inspection.ok ? inspection.host : null;
 }
