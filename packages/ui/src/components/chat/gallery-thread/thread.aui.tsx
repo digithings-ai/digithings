@@ -75,6 +75,7 @@ import { ComposerBlockCaret } from "./block-caret";
 import { ThreadSource } from "./source";
 import { TypedWelcomeCopy } from "./typed-welcome-copy";
 import { useDigichatWarmupPhase } from "../use-warmup-phase";
+import { OverlayScrollbar } from "../overlay-scrollbar";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -430,6 +431,11 @@ const ThreadRoot: FC<{
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
+  const viewportRef = useRef<HTMLElement | null>(null);
+  const attachViewport = useCallback((node: HTMLElement | null) => {
+    viewportRef.current = node;
+    setViewportEl(node);
+  }, []);
 
   return (
     <ThreadPrimitive.Root
@@ -460,8 +466,9 @@ const ThreadRoot: FC<{
           scroll-to-bottom control wired to the viewport store. */}
       <ThreadPrimitive.ViewportProvider>
       <ThreadViewportElContext.Provider value={viewportEl}>
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <ThreadPrimitive.Viewport
-        ref={setViewportEl}
+        ref={attachViewport}
         turnAnchor="top"
         // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
         // so it does not sit flush against the viewport top. `tallerThan` scores
@@ -487,6 +494,8 @@ const ThreadRoot: FC<{
           </div>
         </div>
       </ThreadPrimitive.Viewport>
+      <OverlayScrollbar targetRef={viewportRef} width={10} />
+      </div>
         <div className="mx-auto flex w-full max-w-(--thread-max-width) shrink-0 flex-col px-4">
           <div className="aui-thread-viewport-footer digichat-thread__footer bg-background relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
             <ThreadScrollToBottom />
