@@ -89,6 +89,7 @@ function prefsApi(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     mcpServers: [],
     sessionKey: "embed-host",
     openSettings: vi.fn(),
+    openHelp: vi.fn(),
     openTools: vi.fn(),
     openMcp: vi.fn(),
     openByok: vi.fn(),
