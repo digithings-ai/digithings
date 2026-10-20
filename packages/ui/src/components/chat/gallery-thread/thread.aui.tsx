@@ -1146,6 +1146,10 @@ const AssistantMessage: FC = () => {
   const hasWork = messageParts.some(
     (part) => part.type === "reasoning" || part.type === "tool-call",
   );
+  // Anything real that arrived from the agent — reasoning, a tool call, the
+  // answer itself. A status part (the connection state) is not content: it is
+  // the pre-response phase, which is exactly when the loading row belongs.
+  const hasContent = messageParts.some((part) => part.type !== "data");
   const followedByText = (indices: readonly number[]) => {
     const last = indices.length > 0 ? indices[indices.length - 1] : -1;
     return messageParts.some((part, index) => {
@@ -1290,11 +1294,13 @@ const AssistantMessage: FC = () => {
                   </div>
                 );
               case "indicator":
-                // The work block carries the activity animation. The
-                // standalone indicator is only for a turn that has not
-                // produced anything yet — it must not come back once the
-                // work block is on screen.
-                return hasWork ? null : <AssistantWorkingIndicator />;
+                // One loading affordance per turn. Before the agent answers,
+                // the row stands alone (with the phase text when we know it:
+                // waking, connecting, warming up). The moment anything real
+                // arrives — reasoning, a tool call, the answer — the work
+                // block takes over and this row is gone, so the two never
+                // stack.
+                return hasContent ? null : <AssistantWorkingIndicator />;
               case "source":
                 // Citations are inline markdown links in the answer (DIG-1210);
                 // rendering source parts here stacked duplicate rows between

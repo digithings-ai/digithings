@@ -237,6 +237,36 @@ export type FoundryUsage = {
   totalTokens: number;
 };
 
+/**
+ * The agent's own tool-invocation failure, e.g.
+ *
+ *   An error occurred invoking 'list_collector_reports': 'pageSize' must be
+ *   a string, but a number was provided.
+ *
+ * That text is the tool's complaint, not an internal error: it names the tool
+ * and says what was wrong with the call. It is safe to show (no hostnames, no
+ * stack) and it is the only thing that tells the reader — or the client's MCP
+ * author — what to fix. Anything else keeps the generic line.
+ */
+export function extractToolInvocationFailure(
+  message: string,
+): { toolName: string; errorText: string } | null {
+  const match = /An error occurred invoking '([^']+)':\s*([\s\S]+)/.exec(message);
+  const toolName = match?.[1]?.trim();
+  const detail = match?.[2]?.trim();
+  if (!toolName || !detail) return null;
+  return { toolName, errorText: sanitizeUpstreamMessage(detail) };
+}
+
+/** An upstream message, capped and stripped of anything that looks like a URL. */
+function sanitizeUpstreamMessage(message: string): string {
+  return message
+    .replace(/https?:\/\/\S+/gi, "[link]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 400);
+}
+
 function numberOf(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -993,6 +1023,10 @@ export async function createFoundryStreamResponse(opts: {
 
       if (opts.signal?.aborted) return;
 
+      // Set when the turn dies because a tool refused the call; the failed
+      // row and the turn error both carry the tool's own complaint.
+      let failure: { toolName: string; errorText: string } | null = null;
+
       try {
         let conversationId = opts.conversationId;
         // The no-invent guard (DIG-509 leaf 1b) rides the turn that creates the
@@ -1144,7 +1178,17 @@ export async function createFoundryStreamResponse(opts: {
         }
       } catch (err) {
         if (opts.signal?.aborted) return;
-        if (err instanceof FoundryProtocolError) {
+        failure = extractToolInvocationFailure(
+          err instanceof Error ? err.message : String(err),
+        );
+        if (failure) {
+          // A tool refused the call: say which tool and why, instead of the
+          // generic outage line that hides it.
+          writer.write({
+            type: "error",
+            errorText: `${failure.toolName}: ${failure.errorText}`,
+          });
+        } else if (err instanceof FoundryProtocolError) {
           writer.write({
             type: "error",
             errorText: `Upstream error: ${err.message}`,
@@ -1166,7 +1210,13 @@ export async function createFoundryStreamResponse(opts: {
       } finally {
         // Orphaned started rows settle as failed — a row whose tool never
         // returned must not render as a successful completion.
-        finishStandardActivity(writer, activityCtx);
+        finishStandardActivity(
+          writer,
+          activityCtx,
+          failure
+            ? { toolName: failure.toolName, errorText: failure.errorText }
+            : undefined,
+        );
         closeText();
       }
     },

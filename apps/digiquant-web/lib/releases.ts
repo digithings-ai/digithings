@@ -1,11 +1,17 @@
 /** Tagged product releases named in the repository changelogs: only versions with a
  *  pushed `<product>-vX.Y.Z` tag. digichat 2.4.0 is in the changelog but untagged;
- *  2.6.1 is the Foundry and trace-voice release, tagged from the release
- *  commit on develop; 2.6.0 was the composer and trace release.
+ *  2.6.2 is the one-loading-affordance release, tagged from the release
+ *  commit on develop; 2.6.1 was the Foundry and trace-voice release.
  *  digiquant itself ships on develop and has no product tag.
  *  Each href spans the previous tagged release of that product to this one, the same
  *  range the product changelog heading names. */
 export const TAGGED_RELEASES = [
+  {
+    product: "digichat",
+    version: "2.6.2",
+    date: "2026-10-21",
+    href: "https://github.com/digithings-ai/digithings/compare/digichat-v2.6.1...digichat-v2.6.2",
+  },
   {
     product: "digichat",
     version: "2.6.1",
