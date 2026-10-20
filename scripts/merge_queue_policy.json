@@ -27,7 +27,13 @@
     "required_checks": [
       "test"
     ],
-    "required_checks_note": "Fallback for any repo with no entry in required_checks_by_repo. No current repo relies on it: digithings-ai/digithings is named explicitly (DIG-690) and digithings-ai/twelve-x is named explicitly (DIG-4454)."
+    "required_checks_note": "Fallback for any repo with no entry in required_checks_by_repo. No current repo relies on it: digithings-ai/digithings is named explicitly (DIG-690) and digithings-ai/twelve-x is named explicitly (DIG-4454).",
+    "ignored_checks": [
+      "test",
+      "pricing-parity",
+      "review-applied"
+    ],
+    "ignored_checks_note": "Check names the queue must not read as a blocker, because they are not required and their verdict cannot be trusted right now. The list is global: an ignored name neither passes nor blocks, and it can never mask a required check - merge_queue.py skips a name that is required before it consults this list. `test` and `pricing-parity` are twelve-x's GitHub Actions jobs, which cannot start at all while the org's Actions billing is blocked (DIG-4454): every pull request reports them FAILURE with no log and no work done, so every pull request would be refused no matter what the local mirror says. The local mirror `~/Code/local-ci/twelvex_ci.py` runs the equivalent work (ruff, deno test, pytest) and posts `local-ci`, which is the required check. `review-applied` is a commit status the local worker posts, and its failure row can be OLDER than the review comment it complains about: the dispatcher never re-runs a pull request whose `local-ci` row is already terminal, so a review that lands after the check leaves a failure behind that nothing ever refreshes. The queue enforces review coverage itself - the `reviewed:agent` label plus an `<!-- in-session-review -->` comment plus resolved review threads - so ignoring the stale row loses no coverage. Remove `review-applied` from this list once the dispatcher re-runs a pull request whose review landed after its check. Remove `test` and `pricing-parity` when Actions billing is restored and the twelve-x entry in `required_checks_by_repo` goes back to `test`."
   },
   "required_checks_by_repo": {
     "digithings-ai/digithings": [
