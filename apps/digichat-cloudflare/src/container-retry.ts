@@ -130,6 +130,22 @@ function headersWithRetryAfter(headers: Headers): Headers {
 }
 
 /**
+ * The body for a container that could not be reached at all. The platform
+ * aborts the Durable Object and throws when the instance just restarted, so
+ * there is no response body to carry; this keeps the cause for the client
+ * log and for the operator reading it.
+ */
+function containerUnavailableBody(cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  const inner = (cause as { cause?: unknown })?.cause;
+  const detail = inner instanceof Error ? inner.message : "";
+  return JSON.stringify({
+    error: "container_unavailable",
+    detail: detail ? message + ": " + detail : message,
+  });
+}
+
+/**
  * Calls the container once per attempt and turns a container that could not
  * serve the request right now — a busy instance slot, or an instance that
  * died under the request — into a retryable 503. `fetchOnce` is the container
@@ -148,7 +164,23 @@ export async function fetchContainerWithRetry(
   // failure at once rather than a body that was already sent.
   const replayable = request.body === null;
   for (let attempt = 1; ; attempt += 1) {
-    const res = await fetchOnce(request);
+    let res: Response;
+    try {
+      res = await fetchOnce(request);
+    } catch (cause) {
+      // The container could not be reached at all. When the instance just
+      // restarted the platform aborts the Durable Object and throws
+      // ("Network connection lost."), so the request would end with NO
+      // answer. A retryable answer beats a dead connection, and the cause
+      // is kept in the body so the client can log why. The request is not
+      // replayed: the Durable Object was aborted, so a second attempt in
+      // this request would fail the same way. The client is told to come
+      // back instead.
+      return new Response(containerUnavailableBody(cause), {
+        status: NO_INSTANCE_STATUS,
+        headers: headersWithRetryAfter(new Headers()),
+      });
+    }
     if (res.status !== NO_INSTANCE_STATUS && res.status !== 500) return res;
     // Read a copy: the original response is handed back untouched when the
     // failure is neither the instance limit nor a container that died.

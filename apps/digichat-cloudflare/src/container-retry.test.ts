@@ -265,3 +265,34 @@ describe("fetchContainerWithRetry", () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 });
+
+describe("a container that cannot be reached at all", () => {
+  it("turns a rejected container fetch into a retryable 503", async () => {
+    // The platform aborts the Durable Object and throws when the instance
+    // just restarted (@cloudflare/containers 0.3.7: "Network connection
+    // lost."), so without this the request ends with no answer at all.
+    const inner = new Error("Network connection lost.");
+    const failure = new Error("There is no Container instance available at this time");
+    (failure as Error & { cause?: unknown }).cause = inner;
+    const fetchOnce = vi.fn(async () => {
+      throw failure;
+    });
+    const res = await fetchContainerWithRetry(
+      new Request("https://digithings.ai/api/chat"),
+      fetchOnce,
+    );
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe(String(RETRY_AFTER_SECONDS));
+    expect(await res.text()).toContain("Network connection lost.");
+  });
+
+  it("does not replay the request once the container is gone", async () => {
+    // The Durable Object was aborted, so a second attempt in the same
+    // request would fail the same way. The client is told to come back.
+    const fetchOnce = vi.fn(async () => {
+      throw new Error("Network connection lost.");
+    });
+    await fetchContainerWithRetry(new Request("https://digithings.ai/api/chat"), fetchOnce);
+    expect(fetchOnce).toHaveBeenCalledTimes(1);
+  });
+});
