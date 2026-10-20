@@ -66,12 +66,17 @@ NPM_PACKAGES = (
     "@digithings/ui",
     "@digithings/digichat-ui",
     "@digithings/hero-banner",
+    # apps/digichat imports the BYOK provider catalog and the page-context
+    # sanitizer from here (2026-10-20): without it in the image the digichat
+    # build failed with "Module not found: @digithings/catalog/...".
+    "@digithings/catalog",
 )
 NPM_MANIFESTS = {
     "design": REPO / "packages" / "design" / "package.json",
     "ui": REPO / "packages" / "ui" / "package.json",
     "digichat-ui": REPO / "packages" / "digichat-ui" / "package.json",
     "hero-banner": REPO / "packages" / "hero-banner" / "package.json",
+    "catalog": REPO / "packages" / "catalog" / "package.json",
     "dashboard": REPO / "apps" / "dashboard" / "package.json",
 }
 #: The scope name recorded on a provenance that covers only the npm inputs.
