@@ -361,8 +361,8 @@ def test_the_no_overlay_path_does_not_abort_the_boot():
 
     The container cold-starts on every request (ports.ts sleepAfter 1m), so an
     abort on the no-overlay path would take digisearch, digivault and digikey
-    down for every request after an idle minute. The merge branch still
-    aborts: there the image is broken.
+    down for every request after an idle minute. The merge branch does not
+    abort either: it degrades to the same base config.
     """
     block = _no_overlay_branch(_pre_exec_lines())
     assert not any("exit 1" in line for line in block), block

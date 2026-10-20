@@ -95,8 +95,9 @@ else
   # This path does NOT abort the boot: the container cold-starts on every
   # request (ports.ts sleepAfter 1m), so an abort here would take digisearch,
   # digivault and digikey down with it for every request after an idle
-  # minute. The merge branch above still aborts, because there the image is
-  # broken.
+  # minute. The merge branch above does not abort either: it degrades to the
+  # same base config, so both paths keep the container up and name the
+  # verdict in the log file.
   _curated_check_rc=0
   _curated_missing=""
   _curated_missing="$(python3 /app/scripts/merge_litellm_cheaperinference.py --check-config "$LITELLM_CONFIG" 2>/dev/null)" || _curated_check_rc=$?
