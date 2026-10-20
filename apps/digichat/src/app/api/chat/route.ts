@@ -732,9 +732,10 @@ export async function POST(req: Request) {
           upstreamHeaders,
           responseHeaders,
           activityDetail,
-          // BYOK models travel in their own header; only the house default
-          // belongs in the request body.
-          model: byokKey ? undefined : tenantDefaultModel,
+          // BYOK models travel in their own header; only the house model
+          // belongs in the request body. `modelId` is the pick (when the
+          // tenant curates a list) or the curated default.
+          model: byokKey ? undefined : modelId,
           signal: req.signal,
         }),
       );
