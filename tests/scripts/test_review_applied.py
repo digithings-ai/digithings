@@ -188,3 +188,101 @@ class FetchTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Dig4631ReviewPassTest(unittest.TestCase):
+    """DIG-4631: evidence that must not count as a review pass.
+
+    Three shapes were counted as a review pass on 20 Oct 2026 and let five PRs
+    into ``develop``: a thread the PR's own author resolved, a review posted
+    inside the 60 s window of the push it covers, and a review whose text
+    repeats a review on another PR.
+    """
+
+    def _context(self, pushed_at="2026-10-20T13:27:15Z", commit="a3b894ebb1"):
+        return {
+            "login": "chrizefan",
+            "body": "Fixes DIG-4506",
+            "identity": {},
+            "push_times": {commit: pushed_at},
+        }
+
+    def test_a_pass_inside_the_push_window_is_dropped(self):
+        passes = [
+            {
+                "kind": "in-session",
+                "author": "chrizefan",
+                "has_comments": True,
+                "at": "2026-10-20T13:27:20Z",
+                "commit_id": "a3b894ebb1",
+                "body": "The lock-session write needs the field on the model too.",
+            }
+        ]
+        kept, dropped = _mod._filter_passes(passes, 5968, self._context())
+        self.assertEqual(kept, [])
+        self.assertEqual(len(dropped), 1)
+
+    def test_a_pass_outside_the_push_window_survives(self):
+        passes = [
+            {
+                "kind": "in-session",
+                "author": "chrizefan",
+                "has_comments": True,
+                "at": "2026-10-20T13:20:31Z",
+                "commit_id": "509228c713",
+                "body": "The lock-session write needs the field on the model too.",
+            }
+        ]
+        context = self._context("2026-10-20T13:13:14Z", "509228c713")
+        kept, dropped = _mod._filter_passes(passes, 6013, context)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(dropped, [])
+
+    def test_a_copied_pass_is_dropped(self):
+        import tempfile
+
+        import review_pass_filter as rpf
+
+        body = (
+            "**Cutover slice review** (local source-control loop, sctl). Scope: the "
+            "twelve-x Cloudflare cutover and the deploy lane it needs."
+        )
+        folder = tempfile.mkdtemp()
+        corpus = os.path.join(folder, "corpus.json")
+        rpf.record_reviews(5942, [("2026-10-20T13:05:43Z", body)], path=corpus)
+        previous = os.environ.get(rpf.CORPUS_PATH_ENV)
+        os.environ[rpf.CORPUS_PATH_ENV] = corpus
+        try:
+            passes = [
+                {
+                    "kind": "in-session",
+                    "author": "chrizefan",
+                    "has_comments": True,
+                    "at": "2026-10-20T13:06:49Z",
+                    "commit_id": "181b357f05",
+                    "body": body,
+                }
+            ]
+            context = self._context("2026-10-20T13:11:49Z", "1f0f9ee6b1")
+            kept, dropped = _mod._filter_passes(passes, 5947, context)
+        finally:
+            if previous is None:
+                os.environ.pop(rpf.CORPUS_PATH_ENV, None)
+            else:
+                os.environ[rpf.CORPUS_PATH_ENV] = previous
+        self.assertEqual(kept, [])
+        self.assertEqual(len(dropped), 1)
+
+    def test_an_author_resolved_thread_is_not_cleared(self):
+        thread = {
+            "id": "PRRT_x",
+            "is_resolved": True,
+            "author_resolved": True,
+            "comments": [
+                {"author": "chrizefan", "created_at": "2026-10-20T13:20:31Z"}
+            ],
+        }
+        ok, msg, open_ids = _mod.evaluate([INSESSION], [thread])
+        self.assertFalse(ok)
+        self.assertIn("unresolved thread", msg)
+        self.assertEqual(open_ids, ["PRRT_x"])

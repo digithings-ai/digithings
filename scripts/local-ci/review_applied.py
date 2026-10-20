@@ -19,6 +19,23 @@ Shape: pure ``evaluate()`` over injected data (unit-tested here) plus thin
 
 from __future__ import annotations
 
+import os
+import re
+import sys
+
+# The review-pass filter (DIG-4631) ships next to this file in the host
+# checkout and one directory up in the digithings mirror, so both are put
+# on the path before it is imported.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+for _candidate in (os.path.dirname(_HERE), _HERE):
+    if _candidate and _candidate not in sys.path:
+        sys.path.insert(0, _candidate)
+
+try:  # the rules module is optional: without it the review leg cannot judge
+    import review_pass_filter
+except ImportError:  # pragma: no cover - the module is missing from the install
+    review_pass_filter = None
+
 # Exact context name Chris's runbook adds to develop's required status checks
 # alongside ``local-ci``. Never rename: protection matches this string.
 APPLIED_CTX = "review-applied"
@@ -143,7 +160,17 @@ def _fix_after(thread_first_at, fix_commit_ats):
 
 
 def thread_cleared(thread, fix_commit_ats, reviewer_logins=()):
-    """Condition (b) per thread: resolved, or fix-commit-after-comment AND a reply."""
+    if review_pass_filter is None:
+        # The rules cannot be applied, so a thread is not cleared.
+        return False
+    """Condition (b) per thread: resolved, or fix-commit-after-comment AND a reply.
+
+    A thread the PR's own author resolved does not count as cleared
+    (DIG-4631). Every seat posts under the same GitHub login, so the
+    resolution is checked against the author's seat, not against the login.
+    """
+    if thread.get("author_resolved"):
+        return False
     if thread.get("is_resolved"):
         return True
     return _fix_after(_thread_first_at(thread), fix_commit_ats) and _thread_has_reply(
@@ -151,14 +178,27 @@ def thread_cleared(thread, fix_commit_ats, reviewer_logins=()):
     )
 
 
-def evaluate(review_passes, threads, fix_commit_ats=(), check_runs=(), reviewer_logins=()):
+def evaluate(review_passes, threads, fix_commit_ats=(), check_runs=(), reviewer_logins=(),
+             verdict_blocks=()):
     """Verdict for one PR head.
 
     Returns (ok, message, open_thread_ids). ``message`` names the unmet
     condition and the open threads; it is what local-ci posts as the status
     description (truncated to 139 chars by the caller).
+
+    ``verdict_blocks``: output of ``blocking_verdicts`` (reviewers whose latest
+    verdict is CHANGES_REQUESTED). Any entry fails the check before the pass and
+    thread conditions are read: #5863 passed with a recorded pass and 0 threads
+    while its latest review said "Verdict: CHANGES".
     """
     threads = [t for t in (threads or []) if isinstance(t, dict)]
+    blocks = [b for b in (verdict_blocks or []) if b]
+    if blocks:
+        return (
+            False,
+            "review-applied: changes requested, not cleared: %s" % "; ".join(blocks[:3]),
+            [str(t.get("id") or "?") for t in threads if not t.get("is_resolved")],
+        )
     if not has_review_pass(review_passes, check_runs):
         return (
             False,
@@ -187,6 +227,234 @@ def evaluate(review_passes, threads, fix_commit_ats=(), check_runs=(), reviewer_
 
 
 # ---------------------------------------------------------------------------
+# Each reviewer's latest verdict (after #5863)
+#
+# A reviewer's latest verdict blocks when it is CHANGES_REQUESTED, until the
+# same reviewer posts a later APPROVED or COMMENTED review, or the review is
+# dismissed (GitHub then reports it with state DISMISSED). Bots count like
+# humans. Formal reviews and in-session review comments (the marker) are read
+# in one time order; an in-session comment's verdict is its ``Verdict:`` line.
+
+_VERDICT_LINE_RE = re.compile(
+    r"^[\s>#*_]*verdict\s*[:=]\s*[*_`]*\s*(?P<word>[A-Za-z][A-Za-z_ -]*)", re.I | re.M
+)
+_BLOCKING_WORDS = ("changes", "request_changes", "changes_requested", "changes_needed", "block")
+_APPROVING_WORDS = ("approve", "approved", "lgtm", "pass", "ship")
+_REVIEW_STATES = frozenset({"APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"})
+
+
+def reviewer_key(login):
+    """One key per reviewer: case-folded, ``[bot]`` suffix dropped."""
+    key = _norm_login(login)
+    return key[: -len("[bot]")] if key.endswith("[bot]") else key
+
+
+def in_session_state(body):
+    """CHANGES_REQUESTED / APPROVED / COMMENTED from an in-session review body."""
+    m = _VERDICT_LINE_RE.search(body or "")
+    if not m:
+        return "COMMENTED"
+    word = m.group("word").strip().lower().replace("-", "_").replace(" ", "_")
+    if word.startswith(_BLOCKING_WORDS):
+        return "CHANGES_REQUESTED"
+    if word.startswith(_APPROVING_WORDS):
+        return "APPROVED"
+    return "COMMENTED"
+
+
+# The opencode-power-pack code-review marker carries ``verdict=`` as a field
+# (same marker scripts/merge_queue.py reads); only its fields are trusted.
+_PP_MARKER_RE = re.compile(r"<!--\s*opencode-power-pack:code-review\b(?P<fields>[^>]*?)\s*-->")
+_PP_FIELD_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)=(?P<value>\S+)")
+_PP_BLOCKING = frozenset({"changes_requested", "changes_needed"})
+_PP_APPROVING = frozenset({"approved", "approve"})
+
+
+def marker_state(body):
+    """CHANGES_REQUESTED / APPROVED from a power-pack marker's ``verdict=``,
+    or None when the comment carries no readable marker verdict."""
+    for m in _PP_MARKER_RE.finditer(body or ""):
+        fields = {f.group("key").lower(): f.group("value")
+                  for f in _PP_FIELD_RE.finditer(m.group("fields"))}
+        v = fields.get("verdict", "").strip().strip("'\";").lower().replace("-", "_")
+        if v in _PP_BLOCKING:
+            return "CHANGES_REQUESTED"
+        if v in _PP_APPROVING:
+            return "APPROVED"
+    return None
+
+
+def comment_state(body):
+    """Verdict state of an issue comment, or None when it is not a review verdict."""
+    state = marker_state(body)
+    if state is not None:
+        return state
+    if AGENT_REVIEW_MARKER in (body or ""):
+        return in_session_state(body)
+    return None
+
+
+def _login_of(row):
+    for k in ("user", "author"):
+        v = row.get(k)
+        if isinstance(v, dict) and v.get("login"):
+            return v.get("login")
+    return None
+
+
+def review_events(reviews, comments):
+    """[(at, seq, reviewer, state, where)] for every readable verdict, oldest first.
+
+    ``reviews``: REST pull reviews ({user, state, submitted_at, body, id}).
+    ``comments``: REST issue comments; only marker comments are verdicts.
+    ``seq`` keeps GitHub's order for rows that carry no timestamp.
+    """
+    events = []
+    seq = 0
+    for r in reviews or []:
+        seq += 1
+        if not isinstance(r, dict):
+            continue
+        state = str(r.get("state") or "").upper()
+        body = str(r.get("body") or "")
+        if state == "COMMENTED":
+            state = comment_state(body) or state
+        if state not in _REVIEW_STATES:
+            continue  # PENDING: not submitted, not a verdict
+        at = str(r.get("submitted_at") or r.get("submittedAt") or "")
+        events.append((at, seq, reviewer_key(_login_of(r)), state, "review %s" % (r.get("id") or seq)))
+    for c in comments or []:
+        seq += 1
+        if not isinstance(c, dict):
+            continue
+        body = str(c.get("body") or "")
+        state = comment_state(body)
+        if state is None:
+            continue
+        at = str(c.get("created_at") or c.get("createdAt") or "")
+        events.append((at, seq, reviewer_key(_login_of(c)), state,
+                       "in-session comment %s" % (c.get("id") or seq)))
+    events.sort(key=lambda e: (e[0], e[1]))
+    return events
+
+
+def blocking_verdicts(reviews, comments):
+    """One short message per reviewer whose latest verdict is CHANGES_REQUESTED."""
+    latest = {}
+    for at, _seq, reviewer, state, where in review_events(reviews, comments):
+        latest[reviewer] = (state, where, at)
+    return [
+        "%s (%s%s)" % (reviewer or "?", where, " at " + at if at else "")
+        for reviewer, (state, where, at) in sorted(latest.items())
+        if state == "CHANGES_REQUESTED"
+    ]
+
+
+def fetch_verdict_inputs(pr_number, repo, run_rest):
+    """(reviews, comments) for ``blocking_verdicts``, or None when either read
+    fails: an unreadable record is not a clearance (fail closed)."""
+    reviews = run_rest("repos/%s/pulls/%d/reviews?per_page=100" % (repo, pr_number))
+    comments = run_rest("repos/%s/issues/%d/comments?per_page=100" % (repo, pr_number))
+    if not isinstance(reviews, list) or not isinstance(comments, list):
+        return None
+    return reviews, comments
+
+
+# ---------------------------------------------------------------------------
+# What a review pass is not (DIG-4631)
+#
+# A review does not count when it was posted inside the push window of the
+# commit it covers, or when its text is a copy of a review on another PR.
+# The rolling corpus of recent review texts is what makes the second
+# checkable; the push window needs the commit's push time.
+
+_PR_CONTEXT = {}
+
+
+def _pr_context(pr_number, repo, run_gh, run_rest=None):
+    """Author login, author seat and the push time of every commit.
+
+    Read once per process: the threads and the passes need the same facts.
+    """
+    key = (repo, pr_number)
+    if key in _PR_CONTEXT:
+        return _PR_CONTEXT[key]
+    context = {"login": None, "body": "", "identity": {}, "push_times": {}}
+    data = None
+    if run_rest is not None:
+        try:
+            data = run_rest("repos/%s/pulls/%d" % (repo, pr_number))
+        except Exception:
+            data = None
+    if not isinstance(data, dict) and run_gh is not None:
+        try:
+            data = run_gh(["api", "repos/%s/pulls/%d" % (repo, pr_number)])
+        except Exception:
+            data = None
+    if isinstance(data, dict):
+        context["login"] = (
+            (data.get("user") or {}).get("login")
+            or (data.get("author") or {}).get("login")
+        )
+        context["body"] = data.get("body") or ""
+        for commit in data.get("commits") or []:
+            if not isinstance(commit, dict):
+                continue
+            sha = commit.get("sha")
+            inner = commit.get("commit")
+            inner = inner if isinstance(inner, dict) else {}
+            at = (inner.get("committer") or {}).get("date") or commit.get("committedDate")
+            if sha and at:
+                context["push_times"][sha] = at
+        context["identity"] = review_pass_filter.author_identity(data)
+    _PR_CONTEXT[key] = context
+    return context
+
+
+def _head_push_at(context):
+    """Push time of the newest commit of the PR."""
+    times = [t for t in (context.get("push_times") or {}).values() if t]
+    if not times:
+        return None
+    return max(times, key=lambda t: review_pass_filter.parse_ts(t) or 0)
+
+
+def _filter_passes(passes, pr_number, context):
+    """Split the review passes into the ones that count and the ones that do not."""
+    if review_pass_filter is None:
+        # The rules cannot be applied, so no pass is accepted.
+        return [], list(passes)
+    kept, dropped = [], []
+    corpus = review_pass_filter.load_corpus()
+    for candidate in passes:
+        commit_id = candidate.get("commit_id")
+        if commit_id:
+            push_at = (context.get("push_times") or {}).get(commit_id)
+        else:
+            # A comment carries no commit: it speaks about the head.
+            push_at = _head_push_at(context)
+        if review_pass_filter.review_too_close_to_push(candidate.get("at"), push_at):
+            dropped.append(dict(candidate, reason="posted inside the push window"))
+            continue
+        normalised = review_pass_filter.normalise_review_text(candidate.get("body"))
+        copies = review_pass_filter.duplicate_reviews(normalised, pr_number, corpus)
+        if copies:
+            dropped.append(dict(candidate, reason="copied from another PR"))
+            continue
+        kept.append(candidate)
+    return kept, dropped
+
+
+def _record_corpus(pr_number, passes, context):
+    """Keep the review texts of this PR so a later copy can be recognised."""
+    texts = [(p.get("at"), p.get("body") or "") for p in passes if p.get("body")]
+    if texts:
+        review_pass_filter.record_reviews(
+            pr_number, texts, login=context.get("login")
+        )
+
+
+# ---------------------------------------------------------------------------
 # Fetchers (thin gh wrappers; kept import-free of local_ci so tests stay pure)
 
 
@@ -198,10 +466,12 @@ def fetch_threads_graphql(pr_number, repo, run_gh):
     q = (
         "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){"
         "pullRequest(number:$n){reviewThreads(first:100){nodes{id isResolved "
+        "resolvedBy{login} "
         "comments(first:20){nodes{createdAt author{login} body "
         "commit{oid committedDate}}}}}}}}"
     )
     o, _, r = repo.partition("/")
+    context = _pr_context(pr_number, repo, run_gh)
     data = run_gh(
         ["api", "graphql", "-f", "query=" + q, "-f", "o=" + o, "-f", "r=" + r,
          "-F", "n=%d" % pr_number]
@@ -222,11 +492,18 @@ def fetch_threads_graphql(pr_number, repo, run_gh):
                 author = (c.get("author") or {}).get("login")
             except AttributeError:
                 author = None
-            comments.append({"author": author, "created_at": c.get("createdAt")})
-        out.append(
-            {"id": t.get("id"), "is_resolved": bool(t.get("isResolved")),
-             "comments": comments}
+            comments.append({"author": author, "created_at": c.get("createdAt"),
+                             "body": c.get("body") or ""})
+        thread = {
+            "id": t.get("id"),
+            "is_resolved": bool(t.get("isResolved")),
+            "resolved_by": (t.get("resolvedBy") or {}).get("login"),
+            "comments": comments,
+        }
+        thread["author_resolved"] = review_pass_filter.thread_resolved_by_author(
+            thread, context.get("login"), context.get("identity") or {}
         )
+        out.append(thread)
     return out
 
 
@@ -235,8 +512,13 @@ def fetch_review_passes(pr_number, repo, run_gh, run_rest):
 
     Returns [{kind, author, has_comments}]. ``run_gh`` parses GraphQL-ish argv,
     ``run_rest`` fetches a REST path and returns parsed JSON (both injected).
+
+    A pass that was posted inside the push window of the commit it covers,
+    or whose text is a copy of a review on another PR, is not a review pass
+    (DIG-4631) and is dropped here.
     """
-    passes = []
+    context = _pr_context(pr_number, repo, run_gh, run_rest)
+    candidates = []
     reviews = run_rest("repos/%s/pulls/%d/reviews" % (repo, pr_number)) or []
     for r in reviews:
         if not isinstance(r, dict):
@@ -248,9 +530,13 @@ def fetch_review_passes(pr_number, repo, run_gh, run_rest):
         except AttributeError:
             login = None
         if state == "APPROVED":
-            passes.append({"kind": "human", "author": login, "has_comments": True})
+            candidates.append({"kind": "human", "author": login,
+                               "has_comments": True, "at": r.get("submitted_at"),
+                               "commit_id": r.get("commit_id"), "body": body})
         elif body.strip() and is_reviewer_bot(login):
-            passes.append({"kind": "bot", "author": login, "has_comments": True})
+            candidates.append({"kind": "bot", "author": login,
+                               "has_comments": True, "at": r.get("submitted_at"),
+                               "commit_id": r.get("commit_id"), "body": body})
     comments = run_rest("repos/%s/issues/%d/comments" % (repo, pr_number)) or []
     for c in comments:
         if not isinstance(c, dict):
@@ -260,9 +546,12 @@ def fetch_review_passes(pr_number, repo, run_gh, run_rest):
                 login = (c.get("user") or {}).get("login")
             except AttributeError:
                 login = None
-            passes.append({"kind": "in-session", "author": login, "has_comments": True})
-            break
-    return passes
+            candidates.append({"kind": "in-session", "author": login,
+                               "has_comments": True, "at": c.get("created_at"),
+                               "commit_id": None, "body": c.get("body") or ""})
+    kept, _dropped = _filter_passes(candidates, pr_number, context)
+    _record_corpus(pr_number, kept, context)
+    return kept
 
 
 def reviewer_logins_for(review_passes):

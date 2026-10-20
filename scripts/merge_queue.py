@@ -51,6 +51,12 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+# The "what is not a review pass" rules (DIG-4631) live beside this script so
+# the host CI producer applies the same rules. The module is imported by path,
+# not by package, because `scripts/` is not a package.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import review_pass_filter as rpf
+
 POLICY_PATH = Path(__file__).resolve().parent / "merge_queue_policy.json"
 
 # Only SUCCESS passes a required check. NEUTRAL and SKIPPED are GitHub's way of
@@ -845,54 +851,23 @@ _PLACEHOLDER_IDS = frozenset({"?", "-", "none", "null", "unknown", "n/a", "tbd"}
 def _identity(text: str) -> dict[str, frozenset[str]]:
     """{kind: values} for the seat identity a body names; kinds: seat, session, run.
 
-    `agent=` and `seat=` are one kind: a Paperclip seat writes its agent id, and a
-    reviewer outside Paperclip writes a stable seat name. Only marker fields and
-    line-anchored trailers are read, never prose.
+    The vocabulary lives in `review_pass_filter` (DIG-4631) so the merge queue
+    and the host CI producer read one implementation of it.
     """
-    found: dict[str, set[str]] = {}
-
-    def add(kind: str, value: str) -> None:
-        v = value.strip().strip("'\";,.`").lower()
-        if v and v not in _PLACEHOLDER_IDS and not v.startswith("$"):
-            found.setdefault(kind, set()).add(v)
-
-    for regex in (_SEAT_MARKER_RE, _MARKER_RE):
-        for marker in regex.finditer(text or ""):
-            for f in _MARKER_FIELD_RE.finditer(marker.group("fields")):
-                kind = _SEAT_FIELD_KINDS.get(f.group("key").lower())
-                if kind:
-                    add(kind, f.group("value"))
-    for m in _SEAT_TRAILER_RE.finditer(text or ""):
-        add(_SEAT_TRAILER_KINDS[m.group("key").lower()], m.group("value"))
-    return {k: frozenset(v) for k, v in found.items()}
+    return rpf.identity_from_text(text)
 
 
 def _merge_identities(*ids: dict[str, frozenset[str]]) -> dict[str, frozenset[str]]:
-    out: dict[str, set[str]] = {}
-    for one in ids:
-        for kind, values in one.items():
-            out.setdefault(kind, set()).update(values)
-    return {k: frozenset(v) for k, v in out.items()}
+    return rpf.merge_identities(*ids)
 
 
 def _author_identity(pr: dict[str, Any]) -> dict[str, frozenset[str]]:
     """Every seat, session and run the PR's body and commits name as their author."""
-    texts = [str(pr.get("body") or "")]
-    for commit in pr.get("commits") or []:
-        if isinstance(commit, Mapping):
-            texts.append(
-                f"{commit.get('messageHeadline') or ''}\n{commit.get('messageBody') or ''}"
-            )
-    return _merge_identities(*(_identity(t) for t in texts))
+    return rpf.author_identity(pr)
 
 
 def _show(identity: dict[str, frozenset[str]]) -> str:
-    parts = [
-        f"{kind}={','.join(sorted(identity[kind]))}"
-        for kind in ("seat", "session", "run")
-        if identity.get(kind)
-    ]
-    return " ".join(parts) or "nothing"
+    return rpf.show_identity(identity)
 
 
 def _not_independent(
@@ -900,38 +875,10 @@ def _not_independent(
 ) -> str | None:
     """Why a same-login review cannot be shown to come from another seat, or None.
 
-    Fails closed at every step: a review is independent only when the author is
-    named, the reviewer is named, nothing they name coincides, and they are
-    compared on the strongest kind the author names (the seat if there is one,
-    else the session). A run id alone never identifies a seat.
+    The rule lives in `review_pass_filter` (DIG-4631) so the merge queue and
+    the host CI producer apply one version of it.
     """
-    if not author.get("seat") and not author.get("session"):
-        return (
-            "the PR names no authoring seat or session (add a `<!-- dt-seat agent=... -->` "
-            "marker or a `Paperclip-Agent-Id:` / `Session-Id:` trailer to the PR body or "
-            "commits), so a review under the author's own login cannot be shown to come "
-            "from a different seat"
-        )
-    if not reviewer:
-        return (
-            "the review names no reviewer seat (`<!-- dt-seat agent=... -->`), and every "
-            "seat posts under the author's login, so it may be the authoring session's own "
-            "attestation"
-        )
-    for kind in ("seat", "session", "run"):
-        shared = author.get(kind, frozenset()) & reviewer.get(kind, frozenset())
-        if shared:
-            return (
-                f"the review comes from the authoring {kind} ({','.join(sorted(shared))}); "
-                "a different reviewer seat has to review it"
-            )
-    kind = "seat" if author.get("seat") else "session"
-    if not reviewer.get(kind):
-        return (
-            f"the author is named by {kind} ({_show(author)}) but the review names no "
-            f"{kind} ({_show(reviewer)}), so the two cannot be told apart"
-        )
-    return None
+    return rpf.independence_reason(author, reviewer)
 
 
 def _comment_verdict(body: str) -> str | None:
@@ -1063,7 +1010,13 @@ query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) {
       reviewThreads(first: 100) {
         totalCount
-        nodes { isResolved isOutdated path comments(first: 1) { nodes { author { login } } } }
+        nodes {
+          isResolved
+          isOutdated
+          path
+          resolvedBy { login }
+          comments(first: 3) { nodes { author { login } body createdAt } }
+        }
       }
     }
   }
@@ -1095,15 +1048,61 @@ def _fetch_review_threads(repo: str, number: int) -> list[dict[str, Any]]:
         # More than one page. Treat the unread tail as unanswered rather than
         # paging: a PR with 100+ review threads is not one a cron should merge.
         nodes = nodes + [{"isResolved": False, "isOutdated": False, "path": "(unread page)"}]
-    return nodes
+    return [_normalise_thread(node) for node in nodes]
 
 
-def _open_threads(threads: list[Any]) -> list[dict[str, Any]]:
-    return [
-        t
-        for t in threads
-        if isinstance(t, dict) and not t.get("isResolved") and not t.get("isOutdated")
+def _normalise_thread(node: Any) -> Any:
+    """A thread node with the resolver and the replies in the shape the filters read."""
+    if not isinstance(node, Mapping):
+        return node
+    out = dict(node)
+    resolved_by = node.get("resolvedBy")
+    if isinstance(resolved_by, Mapping):
+        out["resolved_by_login"] = str(resolved_by.get("login") or "")
+    comments = node.get("comments")
+    listed = comments.get("nodes") or [] if isinstance(comments, Mapping) else (comments or [])
+    out["comments"] = [
+        {
+            "author_login": str((c.get("author") or {}).get("login") or "")
+            if isinstance(c.get("author"), Mapping)
+            else str(c.get("author") or ""),
+            "body": str(c.get("body") or ""),
+            "created_at": str(c.get("createdAt") or ""),
+        }
+        for c in listed
+        if isinstance(c, Mapping)
     ]
+    return out
+
+
+def _open_threads(
+    threads: list[Any], pr: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
+    """Threads that are not addressed: unresolved, or resolved by the PR's own author.
+
+    Every seat posts under one GitHub login, so a thread resolved under the
+    author's own login is not evidence that the reviewer was answered. Such a
+    thread stays open (DIG-4631).
+    """
+    author_login = ""
+    author_identity: dict[str, frozenset[str]] = {}
+    if isinstance(pr, Mapping):
+        author = pr.get("author")
+        if isinstance(author, Mapping):
+            author_login = str(author.get("login") or "")
+        author_identity = rpf.author_identity(pr)
+    out: list[dict[str, Any]] = []
+    for t in threads:
+        if not isinstance(t, dict):
+            continue
+        if t.get("isOutdated"):
+            continue
+        if t.get("isResolved") and not rpf.thread_resolved_by_author(
+            t, author_login, author_identity
+        ):
+            continue
+        out.append(t)
+    return out
 
 
 def _gate_review_threads(pr: dict[str, Any], repo: str | None) -> list[str]:
@@ -1125,16 +1124,145 @@ def _gate_review_threads(pr: dict[str, Any], repo: str | None) -> list[str]:
                 "review comments: the PR's review threads could not be read, so the "
                 "queue cannot tell they were addressed"
             ]
-    open_threads = _open_threads(threads if isinstance(threads, list) else [])
+    open_threads = _open_threads(threads if isinstance(threads, list) else [], pr)
     if not open_threads:
         return []
     paths = sorted({str(t.get("path") or "?") for t in open_threads})
     shown = ", ".join(paths[:3]) + (f" and {len(paths) - 3} more" if len(paths) > 3 else "")
+    author = pr.get("author")
+    author_login = str(author.get("login") or "") if isinstance(author, Mapping) else ""
+    author_identity = rpf.author_identity(pr)
+    author_resolved = sum(
+        1
+        for t in open_threads
+        if t.get("isResolved")
+        and rpf.thread_resolved_by_author(t, author_login, author_identity)
+    )
+    extra = (
+        f"; {author_resolved} of them were resolved by the PR's own author, which does "
+        "not show the reviewer was answered"
+        if author_resolved
+        else ""
+    )
     return [
         f"review comments not addressed: {len(open_threads)} unresolved review "
-        f"thread(s) on the current code ({shown}); resolve them, or push the fix "
+        f"thread(s) on the current code ({shown}){extra}; resolve them, or push the fix "
         "that makes them outdated"
     ]
+
+
+def _push_times(pr: dict[str, Any]) -> dict[str, str]:
+    """{commit oid: the time that commit was pushed} from the PR's commit list."""
+    pushes: dict[str, str] = {}
+    for commit in pr.get("commits") or []:
+        if not isinstance(commit, Mapping):
+            continue
+        oid = str(commit.get("oid") or "")
+        at = str(commit.get("committedDate") or "")
+        if oid and at:
+            pushes[oid] = at
+    return pushes
+
+
+def _review_evidence_items(pr: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every review and comment on the PR, as {body, at, commit, where} items."""
+    items: list[dict[str, Any]] = []
+    for review in pr.get("reviews") or []:
+        if not isinstance(review, Mapping):
+            continue
+        body = str(review.get("body") or "")
+        if not body.strip():
+            continue
+        commit = review.get("commit")
+        oid = str(commit.get("oid") or "") if isinstance(commit, Mapping) else ""
+        items.append(
+            {
+                "body": body,
+                "at": str(review.get("submittedAt") or review.get("submitted_at") or ""),
+                "commit": oid,
+                "where": "review",
+            }
+        )
+    for comment in pr.get("comments") or []:
+        if not isinstance(comment, Mapping):
+            continue
+        body = str(comment.get("body") or "")
+        if not body.strip():
+            continue
+        items.append(
+            {
+                "body": body,
+                "at": str(comment.get("createdAt") or comment.get("created_at") or ""),
+                "commit": "",
+                "where": "comment",
+            }
+        )
+    return items
+
+
+def _gate_review_pass_evidence(
+    pr: dict[str, Any], corpus: list[Mapping[str, Any]] | None = None
+) -> list[str]:
+    """The review evidence has to survive the DIG-4631 filters.
+
+    Two classes are refused: a review posted within 60 s of the push it claims
+    to cover, and a review whose text repeats a review on another PR. When every
+    piece of evidence on the PR falls in one of those classes, the PR has no
+    review pass and the queue says why.
+    """
+    items = _review_evidence_items(pr)
+    if not items:
+        return []
+    pushes = _push_times(pr)
+    number = pr.get("number")
+    survivors: list[dict[str, Any]] = []
+    refusals: list[str] = []
+    for item in items:
+        pushed = pushes.get(item["commit"]) if item["commit"] else None
+        if pushed and rpf.review_too_close_to_push(item["at"], pushed):
+            gap = int(
+                (rpf.parse_ts(item["at"]) or 0) - (rpf.parse_ts(pushed) or 0)
+            )
+            refusals.append(
+                f"the {item['where']} was posted {gap}s after the push it claims to cover"
+            )
+            continue
+        copies = rpf.duplicate_reviews(
+            rpf.normalise_review_text(item["body"]), number, corpus
+        )
+        if copies:
+            refusals.append(
+                f"the {item['where']} repeats the review on #{copies[0].get('pr')} "
+                f"(text similarity {copies[0].get('ratio')})"
+            )
+            continue
+        survivors.append(item)
+    if survivors or not refusals:
+        return []
+    return ["review evidence is not a review pass: " + "; ".join(refusals[:2]) + " (DIG-4631)"]
+
+
+def _review_corpus(prs: list[dict[str, Any]]) -> list[Mapping[str, Any]]:
+    """Every review seen on the queued PRs, plus the rolling store.
+
+    A review copied from another PR is only recognisable against reviews seen
+    elsewhere, so the queue keeps a rolling corpus of the review text it has
+    seen (DIG-4631). The corpus is a cache of public review text and decides
+    nothing on its own.
+    """
+    entries: list[Mapping[str, Any]] = list(rpf.load_corpus())
+    for pr in prs:
+        texts = [
+            (item["at"], item["body"])
+            for item in _review_evidence_items(pr)
+            if item["where"] == "review"
+        ]
+        if not texts:
+            continue
+        author = pr.get("author")
+        login = str(author.get("login") or "") if isinstance(author, Mapping) else ""
+        entries.extend(rpf.corpus_entries(pr.get("number"), texts, login=login))
+    return entries
 
 
 def _coverage_module() -> Any:
@@ -1264,6 +1392,7 @@ def evaluate(
     base: str,
     acting_role: str,
     repo: str | None = None,
+    corpus: list[Mapping[str, Any]] | None = None,
 ) -> Verdict:
     """Apply every gate to one PR. Returns the verdict, including why it failed."""
     reasons: list[str] = []
@@ -1304,6 +1433,10 @@ def evaluate(
     reasons.extend(_gate_review(pr))
     coverage_reasons, review_evidence = _review_coverage(pr, repo)
     reasons.extend(coverage_reasons)
+    # The review evidence itself has to be a real review pass (DIG-4631): not a
+    # copy of another PR's review, and not a review posted seconds after the
+    # push it claims to cover.
+    reasons.extend(_gate_review_pass_evidence(pr, corpus))
     # review-applied on the exact tip. The rollup half is free; the by-SHA read is
     # one REST call, so it is spent only on a PR every earlier gate passed.
     reasons.extend(_gate_review_applied(pr, policy, repo if not reasons else None))
@@ -1346,7 +1479,11 @@ def evaluate_all(
     repo: str | None = None,
 ) -> list[Verdict]:
     """Every PR, in queue order, with its verdict."""
-    verdicts = [evaluate(pr, policy, base=base, acting_role=acting_role, repo=repo) for pr in prs]
+    corpus = _review_corpus(prs)
+    verdicts = [
+        evaluate(pr, policy, base=base, acting_role=acting_role, repo=repo, corpus=corpus)
+        for pr in prs
+    ]
     verdicts.sort(key=Verdict.order_key)
     return verdicts
 
