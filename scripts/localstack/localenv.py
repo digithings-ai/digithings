@@ -41,9 +41,10 @@ except ImportError:  # run as a script
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from supabase_ports import PORT_ENV, api_port
 
-#: Overrides the contract's keychain_service_prefix. The local material
-#: lives under this namespace; the contract's default ("digithings/") is
-#: where the shared digithings secrets live.
+#: Names the namespace the local stack works in, so a local render finds the
+#: local material and not a shared one. The contract's shared namespace
+#: ("digithings/") holds the digithings secrets every deployment shares; it
+#: is the only namespace a shared secret is read from.
 KEYCHAIN_PREFIX_ENV = "DT_SECRETS_KEYCHAIN_PREFIX"
 DEFAULT_KEYCHAIN_PREFIX = "digithings-local/"
 
