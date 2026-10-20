@@ -11,18 +11,17 @@ import { DigichatContextMeter } from "./digichat-context-meter";
  */
 export function DigichatComposerToolbar({
   prefs,
-  providerLabel = "cheaper inference",
+  providerLabel = "cheaperinference",
 }: {
   prefs: EmbedChatPrefsApi;
   /** Active backend: Cheaper Inference for house models, or a BYOK provider. */
   providerLabel?: string;
 }) {
   const rawModel = prefs.prefs.model.trim();
-  const modelLabel = rawModel
-    ? (rawModel.split("/").pop() ?? rawModel).replace(/-/g, " ")
-    : "auto";
+  // Routing names, not presentation: the backend sees the full model id.
+  const modelLabel = rawModel || "auto";
 
-  // Connected MCP servers and the tools inside them: one zammad server with
+  // Connected MCP servers and the tools inside them: one ticket server with
   // five tools reads "1 MCP / 5 tools", not "5 MCPs". A server with no
   // sub-tool list counts as one tool. Per-tool toggles live in prefs.extra
   // (tool id -> off).
@@ -79,9 +78,19 @@ export function DigichatComposerToolbar({
             type="button"
             className="aui-composer-meta aui-composer-meta-action"
             onClick={() => prefs.openMcp()}
-            aria-label="Open MCP tools"
+            aria-label="Open MCP servers"
           >
-            {mcpCounts.servers} MCP{mcpCounts.servers === 1 ? "" : "s"} /{" "}
+            {mcpCounts.servers} MCP{mcpCounts.servers === 1 ? "" : "s"}
+          </button>
+          <span className="aui-composer-meta-sep" aria-hidden>
+            /
+          </span>
+          <button
+            type="button"
+            className="aui-composer-meta aui-composer-meta-action"
+            onClick={() => prefs.openTools()}
+            aria-label="Open tools"
+          >
             {mcpCounts.tools} tool{mcpCounts.tools === 1 ? "" : "s"}
           </button>
         </>
