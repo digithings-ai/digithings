@@ -246,3 +246,54 @@ def test_digest_falls_back_loudly_when_git_is_unavailable(
     digest = mod.content_digest(root)
     assert digest != hashlib.sha256().hexdigest(), "an unreadable tree must not hash to nothing"
     assert "computed without git" in capsys.readouterr().err
+
+
+def test_npm_only_packages_the_digichat_inputs_and_refuses_a_worker_deploy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The digichat image installs npm tarballs; the publish lane must be able
+    to package exactly those, and the tree must not read as a complete one.
+
+    The digichat image COPYs image-packages/digichat/ and nothing else, so
+    packaging it must not need uv or the wheels — a release must not depend on
+    unrelated Python packages building. But a partial tree must not pass a full
+    --check-only: a worker deploy built on it would ship an image without its
+    wheels, which is the stale ship the check exists to refuse.
+    """
+    monkeypatch.setattr(mod, "OUT", tmp_path)
+    packed: list[str] = []
+
+    def fake_run(cmd: list[str], *, cwd: Path | None = None) -> None:
+        if cmd[:2] == ["npm", "pack"]:
+            name = cmd[cmd.index("--workspace") + 1]
+            dest = Path(cmd[cmd.index("--pack-destination") + 1])
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / f"{name.split('/')[-1]}-0.0.0.tgz").write_bytes(b"tar")
+            packed.append(name)
+
+    monkeypatch.setattr(mod, "_run", fake_run)
+
+    assert mod.main(["--npm-only"]) == 0
+    assert sorted(packed) == sorted(mod.NPM_PACKAGES), (
+        "every npm workspace the image installs must be packed"
+    )
+    npm_dir = tmp_path / "digichat" / "npm"
+    assert npm_dir.is_dir() and any(npm_dir.iterdir()), "the npm tarballs must land"
+    assert (tmp_path / "digichat" / "manifests" / "ui" / "package.json").is_file(), (
+        "the workspace manifests the Dockerfile COPYs must land"
+    )
+
+    document = json.loads((tmp_path / "PROVENANCE.json").read_text(encoding="utf-8"))
+    assert document["scope"] == mod.NPM_SCOPE, (
+        "a partial tree must say it is partial, or a reader cannot tell it "
+        "apart from a complete one"
+    )
+    assert set(document["packages"]) == set(mod.npm_input_paths()), (
+        "the record must cover exactly the inputs that were packaged"
+    )
+
+    # The npm-scoped check passes on this tree...
+    assert mod.check_only(mod.npm_input_paths()) == 0
+    # ...and the full check refuses it: a worker deploy must not find a
+    # complete tree here.
+    assert mod.check_only() == 1
