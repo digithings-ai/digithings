@@ -37,6 +37,8 @@ function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setModel: vi.fn(),
     setEffort: vi.fn(),
     setSearchEngine: vi.fn(),
+    setToolbar: vi.fn(),
+    setScrollbars: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -100,7 +102,9 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const selected = await screen.findByRole("menuitemradio", { name: "alpha" });
     expect(selected).toHaveAttribute("aria-checked", "true");
     expect(selected.textContent).not.toMatch(/\bon\b/i);
-    expect(hasChevron(selected)).toBe(false);
+    // The cursor row always carries the chevron; a checked row also keeps its
+    // diamond on the right, so the two marks never share a side.
+    expect(hasChevron(selected)).toBe(true);
     expect(hasDiamond(selected)).toBe(true);
 
     const other = screen.getByRole("menuitemradio", { name: "beta" });
@@ -115,10 +119,10 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(hasDiamond(selected)).toBe(true);
     expect(hasDiamond(other)).toBe(false);
 
-    // Navigating the checked row does not add a chevron: the diamond stays
-    // and remains the only mark on that row.
+    // Navigating back to the checked row restores the chevron beside the
+    // diamond; the diamond still marks the configured value.
     await user.hover(selected);
-    expect(hasChevron(selected)).toBe(false);
+    expect(hasChevron(selected)).toBe(true);
     expect(hasDiamond(selected)).toBe(true);
 
     await user.click(other);
@@ -181,7 +185,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const english = await screen.findByRole("menuitemradio", { name: /en\s+English/i });
     expect(english).toHaveAttribute("aria-checked", "true");
     expect(english.textContent).not.toMatch(/\bon\b/i);
-    expect(hasChevron(english)).toBe(false);
+    expect(hasChevron(english)).toBe(true);
     expect(hasDiamond(english)).toBe(true);
 
     const dutch = screen.getByRole("menuitemradio", { name: /nl\s+Dutch/i });
@@ -296,5 +300,45 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const contact = screen.getByRole("link", { name: "contact@digithings.ai" });
     expect(contact.getAttribute("href")).toBe("mailto:contact@digithings.ai");
     unmount();
+  });
+});
+
+describe("EmbedComposerMenu navigation tree", () => {
+  beforeEach(mountHost);
+  afterEach(() => {
+    document.querySelector("[data-picker-test-host]")?.remove();
+  });
+
+  it("goes back from a directly opened page to the root instead of closing", async () => {
+    const user = userEvent.setup();
+    const api = prefs();
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="mcp" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    // Opened at a leaf, so the root list is not on screen yet.
+    expect(screen.queryByRole("menuitem", { name: /\/models/ })).toBeNull();
+
+    await user.keyboard("{Escape}");
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(await screen.findByRole("menuitem", { name: /\/models/ })).toBeTruthy();
+  });
+
+  it("closes only from the root", async () => {
+    const user = userEvent.setup();
+    const api = prefs();
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

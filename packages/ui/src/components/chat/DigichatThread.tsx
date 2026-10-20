@@ -42,6 +42,8 @@ export type DigichatThreadProps = {
   toolCallsMode?: GroupDisclosureMode;
   /** Row rendered inside the composer border, under the input. */
   composerToolbar?: ReactNode;
+  /** `always` reserves a scrollbar gutter; `auto` shows bars only on scroll. */
+  scrollbars?: "always" | "auto";
 };
 
 export function DigichatThread({
@@ -59,6 +61,7 @@ export function DigichatThread({
   reasoningMode,
   toolCallsMode,
   composerToolbar,
+  scrollbars,
 }: DigichatThreadProps) {
   return (
     <Thread
@@ -76,6 +79,7 @@ export function DigichatThread({
       reasoningMode={reasoningMode}
       toolCallsMode={toolCallsMode}
       composerToolbar={composerToolbar}
+      scrollbars={scrollbars}
     />
   );
 }

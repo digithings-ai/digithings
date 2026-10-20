@@ -413,7 +413,12 @@ export function DigichatSkin({
       }
       reasoningMode={reasoningUi.mode}
       toolCallsMode={toolCallsUi.mode}
-      composerToolbar={prefs ? <DigichatComposerToolbar prefs={prefs} /> : undefined}
+      composerToolbar={
+        prefs && prefs.prefs.toolbar !== false ? (
+          <DigichatComposerToolbar prefs={prefs} />
+        ) : undefined
+      }
+      scrollbars={prefs?.prefs.scrollbars ?? "always"}
     />
   );
 }

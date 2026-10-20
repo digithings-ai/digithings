@@ -1043,6 +1043,8 @@ function EmbedChat({
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort: effort })),
       setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
+      setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
+      setScrollbars: (mode) => setChatPrefs((p) => ({ ...p, scrollbars: mode })),
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,

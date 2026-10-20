@@ -41,3 +41,15 @@ describe("searchEngine pref", () => {
     expect(createDefaultEmbedChatPrefs().searchEngine).toBe("");
   });
 });
+
+describe("composer chrome prefs", () => {
+  it("shows the composer footer row by default", () => {
+    expect(DEFAULT_EMBED_CHAT_PREFS.toolbar).toBe(true);
+    expect(createDefaultEmbedChatPrefs().toolbar).toBe(true);
+  });
+
+  it("keeps scrollbars always visible by default", () => {
+    expect(DEFAULT_EMBED_CHAT_PREFS.scrollbars).toBe("always");
+    expect(createDefaultEmbedChatPrefs().scrollbars).toBe("always");
+  });
+});
