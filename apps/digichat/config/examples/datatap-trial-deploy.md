@@ -33,9 +33,16 @@ This is the **trial** chat, not the website docs chat. The website chat
 
 | Variable | Value / source |
 |---|---|
-| `DIGICHAT_CONFIG_PATH` | per-trial baked yaml, e.g. `config/datatap-trial-foundry.yaml` (template in `config/`, cloned per trial with that tenant's `projectEndpoint` + `agentName`) |
-| `AUTH_SECRET`, `AUTH_URL` | per standard digichat deploy (`docs/DEPLOYMENT.md` § digichat) |
+| `DIGICHAT_CONFIG_PATH` | per-trial rendered yaml, e.g. `config/datatap-trial-foundry.yaml` (template in `config/`, copied per trial with that tenant's `projectEndpoint` + `agentName`) |
+| `AUTH_SECRET`, `AUTH_URL` | per standard digichat deploy (`docs/DEPLOYMENT.md` § digichat); `AUTH_TRUST_HOST=true` alongside them |
+| `DIGICHAT_EMBED_TOKEN` | the tenant's embed token, as a **secret** (`secretref:`), never baked into the image. The single-install path enforces it on every `/api/chat` |
+| `AZURE_CLIENT_ID` | the **user-assigned** managed identity's client id, when the app uses one. Without it `DefaultAzureCredential` fails with "Unable to load the proper Managed Identity" |
 | `DIGICHAT_DATABASE_URL` | Postgres (persistence is `none` in this config, but sessions still need it) |
+
+`DIGICHAT_ENABLED_SERVICES` is **not** needed for V1. The warm-up gate used to
+probe digigraph unless that variable named a service, so a Foundry-only install
+parked the UI on a boot screen; the gate now reads the deployment's backend and
+skips digigraph when the install does not use it (#6023).
 
 No MCP token, no digikey/digigraph URLs on V1: the container talks to the
 tenant's Foundry agent via its managed identity (`DefaultAzureCredential`),
@@ -49,6 +56,16 @@ and the agent carries the search index + MCP tool server-side.
   dev MCP server (MCP tool, custom-keys connection, tenant key).
 - Reasoning summary **enabled** on the agent definition, otherwise thinking
   rows stay dropped by design.
+- The agent's search tool needs a project connection that can **read the index
+  definition**, not just query it. A query key returns `403` on
+  `GET /indexes/<name>`, and the tool is refused with "Access denied. Check
+  your permissions or managed identity access to the search service". Use the
+  search service's **admin** key, held in a secret store, never in the agent
+  definition.
+- An `AAD` connection authenticates as **whoever calls the agent**. A direct
+  call from an operator's own session can therefore succeed while the
+  container's managed identity is refused. A key connection is the same for
+  every caller, which is why the trial uses one.
 
 ## Container environment (V2 — DigiGraph harness, parked)
 
@@ -72,6 +89,23 @@ and the agent carries the search index + MCP tool server-side.
 - Model: route `DIGI_LLM_MODEL` at the sharedstack's LiteLLM proxy to the
   Foundry `gpt-5-mini` deployment (azure provider entry), or set it directly
   once the Trials-subscription Foundry account has a deployment.
+
+## Build the image
+
+The Dockerfile consumes `image-packages/`, which
+`scripts/package_r5_image_inputs.py` produces:
+
+```bash
+python3 scripts/package_r5_image_inputs.py --npm-only   # what this image needs
+docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+  -f apps/digichat/Dockerfile -t <registry>/digichat:<tag> . --push
+```
+
+Two traps: the build is `linux/amd64` (a plain `docker build` on an arm64 Mac
+produces an arm64 image and the Container App rejects it with "no child with
+platform linux/amd64"), and the config the image bakes must be the **rendered**
+one — a template with `REPLACE-` placeholders now fails at boot with a clear
+error instead of failing every chat on a DNS lookup (#6023).
 
 ## Deploy sketch — V1 (Azure CLI)
 
@@ -128,6 +162,17 @@ az containerapp create \
    connections JSON (args pane + Result pane).
 3. Unauthenticated `tools/list` on the MCP server shows the base set; the
    keyed container sees the Search tools — scope gating intact.
+
+## Traps worth knowing before the demo
+
+- The chat answers with the **generic** "The assistant is unavailable right now"
+  for every upstream failure, including a refused search connection. Check the
+  container log (`[foundry] stream error …`) before blaming the model.
+- A partially streamed answer followed by that message is not a truncated
+  answer: the turn failed after the first tokens.
+- `GET /api/health` probes the whole ecosystem, so a Foundry-only install
+  reports a failing check while the chat is fine. Read `service` and `version`
+  in the body, not the status code.
 
 ## Promotion notes
 

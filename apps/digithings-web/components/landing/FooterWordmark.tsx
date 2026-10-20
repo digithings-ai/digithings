@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { observeOnce } from "./observe-once";
-import { PixelWordmark } from "./PixelWordmark";
+import { PixelWordmark } from "@digithings/ui/pixel-wordmark";
 
 /** The closing mark above the footer. Builds once, the first time it scrolls into view. */
 export function FooterWordmark() {

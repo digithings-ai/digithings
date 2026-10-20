@@ -4,7 +4,7 @@
  * into matching the fixture as substrings, which is what put a stub banner over a
  * live NAV block.
  */
-import { isStubPayload as isStubEnvelope } from "../../../../packages/ui/src/lib/stub-payload";
+import { isStubPayload as isStubEnvelope } from "@digithings/ui/lib/stub-payload";
 
 export { isStubEnvelope };
 

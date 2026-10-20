@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { chatFailureSentence } from "../../../../clients/digiquant-tui/src/pages/chat-format";
+import { chatFailureSentence } from "digiquant-tui/pages/chat-format";
 import {
   CHAT_ROUTES,
   messageRoute,

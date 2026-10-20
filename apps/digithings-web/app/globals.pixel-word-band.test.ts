@@ -29,7 +29,7 @@ import { DIGITHINGS } from "@digithings/hero-banner/definitions";
  */
 
 const CSS_PATH = join(__dirname, "globals.css");
-const MARK_PATH = join(__dirname, "../components/landing/PixelWordmark.tsx");
+const MARK_PATH = join(__dirname, "../../../packages/ui/src/components/landing/PixelWordmark.tsx"); // moved DIG-3695
 
 const css = readFileSync(CSS_PATH, "utf8");
 const markSrc = readFileSync(MARK_PATH, "utf8");

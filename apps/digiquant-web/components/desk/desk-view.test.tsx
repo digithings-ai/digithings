@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { publicCatalogPages } from "./public-surface";
-import { STUB_READ, presentResponse } from "../../../../clients/digiquant-tui/src/read";
+import { STUB_READ, presentResponse } from "digiquant-tui/read";
 import { DeskView } from "./desk-view";
 import { deskPathFromSlug, deskStaticParams, isDeskPath } from "./paths";
 

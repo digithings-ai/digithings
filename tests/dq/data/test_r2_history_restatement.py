@@ -208,4 +208,6 @@ def test_macro_put_restatement(fakes: Any) -> None:
 
 
 def test_digest_helper_matches_store() -> None:
-    assert _digest(b"x") == hashlib.sha256(b"x").hexdigest()
+    # Known-answer vectors (cross-checked with sha256sum(1), not hashlib).
+    assert _digest(b"x") == "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    assert _digest(b"") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

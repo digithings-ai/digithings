@@ -1,7 +1,7 @@
 """Unit tests for digiquant.data.prices.macro_ingest (mocked HTTP).
 
 The live FRED API fetchers were removed in #4794 PR3 (panel seals from
-gloomberb ``econ_series``); ``fred_observations_to_rows`` stays covered.
+gloomberb ``econ_series``); the unused FRED row mapper went with DIG-3413.
 """
 
 from __future__ import annotations
@@ -13,28 +13,9 @@ from digiquant.data.prices.macro_ingest import (
     dedupe_observation_rows,
     fetch_fx_intraday,
     fetch_fx_yahoo,
-    fred_observations_to_rows,
     fx_intraday_payload_to_candles,
     yahoo_fx_payload_to_rows,
 )
-
-
-@pytest.mark.unit
-def test_fred_observations_to_rows_filters_missing_values() -> None:
-    observations = [
-        {"date": "2025-01-01", "value": "4.12"},
-        {"date": "2025-01-02", "value": "."},  # FRED sentinel for missing
-        {"date": "2025-01-03", "value": ""},
-        {"date": "", "value": "4.15"},
-        {"date": "2025-01-04", "value": "not-a-number"},
-    ]
-    rows = fred_observations_to_rows("DGS10", "percent", "10Y", observations)
-    assert len(rows) == 1
-    assert rows[0]["obs_date"] == "2025-01-01"
-    assert rows[0]["value"] == pytest.approx(4.12)
-    assert rows[0]["source"] == "fred"
-    assert rows[0]["series_id"] == "DGS10"
-    assert rows[0]["meta"]["title"] == "10Y"
 
 
 @pytest.mark.unit

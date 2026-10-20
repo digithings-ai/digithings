@@ -11,7 +11,6 @@ if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
 
 import digikey.db as digikey_db
 import pytest
-from digikey.db import init_db, session_factory
 from digikey.db_schema import ApiKeyRow
 from digikey.key_crypto import generate_raw_key, hash_secret
 from digikey.server import app
@@ -28,7 +27,7 @@ def test_oauth_token_includes_litellm_proxy_when_configured(
     monkeypatch.setenv("DIGIKEY_LITELLM_PROXY_KEY", "sk-shared-lite")
     digikey_db._engine = None
     digikey_db._session_factory = None
-    init_db()
+    digikey_db.init_db()
 
     raw, prefix = generate_raw_key()
     row = ApiKeyRow(
@@ -39,7 +38,7 @@ def test_oauth_token_includes_litellm_proxy_when_configured(
         kind="dev_global",
         label="test",
     )
-    sf = session_factory()
+    sf = digikey_db.session_factory()
     with sf() as session:
         session.add(row)
         session.commit()

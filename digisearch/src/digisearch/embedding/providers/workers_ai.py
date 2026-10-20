@@ -26,7 +26,7 @@ Opener = Callable[[Request], Any]
 
 
 class WorkersAiEmbedder(EmbeddingProvider):
-    """bge-m3 via the Workers AI REST API, or an injected function in tests."""
+    """bge-m3 via the Workers AI REST API, a dedicated embed endpoint, or an injected function in tests."""
 
     model_id: str = BGE_M3_MODEL_ID
 
@@ -36,6 +36,7 @@ class WorkersAiEmbedder(EmbeddingProvider):
         account_id: str | None = None,
         api_token: str | None = None,
         opener: Opener | None = None,
+        url: str | None = None,
     ) -> None:
         self._embed_fn = embed_fn
         self._account_id = (
@@ -45,6 +46,9 @@ class WorkersAiEmbedder(EmbeddingProvider):
             api_token if api_token is not None else os.environ.get("CLOUDFLARE_API_TOKEN", "")
         ).strip()
         self._opener = opener or urlopen
+        # A dedicated embed endpoint replaces the account-scoped Workers AI URL.
+        # The account id is then not needed: the endpoint is addressed directly.
+        self._url = (url or "").strip()
 
     @property
     def dimensions(self) -> int:
@@ -55,11 +59,17 @@ class WorkersAiEmbedder(EmbeddingProvider):
             return []
         if self._embed_fn is not None:
             return _check(self._embed_fn(texts), len(texts))
-        if not self._account_id or not self._api_token:
+        if not self._api_token:
+            raise EmbeddingConfigError(
+                "Workers AI embedder needs CLOUDFLARE_API_TOKEN"
+                if self._url
+                else "Workers AI embedder needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN"
+            )
+        if not self._url and not self._account_id:
             raise EmbeddingConfigError(
                 "Workers AI embedder needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN"
             )
-        url = (
+        url = self._url or (
             "https://api.cloudflare.com/client/v4/accounts/"
             f"{self._account_id}/ai/run/{BGE_M3_MODEL_ID}"
         )

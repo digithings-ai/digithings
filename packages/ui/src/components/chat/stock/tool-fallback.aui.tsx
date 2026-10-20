@@ -181,11 +181,16 @@ function ToolFallbackTrigger({
   const isErrorStatus =
     status?.type === "incomplete" && status.reason === "error";
 
+  // Upstream assistant-ui wording, one word per state.
   const label = isCancelled
     ? "Cancelled tool"
     : isErrorStatus
       ? "Failed tool"
-      : "Used tool";
+      : statusType === "running"
+        ? "Running tool"
+        : statusType === "requires-action"
+          ? "Waiting on tool"
+          : "Used tool";
   const matrixState: DotMatrixState = isCancelled
     ? "idle"
     : statusMatrix[statusType];
@@ -215,16 +220,12 @@ function ToolFallbackTrigger({
         {label}: <b>{title ?? toolName}</b>
       </span>
       <ToolFallbackDuration />
-      <ChevronDownIcon
+      <span
         data-slot="tool-fallback-trigger-chevron"
-        className={cn(
-          "aui-tool-fallback-trigger-chevron size-4 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          "-rotate-90",
-          "group-data-open/trigger:rotate-0",
-          "group-data-panel-open/trigger:rotate-0",
-        )}
-      />
+        className="aui-tool-fallback-trigger-chevron inline-flex shrink-0"
+      >
+        <DotMatrix state="expand" label="Toggle tool" className="size-4" />
+      </span>
     </CollapsibleTrigger>
   );
 }

@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DigichatThread, type GroupDisclosureMode } from "./DigichatThread";
+import type { WorkVisibility } from "./stock/skin-types";
 
 const adapter: ChatModelAdapter = {
   async run() {
@@ -183,6 +184,7 @@ type HarnessProps = {
   initialMessages?: readonly ThreadMessageLike[];
   reasoningMode?: GroupDisclosureMode;
   toolCallsMode?: GroupDisclosureMode;
+  workVisibility?: WorkVisibility;
 };
 
 function Harness({
@@ -192,6 +194,7 @@ function Harness({
   initialMessages,
   reasoningMode,
   toolCallsMode,
+  workVisibility,
 }: HarnessProps) {
   const runtime = useLocalRuntime(
     adapter,
@@ -206,6 +209,7 @@ function Harness({
         hiddenAttachmentNames={hiddenAttachmentNames}
         reasoningMode={reasoningMode}
         toolCallsMode={toolCallsMode}
+        workVisibility={workVisibility}
       />
       {attachmentName ? <AddComposerAttachment name={attachmentName} /> : null}
     </AssistantRuntimeProvider>
@@ -341,6 +345,35 @@ describe("DigichatThread", () => {
     const { host, unmount } = await mount({
       initialMessages: TOOL_MESSAGES,
       toolCallsMode: "expanded",
+    });
+    await act(async () => {});
+    expect(
+      host
+        .querySelector('[data-slot="tool-group-root"]')
+        ?.hasAttribute("data-open"),
+    ).toBe(true);
+    unmount();
+  });
+
+  it("shows one summary line instead of the chain when the client is quiet", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      workVisibility: "quiet",
+    });
+    await act(async () => {});
+    const summary = host.querySelector('[data-slot="aui_work-chain-summary"]');
+    expect(summary).toBeTruthy();
+    expect(summary?.textContent).toContain("Used 2 tools");
+    // The chain itself is not rendered at all.
+    expect(host.querySelector('[data-slot="tool-group-root"]')).toBeNull();
+    expect(host.textContent).toContain("grounded answer");
+    unmount();
+  });
+
+  it("keeps the chain open when the client is verbose", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      workVisibility: "verbose",
     });
     await act(async () => {});
     expect(

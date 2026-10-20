@@ -34,12 +34,23 @@ export function normalizeEmail(raw: unknown): string {
  * as `Bearer`. A header that does not match is left alone, so a genuine user
  * JWT (this module never has one) would still pass.
  */
+/**
+ * True when `key` is a new-format Supabase key (`sb_publishable_` / `sb_secret_`).
+ *
+ * New-format values are not JWTs. The platform expects them on the `apikey`
+ * header only. A legacy JWT does not match and keeps its `Authorization` header.
+ */
+export function isNewFormatKey(key: string): boolean {
+  return /^sb_(publishable|secret)_/.test(key);
+}
+
 export function apiKeyOnlyFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const headers = new Headers(
     init?.headers ?? (input instanceof Request ? input.headers : undefined),
   );
   const authorization = headers.get("Authorization") ?? "";
-  if (/^Bearer (sb_publishable_|sb_secret_)/.test(authorization)) {
+  const token = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
+  if (isNewFormatKey(token)) {
     headers.delete("Authorization");
   }
   if (input instanceof Request) {
