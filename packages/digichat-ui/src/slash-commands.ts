@@ -240,6 +240,22 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     category: "setup",
   },
   {
+    id: "toolbar",
+    names: ["/toolbar"],
+    needsArg: false,
+    hint: "Composer toolbar",
+    kind: "action",
+    category: "setup",
+  },
+  {
+    id: "scrollbar",
+    names: ["/scrollbar"],
+    needsArg: false,
+    hint: "Scrollbars: always or on scroll",
+    kind: "action",
+    category: "setup",
+  },
+  {
     id: "artifacts",
     names: ["/artifacts"],
     needsArg: false,

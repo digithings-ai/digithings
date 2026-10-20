@@ -174,6 +174,8 @@ export type ThreadProps = {
    * other hosts leave it unset.
    */
   composerToolbar?: ReactNode;
+  /** `always` reserves a scrollbar gutter; `auto` shows bars only on scroll. */
+  scrollbars?: "always" | "auto";
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -373,6 +375,7 @@ export const Thread: FC<ThreadProps> = ({
   reasoningMode = "collapsed",
   toolCallsMode = "collapsed",
   composerToolbar,
+  scrollbars = "always",
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -401,6 +404,7 @@ export const Thread: FC<ThreadProps> = ({
                   placeholder={placeholder}
                   composerLayout={composerLayout}
                   composerToolbar={composerToolbar}
+                  scrollbars={scrollbars}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -426,7 +430,8 @@ const ThreadRoot: FC<{
   placeholder?: string | undefined;
   composerLayout: ComposerLayout;
   composerToolbar?: ReactNode;
-}> = ({ autoFocus, placeholder, composerLayout, composerToolbar }) => {
+  scrollbars: "always" | "auto";
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -451,6 +456,7 @@ const ThreadRoot: FC<{
       // /baseline catalog, the embed shell, and the production shells — instead
       // of each surface having to remember to wrap the Thread.
       data-thread-skin="digichat"
+      data-scrollbars={scrollbars}
       style={{
         ["--thread-max-width" as string]: "44rem",
         // `--card` (not `--color-card`) so a scoped palette wins: the

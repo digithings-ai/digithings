@@ -17,6 +17,7 @@ import {
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
+import { OverlayScrollbar } from "../overlay-scrollbar";
 
 export const ANIMATION_DURATION = 200;
 
@@ -291,6 +292,7 @@ function ReasoningText({
   }, [isPreview]);
 
   return (
+    <div className="relative">
     <div
       ref={scrollRef}
       data-slot="reasoning-text"
@@ -315,6 +317,8 @@ function ReasoningText({
       <div ref={contentRef} className="aui-reasoning-text-content space-y-4">
         {children}
       </div>
+    </div>
+    <OverlayScrollbar targetRef={scrollRef} width={4} className="aui-reasoning-scroll" />
     </div>
   );
 }

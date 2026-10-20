@@ -30,6 +30,10 @@ export type EmbedChatPrefs = {
   effort: string;
   /** Web-search engine id (auto/internal/exa/tavily/parallel/firecrawl/tinyfish). */
   searchEngine: string;
+  /** The model/provider/MCP/context row under the composer. */
+  toolbar: boolean;
+  /** `always` keeps scrollbars in their reserved gutter; `auto` shows them on scroll. */
+  scrollbars: "always" | "auto";
 };
 
 export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
@@ -47,6 +51,8 @@ export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
   model: "",
   effort: "medium",
   searchEngine: "",
+  toolbar: true,
+  scrollbars: "always",
 };
 
 /**
@@ -89,6 +95,8 @@ export type EmbedChatPrefsApi = {
   setModel: (id: string) => void;
   setEffort: (effort: string) => void;
   setSearchEngine: (engine: string) => void;
+  setToolbar: (visible: boolean) => void;
+  setScrollbars: (mode: "always" | "auto") => void;
   reset: () => void;
   tenantAllowsWeb: boolean;
   showByok: boolean;
