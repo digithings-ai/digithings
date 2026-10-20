@@ -20,7 +20,12 @@ export const HOUSE_BACKEND_ID = "cheaperinference";
  */
 export function backendLabel(
   byokProvider: BYOKProvider | null | undefined,
+  backendType?: string,
 ): string {
   const own = byokProvider?.trim();
-  return own ? own : HOUSE_BACKEND_ID;
+  if (own) return own;
+  // A Foundry tenant is answered by its own agent, not by the house model
+  // provider: naming the house backend there would be a lie.
+  if (backendType === "foundry") return "Azure AI Foundry";
+  return HOUSE_BACKEND_ID;
 }

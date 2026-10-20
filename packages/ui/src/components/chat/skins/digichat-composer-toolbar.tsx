@@ -20,7 +20,10 @@ export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi })
   // Routing names, not presentation: the backend sees the full model id.
   const modelLabel = rawModel || "auto";
   const providerLabel = prefs.providerLabel?.trim() ?? "";
-  const showProvider = prefs.showByok && providerLabel.length > 0;
+  // The backend is named whenever the host named one — a Foundry tenant is
+  // served by Azure AI Foundry, not by the house model provider. It is a
+  // button only where the tenant can switch it.
+  const showProvider = providerLabel.length > 0;
 
   // Connected MCP servers and the tools inside them: one ticket server with
   // five tools reads "1 MCP / 5 tools", not "5 MCPs". A server with no
@@ -47,6 +50,8 @@ export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi })
 
   return (
     <div data-slot="aui_composer-toolbar-inner" className="aui-composer-toolbar-inner">
+      {/* No model row without a picker: a tenant that publishes no model
+          list (a Foundry agent) has no model to name. */}
       {prefs.showModels ? (
         <button
           type="button"
@@ -56,22 +61,24 @@ export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi })
         >
           {modelLabel}
         </button>
-      ) : (
-        <span className="aui-composer-meta">{modelLabel}</span>
-      )}
+      ) : null}
       {showProvider ? (
         <>
           <span className="aui-composer-meta-sep" aria-hidden>
             /
           </span>
-          <button
-            type="button"
-            className="aui-composer-meta aui-composer-meta-action"
-            onClick={() => prefs.openByok()}
-            aria-label="Open provider menu"
-          >
-            {providerLabel}
-          </button>
+          {prefs.showByok ? (
+            <button
+              type="button"
+              className="aui-composer-meta aui-composer-meta-action"
+              onClick={() => prefs.openByok()}
+              aria-label="Open provider menu"
+            >
+              {providerLabel}
+            </button>
+          ) : (
+            <span className="aui-composer-meta">{providerLabel}</span>
+          )}
         </>
       ) : null}
       {mcpCounts.servers > 0 ? (

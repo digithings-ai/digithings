@@ -88,7 +88,16 @@ export function demoChatResponse(): Response {
       }
       writer.write({ type: "reasoning-end", id: "demo-reasoning" });
 
-      for (const tool of TOOLS) {
+      for (const [index, tool] of TOOLS.entries()) {
+        // A status part between two tool runs: the work continues, so it
+        // belongs to the same work block (this is what the real digigraph
+        // stream emits between a retrieve and the next call).
+        if (index === 2) {
+          writer.write({
+            type: "data-status",
+            data: { status: "working", step: "now reading the notes" },
+          });
+        }
         writer.write({
           type: "tool-input-start",
           toolCallId: tool.toolCallId,

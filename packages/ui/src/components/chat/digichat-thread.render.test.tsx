@@ -55,6 +55,103 @@ const TOOL_MESSAGES: ThreadMessageLike[] = [
   },
 ];
 
+/**
+ * Two work runs with only a source between them: one chain, not two.
+ * The agent reasoned, called a tool, pulled a source, then reasoned and
+ * called a tool again without writing anything in between.
+ */
+const TWO_RUNS_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "r1",
+        toolName: "digisearch",
+        argsText: "{}",
+        result: "ok",
+      },
+      {
+        type: "source",
+        sourceType: "url",
+        id: "s9",
+        url: "https://digithings.ai/docs",
+        title: "docs",
+      },
+      {
+        type: "tool-call",
+        toolCallId: "r2",
+        toolName: "digivault_get_note",
+        argsText: "{}",
+        result: "ok",
+      },
+      { type: "text", text: "one answer" },
+    ],
+  },
+];
+
+/**
+ * Two tool runs with only a status part between them: one work block, and
+ * the tool calls accumulate into one group.
+ */
+const TWO_TOOL_RUNS_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "x1",
+        toolName: "digisearch",
+        argsText: "{}",
+        result: "ok",
+      },
+      {
+        type: "tool-call",
+        toolCallId: "x2",
+        toolName: "digivault_get_note",
+        argsText: "{}",
+        result: "ok",
+      },
+      { type: "data", name: "status", data: { status: "working" } },
+      {
+        type: "tool-call",
+        toolCallId: "x3",
+        toolName: "ticketing_list_tickets",
+        argsText: "{}",
+        result: "ok",
+      },
+      { type: "text", text: "done" },
+    ],
+  },
+];
+
+/**
+ * The model explained itself, then went back to work: the first block is
+ * finished, the second one is still working.
+ */
+const TEXT_THEN_WORK_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "y1",
+        toolName: "digisearch",
+        argsText: "{}",
+        result: "ok",
+      },
+      { type: "text", text: "Let me check the notes." },
+      {
+        type: "tool-call",
+        toolCallId: "y2",
+        toolName: "digivault_get_note",
+        argsText: "{}",
+        result: "ok",
+      },
+    ],
+  },
+];
+
 const GLOOMBERB_MESSAGES: ThreadMessageLike[] = [
   {
     role: "assistant",
@@ -383,6 +480,47 @@ describe("DigichatThread", () => {
     expect(group).toBeTruthy();
     expect(group?.hasAttribute("data-closed")).toBe(true);
     expect(host.querySelector('[data-slot="aui_work-chain-summary"]')).toBeNull();
+    unmount();
+  });
+
+  it("accumulates two tool runs into one group when only a status part separates them", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TWO_TOOL_RUNS_MESSAGES,
+    });
+    await act(async () => {});
+    // One work block, one tool group, and the count is the tool calls.
+    expect(
+      host.querySelectorAll('[data-slot="aui_work-chain-trigger"]').length,
+    ).toBe(1);
+    const label = host.querySelector(
+      '[data-slot="tool-group-trigger-label"]',
+    );
+    expect(label?.textContent).toContain("3 tool calls");
+    unmount();
+  });
+
+  it("closes the finished block and keeps the new one working", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TEXT_THEN_WORK_MESSAGES,
+    });
+    await act(async () => {});
+    const labels = Array.from(
+      host.querySelectorAll('[data-slot="aui_work-chain-label"]'),
+    ).map((el) => el.textContent);
+    // The block before the text is done; the block after it is still working.
+    expect(labels).toEqual(["Worked", "Working"]);
+    unmount();
+  });
+
+  it("stops working once the answer starts, even while the turn streams", async () => {
+    const { host, unmount } = await mount({ initialMessages: TOOL_MESSAGES });
+    await act(async () => {});
+    const label = host.querySelector('[data-slot="aui_work-chain-label"]');
+    expect(label?.textContent).toBe("Worked");
+    const marker = host.querySelector(
+      '[data-slot="aui_work-chain-trigger"] [data-slot="dot-matrix"]',
+    );
+    expect(marker?.getAttribute("data-state")).not.toBe("loading");
     unmount();
   });
 

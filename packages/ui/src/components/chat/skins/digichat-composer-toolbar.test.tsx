@@ -38,6 +38,8 @@ function prefsApi(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setMcpConfig: noop,
     removeMcpConfig: noop,
     setLanguage: noop,
+    setToolbar: noop,
+    setScrollbars: noop,
     setView: noop,
     setThinking: noop,
     setModel: noop,
@@ -78,16 +80,20 @@ function prefsApi(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
 }
 
 describe("DigichatComposerToolbar provider chip (#4597)", () => {
-  it("hides the provider chip when the BYOK preference is off", () => {
+  it("names the backend without a button when the BYOK preference is off", () => {
+    // A tenant that cannot switch providers still says which backend serves
+    // it — a Foundry tenant is Azure AI Foundry, not the house provider. The
+    // name is a label: there is no provider menu to open.
     const { container } = render(
       <DigichatComposerToolbar
         prefs={prefsApi({ showByok: false, providerLabel: "openrouter" })}
       />,
     );
     expect(screen.queryByLabelText("Open provider menu")).toBeNull();
-    // The chip's leading separator goes with it: one separator left, the
-    // one before the language button.
-    expect(container.querySelectorAll(".aui-composer-meta-sep")).toHaveLength(1);
+    expect(container.textContent).toContain("openrouter");
+    // The name keeps its separator: the row still reads
+    // "backend / MCP / tools / EN".
+    expect(container.querySelectorAll(".aui-composer-meta-sep").length).toBeGreaterThan(0);
   });
 
   it("shows the backend the host named", () => {

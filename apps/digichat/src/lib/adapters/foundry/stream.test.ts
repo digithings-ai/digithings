@@ -400,6 +400,38 @@ describe("createFoundryStreamResponse", () => {
     });
   });
 
+  it("surfaces the Responses API token usage and the serving model", async () => {
+    // The context meter reads `metadata.custom.usage`; a Foundry turn has to
+    // carry the real counts or the bar can never be drawn.
+    const { client } = fakeClient([
+      { type: "response.output_text.delta", delta: "Hi" },
+      {
+        type: "response.completed",
+        response: {
+          model: "gpt-4o",
+          usage: { input_tokens: 1200, output_tokens: 340, total_tokens: 1540 },
+        },
+      },
+    ]);
+
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("hello?")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+
+    expect(out).toContain('"type":"message-metadata"');
+    expect(out).toContain('"inputTokens":1200');
+    expect(out).toContain('"outputTokens":340');
+    expect(out).toContain('"totalTokens":1540');
+    expect(out).toContain('"model":"gpt-4o"');
+  });
+
   it("flushes a held leak-prefix instead of silently dropping the tail of a reply", async () => {
     // The final delta ends the stream exactly on an incomplete leak-token
     // prefix ("(remote") — nothing downstream ever disambiguates it, so

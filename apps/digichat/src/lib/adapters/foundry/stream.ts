@@ -227,8 +227,44 @@ export function defaultOpenAIClientFactory(projectEndpoint: string): OpenAIRespo
 type FoundryServerEvent =
   | { type: "text-delta"; delta: string }
   | { type: "activity"; span: ActivitySpan }
-  | { type: "done" }
+  | { type: "done"; usage?: FoundryUsage; model?: string }
   | { type: "error"; message: string };
+
+/** Provider-reported token counts, in the shape the client expects. */
+export type FoundryUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
+function numberOf(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * The token usage the Responses API reports on `response.completed`.
+ *
+ * The Responses API counts input/output tokens (not prompt/completion), and
+ * names the model that served the turn — which is what the context meter
+ * needs to know the window the turn was measured against.
+ */
+export function extractFoundryUsage(event: unknown): {
+  usage: FoundryUsage;
+  model?: string;
+} | null {
+  const response = (event as { response?: Record<string, unknown> })?.response;
+  const raw = response?.usage as Record<string, unknown> | undefined;
+  if (!raw) return null;
+  const input = numberOf(raw.input_tokens ?? raw.prompt_tokens);
+  const output = numberOf(raw.output_tokens ?? raw.completion_tokens);
+  if (input === undefined && output === undefined) return null;
+  const total = numberOf(raw.total_tokens) ?? (input ?? 0) + (output ?? 0);
+  const model = typeof response?.model === "string" ? response.model : undefined;
+  return {
+    usage: { inputTokens: input ?? 0, outputTokens: output ?? 0, totalTokens: total },
+    ...(model ? { model } : {}),
+  };
+}
 
 /**
  * Marks an error surfaced deliberately by Foundry's own `response.error`
@@ -786,8 +822,12 @@ export function mapFoundryEvent(
       }
       return mapped;
     }
-    case "response.completed":
-      return { type: "done" };
+    case "response.completed": {
+      const reported = extractFoundryUsage(event);
+      return reported
+        ? { type: "done", usage: reported.usage, model: reported.model }
+        : { type: "done" };
+    }
     case "response.error":
       return { type: "error", message: String((event as { message?: unknown }).message ?? "Unknown error") };
     default:
@@ -1076,6 +1116,19 @@ export async function createFoundryStreamResponse(opts: {
           } else if (mapped.type === "error") {
             throw new FoundryProtocolError(mapped.message);
           } else if (mapped.type === "done") {
+            if (mapped.usage) {
+              // Real provider-reported token usage (the Responses API counts
+              // them on `response.completed`). The client folds it into
+              // `metadata.custom.usage`, which is what the context meter
+              // reads; nothing is fabricated when the API sends no counts.
+              writer.write({
+                type: "message-metadata",
+                messageMetadata: {
+                  usage: mapped.usage,
+                  ...(mapped.model ? { model: mapped.model } : {}),
+                },
+              });
+            }
             break;
           }
         }
