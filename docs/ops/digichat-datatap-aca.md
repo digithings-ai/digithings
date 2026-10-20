@@ -145,6 +145,33 @@ Two traps in that recipe, both hit while writing it:
 
 Subscription `fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0` ("DataTap WebSite"), region East US 2.
 
+### The trial app — the one that runs
+
+The `prod` / `dev` pair above is history: neither app exists in that shape any more. The environment that serves today is the **trial**, and it lives in a different subscription and region.
+
+| | **trial** |
+|---|---|
+| subscription | `0071922f-05ec-48aa-b20e-2a12333b0adf` ("Datatap Trials") |
+| resource group | `1d0a8149-9387-4574-9d10-e83948e7fcd5` |
+| app | `digichat-datatap-trial` |
+| region | West Europe |
+| revision mode | `Single` (no probes) |
+| image | `datatapregistry.azurecr.io/digichat:trial-1d0a8149-2.6.0` |
+| revision | `digichat-datatap-trial--0000008` |
+| fqdn | `digichat-datatap-trial.victoriouswater-cd6b01f3.westeurope.azurecontainerapps.io` |
+| `/api/health` | `200 {"ok":true,…,"version":"2.6.0"}` |
+| `DIGICHAT_CONFIG_PATH` | `/app/config/datatap-trial-foundry.yaml` |
+
+**The tenant config must be rendered before the image is built.** The repository ships `apps/digichat/config/datatap-trial-foundry.yaml` as a *template*: `REPLACE-FOUNDRY-ACCOUNT`, `REPLACE-PROJECT` and `REPLACE-AGENT-NAME`. The loader fails closed on a `REPLACE-` placeholder (`apps/digichat/src/lib/deploy-config/loader.ts`), so an image built straight from the template **does not boot** — the container dies in the instrumentation hook with "render the tenant config before deploying" and the app answers 500. The per-trial values are substituted before the build:
+
+| placeholder | trial value |
+|---|---|
+| `REPLACE-FOUNDRY-ACCOUNT` | `dg-agentic-1d0a8149` |
+| `REPLACE-PROJECT` | `datatap-trial-chat` |
+| `REPLACE-AGENT-NAME` | `datatap-trial` |
+
+The GHCR image cannot be imported into the ACR from this machine — the package is private and the local token is rejected — so the trial image is **built locally** from the release tag for `linux/amd64` and pushed to `datatapregistry.azurecr.io` directly.
+
 ### `/healthz` returns 404 on both — and that is expected, not a bug
 
 The route exists on `develop` (`apps/digichat/src/app/healthz/route.ts`, added `916c4b5d5`, 2026-09-28). It is simply **not in the running builds** — both predate it. An earlier check of `/api/healthz` 404'ing was mine to own: the route is at `/healthz`, not `/api/healthz`, and I looked up the wrong path before reading the tree. Either way the running images are pre-route.
@@ -339,8 +366,12 @@ The ACR is the ledger of record for what is deployed. Digests below are verified
 |---|---|---|---|
 | `v2.3.2` | `sha256:c5708729fea2` | 2026-09-21T11:47Z | **prod** (`digichat--0000007`) |
 | `v2.3.3` | `sha256:fc06e0a57902` | 2026-09-21T20:46Z | dev (`digichat--0000040`) |
+| `trial-1d0a8149-2.5.1` | `sha256:b41f25e7afe7` | 2026-10-19 | trial (`digichat-datatap-trial--0000005`) |
+| `trial-1d0a8149-2.6.0` | `sha256:c85574ba24ed` | 2026-10-20 | **trial** (`digichat-datatap-trial--0000008`) |
 
-Nothing newer. No 2.4.0 image exists in any registry.
+`trial-1d0a8149-2.6.0` is built from the `digichat-v2.6.0` tag (`bfd87982ee289e3bbc1deef1aea08864865eb904`) and is bound to it: `scripts/check_digichat_image_binding.py --facts` reports `ok: true` against the image's own `org.opencontainers.image.revision` and version.
+
+The GHCR publish of the same release is `ghcr.io/digithings-ai/digichat:sha-bfd87982ee28` (VERSION 2.6.0, COMMIT bfd87982ee).
 
 ---
 
