@@ -2079,3 +2079,177 @@ def test_an_unreadable_comments_fetch_is_refused(gh_stub: Any) -> None:
     assert any(
         reason.startswith("the review record could not be read") for reason in verdict.reasons
     ), verdict.reasons
+
+
+# --- each reviewer's latest verdict is read ------------------------------------
+#
+# #5863 merged with `review-applied` green while its latest in-session review read
+# "Verdict: CHANGES": the gate counted the review pass and its (zero) threads but
+# never read the conclusion. A reviewer's latest CHANGES_REQUESTED now blocks until
+# that reviewer approves, comment-reviews, or the review is dismissed.
+
+
+def _review(login: str, state: str, at: str, body: str = "") -> dict[str, Any]:
+    return {"author": {"login": login}, "state": state, "submittedAt": at, "body": body}
+
+
+def _in_session(verdict: str | None, at: str, login: str = "chrizefan") -> dict[str, Any]:
+    body = f"{mq.IN_SESSION_REVIEW_MARKER}\n## In-session review\n\n"
+    if verdict is not None:
+        body += f"**Verdict: {verdict}** (narrow)\n"
+    return {"id": f"IC_{at}", "author": {"login": login}, "body": body, "createdAt": at}
+
+
+def _eval(pr: dict[str, Any]) -> Any:
+    return mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+
+
+def test_a_latest_formal_changes_requested_blocks_even_with_review_decision_empty() -> None:
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[_review("someone", "CHANGES_REQUESTED", "2026-10-17T01:00:00Z")],
+    )
+    assert pr["reviewDecision"] == ""
+    verdict = _eval(pr)
+    assert not verdict.eligible
+    assert any(r.startswith("review verdict: someone's latest review") for r in verdict.reasons)
+
+
+@pytest.mark.parametrize("later", ["APPROVED", "COMMENTED", "DISMISSED"])
+def test_a_later_review_from_the_same_reviewer_clears_their_block(later: str) -> None:
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[
+            _review("someone", "CHANGES_REQUESTED", "2026-10-17T01:00:00Z"),
+            _review("someone", later, "2026-10-17T02:00:00Z"),
+        ],
+    )
+    verdict = _eval(pr)
+    assert not any(r.startswith("review verdict") for r in verdict.reasons), verdict.reasons
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_dismissed_change_request_does_not_block() -> None:
+    pr = _pr(1, approved=True, reviews=[_review("someone", "DISMISSED", "2026-10-17T01:00:00Z")])
+    assert _eval(pr).eligible
+
+
+def test_another_reviewers_approval_does_not_clear_a_change_request() -> None:
+    pr = _pr(
+        1,
+        reviews=[
+            _review("someone", "CHANGES_REQUESTED", "2026-10-17T01:00:00Z"),
+            _review("other", "APPROVED", "2026-10-17T02:00:00Z"),
+        ],
+    )
+    verdict = _eval(pr)
+    assert not verdict.eligible
+    assert any("someone's latest review" in r for r in verdict.reasons)
+    assert not any("other's latest review" in r for r in verdict.reasons)
+
+
+def test_an_earlier_approval_does_not_clear_a_later_change_request() -> None:
+    pr = _pr(
+        1,
+        reviews=[
+            _review("someone", "APPROVED", "2026-10-17T01:00:00Z"),
+            _review("someone", "CHANGES_REQUESTED", "2026-10-17T02:00:00Z"),
+        ],
+    )
+    assert not _eval(pr).eligible
+
+
+@pytest.mark.parametrize(
+    "login", ["coderabbitai[bot]", "coderabbitai", "copilot-pull-request-reviewer[bot]"]
+)
+def test_a_bot_reviewers_change_request_blocks(login: str) -> None:
+    pr = _pr(
+        1, approved=True, reviews=[_review(login, "CHANGES_REQUESTED", "2026-10-17T01:00:00Z")]
+    )
+    verdict = _eval(pr)
+    assert not verdict.eligible
+    assert any(r.startswith("review verdict:") for r in verdict.reasons)
+
+
+def test_a_bot_is_one_reviewer_across_login_suffixes() -> None:
+    """REST says `coderabbitai[bot]`, `gh pr view` says `coderabbitai`: same reviewer."""
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[
+            _review("coderabbitai[bot]", "CHANGES_REQUESTED", "2026-10-17T01:00:00Z"),
+            _review("coderabbitai", "COMMENTED", "2026-10-17T02:00:00Z"),
+        ],
+    )
+    assert _eval(pr).eligible
+
+
+def test_the_5863_shape_in_session_verdict_changes_blocks() -> None:
+    """Two COMMENTED reviews, then in-session review comments whose latest reads CHANGES."""
+    pr = _labeled_pr(
+        5863,
+        [
+            _finding_comment(),
+            _in_session("CHANGES", "2026-10-16T20:19:26Z"),
+            _in_session("CHANGES", "2026-10-17T03:14:04Z"),
+        ],
+    )
+    pr["reviews"] = [
+        _review("chrizefan", "COMMENTED", "2026-10-16T01:51:27Z", "## In-session review"),
+        _review(
+            "chrizefan",
+            "COMMENTED",
+            "2026-10-16T02:05:37Z",
+            f"{mq.IN_SESSION_REVIEW_MARKER}\nIn-session review, all addressed",
+        ),
+    ]
+    verdict = _eval(pr)
+    assert not verdict.eligible
+    assert any("chrizefan's latest review (in-session review comment" in r for r in verdict.reasons)
+
+
+def test_a_later_in_session_approval_clears_an_in_session_changes() -> None:
+    pr = _labeled_pr(
+        5863,
+        [
+            _finding_comment(),
+            _in_session("CHANGES", "2026-10-17T03:14:04Z"),
+            _in_session("APPROVE", "2026-10-17T05:00:00Z"),
+        ],
+    )
+    verdict = _eval(pr)
+    assert not any(r.startswith("review verdict") for r in verdict.reasons), verdict.reasons
+
+
+def test_a_verdict_line_without_the_in_session_marker_is_not_a_verdict() -> None:
+    pr = _pr(
+        1,
+        approved=True,
+        comments=[
+            {
+                "author": {"login": "chrizefan"},
+                "body": "**Verdict: CHANGES** (do not merge yet)",
+                "createdAt": "2026-10-17T03:14:04Z",
+            }
+        ],
+    )
+    assert _eval(pr).eligible
+
+
+def test_a_pending_review_is_not_a_verdict() -> None:
+    pr = _pr(1, approved=True, reviews=[_review("someone", "PENDING", "")])
+    assert _eval(pr).eligible
+
+
+def test_rows_without_timestamps_keep_github_order() -> None:
+    pr = _pr(
+        1,
+        approved=True,
+        reviews=[
+            {"author": {"login": "someone"}, "state": "CHANGES_REQUESTED"},
+            {"author": {"login": "someone"}, "state": "APPROVED"},
+        ],
+    )
+    assert _eval(pr).eligible

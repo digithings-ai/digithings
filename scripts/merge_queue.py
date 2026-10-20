@@ -632,7 +632,105 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
     # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
     # requested". A posted blocking verdict stays a block until a newer one clears it.
     reasons.extend(_posted_verdict_reason(pr))
+    # #5863 merged with review-applied green over an in-session review whose
+    # latest verdict read CHANGES: the gate counted the pass and its threads but
+    # never read what the pass concluded.
+    reasons.extend(_reviewer_verdict_reasons(pr))
     return reasons
+
+
+# --- each reviewer's latest verdict ------------------------------------------
+#
+# A review pass is evidence only if its conclusion is read. Every reviewer's
+# latest verdict is taken in time order across formal reviews (humans and bots
+# alike) and in-session review comments. A latest CHANGES_REQUESTED blocks until
+# the same reviewer posts a later APPROVED or COMMENTED review, or the review is
+# dismissed (GitHub reports a dismissed review with state DISMISSED). An
+# in-session review is read from its `Verdict:` line, and only in a comment that
+# carries the in-session marker, so ordinary prose never becomes a verdict.
+
+IN_SESSION_REVIEW_MARKER = "<!-- in-session-review -->"
+_IN_SESSION_VERDICT_RE = re.compile(
+    r"^[\s>#*_]*verdict\s*[:=]\s*[*_`]*\s*(?P<word>[A-Za-z][A-Za-z_ -]*)", re.I | re.M
+)
+_BLOCKING_WORDS = ("changes", "request_changes", "changes_requested", "changes_needed", "block")
+_APPROVING_WORDS = ("approve", "approved", "lgtm", "pass", "ship")
+_REVIEW_STATES = frozenset({"APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"})
+
+
+def _reviewer_key(login: Any) -> str:
+    """One key per reviewer: case-folded, `[bot]` suffix dropped (REST and
+    `gh pr view` disagree on the suffix for the same bot)."""
+    key = str(login or "").strip().lower()
+    return key[: -len("[bot]")] if key.endswith("[bot]") else key
+
+
+def _in_session_state(body: str) -> str:
+    """CHANGES_REQUESTED / APPROVED / COMMENTED for an in-session review body."""
+    m = _IN_SESSION_VERDICT_RE.search(body)
+    if not m:
+        return "COMMENTED"
+    word = m.group("word").strip().lower().replace("-", "_").replace(" ", "_")
+    if word.startswith(_BLOCKING_WORDS):
+        return "CHANGES_REQUESTED"
+    if word.startswith(_APPROVING_WORDS):
+        return "APPROVED"
+    return "COMMENTED"
+
+
+def _review_events(pr: dict[str, Any]) -> list[tuple[str, int, str, str, str]]:
+    """(at, seq, reviewer, state, where) for every readable review act, oldest first.
+
+    `seq` keeps GitHub's own order for rows without a timestamp."""
+    events: list[tuple[str, int, str, str, str]] = []
+    seq = 0
+    for review in pr.get("reviews") or []:
+        seq += 1
+        if not isinstance(review, Mapping):
+            continue
+        state = str(review.get("state") or "").upper()
+        body = str(review.get("body") or "")
+        if state == "COMMENTED" and IN_SESSION_REVIEW_MARKER in body:
+            state = _in_session_state(body)
+        if state not in _REVIEW_STATES:
+            continue  # PENDING and unknown states are not a submitted verdict
+        login = (review.get("author") or review.get("user") or {}).get("login")
+        at = str(review.get("submittedAt") or review.get("submitted_at") or "")
+        events.append((at, seq, _reviewer_key(login), state, f"review {review.get('id') or seq}"))
+    for comment in pr.get("comments") or []:
+        seq += 1
+        if not isinstance(comment, Mapping):
+            continue
+        body = str(comment.get("body") or "")
+        if IN_SESSION_REVIEW_MARKER not in body:
+            continue
+        login = (comment.get("author") or comment.get("user") or {}).get("login")
+        at = str(comment.get("createdAt") or comment.get("created_at") or "")
+        events.append(
+            (
+                at,
+                seq,
+                _reviewer_key(login),
+                _in_session_state(body),
+                f"in-session review comment {comment.get('id') or seq}",
+            )
+        )
+    events.sort(key=lambda e: (e[0], e[1]))
+    return events
+
+
+def _reviewer_verdict_reasons(pr: dict[str, Any]) -> list[str]:
+    """A refusal per reviewer whose latest verdict is CHANGES_REQUESTED."""
+    latest: dict[str, tuple[str, str, str]] = {}
+    for at, _seq, reviewer, state, where in _review_events(pr):
+        latest[reviewer] = (state, where, at)
+    return [
+        f"review verdict: {reviewer or '?'}'s latest review ({where}"
+        f"{' at ' + at if at else ''}) requests changes and no later approval, "
+        "comment-review or dismissal from that reviewer has cleared it"
+        for reviewer, (state, where, at) in sorted(latest.items())
+        if state == "CHANGES_REQUESTED"
+    ]
 
 
 # --- review comments addressed -----------------------------------------------
