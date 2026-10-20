@@ -311,10 +311,14 @@ function collapseWs(text: string): string {
 
 function parseHtmlBody(raw: string): Element | null {
   if (typeof DOMParser === "undefined") return null;
-  // lgtm[js/xss] false positive, documented in the PR body: the document DOMParser
-  // creates here is inert - it is never attached to a live document, so no script
-  // in it runs and no subresource in it loads - and every element and attribute is
-  // filtered by the allowlist walk below before this module returns any markup.
+  // The DOMParser document below is inert: it is never attached to a live
+  // document, so no script in it runs and no subresource in it loads, and every
+  // element and attribute is filtered by the allowlist walk before this module
+  // returns any markup. The file is byte-identical to develop's pre-existing
+  // apps/digichat/src/lib/page-context-sanitize.ts apart from this comment; the
+  // alert appeared only because the module became an exported library package,
+  // where CodeQL models an exported function's parameters as remote sources.
+  // lgtm[js/xss]
   const doc = new DOMParser().parseFromString(raw, "text/html");
   return doc.body;
 }
