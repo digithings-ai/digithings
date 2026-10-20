@@ -29,7 +29,12 @@ export DIGITRACE_URL="${DIGITRACE_URL:-}"
 export OPENAI_API_BASE="${OPENAI_API_BASE:-http://127.0.0.1:4000/v1}"
 export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
 # House default: merge Cheaper Inference overlay when key present (unless forced OR).
+# ENV_LITELLM_CONFIG is what supervisord expands in the [program:litellm] command,
+# so it must be set on EVERY path: an unset value expands to an empty --config and
+# litellm then serves no model at all while the health probe stays green
+# (DIG-4512). The merge below replaces both values with the merged file.
 export LITELLM_CONFIG="${LITELLM_CONFIG:-/app/config/litellm.yaml}"
+export ENV_LITELLM_CONFIG="${ENV_LITELLM_CONFIG:-$LITELLM_CONFIG}"
 _ci_key="${CHEAPERINFERENCE_API_KEY:-}"
 _upstream="$(printf '%s' "${DIGI_HOUSE_UPSTREAM:-}" | tr '[:upper:]' '[:lower:]')"
 _ci_house="$(printf '%s' "${CHEAPERINFERENCE_HOUSE:-}" | tr '[:upper:]' '[:lower:]')"
@@ -38,17 +43,35 @@ case "$_upstream" in openrouter|or) _force_or=1 ;; esac
 case "$_ci_house" in 0|false|no|off) _force_or=1 ;; esac
 if [ "$_force_or" -eq 0 ]; then
   export CHEAPERINFERENCE_API_BASE="${CHEAPERINFERENCE_API_BASE:-https://api.cheaperinference.com/v1}"
-  if [ -f /app/scripts/merge_litellm_cheaperinference.py ] \
-    && [ -f /app/config/litellm.cheaperinference.yaml ] \
-    && [ -f /app/config/litellm.yaml ]; then
-    python3 /app/scripts/merge_litellm_cheaperinference.py \
-      --base /app/config/litellm.yaml \
-      --overlay /app/config/litellm.cheaperinference.yaml \
-      -o /app/config/litellm.runtime.yaml \
-      && export LITELLM_CONFIG=/app/config/litellm.runtime.yaml \
-      && export ENV_LITELLM_CONFIG=/app/config/litellm.runtime.yaml \
-      || echo "cheaperinference: merge failed; using default litellm.yaml" >&2
+  # Every asset the merge needs must be present. A missing asset used to skip the
+  # whole merge block in silence, which left the base config in place.
+  _missing=""
+  for _asset in /app/scripts/merge_litellm_cheaperinference.py \
+    /app/config/litellm.cheaperinference.yaml \
+    /app/config/litellm.yaml; do
+    [ -f "$_asset" ] || _missing="$_missing $_asset"
+  done
+  if [ -n "$_missing" ]; then
+    echo "digithings-stack: FATAL cheaperinference overlay asset missing:$_missing" >&2
+    exit 1
   fi
+  # The merge must produce a model_list that carries every curated house model.
+  # If it does not, the boot stops here: serving the base file answers every
+  # curated tenant model with model-not-found while /health stays green
+  # (DIG-4512).
+  if ! python3 /app/scripts/merge_litellm_cheaperinference.py \
+    --base /app/config/litellm.yaml \
+    --overlay /app/config/litellm.cheaperinference.yaml \
+    --require-curated-ids \
+    -o /app/config/litellm.runtime.yaml; then
+    echo "digithings-stack: FATAL cheaperinference LiteLLM merge failed; refusing to serve a model_list without the curated models" >&2
+    exit 1
+  fi
+  export LITELLM_CONFIG=/app/config/litellm.runtime.yaml
+  export ENV_LITELLM_CONFIG=/app/config/litellm.runtime.yaml
+  echo "digithings-stack: INFO cheaperinference overlay merged into $LITELLM_CONFIG" >&2
+else
+  echo "digithings-stack: INFO cheaperinference overlay not applied (no CHEAPERINFERENCE_API_KEY, or the house upstream is forced to OpenRouter); serving $LITELLM_CONFIG" >&2
 fi
 export DIGI_PROJECT_CONFIG="${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}"
 export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"

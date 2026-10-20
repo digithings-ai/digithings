@@ -99,6 +99,19 @@ def _boot_path_block(start_index: int) -> list[str]:
     return block
 
 
+def _block_after(lines: list[str], needle: str) -> list[str]:
+    """The `if` block whose opening line contains `needle`, up to its `fi`."""
+    for index, line in enumerate(lines):
+        if needle in line:
+            block: list[str] = []
+            for candidate in lines[index:]:
+                block.append(candidate)
+                if candidate == "fi":
+                    return block
+            return block
+    raise AssertionError(f"no line contains {needle!r}")
+
+
 def test_required_data_dirs_fail_fast_deliberately():
     """Creating the required dirs may abort the boot — but on purpose, legibly.
 
@@ -163,3 +176,70 @@ def test_a_failing_cp_aborts_set_e_unless_guarded(tmp_path):
     aborted = subprocess.run(["sh", "-c", unguarded], capture_output=True, text=True)
     assert ok.returncode == 0 and "REACHED" in ok.stdout
     assert aborted.returncode != 0 and "REACHED" not in aborted.stdout
+
+
+def test_cheaperinference_merge_must_not_fall_back_silently():
+    """A failed overlay merge must abort the boot, not warn and continue.
+
+    The base file the image ships carries no curated model, so continuing
+    after a failed merge leaves LiteLLM serving a model_list that 404s every
+    curated tenant model while the health probe stays green (DIG-4512).
+    """
+    text = "\n".join(_pre_exec_lines())
+    assert "merge failed; using default litellm.yaml" not in text, (
+        "the silent merge fallback is still in the entrypoint"
+    )
+    assert "--require-curated-ids" in text, (
+        "the merge must be told to check the curated ids"
+    )
+
+
+def test_cheaperinference_merge_failure_aborts_the_boot():
+    lines = _pre_exec_lines()
+    block = _block_after(lines, "if ! python3 /app/scripts/merge_litellm_cheaperinference.py")
+    assert any("FATAL" in line for line in block), block
+    assert "exit 1" in block, f"the merge failure branch must exit non-zero: {block}"
+
+
+def test_cheaperinference_missing_overlay_asset_aborts_the_boot():
+    """A missing overlay asset used to skip the whole merge block silently."""
+    lines = _pre_exec_lines()
+    block = _block_after(lines, 'if [ -n "$_missing" ]')
+    assert any("FATAL" in line for line in block), block
+    assert "exit 1" in block, f"the missing-asset branch must exit non-zero: {block}"
+
+
+def test_litellm_config_is_always_exported_for_supervisord():
+    """supervisord expands %(ENV_LITELLM_CONFIG)s in the litellm command.
+
+    An unset value expands to an empty --config, so litellm serves no model at
+    all — the same silent outage the merge fallback caused (DIG-4512). Every
+    LITELLM_CONFIG export must therefore be paired with an ENV_LITELLM_CONFIG
+    export.
+    """
+    lines = _pre_exec_lines()
+    exports = [
+        (index, line)
+        for index, line in enumerate(lines)
+        if line.startswith("export LITELLM_CONFIG=")
+    ]
+    assert exports, "expected the LiteLLM config to be exported"
+    for index, line in exports:
+        following = lines[index + 1] if index + 1 < len(lines) else ""
+        assert following.startswith("export ENV_LITELLM_CONFIG="), (
+            f"LITELLM_CONFIG export is not paired with ENV_LITELLM_CONFIG: {line}"
+        )
+
+
+def test_a_failing_merge_aborts_the_boot_under_set_e():
+    """Pins the shell semantics the merge guard relies on.
+
+    The guard is `if ! <merge>; then … exit 1; fi`: under `set -eu` a failing
+    command in an `if` condition does not abort by itself, so the branch has to
+    exit on purpose — and it must not fall through to the `exec` below it.
+    """
+    guarded = "set -eu\nif ! false; then echo FATAL; exit 1; fi\necho REACHED\n"
+    result = subprocess.run(["sh", "-c", guarded], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "REACHED" not in result.stdout
+    assert "FATAL" in result.stdout

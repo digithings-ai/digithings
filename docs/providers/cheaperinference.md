@@ -14,6 +14,13 @@ On the Cloudflare stack container, entrypoint merges the CI LiteLLM overlay and
 exports `ENV_LITELLM_CONFIG` for the LiteLLM supervisor (#3674). LiteLLM proxy
 keeps house `model_name` keys (overlay routes them).
 
+The merge is verified, and it fails loudly: the merged `model_list` must carry
+every curated house model (`DIGI_SESSION_MODEL_ALLOWLIST`), and a merge that
+fails, or an overlay asset that is missing, stops the container boot with a
+FATAL line instead of serving the base file. The base file the image ships has
+no curated model, so serving it answers every curated tenant model with
+model-not-found while the health probe stays green (DIG-4512).
+
 Force OpenRouter: `DIGI_HOUSE_UPSTREAM=openrouter` (or `or`), or
 `CHEAPERINFERENCE_HOUSE=0|false|no|off`.
 
