@@ -1562,6 +1562,26 @@ Canonical operator config is a Zod-validated YAML file:
 - Examples: `apps/digichat/config/examples/*.yaml` (incl. `skins/<id>.yaml` and `local-cli.yaml`)
 - Startup: `src/instrumentation.ts` calls `initDigichatConfigAtStartup()` (fail closed)
 
+**Unrendered templates are refused at load (#6023).** The shipped templates
+carry `REPLACE-` placeholders. Deployed as-is, a foundry backend booted and
+then failed every chat on a DNS lookup of
+`replace-foundry-account.services.ai.azure.com`. `loadDigichatConfig` now
+throws, naming the file and the field, when a foundry `projectEndpoint` or
+`agentName` still holds a placeholder — in the single `deployment` and in every
+`hosts` entry. The token is uppercase-only (`REPLACE-[A-Z][A-Z0-9-]*`), so an
+operator-chosen agent name like `my-REPLACE-agent` is a name, not a template.
+The schema stays permissive, so a template still validates in the devkit.
+
+**The warm-up gate waits only for services the install uses (#6023).**
+`GET /api/embed/warmup` probes digigraph when
+`isServiceCapabilityEnabled("digigraph")` **and** the config actually uses it:
+`configUsesDigigraph()` in the loader looks at every deployment in the config,
+and a deployment with no backend is a digigraph install (the chat route
+defaults to it). A foundry-only install — single or registry — no longer probes
+an endpoint that does not exist and parks the UI on a boot screen. One
+digigraph tenant in a mixed install still probes. The gate fails open: an
+unreadable config is probed as before.
+
 **Shape:** `version: 1` plus either a single `deployment` (client install) or
 `hosts` (digithings multi-tenant container). Fields: `chrome.mode`
 (`app|embed|modal|sidebar`), `persistence` (`none|memory|server`), `auth`,
