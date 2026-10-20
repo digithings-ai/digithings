@@ -1,6 +1,5 @@
 "use client";
 
-import { warmFetch } from "@/lib/warmup-gate";
 import { useCallback, useEffect, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
@@ -210,6 +209,13 @@ type UseEmbedDigiChatOptions = {
    * getSelectedModel / getResponseLanguage). Dashboard mint is async after mount.
    */
   getPlanProof?: () => string | null | undefined;
+  /**
+   * Send-time accessor for the host-scoped trial proof (DIG-4523). The proof is
+   * signed by the server and forwarded in X-Embed-Trial-Proof; the chat route
+   * re-verifies it. Read at send time (same freeze reason as getPlanProof) so
+   * a proof that arrives after mount still reaches the header.
+   */
+  getTrialProof?: () => string | null | undefined;
   /** Send-time MCP session overlay (id+token, optional session url). */
   getMcpSession?: () => string | undefined;
   /** Send-time effort: low | medium | high. */
@@ -244,6 +250,7 @@ export function useEmbedDigiChat({
   getSearchEngine,
   planProof,
   getPlanProof,
+  getTrialProof,
   allowClientTurnMutation = true,
   features,
 }: UseEmbedDigiChatOptions): Omit<DigiChatController, "send"> & {
@@ -366,6 +373,14 @@ export function useEmbedDigiChat({
           if (proof) {
             headers["X-Embed-Plan-Proof"] = proof;
           }
+          // Host-scoped trial proof (DIG-4523): forwarded on every request
+          // when one is held, and re-verified by the chat route — the client
+          // never decides whether a proof is valid. Read at send time so a
+          // proof that arrives after mount still reaches the header.
+          const trialProof = getTrialProof?.()?.trim();
+          if (trialProof) {
+            headers["X-Embed-Trial-Proof"] = trialProof;
+          }
           try {
             const conversationId = window.sessionStorage.getItem(
               conversationStorageKey(resolvedHost),
@@ -407,6 +422,7 @@ export function useEmbedDigiChat({
         getEffort,
         getSearchEngine,
         getPlanProof,
+        getTrialProof,
         allowClientTurnMutation,
       ],
   );

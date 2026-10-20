@@ -67,12 +67,14 @@ import {
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
 import { TypedWelcomeCopy } from "./typed-welcome-copy";
 import { useDigichatWarmupPhase } from "../use-warmup-phase";
+import { OverlayScrollbar } from "../overlay-scrollbar";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -165,6 +167,12 @@ export type ThreadProps = {
   reasoningMode?: GroupDisclosureMode | undefined;
   /** Disclosure mode for grouped tool-call runs. Default collapsed. */
   toolCallsMode?: GroupDisclosureMode | undefined;
+  /**
+   * Rendered as a row inside the composer border, under the input. The
+   * digichat skin passes its model / tools / search / view / context chips;
+   * other hosts leave it unset.
+   */
+  composerToolbar?: ReactNode;
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -363,6 +371,7 @@ export const Thread: FC<ThreadProps> = ({
   hiddenAttachmentNames,
   reasoningMode = "collapsed",
   toolCallsMode = "collapsed",
+  composerToolbar,
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -390,6 +399,7 @@ export const Thread: FC<ThreadProps> = ({
                   autoFocus={autoFocus}
                   placeholder={placeholder}
                   composerLayout={composerLayout}
+                  composerToolbar={composerToolbar}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -414,11 +424,17 @@ const ThreadRoot: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
   composerLayout: ComposerLayout;
-}> = ({ autoFocus, placeholder, composerLayout }) => {
+  composerToolbar?: ReactNode;
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
+  const viewportRef = useRef<HTMLElement | null>(null);
+  const attachViewport = useCallback((node: HTMLElement | null) => {
+    viewportRef.current = node;
+    setViewportEl(node);
+  }, []);
 
   return (
     <ThreadPrimitive.Root
@@ -449,8 +465,9 @@ const ThreadRoot: FC<{
           scroll-to-bottom control wired to the viewport store. */}
       <ThreadPrimitive.ViewportProvider>
       <ThreadViewportElContext.Provider value={viewportEl}>
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <ThreadPrimitive.Viewport
-        ref={setViewportEl}
+        ref={attachViewport}
         turnAnchor="top"
         // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
         // so it does not sit flush against the viewport top. `tallerThan` scores
@@ -476,6 +493,8 @@ const ThreadRoot: FC<{
           </div>
         </div>
       </ThreadPrimitive.Viewport>
+      <OverlayScrollbar targetRef={viewportRef} width={10} />
+      </div>
         <div className="mx-auto flex w-full max-w-(--thread-max-width) shrink-0 flex-col px-4">
           <div className="aui-thread-viewport-footer digichat-thread__footer bg-background relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
             <ThreadScrollToBottom />
@@ -493,6 +512,7 @@ const ThreadRoot: FC<{
               autoFocus={autoFocus}
               placeholder={placeholder}
               layout={composerLayout}
+              toolbar={composerToolbar}
             />
             {Footer ? <Footer /> : null}
           </div>
@@ -699,7 +719,8 @@ const Composer: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
   layout: ComposerLayout;
-}> = ({ autoFocus, placeholder = "Send a message...", layout }) => {
+  toolbar?: ReactNode;
+}> = ({ autoFocus, placeholder = "Send a message...", layout, toolbar }) => {
   const compact = layout === "compact";
   const { onComposerSubmit, slash, mention } = useContext(ThreadChromeContext);
   const edit = useContext(ComposerEditContext);
@@ -825,16 +846,13 @@ const Composer: FC<{
             </div>
           ) : null}
           <ComposerAttachments />
-          <div
-            className={cn(
-              "aui-composer-main",
-              compact && "flex min-w-0 items-center gap-1",
-            )}
-          >
-            {compact ? <ComposerAddAttachment /> : null}
+          {/* One row: attach, input, send. The toolbar used to sit on a second
+              row inside the same border, which read as a two-line text box. */}
+          <div className="aui-composer-main flex min-w-0 items-end gap-1">
+            <ComposerAddAttachment />
             <div
               ref={inputWrapRef}
-              className={cn("aui-composer-input-wrap relative min-w-0", compact && "flex-1")}
+              className="aui-composer-input-wrap relative min-w-0 flex-1"
             >
               <ComposerPrimitive.Input
                 placeholder={placeholder}
@@ -853,11 +871,15 @@ const Composer: FC<{
               />
               <ComposerBlockCaret containerRef={inputWrapRef} />
             </div>
-            {compact ? <ComposerSendControls /> : null}
+            <ComposerSendControls />
           </div>
-          {compact ? null : <ComposerAction />}
         </div>
       </ComposerPrimitive.AttachmentDropzone>
+      {toolbar ? (
+        <div data-slot="aui_composer-toolbar" className="aui-composer-toolbar">
+          {toolbar}
+        </div>
+      ) : null}
       {slash ? (
         <ComposerTriggerPopover
           char="/"
@@ -896,8 +918,6 @@ const ComposerSendControls: FC = () => {
   const sendDisabled = useAuiState(
     (s) => !s.composer.canSend || (s.thread.isRunning && !s.thread.capabilities.queue),
   );
-  const sendRef = useRef<HTMLButtonElement | null>(null);
-
   // A `type="submit"` button already submits its form on activation, so the
   // click must not also do it: `preventDefault()` suppresses that implicit
   // submission, and the explicit `requestSubmit()` below replaces it with one
@@ -906,7 +926,7 @@ const ComposerSendControls: FC = () => {
   // turn more than once.
   const submitComposer = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    const form = sendRef.current?.closest("form");
+    const form = event.currentTarget.closest("form");
     if (form) {
       form.requestSubmit();
       return;
@@ -957,10 +977,10 @@ const ComposerSendControls: FC = () => {
         </AuiIf>
       </AuiIf>
       <AuiIf condition={(s) => !s.thread.isRunning}>
-        <TooltipIconButton
-          ref={sendRef}
-          tooltip="Send (Enter)"
-          side="bottom"
+        {/* No tooltip/dropdown on send: the button submits on click and on
+            Enter, so the "Send (Enter)" popover was noise. */}
+        <Button
+          dress="chat"
           type="submit"
           variant="ghost"
           size="icon"
@@ -974,7 +994,7 @@ const ComposerSendControls: FC = () => {
             label="Send"
             className="aui-composer-send-icon size-3.5"
           />
-        </TooltipIconButton>
+        </Button>
       </AuiIf>
       <AuiIf condition={(s) => s.thread.isRunning}>
         <ComposerPrimitive.Cancel asChild>
@@ -993,18 +1013,6 @@ const ComposerSendControls: FC = () => {
           </Button>
         </ComposerPrimitive.Cancel>
       </AuiIf>
-    </div>
-  );
-};
-
-const ComposerAction: FC = () => {
-  // Send controls pin themselves right with ml-auto (not just this
-  // justify-between): when the deployment disables attachments,
-  // AddAttachment renders null and a lone child would collapse left.
-  return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
-      <ComposerSendControls />
     </div>
   );
 };

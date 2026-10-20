@@ -105,6 +105,8 @@ export type EmbedChatPrefsApi = {
   mcpServers: CatalogToolRow[];
   sessionKey: string;
   openSettings: () => void;
+  /** Dedicated help panel: what the assistant can do and how to use it. */
+  openHelp: () => void;
   openTools: () => void;
   openMcp: (seed?: string) => void;
   openByok: (seed?: string) => void;

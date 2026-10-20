@@ -9,7 +9,6 @@
  * mode (baseline) arrives in a later step.
  */
 
-import { useDigichatWarmupPhase } from "@digithings/ui/chat/use-warmup-phase";
 import type {
   ComponentProps,
   CSSProperties,
