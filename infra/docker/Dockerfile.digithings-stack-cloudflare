@@ -198,6 +198,12 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
 # under image-packages/ unless that directory is deleted first, so a src-only edit
 # deploys green while changing nothing in the container. Delete image-packages/ AND
 # bump this marker together, or the layers stay cached.
+# Rebuild marker v18 (2026-10-20): ships the digigraph/src-only change that
+# declares lock_session_controls on WorkflowRequest and carries it into the graph
+# state (the DIG-4459 session-control shape fix). Same rule as marker v10: a
+# src-only digigraph edit deploys green while changing nothing in the container
+# unless the packaged wheels are rebuilt. Delete image-packages/ AND bump this
+# marker together, or the layers stay cached.
 # Rebuild marker v9 (2026-09-17): drops zammad__* from the digiproject allowlist
 # and the entrypoint DIGI_ALLOWED_TOOLS fallback so the website digichat no
 # longer offers Zammad; OCC keeps it via its per-request live MCP union.
