@@ -205,12 +205,13 @@ The alternative was a personal address, from the `SECURITY.md` both forks inheri
 Counsel investigated whether it is monitored, as instructed, and **could not establish that it is.
 Confidence: UNKNOWN.** What was checked:
 
-- It appears exactly once in the repository, at `SECURITY.md:211`, as an unreferenced literal. No
-  code, config, secret or CI job routes mail to it.
+- At the time of the investigation (2026-10-06) it appeared exactly once in the repository, at
+  `SECURITY.md:211`, as an unreferenced literal. No code, config, secret or CI job routes mail to it.
 - It has been published continuously since 2026-04-18 and never edited — only the subject tag changed
   once, on 2026-10-01.
 - No agent instruction, org config or Paperclip record anywhere names it — or any mailbox — as monitored.
-- `digithings.ai` MX points at Proton Mail; the address delivers.
+- `digithings.ai` MX points at Proton Mail and delivers. The personal address also delivered: its
+  domain's MX points at Google Workspace (checked at the time).
 
 Six months of deliberate publication in a security-disclosure section, alongside a 72-hour
 acknowledgement commitment, is real evidence of intent. **It is not evidence that anyone reads it.**
