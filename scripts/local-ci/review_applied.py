@@ -397,7 +397,20 @@ def _pr_context(pr_number, repo, run_gh, run_rest=None):
             or (data.get("author") or {}).get("login")
         )
         context["body"] = data.get("body") or ""
-        for commit in data.get("commits") or []:
+        commits = data.get("commits")
+        if not isinstance(commits, list):
+            # The pull endpoint returns a count in `commits`; the list lives on
+            # the /commits sub-resource.
+            commits = []
+            try:
+                listed = run_gh(
+                    ["api", "repos/%s/pulls/%d/commits" % (repo, pr_number)]
+                )
+            except Exception:
+                listed = None
+            if isinstance(listed, list):
+                commits = listed
+        for commit in commits:
             if not isinstance(commit, dict):
                 continue
             sha = commit.get("sha")
