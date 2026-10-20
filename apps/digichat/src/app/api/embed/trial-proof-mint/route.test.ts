@@ -237,7 +237,27 @@ describe("trial proof mint endpoint", () => {
       expect(JSON.stringify(await res.json())).not.toContain("proof");
     });
 
-    it("mints for the host in the pair, not for the spelling in the request", async () => {
+    it("does not fall through to the monitor rule when the tenant header is present but empty", async () => {
+      // An EMPTY tenant header is still a PRESENT tenant header: the rule is
+      // that the header's presence decides the request, not its value. If the
+      // route treated an empty value as absent, a caller could send an empty
+      // tenant header alongside a good monitor token and mint on the monitor
+      // path, which is exactly the fall-through the two mechanisms must not
+      // have.
+      const res = await POST(
+        mintRequest(
+          {
+            "x-embed-tenant-mint-token": "",
+            "x-embed-monitor-token": MONITOR_TOKEN,
+          },
+          { host: "tenant.example.com" },
+        ),
+      );
+      expect(res.status).toBe(401);
+      expect(JSON.stringify(await res.json())).not.toContain("proof");
+    });
+
+    it("mints for the canonical host of the pair, not for the spelling in the request", async () => {
       const res = await POST(
         mintRequest(
           { "x-embed-tenant-mint-token": TENANT_TOKEN },
@@ -246,11 +266,61 @@ describe("trial proof mint endpoint", () => {
       );
       expect(res.status).toBe(200);
       const body = (await res.json()) as { proof?: string };
-      // The pair's spelling is what gets signed, so the request can never
-      // choose what is minted.
+      // The CANONICAL host of the pair is what gets signed, so the request can
+      // never choose what is minted.
       expect(verifyTrialProof(body.proof as string, SIGNING_SECRET)).toBe(
         "tenant.example.com",
       );
+    });
+
+    it("mints when the tenant's backend names the host as an origin URL", async () => {
+      // The shape a tenant's backend actually sends. The route compares the
+      // CANONICAL form of both sides — the same helper the chat route uses to
+      // verify the proof — so a legitimate caller is not refused, and the
+      // round trip still holds.
+      const res = await POST(
+        mintRequest(
+          { "x-embed-tenant-mint-token": TENANT_TOKEN },
+          { host: "https://tenant.example.com" },
+        ),
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { proof?: string };
+      expect(verifyTrialProof(body.proof as string, SIGNING_SECRET)).toBe(
+        "tenant.example.com",
+      );
+    });
+
+    it("mints when the pair names the host as an origin URL", async () => {
+      // The other direction: the operator wrote the pair as a URL and the
+      // caller sends the bare host. The credential binds the HOST, so both
+      // spellings bind the same host.
+      process.env.DIGICHAT_TENANT_MINT_CREDENTIALS =
+        `https://tenant.example.com=${TENANT_TOKEN}`;
+      const res = await POST(
+        mintRequest(
+          { "x-embed-tenant-mint-token": TENANT_TOKEN },
+          { host: "tenant.example.com" },
+        ),
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { proof?: string };
+      expect(verifyTrialProof(body.proof as string, SIGNING_SECRET)).toBe(
+        "tenant.example.com",
+      );
+    });
+
+    it("refuses a host that does not canonicalise, and mints nothing", async () => {
+      // Neither side can be compared, so there is no host to sign.
+      const res = await POST(
+        mintRequest(
+          { "x-embed-tenant-mint-token": TENANT_TOKEN },
+          { host: "https://" },
+        ),
+      );
+      expect(res.status).toBe(401);
+      const raw = JSON.stringify(await res.json());
+      expect(raw).not.toContain("proof");
     });
 
     it("never returns secret material on the tenant path", async () => {

@@ -22,8 +22,18 @@
  *
  * The tenant credential therefore has its own variable and its own header, and
  * the chat route never reads it.
+ *
+ * HOSTS ARE COMPARED IN CANONICAL FORM. The house helper
+ * `normalizeEmbedHost` is the one the consume side already uses (the chat
+ * route compares `normalizeEmbedHost(proofHost)` with the canonical form of
+ * `X-Embed-Host`), so the mint route compares the same thing the verifier
+ * compares. A trimmed, lower-cased compare would refuse a legitimate caller
+ * whose backend sends `https://tenant.example.com` while the pair holds
+ * `tenant.example.com` — and the reverse. Canonicalising both sides makes the
+ * round trip work in the shape callers actually use.
  */
 
+import { normalizeEmbedHost } from "@/lib/embed-tenants";
 import { safeEqualStr } from "@/lib/safe-equal";
 
 /**
@@ -67,14 +77,16 @@ function tenantMintCredentials(): TenantMintCredential[] {
 }
 
 /**
- * The host a presented tenant credential is bound to, or null when the
- * credential authorises nothing.
+ * The canonical host a presented tenant credential is bound to, or null when
+ * the credential authorises nothing.
  *
  * Two rules make the list trustworthy, and both refuse rather than pick:
  * - a host may appear at most once in the list;
  * - one token may not appear under two hosts.
  * A list that breaks either rule binds nothing for the host it breaks, so the
- * route refuses instead of guessing which entry was meant.
+ * route refuses instead of guessing which entry was meant. The host rule is
+ * checked in CANONICAL form, so a list that names one host twice in two
+ * different spellings is still ambiguous.
  *
  * Compares against every entry without early exit, so neither the number of
  * comparisons nor which entry matched is observable from timing.
@@ -90,32 +102,36 @@ export function tenantMintCredentialHost(presented: string | null): string | nul
   const [matched] = matches;
   if (!matched) return null;
 
+  // The bound host in CANONICAL form, so the proof carries the bare host the
+  // consume side expects, whatever spelling the operator wrote the pair in.
+  // A host that does not canonicalise (empty, or an unparseable URL) binds
+  // nothing: there is no host to compare against and no host to sign.
+  const bound = normalizeEmbedHost(matched.host);
+  if (!bound) return null;
+
   // A host may appear at most once in the list. A host listed twice is
   // ambiguous, so the route refuses to mint for that host.
-  const bound = matched.host.toLowerCase();
   const hostEntries = entries.filter(
-    (entry) => entry.host.toLowerCase() === bound,
+    (entry) => normalizeEmbedHost(entry.host) === bound,
   );
   if (hostEntries.length !== 1) return null;
 
-  // The host as written in the pair, so the proof carries the pair's spelling
-  // and never the spelling the caller used in its request.
-  return matched.host;
+  return bound;
 }
 
 /**
  * True when the requested host is the host the credential is bound to.
  *
- * The comparison is the pair's rule: trim and lower case both sides. A
- * request that names a different host is refused, and the request's own
- * spelling never decides what gets signed.
+ * Both sides go through the house canonicaliser, so the route compares the
+ * same thing the chat route compares when it verifies the proof. A host that
+ * does not canonicalise matches nothing.
  */
 export function tenantMintHostMatches(
   requestedHost: string,
   boundHost: string,
 ): boolean {
-  const requested = requestedHost.trim().toLowerCase();
-  const bound = boundHost.trim().toLowerCase();
+  const requested = normalizeEmbedHost(requestedHost);
+  const bound = normalizeEmbedHost(boundHost);
   if (!requested || !bound) return false;
   return requested === bound;
 }

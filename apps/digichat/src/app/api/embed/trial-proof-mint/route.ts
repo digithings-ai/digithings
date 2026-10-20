@@ -12,9 +12,13 @@
  *
  * 1. Tenant credential — header x-embed-tenant-mint-token, list in
  *    DIGICHAT_TENANT_MINT_CREDENTIALS as comma separated `host=token` pairs
- *    (embed-tenant-mint-token.ts). It is bound to ONE host: the route mints
- *    the proof for the host in that pair and refuses every other host, so a
- *    tenant can never mint a proof for another tenant's host. When the header
+ *    (embed-tenant-mint-credential.ts). It is bound to ONE host: the route
+ *    mints the proof for the host in that pair and refuses every other host,
+ *    so a tenant can never mint a proof for another tenant's host. Both the
+ *    requested host and the pair's host are compared in CANONICAL form
+ *    (normalizeEmbedHost, the same helper the chat route uses to verify the
+ *    proof), so a caller may name the host as a bare host or as an origin URL
+ *    and the proof still carries the bare canonical host. When the header
  *    is present the tenant rule decides the whole request — there is NO
  *    fall-through to the monitor rule, so a tenant token is never read as a
  *    monitor token. The credential is a server-side secret: the tenant's
@@ -51,7 +55,7 @@ import {
   EMBED_TENANT_MINT_TOKEN_HEADER,
   tenantMintCredentialHost,
   tenantMintHostMatches,
-} from "@/lib/embed-tenant-mint-token";
+} from "@/lib/embed-tenant-mint-credential";
 import { signTrialProof } from "@/lib/trial-proof";
 
 /**
@@ -116,7 +120,9 @@ export async function POST(req: Request): Promise<NextResponse> {
     if ("error" in requested) return requested.error;
 
     // The credential is bound to one host. Any other host is refused and
-    // nothing is minted.
+    // nothing is minted. Both sides are compared in canonical form, so the
+    // route accepts the host as the caller knows it (bare host or origin URL)
+    // and still refuses a host the credential is not scoped to.
     if (!tenantMintHostMatches(requested.host, boundHost)) {
       return NextResponse.json(
         {
@@ -141,10 +147,13 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // The proof is minted for the host IN THE PAIR, never for the spelling in
-    // the request: the request can only say WHICH host it wants, not WHAT
-    // gets signed. So a caller can never obtain a proof for a host it does
-    // not hold the credential for.
+    // The proof is minted for the CANONICAL host of the pair, never for the
+    // spelling in the request: the request can only say WHICH host it wants,
+    // not WHAT gets signed. So a caller can never obtain a proof for a host it
+    // does not hold the credential for. The canonical form is also the form
+    // the consume side compares — the chat route canonicalises both the
+    // verified host and the X-Embed-Host header — so the proof verifies
+    // there.
     //
     // Default TTL lives in trial-proof.ts (TRIAL_PROOF_TTL_MS) so the mint
     // route cannot drift from the verifier.

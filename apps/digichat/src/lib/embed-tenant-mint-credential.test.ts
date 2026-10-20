@@ -8,7 +8,7 @@ import {
   TENANT_MINT_CREDENTIALS_ENV,
   tenantMintCredentialHost,
   tenantMintHostMatches,
-} from "@/lib/embed-tenant-mint-token";
+} from "@/lib/embed-tenant-mint-credential";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -97,15 +97,39 @@ describe("tenant mint credential", () => {
     expect(tenantMintCredentialHost("")).toBeNull();
   });
 
-  it("returns the host as written in the pair, not a normalised spelling", () => {
-    // The proof is minted for the pair's host string, so the operator's
-    // spelling is the one that gets signed.
+  it("returns the CANONICAL host of the pair, not the operator's spelling", () => {
+    // The proof is minted for the canonical host, so the operator's spelling
+    // is not what gets signed: the consume side compares the canonical form.
     process.env[TENANT_MINT_CREDENTIALS_ENV] =
       `Tenant.Example.com=${TENANT_TOKEN}`;
-    expect(tenantMintCredentialHost(TENANT_TOKEN)).toBe("Tenant.Example.com");
+    expect(tenantMintCredentialHost(TENANT_TOKEN)).toBe("tenant.example.com");
   });
 
-  it("matches a requested host against the bound host, ignoring case and space", () => {
+  it("returns the canonical host of a pair written as an origin URL", () => {
+    // An operator may write the pair either way; the credential binds the
+    // HOST, not the spelling, so both spellings bind the same host.
+    process.env[TENANT_MINT_CREDENTIALS_ENV] =
+      `https://tenant.example.com=${TENANT_TOKEN}`;
+    expect(tenantMintCredentialHost(TENANT_TOKEN)).toBe("tenant.example.com");
+  });
+
+  it("binds nothing when the pair's host does not canonicalise", () => {
+    // There is no host to compare against and no host to sign, so the pair
+    // authorises nothing rather than something undefined.
+    process.env[TENANT_MINT_CREDENTIALS_ENV] = `https://=${TENANT_TOKEN}`;
+    expect(tenantMintCredentialHost(TENANT_TOKEN)).toBeNull();
+  });
+
+  it("refuses one host listed twice in two spellings", () => {
+    // The same host written two ways is still the same host, so the list is
+    // ambiguous and binds nothing.
+    process.env[TENANT_MINT_CREDENTIALS_ENV] =
+      `tenant.example.com=${TENANT_TOKEN},https://tenant.example.com=${OTHER_TOKEN}`;
+    expect(tenantMintCredentialHost(TENANT_TOKEN)).toBeNull();
+    expect(tenantMintCredentialHost(OTHER_TOKEN)).toBeNull();
+  });
+
+  it("matches a requested host against the bound host in canonical form", () => {
     expect(tenantMintHostMatches("tenant.example.com", "tenant.example.com")).toBe(
       true,
     );
@@ -117,6 +141,23 @@ describe("tenant mint credential", () => {
     );
     expect(tenantMintHostMatches("", "tenant.example.com")).toBe(false);
     expect(tenantMintHostMatches("tenant.example.com", "")).toBe(false);
+  });
+
+  it("matches a host named as an origin URL against a bare bound host", () => {
+    // The shape a tenant's backend actually sends. A trimmed, lower-cased
+    // compare would refuse this legitimate caller; the canonical compare the
+    // consume side uses accepts it.
+    expect(
+      tenantMintHostMatches("https://tenant.example.com", "tenant.example.com"),
+    ).toBe(true);
+    expect(
+      tenantMintHostMatches("tenant.example.com", "https://tenant.example.com"),
+    ).toBe(true);
+  });
+
+  it("matches nothing when either host does not canonicalise", () => {
+    expect(tenantMintHostMatches("https://", "tenant.example.com")).toBe(false);
+    expect(tenantMintHostMatches("tenant.example.com", "https://")).toBe(false);
   });
 
   it("leaves the monitor allowlist reading only its own variable", () => {
