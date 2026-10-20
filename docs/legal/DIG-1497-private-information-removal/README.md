@@ -201,7 +201,7 @@ Run through this immediately before any send. It takes about two minutes.
 **`contact@digithings.ai`.** Chris confirmed this on 2026-10-06. The investigation into the alternative is kept below, because the reasoning is the useful part. It is published at [digithings.ai](https://digithings.ai/) and is the
 only address on the site.
 
-The alternative was `dany.stefan@matador.ai`, from the `SECURITY.md` both forks inherited from us.
+The alternative was a personal address, from the `SECURITY.md` both forks inherited from us.
 Counsel investigated whether it is monitored, as instructed, and **could not establish that it is.
 Confidence: UNKNOWN.** What was checked:
 
@@ -210,7 +210,7 @@ Confidence: UNKNOWN.** What was checked:
 - It has been published continuously since 2026-04-18 and never edited — only the subject tag changed
   once, on 2026-10-01.
 - No agent instruction, org config or Paperclip record anywhere names it — or any mailbox — as monitored.
-- `matador.ai` MX points at Google Workspace; `digithings.ai` MX points at Proton Mail. Both deliver.
+- `digithings.ai` MX points at Proton Mail; the address delivers.
 
 Six months of deliberate publication in a security-disclosure section, alongside a 72-hour
 acknowledgement commitment, is real evidence of intent. **It is not evidence that anyone reads it.**
