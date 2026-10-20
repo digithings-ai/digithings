@@ -1339,11 +1339,9 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   min-height: 1.5rem;
 }
 
-/* Increment 5 — reasoning. Ghost disclosure, square caret, hairline rail. */
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-root"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-root"] {
-  --animation-duration: 0ms;
-}
+/* Increment 5 — reasoning. Ghost disclosure, square caret, hairline rail.
+   The disclosure keeps the upstream 200ms collapse: switching it off made the
+   chain snap shut between two tool calls. */
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-root"] {
   margin-bottom: 1rem;
@@ -1507,6 +1505,23 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] .aui-reasoning-text-content > * + * {
   margin-top: 0.35rem;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-chain-trigger"] {
+  /* The header is part of the trace, not a title: same mono, same size, same
+     muted ink as the rows under it. */
+  width: fit-content;
+  text-align: left;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: var(--ink-mute);
+  text-transform: lowercase;
+  outline: none;
+  box-shadow: none;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"] {
