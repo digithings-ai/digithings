@@ -37,8 +37,6 @@ export default defineConfig({
       // Subpath first: Vite alias matching is prefix-based, so the bare entry
       // would swallow `@digithings/ui/ui` (resolving it to `…/index.ts/ui`).
       '@digithings/ui/ui': path.resolve(__dirname, '../../packages/ui/src/ui/index.ts'),
-      '@digithings/ui/lib/stub-payload': path.resolve(__dirname, '../../packages/ui/src/lib/stub-payload.ts'),
-      '@digithings/catalog/page-context-sanitize': path.resolve(__dirname, '../../packages/catalog/src/page-context-sanitize.ts'),
       '@digithings/ui': path.resolve(__dirname, '../../packages/ui/src/index.ts'),
     },
   },

@@ -3,7 +3,6 @@ import {
   buildCommandItems,
   buildFxHubSearchItems,
   buildTickerCommandItems,
-  dashboardShellCommands,
   filterCommandItems,
 } from './command-palette';
 import type { Doc } from '@/lib/types';
@@ -72,19 +71,6 @@ const baseItems = [
 ] as Parameters<typeof filterCommandItems>[0];
 
 const docs: Doc[] = [doc({ id: '1', path: 'analyst/EWT', title: 'EWT analyst', segment: 'analyst' })];
-
-describe('dashboardShellCommands', () => {
-  it('keeps FX Hub and settings, and drops brief, portfolio, and pipeline', () => {
-    const items = buildCommandItems(data);
-    const shell = dashboardShellCommands(items, true);
-    expect(shell.map((item) => item.id)).toEqual(['go-fx', 'go-fx-how', 'go-settings']);
-  });
-
-  it('hides FX Hub when the caller has no fx_hub grant', () => {
-    const items = buildCommandItems(data);
-    expect(dashboardShellCommands(items, false).map((item) => item.id)).toEqual(['go-settings']);
-  });
-});
 
 describe('buildTickerCommandItems (#1562 PR2 — Tickers palette group)', () => {
   it('maps each ticker to its dossier route', () => {
