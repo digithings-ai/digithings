@@ -84,7 +84,11 @@ runs:
         # One wheel per stack package: the Dockerfile installs nine of them by
         # name. A tree with fewer is a partial build, and the image would fail
         # at pip install instead of here.
-        wheels=$(find image-packages/stack/wheels -name '*.whl' 2>/dev/null | wc -l | tr -d ' ')
+        # The `|| true` is load-bearing: under `set -euo pipefail` a missing
+        # wheels directory makes find fail, the pipeline fail and the script
+        # abort BEFORE the guard below can say why. The count is the diagnosis,
+        # not the crash.
+        wheels=$(find image-packages/stack/wheels -name '*.whl' 2>/dev/null | wc -l | tr -d ' ' || true)
         if [ "$wheels" != "9" ]; then
           echo "::error::image-packages/stack/wheels holds $wheels wheel(s), expected 9 - the image installs one wheel per stack package"
           missing=1
