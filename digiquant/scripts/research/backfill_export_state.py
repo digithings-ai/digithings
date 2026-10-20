@@ -2,8 +2,8 @@
 """
 backfill_export_state.py — Pre-backfill Supabase state export (rollback aid).
 
-Exports daily_snapshots + documents rows for a date range to JSON files so
-the operator can restore if the backfill produces bad results.
+Exports daily_snapshots + documents + positions rows for a date range to JSON
+files so the operator can restore if the backfill produces bad results.
 
 Usage:
     python3 scripts/backfill_export_state.py --start 2026-04-05 --end 2026-04-14
@@ -17,7 +17,7 @@ import json
 import os
 import sys
 import warnings
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any  # score:allow untyped any — duck-typed Supabase client + rows
 
@@ -133,7 +133,10 @@ def export_state(start: str, end: str, out_dir: Path) -> None:
     print(f"✅ Exported {len(pos_rows)} positions rows → {pos_path}")
 
     summary = {
-        "exported_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        # Explicit UTC clock, kept in the exact "…Z" shape the export has always
+        # used (naive-UTC + "Z" suffix) so the output stays byte-identical.
+        "exported_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        + "Z",
         "start": start,
         "end": end,
         "daily_snapshots_count": len(snap_rows),
