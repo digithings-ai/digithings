@@ -1,10 +1,17 @@
 /** Tagged product releases named in the repository changelogs: only versions with a
  *  pushed `<product>-vX.Y.Z` tag. digichat 2.4.0 is in the changelog but untagged;
- *  2.5.1 is the OCC release, tagged from the release commit on develop.
+ *  2.6.0 is the composer and trace release, tagged from the release commit on
+ *  develop; 2.5.1 was the OCC parity release.
  *  digiquant itself ships on develop and has no product tag.
  *  Each href spans the previous tagged release of that product to this one, the same
  *  range the product changelog heading names. */
 export const TAGGED_RELEASES = [
+  {
+    product: "digichat",
+    version: "2.6.0",
+    date: "2026-10-20",
+    href: "https://github.com/digithings-ai/digithings/compare/digichat-v2.5.1...digichat-v2.6.0",
+  },
   {
     product: "digichat",
     version: "2.5.1",
