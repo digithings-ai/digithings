@@ -171,19 +171,52 @@ jobs:
       # nothing said so until wrangler refused. This step makes the gap loud at
       # the point of use. It prints whether the variable is empty, never its
       # value.
-      - name: "Preflight: the Cloudflare Workers token is present"
+      - name: "Preflight: the Cloudflare token is present"
         env:
-          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          if [ -z "$CLOUDFLARE_WORKERS_API_TOKEN" ]; then
-            echo "::error::CLOUDFLARE_WORKERS_API_TOKEN is empty. This lane needs a Cloudflare API token with the Workers Scripts:Edit permission, stored under the name CLOUDFLARE_WORKERS_API_TOKEN."
-            echo "::error::It must NOT be the repo's CLOUDFLARE_API_TOKEN: that name holds the Vectorize/D1 token, and exporting it makes wrangler fail with error 10000."
-            echo "::error::The gap is recorded in .github/secret-names.json under accepted_missing (owner: chris)."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is empty. This lane needs a Cloudflare API token that can deploy a Worker with a container."
+            echo "::error::The name is the one the repo already holds; a dedicated Workers Scripts:Edit token named CLOUDFLARE_WORKERS_API_TOKEN would also work and is the better long-term shape (see .github/secret-names.json, owner: chris)."
             exit 1
           fi
-          echo "CLOUDFLARE_WORKERS_API_TOKEN is present (value not shown)."
+          echo "CLOUDFLARE_API_TOKEN is present (value not shown)."
+      # The image's build context is the repo root, and the Dockerfile COPYs
+      # image-packages/stack/{requirements.txt,wheels,digisearch-seeds} - a
+      # directory that is GENERATED, not committed (.gitignore: "/image-packages/").
+      # A checkout therefore never carries it, so without this step the build
+      # context has no such directory and the build dies computing its cache
+      # key, before a single build step runs.
+      #
+      # The local deploy path has always packaged these inputs first
+      # (scripts/local-deploy/deploy_worker.sh) and the digichat publish lane
+      # got the same step in #5968 (DIG-4506). The stack lane never had one.
+      #
+      # The stack image installs wheels, so this is the full generator, not the
+      # --npm-only subset: it needs uv, and it builds the digibase, digikey,
+      # digifetch, digiquant, digigraph and digillm wheels it packages.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.24"
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Package the image build inputs"
+        run: |
+          set -euo pipefail
+          python3 scripts/package_r5_image_inputs.py
+          for required in stack/requirements.txt stack/wheels stack/digisearch-seeds; do
+            if [ ! -e "image-packages/$required" ]; then
+              echo "::error::image-packages/$required is missing - the build context would carry no packaged input"
+              exit 1
+            fi
+          done
+
       - name: "Deploy stack container"
         run: npm run deploy --workspace digithings-stack-cloudflare
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
