@@ -116,12 +116,20 @@ def write_env(root: Path, env: Optional[Mapping[str, str]] = None) -> Path:
     The rendered .dev.vars are the base; the local overrides win over them,
     and the previous .env wins over the generated omniroute password so the
     value stays stable across runs.
+
+    Every value in the previous .env that the render does not produce belongs
+    to the operator (the LiteLLM keys, the local model-mode paths, whatever
+    else they put there) and survives the rebuild. Only the values the render
+    owns are replaced: a rendered key takes its fresh value from .dev.vars,
+    and a local key takes its local one.
     """
     env = os.environ if env is None else env
     root = Path(root)
     target = root / ".env"
     existing = read_env_file(target)
     values = read_env_file(root / ".dev.vars")
+    for name, value in existing.items():
+        values.setdefault(name, value)
     values.update(local_overrides(env, existing))
     body = "".join(f"{name}={value}\n" for name, value in sorted(values.items()))
     fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=".env.")

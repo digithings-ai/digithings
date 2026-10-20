@@ -184,6 +184,7 @@ Path A is the recommended path for anything you want to keep. Path B is the fast
 - **LiteLLM:** [`config/litellm.yaml`](../config/litellm.yaml) points at local Ollama on `http://ollama:11434` and, if you want it, at Ollama Cloud through `OLLAMA_API_KEY`. Set `LITELLM_MASTER_KEY` and `LITELLM_PROXY_API_KEY` for the digigraph to proxy Bearer. If neither a proxy key nor `OPENAI_API_KEY` is set, a declared trusted local LiteLLM base (the `:4000` defaults) sends the development sentinel `sk-no-key-required`, so a no-auth loopback stack still runs; a direct or vendor base fails fast instead (#3788 / #3939).
 - **Optional funnel:** set `DIGIKEY_LITELLM_PROXY_KEY` to the same value as `LITELLM_MASTER_KEY` (Compose defaults this when unset).
 - **Local Ollama models only:** set `DIGI_MODEL_MODES_FILE=model_modes.local.yaml` and mount `DIGI_CONFIG_PATH` at `/app/config` for digigraph (see [`config/model_modes.local.yaml`](../config/model_modes.local.yaml)).
+- **Your own values:** every value in the root `.env` that the render does not produce is yours, and `dt up` keeps it — the LiteLLM keys, the local model-mode paths and anything else you put there. The rendered `.dev.vars` and the local overrides above still own the keys they produce, so a contract value is never shadowed by an older copy.
 
 ### 7.2 Start
 

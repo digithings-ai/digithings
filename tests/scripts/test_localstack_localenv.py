@@ -82,3 +82,50 @@ def test_the_rendered_env_does_not_aim_the_monitors_store_at_the_board_database(
 def test_the_local_override_wins_over_the_contract_value():
     overrides = localenv.local_overrides({}, {})
     assert overrides["DIGISEARCH_MONITORS_DB"] == localenv.LOCAL_DIGISEARCH_MONITORS_DB
+
+
+# ------------------------------------------------ the operator's own values
+
+#: The values SELF_HOST.md 7.1 tells the operator to set in the root .env.
+OPERATOR_KEYS = (
+    "LITELLM_MASTER_KEY",
+    "LITELLM_PROXY_API_KEY",
+    "OLLAMA_API_KEY",
+    "DIGIKEY_LITELLM_PROXY_KEY",
+    "DIGI_MODEL_MODES_FILE",
+    "DIGI_CONFIG_PATH",
+)
+
+
+def test_an_operator_value_survives_the_render(tmp_path):
+    """The repro: `dt up` rebuilt the root .env and dropped the operator's value."""
+    (tmp_path / ".env").write_text("LITELLM_MASTER_KEY=operator-value\n", encoding="utf-8")
+    (tmp_path / ".dev.vars").write_text("CORE_SUPABASE_SERVICE_KEY=fresh\n", encoding="utf-8")
+    localenv.write_env(tmp_path, env={})
+    rendered = localenv.read_env_file(tmp_path / ".env")
+    assert rendered["LITELLM_MASTER_KEY"] == "operator-value"
+    assert rendered["CORE_SUPABASE_SERVICE_KEY"] == "fresh"
+
+
+@pytest.mark.parametrize("name", OPERATOR_KEYS)
+def test_every_documented_operator_value_survives_the_render(tmp_path, name):
+    """Each value SELF_HOST.md 7.1 documents is the operator's and is kept."""
+    (tmp_path / ".env").write_text(f"{name}=operator-value\n", encoding="utf-8")
+    localenv.write_env(tmp_path, env={})
+    assert localenv.read_env_file(tmp_path / ".env")[name] == "operator-value"
+
+
+def test_a_rendered_value_still_wins_over_the_copy_in_the_root_env(tmp_path):
+    """The render owns the values it produces, so a stale copy does not win."""
+    (tmp_path / ".dev.vars").write_text("CORE_SUPABASE_SERVICE_KEY=fresh\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("CORE_SUPABASE_SERVICE_KEY=stale\n", encoding="utf-8")
+    localenv.write_env(tmp_path, env={})
+    assert localenv.read_env_file(tmp_path / ".env")["CORE_SUPABASE_SERVICE_KEY"] == "fresh"
+
+
+def test_the_local_override_still_wins_over_the_root_env(tmp_path):
+    """The local values win over everything, the operator's copy included."""
+    (tmp_path / ".env").write_text("SUPABASE_URL=http://127.0.0.1:1\n", encoding="utf-8")
+    localenv.write_env(tmp_path, env={})
+    rendered = localenv.read_env_file(tmp_path / ".env")
+    assert rendered["SUPABASE_URL"] == f"http://127.0.0.1:{localenv.api_port({})}"
