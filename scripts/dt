@@ -46,6 +46,7 @@ from scripts.localstack import (
     contracts,
     deploy,
     health,
+    localenv,
     orchestrate,
     preflight,
     render,
@@ -356,6 +357,11 @@ def cmd_deploy(args: argparse.Namespace, root: Path) -> int:
 def main(argv: "list[str] | None" = None) -> int:
     args = build_parser().parse_args(argv)
     root = repo_root()
+    # The local stack's defaults live in the environment, so the plan's
+    # subprocesses, the health gate and the URL table all read the same
+    # values. setdefault only: an explicit DT_SUPABASE_PORT (or any other
+    # knob) from the operator always wins.
+    localenv.apply_defaults(root)
     handlers = {
         "preflight": cmd_preflight,
         "status": cmd_status,
