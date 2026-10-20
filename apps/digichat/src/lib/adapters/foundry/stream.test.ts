@@ -1307,11 +1307,13 @@ describe("mapFoundryEvent call_id correlation (#3861)", () => {
 });
 
 describe("capacity retry (#5979)", () => {
-  function flakyClient(failures: number, events: FoundryStreamEvent[]) {
+  function flakyClient(failures: number, events: FoundryStreamEvent[], status = 429) {
     let calls = 0;
+    let conversations = 0;
     const client = {
       conversations: {
         async create() {
+          conversations += 1;
           return { id: "conv_429" };
         },
       },
@@ -1319,8 +1321,8 @@ describe("capacity retry (#5979)", () => {
         async create() {
           calls += 1;
           if (calls <= failures) {
-            const err = new Error("429 Too Many Requests") as Error & { status?: number };
-            err.status = 429;
+            const err = new Error(`${status} error`) as Error & { status?: number };
+            err.status = status;
             throw err;
           }
           return {
@@ -1331,11 +1333,11 @@ describe("capacity retry (#5979)", () => {
         },
       },
     } as unknown as OpenAIResponsesClientLike;
-    return { client, calls: () => calls };
+    return { client, calls: () => calls, conversations: () => conversations };
   }
 
   it("waits and resumes when the deployment is throttled, without duplicating text", async () => {
-    const { client, calls } = flakyClient(2, [
+    const { client, calls, conversations } = flakyClient(2, [
       { type: "response.output_text.delta", delta: "Hello" },
       { type: "response.output_text.delta", delta: " world" },
       { type: "response.completed" },
@@ -1361,6 +1363,9 @@ describe("capacity retry (#5979)", () => {
     expect(out).toContain('"state":"ready"');
     // The answer is streamed once, not once per retry.
     expect(out.match(/Hello/g)?.length).toBe(1);
+    // A retry must not mint a second conversation or re-emit its part.
+    expect(conversations()).toBe(1);
+    expect(out.match(/"conversationId"/g)?.length).toBe(1);
     expect(out).not.toContain("The assistant is unavailable right now");
   });
 
@@ -1382,6 +1387,32 @@ describe("capacity retry (#5979)", () => {
 
     // Initial attempt plus one retry per configured delay.
     expect(calls()).toBe(3);
+    expect(out).toContain("The assistant is unavailable right now");
+    // The waiting state must not be left behind: the last connection part is
+    // `ready`, even though the error part follows it.
+    const states = [...out.matchAll(/"state":"(warming_up|ready)"/g)].map((m) => m[1]);
+    expect(states.length).toBeGreaterThan(0);
+    expect(states.at(-1)).toBe("ready");
+  });
+
+  it("does not retry a non-capacity error", async () => {
+    const { client, calls } = flakyClient(Number.POSITIVE_INFINITY, [], 400);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(out).not.toContain("Waiting for model capacity");
     expect(out).toContain("The assistant is unavailable right now");
   });
 });

@@ -140,7 +140,12 @@ export interface OpenAIResponsesClientLike {
   responses: {
     create(
       params: { conversation: string; input?: string; stream: true },
-      options: { signal?: AbortSignal; body: { agent_reference: { name: string; type: "agent_reference" } } }
+      options: {
+        signal?: AbortSignal;
+        /** SDK-level retries; the adapter owns capacity retries (#5979). */
+        maxRetries?: number;
+        body: { agent_reference: { name: string; type: "agent_reference" } };
+      }
     ): Promise<AsyncIterable<FoundryStreamEvent>>;
   };
 }
@@ -791,9 +796,8 @@ export function mapFoundryEvent(
 }
 
 /**
- * Retry schedule for a throttled deployment (429) or a momentarily unavailable
- * service (503). Cumulative wait is ~59s, which is well inside a demo's
- * patience and far short of a hung request.
+ * Retry schedule for a throttled deployment (429). Cumulative wait is ~59s, which
+ * is well inside a demo's patience and far short of a hung request.
  */
 const DEFAULT_CAPACITY_RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 15_000, 15_000, 15_000];
 const CAPACITY_RETRY_AFTER_CAP_MS = 30_000;
@@ -808,6 +812,14 @@ function httpStatusOf(err: unknown): number | undefined {
 function retryAfterMs(err: unknown): number | null {
   if (typeof err !== "object" || err === null) return null;
   const headers = (err as { headers?: { get?: (name: string) => string | null } }).headers;
+  // Azure sends millisecond variants alongside the standard header; prefer the
+  // finer-grained one when both are present.
+  for (const name of ["retry-after-ms", "x-ms-retry-after-ms"]) {
+    const ms = Number(headers?.get?.(name));
+    if (Number.isFinite(ms) && ms >= 0) {
+      return Math.min(ms, CAPACITY_RETRY_AFTER_CAP_MS);
+    }
+  }
   const raw = headers?.get?.("retry-after");
   if (!raw) return null;
   const seconds = Number(raw);
@@ -819,14 +831,22 @@ function retryAfterMs(err: unknown): number | null {
   return Math.min(Math.max(asDate - Date.now(), 0), CAPACITY_RETRY_AFTER_CAP_MS);
 }
 
-/** Delay before retrying a capacity failure, or null when it is not retryable. */
+/**
+ * Delay before retrying a capacity failure, or null when it is not retryable.
+ *
+ * 429 only. A 503 can arrive after Foundry has already committed the user item,
+ * and `responses.create` carries the input — retrying it there would append the
+ * user turn twice. Throttling happens before processing, so 429 is safe.
+ */
 function capacityRetryDelayMs(
   err: unknown,
   attempt: number,
   schedule: readonly number[],
 ): number | null {
-  const status = httpStatusOf(err);
-  if (status !== 429 && status !== 503) return null;
+  if (httpStatusOf(err) !== 429) return null;
+  const code = (err as { code?: unknown } | null)?.code;
+  // A hard quota/billing stop is not transient: retrying only burns the budget.
+  if (code === "insufficient_quota" || code === "billing_hard_limit_reached") return null;
   if (attempt >= schedule.length) return null;
   return retryAfterMs(err) ?? schedule[attempt];
 }
@@ -979,6 +999,9 @@ export async function createFoundryStreamResponse(opts: {
             try {
               const created = await openai.responses.create(createParams, {
                 signal: opts.signal,
+                // Our schedule owns the retries; the SDK's own retries would
+                // multiply them (up to 21 POSTs for one turn).
+                maxRetries: 0,
                 body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
               });
               if (attempt > 0) {
@@ -994,7 +1017,18 @@ export async function createFoundryStreamResponse(opts: {
               return created;
             } catch (err) {
               const delay = capacityRetryDelayMs(err, attempt, schedule);
-              if (delay === null) throw err;
+              if (delay === null) {
+                if (attempt > 0) {
+                  // Exhausted, or no longer retryable: clear the waiting state
+                  // so the persisted turn does not carry a stale countdown.
+                  writer.write({
+                    type: "data-connection",
+                    id: "foundry-capacity",
+                    data: { state: "ready" },
+                  });
+                }
+                throw err;
+              }
               writer.write({
                 type: "data-connection",
                 id: "foundry-capacity",

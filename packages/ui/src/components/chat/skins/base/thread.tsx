@@ -616,7 +616,12 @@ const ComposerAction: FC = () => {
 };
 
 const AssistantWorkingIndicator: FC = () => {
-  const isEmpty = useAuiState((s) => s.message.content.length === 0);
+  // Text, not `content`: data parts (the warming-up notice itself) also count
+  // toward `content`, which made this false the moment the notice arrived and
+  // hid its own message (#5979 review).
+  const isEmpty = useAuiState(
+    (s) => !s.message.parts.some((part) => part.type === "text" && (part.text ?? "").length > 0),
+  );
   // Boot retries (#4753): the BFF replaces `connecting` with `warming_up`
   // while it waits out a booting upstream — say so instead of "Connecting".
   // A throttled model deployment (#5979) rides the same part with its own
