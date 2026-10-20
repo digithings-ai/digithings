@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import importlib.util
+import os
 import re
 import subprocess
 import sys
@@ -66,6 +67,24 @@ def run(*argv: str, expect: int | None = None):
     if expect is not None:
         assert proc.returncode == expect, f"rc={proc.returncode}\n{proc.stdout}\n{proc.stderr}"
     return proc
+
+
+def empty_credential_store(tmp_path, monkeypatch):
+    """Make every credential store look empty.
+
+    A test that needs a value that is nowhere to be found has to arrange that
+    itself: on a developer Mac the local namespace holds the local stack's own
+    material, and since DIG-4675 the local namespace is searched for shared
+    secrets too. Hoping for an absent value makes the test depend on the
+    machine it runs on.
+    """
+    stub_dir = tmp_path / "empty-store"
+    stub_dir.mkdir()
+    for name in ("security", "pass", "op"):
+        stub = stub_dir / name
+        stub.write_text("#!/bin/sh\nexit 1\n")
+        stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{stub_dir}{os.pathsep}{os.environ['PATH']}")
 
 
 # ------------------------------------------------------------------ tracking
@@ -323,9 +342,10 @@ def test_generator_needing_a_live_service_fails_cleanly(tmp_path):
     assert "CORE_SUPABASE_SERVICE_KEY" in proc.stderr, "the error must name the secret"
 
 
-def test_render_is_all_or_nothing(tmp_path):
+def test_render_is_all_or_nothing(tmp_path, monkeypatch):
     """One unresolved value must leave NO file, not a half-filled one."""
     # OPENROUTER is hosted-only; CHEAPERINFERENCE is required on selfhost and keychain-sourced.
+    empty_credential_store(tmp_path, monkeypatch)
     only = "AUTH_SECRET,CHEAPERINFERENCE_API_KEY"
     out = tmp_path / ".dev.vars"
     proc = run("render", "--no-prompt", "--only", only, "--output", str(out), expect=1)
@@ -449,7 +469,8 @@ def test_tool_makes_no_network_call():
     assert "import socket" in "import socket\n"
 
 
-def test_check_reports_missing_without_writing(tmp_path):
+def test_check_reports_missing_without_writing(tmp_path, monkeypatch):
+    empty_credential_store(tmp_path, monkeypatch)
     out = tmp_path / ".dev.vars"
     proc = run("check", "--only", "AUTH_SECRET,CHEAPERINFERENCE_API_KEY", expect=1)
     # A traceback also exits 1, so the exit code alone cannot tell a report from
@@ -462,16 +483,71 @@ def test_check_reports_missing_without_writing(tmp_path):
 # ------------------------------------------------- the local keychain prefix
 
 
+def test_the_contract_carries_a_local_prefix_next_to_the_production_one(manifest):
+    """The contract names the local namespace apart from the shared one.
+
+    Without a key of its own the operator-prompt branch cannot tell a local
+    value from a production one, so a local render binds the production
+    credential (DIG-4675).
+    """
+    contract = manifest["contract"]
+    assert contract["local_keychain_service_prefix"] == "digithings-local/"
+    assert contract["keychain_service_prefix"] == "digithings/"
+    assert contract["local_keychain_service_prefix"] != contract["keychain_service_prefix"]
+
+
 def test_the_keychain_prefix_override_comes_first(tool, manifest, monkeypatch):
     """The local stack's material lives under another prefix; the override wins.
 
     The contract keeps the production prefix, so the local bring-up finds its
-    own values without the contract changing (DIG-4501).
+    own values without the contract changing (DIG-4501). The local namespace
+    is a list of its own since DIG-4675, so the override lands there and the
+    shared prefix stays out of it. A shared secret, on the other hand, comes
+    from the shared namespace: the local copy of it is used only when the
+    operator has selected a local context.
     """
     monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    assert tool.local_keychain_prefixes(manifest) == ("digithings-local/",)
     assert tool.keychain_prefixes(manifest) == ("digithings-local/", "digithings/")
     monkeypatch.delenv(tool.KEYCHAIN_PREFIX_ENV, raising=False)
+    # the contract's own local namespace is searched override or not
+    assert tool.local_keychain_prefixes(manifest) == ("digithings-local/",)
+    # but a shared secret is read from the shared namespace alone, so a render
+    # outside the local stack cannot bind a local copy of it
     assert tool.keychain_prefixes(manifest) == ("digithings/",)
+
+
+def test_the_override_adds_a_local_prefix_without_dropping_the_contract_one(tool, manifest, monkeypatch):
+    """An operator who sets the prefix gets theirs first, and the contract's
+    local namespace is still searched behind it."""
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "other-local/")
+    assert tool.local_keychain_prefixes(manifest) == ("other-local/", "digithings-local/")
+
+
+def test_the_local_prefix_list_never_carries_the_production_prefix(tool, manifest, monkeypatch):
+    """The local list is the local namespace only. This is the whole fix: a
+    value that is absent locally is absent, not a production one (DIG-4675)."""
+    monkeypatch.delenv(tool.KEYCHAIN_PREFIX_ENV, raising=False)
+    local = tool.local_keychain_prefixes(manifest)
+    assert local == ("digithings-local/",)
+    assert "digithings/" not in local
+
+
+def test_the_override_cannot_put_the_production_prefix_back_into_the_local_list(
+    tool, manifest, monkeypatch
+):
+    """The override names a namespace; it cannot widen the local list into the
+    shared one. An operator who points it at the shared namespace still gets
+    the local namespace for an operator-prompt value, never the shared one.
+
+    Before the local list was a separate thing, the override was read as
+    "prepend to the shared list", so `digithings/` meant "read the shared
+    namespace" -- and an operator-prompt value came back from it.
+    """
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings/")
+    local = tool.local_keychain_prefixes(manifest)
+    assert local == ("digithings-local/",)
+    assert "digithings/" not in local
 
 
 def test_a_keychain_value_is_read_through_the_prefix_list(tool, manifest, entries, monkeypatch):
@@ -488,15 +564,202 @@ def test_a_keychain_value_is_read_through_the_prefix_list(tool, manifest, entrie
     assert seen["prefixes"] == ("digithings-local/", "digithings/")
 
 
+def test_the_keychain_source_reads_the_local_prefix_before_the_shared_one(
+    tool, manifest, entries, monkeypatch
+):
+    """A shared secret is still found: local first, then the shared namespace."""
+    entry = next(e for e in entries if e["name"] == "DIGIKEY_ADMIN_TOKEN")
+    seen: dict = {}
+
+    def fake_stores(name, prefixes, allow_prompt):
+        seen["prefixes"] = prefixes
+        return "value"
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "from_stores", fake_stores)
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) == "value"
+    assert seen["prefixes"] == ("digithings-local/", "digithings/")
+
+    # outside the local stack the shared namespace alone answers: a local copy
+    # of a shared secret is never bound by accident
+    monkeypatch.delenv(tool.KEYCHAIN_PREFIX_ENV, raising=False)
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) == "value"
+    assert seen["prefixes"] == ("digithings/",)
+
+
+def test_the_operator_prompt_branch_reads_the_local_prefixes_only(
+    tool, manifest, entries, monkeypatch
+):
+    """An operator-prompt value is a LOCAL credential. It is looked up in the
+    local namespace only, never in the shared one (DIG-4675)."""
+    entry = next(e for e in entries if e["name"] == "DIGICLAW_DIGIKEY_API_KEY")
+    seen: dict = {}
+
+    def fake_stores(name, prefixes, allow_prompt):
+        seen["prefixes"] = prefixes
+        return None
+
+    monkeypatch.setenv(tool.KEYCHAIN_PREFIX_ENV, "digithings-local/")
+    monkeypatch.setattr(tool, "from_stores", fake_stores)
+    tool.resolve(manifest, entry, {}, allow_prompt=False)
+    assert seen["prefixes"] == ("digithings-local/",)
+    assert "digithings/" not in seen["prefixes"]
+
+
+def test_an_operator_prompt_value_is_never_taken_from_the_production_prefix(
+    tool, manifest, entries, monkeypatch
+):
+    """A local render must never bind a production credential.
+
+    The operator-prompt entries are minted by the LOCAL digikey. When the value
+    is absent from the local namespace, a scripted render reports it as missing
+    and an interactive one asks the operator. The production namespace is not
+    read for them at all (DIG-4675).
+    """
+    entry = next(e for e in entries if e["name"] == "E2E_BEARER_TOKEN")
+    asked: list = []
+
+    def fake_one_store(name, prefix):
+        # the value exists in the production namespace only
+        return "production-value" if prefix == "digithings/" else None
+
+    monkeypatch.delenv(tool.KEYCHAIN_PREFIX_ENV, raising=False)
+    monkeypatch.setattr(tool, "_from_one_store", fake_one_store)
+    monkeypatch.setattr(tool, "prompt", lambda label: asked.append(label) or "typed")
+
+    # a scripted render reports the value as missing instead of using production
+    assert tool.resolve(manifest, entry, {}, allow_prompt=False) is None
+    assert asked == []
+    # and an interactive render asks the operator
+    assert tool.resolve(manifest, entry, {}, allow_prompt=True) == "typed"
+    assert asked == ["E2E_BEARER_TOKEN: "]
+
+
+def test_no_operator_prompt_entry_can_reach_the_production_namespace(
+    tool, manifest, entries, monkeypatch
+):
+    """The rule holds for every operator-prompt entry in the contract."""
+    seen: list = []
+
+    def fake_stores(name, prefixes, allow_prompt):
+        seen.append(prefixes)
+        return None
+
+    monkeypatch.delenv(tool.KEYCHAIN_PREFIX_ENV, raising=False)
+    monkeypatch.setattr(tool, "from_stores", fake_stores)
+    monkeypatch.setattr(tool, "prompt", lambda label: "typed")
+
+    for entry in entries:
+        if entry["source"] == "operator-prompt":
+            tool.resolve(manifest, entry, {}, allow_prompt=False)
+
+    assert seen, "the contract carries no operator-prompt entry"
+    for prefixes in seen:
+        assert "digithings/" not in prefixes, prefixes
+
+
+def test_an_operator_prompt_alias_never_inherits_a_shared_value(
+    tool, manifest, monkeypatch
+):
+    """An alias of a shared secret carries no shared value.
+
+    The contract carries no such entry today, but an operator-prompt entry
+    that aliases a shared one must not be a way around the rule: the alias is
+    resolved from the local namespace, and asked for when it is not there.
+    """
+    contract_entries = {
+        "DIGIKEY_ADMIN_TOKEN": {
+            "name": "DIGIKEY_ADMIN_TOKEN",
+            "source": "keychain",
+            "renderable": True,
+        },
+        "BYOK_API_KEY": {
+            "name": "BYOK_API_KEY",
+            "source": "operator-prompt",
+            "renderable": True,
+            "same_as": "DIGIKEY_ADMIN_TOKEN",
+        },
+    }
+    alias = contract_entries["BYOK_API_KEY"]
+    asked: list = []
+
+    def fake_one_store(name, prefix):
+        # the value exists in the production namespace only
+        return "production-value" if prefix == "digithings/" else None
+
+    monkeypatch.delenv(tool.KEYCHAIN_PREFIX_ENV, raising=False)
+    monkeypatch.setattr(tool, "_from_one_store", fake_one_store)
+    monkeypatch.setattr(tool, "prompt", lambda label: asked.append(label) or "typed")
+
+    # the already-resolved shared value is not handed to the alias
+    assert (
+        tool.resolve(
+            manifest,
+            alias,
+            {"DIGIKEY_ADMIN_TOKEN": "production-value"},
+            allow_prompt=False,
+            entries=contract_entries,
+        )
+        is None
+    )
+    assert asked == []
+    # and an interactive render asks the operator for it
+    assert (
+        tool.resolve(
+            manifest,
+            alias,
+            {"DIGIKEY_ADMIN_TOKEN": "production-value"},
+            allow_prompt=True,
+            entries=contract_entries,
+        )
+        == "typed"
+    )
+    assert asked == ["DIGIKEY_ADMIN_TOKEN: "]
+
+
+def test_the_missing_report_names_the_local_namespace(tmp_path, monkeypatch):
+    """A missing operator-prompt value says where it has to come from.
+
+    The local namespace is the only place a per-workspace credential may live,
+    so the report names it instead of leaving the operator to guess
+    (DIG-4675).
+    """
+    empty_credential_store(tmp_path, monkeypatch)
+    proc = run("check", "--only", "E2E_BEARER_TOKEN", expect=1)
+    assert "missing: E2E_BEARER_TOKEN" in proc.stdout
+    assert "digithings-local/" in proc.stdout
+
+
+def test_the_unresolved_report_names_the_secret_and_never_a_value(tool, capsys, monkeypatch):
+    """The report that names an unresolved secret carries nothing else.
+
+    The name is an env var identifier that the manifest carries in the clear, so
+    it is public. A value is not, and this report is what the operator reads on
+    a shared screen. CodeQL's clear-text-logging rule flags the print, because
+    the manifest's whole "secrets" list is its taint source, so this test pins
+    the property the rule cannot see: the report prints a name, never a value.
+    """
+    monkeypatch.setattr(tool, "from_stores", lambda name, prefixes, allow_prompt: "a-value")
+
+    assert tool.main(["--manifest", str(MANIFEST), "check", "--only", "E2E_BEARER_TOKEN"]) == 0
+    out = capsys.readouterr().out
+    assert "0 missing" in out
+    assert "a-value" not in out, "the report echoed a value"
+
+    # and a value that is nowhere to be found is reported by name
+    monkeypatch.setattr(tool, "from_stores", lambda name, prefixes, allow_prompt: None)
+
+    assert tool.main(["--manifest", str(MANIFEST), "check", "--only", "E2E_BEARER_TOKEN"]) == 1
+    out = capsys.readouterr().out
+    assert "missing: E2E_BEARER_TOKEN" in out
+    assert "a-value" not in out, "the report echoed a value"
+
+
 def test_an_operator_prompt_value_is_read_from_the_store_before_it_is_asked_for(
     tool, manifest, entries, monkeypatch
 ):
     """A value that is in the credential store must not need the operator.
-
-    The local stack's operator-supplied values (the digikey API key the local
-    digikey mints, the digigraph upstream key, the digisearch seed key, the
-    e2e bearer token) are in the store under the local prefix, so a scripted
-    render (--no-prompt) finds them instead of failing on them.
+    ...
     """
     entry = next(e for e in entries if e["name"] == "E2E_BEARER_TOKEN")
     asked: list = []

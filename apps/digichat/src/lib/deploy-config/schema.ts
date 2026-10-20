@@ -104,8 +104,9 @@ export type DisclosureMode = z.infer<typeof DisclosureModeSchema>;
 
 /**
  * Chain-of-thought view mode (reasoning + tool calls). See view-modes.ts.
- * Retired ids `compact` / `detailed` fold forward to `quiet` / `verbose`;
- * every other unknown value still fails the enum (fail closed).
+ * `quiet` | `balanced` | `verbose`; the retired ids `hidden` / `compact` /
+ * `detailed` fold forward (`hidden` and `compact` → `quiet`, `detailed` →
+ * `verbose`). Every other unknown value still fails the enum (fail closed).
  */
 export const ViewModeSchema = z.preprocess(
   (value) =>
@@ -172,8 +173,10 @@ export const ChromeSchema = z
  * Legacy `features.reasoning` / `features.toolCalls` disclosure keys fold
  * forward onto the view-mode pair so older YAML keeps loading. Per-field:
  * a new-style value always wins; a legacy value maps to the closest mode
- * (toolCalls off→hidden / expanded→verbose / collapsed→quiet; reasoning
- * expanded→thinking open, anything else→pinned collapsed).
+ * (toolCalls off→quiet / expanded→verbose / collapsed→quiet; reasoning
+ * expanded→thinking open, anything else→pinned collapsed). `off` lands on
+ * `quiet` because the retired `hidden` level is gone: the least a client sees
+ * is the folded chain and its status line.
  */
 function foldLegacyDisclosure(value: unknown): unknown {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -186,11 +189,9 @@ function foldLegacyDisclosure(value: unknown): unknown {
   delete record.reasoning;
   if (record.view == null && toolCalls !== undefined) {
     record.view =
-      toolCalls === false || toolCalls === "off"
-        ? "hidden"
-        : toolCalls === "expanded" || toolCalls === "locked_open"
-          ? "verbose"
-          : "quiet";
+      toolCalls === "expanded" || toolCalls === "locked_open"
+        ? "verbose"
+        : "quiet";
   }
   if (record.thinking == null && reasoning !== undefined) {
     record.thinking =

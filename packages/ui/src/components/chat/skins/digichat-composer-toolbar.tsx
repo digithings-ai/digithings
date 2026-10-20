@@ -8,18 +8,22 @@ import { DigichatContextMeter } from "./digichat-context-meter";
  * model and the active backend on the left and the context fill on the
  * right. Clicking the model opens the full settings menu — that is the only
  * control here; the settings button and the per-control chips are gone.
+ *
+ * The backend chip is a backend indicator, so it appears only where BYOK is
+ * on the table (`showByok`) and the host named the backend that serves the
+ * chat (`providerLabel`). The label is the host's: this package holds no
+ * provider vocabulary, and a host that cannot name the backend shows no
+ * chip rather than a wrong one.
  */
-export function DigichatComposerToolbar({
-  prefs,
-  providerLabel = "cheaperinference",
-}: {
-  prefs: EmbedChatPrefsApi;
-  /** Active backend: Cheaper Inference for house models, or a BYOK provider. */
-  providerLabel?: string;
-}) {
+export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi }) {
   const rawModel = prefs.prefs.model.trim();
   // Routing names, not presentation: the backend sees the full model id.
   const modelLabel = rawModel || "auto";
+  const providerLabel = prefs.providerLabel?.trim() ?? "";
+  // The backend is named whenever the host named one — a Foundry tenant is
+  // served by Azure AI Foundry, not by the house model provider. It is a
+  // button only where the tenant can switch it.
+  const showProvider = providerLabel.length > 0;
 
   // Connected MCP servers and the tools inside them: one ticket server with
   // five tools reads "1 MCP / 5 tools", not "5 MCPs". A server with no
@@ -46,6 +50,8 @@ export function DigichatComposerToolbar({
 
   return (
     <div data-slot="aui_composer-toolbar-inner" className="aui-composer-toolbar-inner">
+      {/* No model row without a picker: a tenant that publishes no model
+          list (a Foundry agent) has no model to name. */}
       {prefs.showModels ? (
         <button
           type="button"
@@ -55,20 +61,26 @@ export function DigichatComposerToolbar({
         >
           {modelLabel}
         </button>
-      ) : (
-        <span className="aui-composer-meta">{modelLabel}</span>
-      )}
-      <span className="aui-composer-meta-sep" aria-hidden>
-        /
-      </span>
-      <button
-        type="button"
-        className="aui-composer-meta aui-composer-meta-action"
-        onClick={() => prefs.openByok()}
-        aria-label="Open provider menu"
-      >
-        {providerLabel}
-      </button>
+      ) : null}
+      {showProvider ? (
+        <>
+          <span className="aui-composer-meta-sep" aria-hidden>
+            /
+          </span>
+          {prefs.showByok ? (
+            <button
+              type="button"
+              className="aui-composer-meta aui-composer-meta-action"
+              onClick={() => prefs.openByok()}
+              aria-label="Open provider menu"
+            >
+              {providerLabel}
+            </button>
+          ) : (
+            <span className="aui-composer-meta">{providerLabel}</span>
+          )}
+        </>
+      ) : null}
       {mcpCounts.servers > 0 ? (
         <>
           <span className="aui-composer-meta-sep" aria-hidden>

@@ -81,7 +81,7 @@ describe("DigichatConfigSchema", () => {
         features: { reasoning: true, toolCalls: false },
       },
     });
-    expect(cfg.deployment?.features.view).toBe("hidden");
+    expect(cfg.deployment?.features.view).toBe("quiet");
     expect(cfg.deployment?.features.thinking).toBe("collapsed");
 
     const expanded = parseDigichatConfig({
@@ -116,6 +116,18 @@ describe("DigichatConfigSchema", () => {
       },
     });
     expect(verbose.deployment?.features.view).toBe("verbose");
+
+    // `hidden` was the one-line level; the folded chain shows that line as
+    // its header now, so a config that still says it means the titles only.
+    const hidden = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { view: "hidden" },
+      },
+    });
+    expect(hidden.deployment?.features.view).toBe("quiet");
   });
 
   it("accepts view/thinking modes and cli.enabled", () => {

@@ -205,6 +205,34 @@ export type ThreadMentionTrigger = {
   iconMap?: SlashPopoverProps["iconMap"];
 };
 
+/**
+ * The chain grouping.
+ *
+ * A source or a status part between two work runs must not split the chain:
+ * only text ends a work run, so two runs with nothing but a source between
+ * them are one chain, not two. The library's helper covers the part types it
+ * knows; the status parts (`data-*`) are matched here, and the memo
+ * fingerprint is kept so the tree is not rebuilt on every render.
+ */
+const chainGroupBy = (() => {
+  const base = groupPartByType({
+    reasoning: ["group-chainOfThought", "group-reasoning"],
+    "tool-call": ["group-chainOfThought", "group-tool"],
+    "standalone-tool-call": [],
+    source: ["group-chainOfThought", "group-tool"],
+  });
+  const fn = (part: { type: string }, context?: unknown) => {
+    if (part.type === "data" || part.type.startsWith("data-")) {
+      return ["group-chainOfThought", "group-tool"] as const;
+    }
+    return base(part as never, context as never);
+  };
+  (fn as unknown as Record<symbol, string>)[
+    Symbol.for("@assistant-ui/groupBy.memoKey")
+  ] = "digichat:chain-v2";
+  return fn;
+})();
+
 const DEFAULT_THREAD_ACTIONS: Required<ThreadActions> = {
   undo: true,
   feedback: false,
@@ -1081,14 +1109,14 @@ const AssistantWorkingIndicator: FC = () => {
       <DotMatrix
         state="loading"
         label="Assistant is working"
-        className="size-3.5"
+        className="!size-3"
       />
       {wakePhase === "waking" ? (
-        <span className="text-sm text-muted-foreground">Waking up services…</span>
+        <span className="text-xs text-muted-foreground">Waking up services…</span>
       ) : connectionState === "warming_up" ? (
-        <span className="text-sm text-muted-foreground">{connectionMessage ?? "Warming up…"}</span>
+        <span className="text-xs text-muted-foreground">{connectionMessage ?? "Warming up…"}</span>
       ) : connectionState === "connecting" ? (
-        <span className="text-sm text-muted-foreground">Connecting…</span>
+        <span className="text-xs text-muted-foreground">Connecting…</span>
       ) : null}
     </span>
   );
@@ -1109,6 +1137,24 @@ const AssistantMessage: FC = () => {
   // The whole turn, not just the group: the tools answer faster than the
   // chain can fold, and a group that closes between two of them flickers.
   const turnRunning = useAuiState((s) => s.thread.isRunning);
+  // The message parts, to tell a chain that holds real work from one that
+  // only holds a source or a status part.
+  const messageParts = useAuiState((s) => s.message.parts);
+  // Only text ends a work run: a chain with a text part after it has
+  // answered, so its work is over. A chain without one is still the agent's
+  // current work, even if the model streams another run of tool calls.
+  const hasWork = messageParts.some(
+    (part) => part.type === "reasoning" || part.type === "tool-call",
+  );
+  const followedByText = (indices: readonly number[]) => {
+    const last = indices.length > 0 ? indices[indices.length - 1] : -1;
+    return messageParts.some((part, index) => {
+      if (index <= last) return false;
+      if (part.type !== "text") return false;
+      const text = (part as { text?: unknown }).text;
+      return typeof text === "string" && text.trim() !== "";
+    });
+  };
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -1125,11 +1171,7 @@ const AssistantMessage: FC = () => {
         className="aui-assistant-message-content text-foreground min-w-0 leading-relaxed wrap-break-word"
       >
         <MessagePrimitive.GroupedParts
-          groupBy={groupPartByType({
-            reasoning: ["group-chainOfThought", "group-reasoning"],
-            "tool-call": ["group-chainOfThought", "group-tool"],
-            "standalone-tool-call": [],
-          })}
+          groupBy={chainGroupBy}
         >
           {({ part, children }) => {
             switch (part.type) {
@@ -1148,9 +1190,11 @@ const AssistantMessage: FC = () => {
                 return (
                   <div data-slot="aui_chain-of-thought">
                     <WorkChain
+                      indices={part.indices}
                       openAtRest={disclosure.openAtRest}
                       foldOnAnswer={disclosure.foldOnAnswer}
                       running={part.status.type === "running"}
+                      followedByText={followedByText(part.indices)}
                     >
                       {children}
                     </WorkChain>
@@ -1163,6 +1207,14 @@ const AssistantMessage: FC = () => {
                 }
                 const locked = toolCallsMode === "locked_open";
                 const running = part.status.type === "running";
+                // The group can hold the source and status parts that sit
+                // between two tool runs; the count is the tool calls only.
+                const toolCount = part.indices.filter(
+                  (index) => messageParts[index]?.type === "tool-call",
+                ).length;
+                if (toolCount === 0) {
+                  return <div data-slot="aui_chain-of-thought">{children}</div>;
+                }
                 return (
                   <ToolGroupRoot
                     variant="ghost"
@@ -1176,7 +1228,7 @@ const AssistantMessage: FC = () => {
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
                     <ToolGroupTrigger
-                      count={part.indices.length}
+                      count={toolCount}
                       active={part.status.type === "running"}
                       disabled={locked}
                     />
@@ -1238,7 +1290,11 @@ const AssistantMessage: FC = () => {
                   </div>
                 );
               case "indicator":
-                return <AssistantWorkingIndicator />;
+                // The work block carries the activity animation. The
+                // standalone indicator is only for a turn that has not
+                // produced anything yet — it must not come back once the
+                // work block is on screen.
+                return hasWork ? null : <AssistantWorkingIndicator />;
               case "source":
                 // Citations are inline markdown links in the answer (DIG-1210);
                 // rendering source parts here stacked duplicate rows between

@@ -647,6 +647,35 @@ The public embed `/provider` path uses `EmbedComposerMenu` (provider list →
 token field → model when required) and the same `validateBYOKKey` /
 `pingByokKey` / `useBYOKKey` contract.
 
+#### The composer provider chip names the backend that serves the chat
+
+The digichat composer footer carries a provider chip: a backend indicator
+sitting next to the model chip. It follows the same two rules the model chip
+already follows, one for the model chip and one for this one.
+
+- **The chip appears only where BYOK is on the table.** The gate is the
+  `showByok` preference the `/byok` slash command uses
+  (`src/lib/product-slash-commands.ts`), so a surface that does not offer
+  BYOK shows no provider chip at all.
+- **The label is derived from the backend that actually serves the chat.**
+  The host names it: `EmbedChatPrefsApi.providerLabel` carries the own-key
+  provider id while the session carries a key, else the house backend id
+  (`src/lib/provider-label.ts` — `backendLabel()` and `HOUSE_BACKEND_ID`).
+  Absent means unknown, and an unknown backend renders no chip rather than
+  a wrong one.
+
+`packages/ui` cannot import app code, so the package holds **no provider
+vocabulary**: it renders the label it is handed, and the app owns the
+names. The static surfaces (home, baseline, devkit) have no BYOK state of
+their own — the provider menu they render cannot activate an own key — so
+they name the house backend; the embed surface names its own provider while
+a key is set.
+
+The house backend id appears a second time inline in the provider menu
+(`src/components/stock/embed-composer-menu.tsx`), which lists the house
+backend as one provider choice among the own-key ones. That copy is the one
+to watch for drift.
+
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 (stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
 opens BYOK mode):
@@ -998,6 +1027,28 @@ list when the provider requires one. PaywallCard / ChatShell still use `ByokCliF
 `/compact`, `/undo`, `/redo` stay client-only. Reload and `/new` reset session prefs
 (tools ON + English — not localStorage); catalog and auth toggles persist to
 localStorage. No sign-in is required for these session prefs.
+
+**Decision — the composer menu cursor is the current value, and it is indexed
+against the rows the page renders** (#4666, #4598). The cursor marks the row
+Enter commits, so a page with a single choice (`/models`, `/effort`,
+`/search-engine`, `/language`, `/view`, `/thinking`, `/provider`) opens on the
+value that is set, and Enter re-commits that value instead of the first row.
+The index comes from the rows the page renders — `cursorOnCurrentRow` in
+`embed-composer-menu.tsx` takes the first row that is both exclusive and
+checked — and never from a separate order constant: the list a page shows and
+the list it indexes are the same list by construction, so a rendered row can
+never sit one off from the cursor. The provider roster was exactly that
+off-by-one: it renders a `cheaperinference` row before the providers, so an
+index into the provider *order* landed on the row before the connected one. A
+page without a single current value (the root, the on/off toggles, the tool and
+MCP lists) has no row to land on and starts at the top. A page with no rows at
+all (`/help`, whose panel is prose and links) has no cursor to seed and no row to
+commit: it renders no list and borrows no other page's rows, so Enter there
+changes nothing. The seed belongs to the page, not to the moment the menu
+opened: opening a sub-page from the root
+re-seeds it, so `/view` lands on the current view mode even when the menu was
+opened on another page. Coming back from a provider form lands on the provider
+row the user opened, not on the connected one.
 
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup?, allowedTools?, mutatingTools? }` is
 forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?,allowedTools?,mutatingTools?}`). `setup` is the

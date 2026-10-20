@@ -246,7 +246,7 @@ def _fetch_price_rows(
     :func:`_rows_from_inception` guard (#4005).
     """
     # Imported per call (cached in sys.modules afterwards) so loading the module needs no
-    # digiquant import at module scope, matching fill-entry-prices.py.
+    # digiquant import at module scope, matching fill_entry_prices.py.
     from digiquant.research.data.queries import r2_ohlcv_rows
 
     inception_date = inception.isoformat() if isinstance(inception, date) else str(inception)

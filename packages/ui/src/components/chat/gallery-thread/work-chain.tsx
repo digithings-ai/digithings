@@ -9,6 +9,7 @@ import {
 } from "../../../ui/collapsible";
 import { DotMatrix } from "../DotMatrix";
 import { cn } from "./cn";
+import { workStatusText } from "./work-status";
 
 /**
  * How long the chain waits before it folds away once the turn is over.
@@ -31,15 +32,29 @@ const ANIMATION_DURATION = 200;
  * between two tool calls.
  *
  * The first manual toggle wins, as it does upstream.
+ *
+ * Folded, the header is a live status line: it names the tool that is
+ * running, or counts what the chain did once it is done. Expanded, it goes
+ * back to the plain "Working" / "Worked" title, because the reasoning and the
+ * tool calls are right there underneath — the header no longer has to
+ * describe them.
  */
 export function WorkChain({
   children,
+  indices,
   openAtRest = false,
   foldOnAnswer = false,
   running = false,
+  followedByText = false,
   className,
 }: {
   children: ReactNode;
+  /**
+   * The message-part indices this chain holds. The folded header describes
+   * them ("Working — digisearch", "Used 3 tools"); without them the header
+   * has nothing to describe and keeps the plain title.
+   */
+  indices?: readonly number[];
   /**
    * The chain stays open for good: nothing ever folds (the verbose level).
    * The balanced level instead opens the chain while the turn runs and folds
@@ -54,39 +69,45 @@ export function WorkChain({
   foldOnAnswer?: boolean;
   /** The chain group is running (a tool or the reasoning is streaming). */
   running?: boolean;
+  /**
+   * A text part follows this chain in the message: the agent wrote
+   * something, so the work that came before it is finished. Only the answer
+   * ends a work run — a second run of tool calls and reasoning without text
+   * in between belongs to the same block.
+   */
+  followedByText?: boolean;
   className?: string;
 }) {
-  const turnRunning = useAuiState((s) => s.thread.isRunning);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const [settled, setSettled] = useState(false);
 
+  // The work of this block is over when text follows it: the agent wrote
+  // something, so it stopped reasoning and stopped calling tools for that
+  // run. Until then the block is still working — a second run of tool calls
+  // and reasoning without text in between is the same block, not a new one.
+  // The marker and the title follow the work; the disclosure follows it too.
+  const working = !followedByText;
+
   useEffect(() => {
-    if (running || turnRunning) {
+    if (working) {
       setSettled(false);
       return;
     }
     const id = setTimeout(() => setSettled(true), SETTLE_MS);
     return () => clearTimeout(id);
-  }, [running, turnRunning]);
+  }, [working]);
 
-  // The answer has started: the text part of this message carries content.
-  const answerStarted = useAuiState((s) =>
-    s.message.parts.some(
-      (part) =>
-        part.type === "text" &&
-        typeof (part as { text?: string }).text === "string" &&
-        (part as { text?: string }).text !== "",
-    ),
-  );
-
-  const busy = running || turnRunning;
   const open = userOpen ?? (
-    openAtRest
-      ? true
-      : foldOnAnswer
-        ? busy && !answerStarted
-        : !settled && busy
+    openAtRest ? true : foldOnAnswer ? working : !settled && working
   );
+
+  // Folded, the header is a live status line — the same sentence the retired
+  // summary level showed. Expanded, the plain title is enough: the reasoning
+  // and the tool calls are underneath it.
+  const parts = useAuiState((s) => s.message.parts);
+  const status = !open && indices ? workStatusText(parts, indices) : undefined;
+  const title = status ? status.label : working ? "Working" : "Worked";
+  const markerRunning = status ? status.running : working;
 
   return (
     <Collapsible
@@ -105,15 +126,15 @@ export function WorkChain({
             the title never shifts when the turn ends — and the check mark
             stays where it belongs, on the tool rows. */}
         <DotMatrix
-          state={busy ? "loading" : "idle"}
-          label={busy ? "Working" : "Worked"}
+          state={markerRunning ? "loading" : "idle"}
+          label={title}
           className="!size-3 shrink-0"
         />
         <span
           data-slot="aui_work-chain-label"
           className="aui-work-chain-label inline-block leading-none"
         >
-          {busy ? "Working" : "Worked"}
+          {title}
         </span>
         <span
           data-slot="aui_work-chain-chevron"

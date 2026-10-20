@@ -467,8 +467,13 @@ services:
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
       - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      # Monitor store home: the same store the digisearch service uses, on the
+      # same volume. The MCP server creates watches in it, and a store of its
+      # own would lose every watch on the next recreate.
+      - DIGI_WORKSPACE=/data/monitors
     volumes:
       - digisearch_chroma:/data/chroma
+      - digisearch_monitors:/data/monitors
       - ./digisearch/devdata/edgar_sample:/data/edgar_dev_corpus:ro
     command: ["python", "-m", "digisearch.cli", "mcp", "--port", "8765"]
 

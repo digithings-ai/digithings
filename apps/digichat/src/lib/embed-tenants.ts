@@ -182,9 +182,11 @@ export type EmbedTenantConfig = {
   webSearch?: boolean;
   /**
    * Chain-of-thought view mode for this tenant's embeds (digichat skin):
-   * hidden / quiet / balanced / verbose. `balanced` (default) opens
-   * reasoning + tool groups while they stream and collapses them when done.
-   * The retired ids `compact` / `detailed` are folded to `quiet` / `verbose`.
+   * quiet / balanced / verbose. `balanced` (default) opens reasoning + tool
+   * groups while they stream and collapses them when done; `quiet` keeps the
+   * chain folded to its titles, where the header reads as a status line. The
+   * retired ids fold forward: `hidden` and `compact` → `quiet`, `detailed` →
+   * `verbose`.
    */
   view?: ViewMode;
   /**
@@ -616,7 +618,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     !VIEW_MODES.includes(v.view as ViewMode) &&
     !isLegacyViewMode(v.view)
   ) {
-    throw new Error(`${ctx}: view must be "hidden", "quiet", "balanced", or "verbose"`);
+    throw new Error(
+      `${ctx}: view must be "quiet", "balanced", or "verbose" (retired: "hidden", "compact", "detailed")`,
+    );
   }
   if (v.thinking !== undefined && !THINKING_MODES.includes(v.thinking as ThinkingMode)) {
     throw new Error(`${ctx}: thinking must be "auto", "collapsed", or "open"`);

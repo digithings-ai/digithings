@@ -380,7 +380,7 @@ DIGEST.md  ← Human-readable analysis (authoritative for narrative)
 snapshot.json ← Machine-readable data (authoritative for numbers)
 ```
 
-`generate-snapshot.py` can also retroactively create snapshot.json from existing DIGEST.md files.
+`generate_snapshot.py` can also retroactively create snapshot.json from existing DIGEST.md files.
 
 ### Schema
 

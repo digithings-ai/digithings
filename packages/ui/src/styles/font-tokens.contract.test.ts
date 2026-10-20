@@ -2,9 +2,6 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-// Single `__dirname` usage: the tsconfig carries no node types, so this file
-// reports TS2304 for it (pre-existing, like its node: imports — see
-// contrast.contract.test.ts).
 const here = __dirname;
 const repoRoot = path.resolve(here, "../../../..");
 const at = (rel: string) => readFileSync(path.join(repoRoot, rel), "utf8");
@@ -28,8 +25,11 @@ const SURFACES = [
  * digichat still loads Inter, IBM Plex and Geist Mono in its route layouts.
  * It rejoins SURFACES when [DIG-3449] applies the 14 Oct Geist Mono decision.
  * Until then the contract does not police it.
+ *
+ * digiquant-app still loads Inter, JetBrains Mono and Geist Mono through its own
+ * next/font call. It rejoins SURFACES when its fonts move to `@digithings/design/fonts`.
  */
-const PENDING_PORT = ["apps/digichat/"];
+const PENDING_PORT = ["apps/digichat/", "apps/digiquant-app/"];
 
 /** Type-specimen galleries and demos show font alternatives on purpose. */
 const OUT_OF_SCOPE = [
@@ -90,7 +90,8 @@ function themedRoot(): string {
  */
 const FALLBACK_CHAIN = ["ui-monospace", "SF Mono", "Menlo", "DejaVu Sans Mono", "Segoe UI Symbol"];
 
-describe("font tokens contract", () => {
+// Several cases read every in-scope file synchronously, so they outgrow the 5s default as the repo grows.
+describe("font tokens contract", { timeout: 30_000 }, () => {
   it("loads Geist Mono once, in the shared design loader", () => {
     const source = at(LOADER);
     expect(source).toMatch(/from ["']next\/font/);

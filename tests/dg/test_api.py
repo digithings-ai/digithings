@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -246,6 +247,41 @@ class TestOpenAICompatible:
         assert "data: " in body
         assert "[DONE]" in body
         assert "chat.completion.chunk" in body
+
+    def test_chat_completions_stream_accepts_a_locked_tenant(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """DIG-4587: a locked tenant's streaming request is accepted.
+
+        The tenant corpus map carries lockSessionControls. The server writes it
+        into the request extras, so the request model must own that key — else
+        every streaming chat request is a validation error and the chat 500s.
+        """
+        monkeypatch.setenv(
+            "DIGI_TENANT_CORPUS_MAP",
+            json.dumps({"pytest-tenant": {"lockSessionControls": True}}),
+        )
+        seen: dict = {}
+
+        def fake_streaming(req, queue, cancel_event=None):
+            seen["req"] = req
+            queue.put(("content", "Hi"))
+            queue.put(("done", None))
+
+        with patch("digigraph.server.run_digigraph_workflow_streaming", side_effect=fake_streaming):
+            r = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "digigraph-rag",
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "stream": True,
+                },
+            )
+        assert r.status_code == 200
+        assert r.headers.get("content-type", "").startswith("text/event-stream")
+        # Accepted AND carried: the lock must reach the request, not be dropped.
+        assert seen["req"].lock_session_controls is True
+
 
     def test_chat_completions_stream_project_rag_alone_uses_neutral_formatter(
         self, client: TestClient
