@@ -493,7 +493,7 @@ def test_unknown_map_key_warns_naming_slug_and_key_but_not_value(
     raw = json.dumps(
         {
             "occ": {
-                "digisearchIndex": "occ_help",
+                "digisearchIndex": "tenant_a_index",
                 "digisearchIndexTypo": "sensitive-value-do-not-log",
             }
         }
@@ -507,7 +507,7 @@ def test_unknown_map_key_warns_naming_slug_and_key_but_not_value(
     assert "digisearchIndexTypo" in message
     assert "sensitive-value-do-not-log" not in caplog.text
     # The known key still applies — an unknown key must not disturb the entry.
-    assert table["occ"].digisearch_index == "occ_help"
+    assert table["occ"].digisearch_index == "tenant_a_index"
 
 
 def test_known_map_keys_do_not_warn(caplog: pytest.LogCaptureFixture) -> None:
@@ -515,7 +515,7 @@ def test_known_map_keys_do_not_warn(caplog: pytest.LogCaptureFixture) -> None:
     raw = json.dumps(
         {
             "occ": {
-                "digisearchIndex": "occ_help",
+                "digisearchIndex": "tenant_a_index",
                 "vaultPathPrefix": "clients/occ",
                 "researchSystemPrompt": "Answer only about occ.",
                 "lockSessionControls": True,
