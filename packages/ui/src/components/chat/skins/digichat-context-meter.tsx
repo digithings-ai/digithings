@@ -3,10 +3,10 @@
 import { useAuiState } from "@assistant-ui/react";
 
 /**
- * Context used, as a 5×5 digichat cube grid. Lit cells are the fraction of
- * the model's window the last turn sent; the grid replaces a ring/percentage
- * with the product's own square motif. Hovering (or focusing) the grid opens
- * a small breakdown card.
+ * Context used, as the segmented digichat cube bar. The bar is the same
+ * one that used to sit inside the breakdown card: its lit span is the
+ * fraction of the model's window the last turn sent, coloured by
+ * system/tools/user. Hovering (or focusing) the bar opens the legend.
  *
  * The provider reports only the prompt total (inputTokens). The system /
  * tools / user split is therefore an estimate: user text is counted from the
@@ -14,8 +14,7 @@ import { useAuiState } from "@assistant-ui/react";
  * the system prompt. Values carry a `~` so the card never implies precision
  * the backend does not send.
  */
-const GRID = 5;
-const CELLS = GRID * GRID;
+const BAR_CELLS = 25;
 
 const CONTEXT_WINDOWS: Record<string, number> = {
   "deepseek/deepseek-v4.1-flash": 1_048_576,
@@ -92,17 +91,13 @@ export function DigichatContextMeter({
   // No fabricated fill: until a turn reports usage the grid stays empty.
   const input = reportedInput ?? 0;
   const ratio = Math.min(1, input / window);
-  const filled = input > 0 ? Math.max(1, Math.round(ratio * CELLS)) : 0;
-
   const userTokens = input > 0 ? Math.round(userChars / 4) : 0;
   const toolTokens = input > 0 ? toolCount * TOKENS_PER_TOOL : 0;
   const systemTokens = Math.max(0, input - userTokens - toolTokens);
   const label = `${format(input)} / ${format(window)} tokens`;
 
-  // Breakdown bar: same cube motif as the grid, stretched to a row. The used
-  // span grows with the window ratio; inside it the three types take their
-  // share of the prompt.
-  const BAR_CELLS = 25;
+  // The used span grows with the window ratio; inside it the three types
+  // take their share of the prompt.
   const usedCells = input > 0 ? Math.max(1, Math.round(ratio * BAR_CELLS)) : 0;
   const sysPct = input > 0 ? Math.round((systemTokens / input) * 100) : 0;
   const toolPct = input > 0 ? Math.round((toolTokens / input) * 100) : 0;
@@ -125,12 +120,22 @@ export function DigichatContextMeter({
         tabIndex={0}
         aria-label={`Context ${label}`}
       >
-        {Array.from({ length: CELLS }, (_, index) => (
-          <span
-            key={index}
-            className={index < filled ? "aui-context-cell is-lit" : "aui-context-cell"}
-          />
-        ))}
+        {Array.from({ length: BAR_CELLS }, (_, index) => {
+          const tone =
+            index < sysCells
+              ? "is-system"
+              : index < sysCells + toolCells
+                ? "is-tools"
+                : index < sysCells + toolCells + userCells
+                  ? "is-user"
+                  : "";
+          return (
+            <span
+              key={index}
+              className={tone ? `aui-context-bar-cell ${tone}` : "aui-context-bar-cell"}
+            />
+          );
+        })}
       </span>
       <span className="aui-context-card" role="tooltip">
         <span className="aui-context-card-row aui-context-card-total">
@@ -138,24 +143,6 @@ export function DigichatContextMeter({
           <span>
             {format(input)} / {format(window)}
           </span>
-        </span>
-        <span className="aui-context-card-bar" role="img" aria-label="Context breakdown">
-          {Array.from({ length: BAR_CELLS }, (_, index) => {
-            const tone =
-              index < sysCells
-                ? "is-system"
-                : index < sysCells + toolCells
-                  ? "is-tools"
-                  : index < sysCells + toolCells + userCells
-                    ? "is-user"
-                    : "";
-            return (
-              <span
-                key={index}
-                className={tone ? `aui-context-bar-cell ${tone}` : "aui-context-bar-cell"}
-              />
-            );
-          })}
         </span>
         <span className="aui-context-card-row">
           <span className="aui-context-legend">
