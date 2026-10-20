@@ -67,6 +67,36 @@ function measureTextWidth(text: string, font: string): number | null {
   }
 }
 
+/**
+ * The font's own vertical metrics: the ascent and descent the browser uses to
+ * place the baseline inside a line box. Measured, not guessed — the block
+ * caret has to sit on the same baseline the text does, and a hardcoded
+ * ascent ratio lands off the glyphs on other families.
+ */
+function fontVerticalMetrics(
+  font: string,
+  fontSize: number,
+): { ascent: number; descent: number } {
+  const fallback = { ascent: fontSize * 0.8, descent: fontSize * 0.2 };
+  try {
+    if (!measureCanvas && typeof document !== "undefined") {
+      measureCanvas = document.createElement("canvas");
+    }
+    const ctx = measureCanvas?.getContext("2d");
+    if (!ctx) return fallback;
+    ctx.font = font;
+    const m = ctx.measureText("Hxg0");
+    const ascent = m.fontBoundingBoxAscent;
+    const descent = m.fontBoundingBoxDescent;
+    return {
+      ascent: Number.isFinite(ascent) && ascent > 0 ? ascent : fallback.ascent,
+      descent: Number.isFinite(descent) && descent >= 0 ? descent : fallback.descent,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function px(value: string | null | undefined, fallback: number): number {
   if (!value) return fallback;
   const n = Number.parseFloat(value);
@@ -140,11 +170,17 @@ let mirrorDiv: HTMLDivElement | null = null;
  * logical-line math kept growing `left` past the right edge on a long single
  * line instead of dropping to the next visual row. Returns null when the
  * textarea has no layout (jsdom, display:none) so the canvas path still runs.
+ *
+ * The returned baseline is the text's own baseline, read with a zero-height
+ * inline-block probe (its bottom edge sits on the baseline). Measuring it
+ * beats modelling it: the browser's line layout and the canvas metrics
+ * disagree by a pixel or two, and a caret that misses the baseline by that
+ * much reads as "sitting below the letters".
  */
 function mirrorCaretPx(
   area: HTMLTextAreaElement,
   cs: CSSStyleDeclaration | null,
-): { left: number; top: number; lineHeight: number } | null {
+): { left: number; baseline: number; lineHeight: number } | null {
   if (!cs || typeof document === "undefined" || !area.clientWidth) return null;
   try {
     if (!mirrorDiv) {
@@ -173,9 +209,19 @@ function mirrorCaretPx(
     // A zero-width glyph keeps the marker on the line the next char would use.
     marker.textContent = area.value.slice(offset) ? area.value.slice(offset, offset + 1) : "\u200b";
     mirrorDiv.appendChild(marker);
+    // Zero-height inline-block: its bottom margin edge sits on the baseline.
+    const probe = document.createElement("span");
+    probe.style.display = "inline-block";
+    probe.style.width = "0";
+    probe.style.height = "0";
+    mirrorDiv.appendChild(probe);
     const fontSize = px(cs.fontSize, 14);
     const lh = cs.lineHeight === "normal" || !cs.lineHeight ? fontSize * 1.5 : px(cs.lineHeight, fontSize * 1.5);
-    return { left: marker.offsetLeft, top: marker.offsetTop, lineHeight: lh };
+    return {
+      left: marker.offsetLeft,
+      baseline: probe.offsetTop,
+      lineHeight: lh,
+    };
   } catch {
     return null;
   }
@@ -225,25 +271,37 @@ export function caretPx(
   const baseTop = (area.offsetTop || 0) + borderTop + paddingTop;
   void container;
 
-  // Ink-height block: start where the 1.1em block used to start (top aligned
-  // with the letter tops) and shorten the bottom so it stops at the baseline
-  // instead of hanging below it.
-  const caretHeight = Math.max(8, Math.round(fontSize * 0.8));
-  const topOffset = Math.max(0, (lineHeight - Math.round(fontSize * 1.1)) / 2);
+  // Native-cursor geometry, measured from the font itself: the caret is as
+  // tall as the font's ascent + descent (what a real text cursor spans) and
+  // its BOTTOM edge stands on the text's baseline, so the extra height is
+  // above the letters instead of hanging below them.
+  const { ascent, descent } = fontVerticalMetrics(font, fontSize);
+  const contentHeight = ascent + descent;
+  const caretHeight = Math.max(8, Math.round(contentHeight));
 
   const mirrored = mirrorCaretPx(area, cs);
   if (mirrored) {
     return {
-      left: (area.offsetLeft || 0) + mirrored.left - (area.scrollLeft || 0),
-      top: (area.offsetTop || 0) + mirrored.top - (area.scrollTop || 0) + topOffset,
+      left: (area.offsetLeft || 0) + borderLeft + mirrored.left - (area.scrollLeft || 0),
+      // The mirror's baseline is measured from the textarea's padding edge, so
+      // the block hangs from it: bottom edge on the baseline, height upward.
+      top:
+        (area.offsetTop || 0) +
+        borderTop +
+        mirrored.baseline -
+        caretHeight -
+        (area.scrollTop || 0),
       height: caretHeight,
       width: Math.max(1, chWidth),
     };
   }
 
+  // No layout to measure (jsdom, display:none): fall back to the font model.
+  const halfLeading = (lineHeight - contentHeight) / 2;
+  const baseline = baseTop + row * lineHeight + halfLeading + ascent;
   return {
     left: baseLeft + textWidth - (area.scrollLeft || 0),
-    top: baseTop + row * lineHeight - (area.scrollTop || 0) + topOffset,
+    top: baseline - caretHeight - (area.scrollTop || 0),
     height: caretHeight,
     width: Math.max(1, chWidth),
   };

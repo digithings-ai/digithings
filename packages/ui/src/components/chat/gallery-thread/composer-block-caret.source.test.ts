@@ -46,10 +46,15 @@ describe("gallery-thread composer renders the painted block caret", () => {
     expect(paintBlock).toMatch(/\.aui-composer-input:focus[\s\S]*?display:\s*block/);
   });
 
-  it("draws an ink-height block, not a full line-height column", () => {
+  it("draws a block as tall as a native cursor, standing on the baseline", () => {
     const caret = read("block-caret.tsx");
-    expect(caret).toContain("fontSize * 0.8");
-    expect(caret).toContain("topOffset");
+    // Height comes from the font's own ascent + descent, and the block's
+    // bottom edge lands on the baseline so it never hangs below the letters.
+    expect(caret).toContain("fontVerticalMetrics");
+    expect(caret).toContain("ascent + descent");
+    expect(caret).toContain("baseline - caretHeight");
+    // The measured path hangs the block from the text's own baseline.
+    expect(caret).toContain("mirrored.baseline");
   });
 
   it("keeps the block static under reduced motion", () => {
