@@ -5,8 +5,9 @@
  * slash palette: opaque, composer-width, command/label left, value right.
  * Arrow keys move; Enter toggles, opens a nested list, or commits an exclusive
  * pick (then the menu closes). Escape closes. Left/Right on `/language` cycles
- * the full ISO list. Exclusive rows mark the selection with a 3x3 cube diamond,
- * not the word “on”.
+ * the full ISO list. Exclusive rows mark the selection with the same `>`
+ * chevron as a user message, in a fixed left slot, and nothing else: hover
+ * moves the keyboard cursor but never the mark.
  */
 
 import {
@@ -17,6 +18,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { DotMatrix } from "@digithings/ui/chat/dot-matrix";
@@ -144,9 +146,11 @@ const THINKING_LABELS: Record<string, string> = {
 
 // digichat-local composer menu rows (not the kit DropdownMenu). These carry
 // their own pointer cursor because the kit owns no equivalent row.
-const MCP_SUGGEST_ROW_CLASS = "hover:bg-muted/50 flex w-full cursor-pointer items-baseline justify-between gap-4 rounded-none px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px]"; // canon-allow: digichat-local composer menu; kit owns no equivalent
+const MCP_SUGGEST_ROW_CLASS =
+  "hover:bg-muted/50 flex w-full cursor-pointer items-baseline justify-between gap-4 rounded-none px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px]"; // canon-allow: digichat-local composer menu; kit owns no equivalent
 
-const MENU_ROW_CLASS = "flex w-full cursor-pointer items-center gap-2 px-2 py-1 text-start text-sm outline-none"; // canon-allow: digichat-local composer menu; kit owns no equivalent
+const MENU_ROW_CLASS =
+  "flex w-full cursor-pointer items-center gap-2 px-2 py-1 text-start text-sm outline-none"; // canon-allow: digichat-local composer menu; kit owns no equivalent
 
 function slashName(id: string): string {
   return id.startsWith("/") ? id : `/${id}`;
@@ -173,8 +177,77 @@ function initialView(kind: ComposerMenuKind): MenuView {
 
 function composerHost(): HTMLElement | null {
   if (typeof document === "undefined") return null;
-  return document.querySelector<HTMLElement>(
-    '[data-thread-skin="digichat"] .aui-composer-root',
+  return document.querySelector<HTMLElement>('[data-thread-skin="digichat"] .aui-composer-root');
+}
+
+/**
+ * Square scroll indicator for the menu body.
+ *
+ * Safari draws its overlay scrollbar as an OS capsule and ignores
+ * `::-webkit-scrollbar` shape rules, so the native bar is hidden and this
+ * 6px track/thumb is painted instead. It follows scroll position, keyboard
+ * scrolling and list changes, and can be dragged.
+ */
+function MenuScrollbar({ targetRef }: { targetRef: React.RefObject<HTMLDivElement | null> }) {
+  const [thumb, setThumb] = useState<{ top: number; height: number } | null>(null);
+
+  useEffect(() => {
+    const el = targetRef.current;
+    if (!el) return;
+    const update = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      if (scrollHeight <= clientHeight + 1) {
+        setThumb(null);
+        return;
+      }
+      const height = Math.max(12, Math.round((clientHeight / scrollHeight) * clientHeight));
+      const maxTop = clientHeight - height;
+      const maxScroll = scrollHeight - clientHeight;
+      setThumb({
+        top: maxScroll > 0 ? Math.round((scrollTop / maxScroll) * maxTop) : 0,
+        height,
+      });
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      observer?.disconnect();
+    };
+  }, [targetRef]);
+
+  if (!thumb) return null;
+
+  const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const el = targetRef.current;
+    if (!el) return;
+    event.preventDefault();
+    const startY = event.clientY;
+    const startScroll = el.scrollTop;
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    const track = el.clientHeight - thumb.height;
+    const move = (e: PointerEvent) => {
+      if (track <= 0) return;
+      el.scrollTop = startScroll + ((e.clientY - startY) / track) * maxScroll;
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end, { once: true });
+  };
+
+  return (
+    <div className="dc-composer-menu-scroll" aria-hidden>
+      <div
+        className="dc-composer-menu-thumb"
+        style={{ top: thumb.top, height: thumb.height }}
+        onPointerDown={startDrag}
+      />
+    </div>
   );
 }
 
@@ -205,10 +278,8 @@ export function EmbedComposerMenu({
   mcpSeed?: string;
 }) {
   const api = useEmbedChatPrefs();
-  const available = sessionPickerModels(
-    models ?? [],
-    providerActive?.provider ?? null,
-  );
+  const menuBodyRef = useRef<HTMLDivElement | null>(null);
+  const available = sessionPickerModels(models ?? [], providerActive?.provider ?? null);
   const languages = useMemo(() => languageSelectOptions(), []);
   const toolOnInput = useMemo(
     () => ({
@@ -279,7 +350,8 @@ export function EmbedComposerMenu({
   if (appliedOpen !== openKey) {
     setAppliedOpen(openKey);
     const next = initialView(kind);
-    const providerSeeded = kind === "provider" ? tryResolveProviderInput(providerSeed ?? "") : undefined;
+    const providerSeeded =
+      kind === "provider" ? tryResolveProviderInput(providerSeed ?? "") : undefined;
     const mcpOpened = kind === "mcp" ? parseMcpSeed(mcpSeed ?? "") : undefined;
     if (providerSeeded) {
       setView("provider-key");
@@ -304,7 +376,10 @@ export function EmbedComposerMenu({
         setCursor(Math.max(0, EFFORTS.indexOf(api.prefs.effort as (typeof EFFORTS)[number])));
       } else if (kind === "search-engine") {
         setCursor(
-          Math.max(0, SEARCH_ENGINES.indexOf(api.prefs.searchEngine as (typeof SEARCH_ENGINES)[number])),
+          Math.max(
+            0,
+            SEARCH_ENGINES.indexOf(api.prefs.searchEngine as (typeof SEARCH_ENGINES)[number]),
+          ),
         );
       } else if (kind === "view") {
         setCursor(Math.max(0, VIEW_MODES.indexOf(api.prefs.view)));
@@ -409,7 +484,10 @@ export function EmbedComposerMenu({
         value: SEARCH_ENGINE_LABELS[api.prefs.searchEngine || "auto"] ?? api.prefs.searchEngine,
         activate: () => {
           setCursor(
-            Math.max(0, SEARCH_ENGINES.indexOf(api.prefs.searchEngine as (typeof SEARCH_ENGINES)[number])),
+            Math.max(
+              0,
+              SEARCH_ENGINES.indexOf(api.prefs.searchEngine as (typeof SEARCH_ENGINES)[number]),
+            ),
           );
           setView("search-engine");
         },
@@ -419,9 +497,7 @@ export function EmbedComposerMenu({
       rows.push({
         id: "provider",
         label: slashName("provider"),
-        value: providerActive
-          ? providerDisplayName(providerActive.provider)
-          : "Off",
+        value: providerActive ? providerDisplayName(providerActive.provider) : "Off",
         checked: Boolean(providerActive),
         activate: () => {
           const current = defaultProviderPick(providerActive?.provider, initialProvider);
@@ -432,7 +508,17 @@ export function EmbedComposerMenu({
       });
     }
     return rows;
-  }, [api, toolRows, toolOnInput, mcpConfigs, available, onActivateProvider, languageCodes, providerActive, initialProvider]);
+  }, [
+    api,
+    toolRows,
+    toolOnInput,
+    mcpConfigs,
+    available,
+    onActivateProvider,
+    languageCodes,
+    providerActive,
+    initialProvider,
+  ]);
 
   const languageRows = useMemo(
     (): MenuRow[] =>
@@ -810,20 +896,20 @@ export function EmbedComposerMenu({
         },
       },
       ...PROVIDER_MENU_ORDER.map((id) => ({
-      id,
-      label: slashName(id),
-      value: `${providerDisplayName(id)} · own key`,
-      checked: providerActive?.provider === id,
-      exclusive: true,
-      activate: () => {
-        setProviderPick(id);
-        setKeyDraft("");
-        setModelDraft("");
-        setCustomModel(false);
-        setProviderError(null);
-        setLiveModels(undefined);
-        setView("provider-key");
-      },
+        id,
+        label: slashName(id),
+        value: `${providerDisplayName(id)} · own key`,
+        checked: providerActive?.provider === id,
+        exclusive: true,
+        activate: () => {
+          setProviderPick(id);
+          setKeyDraft("");
+          setModelDraft("");
+          setCustomModel(false);
+          setProviderError(null);
+          setLiveModels(undefined);
+          setView("provider-key");
+        },
       })),
     ];
     return rows;
@@ -858,19 +944,19 @@ export function EmbedComposerMenu({
               ? thinkingRows
               : view === "tools"
                 ? toolsRows
-            : view === "mcp"
-              ? mcpRows
-              : view === "mcp-edit"
-                ? []
-                : view === "provider"
-                  ? providerRows
-                  : view === "provider-model"
-                    ? providerModelRows
-                    : view === "provider-key"
-                      ? []
-                      : view === "search-engine"
-                        ? engineRows
-                        : modelRows;
+                : view === "mcp"
+                  ? mcpRows
+                  : view === "mcp-edit"
+                    ? []
+                    : view === "provider"
+                      ? providerRows
+                      : view === "provider-model"
+                        ? providerModelRows
+                        : view === "provider-key"
+                          ? []
+                          : view === "search-engine"
+                            ? engineRows
+                            : modelRows;
   const title =
     view === "language"
       ? "/language"
@@ -884,15 +970,15 @@ export function EmbedComposerMenu({
               ? "/thinking"
               : view === "tools"
                 ? "/tools"
-            : view === "mcp" || view === "mcp-edit"
-              ? "/mcp"
-              : view === "provider" || view === "provider-key" || view === "provider-model"
-                ? "/provider"
-                : view === "search-engine"
-                  ? "/search-engine"
-                  : view === "help"
-                    ? "/help"
-                    : "Settings";
+                : view === "mcp" || view === "mcp-edit"
+                  ? "/mcp"
+                  : view === "provider" || view === "provider-key" || view === "provider-model"
+                    ? "/provider"
+                    : view === "search-engine"
+                      ? "/search-engine"
+                      : view === "help"
+                        ? "/help"
+                        : "Settings";
 
   const safeCursor = rows.length ? Math.min(cursor, rows.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);
@@ -1136,451 +1222,446 @@ export function EmbedComposerMenu({
           escape
         </Button>
       </div>
-      <div
-        className={`dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col py-0.5 ${
-          view === "mcp-edit" ? "overflow-visible" : "overflow-y-auto"
-        }`}
-      >
-        {view === "provider-key" ? (
-          <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5" htmlFor={keyFormId}>
-            <span className="text-muted-foreground text-xs">Paste API key, then Enter</span>
-            <Input
-              ref={keyInputRef}
-              id={keyFormId}
-              type="password"
-              value={keyDraft}
-              placeholder={providerKeyPlaceholder(providerPick)}
-              autoComplete="off"
-              spellCheck={false}
-              aria-invalid={Boolean(providerError)}
-              className="border-border bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none h-auto"
-              onChange={(e) => {
-                setKeyDraft(e.target.value);
-                setProviderError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  submitProviderKey();
-                }
-              }}
-            />
-          </Label>
-        ) : null}
-        {view === "provider-model" && customModel ? (
-          <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5">
-            <span className="text-muted-foreground text-xs">Model slug, then Enter</span>
-            <Input
-              ref={customModelRef}
-              type="text"
-              value={modelDraft}
-              autoComplete="off"
-              spellCheck={false}
-              className="border-border bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none h-auto"
-              onChange={(e) => {
-                setModelDraft(e.target.value);
-                setProviderError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void activateProvider(modelDraft);
-                }
-              }}
-            />
-          </Label>
-        ) : null}
-        {view === "mcp-edit" ? (
-          <div className="flex flex-col gap-2 px-3 py-1.5">
-            <pre className="border-border text-muted-foreground max-h-32 overflow-auto border px-2 py-1.5 font-mono text-[11px] leading-4">
-              {mcpConfigJson(mcpDraft)}
-            </pre>
-            <div className="flex flex-col items-stretch gap-1">
-              <span className="text-muted-foreground text-xs" id="mcp-id-label">
-                id
-              </span>
-              <div className="relative z-10" data-mcp-id-field>
-                <Input
-                  type="text"
-                  value={mcpDraft.id}
-                  disabled={mcpDraft.source === "operator"}
-                  placeholder="linear"
-                  autoComplete="off"
-                  spellCheck={false}
-                  role="combobox"
-                  aria-labelledby="mcp-id-label"
-                  aria-autocomplete="list"
-                  aria-expanded={mcpIdListOpen}
-                  aria-controls={mcpDraft.source === "session" ? "mcp-id-suggestions" : undefined}
-                  aria-activedescendant={
-                    mcpIdListOpen && mcpSuggestIndex >= 0 && mcpSuggestions[mcpSuggestIndex]
-                      ? `mcp-suggest-${mcpSuggestions[mcpSuggestIndex]!.id}`
-                      : undefined
-                  }
-                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none disabled:opacity-60 h-auto"
-                  onFocus={() => {
-                    if (mcpDraft.source === "session") setMcpIdDropdownOpen(true);
-                  }}
-                  onBlur={(e) => {
-                    const root = e.currentTarget.closest("[data-mcp-id-field]");
-                    if (e.relatedTarget instanceof Node && root?.contains(e.relatedTarget)) return;
-                    closeMcpIdDropdown();
-                  }}
-                  onChange={(e) => {
-                    setMcpSuggestIndex(-1);
-                    if (mcpDraft.source === "session") setMcpIdDropdownOpen(true);
-                    commitMcpDraft(applyWellKnownMcp(mcpDraft, e.target.value));
-                  }}
-                  onKeyDown={(e) => {
-                    if (mcpDraft.source === "operator") return;
-                    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                      if (!mcpSuggestions.length) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (!mcpIdDropdownOpen) {
-                        setMcpIdDropdownOpen(true);
-                        setMcpSuggestIndex(e.key === "ArrowDown" ? 0 : mcpSuggestions.length - 1);
-                        return;
-                      }
-                      const delta = e.key === "ArrowDown" ? 1 : -1;
-                      setMcpSuggestIndex((i) => {
-                        if (i < 0) return delta === 1 ? 0 : mcpSuggestions.length - 1;
-                        return nextPaletteIndex(i, delta, mcpSuggestions.length);
-                      });
-                      return;
-                    }
-                    if (e.key === "Enter") {
-                      if (!mcpIdListOpen) return;
-                      const hit = mcpSuggestIndex >= 0 ? mcpSuggestions[mcpSuggestIndex] : undefined;
-                      if (!hit) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      applyMcpSuggestion(hit.id);
-                    }
-                  }}
-                />
-                {mcpIdListOpen ? (
-                  <div
-                    id="mcp-id-suggestions"
-                    role="listbox"
-                    aria-labelledby="mcp-id-label"
-                    data-mcp-id-dropdown
-                    className="border-border bg-background absolute inset-x-0 top-full z-20 mt-px max-h-40 overflow-y-auto overscroll-contain rounded-none border"
-                    onMouseDown={(e) => e.preventDefault()}
-                  >
-                    {mcpSuggestionGroups.map((g) => (
-                      <div key={g.group}>
-                        <div className="text-muted-foreground px-3 py-1 text-xs">{g.group}</div>
-                        {g.servers.map((row) => {
-                          const index = mcpSuggestions.findIndex((s) => s.id === row.id);
-                          const highlighted = index === mcpSuggestIndex;
-                          return (
-                            <button
-                              key={row.id}
-                              id={`mcp-suggest-${row.id}`}
-                              type="button"
-                              role="option"
-                              tabIndex={-1}
-                              aria-label={row.id}
-                              aria-selected={highlighted}
-                              data-cursor={highlighted ? "true" : undefined}
-                              className={`${MCP_SUGGEST_ROW_CLASS} ${
-                                highlighted ? "bg-muted/50" : ""
-                              }`}
-                              ref={(node) => {
-                                if (!highlighted || !node) return;
-                                const root = node.closest("[data-mcp-id-dropdown]");
-                                if (!(root instanceof HTMLElement)) return;
-                                const n = node.getBoundingClientRect();
-                                const r = root.getBoundingClientRect();
-                                if (n.bottom > r.bottom) root.scrollTop += n.bottom - r.bottom;
-                                else if (n.top < r.top) root.scrollTop -= r.top - n.top;
-                              }}
-                              onMouseEnter={() => setMcpSuggestIndex(index)}
-                              onClick={() => applyMcpSuggestion(row.id)}
-                            >
-                              <span className="min-w-0 shrink-0 font-medium">{row.id}</span>
-                              <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
-                                {wellKnownMcpHost(row.url) || row.auth}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <Label className="flex flex-col items-stretch gap-1">
-              <span className="text-muted-foreground text-xs">label</span>
+      <div className="relative min-h-0">
+        <div
+          ref={menuBodyRef}
+          className={`dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col py-0.5 ${
+            view === "mcp-edit" ? "overflow-visible" : "overflow-y-auto"
+          }`}
+        >
+          {view === "provider-key" ? (
+            <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5" htmlFor={keyFormId}>
+              <span className="text-muted-foreground text-xs">Paste API key, then Enter</span>
               <Input
-                type="text"
-                value={mcpDraft.label}
+                ref={keyInputRef}
+                id={keyFormId}
+                type="password"
+                value={keyDraft}
+                placeholder={providerKeyPlaceholder(providerPick)}
                 autoComplete="off"
                 spellCheck={false}
-                className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
-                onChange={(e) => commitMcpDraft({ ...mcpDraft, label: e.target.value })}
+                aria-invalid={Boolean(providerError)}
+                className="border-border bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none h-auto"
+                onChange={(e) => {
+                  setKeyDraft(e.target.value);
+                  setProviderError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitProviderKey();
+                  }
+                }}
               />
             </Label>
-            {mcpDraft.source === "session" ? (
-              <Label className="flex flex-col items-stretch gap-1">
-                <span className="text-muted-foreground text-xs">url</span>
-                <Input
-                  type="url"
-                  value={mcpDraft.url}
-                  placeholder="https://…"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
-                  onChange={(e) => commitMcpDraft({ ...mcpDraft, url: e.target.value })}
-                />
-              </Label>
-            ) : (
-              <p className="text-muted-foreground text-xs">url is operator-managed (BFF)</p>
-            )}
-            <div className="flex flex-col items-stretch gap-1">
-              <span className="text-muted-foreground text-xs" id="mcp-auth-label">
-                auth
-              </span>
-              <div
-                role="radiogroup"
-                aria-labelledby="mcp-auth-label"
-                className="border-border flex border"
-                onKeyDown={(e) => {
-                  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const delta = e.key === "ArrowRight" ? 1 : -1;
-                  const next = cycleMcpAuth(mcpDraft.auth, delta);
-                  commitMcpDraft({ ...mcpDraft, auth: next });
-                  queueMicrotask(() => {
-                    document.getElementById(`mcp-auth-${next}`)?.focus();
-                  });
+          ) : null}
+          {view === "provider-model" && customModel ? (
+            <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5">
+              <span className="text-muted-foreground text-xs">Model slug, then Enter</span>
+              <Input
+                ref={customModelRef}
+                type="text"
+                value={modelDraft}
+                autoComplete="off"
+                spellCheck={false}
+                className="border-border bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none h-auto"
+                onChange={(e) => {
+                  setModelDraft(e.target.value);
+                  setProviderError(null);
                 }}
-              >
-                {MCP_AUTH.map((kind, index) => {
-                  const selected = mcpDraft.auth === kind;
-                  return (
-                    <button
-                      key={kind}
-                      id={`mcp-auth-${kind}`}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      tabIndex={selected ? 0 : -1}
-                      className={`min-w-0 flex-1 px-2 py-1 font-mono text-xs outline-none outline-offset-[-1px] ${
-                        index > 0 ? "border-border border-l" : ""
-                      } ${selected ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}
-                      onClick={() => commitMcpDraft({ ...mcpDraft, auth: kind })}
-                    >
-                      {kind}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {mcpDraft.auth === "oauth" ? (
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void activateProvider(modelDraft);
+                  }
+                }}
+              />
+            </Label>
+          ) : null}
+          {view === "mcp-edit" ? (
+            <div className="flex flex-col gap-2 px-3 py-1.5">
+              <pre className="border-border text-muted-foreground max-h-32 overflow-auto border px-2 py-1.5 font-mono text-[11px] leading-4">
+                {mcpConfigJson(mcpDraft)}
+              </pre>
               <div className="flex flex-col items-stretch gap-1">
-                <span className="text-muted-foreground text-xs">token / oauth client secret</span>
-                <div className="flex min-w-0 items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-auto shrink-0 whitespace-nowrap border-border px-2 py-1"
-                    disabled={mcpOAuthBusy}
-                    onClick={() => void authenticateMcp()}
-                  >
-                    {mcpOAuthBusy ? "Authenticating…" : "Authenticate"}
-                  </Button>
-                  <span className="text-muted-foreground whitespace-nowrap text-xs">or</span>
-                  <Input
-                    type="password"
-                    value={mcpDraft.token}
-                    placeholder="OAuth token"
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
-                    onChange={(e) => commitMcpDraft({ ...mcpDraft, token: e.target.value })}
-                  />
-                </div>
-              </div>
-            ) : mcpDraft.auth !== "none" ? (
-              <Label className="flex flex-col items-stretch gap-1">
-                <span className="text-muted-foreground text-xs">token</span>
-                <Input
-                  type="password"
-                  value={mcpDraft.token}
-                  placeholder="Bearer token"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
-                  onChange={(e) => commitMcpDraft({ ...mcpDraft, token: e.target.value })}
-                />
-              </Label>
-            ) : null}
-            <div className="flex flex-col items-stretch gap-1">
-              <span className="text-muted-foreground text-xs">other</span>
-              {Object.entries(mcpDraft.extra).map(([key, value]) => (
-                <Label key={key} className="flex flex-col items-stretch gap-1">
-                  <span className="text-muted-foreground text-xs">{key}</span>
+                <span className="text-muted-foreground text-xs" id="mcp-id-label">
+                  id
+                </span>
+                <div className="relative z-10" data-mcp-id-field>
                   <Input
                     type="text"
-                    value={value}
+                    value={mcpDraft.id}
+                    disabled={mcpDraft.source === "operator"}
+                    placeholder="linear"
+                    autoComplete="off"
+                    spellCheck={false}
+                    role="combobox"
+                    aria-labelledby="mcp-id-label"
+                    aria-autocomplete="list"
+                    aria-expanded={mcpIdListOpen}
+                    aria-controls={mcpDraft.source === "session" ? "mcp-id-suggestions" : undefined}
+                    aria-activedescendant={
+                      mcpIdListOpen && mcpSuggestIndex >= 0 && mcpSuggestions[mcpSuggestIndex]
+                        ? `mcp-suggest-${mcpSuggestions[mcpSuggestIndex]!.id}`
+                        : undefined
+                    }
+                    className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none disabled:opacity-60 h-auto"
+                    onFocus={() => {
+                      if (mcpDraft.source === "session") setMcpIdDropdownOpen(true);
+                    }}
+                    onBlur={(e) => {
+                      const root = e.currentTarget.closest("[data-mcp-id-field]");
+                      if (e.relatedTarget instanceof Node && root?.contains(e.relatedTarget))
+                        return;
+                      closeMcpIdDropdown();
+                    }}
+                    onChange={(e) => {
+                      setMcpSuggestIndex(-1);
+                      if (mcpDraft.source === "session") setMcpIdDropdownOpen(true);
+                      commitMcpDraft(applyWellKnownMcp(mcpDraft, e.target.value));
+                    }}
+                    onKeyDown={(e) => {
+                      if (mcpDraft.source === "operator") return;
+                      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                        if (!mcpSuggestions.length) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!mcpIdDropdownOpen) {
+                          setMcpIdDropdownOpen(true);
+                          setMcpSuggestIndex(e.key === "ArrowDown" ? 0 : mcpSuggestions.length - 1);
+                          return;
+                        }
+                        const delta = e.key === "ArrowDown" ? 1 : -1;
+                        setMcpSuggestIndex((i) => {
+                          if (i < 0) return delta === 1 ? 0 : mcpSuggestions.length - 1;
+                          return nextPaletteIndex(i, delta, mcpSuggestions.length);
+                        });
+                        return;
+                      }
+                      if (e.key === "Enter") {
+                        if (!mcpIdListOpen) return;
+                        const hit =
+                          mcpSuggestIndex >= 0 ? mcpSuggestions[mcpSuggestIndex] : undefined;
+                        if (!hit) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        applyMcpSuggestion(hit.id);
+                      }
+                    }}
+                  />
+                  {mcpIdListOpen ? (
+                    <div
+                      id="mcp-id-suggestions"
+                      role="listbox"
+                      aria-labelledby="mcp-id-label"
+                      data-mcp-id-dropdown
+                      className="border-border bg-background absolute inset-x-0 top-full z-20 mt-px max-h-40 overflow-y-auto overscroll-contain rounded-none border"
+                      onMouseDown={(e) => e.preventDefault()}
+                    >
+                      {mcpSuggestionGroups.map((g) => (
+                        <div key={g.group}>
+                          <div className="text-muted-foreground px-3 py-1 text-xs">{g.group}</div>
+                          {g.servers.map((row) => {
+                            const index = mcpSuggestions.findIndex((s) => s.id === row.id);
+                            const highlighted = index === mcpSuggestIndex;
+                            return (
+                              <button
+                                key={row.id}
+                                id={`mcp-suggest-${row.id}`}
+                                type="button"
+                                role="option"
+                                tabIndex={-1}
+                                aria-label={row.id}
+                                aria-selected={highlighted}
+                                data-cursor={highlighted ? "true" : undefined}
+                                className={`${MCP_SUGGEST_ROW_CLASS} ${
+                                  highlighted ? "bg-muted/50" : ""
+                                }`}
+                                ref={(node) => {
+                                  if (!highlighted || !node) return;
+                                  const root = node.closest("[data-mcp-id-dropdown]");
+                                  if (!(root instanceof HTMLElement)) return;
+                                  const n = node.getBoundingClientRect();
+                                  const r = root.getBoundingClientRect();
+                                  if (n.bottom > r.bottom) root.scrollTop += n.bottom - r.bottom;
+                                  else if (n.top < r.top) root.scrollTop -= r.top - n.top;
+                                }}
+                                onMouseEnter={() => setMcpSuggestIndex(index)}
+                                onClick={() => applyMcpSuggestion(row.id)}
+                              >
+                                <span className="min-w-0 shrink-0 font-medium">{row.id}</span>
+                                <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
+                                  {wellKnownMcpHost(row.url) || row.auth}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              <Label className="flex flex-col items-stretch gap-1">
+                <span className="text-muted-foreground text-xs">label</span>
+                <Input
+                  type="text"
+                  value={mcpDraft.label}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                  onChange={(e) => commitMcpDraft({ ...mcpDraft, label: e.target.value })}
+                />
+              </Label>
+              {mcpDraft.source === "session" ? (
+                <Label className="flex flex-col items-stretch gap-1">
+                  <span className="text-muted-foreground text-xs">url</span>
+                  <Input
+                    type="url"
+                    value={mcpDraft.url}
+                    placeholder="https://…"
                     autoComplete="off"
                     spellCheck={false}
                     className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
-                    onChange={(e) =>
-                      commitMcpDraft({
-                        ...mcpDraft,
-                        extra: { ...mcpDraft.extra, [key]: e.target.value },
-                      })
-                    }
+                    onChange={(e) => commitMcpDraft({ ...mcpDraft, url: e.target.value })}
                   />
                 </Label>
-              ))}
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  value={mcpFieldName}
-                  placeholder="field"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
-                  onChange={(e) => setMcpFieldName(e.target.value)}
-                />
-                <Input
-                  type="text"
-                  value={mcpFieldValue}
-                  placeholder="value"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
-                  onChange={(e) => setMcpFieldValue(e.target.value)}
+              ) : (
+                <p className="text-muted-foreground text-xs">url is operator-managed (BFF)</p>
+              )}
+              <div className="flex flex-col items-stretch gap-1">
+                <span className="text-muted-foreground text-xs" id="mcp-auth-label">
+                  auth
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="mcp-auth-label"
+                  className="border-border flex border"
                   onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
+                    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
                     e.preventDefault();
-                    const key = mcpFieldName.trim();
-                    if (
-                      !key ||
-                      key === "id" ||
-                      key === "label" ||
-                      key === "url" ||
-                      key === "auth" ||
-                      key === "token"
-                    ) {
-                      return;
-                    }
-                    commitMcpDraft({
-                      ...mcpDraft,
-                      extra: { ...mcpDraft.extra, [key]: mcpFieldValue },
+                    e.stopPropagation();
+                    const delta = e.key === "ArrowRight" ? 1 : -1;
+                    const next = cycleMcpAuth(mcpDraft.auth, delta);
+                    commitMcpDraft({ ...mcpDraft, auth: next });
+                    queueMicrotask(() => {
+                      document.getElementById(`mcp-auth-${next}`)?.focus();
                     });
-                    setMcpFieldName("");
-                    setMcpFieldValue("");
                   }}
-                />
-              </div>
-            </div>
-            {mcpError ? (
-              <p className="text-destructive text-xs" role="alert">
-                {mcpError}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        {view === "help" ? (
-          <div className="flex flex-col gap-2 px-3 py-2 text-xs leading-relaxed" data-embed-help>
-            <p className="text-muted-foreground">
-              Ask about OCC policies, procedures and help articles, search internal
-              notes, or check live support tickets.
-            </p>
-            <div className="flex flex-col gap-1">
-              <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
-                Try asking
-              </span>
-              <span>How do I raise a support ticket?</span>
-              <span>What is our data retention policy?</span>
-              <span>Summarise my open support tickets.</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
-                Commands
-              </span>
-              <span className="font-mono">/models · /language · /tools · /mcp · /settings · /new</span>
-            </div>
-            <span className="text-muted-foreground">Enter sends · Shift+Enter adds a line</span>
-            <span>
-              Need a person?{" "}
-              <a className="underline underline-offset-2" href="mailto:contact@digithings.ai">
-                contact@digithings.ai
-              </a>
-            </span>
-          </div>
-        ) : null}
-        {view !== "provider-key" &&
-        !(view === "provider-model" && customModel) &&
-        view !== "mcp-edit" &&
-        view !== "help"
-          ? rows.map((row, index) => {
-              const toggle = typeof row.checked === "boolean" && (view === "main" || view === "tools");
-              const exclusive = Boolean(row.exclusive);
-              return (
-                <button
-                  key={row.id}
-                  id={`dc-menu-${row.id}`}
-                  type="button"
-                  role={toggle ? "menuitemcheckbox" : exclusive ? "menuitemradio" : "menuitem"}
-                  aria-checked={typeof row.checked === "boolean" ? row.checked : undefined}
-                  data-cursor={index === cursor ? "true" : undefined}
-                  className={MENU_ROW_CLASS}
-                  ref={(node) => {
-                    if (index === cursor) node?.scrollIntoView({ block: "nearest" });
-                  }}
-                  onMouseEnter={() => setCursor(index)}
-                  onClick={() => row.activate()}
-                  onKeyDown={(e) => onRowKey(e, index)}
                 >
-                  {/* Selection is the user-message chevron, in a fixed slot:
-                      the cursor never reflows or resizes a row. */}
-                  <span className="aui-menu-cursor" aria-hidden>
-                    {index === cursor ? <DotMatrix state="user" className="size-3.5" /> : null}
-                  </span>
-                  <span className="min-w-0 shrink-0 font-medium">{row.label}</span>
-                  {row.value || (exclusive && row.checked) ? (
-                    <span className="text-muted-foreground ml-auto flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
-                      {row.value ? <span className="truncate">{row.value}</span> : null}
+                  {MCP_AUTH.map((kind, index) => {
+                    const selected = mcpDraft.auth === kind;
+                    return (
+                      <button
+                        key={kind}
+                        id={`mcp-auth-${kind}`}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        tabIndex={selected ? 0 : -1}
+                        className={`min-w-0 flex-1 px-2 py-1 font-mono text-xs outline-none outline-offset-[-1px] ${
+                          index > 0 ? "border-border border-l" : ""
+                        } ${selected ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}
+                        onClick={() => commitMcpDraft({ ...mcpDraft, auth: kind })}
+                      >
+                        {kind}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {mcpDraft.auth === "oauth" ? (
+                <div className="flex flex-col items-stretch gap-1">
+                  <span className="text-muted-foreground text-xs">token / oauth client secret</span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-auto shrink-0 whitespace-nowrap border-border px-2 py-1"
+                      disabled={mcpOAuthBusy}
+                      onClick={() => void authenticateMcp()}
+                    >
+                      {mcpOAuthBusy ? "Authenticating…" : "Authenticate"}
+                    </Button>
+                    <span className="text-muted-foreground whitespace-nowrap text-xs">or</span>
+                    <Input
+                      type="password"
+                      value={mcpDraft.token}
+                      placeholder="OAuth token"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                      onChange={(e) => commitMcpDraft({ ...mcpDraft, token: e.target.value })}
+                    />
+                  </div>
+                </div>
+              ) : mcpDraft.auth !== "none" ? (
+                <Label className="flex flex-col items-stretch gap-1">
+                  <span className="text-muted-foreground text-xs">token</span>
+                  <Input
+                    type="password"
+                    value={mcpDraft.token}
+                    placeholder="Bearer token"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                    onChange={(e) => commitMcpDraft({ ...mcpDraft, token: e.target.value })}
+                  />
+                </Label>
+              ) : null}
+              <div className="flex flex-col items-stretch gap-1">
+                <span className="text-muted-foreground text-xs">other</span>
+                {Object.entries(mcpDraft.extra).map(([key, value]) => (
+                  <Label key={key} className="flex flex-col items-stretch gap-1">
+                    <span className="text-muted-foreground text-xs">{key}</span>
+                    <Input
+                      type="text"
+                      value={value}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                      onChange={(e) =>
+                        commitMcpDraft({
+                          ...mcpDraft,
+                          extra: { ...mcpDraft.extra, [key]: e.target.value },
+                        })
+                      }
+                    />
+                  </Label>
+                ))}
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    value={mcpFieldName}
+                    placeholder="field"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                    onChange={(e) => setMcpFieldName(e.target.value)}
+                  />
+                  <Input
+                    type="text"
+                    value={mcpFieldValue}
+                    placeholder="value"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                    onChange={(e) => setMcpFieldValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      const key = mcpFieldName.trim();
+                      if (
+                        !key ||
+                        key === "id" ||
+                        key === "label" ||
+                        key === "url" ||
+                        key === "auth" ||
+                        key === "token"
+                      ) {
+                        return;
+                      }
+                      commitMcpDraft({
+                        ...mcpDraft,
+                        extra: { ...mcpDraft.extra, [key]: mcpFieldValue },
+                      });
+                      setMcpFieldName("");
+                      setMcpFieldValue("");
+                    }}
+                  />
+                </div>
+              </div>
+              {mcpError ? (
+                <p className="text-destructive text-xs" role="alert">
+                  {mcpError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {view === "help" ? (
+            <div className="flex flex-col gap-2 px-3 py-2 text-xs leading-relaxed" data-embed-help>
+              <p className="text-muted-foreground">
+                Ask about OCC policies, procedures and help articles, search internal notes, or
+                check live support tickets.
+              </p>
+              <div className="flex flex-col gap-1">
+                <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
+                  Try asking
+                </span>
+                <span>How do I raise a support ticket?</span>
+                <span>What is our data retention policy?</span>
+                <span>Summarise my open support tickets.</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
+                  Commands
+                </span>
+                <span className="font-mono">
+                  /models · /language · /tools · /mcp · /settings · /new
+                </span>
+              </div>
+              <span className="text-muted-foreground">Enter sends · Shift+Enter adds a line</span>
+              <span>
+                Need a person?{" "}
+                <a className="underline underline-offset-2" href="mailto:contact@digithings.ai">
+                  contact@digithings.ai
+                </a>
+              </span>
+            </div>
+          ) : null}
+          {view !== "provider-key" &&
+          !(view === "provider-model" && customModel) &&
+          view !== "mcp-edit" &&
+          view !== "help"
+            ? rows.map((row, index) => {
+                const toggle =
+                  typeof row.checked === "boolean" && (view === "main" || view === "tools");
+                const exclusive = Boolean(row.exclusive);
+                return (
+                  <button
+                    key={row.id}
+                    id={`dc-menu-${row.id}`}
+                    type="button"
+                    role={toggle ? "menuitemcheckbox" : exclusive ? "menuitemradio" : "menuitem"}
+                    aria-checked={typeof row.checked === "boolean" ? row.checked : undefined}
+                    data-cursor={index === cursor ? "true" : undefined}
+                    className={MENU_ROW_CLASS}
+                    ref={(node) => {
+                      if (index === cursor) node?.scrollIntoView({ block: "nearest" });
+                    }}
+                    onMouseEnter={() => setCursor(index)}
+                    onClick={() => row.activate()}
+                    onKeyDown={(e) => onRowKey(e, index)}
+                  >
+                    {/* Selection is the user-message chevron, in a fixed slot:
+                      it marks the checked row only, so hover never moves it,
+                      reflows a row or resizes a row. */}
+                    <span className="aui-menu-cursor" aria-hidden>
                       {exclusive && row.checked ? (
-                        <span data-slot="dropdown-menu-radio-item-indicator" className="inline-flex shrink-0">
-                          <span
-                            className="aui-menu-mark inline-flex shrink-0"
-                            aria-hidden
-                          >
-                            {[0, 1, 0, 1, 1, 1, 0, 1, 0].map((on, cell) => (
-                              <span
-                                key={cell}
-                                className={
-                                  on ? "aui-menu-mark-cell is-on" : "aui-menu-mark-cell"
-                                }
-                              />
-                            ))}
-                          </span>
-                        </span>
+                        <DotMatrix state="user" className="size-3.5" />
                       ) : null}
                     </span>
-                  ) : null}
-                </button>
-              );
-            })
-          : null}
-        {providerPending ? (
-          <p className="text-muted-foreground px-3 py-1 text-xs">Checking key…</p>
-        ) : null}
-        {providerError ? (
-          <p className="text-destructive px-3 py-1 text-xs" role="alert">
-            {providerError}
-          </p>
-        ) : null}
+                    <span className="min-w-0 shrink-0 font-medium">{row.label}</span>
+                    {row.value ? (
+                      <span className="text-muted-foreground ml-auto flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
+                        <span className="truncate">{row.value}</span>
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })
+            : null}
+          {providerPending ? (
+            <p className="text-muted-foreground px-3 py-1 text-xs">Checking key…</p>
+          ) : null}
+          {providerError ? (
+            <p className="text-destructive px-3 py-1 text-xs" role="alert">
+              {providerError}
+            </p>
+          ) : null}
+        </div>
+        <MenuScrollbar targetRef={menuBodyRef} />
       </div>
     </div>
   );

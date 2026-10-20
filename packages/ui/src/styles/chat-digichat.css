@@ -224,6 +224,41 @@
   background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
 }
 
+/* Menu body: Safari's overlay scrollbar is an OS capsule and ignores the
+   shape rules above, so the native bar is hidden and the menu paints this
+   square 6px thumb instead (MenuScrollbar in embed-composer-menu). */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body {
+  scrollbar-width: none;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.dc-composer-menu-scroll {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  bottom: 0;
+  width: 6px;
+  pointer-events: none;
+}
+
+.dc-composer-menu-thumb {
+  position: absolute;
+  right: 0;
+  width: 6px;
+  border-radius: 0;
+  background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+  pointer-events: auto;
+}
+
+.dc-composer-menu-thumb:hover {
+  background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input {
   font-family: var(--font-mono);
   font-size: 0.88rem;
@@ -1076,23 +1111,6 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-highlighted],
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted],
-/* Selected row: a 3x3 cube diamond, the same grid motif as the context
-   meter, instead of the dropdown radio disc. */
-.aui-menu-mark {
-  display: grid;
-  grid-template-columns: repeat(3, 2px);
-  grid-auto-rows: 2px;
-  gap: 1px;
-}
-
-.aui-menu-mark-cell {
-  background: color-mix(in oklab, var(--ink-mute) 22%, transparent);
-}
-
-.aui-menu-mark-cell.is-on {
-  background: currentColor;
-}
-
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [aria-selected="true"],
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [aria-selected="true"] {
   background: transparent;
@@ -1102,19 +1120,14 @@
   outline-offset: -1px;
 }
 
-/* Cursor row: no outline, wash or size change. The chevron is the only
-   mark, and it sits in a slot reserved on every row so nothing reflows. */
+/* Selected row: one chevron, in a slot reserved on every row so hover and
+   selection never reflow or resize a row. */
 .aui-menu-cursor {
   display: inline-flex;
   width: 1rem;
   flex: none;
   align-items: center;
   justify-content: center;
-  visibility: hidden;
-}
-
-.dc-composer-menu [data-cursor="true"] .aui-menu-cursor {
-  visibility: visible;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings],
