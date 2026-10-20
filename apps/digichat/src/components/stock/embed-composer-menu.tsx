@@ -154,9 +154,9 @@ const SEARCH_ENGINE_LABELS: Record<string, string> = {
 
 const VIEW_LABELS: Record<string, string> = {
   hidden: "Hidden · answer only",
-  compact: "Compact · closed",
+  quiet: "Quiet · one line",
   balanced: "Balanced · collapse when done",
-  detailed: "Detailed · stays open",
+  verbose: "Verbose · stays open",
 };
 
 const THINKING_LABELS: Record<string, string> = {

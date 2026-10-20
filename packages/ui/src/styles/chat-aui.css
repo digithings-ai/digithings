@@ -757,6 +757,8 @@
 .digichat-thread [data-slot="aui_work-chain-content"],
 .digichat-launcher [data-slot="aui_work-chain-content"] {
   padding-left: 0.25rem;
+  /* A little air between the chain header and the rows inside it. */
+  padding-top: 0.3rem;
 }
 
 .digichat-thread [data-slot="tool-group-trigger"],
