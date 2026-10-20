@@ -101,7 +101,7 @@ export function SettingsPage({ path }: { path: string }) {
           <SegmentedControl
             aria-label="Theme"
             value={settings.theme}
-            options={THEMES.map((theme) => ({ value: theme, label: theme }))}
+            options={THEMES.filter((theme) => theme !== "light").map((theme) => ({ value: theme, label: theme }))}
             onChange={(theme: ThemeName) => patch({ theme })}
           />
         </div>

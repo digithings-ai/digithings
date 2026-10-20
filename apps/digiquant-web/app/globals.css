@@ -580,6 +580,13 @@ body {
   --vela-radius-md: 0;
   --vela-radius-lg: 0;
 }
+/* The Vela workspace paints its own grey surface. The desk is one solid
+   black canvas, so the widget sits on the desk background. The widget
+   injects its stylesheet at mount and wins equal-specificity ties by
+   order, so `!important` is the only lever that holds. */
+.vela-host .vela-workspace {
+  background: var(--bg) !important;
+}
 .vela-host *:not(.vela-callout):not([style*="border-radius:50%"]):not([style*="border-radius: 50%"]) {
   border-radius: 0 !important;
 }
@@ -719,6 +726,20 @@ body {
   }
   .desk-head .cmd-in {
     width: 2.5rem;
+  }
+  /* The path is the field value, and a 2.5rem field cannot show it
+     without cutting a glyph mid-word. Collapsed, the field carries the
+     key hint; it opens over the header with the full path on focus.
+     The size matches .cmd-in above. */
+  .desk-head .cmd:not(:focus-within) .cmd-in {
+    color: transparent;
+  }
+  .desk-head .cmd:not(:focus-within)::before {
+    content: "/";
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1;
   }
   .desk-head .cmd:focus-within {
     position: absolute;

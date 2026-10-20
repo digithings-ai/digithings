@@ -96,6 +96,7 @@ export function DeskCommand({ pathname }: { pathname: string }) {
                 variant="ghost"
                 id={`cmd-opt-${i}`}
                 role="option"
+                tabIndex={-1}
                 aria-selected={i === sel}
                 className="cmd-hit"
                 onMouseDown={(e) => {
