@@ -84,6 +84,68 @@ describe("routing and auth", () => {
     expect(container).not.toHaveBeenCalled();
   });
 
+  it("rejects a run_date that is not a calendar date", async () => {
+    const container = vi.fn();
+    for (const runDate of ["2026-13-01", "2026-02-30", "20261020", "01-10-2026", 7]) {
+      const res = await handle(
+        post("session", { session: "asia", run_date: runDate }),
+        env(),
+        { fetch: container } as unknown as Fetcher,
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "invalid_run_date" });
+    }
+    expect(container).not.toHaveBeenCalled();
+  });
+
+  it("forwards a valid run_date on the session route", async () => {
+    let forwarded: { run_date?: string } | undefined;
+    const container = vi.fn(async (request: Request) => {
+      forwarded = JSON.parse(await request.text()) as { run_date?: string };
+      return Response.json(containerResult({ exit_code: 0 }));
+    });
+    const res = await handle(
+      post("session", { job_id: "twelve-x-asia", session: "asia", run_date: "2026-10-01" }),
+      env(),
+      { fetch: container } as unknown as Fetcher,
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded?.run_date).toBe("2026-10-01");
+  });
+
+  it("treats an empty run_date as absent, like the workflow default", async () => {
+    let forwarded: { run_date?: string } | undefined;
+    const container = vi.fn(async (request: Request) => {
+      forwarded = JSON.parse(await request.text()) as { run_date?: string };
+      return Response.json(containerResult({ exit_code: 0 }));
+    });
+    const res = await handle(
+      post("session", { session: "asia", run_date: "" }),
+      env(),
+      { fetch: container } as unknown as Fetcher,
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded?.run_date).toBeUndefined();
+  });
+
+  it("does not forward a run_date on the ingest route", async () => {
+    let forwarded: { run_date?: string } | undefined;
+    const container = vi.fn(async (request: Request) => {
+      forwarded = JSON.parse(await request.text()) as { run_date?: string };
+      return Response.json(containerResult({ exit_code: 0 }));
+    });
+    const res = await handle(
+      post("ingest", { bucket: "daily", run_date: "2026-10-01" }),
+      env(),
+      { fetch: container } as unknown as Fetcher,
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded?.run_date).toBeUndefined();
+  });
+
   it("forwards a session with the session the workflow passes", async () => {
     let forwarded: { session: string; timeout_seconds: number } | undefined;
     const container = vi.fn(async (request: Request) => {

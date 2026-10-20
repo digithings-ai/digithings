@@ -79,6 +79,39 @@ describe("twelve-x runner jobs", () => {
     expect(forwarded.timeout_seconds).toBe(7200);
   });
 
+  it("leaves the run_date out of the body when the row carries none", async () => {
+    const runnerFetch = vi.fn(async (_request: Request) =>
+      Response.json({ ok: true, exit_code: 0, duration_ms: 4, alert: "none" }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      TWELVEX_RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const job = JOBS.find((row) => row.id === "twelve-x-asia");
+    if (!job) throw new Error("missing asia job");
+    await dispatchTwelvex(env, job, job.cron);
+    const request = runnerFetch.mock.calls[0][0] as Request;
+    expect(JSON.parse(await request.text())).not.toHaveProperty("run_date");
+  });
+
+  it("forwards the run_date a row carries", async () => {
+    const runnerFetch = vi.fn(async (_request: Request) =>
+      Response.json({ ok: true, exit_code: 0, duration_ms: 4, alert: "none" }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      TWELVEX_RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const job = JOBS.find((row) => row.id === "twelve-x-asia");
+    if (!job) throw new Error("missing asia job");
+    const backfill: Job = { ...job, inputs: { session: "asia", run_date: "2026-10-01" } };
+    await dispatchTwelvex(env, backfill, backfill.cron);
+    const request = runnerFetch.mock.calls[0][0] as Request;
+    expect(JSON.parse(await request.text())).toMatchObject({ run_date: "2026-10-01" });
+  });
+
   it("dispatch sends the daily row to the runner", async () => {
     const runnerFetch = vi.fn(async (_request: Request) =>
       Response.json({ ok: true, exit_code: 0, duration_ms: 4, alert: "none" }),

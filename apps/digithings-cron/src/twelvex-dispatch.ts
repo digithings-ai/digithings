@@ -31,10 +31,14 @@ export async function dispatchTwelvex(
   }
   const bucket = job.inputs?.bucket;
   const session = job.inputs?.session;
+  // The workflow's optional backfill date. Absent on the daily crons, so the
+  // key is left out of the body entirely and the graph takes its forward path.
+  const runDate = job.inputs?.run_date;
   const body = {
     job_id: job.id,
     bucket,
     session,
+    run_date: runDate,
     timeout_seconds:
       job.timeoutSeconds ??
       (job.route === "ingest" ? 1200 : job.route === "session" ? 7200 : 300),

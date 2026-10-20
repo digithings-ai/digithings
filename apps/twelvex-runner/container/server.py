@@ -2,7 +2,8 @@
 
 POST /run/ingest    body {"bucket": "intraday"|"daily"|"weekly"|"quarterly", "dry_run": bool}
 POST /run/heartbeat body {"dry_run": bool}
-POST /run/session   body {"session": "asia"|"london"|"new_york", "dry_run": bool}
+POST /run/session   body {"session": "asia"|"london"|"new_york",
+                           "run_date": "YYYY-MM-DD" (optional), "dry_run": bool}
 
 Runs the same argv as the GitHub Actions steps. DRY_RUN=1 or "dry_run": true
 returns exit 0 and does not start the command, so nothing is written.
@@ -18,6 +19,7 @@ import re
 import subprocess
 import threading
 import time
+from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = "0.0.0.0"
@@ -27,6 +29,8 @@ _LOCK = threading.Lock()
 # The FX research sessions the workflow runs. A request string never becomes
 # an argument, so the set of sessions is a literal list here.
 SESSIONS = ("asia", "london", "new_york")
+# The workflow's run_date input: a calendar date, never a timestamp.
+RUN_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 _SECRET = re.compile(
     r"(?i)(bearer\s+)[A-Za-z0-9._\-+/=]+"
@@ -70,8 +74,34 @@ def command_for(route: str, bucket: str | None, session: str | None = None) -> l
     raise ValueError("unknown route")
 
 
+def validate_run_date(value: object) -> str | None:
+    """Accept a calendar date (YYYY-MM-DD) or nothing. Reject anything else.
+
+    The workflow passes its run_date input straight into the graph's RUN_DATE
+    env, and an empty input means the forward path. So does an empty string
+    here: it is absent, not malformed.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("invalid_run_date")
+    trimmed = value.strip()
+    if trimmed == "":
+        return None
+    if not RUN_DATE.match(trimmed):
+        raise ValueError("invalid_run_date")
+    try:
+        date.fromisoformat(trimmed)
+    except ValueError:
+        raise ValueError("invalid_run_date") from None
+    return trimmed
+
+
 def steps_for(
-    route: str, bucket: str | None, session: str | None
+    route: str,
+    bucket: str | None,
+    session: str | None,
+    run_date: str | None = None,
 ) -> list[tuple[list[str], dict[str, str], bool]]:
     """(argv, extra_env, fatal) per step, in order.
 
@@ -82,13 +112,13 @@ def steps_for(
     if route == "session":
         graph = command_for(route, bucket, session)
         assert session is not None  # command_for accepted only a known literal
+        graph_env = {"FX_SESSION": session, "TRADE_INTELLIGENCE_MODE": "alongside"}
+        if run_date:
+            # The workflow passes RUN_DATE to the graph step only.
+            graph_env["RUN_DATE"] = run_date
         return [
             (["python", "-m", "twelve_x.scripts.ingest_calendar"], {}, False),
-            (
-                graph,
-                {"FX_SESSION": session, "TRADE_INTELLIGENCE_MODE": "alongside"},
-                True,
-            ),
+            (graph, graph_env, True),
         ]
     return [(command_for(route, bucket, session), {}, True)]
 
@@ -195,7 +225,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": "invalid_json"})
             return
         try:
-            steps = steps_for(route, body.get("bucket"), body.get("session"))
+            run_date = validate_run_date(body.get("run_date"))
+            steps = steps_for(route, body.get("bucket"), body.get("session"), run_date)
         except ValueError as exc:
             self._json(400, {"error": str(exc)})
             return

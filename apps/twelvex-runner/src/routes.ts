@@ -1,4 +1,11 @@
-/** Paths the container HTTP server accepts. Cron copies these. */
+/**
+ * Paths the container HTTP server accepts. Cron copies these.
+ *
+ * The argv each route runs lives in one place only: the container entrypoint
+ * (container/server.py). A second copy of it here would drift from the pinned
+ * twelve-x ref without any run failing, so this module keeps no command
+ * mirror.
+ */
 export const ROUTES = ["ingest", "heartbeat", "session"] as const;
 export type Route = (typeof ROUTES)[number];
 
@@ -21,24 +28,17 @@ export function isSession(value: string): value is Session {
   return (SESSIONS as readonly string[]).includes(value);
 }
 
-/** Same argv the GitHub Actions steps run. No shell. */
-export function commandFor(route: Route, bucket?: string, session?: string): string[] {
-  if (route === "heartbeat") {
-    return ["python", "-m", "twelve_x.scripts.primarketet_session_heartbeat"];
-  }
-  if (route === "session") {
-    // The graph is the step that decides the exit code. The calendar ingest
-    // runs first and is not fatal, exactly like the workflow step that
-    // carries continue-on-error.
-    if (!session || !isSession(session)) {
-      throw new Error("session requires session asia|london|new_york");
-    }
-    return ["python", "-m", "twelve_x.graph"];
-  }
-  if (!bucket || !isBucket(bucket)) {
-    throw new Error("ingest requires bucket intraday|daily|weekly|quarterly");
-  }
-  return ["python", "-m", "twelve_x.scripts.ingest_market_context", bucket];
+/**
+ * A calendar date in YYYY-MM-DD form, the only shape the workflow's run_date
+ * input accepts. A real date only: 2026-02-30 is not a date.
+ */
+export function isIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  // The date parser normalizes an overflowing day (2026-02-30 becomes
+  // 2026-03-01), so the round trip is what proves the calendar date exists.
+  return parsed.toISOString().slice(0, 10) === value;
 }
 
 export function defaultTimeoutSeconds(route: Route): number {
