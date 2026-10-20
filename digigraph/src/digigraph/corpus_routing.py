@@ -44,6 +44,26 @@ _RESERVED_TOOL_NAMES = frozenset(
 _HEADER_CORPUS_INDEX = "x-digi-corpus-index"
 _HEADER_VAULT_PREFIX = "x-digi-vault-prefix"
 _HEADER_TENANT = "x-digi-tenant"
+# Every entry key this parser understands — the camelCase and the snake_case
+# spelling of each known field. An entry key outside this set is *ignored*
+# (forward compatibility: a newer map may carry fields this build predates),
+# but it is never ignored silently. The map is read key by key and the override
+# is built from explicit keyword arguments, so an unknown key would otherwise
+# vanish with no log line and no error — a renamed or misspelled field would
+# look exactly like a working map. DIG-4459 decision note D2 requires a warning
+# that names the key; the VALUE of an unknown key is never logged.
+_KNOWN_ENTRY_KEYS = frozenset(
+    {
+        "digisearchIndex",
+        "digisearch_index",
+        "vaultPathPrefix",
+        "vault_path_prefix",
+        "researchSystemPrompt",
+        "research_system_prompt",
+        "lockSessionControls",
+        "lock_session_controls",
+    }
+)
 
 
 class TenantCorpusMapError(RuntimeError):
@@ -114,6 +134,9 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
     Genuinely unset / empty → ``{}`` (single-tenant; headers may select corpus).
     Set but unusable (bad JSON, non-object, or every entry dropped) →
     ``TenantCorpusMapError`` — same discipline as digivault ``tenant_scope``.
+
+    An entry key this build does not know is ignored, but it is warned about
+    (tenant slug + key names, never values) rather than dropped in silence.
     """
     text = (raw if raw is not None else "").strip()
     if not text:
@@ -138,6 +161,15 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
         if not isinstance(value, dict):
             logger.warning("%s[%s]: entry must be an object", _ENV_VAR, normalized_slug)
             continue
+        unknown_keys = sorted(str(key) for key in value if key not in _KNOWN_ENTRY_KEYS)
+        if unknown_keys:
+            # Key names only, never values (DIG-4569 / DIG-4459 note D2).
+            logger.warning(
+                "%s[%s]: ignoring unknown key(s): %s",
+                _ENV_VAR,
+                normalized_slug,
+                ", ".join(unknown_keys),
+            )
         idx = value.get("digisearchIndex") or value.get("digisearch_index")
         prefix = value.get("vaultPathPrefix") or value.get("vault_path_prefix")
         prompt = value.get("researchSystemPrompt") or value.get("research_system_prompt")
