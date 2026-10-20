@@ -36,7 +36,9 @@ and `TRADE_INTELLIGENCE_MODE=alongside`.
 calendar date in `YYYY-MM-DD` form. The Worker answers `400 invalid_run_date`
 for anything else and the container checks it a second time, so a malformed
 date never reaches the graph. An empty string counts as no `run_date`, like
-the workflow's empty default. With no `run_date` the graph takes its forward
+the workflow's empty default. The dispatcher in `digithings-cron` trims the
+value and reads an empty one as no date, the same way the Worker does, so a
+padded date in a job row is forwarded clean. With no `run_date` the graph takes its forward
 high-water-mark path. The three daily session crons pass none, so they keep
 the forward path.
 

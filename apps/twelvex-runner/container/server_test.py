@@ -152,7 +152,9 @@ ALLOWED_MODULES = {
 }
 MODULE_PATH = re.compile(r"twelve_x(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
 # A copy of an argv in code: "python", "-m", "twelve_x...
-ARGV_COPY = re.compile(r"python\"?\s*,\s*\"?-m\"?\s*,\s*\"?twelve_x")
+# Both quote styles count. A single-quoted copy is the same second source of
+# truth as a double-quoted one, so the scan must not only look for one of them.
+ARGV_COPY = re.compile(r"['\"]?python['\"]?\s*,\s*['\"]?-m['\"]?\s*,\s*['\"]?twelve_x")
 SKIP_DIRS = {"node_modules", ".wrangler", "dist", "build", "__pycache__", ".git"}
 
 
@@ -199,6 +201,19 @@ class OneCommandSourceTests(unittest.TestCase):
         routes = (self.app / "src" / "routes.ts").read_text()
         self.assertNotIn("twelve_x", routes)
         self.assertNotIn("python", routes)
+
+    def test_the_guard_catches_a_copy_in_either_quote_style(self):
+        for copy in (
+            'const cmd = ["python", "-m", "twelve_x.graph"];',
+            "const cmd = ['python', '-m', 'twelve_x.graph'];",
+            'cmd = ["python", "-m", "twelve_x.scripts.ingest_calendar"]',
+            "cmd = ['python', '-m', 'twelve_x.scripts.ingest_market_context']",
+        ):
+            self.assertTrue(ARGV_COPY.search(copy), copy)
+
+    def test_the_guard_does_not_flag_a_mention_of_python(self):
+        for text in ("const python = 1;", "twelve_x.graph is the graph module"):
+            self.assertFalse(ARGV_COPY.search(text), text)
 
 
 class RunDateTests(unittest.TestCase):
