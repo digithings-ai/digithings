@@ -1,15 +1,26 @@
 /**
  * Financial digichat session for the digiquant desk.
  *
- * Tenant config is a Cloudflare KV record (key `digiquant`). The cheap
- * inference key is a worker secret (`DIGICHAT_CHEAP_INFERENCE_KEY`). Neither
- * value is read from the repo. Chat stays fail-closed until both are present.
- * The key is sent only as an Authorization header to the tenant origin and
- * is never copied into a response or a JSON body.
+ * A turn goes to the digichat BFF (`POST {origin}/api/chat`, the route in
+ * apps/digichat/src/app/api/chat/route.ts) as one UIMessage, authenticated with
+ * a digichat machine key (`digi_live_…`) for the digiquant tenant. That key is
+ * the session's only credential: the tenant pins the cheap model and owns the
+ * MCP servers (Gloomberb, LuxAlgo, dashboard), so no provider key is held here.
+ * The reply is read from the AI SDK UI-message stream the route answers with.
+ *
+ * Tenant config is a Cloudflare KV record (key `digiquant`). The machine key is
+ * a worker secret (`DIGICHAT_MACHINE_KEY`). Neither value is read from the repo.
+ * Chat stays fail-closed until both are present. The key is sent only as an
+ * Authorization header to the tenant origin and is never copied into a
+ * response or a JSON body.
  */
 
 export const TENANT_KV_KEY = "digiquant";
-export const CHEAP_INFERENCE_KEY_ENV = "DIGICHAT_CHEAP_INFERENCE_KEY";
+export const MACHINE_KEY_ENV = "DIGICHAT_MACHINE_KEY";
+/** Digichat machine-key prefix the BFF accepts on Authorization (request-auth.ts). */
+export const MACHINE_KEY_PREFIX = "digi_live_";
+/** Upper bound on one forwarded turn, so a stalled stream cannot hold the worker. */
+export const TURN_TIMEOUT_MS = 60_000;
 
 /** LuxAlgo tools registered and audited on the digiquant MCP server. */
 export const LUXALGO_TOOLS = [
@@ -42,7 +53,7 @@ export interface TenantKv {
 
 export interface FinancialSessionEnv {
   DIGICHAT_TENANT?: TenantKv;
-  DIGICHAT_CHEAP_INFERENCE_KEY?: string;
+  DIGICHAT_MACHINE_KEY?: string;
 }
 
 export interface TenantConfig {
@@ -77,7 +88,7 @@ const SECRET_FIELDS = new Set([
   "authorization",
 ]);
 
-const TOOL_NAME = /^[a-z][a-z0-9_]{0,80}$/;
+const GLOOMBERB_TOOL = /^gloomberb_[a-z0-9_]{1,80}$/;
 const MODEL_NAME = /^[a-z0-9][a-z0-9._/-]{0,80}$/i;
 
 export function financialDeskFrom(value: string | null | undefined): FinancialDesk {
@@ -97,7 +108,7 @@ function toolNames(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const names: string[] = [];
   for (const item of value) {
-    if (typeof item !== "string" || !TOOL_NAME.test(item)) return null;
+    if (typeof item !== "string" || !GLOOMBERB_TOOL.test(item)) return null;
     names.push(item);
   }
   return names;
@@ -112,10 +123,11 @@ function originOk(raw: string): string | null {
   }
   if (url.username || url.password || url.search || url.hash) return null;
   const loopback = url.hostname === "127.0.0.1" || url.hostname === "localhost";
-  const https = url.protocol === "https:";
-  const localHttp = url.protocol === "http:" && loopback;
-  if (!https && !localHttp) return null;
-  return url.origin;
+  // The bearer key goes only to a digithings host, or to loopback in local dev.
+  const house = url.hostname === "digithings.ai" || url.hostname.endsWith(".digithings.ai");
+  if (url.protocol === "https:" && (house || loopback)) return url.origin;
+  if (url.protocol === "http:" && loopback) return url.origin;
+  return null;
 }
 
 /** Parse a KV tenant record. A secret field, or a bad origin, is refuse-closed. */
@@ -161,23 +173,50 @@ export function buildFinancialSession(config: TenantConfig, desk: FinancialDesk)
 export async function loadFinancialSession(
   env: FinancialSessionEnv,
   desk: FinancialDesk,
-): Promise<{ config: TenantConfig; session: FinancialSession; inferenceKey: string } | null> {
-  const inferenceKey = env.DIGICHAT_CHEAP_INFERENCE_KEY?.trim() ?? "";
-  if (!inferenceKey) return null;
+): Promise<{ config: TenantConfig; session: FinancialSession; machineKey: string } | null> {
+  const machineKey = env.DIGICHAT_MACHINE_KEY?.trim() ?? "";
+  if (!machineKey.startsWith(MACHINE_KEY_PREFIX) || machineKey.length <= MACHINE_KEY_PREFIX.length) return null;
   const raw = await env.DIGICHAT_TENANT?.get(TENANT_KV_KEY);
   const config = parseTenantConfig(raw);
   if (!config) return null;
-  return { config, session: buildFinancialSession(config, desk), inferenceKey };
+  return { config, session: buildFinancialSession(config, desk), machineKey };
 }
 
 export interface ForwardedTurn {
   reply: string;
 }
 
-/** POST the turn to the tenant digichat origin. The key stays on the header. */
+/**
+ * The desk context, read paths and tool families, as a lead-in to the user's text.
+ * The BFF takes no system field from the client, and its MCP servers come from the
+ * tenant config, so this names what to use; it grants nothing by itself.
+ */
+export function turnPreamble(session: FinancialSession): string {
+  const families = ["LuxAlgo", ...(session.tools.gloomberb.length > 0 ? ["Gloomberb"] : [])];
+  return [
+    `digiquant ${session.context}.`,
+    `Dashboard reads: ${session.tools.app.join(", ")}.`,
+    `Tools: ${families.join(" and ")} via MCP.`,
+  ].join(" ");
+}
+
+/** The JSON body `POST /api/chat` accepts: `messages` as UIMessage entries with text parts. */
+export function turnBody(session: FinancialSession, text: string): string {
+  return JSON.stringify({
+    messages: [
+      {
+        id: crypto.randomUUID(),
+        role: "user",
+        parts: [{ type: "text", text: `${turnPreamble(session)}\n\n${text}` }],
+      },
+    ],
+  });
+}
+
+/** POST the turn to the tenant digichat BFF. The key stays on the header. */
 export async function forwardFinancialTurn(
   config: TenantConfig,
-  inferenceKey: string,
+  machineKey: string,
   session: FinancialSession,
   text: string,
   fetchFn: typeof fetch = fetch,
@@ -189,35 +228,49 @@ export async function forwardFinancialTurn(
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${inferenceKey}`,
+        accept: "text/event-stream",
+        authorization: `Bearer ${machineKey}`,
+        "x-digi-caller": "digiquant-desk",
+        "x-digi-model": session.cheapModel,
       },
-      body: JSON.stringify({
-        model: session.cheapModel,
-        desk: session.desk,
-        context: session.context,
-        tools: session.tools,
-        messages: [{ role: "user", content: text }],
-      }),
+      body: turnBody(session, text),
+      signal: AbortSignal.timeout(TURN_TIMEOUT_MS),
     });
   } catch {
     return { error: "digichat could not be reached" };
   }
   if (!res.ok) return { error: "digichat returned no reply" };
-  let body: unknown;
+  let raw: string;
   try {
-    body = await res.json();
+    raw = await res.text();
   } catch {
-    return { error: "digichat returned no reply" };
+    return { error: "digichat could not be reached" };
   }
-  const reply = readReply(body);
+  const reply = readStreamReply(raw);
   if (!reply) return { error: "digichat returned no reply" };
   return { reply };
 }
 
-function readReply(body: unknown): string | null {
-  if (!isRecord(body)) return null;
-  if (typeof body.reply === "string" && body.reply.trim()) return body.reply.trim();
-  const data = isRecord(body.data) ? body.data : null;
-  if (data && typeof data.reply === "string" && data.reply.trim()) return data.reply.trim();
-  return null;
+/**
+ * Assistant text from an AI SDK UI-message stream (SSE `data:` lines carrying
+ * `text-delta` chunks, ending in `[DONE]`). An `error` chunk means no reply.
+ */
+export function readStreamReply(raw: string): string | null {
+  let text = "";
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    const data = line.slice(5).trim();
+    if (!data || data === "[DONE]") continue;
+    let chunk: unknown;
+    try {
+      chunk = JSON.parse(data);
+    } catch {
+      continue;
+    }
+    if (!isRecord(chunk)) continue;
+    if (chunk.type === "error") return null;
+    if (chunk.type === "text-delta" && typeof chunk.delta === "string") text += chunk.delta;
+  }
+  const reply = text.trim();
+  return reply ? reply : null;
 }

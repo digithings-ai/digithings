@@ -111,7 +111,6 @@ export function legacyDashboardTarget(pathname, options) {
   if (rest === "" || isFxHubRest(rest)) {
     return routeFxHubToApp(options) ? "/app" : null;
   }
-  if (rest === "") return "/app";
   const alias = TOOL_ROUTE_ALIASES.find(([from]) => from === rest);
   if (alias) return legacyDeskHref(alias[1]);
   if (LEGACY_DESK_PATHS.includes(rest)) return legacyDeskHref(rest);
