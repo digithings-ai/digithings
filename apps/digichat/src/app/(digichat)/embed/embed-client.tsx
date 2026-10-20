@@ -77,6 +77,7 @@ import {
 } from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
+import { backendLabel } from "@/lib/provider-label";
 import type { EmbedUiParams } from "@/lib/embed-ui-params";
 import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
 import {
@@ -1170,6 +1171,10 @@ function EmbedChat({
         }),
       tenantAllowsWeb,
       showByok,
+      // The backend that serves this chat: the own-key provider the
+      // session carries, else the house backend. This is the label the
+      // composer chip shows, so it follows the active provider.
+      providerLabel: backendLabel(byokIsSet ? byokProvider : null),
       showModels,
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
@@ -1248,6 +1253,8 @@ function EmbedChat({
       chatPrefs,
       tenantAllowsWeb,
       showByok,
+      byokIsSet,
+      byokProvider,
       showModels,
       catalog,
       catalogTools,
