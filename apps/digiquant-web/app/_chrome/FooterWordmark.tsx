@@ -7,8 +7,9 @@ import { QuantWordmark } from "./QuantWordmark";
 /** The closing mark above the footer, drawn at the width between the page rails (one gutter in from each) so its
  *  edges line up with the frame. It builds like the top hero each time it
  *  scrolls into view on a load, then keeps flashing. Reduced motion shows
- *  the finished mark. Server render and no-JS show a blank canvas box: the
- *  shared-definition port paints on mount (DIG-2702), unlike the old SVG. */
+ *  the finished mark. The server render and a no-JS page show the settled
+ *  mark: the shared-definition port renders it as a CSS mask over a themed
+ *  background, so the canvas is never an empty box before it paints. */
 export function FooterWordmark() {
   const safe = useMotionSafe();
   const ref = useRef<HTMLDivElement>(null);
