@@ -924,18 +924,21 @@ class TestOperatorDefaultCannotBillTheOperator:
 
     ``TestByokModelCannotRedirectTheBill`` covers the model the caller *sent*. This
     covers the model they didn't: when the header is absent, digigraph falls back to
-    the deployment's own default, and on the shipped release config that default is an
-    ``openrouter/…`` string served by the operator's ``OPENROUTER_API_KEY``. The user's
-    key is accepted, displayed as active, and never spent — the same mis-billing as a
-    foreign header, reached by omission instead of by input (#2490).
+    the deployment's own default, and a default that names a registered provider (the
+    ``openrouter/…`` string the release config used to pin) is served by the operator's
+    ``OPENROUTER_API_KEY``. The user's key is accepted, displayed as active, and never
+    spent — the same mis-billing as a foreign header, reached by omission (#2490).
     """
 
-    def test_the_shipped_release_config_is_exactly_this_bug(self) -> None:
+    def test_the_shipped_release_config_moved_off_the_operator_default(self) -> None:
         """Encode the deployment, not just the predicate.
 
-        An env-pinned test proves the rule; this proves the rule fires on the config
-        digichat actually ships, and it keeps proving it if someone edits the dev
-        config out from under the tests above.
+        An env-pinned test proves the rule; this proves which shape the config
+        digichat actually ships carries. The tier defaults are bare ``deepseek/…``
+        cheap-inference slugs (the V4.1 Flash tier change), whose head is not a
+        registered provider, so the shipped default no longer routes the bill to the
+        operator. Inverted rather than deleted -- this is what notices if an
+        ``openrouter/…`` default ever comes back.
         """
         import yaml
 
@@ -947,10 +950,10 @@ class TestOperatorDefaultCannotBillTheOperator:
         defaults = cfg["defaults"]
         assert defaults, "release config must pin the tier defaults this test reasons about"
         for tier, model in defaults.items():
-            assert byok_operator_model_routes_elsewhere("openai", model), (
-                f"release default {tier}={model!r} no longer reproduces #2490 — if the "
-                "release config moved to a bare model this assertion should be inverted, "
-                "not deleted"
+            assert not byok_operator_model_routes_elsewhere("openai", model), (
+                f"release default {tier}={model!r} names a registered provider again, so "
+                "an unconfigured BYOK key is back to being idled while the operator pays "
+                "(#2490) — pin the default, do not delete this test"
             )
 
     def test_normalizing_the_operator_default_would_answer_the_wrong_question(self) -> None:

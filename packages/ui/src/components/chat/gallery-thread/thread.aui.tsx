@@ -72,7 +72,6 @@ import {
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
-import { ThreadSource } from "./source";
 import { TypedWelcomeCopy } from "./typed-welcome-copy";
 import { useDigichatWarmupPhase } from "../use-warmup-phase";
 import { OverlayScrollbar } from "../overlay-scrollbar";
@@ -1066,7 +1065,6 @@ const AssistantMessage: FC = () => {
     ToolFallback: ToolFallbackComponent = ToolFallback,
     ToolGroup,
     ReasoningGroup,
-    Source: SourceComponent = ThreadSource,
   } = useContext(ThreadComponentsContext);
   const { reasoning: reasoningMode, toolCalls: toolCallsMode } = useContext(
     ThreadGroupDisclosureContext,

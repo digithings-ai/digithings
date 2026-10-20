@@ -398,6 +398,7 @@
         "DIGICHAT_EMBED_HOSTS": "var",
         "DIGICHAT_ENABLED_SERVICES": "var",
         "DIGICHAT_REQUIRE_ROOT_AUTH": "var",
+        "DIGICHAT_TENANTS_KV": "kv_namespace",
         "DT_BASE_URL": "var",
         "DT_TARGET": "var",
         "DT_VARIANT": "var",
