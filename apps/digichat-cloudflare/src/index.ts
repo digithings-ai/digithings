@@ -17,6 +17,7 @@ import {
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { isOccShellPath, occGate } from "./occ-gate";
 import { digichatContainerReset } from "./admin-reset";
+import { fetchContainerWithRetry } from "./container-retry";
 
 /**
  * `env` from `cloudflare:workers` is untyped until `wrangler types` generates
@@ -33,7 +34,9 @@ const ZAMMAD_MCP_PREFIX = "/api/mcp/zammad";
 /**
  * Worker-owned, secret-gated recovery lever for the shared Container. Handled
  * here (never proxied to the container) so `destroy()` can reclaim an instance
- * that outlived its idle tail while `max_instances = 1` blocks every cold start.
+ * that outlived its idle tail and still holds one of the Worker's container
+ * slots (wrangler.toml allows two, so a stuck instance no longer starves
+ * every cold start on its own).
  */
 const DIGICHAT_ADMIN_RESET_PATH = "/_digichat-admin/container/reset";
 
@@ -177,6 +180,9 @@ export default {
     // instance keeps its boot env, so a forgotten bump silently serves the old
     // image. See paths.ts. Same `containerId` the reset lever above destroys.
     const container = getContainer(workerEnv.DIGICHAT, containerId);
-    return container.fetch(request);
+    // The container slot is shared, and a rollout can leave the previous
+    // instance draining while this one starts. A busy slot comes back as a
+    // retryable 503 instead of a hard failure (DIG-4487).
+    return fetchContainerWithRetry(request, (req) => container.fetch(req));
   },
 };

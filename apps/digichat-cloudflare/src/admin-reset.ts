@@ -1,8 +1,9 @@
 /**
  * Worker-owned recovery lever: destroy the shared digichat Container instance.
  *
- * With `max_instances = 1` (wrangler.toml), a Container instance that never
- * returns to `stopped` occupies the only slot and blocks every cold start — an
+ * With two slots (wrangler.toml, DIG-4487), a Container instance that never
+ * returns to `stopped` holds one of them and leaves the other free for a
+ * cold start — but two such instances exhaust the pool again. An
  * observed instance (the id pinned at the time) stayed `running` after minutes
  * of idleness despite `sleepAfter = "1m"`. `stop()` / `destroy()` exist only as
  * in-Durable Object methods, so the only recovery was deleting the whole
