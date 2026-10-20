@@ -223,3 +223,96 @@ def test_the_composed_registry_is_written_outside_the_repository(tmp_path):
     assert oct(os.stat(str(target)).st_mode & 0o777) == "0o600"
     with target.open("r", encoding="utf-8") as handle:
         assert json.load(handle)["occ.digithings.ai"]["token"] == "tok-occ"
+
+
+def test_a_symlinked_spelling_of_the_repository_is_refused(tmp_path, monkeypatch):
+    """The DIG-4588 failure under a symlinked path.
+
+    A symlink that points INTO the repository resolves to a path inside
+    it. Comparing the unresolved spelling against the repository root
+    never matches, so the token-bearing registry would be written inside
+    the checkout.
+    """
+    stand_in = tmp_path / "repo"
+    stand_in.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setattr(registry, "repo_root", lambda: str(stand_in))
+
+    link = tmp_path / "link-to-repo"
+    link.symlink_to(stand_in, target_is_directory=True)
+    through_link = link / "registry.json"
+
+    composed, _ = registry.compose_registry(LIVE, {})
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.write_out(composed, str(through_link))
+    assert "repository" in str(refusal.value)
+    assert not through_link.exists()
+    assert not (stand_in / "registry.json").exists()
+
+    # The other direction: a path spelled inside the repository is
+    # refused even when it is a symlink pointing out of it, because
+    # writing it would replace the symlink with a regular file that
+    # carries tenant tokens inside the checkout.
+    link_out = stand_in / "link-out.json"
+    link_out.symlink_to(outside / "registry.json")
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.write_out(composed, str(link_out))
+    assert "repository" in str(refusal.value)
+    assert not (outside / "registry.json").exists()
+
+
+def test_the_write_is_refused_when_the_repository_root_cannot_be_resolved(tmp_path, monkeypatch):
+    """No resolvable root means no containment guarantee: fail closed."""
+    monkeypatch.setattr(registry, "repo_root", lambda: None)
+    target = tmp_path / "registry.json"
+    composed, _ = registry.compose_registry(LIVE, {})
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.write_out(composed, str(target))
+    assert "repository root" in str(refusal.value)
+    assert not target.exists()
+
+
+def test_the_admin_key_never_enters_the_argument_list(tmp_path, monkeypatch):
+    """A command line is readable by every local process through ps."""
+    key = "admin-key-value"
+    key_file = tmp_path / "admin-key.txt"
+    key_file.write_text(key + "\n", encoding="utf-8")
+
+    seen = {}
+
+    def fake_run(argv, cwd=None, stdin_text=None):
+        seen["argv"] = list(argv)
+        seen["stdin"] = stdin_text
+        return 0, "\nhttp_code=200\n"
+
+    monkeypatch.setattr(registry, "_run", fake_run)
+    code, status, _body = registry.recycle_container(str(key_file), "https://example.invalid/reset")
+    assert code == 0
+    assert status == "200"
+    assert key not in " ".join(seen["argv"])
+    assert key not in "".join(seen["argv"])
+    assert seen["stdin"] == "x-digi-admin-key: " + key + "\n"
+
+
+def test_an_admin_key_file_holding_more_than_one_line_is_refused(tmp_path):
+    key_file = tmp_path / "admin-key.txt"
+    key_file.write_text("first-line\nsecond-line\n", encoding="utf-8")
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.recycle_container(str(key_file), "https://example.invalid/reset")
+    assert "one line" in str(refusal.value)
+
+
+def test_an_overlay_with_a_scalar_backend_is_refused_by_name():
+    """The shape mistake is named, not raised as an AttributeError."""
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_registry(LIVE, {"digithings.ai": {"backend": "digigraph"}})
+    assert "backend must be an object" in str(refusal.value)
+
+
+def test_a_live_registry_with_a_scalar_backend_is_refused_by_name():
+    broken = json.loads(json.dumps(LIVE))
+    broken["digithings.ai"]["backend"] = "digigraph"
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_registry(broken, {})
+    assert "backend must be an object" in str(refusal.value)
