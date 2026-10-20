@@ -243,7 +243,7 @@ commits(last: 1) {
   nodes {
     commit {
       statusCheckRollup {
-        contexts {
+        nodes {
           ... on CheckRun { name conclusion }
           ... on StatusContext { context state }
         }
@@ -359,7 +359,7 @@ def state_from_graphql_pr(node: dict) -> dict:
     labeled = (node.get("timelineItems") or {}).get("nodes") or []
     commits = (node.get("commits") or {}).get("nodes") or []
     rollup = ((commits[0].get("commit") or {}).get("statusCheckRollup") if commits else None) or {}
-    checks = rollup.get("contexts") or []
+    checks = rollup.get("nodes") or []
     state = {
         "labels": labels,
         "approvals": [],
