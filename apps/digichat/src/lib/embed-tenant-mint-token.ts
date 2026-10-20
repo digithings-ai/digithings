@@ -1,0 +1,121 @@
+/**
+ * Host-scoped tenant credential for the trial proof mint route (DIG-4526).
+ *
+ * A tenant that needs a signed trial proof for its OWN embed host calls
+ * POST /api/embed/trial-proof-mint from its server-side backend and presents
+ * the credential in `x-embed-tenant-mint-token`. The credential is bound to
+ * ONE host: the route mints the proof for that host only, so a tenant can
+ * never mint a proof for another tenant's host.
+ *
+ * The list lives in DIGICHAT_TENANT_MINT_CREDENTIALS as a comma separated list
+ * of `host=token` pairs. It is a Worker secret, not a build value; when it is
+ * absent no tenant can mint.
+ *
+ * This is deliberately NOT the monitor allowlist and NOT the tenant registry
+ * token:
+ * - the monitor allowlist (DIGICHAT_MONITOR_TOKENS) is host-unscoped, and a
+ *   token on it also satisfies the quota directly in the chat route, so a
+ *   tenant credential placed there could mint a proof for another tenant's
+ *   host;
+ * - the tenant registry token is a publishable key rendered into the embedding
+ *   page on purpose, so a mint route keyed on it would be a public endpoint.
+ *
+ * The tenant credential therefore has its own variable and its own header, and
+ * the chat route never reads it.
+ */
+
+import { safeEqualStr } from "@/lib/safe-equal";
+
+/**
+ * Header carrying the host-scoped tenant credential. Distinct from every
+ * other embed header, and in particular from the monitor header: one header
+ * with two meanings would make a tenant token a monitor token.
+ */
+export const EMBED_TENANT_MINT_TOKEN_HEADER = "x-embed-tenant-mint-token";
+
+/**
+ * Worker secret holding the `host=token` pairs. The NAME is exported so the
+ * value never has to be read: a secret belongs in the environment, not in a
+ * log line.
+ */
+export const TENANT_MINT_CREDENTIALS_ENV = "DIGICHAT_TENANT_MINT_CREDENTIALS";
+
+/** One parsed `host=token` pair. */
+type TenantMintCredential = { host: string; token: string };
+
+/**
+ * The parsed pairs of DIGICHAT_TENANT_MINT_CREDENTIALS.
+ *
+ * One pair is `host=token`, split at the FIRST `=` so a token may itself
+ * contain one. Both sides are trimmed. A pair with no `=`, an empty host or an
+ * empty token is skipped: a half-written pair must never authorise anything,
+ * and it must never shadow a well-formed one.
+ */
+function tenantMintCredentials(): TenantMintCredential[] {
+  const raw = process.env[TENANT_MINT_CREDENTIALS_ENV];
+  if (!raw) return [];
+  const entries: TenantMintCredential[] = [];
+  for (const pair of raw.split(",")) {
+    const separator = pair.indexOf("=");
+    if (separator < 0) continue;
+    const host = pair.slice(0, separator).trim();
+    const token = pair.slice(separator + 1).trim();
+    if (!host || !token) continue;
+    entries.push({ host, token });
+  }
+  return entries;
+}
+
+/**
+ * The host a presented tenant credential is bound to, or null when the
+ * credential authorises nothing.
+ *
+ * Two rules make the list trustworthy, and both refuse rather than pick:
+ * - a host may appear at most once in the list;
+ * - one token may not appear under two hosts.
+ * A list that breaks either rule binds nothing for the host it breaks, so the
+ * route refuses instead of guessing which entry was meant.
+ *
+ * Compares against every entry without early exit, so neither the number of
+ * comparisons nor which entry matched is observable from timing.
+ */
+export function tenantMintCredentialHost(presented: string | null): string | null {
+  const token = presented?.trim();
+  if (!token) return null;
+
+  const entries = tenantMintCredentials();
+  const matches = entries.filter((entry) => safeEqualStr(token, entry.token));
+  // One token may not appear under two hosts: an ambiguous list binds nothing.
+  if (matches.length !== 1) return null;
+  const [matched] = matches;
+  if (!matched) return null;
+
+  // A host may appear at most once in the list. A host listed twice is
+  // ambiguous, so the route refuses to mint for that host.
+  const bound = matched.host.toLowerCase();
+  const hostEntries = entries.filter(
+    (entry) => entry.host.toLowerCase() === bound,
+  );
+  if (hostEntries.length !== 1) return null;
+
+  // The host as written in the pair, so the proof carries the pair's spelling
+  // and never the spelling the caller used in its request.
+  return matched.host;
+}
+
+/**
+ * True when the requested host is the host the credential is bound to.
+ *
+ * The comparison is the pair's rule: trim and lower case both sides. A
+ * request that names a different host is refused, and the request's own
+ * spelling never decides what gets signed.
+ */
+export function tenantMintHostMatches(
+  requestedHost: string,
+  boundHost: string,
+): boolean {
+  const requested = requestedHost.trim().toLowerCase();
+  const bound = boundHost.trim().toLowerCase();
+  if (!requested || !bound) return false;
+  return requested === bound;
+}

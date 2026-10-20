@@ -111,4 +111,160 @@ describe("trial proof mint endpoint", () => {
     );
     expect(res.status).toBe(400);
   });
+
+  // --- DIG-4526: the host-scoped tenant credential ---------------------------
+  // The tenant credential is bound to ONE host. The monitor credential stays
+  // exactly as it was. These cases pin both halves, and the negative arms
+  // prove that nothing is minted when the credential does not cover the host.
+  describe("host-scoped tenant credential", () => {
+    const TENANT_TOKEN = "test-tenant-secret-0123456789-abcdefghij";
+    const OTHER_TENANT_TOKEN = "test-tenant-secret-9876543210-abcdefghij";
+
+    beforeEach(() => {
+      process.env.DIGICHAT_TENANT_MINT_CREDENTIALS =
+        `tenant.example.com=${TENANT_TOKEN},other.example.com=${OTHER_TENANT_TOKEN}`;
+    });
+
+    afterEach(() => {
+      delete process.env.DIGICHAT_TENANT_MINT_CREDENTIALS;
+    });
+
+    it("mints a proof that verifies back to the tenant's own host only", async () => {
+      const res = await POST(
+        mintRequest(
+          { "x-embed-tenant-mint-token": TENANT_TOKEN },
+          { host: "tenant.example.com" },
+        ),
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { proof?: string };
+      expect(typeof body.proof).toBe("string");
+      // The round trip, not the status: a proof for a DIFFERENT host would
+      // still be a 200.
+      expect(verifyTrialProof(body.proof as string, SIGNING_SECRET)).toBe(
+        "tenant.example.com",
+      );
+      expect(
+        verifyTrialProof(body.proof as string, "a-different-secret"),
+      ).toBeNull();
+
+      // The other tenant's credential mints for its own host and no other.
+      const other = await POST(
+        mintRequest(
+          { "x-embed-tenant-mint-token": OTHER_TENANT_TOKEN },
+          { host: "other.example.com" },
+        ),
+      );
+      expect(other.status).toBe(200);
+      const otherBody = (await other.json()) as { proof?: string };
+      expect(verifyTrialProof(otherBody.proof as string, SIGNING_SECRET)).toBe(
+        "other.example.com",
+      );
+    });
+
+    it("refuses a tenant credential that is not scoped to the requested host, and mints nothing", async () => {
+      const res = await POST(
+        mintRequest(
+          { "x-embed-tenant-mint-token": TENANT_TOKEN },
+          { host: "other.example.com" },
+        ),
+      );
+      expect(res.status).toBe(401);
+      // The load-bearing negative: a refusal that still returned a proof
+      // would satisfy the status check and defeat the whole point.
+      const raw = JSON.stringify(await res.json());
+      expect(raw).not.toContain("proof");
+      expect(raw).not.toContain(TENANT_TOKEN);
+      expect(raw).not.toContain(SIGNING_SECRET);
+    });
+
+    it("refuses a tenant credential when the host list is not configured", async () => {
+      delete process.env.DIGICHAT_TENANT_MINT_CREDENTIALS;
+      const res = await POST(
+        mintRequest(
+          { "x-embed-tenant-mint-token": TENANT_TOKEN },
+          { host: "tenant.example.com" },
+        ),
+      );
+      expect(res.status).toBe(401);
+      expect(JSON.stringify(await res.json())).not.toContain("proof");
+    });
+
+    it("never accepts the tenant credential as a monitor credential", async () => {
+      // The tenant credential is in a different variable and a different
+      // header, so it is not on the monitor allowlist and cannot be replayed
+      // as one.
+      const res = await POST(
+        mintRequest(
+          { "x-embed-monitor-token": TENANT_TOKEN },
+          { host: "tenant.example.com" },
+        ),
+      );
+      expect(res.status).toBe(401);
+      expect(JSON.stringify(await res.json())).not.toContain("proof");
+    });
+
+    it("leaves the monitor path working exactly as it was", async () => {
+      // The monitor mechanism does not change: the same allowlist entry still
+      // authenticates, and the monitor still mints for the host it names.
+      const res = await POST(
+        mintRequest(
+          { "x-embed-monitor-token": MONITOR_TOKEN },
+          { host: "tenant.example.com" },
+        ),
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { proof?: string };
+      expect(verifyTrialProof(body.proof as string, SIGNING_SECRET)).toBe(
+        "tenant.example.com",
+      );
+    });
+
+    it("does not fall through to the monitor rule when the tenant header is present", async () => {
+      // A tenant header decides the whole request. If the route fell through
+      // to the monitor rule, a bad tenant credential paired with a good
+      // monitor one would mint, and the two mechanisms would mix.
+      const res = await POST(
+        mintRequest(
+          {
+            "x-embed-tenant-mint-token": "not-a-valid-tenant-secret",
+            "x-embed-monitor-token": MONITOR_TOKEN,
+          },
+          { host: "tenant.example.com" },
+        ),
+      );
+      expect(res.status).toBe(401);
+      expect(JSON.stringify(await res.json())).not.toContain("proof");
+    });
+
+    it("mints for the host in the pair, not for the spelling in the request", async () => {
+      const res = await POST(
+        mintRequest(
+          { "x-embed-tenant-mint-token": TENANT_TOKEN },
+          { host: "TENANT.EXAMPLE.COM" },
+        ),
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { proof?: string };
+      // The pair's spelling is what gets signed, so the request can never
+      // choose what is minted.
+      expect(verifyTrialProof(body.proof as string, SIGNING_SECRET)).toBe(
+        "tenant.example.com",
+      );
+    });
+
+    it("never returns secret material on the tenant path", async () => {
+      const res = await POST(
+        mintRequest(
+          { "x-embed-tenant-mint-token": TENANT_TOKEN },
+          { host: "tenant.example.com" },
+        ),
+      );
+      const raw = JSON.stringify(await res.json());
+      expect(raw).not.toContain(TENANT_TOKEN);
+      expect(raw).not.toContain(SIGNING_SECRET);
+      expect(raw).not.toContain("DIGICHAT_TENANT_MINT_CREDENTIALS");
+      expect(raw).not.toContain("DIGICHAT_TRIAL_PROOF_SECRET");
+    });
+  });
 });
