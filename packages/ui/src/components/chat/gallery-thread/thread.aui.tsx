@@ -16,7 +16,6 @@ import {
   ReasoningContent,
   ReasoningRoot,
   ReasoningText,
-  ReasoningTrigger,
 } from "../stock/reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
 import { WorkChain } from "./work-chain";
@@ -1196,7 +1195,7 @@ const AssistantMessage: FC = () => {
                   <ReasoningRoot
                     variant="ghost"
                     streaming={
-                      running &&
+                      (running || turnRunning) &&
                       (disclosure.openWhileRunning || reasoningMode === "balanced")
                     }
                     defaultOpen={
@@ -1204,7 +1203,8 @@ const AssistantMessage: FC = () => {
                     }
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
-                    <ReasoningTrigger active={running} disabled={locked} />
+                    {/* No trigger of its own: the chain header carries the
+                        reasoning title, and the chain is what folds away. */}
                     <ReasoningContent aria-busy={running}>
                       <ReasoningText>{children}</ReasoningText>
                     </ReasoningContent>
