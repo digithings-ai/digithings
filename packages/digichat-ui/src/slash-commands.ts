@@ -94,11 +94,10 @@ export function isSearchEngine(value: string): value is SearchEngineCode {
   return (SEARCH_ENGINE_CODES as readonly string[]).includes(value.trim().toLowerCase());
 }
 
-export const VIEW_CODES = ["hidden", "quiet", "balanced", "verbose"] as const;
+export const VIEW_CODES = ["quiet", "balanced", "verbose"] as const;
 export type ViewCode = (typeof VIEW_CODES)[number];
 const VIEW_LABELS: Record<ViewCode, string> = {
-  hidden: "Hidden \u00b7 answer only",
-  quiet: "Quiet \u00b7 one line",
+  quiet: "Quiet \u00b7 titles only, folded",
   balanced: "Balanced \u00b7 collapse when done",
   verbose: "Verbose \u00b7 stays open",
 };
@@ -200,7 +199,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "view",
     names: ["/view"],
     needsArg: false,
-    hint: "hidden / quiet / balanced / verbose",
+    hint: "quiet / balanced / verbose",
     choiceOptions: VIEW_CHOICES,
     kind: "client",
     category: "setup",

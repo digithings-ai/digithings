@@ -611,6 +611,23 @@ describe("parseEmbedTenants", () => {
     expect(() => parseEmbedTenants(entry({ thinking: "yes" }))).toThrow(/thinking/);
   });
 
+  it("folds a tenant that still carries the retired hidden view", () => {
+    // `hidden` described the one-line trace; the folded chain shows that line
+    // as its header now, so the tenant means the titles only.
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "turn_limited",
+          token: "t",
+          view: "hidden",
+        },
+      }),
+    );
+    expect(reg.get("example.com")?.view).toBe("quiet");
+  });
+
   it("throws on an invalid gateMode or theme", () => {
     expect(() =>
       parseEmbedTenants(

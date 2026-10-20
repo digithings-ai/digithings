@@ -3,14 +3,16 @@
 import { useAuiState } from "@assistant-ui/react";
 import { DotMatrix } from "../DotMatrix";
 import { cn } from "./cn";
+import { workStatusText } from "./work-status";
 
 /**
- * The one line a quiet client sees instead of the whole chain.
+ * The one line that replaces the whole chain.
  *
- * While the agent is working it names what is running ("Working — digisearch");
- * once the chain is done it counts what it did ("Used 3 tools"). The reasoning
- * and the tool calls themselves stay closed — that is the point of the quiet
- * level.
+ * This is the retired "hidden" view level: the chain collapsed into a single
+ * status row. The level is gone — a client folds the chain to its titles
+ * instead — so nothing in the product renders this any more; the thread
+ * renderer still holds the branch that would, and it draws from the same
+ * `workStatusText` the chain header uses so the two can never disagree.
  */
 export function WorkChainSummary({
   indices,
@@ -20,30 +22,7 @@ export function WorkChainSummary({
   className?: string;
 }) {
   const parts = useAuiState((s) => s.message.parts);
-
-  const chain = indices
-    .map((index) => parts[index])
-    .filter((part): part is NonNullable<typeof part> => Boolean(part));
-  const tools = chain.filter(
-    (part) => part.type === "tool-call" && "toolName" in part,
-  );
-  const running = tools.find(
-    (part) => "status" in part && part.status?.type === "running",
-  );
-  const thinking = chain.some(
-    (part) =>
-      part.type === "reasoning" &&
-      "status" in part &&
-      part.status?.type === "running",
-  );
-
-  const label = running
-    ? `Working — ${"toolName" in running ? running.toolName : "tool"}`
-    : thinking
-      ? "Thinking"
-      : tools.length > 0
-        ? `Used ${tools.length} tool${tools.length === 1 ? "" : "s"}`
-        : "Thought";
+  const status = workStatusText(parts, indices);
 
   return (
     <div
@@ -54,15 +33,15 @@ export function WorkChainSummary({
       )}
     >
       <DotMatrix
-        state={running || thinking ? "loading" : "success"}
-        label={label}
+        state={status.running ? "loading" : "success"}
+        label={status.label}
         className="size-4 shrink-0"
       />
       <span
         data-slot="aui_work-chain-summary-label"
         className="inline-block leading-none"
       >
-        {label}
+        {status.label}
       </span>
     </div>
   );

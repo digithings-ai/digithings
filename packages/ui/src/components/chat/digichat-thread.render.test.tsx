@@ -12,7 +12,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DigichatThread, type GroupDisclosureMode } from "./DigichatThread";
-import type { WorkVisibility } from "./stock/skin-types";
+import { workVisibilityForView, type WorkVisibility } from "./stock/skin-types";
 
 const adapter: ChatModelAdapter = {
   async run() {
@@ -452,18 +452,16 @@ describe("DigichatThread", () => {
     unmount();
   });
 
-  it("folds the whole trace to one line when the client is hidden", async () => {
+  it("folds the retired hidden level onto the titles-only chain", async () => {
     const { host, unmount } = await mount({
       initialMessages: TOOL_MESSAGES,
-      workVisibility: "hidden",
+      // A stale host still says `hidden`; it means the folded chain now, and
+      // the summary line it used to get is gone.
+      workVisibility: workVisibilityForView("hidden" as never),
     });
     await act(async () => {});
-    const summary = host.querySelector('[data-slot="aui_work-chain-summary"]');
-    expect(summary).toBeTruthy();
-    expect(summary?.textContent).toContain("Used 2 tools");
-    // The chain itself is not rendered at all.
-    expect(host.querySelector('[data-slot="aui_work-chain"]')).toBeNull();
-    expect(host.querySelector('[data-slot="tool-group-root"]')).toBeNull();
+    expect(host.querySelector('[data-slot="aui_work-chain-summary"]')).toBeNull();
+    expect(host.querySelector('[data-slot="aui_work-chain"]')).toBeTruthy();
     expect(host.textContent).toContain("grounded answer");
     unmount();
   });
@@ -507,8 +505,9 @@ describe("DigichatThread", () => {
     const labels = Array.from(
       host.querySelectorAll('[data-slot="aui_work-chain-label"]'),
     ).map((el) => el.textContent);
-    // The block before the text is done; the block after it is still working.
-    expect(labels).toEqual(["Worked", "Working"]);
+    // The block before the text is done — its folded title follows the last
+    // step it took; the block after it is still working.
+    expect(labels).toEqual(["Used 1 tool", "Working"]);
     unmount();
   });
 
@@ -516,7 +515,9 @@ describe("DigichatThread", () => {
     const { host, unmount } = await mount({ initialMessages: TOOL_MESSAGES });
     await act(async () => {});
     const label = host.querySelector('[data-slot="aui_work-chain-label"]');
-    expect(label?.textContent).toBe("Worked");
+    // Folded, the title follows the last step: the work is done, so it says
+    // what it did rather than sitting on a static "Worked".
+    expect(label?.textContent).toBe("Used 2 tools");
     const marker = host.querySelector(
       '[data-slot="aui_work-chain-trigger"] [data-slot="dot-matrix"]',
     );
