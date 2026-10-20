@@ -25,6 +25,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HOST = "0.0.0.0"
 PORT = 8080
 LOG_TAIL = 4000
+# The head of the log carries the verdict line: the ingest prints it on
+# stdout, and stdout comes before stderr in the combined output. A tail that
+# keeps only the end drops that line when the run is noisy.
+LOG_HEAD = 600
+_TRUNCATION_MARKER = "\n... [truncated: the middle of the run was omitted] ...\n"
 _LOCK = threading.Lock()
 # The FX research sessions the workflow runs. A request string never becomes
 # an argument, so the set of sessions is a literal list here.
@@ -55,6 +60,22 @@ def redact(text: str) -> str:
         return "[redacted]"
 
     return _SECRET.sub(repl, text)
+
+
+def clip(text: str, limit: int = LOG_TAIL) -> str:
+    """Keep the head and the tail of a long log, and say what was dropped.
+
+    The head carries the verdict line the ingest prints on stdout. The tail
+    carries what the run said last. A run longer than the limit loses its
+    middle, and the marker says so instead of leaving a silent gap.
+    """
+    if len(text) <= limit:
+        return text
+    head = min(LOG_HEAD, limit)
+    tail = limit - head - len(_TRUNCATION_MARKER)
+    if tail <= 0:
+        return text[:limit]
+    return text[:head] + _TRUNCATION_MARKER + text[-tail:]
 
 
 def command_for(route: str, bucket: str | None, session: str | None = None) -> list[str]:
@@ -215,7 +236,7 @@ def run_steps(
         if step_code != 0 and fatal:
             break
     duration_ms = int((time.monotonic() - started) * 1000)
-    tail = redact("".join(outputs))[-LOG_TAIL:]
+    tail = clip(redact("".join(outputs)))
     return {
         "ok": code == 0,
         "exit_code": code,

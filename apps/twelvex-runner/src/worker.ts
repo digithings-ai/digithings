@@ -1,6 +1,11 @@
 /**
  * Routing and auth for POST /run/{ingest|heartbeat}.
  * The container binding is injected so tests do not start an image.
+ *
+ * The reason a run failed is computed once, from the container log tail, and
+ * travels with the exit: in the Worker log line, in the response body and in
+ * the GitHub alert. A reason that stays inside the container is a reason the
+ * run watch cannot read.
  */
 import {
   durableObjectUnavailableResponse,
@@ -44,7 +49,20 @@ export type RunResult = {
   dry_run: boolean;
   command: string[];
   alert: string;
+  /** The one-line reason, present on a failed run. */
+  reason?: string | null;
 };
+
+/**
+ * The one-line reason a run failed, per route. The ingest prints a verdict
+ * token, the FX graph prints no token, and the heartbeat probe has one
+ * fixed meaning.
+ */
+export function reasonFor(route: Route, logTail: string): string {
+  if (route === "ingest") return verdictLine(logTail);
+  if (route === "session") return lastMeaningfulLine(logTail);
+  return "session probe failed";
+}
 
 function authorized(request: Request, env: Env): boolean {
   const token = env.RUNNER_AUTH_TOKEN;
@@ -195,17 +213,23 @@ export async function handle(
     return Response.json({ error: "container_bad_json" }, { status: 502 });
   }
   const duration = result.duration_ms || Date.now() - started;
-  const alert = dryRun ? "none" : await publishAlert(env, route, result, body, fetchImpl, started);
+  // The reason is read off the tail here, once, so the log line, the
+  // response and the alert all carry the same words.
+  const reason = result.exit_code === 0 ? null : reasonFor(route, result.log_tail ?? "");
+  const alert = dryRun
+    ? "none"
+    : await publishAlert(env, route, result, body, fetchImpl, started, reason);
   logLine({
     job: body.job_id,
     route,
     event: "exit",
     exit_code: result.exit_code,
     duration_ms: duration,
+    reason,
     alert,
     dry_run: dryRun,
   });
-  return Response.json({ ...result, duration_ms: duration, alert, dry_run: dryRun });
+  return Response.json({ ...result, duration_ms: duration, reason, alert, dry_run: dryRun });
 }
 
 async function publishAlert(
@@ -215,6 +239,7 @@ async function publishAlert(
   body: RunBody,
   fetchImpl: typeof fetch,
   now: number,
+  reason: string | null,
 ): Promise<string> {
   const failureLabel = labelFor(route, result.exit_code);
   const closing = route === "heartbeat" && result.exit_code === 0;
@@ -233,12 +258,7 @@ async function publishAlert(
       exitCode: result.exit_code,
       bucket: body.bucket,
       session: body.session,
-      reason:
-        route === "ingest"
-          ? verdictLine(result.log_tail ?? "")
-          : route === "session"
-            ? lastMeaningfulLine(result.log_tail ?? "")
-            : "session probe failed",
+      reason: reason ?? "the run failed",
       logTail: result.log_tail,
       now,
       open,
