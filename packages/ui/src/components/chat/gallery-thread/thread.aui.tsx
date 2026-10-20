@@ -1059,6 +1059,17 @@ const AssistantWorkingIndicator: FC = () => {
     }
     return state;
   });
+  const connectionMessage = useAuiState((s) => {
+    let message: string | undefined;
+    for (const part of s.message.parts) {
+      if (part.type !== "data" || part.name !== "connection") continue;
+      const data = (part.data ?? {}) as { state?: string; message?: unknown };
+      if (data.state === "warming_up" && typeof data.message === "string" && data.message.length > 0) {
+        message = data.message;
+      }
+    }
+    return message;
+  });
   const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
   return (
@@ -1074,7 +1085,7 @@ const AssistantWorkingIndicator: FC = () => {
       {wakePhase === "waking" ? (
         <span className="text-sm text-muted-foreground">Waking up services…</span>
       ) : connectionState === "warming_up" ? (
-        <span className="text-sm text-muted-foreground">Warming up…</span>
+        <span className="text-sm text-muted-foreground">{connectionMessage ?? "Warming up…"}</span>
       ) : connectionState === "connecting" ? (
         <span className="text-sm text-muted-foreground">Connecting…</span>
       ) : null}
