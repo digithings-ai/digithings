@@ -223,10 +223,14 @@ export class DigiStackContainer extends Container {
         return containerEvictedResponse("stack", message);
       }
       // DIG-4477: the container was RECYCLED or FAILED under the request (a
-      // rollout exit, "not running", "no container instance"). That is not a
-      // cold boot: a fresh instance can serve the request, so answer with the
-      // retryable `container_failed` code and let the Worker retry once
-      // instead of surfacing the failure to the client.
+      // rollout exit, an unexpected exit, "no container instance"). That is not
+      // a cold boot: a fresh instance can serve the request, so answer with
+      // the retryable `container_failed` code and let the Worker retry once
+      // instead of surfacing the failure to the client. The matched shapes are
+      // the @cloudflare/containers producer constants listed in
+      // ./container-errors.ts; this Worker's documented cold-boot kill
+      // (index.ts #5762) is deliberately NOT one of them and keeps 503
+      // `container_booting`.
       if (isContainerFailedError(message)) {
         return containerFailedResponse("stack", message);
       }
