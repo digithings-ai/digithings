@@ -1389,11 +1389,34 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   flex-shrink: 0;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-label"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger"] {
+  /* The trace is one voice: the same mono, the same size, the same muted ink
+     on the chain header, the reasoning row, the tool-group row and the tool
+     rows. */
+  width: fit-content;
+  max-width: 100%;
+  text-align: left;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: var(--ink-mute);
+  text-transform: lowercase;
+  outline: none;
+  box-shadow: none;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-label"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-label"] {
   flex: 0 1 auto;
   min-width: 0;
   background: none;
   animation: none;
+  font-size: inherit;
+  font-weight: 400;
   color: inherit;
 }
 

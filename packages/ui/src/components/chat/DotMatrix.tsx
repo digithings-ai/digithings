@@ -316,6 +316,12 @@ const PATTERNS = {
     unionRows(1, 3),
     unionRows(1, 3),
   ],
+  /**
+   * A full grid — the mark on the tool row. Solid and still, the same weight
+   * as the reasoning glyph, and it never changes size, so the label beside it
+   * cannot shift.
+   */
+  tools: [Array.from({ length: 25 }, (_, i) => i)],
   /** Scanline down the rows. */
   executing: [0, 1, 2, 3, 4].map(rowCells),
   /** Scanline across the columns (web search). */
