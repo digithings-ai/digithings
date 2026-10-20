@@ -80,8 +80,20 @@ describe("runRecrawl", () => {
     );
     const two = await runRecrawl(source, second, { nowMs: Date.parse("2026-10-19T01:00:00.000Z") });
     expect(two).toMatchObject({ upserted: 0, deleted: 0, wrote: false });
-    expect(second.writes).toEqual([]);
+    expect(second.writes).toEqual(["putState"]);
     expect(two.metric.rowsChanged).toBe(0);
+  });
+
+  it("records the run on an unchanged re-run, so the alert measures the crawl and not the corpus", async () => {
+    const source = [crawled("https://h/a", "body")];
+    const store = memoryStore(
+      [{ url: "https://h/a", contentHash: hashContent("body") }],
+      "2026-10-01T00:00:00.000Z",
+    );
+    const result = await runRecrawl(source, store, { nowMs: Date.parse("2026-10-19T00:00:00.000Z") });
+    expect(store.writes).toEqual(["putState"]);
+    expect(result.metric.lastSuccessAt).toBe("2026-10-19T00:00:00.000Z");
+    expect(result.freshness).toMatchObject({ alert: false, reason: "fresh" });
   });
 
   it("dry-run reports the diff and writes nothing", async () => {
@@ -90,6 +102,7 @@ describe("runRecrawl", () => {
     const result = await runRecrawl(source, store, { dryRun: true });
     expect(result).toMatchObject({ upserted: 1, wrote: false, dryRun: true });
     expect(store.writes).toEqual([]);
+    expect(result.metric.lastSuccessAt).toBeNull();
   });
 
   it("records the freshness metric on a write", async () => {
@@ -111,6 +124,19 @@ describe("runRecrawl", () => {
 describe("newestDocAt", () => {
   it("returns null for an empty source", () => {
     expect(newestDocAt([])).toBeNull();
+  });
+
+  it("compares instants, not text, so a mixed-offset corpus reports the right newest doc", () => {
+    const source = [
+      crawled("https://h/a", "x", "2026-10-12T00:00:00+02:00"),
+      crawled("https://h/b", "y", "2026-10-11T23:00:00.000Z"),
+    ];
+    expect(newestDocAt(source)).toBe("2026-10-11T23:00:00.000Z");
+  });
+
+  it("ignores a timestamp it cannot parse", () => {
+    const source = [crawled("https://h/a", "x", "not-a-date"), crawled("https://h/b", "y")];
+    expect(newestDocAt(source)).toBe("2026-10-12T00:00:00.000Z");
   });
 });
 
