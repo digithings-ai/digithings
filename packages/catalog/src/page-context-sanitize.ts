@@ -318,8 +318,7 @@ function parseHtmlBody(raw: string): Element | null {
   // apps/digichat/src/lib/page-context-sanitize.ts apart from this comment; the
   // alert appeared only because the module became an exported library package,
   // where CodeQL models an exported function's parameters as remote sources.
-  // codeql[js/xss]
-  const doc = new DOMParser().parseFromString(raw, "text/html");
+  const doc = new DOMParser().parseFromString(raw, "text/html"); // codeql[js/xss]
   return doc.body;
 }
 
