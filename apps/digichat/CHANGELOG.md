@@ -1,3 +1,13 @@
+## [2.6.2](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.1...digichat-v2.6.2) (2026-10-21)
+
+A turn shows one thing moving at a time, and a tool failure says what went
+wrong instead of looking like an outage.
+
+### Bug Fixes
+
+* **chat:** one loading affordance per turn — the dot matrix waits for the agent, and the work block takes over the moment reasoning, a tool call or the answer arrives ([#6088](https://github.com/digithings-ai/digithings/pull/6088))
+* **foundry:** a tool that refuses the call says so — the tool's own complaint reaches the failed row and the turn, not "the assistant is unavailable" ([#6086](https://github.com/digithings-ai/digithings/pull/6086))
+
 # Changelog
 
 ## [2.6.1](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.0...digichat-v2.6.1) (2026-10-20)
