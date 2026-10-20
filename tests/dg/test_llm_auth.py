@@ -31,9 +31,6 @@ from digigraph.llm_auth import (
 )
 
 import digillm
-from digillm import client as client_mod
-from digillm import get_byok as digillm_get_byok
-from digillm import get_proxy_key as digillm_get_proxy_key
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -92,22 +89,22 @@ class TestLiteLlmProxyHeader:
     def test_header_feeds_digillm_proxy_key(self) -> None:
         tok = push_lite_llm_proxy_header(_proxy_request("sk-header"))
         try:
-            assert digillm_get_proxy_key() == "sk-header"
+            assert digillm.get_proxy_key() == "sk-header"
         finally:
             pop_lite_llm_proxy(tok)
-        assert digillm_get_proxy_key() is None
+        assert digillm.get_proxy_key() is None
 
     def test_no_header_leaves_override_unset(self) -> None:
         tok = push_lite_llm_proxy_header(_proxy_request(None))
         try:
-            assert digillm_get_proxy_key() is None
+            assert digillm.get_proxy_key() is None
         finally:
             pop_lite_llm_proxy(tok)
 
     def test_whitespace_header_ignored(self) -> None:
         tok = push_lite_llm_proxy_header(_proxy_request("   "))
         try:
-            assert digillm_get_proxy_key() is None
+            assert digillm.get_proxy_key() is None
         finally:
             pop_lite_llm_proxy(tok)
 
@@ -120,7 +117,7 @@ class TestByokHeader:
         tok = push_byok_header(_byok_request())
         try:
             assert get_byok_override() is None
-            assert digillm_get_byok() is None
+            assert digillm.get_byok() is None
         finally:
             pop_byok(tok)
 
@@ -150,20 +147,20 @@ class TestByokHeader:
         tok = push_byok_header(_byok_request(key="sk-abc", provider="openai"))
         pop_byok(tok)
         assert get_byok_override() is None
-        assert digillm_get_byok() is None
+        assert digillm.get_byok() is None
 
     def test_openai_byok_feeds_digillm(self) -> None:
         """OpenAI BYOK → digillm BYOK override (direct api.openai.com client)."""
         tok = push_byok_header(_byok_request(key="sk-byok-key", provider="openai"))
         try:
-            byok = digillm_get_byok()
+            byok = digillm.get_byok()
             assert byok is not None
             key, base_url = byok
             assert key == "sk-byok-key"
             assert base_url == "https://api.openai.com/v1"
         finally:
             pop_byok(tok)
-        assert digillm_get_byok() is None
+        assert digillm.get_byok() is None
 
     def test_openrouter_byok_feeds_digillm_and_model(self) -> None:
         """OpenRouter BYOK → digillm BYOK override + model slug contextvar."""
@@ -177,7 +174,7 @@ class TestByokHeader:
         try:
             assert get_byok_override() == ("sk-or-v1-test", "openrouter")
             assert get_byok_model_override() == "openai/gpt-4o-mini"
-            byok = digillm_get_byok()
+            byok = digillm.get_byok()
             assert byok is not None
             key, base_url = byok
             assert key == "sk-or-v1-test"
@@ -185,7 +182,7 @@ class TestByokHeader:
         finally:
             pop_byok(tok)
         assert get_byok_model_override() is None
-        assert digillm_get_byok() is None
+        assert digillm.get_byok() is None
 
     def test_anthropic_byok_feeds_digillm(self) -> None:
         """Anthropic BYOK → digillm BYOK override (Anthropic OpenAI-compat endpoint)."""
@@ -199,7 +196,7 @@ class TestByokHeader:
         try:
             assert get_byok_override() == ("sk-ant-xyz", "anthropic")
             assert get_byok_model_override() == "claude-sonnet-4-6"
-            byok = digillm_get_byok()
+            byok = digillm.get_byok()
             assert byok is not None
             key, base_url = byok
             assert key == "sk-ant-xyz"
@@ -214,7 +211,7 @@ class TestByokHeader:
         try:
             assert get_byok_override() == ("gem-key", "gemini")
             assert get_byok_model_override() == "gemini-2.5-flash"
-            byok = digillm_get_byok()
+            byok = digillm.get_byok()
             assert byok is not None
             assert byok[0] == "gem-key"
             assert "generativelanguage.googleapis.com" in byok[1]
@@ -1443,7 +1440,7 @@ class TestByokSurvivesIntoTheStreamingWorker:
         def recording_worker(workflow_req, event_queue, cancel_event):
             seen["dg"] = get_byok_override()
             seen["model"] = get_byok_model_override()
-            seen["llm"] = digillm_get_byok()
+            seen["llm"] = digillm.get_byok()
             event_queue.put(("content", "ok"))
             event_queue.put(("done",))
 
@@ -1495,7 +1492,7 @@ class TestByokSurvivesIntoTheStreamingWorker:
 
         def recording_worker(workflow_req, event_queue, cancel_event):
             seen["dg"] = get_byok_override()
-            seen["llm"] = digillm_get_byok()
+            seen["llm"] = digillm.get_byok()
             event_queue.put(("done",))
 
         monkeypatch.setattr(srv, "run_digigraph_workflow_streaming", recording_worker)
@@ -1542,9 +1539,9 @@ class TestTheStreamingWorkerDoesNotKeepTheKey:
 
         def recording_clear() -> None:
             """Stand in the worker's ``finally``, inside the worker's context copy."""
-            seen["before"] = (get_byok_override(), get_byok_model_override(), digillm_get_byok())
+            seen["before"] = (get_byok_override(), get_byok_model_override(), digillm.get_byok())
             real_clear()
-            seen["after"] = (get_byok_override(), get_byok_model_override(), digillm_get_byok())
+            seen["after"] = (get_byok_override(), get_byok_model_override(), digillm.get_byok())
             cleared.set()
 
         monkeypatch.setattr(llm_auth, "clear_byok_bindings", recording_clear)
@@ -1599,7 +1596,7 @@ class TestTheStreamingWorkerDoesNotKeepTheKey:
         )
         try:
             clear_byok_bindings()
-            assert (get_byok_override(), get_byok_model_override(), digillm_get_byok()) == (
+            assert (get_byok_override(), get_byok_model_override(), digillm.get_byok()) == (
                 None,
                 None,
                 None,
@@ -1631,7 +1628,7 @@ class TestByokSurvivesTheParallelFanOut:
             return {
                 "dg": get_byok_override(),
                 "model": get_byok_model_override(),
-                "llm": digillm_get_byok(),
+                "llm": digillm.get_byok(),
             }
 
         token = push_byok_header(_byok_request("sk-fan", "openrouter", "openai/gpt-4o-mini"))
@@ -1672,7 +1669,7 @@ class TestByokSurvivesTheParallelFanOut:
         from digigraph.planning.executor import run_plan
 
         def sample(_agent: str, _args: dict) -> dict:
-            return {"dg": get_byok_override(), "llm": digillm_get_byok()}
+            return {"dg": get_byok_override(), "llm": digillm.get_byok()}
 
         results = run_plan(
             [{"id": "a", "agent": "t", "args": {}}, {"id": "b", "agent": "t", "args": {}}],
@@ -1701,7 +1698,7 @@ class TestByokSurvivesTheParallelFanOut:
 
         def sample(_agent: str, _args: dict) -> dict:
             return {
-                "metadata": client_mod._provider_call_metadata.get(),
+                "metadata": digillm.client._provider_call_metadata.get(),
                 "dg": get_byok_override(),
             }
 
@@ -1718,7 +1715,7 @@ class TestByokSurvivesTheParallelFanOut:
                 )
                 solo = run_plan([{"id": "only", "agent": "t", "args": {}}], sample)
                 # The workers cleared their own copies, not the caller's binding.
-                caller_metadata = client_mod._provider_call_metadata.get()
+                caller_metadata = digillm.client._provider_call_metadata.get()
         finally:
             pop_byok(token)
 
@@ -1789,7 +1786,7 @@ class TestTheFanOutDropsDigigraphsLogicalCallHandle:
         import digigraph.llm_client  # noqa: F401  (imported for its registration)
         from digigraph.usage import detach_logical_call_context
 
-        assert client_mod._fan_out_detach_hook is detach_logical_call_context
+        assert digillm.client._fan_out_detach_hook is detach_logical_call_context
 
     def test_digillms_tool_pool_clears_it(self) -> None:
         """digillm's parallel tool branch, through the registered hook."""
@@ -1823,7 +1820,7 @@ class TestTheFanOutDropsDigigraphsLogicalCallHandle:
                 purpose=CallPurpose.TOOL_SELECTION,
                 no_artifact_reason=dg_usage.NoArtifactReason.TOOL_DISPATCH,
             ) as handle:
-                with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+                with patch.object(digillm.client, "get_client_for_model", return_value=fake_client):
                     with digillm.provider_call_context(
                         node_run_id=uuid4(),
                         purpose=CallPurpose.TOOL_SELECTION,
@@ -1962,8 +1959,8 @@ class TestByokReachesTheOpenRouterAutoRouter:
         finally:
             pop_byok(token)
         litellm_string = byok_routable_model(provider, slug)
-        prov, model_id = client_mod._parse_provider_prefix(litellm_string)
-        return client_mod._wire_model(prov, model_id, litellm_string)
+        prov, model_id = digillm.client._parse_provider_prefix(litellm_string)
+        return digillm.client._wire_model(prov, model_id, litellm_string)
 
     @pytest.mark.parametrize("header", ["auto", "openrouter/auto", "openrouter/openrouter/auto"])
     def test_every_spelling_a_user_can_send_reaches_the_auto_router(self, header: str) -> None:

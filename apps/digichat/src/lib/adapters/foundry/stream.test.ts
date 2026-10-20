@@ -7,6 +7,7 @@ import {
   FoundryToolLeakFilter,
   stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
+  capacityRetryDelayMs,
   type FoundryStreamEvent,
   type FoundryConversationItem,
 } from "./stream";
@@ -1303,5 +1304,157 @@ describe("mapFoundryEvent call_id correlation (#3861)", () => {
     expect(mapFoundryEvent(message, state)).toBeNull();
     // Stateless callers (and native file_search agents) keep the old behavior.
     expect(mapFoundryEvent(message)?.type).toBe("activity");
+  });
+});
+
+describe("capacity retry (#5979)", () => {
+  function flakyClient(failures: number, events: FoundryStreamEvent[], status = 429) {
+    let calls = 0;
+    let conversations = 0;
+    const options: unknown[] = [];
+    const client = {
+      conversations: {
+        async create() {
+          conversations += 1;
+          return { id: "conv_429" };
+        },
+      },
+      responses: {
+        async create(_params: unknown, opts?: unknown) {
+          calls += 1;
+          options.push(opts);
+          if (calls <= failures) {
+            const err = new Error(`${status} error`) as Error & { status?: number };
+            err.status = status;
+            throw err;
+          }
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+            },
+          };
+        },
+      },
+    } as unknown as OpenAIResponsesClientLike;
+    return { client, calls: () => calls, conversations: () => conversations, options };
+  }
+
+  it("waits and resumes when the deployment is throttled, without duplicating text", async () => {
+    const { client, calls, conversations, options } = flakyClient(2, [
+      { type: "response.output_text.delta", delta: "Hello" },
+      { type: "response.output_text.delta", delta: " world" },
+      { type: "response.completed" },
+    ]);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    expect(calls()).toBe(3);
+    // The waiting state reaches the client twice (one per 429) and is cleared.
+    expect(out.match(/"state":"warming_up"/g)?.length).toBe(2);
+    expect(out).toContain("Waiting for model capacity");
+    expect(out).toContain('"state":"ready"');
+    // The answer is streamed once, not once per retry.
+    expect(out.match(/Hello/g)?.length).toBe(1);
+    // A retry must not mint a second conversation or re-emit its part.
+    expect(conversations()).toBe(1);
+    expect(out.match(/"conversationId"/g)?.length).toBe(1);
+    expect(out).not.toContain("The assistant is unavailable right now");
+    // The SDK's own retries must not multiply our schedule.
+    expect(options.map((o) => (o as { maxRetries?: number }).maxRetries)).toEqual([0, 0, 0]);
+  });
+
+  it("gives up after the retry schedule and reports the existing error", async () => {
+    const { client, calls } = flakyClient(Number.POSITIVE_INFINITY, []);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    // Initial attempt plus one retry per configured delay.
+    expect(calls()).toBe(3);
+    expect(out).toContain("The assistant is unavailable right now");
+    // The waiting state must not be left behind: the last connection part is
+    // `ready`, even though the error part follows it.
+    const states = [...out.matchAll(/"state":"(warming_up|ready)"/g)].map((m) => m[1]);
+    expect(states.length).toBeGreaterThan(0);
+    expect(states.at(-1)).toBe("ready");
+  });
+
+  it("does not retry a non-capacity error", async () => {
+    const { client, calls } = flakyClient(Number.POSITIVE_INFINITY, [], 400);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(out).not.toContain("Waiting for model capacity");
+    expect(out).toContain("The assistant is unavailable right now");
+  });
+
+  describe("delay classification", () => {
+    function throttle(headers: Record<string, string>) {
+      const err = new Error("429") as Error & { status: number; headers: { get(name: string): string | null } };
+      err.status = 429;
+      err.headers = { get: (name) => headers[name] ?? null };
+      return err;
+    }
+
+    it("reads retry-after seconds", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after": "7" }), 0, [1])).toBe(7000);
+    });
+
+    it("reads Azure's millisecond headers as milliseconds", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after-ms": "250" }), 0, [1])).toBe(250);
+      expect(capacityRetryDelayMs(throttle({ "x-ms-retry-after-ms": "900" }), 0, [1])).toBe(900);
+    });
+
+    it("falls back to the schedule when no header is present", () => {
+      // Regression: Number(null) === 0 used to win and zero every backoff.
+      expect(capacityRetryDelayMs(throttle({}), 1, [1, 4, 8])).toBe(4);
+    });
+
+    it("caps a hostile retry-after", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after": "3600" }), 0, [1])).toBe(30_000);
+    });
+
+    it("does not retry a non-capacity status or a hard quota stop", () => {
+      const notFound = throttle({});
+      notFound.status = 404;
+      expect(capacityRetryDelayMs(notFound, 0, [1])).toBeNull();
+
+      const quota = throttle({}) as Error & { code?: string };
+      quota.code = "insufficient_quota";
+      expect(capacityRetryDelayMs(quota, 0, [1])).toBeNull();
+    });
   });
 });
