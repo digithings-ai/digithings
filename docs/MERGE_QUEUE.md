@@ -84,11 +84,11 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
-| Review | No outstanding `CHANGES_REQUESTED` review and no posted verdict of `changes_requested`. Review *evidence* is the row below: the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. |
+| Review | No outstanding `CHANGES_REQUESTED` review, and the **newest** readable review verdict is an approve that names the head the PR stands at. A verdict is read from the `opencode-power-pack:code-review` marker or from a `Review verdict:` line, whichever is newer; the marker wins inside one comment. Review *evidence* is the row below: the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. |
 | Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. |
 | Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat that did not write the PR's code. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring seat, or that seat's own marker posted while its own run was still active, is dropped — the PR then waits for a review from another seat. See [Reviewer independence](#reviewer-independence). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
-| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested` still scoped to the branch, blocks. |
+| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **whatever it is scoped to**. Only a later approve clears it, and only an approve that names the head the PR stands at — a new commit, a rebase or a merge from `develop` does not spend a block (DIG-4878). |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
 
 Three of these are deliberate choices worth stating plainly.
@@ -100,13 +100,21 @@ already does. If the key is absent the row is completed by one `gh pr view --jso
 *before* both review gates run: the coverage gate's own lazy fetch comes too late, because
 it runs after the verdict gate and so cannot repair a row the verdict gate has already read
 as verdict-free. If even that is impossible — no repo to read from, or a read that failed —
-the PR is refused, not queued. The same rule covers the ancestry question: a posted verdict
-blocks while the commit it names is on the branch, and a row with no `commits` list cannot
-check that, so the block stands. This is the sentence `_posted_verdict` already applies to a
+the PR is refused, not queued. This is the sentence `_marker_verdict` already applies to a
 marker it cannot parse, one level up: *a missing signal, not a clearance.* `#5903` merged on
 2026-10-19 08:23 with four review passes on it and the newest a `changes_requested`, because
 its row arrived without comments — the coverage gate authorised the merge, and the queue's
 own audit comment names that gate.
+
+**A verdict is not spent by the branch moving.** The verdict gate reads the newest verdict
+on the PR and asks whether that verdict clears the head the PR stands at. It does not ask
+whether the commit the verdict named is still on the branch. That was the rule until
+2026-10-21, and it was the hole: the block was retired the moment a new commit, a rebase or
+a merge from `develop` rewrote the branch's commit list, and the coverage gate then carried
+the PR to a merge on a `reviewed:agent` label. Six `digithings` PRs merged that way between
+2026-10-20 and 2026-10-21 (`#6115`, `#6074`, `#6071`, `#6019`, `#5968`, `#5761`). A
+blocking verdict now stands until a later approve names the head it covers, and a `reviewed:agent`
+label cannot carry a PR past it. See the gate table above and `docs/agents/CODE_REVIEW_POLICY.md`.
 
 **`NEUTRAL` and `SKIPPED` fail a required check.** A required check that reports nothing
 is indistinguishable from a check that was never asked to run — which is exactly the hole
@@ -320,6 +328,12 @@ gate (`scripts/merge_queue.py`, `_review_coverage`):
    wrote the code, and a reviewer that owns the ticket still reviews — reading
    the assignee as the author refused the review of the very seat that owns the
    ticket (the QA Lead's finding on #6145, 21 Oct 2026).
+
+**This gate is not the value gate.** The question here is *who* reviewed, not *which
+way* the review went. Whether the newest verdict blocks is the verdict gate's
+question (`_verdict_value_reason`), and it runs first: PR #5994 above is refused by the
+verdict gate before this gate is reached (DIG-4878). The two gates stay apart on purpose —
+this one is about provenance, that one about the verdict.
 
 **Who wrote the code.** The author is read from the branch, not from the ticket
 header:

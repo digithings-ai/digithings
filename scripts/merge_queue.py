@@ -1598,10 +1598,13 @@ def _gate_checks(pr: dict[str, Any], policy: Policy, repo: str | None = None) ->
 # requested — one finding blocks approval" at 22:07:11Z and merged at 22:13:57Z on
 # an attestation, because the queue only ever fetched `reviews`.
 #
-# Only the marker's `key=value` fields are read. The prose is not a contract: a
-# matcher on `## Verdict: changes requested (narrow)` would have to survive a
-# reviewer reformatting a heading, and a heading someone forgets to update is
-# indistinguishable from a verdict someone forgot to post.
+# Only the marker's `key=value` fields are read, and one line of prose beside it:
+# `Review verdict: changes requested`. The prose is not a contract *about the
+# findings* — a matcher on `## Verdict: changes requested (narrow)` would have to
+# survive a reviewer reformatting a heading, and a heading someone forgets to
+# update is indistinguishable from a verdict someone forgot to post. The review
+# rule's own token is different: it is how a reviewer says which way the review
+# went, and a queue that cannot read it cannot see the verdict at all (DIG-4878).
 
 _MARKER_RE = re.compile(r"<!--\s*opencode-power-pack:code-review\b(?P<fields>[^>]*?)\s*-->")
 _MARKER_FIELD_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)=(?P<value>\S+)")
@@ -1618,14 +1621,13 @@ def _normalise_verdict(value: str) -> str:
     return value.strip().strip("'\";").lower().replace("-", "_")
 
 
-def _posted_verdict(comment: dict[str, Any]) -> tuple[str, str] | None:
-    """`(verdict, scope_sha)` from a review marker comment, or None.
+def _marker_verdict(body: str) -> tuple[str, str] | None:
+    """`(verdict, scope_sha)` from a review marker in `body`, or None.
 
-    None means "this comment is not a verdict the queue can read" — which covers
-    both a plain comment and a marker whose `verdict=` is missing or misspelled.
-    That is a missing signal, not a clearance, and it must not be treated as one.
+    None means "this comment carries no marker verdict the queue can read" — a
+    plain comment, or a marker whose `verdict=` is missing or misspelled. That
+    is a missing signal, not a clearance, and it must not be treated as one.
     """
-    body = str(comment.get("body") or "")
     for marker in _MARKER_RE.finditer(body):
         fields = {
             m.group("key").lower(): m.group("value")
@@ -1639,80 +1641,204 @@ def _posted_verdict(comment: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
-def _on_pr_history(pr: dict[str, Any], sha: str) -> bool:
-    """Whether `sha` is the PR head, or a commit behind it.
+# The review rule's own format is a line carrying the token `Review verdict:`.
+# The queue reads it as well as the marker: a reviewer who posts the line and no
+# marker has still delivered a verdict, and reading only the marker leaves that
+# verdict invisible — which is how a "changes requested" written in prose came
+# to be read as no verdict at all (DIG-4878).
+#
+# The value list is explicit and longest-first. A loose `(?P<verdict>[\w -]+?)`
+# reads one character and stops, which turns "changes requested" into "c" —
+# unreadable, and the block goes with it. "no review owed" and "NO REVIEW —
+# non-answer" are not on the list on purpose: they are the review rule's
+# non-answers, and a non-answer is not a verdict.
+_PROSE_VERDICT_RE = re.compile(
+    r"review\s+verdict\s*:\s*[*_`\s]*"
+    r"(?P<verdict>changes\s+requested|changes\s+needed|changes_requested|changes_needed"
+    r"|approved|approve)\b",
+    re.IGNORECASE,
+)
 
-    Every commit GitHub lists for a PR is an ancestor of its head, so the commit
-    list is the ancestry proof the gate needs — without a repository or a network
-    round trip, which is what keeps `evaluate` a pure function the tests can pin.
+# A sha written in prose, read as a prefix of the head at 7 characters or more —
+# the same width the reviewer-independence gate reads. The token has to stand
+# alone: a hex run inside a word is a word, not a commit, and a hex run joined
+# to another by a dash is a uuid group, not a commit.
+_PROSE_SHA_RE = re.compile(r"(?<![0-9a-zA-Z-])(?P<sha>[0-9a-f]{7,40})(?![0-9a-zA-Z-])")
+
+# The markers are read from the raw comment; the prose is what is left. A hex run
+# inside a marker is not prose: `agent=54a431af-501a-47d9-...` is a seat uuid,
+# and reading its first group as a commit would name a head nobody reviewed.
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def _comment_text(body: str) -> str:
+    """The comment body with its HTML comments taken out."""
+    return _HTML_COMMENT_RE.sub(" ", body)
+
+
+def _line_at(body: str, index: int) -> str:
+    """The line of `body` that contains `index`."""
+    start = body.rfind("\n", 0, index) + 1
+    end = body.find("\n", index)
+    return body[start:] if end == -1 else body[start:end]
+
+
+def _prose_verdict(body: str) -> tuple[str, str] | None:
+    """`(verdict, the line it was read from)` from a `Review verdict:` line."""
+    match = _PROSE_VERDICT_RE.search(body)
+    if match is None:
+        return None
+    return match.group("verdict").lower().replace(" ", "_"), _line_at(body, match.start())
+
+
+@dataclass(frozen=True)
+class PostedVerdict:
+    """The verdict the queue reads on a PR, and the head it names."""
+
+    verdict: str
+    source: str
+    scope: str
+    bindings: tuple[str, ...]
+    comment_id: str
+    author: str
+    at: str
+
+
+def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
+    """The verdict one comment carries, with the head it names, or None.
+
+    The marker wins inside a comment: it is the contract, and the prose around
+    it is what a reviewer reads. The prose line is read when the comment carries
+    no marker verdict at all — a marker whose `verdict=` is missing or
+    misspelled is skipped, and the line beside it still says what the reviewer
+    decided.
     """
-    if not sha:
-        return False
-    head = str(pr.get("headRefOid") or "")
-    if head and sha == head:
-        return True
-    return sha in {str(c.get("oid") or "") for c in (pr.get("commits") or [])}
+    body = str(comment.get("body") or "")
+    text = _comment_text(body)
+    marker = _marker_verdict(body)
+    prose = _prose_verdict(text)
+    if marker is None and prose is None:
+        return None
+    if marker is not None:
+        verdict, scope = marker
+        source = "a `verdict=` marker"
+        # The marker's `scope=` is the head the verdict is about. The prose around
+        # it may name any number of commits, so it is not read as a binding.
+        claims = [scope] if scope else []
+    else:
+        verdict, _line = prose
+        source = "a `Review verdict:` line"
+        scope = ""
+        # A prose verdict names the head it covers somewhere in the comment — on
+        # the verdict line, in the sentence after it, or in the scope line the
+        # review opens with. The question this gate asks is "does this comment
+        # name the head the PR stands at", so every sha in it is a candidate.
+        claims = [found.group("sha") for found in _PROSE_SHA_RE.finditer(text)]
+    provenance_head = str(_provenance_fields(body).get("head") or "")
+    if provenance_head:
+        claims.append(provenance_head)
+    bindings: list[str] = []
+    for binding in claims:
+        if binding and binding not in bindings:
+            bindings.append(binding)
+    author = comment.get("author")
+    login = "?"
+    if isinstance(author, Mapping):
+        login = str(author.get("login") or "?")
+    return PostedVerdict(
+        verdict=verdict,
+        source=source,
+        scope=scope,
+        bindings=tuple(bindings),
+        comment_id=str(comment.get("id") or ""),
+        author=login,
+        at=str(comment.get("createdAt") or ""),
+    )
 
 
-def _latest_readable_verdict(pr: dict[str, Any]) -> tuple[dict[str, Any], str, str] | None:
-    """The newest comment carrying a verdict the queue can read, with its scope.
+def _latest_posted_verdict(pr: dict[str, Any]) -> PostedVerdict | None:
+    """The newest comment carrying a verdict the queue can read.
 
     Newest wins, so a reviewer who blocked and then came back and approved clears
     their own block. Comments the queue cannot read are skipped rather than
     counted as the newest: letting a typo'd marker displace a real block would
     hand anyone who can comment a way to unlock the queue.
     """
-    best: tuple[dict[str, Any], str, str] | None = None
-    best_at = ""
+    best: PostedVerdict | None = None
     for comment in pr.get("comments") or []:
         if not isinstance(comment, Mapping):
             continue
-        parsed = _posted_verdict(comment)
+        parsed = _comment_verdict(comment)
         if parsed is None:
             continue
-        verdict, scope_sha = parsed
-        posted_at = str(comment.get("createdAt") or "")
-        if best is None or posted_at >= best_at:
-            best, best_at = (comment, verdict, scope_sha), posted_at
+        if best is None or parsed.at >= best.at:
+            best = parsed
     return best
 
 
-def _posted_verdict_reason(pr: dict[str, Any]) -> list[str]:
-    """A refusal when the newest readable posted verdict blocks this PR.
+def _sha_text(sha: str) -> str:
+    """A sha as the queue names it in a refusal."""
+    return f"`{sha[:12]}`" if sha else "no commit"
 
-    A block stands while the commit it names is still on the branch, which is what
-    `_on_pr_history` answers from `pr["commits"]`. When the row carries no commit
-    list that question cannot be answered at all, and answering "gone" would retire a
-    live block — the second leg of the `#5903` hole, where a verdict scoped to a
-    commit that was still on the branch was cleared by a row that never said which
-    commits the branch had. Unverifiable blocks; only a branch that is *known* not to
-    carry the commit spends the verdict.
+
+def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
+    """A refusal when the newest readable verdict does not clear this PR.
+
+    DIG-4878. A blocking verdict used to be spent the moment the commit it named
+    left the branch: the gate asked `pr["commits"]` whether that commit was still
+    there, and a new commit, a rebase or a merge from develop rewrites that list.
+    The block was retired, the coverage gate then carried the merge on
+    `reviewed:agent`, and a PR whose latest verdict was "changes requested" landed
+    with no approve on the head it merged. Six digithings PRs did it between
+    2026-10-20 and 2026-10-21 (#6115, #6074, #6071, #6019, #5968, #5761).
+
+    The rule reads the verdict now, not the branch:
+
+    * the newest readable verdict is the one that counts, whatever it is scoped
+      to — a blocking verdict blocks, and only a later approve clears it;
+    * an approve clears only when it names the head the PR stands at, so a
+      verdict written against a head that has moved cannot clear anything. The
+      head is named by the marker's `scope=`, by the provenance marker's `head=`,
+      or — for a verdict written in prose — by any sha the comment writes;
+    * a verdict the queue cannot read is skipped, not read as a clearance.
+
+    This is the value gate. Whether a review happened at all, and whether it came
+    from another seat, is the coverage gate's question (`_review_coverage`), and
+    the two stay apart on purpose (DIG-4795).
     """
-    latest = _latest_readable_verdict(pr)
+    latest = _latest_posted_verdict(pr)
     if latest is None:
+        # No verdict the queue can read is not a verdict. The coverage gate
+        # decides this PR, on its own evidence.
         return []
-    comment, verdict, scope_sha = latest
-    if verdict not in BLOCKING_VERDICTS:
+    head = str(pr.get("headRefOid") or "")
+    head_text = f"`{head[:12]}`" if head else "an unknown head"
+    where = f"comment {latest.comment_id}" if latest.comment_id else "a comment"
+    if latest.verdict in BLOCKING_VERDICTS:
+        if latest.scope:
+            scope_text = f", scoped to `{latest.scope[:12]}`"
+        elif latest.bindings:
+            scope_text = f", naming `{latest.bindings[0][:12]}`"
+        else:
+            scope_text = ""
+        return [
+            f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
+            f"({latest.source}, posted by {latest.author} in {where}){scope_text}; "
+            f"the PR now stands at {head_text}, and a blocking "
+            f"verdict stands until a later approve names the head it covers"
+        ]
+    covering = [
+        binding
+        for binding in latest.bindings
+        if len(binding) >= 7 and head.lower().startswith(binding.lower())
+    ]
+    if covering:
         return []
-    on_history = _on_pr_history(pr, scope_sha)
-    if not on_history and pr.get("commits") is not None:
-        return []
-    login = str((comment.get("author") or {}).get("login") or "?")
-    where = (
-        f"comment {comment.get('id') or '?'}" if comment.get("id") else f"a comment from {login}"
-    )
-    scope = scope_sha[:12] if scope_sha else "an unstated commit"
-    still = (
-        "and that commit is still on this branch"
-        if on_history
-        else (
-            "and this row carries no commit list, so that commit could not be "
-            "checked against the branch"
-        )
-    )
     return [
-        f"a code-review verdict of '{verdict}' was posted on this PR by {login} "
-        f"({where}) against {scope}, {still}; a new review must clear it"
+        f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
+        f"({latest.source}, posted by {latest.author} in {where}) but it names "
+        f"{_sha_text(latest.bindings[0] if latest.bindings else '')}, and the PR now "
+        f"stands at {head_text}; an approve counts only when it names the head it covers"
     ]
 
 
@@ -1748,7 +1874,7 @@ def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
 def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
     """Give the row its comments, or say why it cannot. Returns a refusal, or None.
 
-    `_posted_verdict_reason` reads `pr["comments"]`, and a PR can carry a
+    `_verdict_value_reason` reads `pr["comments"]`, and a PR can carry a
     `changes_requested` verdict with **no label at all** — so this is not the
     `reviewed:agent` lazy fetch's client, and it runs before both review gates rather
     than inside the coverage one.
@@ -1756,13 +1882,13 @@ def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
     `#5903` merged on 2026-10-19T08:23:06Z with four review passes on it and the
     newest a `changes_requested` verdict. The gate was not wrong: run against the
     real payload it refuses. The *row* was wrong — the host tick fetched it with a
-    field list that left `comments` out, so `_posted_verdict_reason` read nothing,
+    field list that left `comments` out, so `_verdict_value_reason` read nothing,
     `_gate_review` stayed silent, and `_gate_review_coverage` authorised the merge on
     a label. The queue's own audit comment says which gate carried it:
     `review: review evidence via the coverage gate (_gate_review_coverage)`.
 
     An absent comment list is a missing signal, not a clearance — the sentence
-    `_posted_verdict` already applies to a marker it cannot parse. So the row is
+    `_marker_verdict` already applies to a marker it cannot parse. So the row is
     completed here when it can be, and refused when it cannot: with no repo there is
     nothing to read, and a failed read is not an empty one.
     """
@@ -1821,13 +1947,17 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
     The review that counts is the board's own review pass, read by
     `_gate_review_coverage`, with its comments addressed (`_gate_review_threads`)
     — Chris's 2026-10-15 definition. A human approval still counts there.
+
+    `_verdict_value_reason` is the value gate, and it runs here, before the
+    coverage gate: a PR whose newest verdict blocks must not be carried to a
+    merge by a `reviewed:agent` label (DIG-4878).
     """
     reasons: list[str] = []
     if str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
         reasons.append("review has outstanding change requests")
     # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
     # requested". A posted blocking verdict stays a block until a newer one clears it.
-    reasons.extend(_posted_verdict_reason(pr))
+    reasons.extend(_verdict_value_reason(pr))
     return reasons
 
 
