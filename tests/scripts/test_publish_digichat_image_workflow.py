@@ -592,7 +592,16 @@ def test_the_probe_reads_the_health_status_instead_of_demanding_a_200() -> None:
         "turns that expected degradation into a red lane"
     )
     assert "api_status" in probe, "the probe must read the status code, not demand one"
-    assert '!= "200"' in probe, "the probe must compare the status it read"
+    assert "200|503)" in probe, (
+        "the probe must accept only the two answers the health route can give: "
+        "200 (everything reachable) and 503 (the ecosystem is unreachable). Any "
+        "other status - a 500 that still serialises the version - is a fault, "
+        "not a degraded environment"
+    )
+    assert "unreachable" in probe, (
+        "the tolerated failure is the one the route records when the fetch never "
+        "completed; an upstream that answered http_<status> is a real fault"
+    )
     for service in ("digraph", "digiquant", "digitrace", "digisearch"):
         assert service in probe, (
             f"the probe must name {service} as a service a standalone container "
@@ -622,6 +631,28 @@ def test_a_tag_push_resolves_the_release_name() -> None:
     assert 'tag="${GITHUB_REF_NAME:-}"' in resolve, (
         "the release tag on a push event is the ref the event carries"
     )
+
+
+def test_the_image_is_bound_to_the_tree_that_was_built() -> None:
+    """The label has to name the commit the image was built from.
+
+    The checkout is pinned to the tag, so the tree that gets built is the tag's
+    tree. The commit the image is labelled with used to be resolved a second
+    time, on its own, with `git rev-list -n1 <tag>`: a tag that moved between
+    the checkout and the resolve step would then label the image with a commit
+    the tree was never built from — the exact image→commit hole this lane
+    exists to close.
+    """
+    resolve = _no_comments(_step_by_id(_doc(), "version")["run"])
+    assert 'commit="$(git rev-parse HEAD' in resolve, (
+        "the commit the image is labelled with must be the tree that is built"
+    )
+    assert 'tag_commit="$(git rev-list -n1 "$tag"' in resolve, (
+        "the tag has to be resolved as well, to prove the two agree"
+    )
+    assert _refuses(
+        resolve, "refusing to bind an image to a tree it was not built from"
+    ), "the two commits must be compared, and a mismatch must stop the lane"
 
 
 def test_the_build_context_carries_the_packaged_inputs() -> None:

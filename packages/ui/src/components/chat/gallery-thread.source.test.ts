@@ -57,10 +57,10 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(fallback).not.toMatch(/`tool\(/);
   });
 
-  it("reasoning uses thought when done and expand caret", () => {
+  it("reasoning uses thought when done and the shared caret", () => {
     const reasoning = read("gallery-thread/reasoning.tsx");
     expect(reasoning).toMatch(/state=\{active \? "thinking" : "thought"\}/);
-    expect(reasoning).toMatch(/state="expand"/);
+    expect(reasoning).toMatch(/DisclosureChevron/);
   });
 
   it("container no longer COPYs gallery chatbot.css (grammar lives in the package)", () => {

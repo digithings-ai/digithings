@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Local replacement for publish-digichat-image.yml and publish-digillm-image.yml
-# (both disabled on GitHub; Actions minutes exhausted).
+# Local replacement for the GitHub publish lanes: publish-digichat-image.yml
+# runs on GitHub (on a digichat-v* tag push), and the digillm image has no lane
+# of its own.
 #
 # DEFAULT BUILDS AND BOOT-PROBES BUT NEVER PUSHES. The image is loaded into
 # the local Docker daemon, watched until it serves, and checked for the
@@ -106,8 +107,8 @@ else
   # the image has to serve with no environment at all, and a rehearsal that
   # hands the container an environment proves a configuration the release
   # never runs. A bare container has no digigraph/digisearch/digiquant/
-  # digitrace to reach, so /api/health answers 503; the version check below
-  # reads the response body instead of demanding a 200.
+  # digitrace to reach, so /api/health answers 503; the check below reads the
+  # status and the body instead of demanding a 200.
   probe_container="$(docker run --detach --rm --publish 127.0.0.1::3000 "$NAME")"
   probe_cleanup() { docker rm --force "$probe_container" >/dev/null 2>&1 || true; }
 fi
@@ -128,31 +129,70 @@ if [ "$IMAGE" = "digichat" ]; then
   [ "$code" = "200" ] || { echo "ERROR: /healthz never 200 (last '$code')." >&2; docker logs "$probe_container" 2>&1 || true; exit 1; }
   [ "$(curl --silent --show-error --fail "$base/healthz" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).ok")" = "true" ] \
     || { echo "ERROR: /healthz did not report ok=true." >&2; exit 1; }
-  # The status code is NOT demanded: a bare container has no ecosystem
+  # The status code is READ, not demanded: a bare container has no ecosystem
   # services to reach, so /api/health answers 503, and that is the truth about
-  # a degraded environment rather than a broken image. This lane reads the
-  # RESPONSE BODY of /api/health, not the status code: the version has to be
-  # right either way, and a failing check is tolerated only when it is one of
-  # the four ecosystem services and the database is skipped. The CI lane reads
-  # the status code as well (api_status) and warns when it is not 200; the
-  # checks below are the same contract in both lanes.
-  api_body="$(curl --silent --show-error --max-time 30 "$base/api/health" || true)"
-  reported="$(printf '%s' "$api_body" | node -e "const b=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(b.version === undefined ? '' : b.version));" 2>/dev/null || true)"
+  # a degraded environment rather than a broken image. Only two answers are
+  # honest here - 200 (every check reachable) and 503 (the route telling the
+  # truth about a degraded environment) - and any other status is a fault.
+  # The version has to be right either way, and a failing check is tolerated
+  # only when it is one of the four ecosystem services AND the fetch never
+  # completed ("unreachable"): the route records an upstream that answered
+  # with a non-2xx as "http_<status>", and that is a real fault. This is the
+  # same contract the CI lane holds in
+  # .github/workflows/publish-digichat-image.yml.
+  curl_rc=0
+  api_response="$(curl --silent --show-error --max-time 60 --write-out '\n%{http_code}' "$base/api/health")" || curl_rc=$?
+  api_status="$(printf '%s\n' "$api_response" | tail -n1)"
+  api_body="$(printf '%s\n' "$api_response" | sed '$d')"
+  if [ "$curl_rc" -ne 0 ]; then
+    echo "ERROR: the request to /api/health did not complete (curl exited $curl_rc) — a timeout or a refused connection, not an answer from the image." >&2
+    exit 1
+  fi
+  case "$api_status" in
+    200|503) ;;
+    *) echo "ERROR: /api/health answered '$api_status', not 200 or 503." >&2; exit 1 ;;
+  esac
+  [ -n "$api_body" ] || { echo "ERROR: /api/health answered '$api_status' with no body — the route did not answer." >&2; exit 1; }
+  reported="$(node -e 'const fs = require("fs");
+let raw = "";
+try { raw = fs.readFileSync(0, "utf8"); } catch (e) { raw = ""; }
+let body = null;
+try { body = JSON.parse(raw); } catch (e) { body = null; }
+if (body === null || typeof body !== "object") { process.stdout.write("NOTJSON"); }
+else if (body.version === undefined || body.version === null) { process.stdout.write("NOVERSION"); }
+else { process.stdout.write(String(body.version)); }' <<< "$api_body" 2>/dev/null || true)"
+  case "$reported" in
+    NOTJSON) echo "ERROR: /api/health answered '$api_status' with a body that is not JSON — the route did not answer." >&2; exit 1 ;;
+    NOVERSION) echo "ERROR: /api/health answered '$api_status' with JSON that carries no version." >&2; exit 1 ;;
+  esac
   [ "$reported" = "$VERSION" ] || { echo "ERROR: serves version '$reported', built '$VERSION'." >&2; exit 1; }
-  unexpected="$(printf '%s' "$api_body" | node -e "
-    const b = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-    const checks = b.checks || {};
-    const ecosystem = ['digraph', 'digiquant', 'digitrace', 'digisearch'];
-    const failing = Object.keys(checks).filter((k) => checks[k] !== 'ok' && checks[k] !== 'skipped');
-    const unexpected = failing.filter((k) => ecosystem.indexOf(k) === -1 && k !== 'service' && k !== 'database');
-    const bad = [];
-    if ((checks.service || 'missing') !== 'ok') bad.push('service');
-    const database = checks.database || 'missing';
-    if (database !== 'ok' && database !== 'skipped') bad.push('database');
-    if (unexpected.length) bad.push(unexpected.join(','));
-    process.stdout.write(bad.join(',') || 'ok');
-  " 2>/dev/null || true)"
-  [ "$unexpected" = "ok" ] || { echo "ERROR: /api/health failing checks are not only the unreachable ecosystem services ($unexpected)." >&2; exit 1; }
+  checks_verdict="$(node -e 'const fs = require("fs");
+let raw = "";
+try { raw = fs.readFileSync(0, "utf8"); } catch (e) { raw = ""; }
+let body = null;
+try { body = JSON.parse(raw); } catch (e) { body = null; }
+const checks = body && typeof body === "object" && body.checks && typeof body.checks === "object" ? body.checks : {};
+const ecosystem = ["digraph", "digiquant", "digitrace", "digisearch"];
+const bad = [];
+const tolerated = [];
+if ((checks.service || "missing") !== "ok") bad.push("service=" + (checks.service || "missing"));
+const database = checks.database || "missing";
+if (database !== "ok" && database !== "skipped") bad.push("database=" + database);
+for (const key of Object.keys(checks)) {
+  if (key === "service" || key === "database") continue;
+  const value = checks[key];
+  if (value === "ok" || value === "skipped") continue;
+  // Only "unreachable" is the degradation this probe tolerates: the route
+  // records a fetch that never completed that way, and an upstream that
+  // answered with a non-2xx as http_<status>.
+  if (ecosystem.indexOf(key) !== -1 && value === "unreachable") { tolerated.push(key + "=" + value); continue; }
+  bad.push(key + "=" + value);
+}
+process.stdout.write(bad.length ? "BAD:" + bad.join(",") : "CLEAN " + (tolerated.length ? tolerated.join(",") : "none"));' <<< "$api_body" 2>/dev/null || true)"
+  verdict="${checks_verdict%% *}"
+  tolerated="${checks_verdict#* }"
+  [ "$verdict" = "CLEAN" ] || { echo "ERROR: /api/health reports checks that are not only the unreachable ecosystem services (${checks_verdict:-no verdict})." >&2; exit 1; }
+  echo "Probe: /api/health answered '$api_status' (version $reported); tolerated: ${tolerated:-none}."
 else
   for _ in $(seq 60); do
     status=$(docker inspect -f '{{.State.Health.Status}}' "$probe_container")

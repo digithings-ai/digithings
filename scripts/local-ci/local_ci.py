@@ -17,7 +17,10 @@ same-repo develop->main promotion PRs (DIG-3743). Nothing else posts that name.
 An explicit --pr N run resolves the pull request in any state: a closed or a
 merged one still gets a verdict that names it and its state, never a silent
 skip (DIG-4812).
+A run that no trusted launcher started is refused before anything happens:
+the launchd daemon or the CI container only (launch_guard.py, DIG-4796).
 Usage: local_ci.py [--pr N] [--dry-run]"""
+import io
 import json
 import os
 import re
@@ -37,6 +40,28 @@ try:
     import pr_template
 except ImportError:  # fail closed in run_checks, never crash the tick
     pr_template = None
+try:
+    import launch_guard
+except ImportError:  # fail closed everywhere: a run without the guard does not run at all
+    launch_guard = None
+
+
+def _guard(ctx="local-ci"):
+    """Ask the launch guard that a trusted launcher started this run (DIG-4796).
+
+    The guard is asked at every entry point that does work, not only in main():
+    the post-merge launchd job drives run_checks() in-process and never goes
+    through main(), so a guard that only lived in main() would not be asked on
+    the path the live job takes. A run that no trusted launcher started is
+    refused with exit 78 before the lock, the worktree, the log or GitHub.
+    """
+    if launch_guard is None:
+        sys.stderr.write("local_ci: the launch_guard module is missing; refusing to "
+                         "run rather than run unguarded (DIG-4796)\n")
+        sys.exit(78)
+    launch_guard.enforce(__file__, ctx)
+
+
 HOME = os.path.expanduser("~")
 REPO = "digithings-ai/digithings"
 MAIN = os.environ.get("LOCAL_CI_MAIN") or f"{HOME}/Code/digithings"
@@ -119,6 +144,11 @@ def build_env(base=None):
     b["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:{b.get('PATH', '/usr/bin:/bin')}"
     for k in PROXY_KEYS:
         b.pop(k, None)
+    # The app token belongs to the app row alone. Handed over in the
+    # environment, it would ride along into every child the gate starts (npm,
+    # wrangler, uv, git, the check scripts). The app row builds its own
+    # environment with the token in it (DIG-4809).
+    b.pop("CI_APP_TOKEN", None)
     return b
 
 
@@ -235,21 +265,84 @@ def log_soft(msg):
         pass
 
 
+#: The shape of a GitHub App installation token. GitHub issues the opaque
+#: form - `ghs_` and a body with no separator - and the App plan writes the
+#: token down as `ghs_<appid>_<jwt>`. Both are accepted, and nothing else is:
+#: the row is posted under the app's bot, so a token that is not an app token
+#: would post it under the wrong identity (DIG-4809).
+APP_TOKEN_SHAPE = re.compile(r"^ghs_(?:[0-9]+_)?[A-Za-z0-9_\-\.]{20,}$")
+
+
+def _read_token_file(path):
+    """The token in the file at `path`, or "" when there is none.
+
+    The read is defensive on purpose. A file that cannot be opened, is not a
+    regular file (a FIFO would block the tick for ever) or holds bytes that are
+    not text must leave the row unposted instead of stopping the tick: a
+    broken token file must never cost the `local-ci` row as well (DIG-4809).
+    """
+    try:
+        if not os.path.isfile(path):
+            return ""
+        with open(path, "rb") as f:
+            raw = f.readline()
+    except OSError:
+        return ""
+    try:
+        return raw.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return ""
+
+
+def _token_sources():
+    """Every place the app token can come from, in the order it is tried."""
+    for path in (os.environ.get("LOCAL_CI_APP_TOKEN_FILE"), APP_TOKEN_FILE):
+        if path:
+            yield _read_token_file(path)
+    yield (os.environ.get("CI_APP_TOKEN") or "").strip()
+
+
 def app_token():
     """The app installation token the pipeline minted, or "" when there is none.
 
     Read from the file the pipeline wrote for the worker alone, never printed
     and never taken from the command line. Only the first line of the file is
     the token: a file with more content must not put two lines into it. The
-    environment is the fallback for a run that hands the token over directly.
+    chain is the named file, the default file, then the environment as the
+    fallback for a run that hands the token over directly. A named file that
+    does not exist falls through to the default one instead of ending the
+    search, and a token that is not an app installation token is passed over
+    as well: a file holding the wrong secret must not hide a good one behind
+    it (DIG-4809).
     """
-    path = os.environ.get("LOCAL_CI_APP_TOKEN_FILE") or APP_TOKEN_FILE
-    try:
-        with open(path) as f:
-            tok = f.readline().strip()
-    except OSError:
-        tok = ""
-    return tok or (os.environ.get("CI_APP_TOKEN") or "").strip()
+    for tok in _token_sources():
+        if tok and is_app_installation_token(tok):
+            return tok
+    return ""
+
+
+def raw_app_token():
+    """The first token the chain offers, whatever shape it has.
+
+    The shape of a token that was found is a diagnosis, not a result: the
+    reason a row was skipped is in the log, and the reason it says "not an
+    app installation token" has to be the token the worker actually read
+    (DIG-4809).
+    """
+    for tok in _token_sources():
+        if tok:
+            return tok
+    return ""
+
+
+def is_app_installation_token(tok):
+    """True when the token is shaped like a GitHub App installation token.
+
+    The app row goes out under `digithings-ci[bot]`. A token that is not an
+    installation token - the repository's own token, say - would post that row
+    under the wrong identity, so it is refused (DIG-4809).
+    """
+    return bool(APP_TOKEN_SHAPE.match(tok or ""))
 
 
 def status_fields(state, desc):
@@ -275,30 +368,56 @@ def status_args(sha, ctx, fields):
     return args
 
 
+def _failure_reason(text, tok):
+    """One line of the failed command's answer, with the token taken out.
+
+    A failed row has to be diagnosable: an installation without the
+    `statuses: write` permission says so in its answer, and "rc=1" alone does
+    not (DIG-4809).
+    """
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    detail = ""
+    for ln in reversed(lines):
+        if ln.startswith("$ ") or ln.startswith("[rc="):
+            continue
+        detail = ln
+        break
+    if tok:
+        detail = detail.replace(tok, "<redacted>")
+    return detail[:200]
+
+
 def app_status(sha, fields):
     """Post the same verdict under `local-ci/app`, with the app's own token.
 
     The token goes into the child's environment, never into its arguments, so
     it cannot land in a process listing or in the log line the runner writes
     for every command it starts. With no token there is no row: the app is the
-    only identity allowed to post this one.
+    only identity allowed to post this one. A token that is not an app
+    installation token is refused the same way, because it would post the row
+    under the wrong identity (DIG-4809).
     """
     tok = app_token()
     if not tok:
-        log_soft("app status: skipped, no app token")
+        if raw_app_token():
+            log_soft("app status: skipped, the token is not an app installation token")
+        else:
+            log_soft("app status: skipped, no app token")
         return False
     env = dict(ENV)
     env["GH_TOKEN"] = tok
     env["GITHUB_TOKEN"] = tok
-    rc, _ = sh(["gh", *status_args(sha, APP_CTX, fields)], timeout=120, env=env)
+    buf = io.StringIO()
+    rc, _ = sh(["gh", *status_args(sha, APP_CTX, fields)], timeout=120, env=env, out=buf)
     if rc != 0:
-        log_soft(f"app status: failed (rc={rc})")
+        reason = _failure_reason(buf.getvalue(), tok)
+        log_soft(f"app status: failed (rc={rc}){': ' + reason if reason else ''}")
         return False
     log_soft(f"app status: {fields['state']} {APP_CTX}")
     return True
 
 
-def status(sha, state, desc):
+def status(sha, state, desc, app=True):
     """Post the `local-ci` status, naming the build when there is one.
 
     The name is what makes the status evidence: a commit status is worth what
@@ -307,11 +426,19 @@ def status(sha, state, desc):
 
     The same verdict goes out under `local-ci/app`, posted with the app's own
     token. Both rows are built from one set of fields, so they are always the
-    same verdict (DIG-4809).
+    same verdict (DIG-4809). The app row follows the repo row: a repo row
+    that was refused leaves no app row behind, so the two can never carry
+    different verdicts. `app=False` posts the repo row alone, for the heads
+    that are not commits of this repository at all.
     """
     fields = status_fields(state, desc)
-    gh(*status_args(sha, CTX, fields))
-    app_status(sha, fields)
+    if gh(*status_args(sha, CTX, fields)) is None:
+        if app:
+            log_soft(f"local-ci status: {state} was refused, {APP_CTX} not posted")
+        return False
+    if app:
+        app_status(sha, fields)
+    return True
 
 
 def review_status(sha, state, desc):
@@ -658,6 +785,7 @@ def prepare_wt(n, sha, base, out):
     Now every step's rc is logged, a worktree git cannot read is rebuilt,
     and HEAD must equal the PR head before any gate runs. origin/main is
     fetched too: check_vendor_content.py baselines on merge-base(HEAD, origin/main)."""
+    _guard()
     out.write(f"===== worktree {sha[:12]}\n")
     sh(["git", "fetch", "-q", "origin", base, "main", f"pull/{n}/head"], cwd=MAIN, timeout=600, out=out)
     if os.path.isdir(WT) and wt_head() is None:
@@ -685,6 +813,8 @@ def prepare_wt(n, sha, base, out):
 
 
 def run_checks(pr, out):
+    """Run every gate on the PR. Returns the list of failed gate names."""
+    _guard()
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
     fails = []
     def step(name, cmd, timeout=1800, cwd=None):
@@ -818,6 +948,7 @@ def lock_holder_alive():
 
 def acquire_lock():
     """Take the tick lock. A lock whose holder is dead is taken over and logged, never waited on."""
+    _guard()
     try:
         os.mkdir(LOCK)
     except FileExistsError:
@@ -1300,6 +1431,12 @@ def explicit_run(only, dry):
 
 
 def main():
+    # The launch guard runs first, before any side effect: a run that no trusted
+    # launcher started (a hand-run from any shell, a seat's shell, a detached
+    # script) is refused with exit 78 and never reaches the lock, the watchdog
+    # or GitHub (DIG-4796). The guard is asked again at every entry point that
+    # does work, because the post-merge launchd job never comes through here.
+    _guard()
     dry = "--dry-run" in sys.argv
     if os.environ.get("LOCAL_CI_WT") and os.path.isdir(WT) and not wt_is_ours(WT):
         sys.exit(f"local_ci: LOCAL_CI_WT={WT} exists and is not a worktree of {MAIN}; "
@@ -1328,7 +1465,7 @@ def main():
                 for p in pending(prs, False)[:MAX_PER_TICK]:
                     status(p["headRefOid"], "failure", f"local-ci skipped: {reason}")
                 for p in pending(prs, True)[:MAX_PER_TICK]:
-                    status(p["headRefOid"], "failure", FORK_DESC)
+                    status(p["headRefOid"], "failure", FORK_DESC, app=False)
                 for p in pending_applied(prs)[:MAX_PER_TICK]:
                     applied_status(p["headRefOid"], "failure", f"local-ci skipped: {reason}")
                 for p in pending_reviews(main_prs)[:REVIEW_MAX_PER_TICK]:
@@ -1336,7 +1473,7 @@ def main():
             return
         if not dry:
             for p in pending(prs, True)[:MAX_PER_TICK]:
-                status(p["headRefOid"], "failure", FORK_DESC)
+                status(p["headRefOid"], "failure", FORK_DESC, app=False)
         done = 0
         for p in pending(prs, False):
             if done >= MAX_PER_TICK: break
