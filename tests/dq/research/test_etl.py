@@ -1,11 +1,10 @@
-"""tests/test_etl.py — Unit tests for ETL parsing functions in generate-snapshot.py
+"""tests/test_etl.py — Unit tests for ETL parsing functions in generate_snapshot.py
 and update_tearsheet.py.
 
 Run with:
     pytest tests/test_etl.py -v
 """
 
-import importlib.util
 import sys
 from pathlib import Path
 
@@ -17,19 +16,10 @@ SCRIPTS = Path(__file__).parent.parent.parent.parent / "digiquant" / "scripts" /
 sys.path.insert(0, str(SCRIPTS))
 
 
-def _load_hyphenated(name: str, path: Path):
-    """Load a Python module whose filename contains hyphens (not importable via import)."""
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-gs = _load_hyphenated("generate_snapshot", SCRIPTS / "generate-snapshot.py")
+import generate_snapshot as gs  # noqa: E402
 import update_tearsheet as ut  # noqa: E402
 
-# ─── generate-snapshot.py: parse_regime ────────────────────────────────────
+# ─── generate_snapshot.py: parse_regime ────────────────────────────────────
 
 SAMPLE_DIGEST = """\
 # Market Digest — 2026-04-07
@@ -101,7 +91,7 @@ class TestParseRegime:
         assert result["bias"] == "Neutral"
 
 
-# ─── generate-snapshot.py: parse_segment_biases ────────────────────────────
+# ─── generate_snapshot.py: parse_segment_biases ────────────────────────────
 
 
 class TestParseSegmentBiases:

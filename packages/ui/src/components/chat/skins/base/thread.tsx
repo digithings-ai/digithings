@@ -8,7 +8,9 @@ import {
 import { MarkdownText } from "../../stock/markdown-text";
 import { DotMatrix } from "./ui/dot-matrix";
 import { useDigichatWarmupPhase } from "../../use-warmup-phase";
+import { connectionStatusText } from "../../connection-status";
 import { MessageTiming } from "./elements/message-timing.aui";
+import { BackendNotice } from "../../stock/chat-notice";
 import { ToolFallback } from "../../stock/tool-fallback.aui";
 import { MessageError } from "../../stock/message-error.aui";
 
@@ -616,18 +618,42 @@ const ComposerAction: FC = () => {
 };
 
 const AssistantWorkingIndicator: FC = () => {
-  const isEmpty = useAuiState((s) => s.message.content.length === 0);
-  // Boot retries (#4753): the BFF replaces `connecting` with `warming_up`
-  // while it waits out a booting upstream — say so instead of "Connecting".
-  const warmingUp = useAuiState((s) =>
-    s.message.parts.some(
-      (part) =>
-        part.type === "data" &&
-        part.name === "connection" &&
-        (part.data as { state?: string } | undefined)?.state === "warming_up",
-    ),
+  // Text, not `content`: data parts (the warming-up notice itself) also count
+  // toward `content`, which made this false the moment the notice arrived and
+  // hid its own message (#5979 review).
+  const isEmpty = useAuiState(
+    (s) => !s.message.parts.some((part) => part.type === "text" && (part.text ?? "").length > 0),
   );
+  // Text only when the server sent a status message (DIG-4459): the BFF's
+  // boot retry (#4753) and the throttled deployment (#5979) ride the
+  // connection part with their own message. A bare `connecting` is the plain
+  // wait for a response: the animation alone, no client-side default copy.
+  const statusText = useAuiState((s) => connectionStatusText(s.message.parts));
+  // Latest connection state wins. A turn that hits the model's rate limit after
+  // text has already streamed (DC-18) waits mid-message; without this the
+  // countdown only showed on an empty message.
+  const waitingMidMessage = useAuiState((s) => {
+    let state: string | undefined;
+    for (const part of s.message.parts) {
+      if (part.type !== "data" || part.name !== "connection") continue;
+      const next = (part.data as { state?: string } | undefined)?.state;
+      if (typeof next === "string") state = next;
+    }
+    return state === "warming_up";
+  });
   const wakePhase = useDigichatWarmupPhase();
+  if (!isEmpty && waitingMidMessage && statusText) {
+    return (
+      <span
+        data-slot="aui_assistant-message-indicator"
+        className="text-muted-foreground inline-flex items-center gap-2 align-middle"
+        role="status"
+      >
+        <DotMatrix state="connecting" aria-hidden />
+        <span className="text-sm">{statusText}</span>
+      </span>
+    );
+  }
   if (isEmpty) {
     return (
       <span
@@ -635,9 +661,13 @@ const AssistantWorkingIndicator: FC = () => {
         className="text-muted-foreground inline-flex items-center gap-2 align-middle"
       >
         <DotMatrix state="connecting" aria-hidden />
-        <span className="text-sm">
-          {wakePhase === "waking" ? "Waking up services…" : warmingUp ? "Warming up…" : "Connecting"}
-        </span>
+        {wakePhase === "waking" ? (
+          <span className="text-sm">Waking up services…</span>
+        ) : statusText ? (
+          <span className="text-sm">{statusText}</span>
+        ) : (
+          <span className="sr-only">Assistant is working</span>
+        )}
       </span>
     );
   }
@@ -710,7 +740,9 @@ const AssistantMessage: FC = () => {
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "data":
-                return part.dataRendererUI;
+                // DIG-4459: a backend notice (data-notice, or a data-status
+                // with a message) shows as a boxed status/error line.
+                return part.dataRendererUI ?? <BackendNotice part={part} />;
               default:
                 return null;
             }

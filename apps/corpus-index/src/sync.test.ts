@@ -74,6 +74,11 @@ describe("syncTickets", () => {
     expect(String(upserts[0].metadata.content)).not.toContain("[email]");
     expect(upserts[0].metadata.state).toBe("closed");
     expect(kv.data.get("corpus-index:cursor:helpdesk:tickets")).toBe("2026-10-13T01:00:00.000Z");
+    const state = JSON.parse(kv.data.get("corpus-index:state:helpdesk:tickets") ?? "{}");
+    expect(state.lastSuccessAt).toBe("2026-10-13T03:00:00.000Z");
+    expect(state.newestTicketAt).toBe("2026-10-13T01:00:00.000Z");
+    expect(state.tickets).toBe(1);
+    expect(state.vectors).toBe(1);
   });
 
   it("does not embed or write the cursor on a dry run", async () => {
@@ -108,6 +113,30 @@ describe("syncTickets", () => {
     expect(embedded).toBe(0);
     expect(writes).toBe(0);
     expect(kv.data.has("corpus-index:cursor:helpdesk:tickets")).toBe(false);
+    expect(kv.data.has("corpus-index:state:helpdesk:tickets")).toBe(false);
+  });
+
+  it("marks a quiet day successful without moving the cursor", async () => {
+    const kv = memoryKv();
+    await kv.put("corpus-index:cursor:helpdesk:tickets", "2026-10-12T09:00:00.000Z");
+    await syncTickets(
+      job,
+      kv,
+      {
+        search: async () => [],
+        articles: async () => [],
+        listIds: async () => [],
+      },
+      { upsert: async () => {}, deleteIds: async () => {} },
+      { embed },
+      new Date("2026-10-13T03:00:00.000Z"),
+      false,
+    );
+    expect(kv.data.get("corpus-index:cursor:helpdesk:tickets")).toBe("2026-10-12T09:00:00.000Z");
+    const state = JSON.parse(kv.data.get("corpus-index:state:helpdesk:tickets") ?? "{}");
+    expect(state.lastSuccessAt).toBe("2026-10-13T03:00:00.000Z");
+    expect(state.newestTicketAt).toBe("2026-10-12T09:00:00.000Z");
+    expect(state.tickets).toBe(0);
   });
 
   it("uses a 10 minute overlap on the next run", async () => {

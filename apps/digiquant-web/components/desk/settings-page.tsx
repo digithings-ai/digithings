@@ -70,7 +70,7 @@ export function SettingsPage({ path }: { path: string }) {
       onSubmit={(event) => event.preventDefault()}
     >
       <header className="flex flex-col gap-1">
-        <h1 className="m-0 font-mono text-[0.75rem] font-normal tracking-[0.04em] text-ink">Settings</h1>
+        <h2 className="m-0 font-mono text-[0.75rem] font-normal tracking-[0.04em] text-ink">Settings</h2>
         <p className="m-0 font-mono text-[0.75rem] leading-[1.45] text-ink-mute">
           {path === "/fx/settings"
             ? "These choices apply on the FX desk and the rest of the app."

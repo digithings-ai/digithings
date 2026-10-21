@@ -94,13 +94,12 @@ export function isSearchEngine(value: string): value is SearchEngineCode {
   return (SEARCH_ENGINE_CODES as readonly string[]).includes(value.trim().toLowerCase());
 }
 
-export const VIEW_CODES = ["hidden", "compact", "balanced", "detailed"] as const;
+export const VIEW_CODES = ["quiet", "balanced", "verbose"] as const;
 export type ViewCode = (typeof VIEW_CODES)[number];
 const VIEW_LABELS: Record<ViewCode, string> = {
-  hidden: "Hidden \u00b7 answer only",
-  compact: "Compact \u00b7 closed",
+  quiet: "Quiet \u00b7 titles only, folded",
   balanced: "Balanced \u00b7 collapse when done",
-  detailed: "Detailed \u00b7 stays open",
+  verbose: "Verbose \u00b7 stays open",
 };
 export const VIEW_CHOICES: readonly { value: ViewCode; label: string }[] = VIEW_CODES.map(
   (code) => ({ value: code, label: VIEW_LABELS[code] }),
@@ -200,7 +199,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "view",
     names: ["/view"],
     needsArg: false,
-    hint: "hidden / compact / balanced / detailed",
+    hint: "quiet / balanced / verbose",
     choiceOptions: VIEW_CHOICES,
     kind: "client",
     category: "setup",
@@ -236,6 +235,22 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     names: ["/settings"],
     needsArg: false,
     hint: "Settings",
+    kind: "action",
+    category: "setup",
+  },
+  {
+    id: "toolbar",
+    names: ["/toolbar"],
+    needsArg: false,
+    hint: "Composer toolbar",
+    kind: "action",
+    category: "setup",
+  },
+  {
+    id: "scrollbar",
+    names: ["/scrollbar"],
+    needsArg: false,
+    hint: "Scrollbars: always or on scroll",
     kind: "action",
     category: "setup",
   },

@@ -1,4 +1,80 @@
+## [2.6.4](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.3...digichat-v2.6.4) (2026-10-21)
+
+The chat shows the backend's own words: what the server says while it works,
+every tool argument in full, and the tool's real error under it. A turn that
+runs into the model's per-minute token limit now waits and carries on.
+
+### Bug Fixes
+
+* **chat:** the loading row shows text only when the server sent a status ("Waking up services…", a capacity countdown); a plain wait for the response is the animation alone ([#6114](https://github.com/digithings-ai/digithings/pull/6114))
+* **chat:** tool arguments and results show as full JSON in a scroll area, a tool's error sits under its arguments with the whole traceback, and server notices and errors are boxed, the errors in a faded red ([#6117](https://github.com/digithings-ai/digithings/pull/6117))
+* **digichat:** a Foundry turn that hits the model's per-minute token limit mid-stream shows a countdown, waits for the window (Retry-After, capped at 90 s) and resumes the same conversation, up to three times, then explains what happened instead of a generic outage line ([#6110](https://github.com/digithings-ai/digithings/pull/6110))
+
+## [2.6.3](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.2...digichat-v2.6.3) (2026-10-21)
+
+A turn shows one thing moving: the work block no longer appears before the
+agent has done anything, and the composer row does not open with a stray
+separator.
+
+### Bug Fixes
+
+* **chat:** a status part alone gets no work block — the loading row waits for the agent, and the work block takes over the moment reasoning, a tool call or the answer arrives ([#6108](https://github.com/digithings-ai/digithings/pull/6108))
+* **chat:** the composer row lists its facts without a dangling separator ([#6098](https://github.com/digithings-ai/digithings/pull/6098))
+
+## [2.6.2](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.1...digichat-v2.6.2) (2026-10-21)
+
+A turn shows one thing moving at a time, and a tool failure says what went
+wrong instead of looking like an outage.
+
+### Bug Fixes
+
+* **chat:** one loading affordance per turn — the dot matrix waits for the agent, and the work block takes over the moment reasoning, a tool call or the answer arrives ([#6088](https://github.com/digithings-ai/digithings/pull/6088))
+* **foundry:** a tool that refuses the call says so — the tool's own complaint reaches the failed row and the turn, not "the assistant is unavailable" ([#6086](https://github.com/digithings-ai/digithings/pull/6086))
+
 # Changelog
+
+## [2.6.1](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.0...digichat-v2.6.1) (2026-10-20)
+
+The trace of the agent's work gets one voice, and a tenant on an Azure AI
+Foundry agent stops advertising models it does not have.
+
+### Features
+
+* **chat:** the chain title follows the latest step — `Working — digisearch` while a tool runs, `Used 3 tools` when it is done — instead of a static word ([#6079](https://github.com/digithings-ai/digithings/pull/6079))
+* **foundry:** a tenant on an Azure AI Foundry agent shows no model list, names its real backend (`Azure AI Foundry`), and reports the token usage the Responses API gives it ([#6073](https://github.com/digithings-ai/digithings/pull/6073))
+* **chat:** the composer menu opens a sub-page on its current value ([#6064](https://github.com/digithings-ai/digithings/pull/6064))
+
+### Bug Fixes
+
+* **chat:** two work runs with nothing between them are one block, and the block stops working when the answer starts ([#6079](https://github.com/digithings-ai/digithings/pull/6079))
+* **chat:** the provider chip is named from the active backend ([#6025](https://github.com/digithings-ai/digithings/pull/6025))
+* **chat:** the context meter's shares stay inside the turn ([#6022](https://github.com/digithings-ai/digithings/pull/6022))
+* **digichat:** the image packages the `@digithings/catalog` workspace, so the build no longer dies on a missing module ([#6059](https://github.com/digithings-ai/digithings/pull/6059))
+* **ci:** the review-coverage check reads the check rollup through its contexts connection, so the required main check is posted again ([#6063](https://github.com/digithings-ai/digithings/pull/6063))
+
+## [2.6.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.5.1...digichat-v2.6.0) (2026-10-20)
+
+The composer and the trace of the agent's work, rebuilt on assistant-ui's own
+structure: one vocabulary for how much of the work a user sees, one block for
+the whole chain, and one voice across the trace.
+
+### Features
+
+* **chat:** the trace is a four-rung ladder — `hidden` folds it to one line, `quiet` shows the titles only, `balanced` opens the rows while they stream, `verbose` leaves everything open ([#6048](https://github.com/digithings-ai/digithings/pull/6048))
+* **chat:** the composer footer shows the model, the provider, the connected MCPs and the context fill, and each of them opens the right panel ([#5967](https://github.com/digithings-ai/digithings/pull/5967))
+* **chat:** `/help` opens a panel with the commands, the shortcuts and how to reach a person ([#5971](https://github.com/digithings-ai/digithings/pull/5971))
+* **chat:** the model picker offers `auto` when the deployment pins no model, and the provider list names the in-house default beside the bring-your-own-key ones ([#5971](https://github.com/digithings-ai/digithings/pull/5971))
+* **chat:** the block cursor stands on the measured text baseline and centres on the letters ([#6034](https://github.com/digithings-ai/digithings/pull/6034))
+* **digichat:** the first turn runs on the tenant's curated default model ([#5957](https://github.com/digithings-ai/digithings/pull/5957))
+* **digichat:** a model at capacity is waited out instead of failing the turn ([#5981](https://github.com/digithings-ai/digithings/pull/5981))
+
+### Bug Fixes
+
+* **chat:** the reasoning and the tool calls live under one "Working" block that folds as one, and it stays open for the whole turn, so it no longer flickers shut between two tool calls ([#6036](https://github.com/digithings-ai/digithings/pull/6036), [#6039](https://github.com/digithings-ai/digithings/pull/6039), [#6049](https://github.com/digithings-ai/digithings/pull/6049))
+* **chat:** the trace keeps its place — the marks are always there, the counts no longer move the arrow, and every arrow sits next to its own text ([#6037](https://github.com/digithings-ai/digithings/pull/6037), [#6040](https://github.com/digithings-ai/digithings/pull/6040), [#6043](https://github.com/digithings-ai/digithings/pull/6043), [#6046](https://github.com/digithings-ai/digithings/pull/6046))
+* **chat:** the scrollbars are square everywhere, and the menu keeps its cursor in view ([#5972](https://github.com/digithings-ai/digithings/pull/5972), [#5973](https://github.com/digithings-ai/digithings/pull/5973), [#5980](https://github.com/digithings-ai/digithings/pull/5980))
+* **chat:** the composer is a single row and carries no editing chrome — Escape cancels, and an empty or unchanged edit is never sent ([#5961](https://github.com/digithings-ai/digithings/pull/5961))
+* **chat:** the menu moves with the arrow keys, the right arrow submits and the left one goes back, and the command palette matches the menu ([#5978](https://github.com/digithings-ai/digithings/pull/5978))
 
 ## [2.5.1](https://github.com/digithings-ai/digithings/compare/digichat-v2.5.0...digichat-v2.5.1) (2026-10-19)
 

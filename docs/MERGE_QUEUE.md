@@ -211,10 +211,12 @@ python3 scripts/merge_queue.py run --repo digithings-ai/twelve-x --acting-role c
 turn the next PR into `CONFLICTING`; re-reading is what makes that visible instead of
 sending a stale-base merge. The queue stops and reports when it happens.
 
-`run` also brings **one** stale branch up to date per tick — the oldest PR whose only
+`run` also brings stale branches up to date per tick — the oldest PRs whose only
 remaining reason is `BEHIND` — for the reason above: a merge is what puts every other PR
 behind, and nothing else here can clear that. `--max-updates 0` merges only; `--max-updates N`
-allows up to N. An updated PR is never merged on the same read: its checks have to report
+allows up to N (the default is 1). Each refreshed branch spends a full CI run, so N is a
+budget on CI runs per tick, not a formality: the branches are refreshed oldest first, and
+the first refusal stops the batch rather than skipping past the oldest PR. An updated PR is never merged on the same read: its checks have to report
 against the new base first, so it queues on a later tick.
 
 Each merge passes `--match-head-commit`, so a push landing between evaluation and merge

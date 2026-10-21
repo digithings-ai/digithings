@@ -8,6 +8,7 @@ import {
   refreshIntervalMs,
   serializeSettings,
   staleBanner,
+  THEMES,
 } from "./app-settings";
 
 const SENTINEL = "sk-test-sentinel-not-a-real-key";
@@ -16,7 +17,6 @@ describe("app settings", () => {
   it("round-trips a valid document and drops anything that is not a setting", () => {
     const saved = serializeSettings({
       ...DEFAULT_SETTINGS,
-      theme: "light",
       density: "compact",
       refreshSec: 30,
       staleSessions: 1,
@@ -27,7 +27,7 @@ describe("app settings", () => {
     expect(saved).not.toContain(SENTINEL);
     expect(saved).not.toContain("byok");
     expect(parseSettings(saved)).toMatchObject({
-      theme: "light",
+      theme: "dark",
       density: "compact",
       refreshSec: 30,
       staleSessions: 1,
@@ -52,6 +52,11 @@ describe("app settings", () => {
     expect(serializeSettings(settings)).not.toContain(SENTINEL);
   });
 
+  it("drops a stored light theme: the desk has no light scheme", () => {
+    expect(THEMES).toEqual(["dark"]);
+    expect(parseSettings(JSON.stringify({ theme: "light" })).theme).toBe("dark");
+  });
+
   it("puts only the text and an allowed model on a chat send", () => {
     expect(chatRequestBody("hello", DEFAULT_SETTINGS)).toEqual({ text: "hello", model: DEFAULT_SETTINGS.chatModel });
     expect(chatRequestBody("hello", { ...DEFAULT_SETTINGS, chatModel: "nope" }).model).toBe(DEFAULT_SETTINGS.chatModel);
@@ -63,8 +68,9 @@ describe("app settings", () => {
       setAttribute: (name: string, value: string) => void attrs.set(name, value),
       removeAttribute: (name: string) => void attrs.delete(name),
     };
-    applyDocumentPrefs({ ...DEFAULT_SETTINGS, theme: "light", density: "compact" }, root);
-    expect(attrs.get("data-theme")).toBe("light");
+    applyDocumentPrefs({ ...DEFAULT_SETTINGS, density: "compact" }, root);
+    expect(attrs.get("data-theme")).toBe("dark");
+    expect(attrs.get("data-density")).toBe("compact");
     clearDocumentPrefs(root);
     expect(attrs.get("data-theme")).toBe("dark");
     expect(attrs.has("data-density")).toBe(false);

@@ -130,6 +130,8 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIKEY_BFF_TOKEN
 #   DIGICHAT_PLAN_PROOF_SECRET
 #   DIGICHAT_MONITOR_TOKENS   # monitor free-turn bypass (DIG-613); optional, fails open
+#   DIGICHAT_TRIAL_PROOF_SECRET   # wrangler secret put DIGICHAT_TRIAL_PROOF_SECRET — trial-proof mint/verify secret (DIG-4530); forwarded to the container
+#   DIGICHAT_TENANT_MINT_CREDENTIALS   # wrangler secret put DIGICHAT_TENANT_MINT_CREDENTIALS — tenant mint credentials (DIG-4530); forwarded to the container
 #   DIGICHAT_DASHBOARD_SUPABASE_URL
 #   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
 #   ZAMMAD_API_TOKEN         # read-only Zammad helpdesk MCP (in-container zammad-mcp, OCC tickets)
@@ -149,6 +151,15 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
 #   DIGIKEY_URL=https://key.digithings.ai
 # Never use Mac Compose / *.trycloudflare.com quick tunnels in production.
+
+# Embed tenant config (DIG-1210): non-secret JSON in KV key `embed-tenants`,
+# credentials referenced by name (tokenEnv) and set as Worker secrets.
+# Create once:  npx wrangler kv namespace create DIGICHAT_TENANTS_KV
+# (created 2026-10-13). Without the binding the Worker uses
+# the legacy DIGICHAT_EMBED_TENANTS secret unchanged.
+[[kv_namespaces]]
+binding = "DIGICHAT_TENANTS_KV"
+id = "361b710bee56466097053275404535ba"
 
 [vars]
 # Legacy generic anonymous embed is intentionally NOT set (OFF). A stock deploy

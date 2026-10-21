@@ -8,7 +8,7 @@ import {
   type FC,
   type PropsWithChildren,
 } from "react";
-import { ChevronDownIcon, LoaderIcon } from "lucide-react";
+import { DotMatrix } from "../DotMatrix";
 import { cva, type VariantProps } from "class-variance-authority";
 import { useScrollLock } from "@assistant-ui/react";
 import {
@@ -39,6 +39,8 @@ export type ToolGroupRootProps = Omit<
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     defaultOpen?: boolean;
+    /** Open while this group is still streaming, auto-close on completion. */
+    streamingOpen?: boolean;
   };
 
 function ToolGroupRoot({
@@ -47,21 +49,25 @@ function ToolGroupRoot({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   defaultOpen = false,
+  streamingOpen = false,
   children,
   ...props
 }: ToolGroupRootProps) {
   const collapsibleRef = useRef<HTMLDivElement>(null);
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const [initialOpen] = useState(defaultOpen);
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const lockScroll = useScrollLock(collapsibleRef, ANIMATION_DURATION);
 
   const isControlled = controlledOpen !== undefined;
-  const isOpen = isControlled ? controlledOpen : uncontrolledOpen;
+  const isOpen = isControlled
+    ? controlledOpen
+    : (userOpen ?? (streamingOpen || initialOpen));
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
       lockScroll();
       if (!isControlled) {
-        setUncontrolledOpen(open);
+        setUserOpen(open);
       }
       controlledOnOpenChange?.(open);
     },
@@ -95,13 +101,15 @@ function ToolGroupRoot({
 function ToolGroupTrigger({
   count,
   active = false,
+  label,
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   count: number;
   active?: boolean;
+  label?: string;
 }) {
-  const label = `${count} tool ${count === 1 ? "call" : "calls"}`;
+  const text = label ?? `${count} tool ${count === 1 ? "call" : "calls"}`;
 
   return (
     <CollapsibleTrigger
@@ -115,34 +123,42 @@ function ToolGroupTrigger({
       )}
       {...props}
     >
-      {active && (
-        <LoaderIcon
-          data-slot="tool-group-trigger-loader"
-          className="aui-tool-group-trigger-loader size-3 shrink-0 animate-spin [animation-duration:0.6s]"
+      {/* The slot is always filled — the loading trail while the tools run,
+          the quiet corner dots when they are done — so the label and the
+          arrow keep their place. */}
+      <span data-slot="tool-group-trigger-loader" className="aui-tool-group-trigger-loader inline-flex shrink-0">
+        {/* A full grid, the same weight as the reasoning glyph: solid, still,
+            and the same size in both states, so the label never shifts. The
+            chain header carries the running state. */}
+        <DotMatrix
+          state="tools"
+          label={active ? "Tools running" : "Tools"}
+          className="!size-3 shrink-0"
         />
-      )}
+      </span>
       <span
         data-slot="tool-group-trigger-label"
         className={cn(
-          "aui-tool-group-trigger-label-wrapper inline-block text-start text-xs leading-none font-medium",
+          "aui-tool-group-trigger-label-wrapper inline-block min-w-[4rem] text-start text-xs leading-none font-medium",
           "group-data-[variant=ghost]/tool-group-root:font-normal",
           "group-data-[variant=outline]/tool-group-root:grow",
           "group-data-[variant=muted]/tool-group-root:grow",
-          active && "shimmer motion-reduce:animate-none",
         )}
       >
-        {label}
+        {text}
       </span>
-      <ChevronDownIcon
+      <span
         data-slot="tool-group-trigger-chevron"
         className={cn(
-          "aui-tool-group-trigger-chevron size-3 shrink-0",
+          "aui-tool-group-trigger-chevron inline-flex shrink-0",
           "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
           "-rotate-90",
           "group-data-open/trigger:rotate-0",
           "group-data-panel-open/trigger:rotate-0",
         )}
-      />
+      >
+        <DotMatrix state="expand" label="Toggle tools" className="!size-3 shrink-0" />
+      </span>
     </CollapsibleTrigger>
   );
 }

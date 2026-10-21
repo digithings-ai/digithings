@@ -21,6 +21,7 @@ import {
   isNonAiSdkConfig,
 } from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
+import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
 import {
   DigigraphUpstreamAuthError,
   resolveDigigraphUpstreamAuth,
@@ -55,9 +56,13 @@ import {
   resolveAnonymousInstallChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
-import { isPlanTierSatisfied } from "@/lib/embed-tenants";
+import { isPlanTierSatisfied, normalizeEmbedHost } from "@/lib/embed-tenants";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
+import {
+  inspectTrialProof,
+  TRIAL_PROOF_EXPIRED_HEADER,
+} from "@/lib/trial-proof";
 import {
   acquireChatRunLock,
   releaseChatRunLockOnResponseEnd,
@@ -97,7 +102,93 @@ function jsonError(
   });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
+  const trialProof = inspectRequestTrialProof(req);
+  const res = await handleChat(req, trialProof);
+  if (!trialProof.expired) return res;
+  // The signal rides on the Response the route returns: the chat response is
+  // a stream, so there is no error path to hang it on, and the client reads
+  // the header off whatever response it actually receives.
+  return withExpiredTrialProofHeader(res);
+}
+
+/**
+ * Add the expired-proof signal to a response the route is about to return.
+ * The header is set on the response itself where that is allowed, and on a
+ * copy otherwise (a response whose headers are immutable).
+ */
+function withExpiredTrialProofHeader(res: Response): Response {
+  try {
+    res.headers.set(TRIAL_PROOF_EXPIRED_HEADER, "1");
+    return res;
+  } catch {
+    const headers = new Headers(res.headers);
+    headers.set(TRIAL_PROOF_EXPIRED_HEADER, "1");
+    return new Response(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers,
+    });
+  }
+}
+
+/**
+ * The trial proof the client presented, resolved once per request.
+ *
+ * Both flags are host-scoped: a proof only counts for the embed host it
+ * names. A valid proof for another host buys nothing (the same trust chain
+ * as before), and an expired proof for another host is not this client's
+ * proof to drop.
+ */
+type RequestTrialProof = {
+  /** The host an authentic presented proof binds; null when there is none. */
+  host: string | null;
+  /** Authentic, unexpired, and for this request's embed host. */
+  accepted: boolean;
+  /** Authentic, expired, and for this request's embed host. */
+  expired: boolean;
+};
+
+function inspectRequestTrialProof(req: Request): RequestTrialProof {
+  const token = req.headers.get("x-embed-trial-proof")?.trim();
+  const secret = process.env.DIGICHAT_TRIAL_PROOF_SECRET?.trim();
+  if (!token || !secret) {
+    return { host: null, accepted: false, expired: false };
+  }
+
+  const inspection = inspectTrialProof(token, secret);
+  if (inspection.ok) {
+    return {
+      host: inspection.host,
+      accepted: matchesEmbedHost(req, inspection.host),
+      expired: false,
+    };
+  }
+  if (inspection.reason === "expired") {
+    return {
+      host: inspection.host,
+      accepted: false,
+      expired: matchesEmbedHost(req, inspection.host),
+    };
+  }
+  // Malformed or wrongly signed: invalid, not expired. The client must not
+  // treat these as re-mintable.
+  return { host: null, accepted: false, expired: false };
+}
+
+/** True when the proof's host is the embed host this request came from. */
+function matchesEmbedHost(req: Request, proofHost: string): boolean {
+  const embedHost = normalizeEmbedHost(req.headers.get("x-embed-host"));
+  const normalizedProofHost = normalizeEmbedHost(proofHost);
+  return Boolean(
+    embedHost && normalizedProofHost && normalizedProofHost === embedHost,
+  );
+}
+
+async function handleChat(
+  req: Request,
+  trialProof: RequestTrialProof,
+): Promise<Response> {
   // Revoked/expired license refuses before auth: a revoked deployment
   // refuses even an authenticated caller, and the check is cheaper.
   const refusal = licenseRefusal();
@@ -157,6 +248,13 @@ export async function POST(req: Request) {
     req.headers.get("x-byok-model")?.trim() ?? ""
   );
   const languageCode = resolveLanguageCode(req.headers.get("x-digi-language"));
+
+  // Dev-only: a canned reply so the tool chain (reasoning, grouped tool
+  // calls, the banners around them) can be reviewed in the local embed
+  // without a model behind it. Never in production.
+  if (isDemoChatEnabled() && !byokKey) {
+    return demoChatResponse();
+  }
 
   const sessionId =
     req.headers.get("x-digichat-session") ??
@@ -271,6 +369,12 @@ export async function POST(req: Request) {
   // When the tenant configures gate.consumeUrl and the client presents a chat
   // token, server-side quota supersedes the unlock header and the IP quota.
   let quotaSatisfied = false;
+  // Set when the tenant's quota service could not answer (5xx, timeout, transport
+  // error). The visitor is still admitted — a tenant outage must not 402 someone who
+  // already completed the form, because verifying that form *is* the call that is down
+  // — but the entitlement is unverified, so it is bounded server-side below instead of
+  // being granted outright.
+  let quotaServiceUnavailable = false;
   if (embedConfig?.gateMode === "trial_form") {
     const chatToken = req.headers.get("x-embed-chat-token");
     if (embedConfig.gate && chatToken) {
@@ -286,7 +390,20 @@ export async function POST(req: Request) {
           { status: 402, headers: { "content-type": "application/json" } },
         );
       }
-      quotaSatisfied = true;
+      if (verdict === "unavailable") {
+        // The tenant could not answer. Fall through to the per-IP budget with the
+        // entitlement bounded server-side (see the degraded raise below) rather than
+        // skipping the budget entirely, which is what an outage used to do.
+        // Logged like the two sibling fail-open paths in this gate: without a log, a
+        // tenant quota-service outage silently changes the entitlement from unbounded
+        // to capped and ops never sees it.
+        console.warn(
+          "[trial-gate] tenant quota service unavailable, bounding the entitlement to the trial cap:",
+        );
+        quotaServiceUnavailable = true;
+      } else {
+        quotaSatisfied = true;
+      }
     }
 
     if (!quotaSatisfied) {
@@ -318,6 +435,31 @@ export async function POST(req: Request) {
     }
 
     if (!quotaSatisfied) {
+      // A trial proof is a server-signed token (lib/trial-proof.ts) that this
+      // server mints for an embed host, so a visitor who has completed the
+      // trial form can be let through the free-turn cap without a client-
+      // asserted header. Unlike x-embed-trial-unlock below — which the client
+      // asserts and anyone can send — a proof cannot be forged: the signature
+      // covers host|exp and only this server holds DIGICHAT_TRIAL_PROOF_SECRET,
+      // so only it can produce a token that verifies. A raw client-asserted
+      // X-Embed-Trial-Proof value is NEVER trusted.
+      // The proof binds host|exp|sig only — no tenant, no nonce — so the gate
+      // compares the VERIFIED host itself and a valid proof for another host
+      // buys nothing. The proof's host is the canonical bare registry host
+      // while the browser sends the embed origin as a URL, so compare the
+      // canonical forms. A sanctioned bypass must not spend the visitor's
+      // budget, so once a proof is accepted the per-IP quota below is not
+      // consulted at all. No proof, no bypass: an absent, malformed, expired,
+      // wrongly-signed or wrong-host proof leaves the gate exactly as it was.
+      // The verdict itself - verified host, expiry, and the host comparison -
+      // is resolved once per request in inspectRequestTrialProof, so the gate
+      // and the expiry signal can never disagree.
+      if (trialProof.accepted) {
+        quotaSatisfied = true;
+      }
+    }
+
+    if (!quotaSatisfied) {
       try {
         const ip = clientIpForRateLimit(req);
         // "unknown" is what clientIpForRateLimit returns when the ingress fails
@@ -329,6 +471,16 @@ export async function POST(req: Request) {
         // with this module's "best-effort, not an authorization boundary"
         // philosophy (embed-turn-quota.ts).
         if (ip !== "unknown") {
+          if (quotaServiceUnavailable) {
+            // Degraded path: the tenant's quota service could not answer, so the
+            // entitlement is unverified. Bound it server-side at the trial cap (100
+            // turns per IP per 24h) instead of skipping the budget, which is what an
+            // outage used to do — that granted unbounded free turns to anyone
+            // presenting a chat token. Same counter and same cap as the
+            // client-asserted unlock below, so a forged header buys nothing the server
+            // did not grant.
+            unlockEmbedTrial(ip);
+          }
           if (req.headers.get("x-embed-trial-unlock") === "1") {
             unlockEmbedTrial(ip);
           }
@@ -732,9 +884,10 @@ export async function POST(req: Request) {
           upstreamHeaders,
           responseHeaders,
           activityDetail,
-          // BYOK models travel in their own header; only the house default
-          // belongs in the request body.
-          model: byokKey ? undefined : tenantDefaultModel,
+          // BYOK models travel in their own header; only the house model
+          // belongs in the request body. `modelId` is the pick (when the
+          // tenant curates a list) or the curated default.
+          model: byokKey ? undefined : modelId,
           signal: req.signal,
         }),
       );

@@ -31,6 +31,8 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setModel: vi.fn(),
     setEffort: vi.fn(),
     setSearchEngine: vi.fn(),
+    setToolbar: vi.fn(),
+    setScrollbars: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -307,6 +309,18 @@ describe("executeSlashDef", () => {
     expect(a.openTools).toHaveBeenCalledOnce();
   });
 
+  it("keeps /view on the three levels and folds the retired hidden one", () => {
+    const a = api();
+    const def = { id: "view" as const, names: ["/view"], needsArg: false, hint: "" };
+    executeSlashDef(def, "verbose", a);
+    expect(a.setView).toHaveBeenCalledWith("verbose");
+    // A stale invocation still says `hidden`; it means the titles only.
+    executeSlashDef(def, "hidden", a);
+    expect(a.setView).toHaveBeenLastCalledWith("quiet");
+    executeSlashDef(def, "nonsense", a);
+    expect(a.openView).toHaveBeenCalledOnce();
+  });
+
   it("exposes extra MCP servers as slash tools", () => {
     const extra = extraSlashDefs(
       api({
@@ -381,5 +395,54 @@ describe("/artifacts", () => {
       a,
     );
     expect(a.openArtifacts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("/toolbar and /scrollbar", () => {
+  const chrome = (prefs: Partial<EmbedChatPrefsApi["prefs"]> = {}) =>
+    api({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, toolbar: true, scrollbars: "always", ...prefs } });
+
+  it("lists both commands in the product palette", () => {
+    const ids = buildProductSlashCommands(chrome()).map((c) => c.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids).toContain("toolbar");
+    expect(ids).toContain("scrollbar");
+  });
+
+  it("describes the current values", () => {
+    const on = new Map(buildProductSlashCommands(chrome()).map((c) => [c.id, c]));
+    expect(on.get("toolbar")?.description).toBe("On · visible");
+    expect(on.get("scrollbar")?.description).toBe("always visible");
+
+    const off = new Map(
+      buildProductSlashCommands(chrome({ toolbar: false, scrollbars: "auto" })).map((c) => [
+        c.id,
+        c,
+      ]),
+    );
+    expect(off.get("toolbar")?.description).toBe("Off · hidden");
+    expect(off.get("scrollbar")?.description).toBe("on scroll");
+  });
+
+  it("flips the visible toolbar off", () => {
+    const a = chrome();
+    executeSlashDef({ id: "toolbar", names: ["/toolbar"], needsArg: false, hint: "" }, "", a);
+    expect(a.setToolbar).toHaveBeenCalledOnce();
+    expect(a.setToolbar).toHaveBeenCalledWith(false);
+  });
+
+  it("flips always scrollbars to on-scroll", () => {
+    const a = chrome();
+    executeSlashDef({ id: "scrollbar", names: ["/scrollbar"], needsArg: false, hint: "" }, "", a);
+    expect(a.setScrollbars).toHaveBeenCalledOnce();
+    expect(a.setScrollbars).toHaveBeenCalledWith("auto");
+  });
+
+  it("runs the same flip from the palette row", () => {
+    const a = chrome();
+    const row = buildProductSlashCommands(a).find((c) => c.id === "toolbar");
+    expect(row).toBeDefined();
+    row?.execute?.();
+    expect(a.setToolbar).toHaveBeenCalledWith(false);
   });
 });

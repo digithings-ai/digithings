@@ -171,10 +171,10 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `total_return_pct` | `float` | `total_pnl / 1_000_000.0 * 100` |
 | `sharpe_ratio` | `float | None` | Annualised from the account-report **balance path**, never from the analyzer (DIG-462) |
 | `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from the same balance path |
-| `num_trades` | `int` | Row count of `generate_order_fills_report()` |
+| `num_trades` | `int` | Closed round trips: one per position that realized a PnL. A position still open at the end of the run does not count. It is *not* the `generate_order_fills_report()` row count — the fill report still reaches the tearsheet as `fills_report` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
 | `missing` | `list[str]` | Names that could not be produced — the machine-readable form of the "missing metrics" clause in `message`. Empty when `status` is `ok` |
-| `honest_rate` | `HonestRateBlock \| None` | Win rate with its denominator and interval. `None` when no realized-PnL series was extracted — never a fabricated zero and never `num_trades` |
+| `honest_rate` | `HonestRateBlock \| None` | Win rate with its denominator and interval. `None` when no realized-PnL series was extracted — never a fabricated zero, and never reconstructed from `num_trades` (which carries the same closed round-trip count but no numerator) |
 | `honest_rate_by_symbol` | `dict[str, HonestRateBlock]` | Per-symbol `honest_rate` blocks for multi-symbol backtests. Declared on the model by DIG-845 (L3); populated by DIG-847 (#5298), so it is `{}` until that leaf lands |
 | `status` | `str` | `ok` | `partial` | `error` |
 | `message` | `str` | Optional detail |

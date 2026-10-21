@@ -15,6 +15,7 @@ import {
   shouldProxyToDigiChat,
 } from "./paths";
 import { legacyEmbedEnabledValue } from "./embed-flag";
+import { resolveEmbedTenants } from "./tenants-kv";
 import { isOccShellPath, occGate } from "./occ-gate";
 import { digichatContainerReset } from "./admin-reset";
 import { fetchContainerWithRetry } from "./container-retry";
@@ -71,6 +72,10 @@ export class DigiChatContainer extends Container {
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: workerVars.DIGICHAT_PLAN_PROOF_SECRET ?? "",
     DIGICHAT_MONITOR_TOKENS: workerVars.DIGICHAT_MONITOR_TOKENS ?? "",
+    // Trial-proof mint/verify secret (DIG-4530); must reach the container process.
+    DIGICHAT_TRIAL_PROOF_SECRET: workerVars.DIGICHAT_TRIAL_PROOF_SECRET ?? "",
+    // Tenant mint credentials (DIG-4530); must reach the container process.
+    DIGICHAT_TENANT_MINT_CREDENTIALS: workerVars.DIGICHAT_TENANT_MINT_CREDENTIALS ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_URL: workerVars.DIGICHAT_DASHBOARD_SUPABASE_URL ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
       workerVars.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? "",
@@ -78,6 +83,40 @@ export class DigiChatContainer extends Container {
     ZAMMAD_API_TOKEN: workerVars.ZAMMAD_API_TOKEN ?? "",
     ZAMMAD_BASE_URL: workerVars.ZAMMAD_BASE_URL ?? "",
   };
+
+  private tenantsResolved = false;
+
+  /**
+   * Before the container boots, build DIGICHAT_EMBED_TENANTS from the KV
+   * tenant config (secret refs resolved from Worker secrets), falling back to
+   * the legacy secret. See ./tenants-kv.ts. Config edits apply on next boot.
+   */
+  override async fetch(request: Request): Promise<Response> {
+    if (!this.tenantsResolved) {
+      try {
+        const { json, source } = await resolveEmbedTenants(
+          workerVars.DIGICHAT_TENANTS_KV,
+          workerVars.DIGICHAT_EMBED_TENANTS,
+          workerVars as unknown as Record<string, unknown>,
+        );
+        this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: json };
+        console.log(`[tenants-kv] embed tenants source=${source}`);
+      } catch (e) {
+        // A tenant-config failure must not 500 every proxied request (embed,
+        // chat, assets, /healthz). Fail closed to no tenants for this boot;
+        // onStop() re-arms the resolution for the next boot.
+        console.error(`[tenants-kv] tenant config unavailable, serving no tenants: ${(e as Error).message}`);
+        this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: "" };
+      }
+      this.tenantsResolved = true;
+    }
+    return super.fetch(request);
+  }
+
+  /** Re-read KV tenant config on the next boot (the DO outlives container sleeps). */
+  override onStop(): void {
+    this.tenantsResolved = false;
+  }
 }
 
 export interface Env {
@@ -103,11 +142,17 @@ export interface Env {
   DIGICHAT_ENABLED_SERVICES?: string;
   AUTH_SECRET?: string;
   DIGICHAT_EMBED_TENANTS?: string;
+  /** KV with key `embed-tenants` (non-secret tenant config; refs via *Env). */
+  DIGICHAT_TENANTS_KV?: KVNamespace;
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGIKEY_BFF_TOKEN?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
   DIGICHAT_MONITOR_TOKENS?: string;
+  /** HMAC secret backing the trial-proof mint/verify path (DIG-4530). */
+  DIGICHAT_TRIAL_PROOF_SECRET?: string;
+  /** Per-tenant credentials used by the mint path (DIG-4530). */
+  DIGICHAT_TENANT_MINT_CREDENTIALS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
   /** Read-only Zammad helpdesk MCP: base URL + API token, forwarded to the container. */

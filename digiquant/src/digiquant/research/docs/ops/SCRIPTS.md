@@ -43,8 +43,8 @@ Operator truth for **when to run what** remains [`RUNBOOK.md`](../../RUNBOOK.md)
 
 | Script | Role |
 |--------|------|
-| [`scripts/generate-snapshot.py`](../../scripts/generate-snapshot.py) | Build `snapshot.json` sidecars from legacy markdown (when needed) |
-| [`scripts/fill-entry-prices.py`](../../scripts/fill-entry-prices.py) | Backfill entry prices from `price_history` |
+| [`scripts/generate_snapshot.py`](../../scripts/generate_snapshot.py) | Build `snapshot.json` sidecars from legacy markdown (when needed) |
+| [`scripts/fill_entry_prices.py`](../../scripts/fill_entry_prices.py) | Backfill entry prices from `price_history` |
 | [`scripts/validate-portfolio.sh`](../../scripts/validate-portfolio.sh) | `portfolio.json` vs profile |
 | [`scripts/repair_supabase_portfolio_data.py`](../../scripts/repair_supabase_portfolio_data.py) | One-off repairs |
 

@@ -162,7 +162,7 @@ CLEAN_FILES: tuple[str, ...] = (
     "digiquant/scripts/research/backfill_context.py",
     "digiquant/scripts/research/backfill_execution_prices.py",
     "digiquant/scripts/research/execute_at_open.py",
-    "digiquant/scripts/research/fill-entry-prices.py",
+    "digiquant/scripts/research/fill_entry_prices.py",
     "digiquant/scripts/research/finalize_period_accounting.py",
     "digiquant/scripts/research/position_entry_from_events.py",
     "digiquant/scripts/research/refresh_attribution.py",

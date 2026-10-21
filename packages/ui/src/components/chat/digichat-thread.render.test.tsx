@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DigichatThread, type GroupDisclosureMode } from "./DigichatThread";
+import { workVisibilityForView, type WorkVisibility } from "./stock/skin-types";
 
 const adapter: ChatModelAdapter = {
   async run() {
@@ -50,6 +51,103 @@ const TOOL_MESSAGES: ThreadMessageLike[] = [
         title: "docs",
       },
       { type: "text", text: "grounded answer" },
+    ],
+  },
+];
+
+/**
+ * Two work runs with only a source between them: one chain, not two.
+ * The agent reasoned, called a tool, pulled a source, then reasoned and
+ * called a tool again without writing anything in between.
+ */
+const TWO_RUNS_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "r1",
+        toolName: "digisearch",
+        argsText: "{}",
+        result: "ok",
+      },
+      {
+        type: "source",
+        sourceType: "url",
+        id: "s9",
+        url: "https://digithings.ai/docs",
+        title: "docs",
+      },
+      {
+        type: "tool-call",
+        toolCallId: "r2",
+        toolName: "digivault_get_note",
+        argsText: "{}",
+        result: "ok",
+      },
+      { type: "text", text: "one answer" },
+    ],
+  },
+];
+
+/**
+ * Two tool runs with only a status part between them: one work block, and
+ * the tool calls accumulate into one group.
+ */
+const TWO_TOOL_RUNS_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "x1",
+        toolName: "digisearch",
+        argsText: "{}",
+        result: "ok",
+      },
+      {
+        type: "tool-call",
+        toolCallId: "x2",
+        toolName: "digivault_get_note",
+        argsText: "{}",
+        result: "ok",
+      },
+      { type: "data", name: "status", data: { status: "working" } },
+      {
+        type: "tool-call",
+        toolCallId: "x3",
+        toolName: "ticketing_list_tickets",
+        argsText: "{}",
+        result: "ok",
+      },
+      { type: "text", text: "done" },
+    ],
+  },
+];
+
+/**
+ * The model explained itself, then went back to work: the first block is
+ * finished, the second one is still working.
+ */
+const TEXT_THEN_WORK_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "y1",
+        toolName: "digisearch",
+        argsText: "{}",
+        result: "ok",
+      },
+      { type: "text", text: "Let me check the notes." },
+      {
+        type: "tool-call",
+        toolCallId: "y2",
+        toolName: "digivault_get_note",
+        argsText: "{}",
+        result: "ok",
+      },
     ],
   },
 ];
@@ -183,6 +281,7 @@ type HarnessProps = {
   initialMessages?: readonly ThreadMessageLike[];
   reasoningMode?: GroupDisclosureMode;
   toolCallsMode?: GroupDisclosureMode;
+  workVisibility?: WorkVisibility;
 };
 
 function Harness({
@@ -192,6 +291,7 @@ function Harness({
   initialMessages,
   reasoningMode,
   toolCallsMode,
+  workVisibility,
 }: HarnessProps) {
   const runtime = useLocalRuntime(
     adapter,
@@ -206,6 +306,7 @@ function Harness({
         hiddenAttachmentNames={hiddenAttachmentNames}
         reasoningMode={reasoningMode}
         toolCallsMode={toolCallsMode}
+        workVisibility={workVisibility}
       />
       {attachmentName ? <AddComposerAttachment name={attachmentName} /> : null}
     </AssistantRuntimeProvider>
@@ -341,6 +442,128 @@ describe("DigichatThread", () => {
     const { host, unmount } = await mount({
       initialMessages: TOOL_MESSAGES,
       toolCallsMode: "expanded",
+    });
+    await act(async () => {});
+    expect(
+      host
+        .querySelector('[data-slot="tool-group-root"]')
+        ?.hasAttribute("data-open"),
+    ).toBe(true);
+    unmount();
+  });
+
+  it("folds the retired hidden level onto the titles-only chain", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      // A stale host still says `hidden`; it means the folded chain now, and
+      // the summary line it used to get is gone.
+      workVisibility: workVisibilityForView("hidden" as never),
+    });
+    await act(async () => {});
+    expect(host.querySelector('[data-slot="aui_work-chain-summary"]')).toBeNull();
+    expect(host.querySelector('[data-slot="aui_work-chain"]')).toBeTruthy();
+    expect(host.textContent).toContain("grounded answer");
+    unmount();
+  });
+
+  it("shows the titles only when the client is quiet", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      workVisibility: "quiet",
+    });
+    await act(async () => {});
+    // The chain and its rows are there, folded.
+    expect(host.querySelector('[data-slot="aui_work-chain"]')).toBeTruthy();
+    const group = host.querySelector('[data-slot="tool-group-root"]');
+    expect(group).toBeTruthy();
+    expect(group?.hasAttribute("data-closed")).toBe(true);
+    expect(host.querySelector('[data-slot="aui_work-chain-summary"]')).toBeNull();
+    unmount();
+  });
+
+  it("shows no work block for a message that only carries a status part", async () => {
+    // The connection state is a status part, and the grouping puts it in the
+    // chain. Without the guard the chain header appeared before the model
+    // had said anything — right next to the loading row.
+    const { host, unmount } = await mount({
+      initialMessages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "data", name: "connection", data: { state: "connecting" } },
+          ],
+        },
+      ],
+    });
+    await act(async () => {});
+    expect(
+      host.querySelector('[data-slot="aui_work-chain-trigger"]'),
+    ).toBeNull();
+    unmount();
+  });
+
+  it("accumulates two tool runs into one group when only a status part separates them", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TWO_TOOL_RUNS_MESSAGES,
+    });
+    await act(async () => {});
+    // One work block, one tool group, and the count is the tool calls.
+    expect(
+      host.querySelectorAll('[data-slot="aui_work-chain-trigger"]').length,
+    ).toBe(1);
+    const label = host.querySelector(
+      '[data-slot="tool-group-trigger-label"]',
+    );
+    expect(label?.textContent).toContain("3 tool calls");
+    unmount();
+  });
+
+  it("closes the finished block and keeps the new one working", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TEXT_THEN_WORK_MESSAGES,
+    });
+    await act(async () => {});
+    const labels = Array.from(
+      host.querySelectorAll('[data-slot="aui_work-chain-label"]'),
+    ).map((el) => el.textContent);
+    // The block before the text is done — its folded title follows the last
+    // step it took; the block after it is still working.
+    expect(labels).toEqual(["Used 1 tool", "Working"]);
+    unmount();
+  });
+
+  it("stops working once the answer starts, even while the turn streams", async () => {
+    const { host, unmount } = await mount({ initialMessages: TOOL_MESSAGES });
+    await act(async () => {});
+    const label = host.querySelector('[data-slot="aui_work-chain-label"]');
+    // Folded, the title follows the last step: the work is done, so it says
+    // what it did rather than sitting on a static "Worked".
+    expect(label?.textContent).toBe("Used 2 tools");
+    const marker = host.querySelector(
+      '[data-slot="aui_work-chain-trigger"] [data-slot="dot-matrix"]',
+    );
+    expect(marker?.getAttribute("data-state")).not.toBe("loading");
+    unmount();
+  });
+
+  it("folds the quiet chain as soon as the answer has started", async () => {
+    // The titles are there while the agent works; when the answer streams
+    // they get out of its way.
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      workVisibility: "quiet",
+    });
+    await act(async () => {});
+    const chain = host.querySelector('[data-slot="aui_work-chain"]');
+    expect(chain).toBeTruthy();
+    expect(chain?.hasAttribute("data-closed")).toBe(true);
+    unmount();
+  });
+
+  it("keeps the chain open when the client is verbose", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: TOOL_MESSAGES,
+      workVisibility: "verbose",
     });
     await act(async () => {});
     expect(

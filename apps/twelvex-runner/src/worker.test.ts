@@ -18,6 +18,14 @@ function env(over: Partial<Env> = {}): Env {
   };
 }
 
+/**
+ * The stub the Worker resolves for the Durable Object that owns the container.
+ * The Worker takes a factory, so a reconnect can address a fresh stub.
+ */
+function stubOf(fetchImpl: unknown): () => Fetcher {
+  return () => ({ fetch: fetchImpl } as unknown as Fetcher);
+}
+
 function post(route: string, body: unknown, token = "runner-token"): Request {
   return new Request(`https://twelvex-runner/run/${route}`, {
     method: "POST",
@@ -33,7 +41,9 @@ function containerResult(over: Partial<RunResult> = {}): RunResult {
     duration_ms: 12,
     log_tail: "",
     dry_run: false,
-    command: ["python", "-m", "twelve_x.scripts.primemarket_session_heartbeat"],
+    // The real argv lives in container/server.py. It is not copied here, and
+    // no test asserts on it, so a placeholder keeps the shape of RunResult.
+    command: ["not-asserted"],
     alert: "none",
     ...over,
   };
@@ -42,16 +52,14 @@ function containerResult(over: Partial<RunResult> = {}): RunResult {
 describe("routing and auth", () => {
   it("healthz does not call the container", async () => {
     const container = vi.fn();
-    const res = await handle(new Request("https://twelvex-runner/healthz"), env(), {
-      fetch: container,
-    } as unknown as Fetcher);
+    const res = await handle(new Request("https://twelvex-runner/healthz"), env(), stubOf(container));
     expect(res.status).toBe(200);
     expect(container).not.toHaveBeenCalled();
   });
 
   it("rejects a missing and a wrong token", async () => {
     const container = vi.fn();
-    const binding = { fetch: container } as unknown as Fetcher;
+    const binding = stubOf(container);
     const missing = await handle(post("heartbeat", {}), env({ RUNNER_AUTH_TOKEN: undefined }), binding);
     const wrong = await handle(post("heartbeat", {}, "other"), env(), binding);
     expect(missing.status).toBe(401);
@@ -61,27 +69,118 @@ describe("routing and auth", () => {
 
   it("rejects an unknown route", async () => {
     const container = vi.fn();
-    const res = await handle(post("other", {}), env(), { fetch: container } as unknown as Fetcher);
+    const res = await handle(post("other", {}), env(), stubOf(container));
     expect(res.status).toBe(404);
     expect(container).not.toHaveBeenCalled();
   });
 
   it("rejects ingest without a known bucket", async () => {
     const container = vi.fn();
-    const res = await handle(post("ingest", { bucket: "hourly" }), env(), {
-      fetch: container,
-    } as unknown as Fetcher);
+    const res = await handle(post("ingest", { bucket: "hourly" }), env(), stubOf(container));
     expect(res.status).toBe(400);
     expect(container).not.toHaveBeenCalled();
   });
 
+  it("rejects a session without a known session", async () => {
+    const container = vi.fn();
+    const res = await handle(post("session", { session: "hourly" }), env(), stubOf(container));
+    expect(res.status).toBe(400);
+    expect(container).not.toHaveBeenCalled();
+  });
+
+  it("rejects a run_date that is not a calendar date", async () => {
+    const container = vi.fn();
+    for (const runDate of ["2026-13-01", "2026-02-30", "20261020", "01-10-2026", "0000-01-01", 7]) {
+      const res = await handle(
+        post("session", { session: "asia", run_date: runDate }),
+        env(),
+        stubOf(container),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "invalid_run_date" });
+    }
+    expect(container).not.toHaveBeenCalled();
+  });
+
+  it("forwards a valid run_date on the session route", async () => {
+    let forwarded: { run_date?: string } | undefined;
+    const container = vi.fn(async (request: Request) => {
+      forwarded = JSON.parse(await request.text()) as { run_date?: string };
+      return Response.json(containerResult({ exit_code: 0 }));
+    });
+    const res = await handle(
+      post("session", { job_id: "twelve-x-asia", session: "asia", run_date: "2026-10-01" }),
+      env(),
+      stubOf(container),
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded?.run_date).toBe("2026-10-01");
+  });
+
+  it("treats an empty run_date as absent, like the workflow default", async () => {
+    let forwarded: { run_date?: string } | undefined;
+    const container = vi.fn(async (request: Request) => {
+      forwarded = JSON.parse(await request.text()) as { run_date?: string };
+      return Response.json(containerResult({ exit_code: 0 }));
+    });
+    const res = await handle(
+      post("session", { session: "asia", run_date: "" }),
+      env(),
+      stubOf(container),
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded?.run_date).toBeUndefined();
+  });
+
+  it("does not forward a run_date on the ingest route", async () => {
+    let forwarded: { run_date?: string } | undefined;
+    const container = vi.fn(async (request: Request) => {
+      forwarded = JSON.parse(await request.text()) as { run_date?: string };
+      return Response.json(containerResult({ exit_code: 0 }));
+    });
+    const res = await handle(
+      post("ingest", { bucket: "daily", run_date: "2026-10-01" }),
+      env(),
+      stubOf(container),
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded?.run_date).toBeUndefined();
+  });
+
+  it("forwards a session with the session the workflow passes", async () => {
+    let forwarded: { session: string; timeout_seconds: number } | undefined;
+    const container = vi.fn(async (request: Request) => {
+      forwarded = JSON.parse(await request.text()) as {
+        session: string;
+        timeout_seconds: number;
+      };
+      return Response.json(containerResult({ exit_code: 0 }));
+    });
+    const github = vi.fn();
+    const res = await handle(
+      post("session", { job_id: "twelve-x-asia", session: "asia" }),
+      env(),
+      stubOf(container),
+      github as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded?.session).toBe("asia");
+    expect(forwarded?.timeout_seconds).toBe(7200);
+    expect(github).not.toHaveBeenCalled();
+  });
+
   it("forwards ingest with the workflow bucket and auth", async () => {
-    const container = vi.fn(async () => Response.json(containerResult({ exit_code: 0 })));
+    const container = vi.fn(async (_request: Request) =>
+      Response.json(containerResult({ exit_code: 0 })),
+    );
     const github = vi.fn();
     const res = await handle(
       post("ingest", { job_id: "twelve-x-market-context-daily", bucket: "daily" }),
       env(),
-      { fetch: container } as unknown as Fetcher,
+      stubOf(container),
       github as unknown as typeof fetch,
     );
     expect(res.status).toBe(200);
@@ -93,13 +192,11 @@ describe("routing and auth", () => {
   });
 
   it("DRY_RUN=1 still calls the container and does not write or alert", async () => {
-    const container = vi.fn(async () =>
+    const container = vi.fn(async (_request: Request) =>
       Response.json(containerResult({ dry_run: true, log_tail: "dry_run ingest" })),
     );
     const github = vi.fn();
-    const res = await handle(post("heartbeat", { job_id: "twelve-x-primemarket-heartbeat" }), env({ DRY_RUN: "1" }), {
-      fetch: container,
-    } as unknown as Fetcher, github as unknown as typeof fetch);
+    const res = await handle(post("heartbeat", { job_id: "twelve-x-primemarket-heartbeat" }), env({ DRY_RUN: "1" }), stubOf(container), github as unknown as typeof fetch);
     expect(res.status).toBe(200);
     const body = (await res.json()) as RunResult;
     expect(body.dry_run).toBe(true);

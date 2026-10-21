@@ -421,3 +421,21 @@ def test_with_path_keeps_query_and_fragment():
     base = "http://127.0.0.1:8788/prefix?a=1#f"
     got = contracts._with_path(base, "/healthz")
     assert got == "http://127.0.0.1:8788/prefix/healthz?a=1#f"
+
+
+def test_the_supabase_probes_follow_the_local_port_knob():
+    """The gate has to address the Supabase set the local stack starts.
+
+    core-local holds 54321, so probing that port would read core-local's
+    database and report a false PASS (DIG-4501). Only the port is templated:
+    the host stays on the loopback, like every other builtin.
+    """
+    for name, path in (("supabase-rest", "/rest/v1/"), ("supabase-auth", "/auth/v1/health")):
+        check = next(c for c in contracts.BUILTIN_CHECKS if c.name == name)
+        url, reason = contracts.resolve(check, {"DT_SUPABASE_PORT": "55421"})
+        assert reason is None
+        assert url == f"http://127.0.0.1:55421{path}"
+        # without the knob the local stack's own default stands
+        url, reason = contracts.resolve(check, {})
+        assert url == f"http://127.0.0.1:{contracts.DEFAULT_API_PORT}{path}"
+        assert url.startswith("http://127.0.0.1:")

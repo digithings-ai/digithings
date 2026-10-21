@@ -7,22 +7,24 @@ import {
   VIEW_MODES,
   effectiveReasoningMode,
   effectiveToolCallsMode,
+  isLegacyViewMode,
   isThinkingMode,
   isViewMode,
-  viewIsVisible,
+  normalizeViewMode,
 } from "@/lib/view-modes";
 
 describe("view-modes", () => {
   it("defaults to the balanced view with auto thinking", () => {
     expect(DEFAULT_VIEW_MODE).toBe("balanced");
     expect(DEFAULT_THINKING_MODE).toBe("auto");
-    expect(VIEW_MODES).toEqual(["hidden", "compact", "balanced", "detailed"]);
+    expect(VIEW_MODES).toEqual(["quiet", "balanced", "verbose"]);
     expect(THINKING_MODES).toEqual(["auto", "collapsed", "open"]);
   });
 
   it("guards view and thinking mode values", () => {
-    expect(isViewMode("hidden")).toBe(true);
+    expect(isViewMode("quiet")).toBe(true);
     expect(isViewMode("balanced")).toBe(true);
+    expect(isViewMode("hidden")).toBe(false);
     expect(isViewMode("expanded")).toBe(false);
     expect(isViewMode(undefined)).toBe(false);
 
@@ -32,34 +34,43 @@ describe("view-modes", () => {
     expect(isThinkingMode(true)).toBe(false);
   });
 
-  it("hides both groups only in the hidden view", () => {
-    expect(viewIsVisible("hidden")).toBe(false);
-    expect(viewIsVisible("compact")).toBe(true);
-    expect(viewIsVisible("balanced")).toBe(true);
-    expect(viewIsVisible("detailed")).toBe(true);
+  it("folds the retired view ids forward", () => {
+    // `hidden` was the one-line level; the folded chain shows that same line
+    // as its header now, so it means the titles only.
+    expect(isLegacyViewMode("hidden")).toBe(true);
+    expect(normalizeViewMode("hidden")).toBe("quiet");
+    expect(normalizeViewMode("compact")).toBe("quiet");
+    expect(normalizeViewMode("detailed")).toBe("verbose");
+    expect(normalizeViewMode("verbose")).toBe("verbose");
+    expect(normalizeViewMode("nonsense")).toBe("balanced");
+    expect(normalizeViewMode(undefined)).toBe("balanced");
   });
 
   it("folds the view mode with the thinking override for reasoning", () => {
-    expect(effectiveReasoningMode("hidden", "auto")).toBe("off");
-    expect(effectiveReasoningMode("hidden", "open")).toBe("off");
-
-    expect(effectiveReasoningMode("compact", "auto")).toBe("collapsed");
-    expect(effectiveReasoningMode("compact", "collapsed")).toBe("collapsed");
-    expect(effectiveReasoningMode("compact", "open")).toBe("expanded");
+    expect(effectiveReasoningMode("quiet", "auto")).toBe("collapsed");
+    expect(effectiveReasoningMode("quiet", "collapsed")).toBe("collapsed");
+    expect(effectiveReasoningMode("quiet", "open")).toBe("expanded");
 
     expect(effectiveReasoningMode("balanced", "auto")).toBe("balanced");
     expect(effectiveReasoningMode("balanced", "collapsed")).toBe("collapsed");
     expect(effectiveReasoningMode("balanced", "open")).toBe("expanded");
 
-    expect(effectiveReasoningMode("detailed", "auto")).toBe("expanded");
-    expect(effectiveReasoningMode("detailed", "collapsed")).toBe("collapsed");
-    expect(effectiveReasoningMode("detailed", "open")).toBe("expanded");
+    expect(effectiveReasoningMode("verbose", "auto")).toBe("expanded");
+    expect(effectiveReasoningMode("verbose", "collapsed")).toBe("collapsed");
+    expect(effectiveReasoningMode("verbose", "open")).toBe("expanded");
   });
 
   it("maps the view mode onto tool-call disclosure", () => {
-    expect(effectiveToolCallsMode("hidden")).toBe("off");
-    expect(effectiveToolCallsMode("compact")).toBe("collapsed");
+    expect(effectiveToolCallsMode("quiet")).toBe("collapsed");
     expect(effectiveToolCallsMode("balanced")).toBe("balanced");
-    expect(effectiveToolCallsMode("detailed")).toBe("expanded");
+    expect(effectiveToolCallsMode("verbose")).toBe("expanded");
+  });
+
+  it("has no view that turns the trace off", () => {
+    // The retired `hidden` level was the only one that did.
+    for (const view of VIEW_MODES) {
+      expect(effectiveToolCallsMode(view)).not.toBe("off");
+      expect(effectiveReasoningMode(view, "auto")).not.toBe("off");
+    }
   });
 });

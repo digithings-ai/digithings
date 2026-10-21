@@ -36,7 +36,7 @@ _ci_house="$(printf '%s' "${CHEAPERINFERENCE_HOUSE:-}" | tr '[:upper:]' '[:lower
 _force_or=0
 case "$_upstream" in openrouter|or) _force_or=1 ;; esac
 case "$_ci_house" in 0|false|no|off) _force_or=1 ;; esac
-if [ -n "$_ci_key" ] && [ "$_force_or" -eq 0 ]; then
+if [ "$_force_or" -eq 0 ]; then
   export CHEAPERINFERENCE_API_BASE="${CHEAPERINFERENCE_API_BASE:-https://api.cheaperinference.com/v1}"
   if [ -f /app/scripts/merge_litellm_cheaperinference.py ] \
     && [ -f /app/config/litellm.cheaperinference.yaml ] \

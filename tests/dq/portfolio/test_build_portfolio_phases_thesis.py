@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from digiquant.portfolio.graph import build_portfolio_graph, build_portfolio_phases_thesis
 from digiquant.research.state import PhasePortfolioState, ResearchState
@@ -75,7 +77,7 @@ class TestBuildPortfolioPhasesThesis:
         monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "2")
         state = ResearchState(
             run_type="delta",
-            run_date=__import__("datetime").date(2026, 6, 20),
+            run_date=date(2026, 6, 20),
             config=ResearchConfigBundle(watchlist=["SPY"]),
         )
         state.phase_portfolio = PhasePortfolioState(

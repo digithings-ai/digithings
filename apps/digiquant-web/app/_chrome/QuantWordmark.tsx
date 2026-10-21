@@ -9,8 +9,10 @@ import { HeroBanner } from "@digithings/hero-banner/web";
  *  every load (`replayLoading`); `phase="idle"` holds the mark back until it
  *  flips to `run`. Scroll-triggered marks stay unarmed until allowed.
  *  Reduced motion paints the settled mark with no build (inside `HeroBanner`,
- *  not in CSS). SSR emits an empty canvas where the old SVG carried pixels —
- *  first paint needs JS. `className` stays on the canvas so the callers' fixed
+ *  not in CSS). The server render and a no-JS page show the settled mark:
+ *  `HeroBanner` renders it as a CSS mask over a themed background, so the
+ *  canvas is never an empty box before it paints. `className` stays on the
+ *  canvas so the callers' fixed
  *  widths (`top`, footer) size it exactly as before; the `h-`fixed callers
  *  (`_nav`, desk frame) carry explicit pixel widths for the same reason. */
 export function quantArmed({ phase, armed }: { phase: "run" | "idle"; armed: boolean }): boolean {

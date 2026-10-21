@@ -16,7 +16,11 @@ if (!models.available.includes(models.default)) {
 
 export const CHAT_MODELS: readonly string[] = models.available;
 
-export const THEMES = ["dark", "light"] as const;
+/**
+ * The desk has one scheme: dark. A stored "light" theme is dropped here, so the
+ * desk never asks the document for a scheme it does not have.
+ */
+export const THEMES = ["dark"] as const;
 export const DENSITIES = ["regular", "compact"] as const;
 export const REFRESH_SECONDS = [0, 15, 30, 60, 120] as const;
 export const STALE_SESSIONS = [1, 2, 3, 5] as const;

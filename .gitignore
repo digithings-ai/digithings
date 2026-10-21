@@ -244,3 +244,6 @@ docs/superpowers/specs/review-*
 /*-prompt.txt
 /notes*.md
 /scratch*
+
+# Agent scratch — temporary artifacts, screenshots, logs (never commit)
+.agent-tmp/

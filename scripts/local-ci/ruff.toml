@@ -1,0 +1,11 @@
+# This directory is a verbatim copy of the host CI runner that posts the `local-ci`
+# status (see README.md here). The copy is deliberate: the exact bytes that run on
+# the host are reviewable in the repo, so reformatting them would destroy the audit
+# trail and turn every future sync into a manual merge.
+#
+# E701/E702 are the compact one-line style that script has always used. They are the
+# only rules waived, and only here. Everything else in the root config still applies.
+extend = "../../ruff.toml"
+
+[lint]
+ignore = ["E701", "E702"]

@@ -2,13 +2,36 @@
  * Routing and auth for POST /run/{ingest|heartbeat}.
  * The container binding is injected so tests do not start an image.
  */
-import { decideAlert, executeAlert, labelFor, loadOpen, verdictLine, SESSION_LABEL } from "./alerts";
+import {
+  durableObjectUnavailableResponse,
+  DURABLE_OBJECT_UNAVAILABLE,
+  DurableObjectUnavailableError,
+  fetchDurableObject,
+} from "@digithings/durable-object-reconnect";
+import {
+  decideAlert,
+  executeAlert,
+  labelFor,
+  lastMeaningfulLine,
+  loadOpen,
+  verdictLine,
+  SESSION_LABEL,
+} from "./alerts";
 import type { Env } from "./env";
-import { defaultTimeoutSeconds, isBucket, isRoute, type Route } from "./routes";
+import {
+  defaultTimeoutSeconds,
+  isBucket,
+  isIsoDate,
+  isRoute,
+  isSession,
+  type Route,
+} from "./routes";
 
 export type RunBody = {
   job_id?: string;
   bucket?: string;
+  session?: string;
+  run_date?: string;
   timeout_seconds?: number;
   dry_run?: boolean;
 };
@@ -29,14 +52,33 @@ function authorized(request: Request, env: Env): boolean {
   return (request.headers.get("Authorization") ?? "") === `Bearer ${token}`;
 }
 
+/**
+ * The workflow's run_date input: optional, a calendar date, empty means the
+ * forward path. A missing value or a JSON null is absent, the same as the
+ * workflow's empty default; a returned null means malformed.
+ */
+function readRunDate(value: unknown): string | undefined | null {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  return isIsoDate(trimmed) ? trimmed : null;
+}
+
 function logLine(fields: Record<string, unknown>): void {
   console.log(JSON.stringify(fields));
 }
 
+/**
+ * `connectContainer` resolves the stub of the Durable Object that owns the
+ * container. It is a factory, not a stub, because a reconnect must address the
+ * live instance: the platform closes the instance when it recycles it, and the
+ * next call has to reach the instance that took over the name.
+ */
 export async function handle(
   request: Request,
   env: Env,
-  container: Fetcher,
+  connectContainer: () => Fetcher,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Response> {
   const url = new URL(request.url);
@@ -70,11 +112,22 @@ export async function handle(
   if (route === "ingest" && (typeof parsed.bucket !== "string" || !isBucket(parsed.bucket))) {
     return Response.json({ error: "invalid_bucket" }, { status: 400 });
   }
+  if (route === "session" && (typeof parsed.session !== "string" || !isSession(parsed.session))) {
+    return Response.json({ error: "invalid_session" }, { status: 400 });
+  }
+  const runDate = readRunDate(parsed.run_date);
+  if (runDate === null) {
+    return Response.json({ error: "invalid_run_date" }, { status: 400 });
+  }
 
   const dryRun = env.DRY_RUN === "1" || parsed.dry_run === true;
   const body: RunBody = {
     job_id: typeof parsed.job_id === "string" ? parsed.job_id : route,
     bucket: parsed.bucket,
+    session: parsed.session,
+    // Only the session route runs the graph, and only the graph reads a
+    // backfill date. The other routes ignore it.
+    run_date: route === "session" ? runDate : undefined,
     timeout_seconds:
       typeof parsed.timeout_seconds === "number"
         ? parsed.timeout_seconds
@@ -84,13 +137,41 @@ export async function handle(
   const started = Date.now();
   logLine({ job: body.job_id, route, event: "start", dry_run: dryRun });
 
-  const res = await container.fetch(
-    new Request(`https://twelvex-runner/run/${route}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  );
+  /**
+   * The hop to the container is the hop that fails: when the platform closes
+   * the Durable Object instance while the request is in flight, the connection
+   * is closed and the request never reaches the container. The platform's own
+   * message says to reconnect and retry, so we reconnect once; when even the
+   * reconnect fails we answer 503 + Retry-After, so the caller backs off
+   * instead of hammering a runner that is still coming up (run-watch
+   * DIG-4753).
+   */
+  let res: Response;
+  try {
+    res = await fetchDurableObject(
+      connectContainer,
+      () =>
+        new Request(`https://twelvex-runner/run/${route}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+    );
+  } catch (error) {
+    if (error instanceof DurableObjectUnavailableError) {
+      logLine({
+        job: body.job_id,
+        route,
+        event: "exit",
+        exit_code: null,
+        error: DURABLE_OBJECT_UNAVAILABLE,
+      });
+      return durableObjectUnavailableResponse(
+        "the runner's Durable Object instance was not available; retry later",
+      );
+    }
+    throw error;
+  }
   const text = await res.text();
   if (res.status === 409) {
     logLine({ job: body.job_id, route, event: "exit", exit_code: null, error: "busy" });
@@ -151,7 +232,14 @@ async function publishAlert(
       route,
       exitCode: result.exit_code,
       bucket: body.bucket,
-      reason: route === "ingest" ? verdictLine(result.log_tail ?? "") : "session probe failed",
+      session: body.session,
+      reason:
+        route === "ingest"
+          ? verdictLine(result.log_tail ?? "")
+          : route === "session"
+            ? lastMeaningfulLine(result.log_tail ?? "")
+            : "session probe failed",
+      logTail: result.log_tail,
       now,
       open,
     });

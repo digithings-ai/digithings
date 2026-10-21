@@ -2,11 +2,11 @@
 """Generate snapshot.json sidecar from existing DIGEST.md + portfolio.json.
 
 Usage:
-  python scripts/generate-snapshot.py                  # latest day
-  python scripts/generate-snapshot.py 2026-04-06       # specific day
-  python scripts/generate-snapshot.py --all            # all day folders
-  python scripts/generate-snapshot.py --validate       # validate existing snapshot.json files
-  python scripts/generate-snapshot.py --force 2026-04-06  # re-parse even if snapshot.json exists
+  python digiquant/scripts/research/generate_snapshot.py                  # latest day
+  python digiquant/scripts/research/generate_snapshot.py 2026-04-06       # specific day
+  python digiquant/scripts/research/generate_snapshot.py --all            # all day folders
+  python digiquant/scripts/research/generate_snapshot.py --validate       # validate existing snapshot.json files
+  python digiquant/scripts/research/generate_snapshot.py --force 2026-04-06  # re-parse even if snapshot.json exists
 
 NOTE: If snapshot.json already exists and has a populated 'regime' key (written
 directly by the AI in Phase 7), this script returns it unchanged unless --force
@@ -370,7 +370,7 @@ def main():
     pj_positions, _ = load_portfolio_json()
 
     parser = argparse.ArgumentParser(
-        description="generate-snapshot.py — Generate snapshot.json sidecar from DIGEST.md + portfolio.json",
+        description="generate_snapshot.py — Generate snapshot.json sidecar from DIGEST.md + portfolio.json",
         epilog="Without arguments, processes the latest day folder."
     )
     parser.add_argument(

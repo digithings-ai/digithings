@@ -70,6 +70,8 @@ npx wrangler secret put DIGICHAT_PLAN_PROOF_SECRET
 npx wrangler secret put DIGICHAT_MONITOR_TOKENS   # optional (DIG-613); omit => free-turn gate applies to all
 npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_URL
 npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
+npx wrangler secret put DIGICHAT_TRIAL_PROOF_SECRET      # trial-proof mint/verify secret (DIG-4530); forwarded to the container
+npx wrangler secret put DIGICHAT_TENANT_MINT_CREDENTIALS  # tenant mint credentials (DIG-4530); forwarded to the container
 
 npx wrangler deploy
 ```
