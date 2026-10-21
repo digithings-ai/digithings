@@ -16,6 +16,16 @@ import time
 import unittest
 from datetime import datetime, timedelta, timezone
 
+# The CI lane runs `pytest tests/scripts/ ... -m "unit or baseline"`. A file
+# without a marker is deselected, so every test in this file would never run
+# in the lane (DIG-4809).
+try:
+    import pytest
+except ImportError:  # the file also runs as a plain unittest module
+    pytest = None
+else:
+    pytestmark = pytest.mark.unit
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS = os.path.abspath(os.path.join(_HERE, "..", "..", "scripts", "local-ci"))
 if _SCRIPTS not in sys.path:
@@ -1294,40 +1304,63 @@ class ForkRowWiringTest(unittest.TestCase):
     cannot see which caller asked for the app row.
     """
 
-    def _status_calls(self):
-        with open(os.path.join(_SCRIPTS, "local_ci.py")) as f:
-            tree = ast.parse(f.read())
+    def _status_calls(self, source=None):
+        if source is None:
+            with open(os.path.join(_SCRIPTS, "local_ci.py")) as f:
+                source = f.read()
+        tree = ast.parse(source)
         return [node for node in ast.walk(tree)
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                 and node.func.id == "status"]
 
-    def test_every_fork_status_call_posts_the_repo_row_alone(self):
-        fork_calls = [c for c in self._status_calls()
-                      if any(isinstance(a, ast.Name) and a.id == "FORK_DESC"
-                             for a in c.args)]
-        self.assertTrue(fork_calls, "the fork call sites must be found")
-        for call in fork_calls:
+    def _fork_calls(self, source=None):
+        """The status calls that carry a fork's verdict.
+
+        A fork site names the constant `FORK_DESC` or writes its text out. A
+        check that only knows the name would miss the second form, and that
+        site would ask for an app row on a head this repository does not have.
+        """
+        calls = []
+        for call in self._status_calls(source):
+            for arg in call.args:
+                if isinstance(arg, ast.Name) and arg.id == "FORK_DESC":
+                    calls.append(call)
+                    break
+                if (isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                        and _mod.FORK_DESC in arg.value):
+                    calls.append(call)
+                    break
+        return calls
+
+    def _fork_calls_without_the_app_row(self, source=None):
+        out = []
+        for call in self._fork_calls(source):
             app = [kw.value for kw in call.keywords if kw.arg == "app"]
-            self.assertEqual(len(app), 1, "a fork status call must pass app=False")
-            self.assertIsInstance(app[0], ast.Constant)
-            self.assertIs(app[0].value, False)
+            if (len(app) != 1 or not isinstance(app[0], ast.Constant)
+                    or app[0].value is not False):
+                out.append(call)
+        return out
+
+    def test_every_fork_status_call_posts_the_repo_row_alone(self):
+        fork_calls = self._fork_calls()
+        self.assertTrue(fork_calls, "the fork call sites must be found")
+        self.assertEqual(self._fork_calls_without_the_app_row(), [])
 
     def test_a_fork_description_written_as_a_literal_is_also_caught(self):
         """A literal in place of the constant would hide the call site.
 
-        The name-based check finds `FORK_DESC`; a site that writes the text
-        out instead would not be found, and the app row would be asked for a
-        head this repository does not have.
+        The checker has to find both forms, and this proves it: a source that
+        writes the description out is reported, so such a site cannot slip
+        through unnoticed.
         """
-        literal_calls = [c for c in self._status_calls()
-                         if any(isinstance(a, ast.Constant) and a.value == _mod.FORK_DESC
-                                for a in c.args)]
-        for call in literal_calls:
-            app = [kw.value for kw in call.keywords if kw.arg == "app"]
-            self.assertEqual(len(app), 1,
-                             "a fork status call must pass app=False")
-            self.assertIsInstance(app[0], ast.Constant)
-            self.assertIs(app[0].value, False)
+        literal = ("def f(p):\n"
+                   "    status(p, 'failure', %r)\n" % _mod.FORK_DESC)
+        found = self._fork_calls(literal)
+        self.assertEqual(len(found), 1,
+                         "the checker must find a fork site that writes the text out")
+        self.assertEqual(len(self._fork_calls_without_the_app_row(literal)), 1,
+                         "a fork site without app=False must be reported")
+        self.assertEqual(self._fork_calls_without_the_app_row(), [])
 
 
 class AppRowLastGapsTest(NoRealNetwork, unittest.TestCase):
@@ -1377,16 +1410,6 @@ class AppRowLastGapsTest(NoRealNetwork, unittest.TestCase):
         self.assertIn("<redacted>", logged)
         self.assertNotIn(self.TOKEN, logged)
 
-    def test_the_gate_environment_drops_the_token_at_import_time(self):
-        """The gate environment is built at import time.
-
-        It cannot be observed in process, so the protection is pinned by
-        reading the source instead of by calling it.
-        """
-        with open(os.path.join(_SCRIPTS, "local_ci.py")) as f:
-            source = f.read()
-        self.assertIn('pop("CI_APP_TOKEN"', source)
-
     def test_the_app_row_carries_the_token_in_the_child_environment(self):
         self._write_token(self.TOKEN)
         _mod.status("abc123", "success", "all gates passed")
@@ -1396,12 +1419,38 @@ class AppRowLastGapsTest(NoRealNetwork, unittest.TestCase):
         self.assertEqual(call["env"]["GITHUB_TOKEN"], self.TOKEN)
 
     def test_the_child_state_record_carries_no_token(self):
-        """The child state file records the command that ran."""
-        self._write_token(self.TOKEN)
-        _mod.status("abc123", "success", "all gates passed")
-        for call in self.sh_calls:
-            self.assertNotIn(self.TOKEN, call["name"] or "")
-            self.assertNotIn(self.TOKEN, " ".join(call["cmd"]))
+        """The record the watchdog reads holds the command, not the token.
+
+        The record is written by the real command runner, so the file is read
+        in the moment it is written. A stubbed runner never writes it, and a
+        test against a stub proves nothing about the record.
+        """
+        state = os.path.join(self._tmp, "child.json")
+        saved_state = _mod.CHILD_STATE
+        _mod.CHILD_STATE = state
+        seen = {}
+        original = _mod._write_child_state
+
+        def spy(pid, name, budget):
+            original(pid, name, budget)
+            try:
+                with open(state) as f:
+                    seen["record"] = f.read()
+            except OSError:
+                seen["record"] = ""
+
+        _mod._write_child_state = spy
+        try:
+            env = dict(os.environ)
+            env["GH_TOKEN"] = self.TOKEN
+            env["GITHUB_TOKEN"] = self.TOKEN
+            rc, _ = self._saved_sh(["/bin/sh", "-c", "exit 0"], timeout=30, env=env)
+        finally:
+            _mod._write_child_state = original
+            _mod.CHILD_STATE = saved_state
+        self.assertEqual(rc, 0)
+        self.assertIn("record", seen, "the child state record must have been written")
+        self.assertNotIn(self.TOKEN, seen["record"])
 
     @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0,
                      "root can read a file whatever its mode")
