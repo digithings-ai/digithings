@@ -287,8 +287,9 @@ export const ModelsSchema = z
     /**
      * OCC visitor picker. On unless false, after Chris's sign-off (21 Oct
      * 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I
-     * sign off on overriding the DIG-4488 lock". Other hosts ignore it. Tool
-     * and MCP locks stay closed.
+     * sign off on overriding the DIG-4488 lock". `false` keeps the operator
+     * model. A row that only shares the slug stays locked unless the flag
+     * is true. Tool and MCP locks stay closed.
      */
     occPicker: z.boolean().optional(),
     /** USD per million output tokens. Omit to use the catalog default. */
@@ -810,6 +811,19 @@ export const DeploymentSchema = z
      * Never projected to the browser via the client config API.
      */
     token: z.string().min(1).optional(),
+    /**
+     * Env var that holds the embed token. The name only — the loader resolves
+     * it and the client projection never copies it.
+     */
+    tokenEnv: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]*$/, "tokenEnv must be an env var name")
+      .optional(),
+    /**
+     * Server-only system prompt for this deployment. The client projection
+     * does not copy it. House puts the digithings corpus prompt here.
+     */
+    prompt: z.string().min(1).optional(),
   })
   .strict()
   .superRefine((deployment, ctx) => {
@@ -833,6 +847,16 @@ export const DeploymentSchema = z
 export const DigichatConfigSchema = z
   .object({
     version: z.literal(1),
+    /**
+     * Parents allowed to embed this install. Hostnames, not origins.
+     * An overlay unions onto this list (`extends-merge`).
+     */
+    embedHosts: z.array(z.string().min(1)).optional(),
+    /**
+     * digigraph tool names for the house project. Not the catalog ids.
+     * Server-only; the client projection does not copy the list.
+     */
+    graphTools: z.array(z.string().min(1)).optional(),
     /** Single-install product shape (typical client deploy). */
     deployment: DeploymentSchema.optional(),
     /**

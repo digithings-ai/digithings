@@ -395,7 +395,7 @@ describe("product embed YAML hosts", () => {
     expect(painted.skin).toBe("digichat");
     expect(painted.slug).toBe("digithings-ai");
     expect(painted.backendType).toBe("digigraph");
-    expect(painted.webSearch).toBe(false);
+    expect(painted.webSearch).toBe(true);
     expect(painted.gateMode).toBe("ungated");
   });
 

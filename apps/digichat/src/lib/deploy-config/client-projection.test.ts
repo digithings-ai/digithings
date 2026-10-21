@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { BASELINE_EMBED_SUGGESTIONS } from "@/lib/baseline-embed";
 import { DEFAULT_CLIENT_CONFIG, toDigichatClientConfig } from "./client-projection";
 import { clientConfigFromEmbedTenant } from "./embed-bridge";
 import type { EmbedTenantClientConfig } from "@/lib/embed-client-config";
@@ -170,14 +169,17 @@ describe("baseline embed models catalog (Cheaper Inference default)", () => {
   });
 });
 
-describe("baseline embed defaults (unconfigured container) are least-privilege", () => {
-  it("ships template suggestions but leaves user MCP, web search, and BYOK off", () => {
-    expect(BASELINE_EMBED_SUGGESTIONS).toHaveLength(4);
-    expect(DEFAULT_CLIENT_CONFIG.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
+describe("client fallback matches house", () => {
+  it("ships the house suggestions with web search, BYOK, and the context meter on", () => {
+    expect(DEFAULT_CLIENT_CONFIG.slug).toBe("digithings-ai");
+    expect(DEFAULT_CLIENT_CONFIG.chrome.suggestions).toHaveLength(8);
+    expect(DEFAULT_CLIENT_CONFIG.chrome.welcome).toBe("Ask about digithings");
     expect(DEFAULT_CLIENT_CONFIG.mcp.allowUserServers).toBe(false);
     expect(DEFAULT_CLIENT_CONFIG.mcp.allowAddForm).toBe(false);
-    expect(DEFAULT_CLIENT_CONFIG.gate.webSearch).toBe(false);
-    expect(DEFAULT_CLIENT_CONFIG.gate.showByok).toBe(false);
+    expect(DEFAULT_CLIENT_CONFIG.gate.webSearch).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.gate.showByok).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.gate.showContextMeter).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.features.attachments).toBe(false);
   });
 
   it("enables user MCP, web search, and BYOK only for an explicitly-configured deployment", () => {

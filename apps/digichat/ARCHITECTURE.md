@@ -1170,8 +1170,11 @@ guardrails:                      # omit the block and every guard is off
     user: 80000                  # optional; per user id, else server-derived IP
 ```
 
-The numbers in that block are the shape. No shipped yaml sets them. The
-public digithings.ai example only comments a per-user value of 80000.
+House (`defaults.yaml`) sets `maxToolCallsPerTurn: 5`, `answerAt: 0.7`,
+`pauseAt: 0.9`, and a per-visitor `tokensPerMinute.user` of 80000. OCC clears
+the per-visitor minute and keeps the tool-call cap and the answer guard. The
+DataTap trial clears the per-visitor minute; its shared deployment TPM is
+unset until the Azure number for gpt-5.6-terra in westeurope is known.
 
 `maxToolCallsPerTurn` caps tool calls in one user turn where the backend can
 enforce it, and is notice/best-effort where it cannot (digigraph, langgraph,
@@ -1236,11 +1239,11 @@ It does not abort the upstream call, and a wrap-up instruction cannot reach a
 later round of that same request. a2a reports no tool calls, so the key is
 refused at config load.
 
-The trial yaml leaves a proposed cap of 5 (4 is the other candidate)
-and a deployment TPM commented out until the Azure number for gpt-5.6-terra in
-westeurope is confirmed. The public digithings.ai example comments a per-user
-limit of 80000 and does not enable it. OCC and the trial do not carry that
-per-user value.
+defaults.yaml sets the tool-call cap to 5 and the answer guard to 0.7 / 0.9,
+and a per-visitor minute of 80000 because house is public. OCC and local clear
+that minute and keep the cap and the answer guard. The DataTap trial clears
+the per-visitor minute. Its shared deployment TPM stays unset until the Azure
+number for gpt-5.6-terra in westeurope is known.
 
 A reasoning disclosure appears only when the Foundry event includes summary text. Operators enable that
 summary on the agent definition: the Responses API refuses a per-call
@@ -2006,6 +2009,7 @@ Canonical operator config is a Zod-validated YAML file:
 - Path: `DIGICHAT_CONFIG_PATH` (default `/app/config/digichat.yaml`)
 - Loader: `src/lib/deploy-config/` (`loadDigichatConfig` / `getDigichatConfig`)
 - Examples: `apps/digichat/config/examples/*.yaml` (incl. `skins/<id>.yaml` and `local-cli.yaml`)
+- House: `apps/digichat/config/defaults.yaml`. OCC, the DataTap trial, local, and Docker are `extends: defaults` overlays. Objects merge, arrays replace, `embedHosts` unions, `null` deletes a key, and a different `backend.type` replaces the backend. A missing config file loads this document, so a deployment with no overrides looks like digithings.ai (`gate.webSearch: true`, `gate.showContextMeter: true`, per-visitor `guardrails.tokensPerMinute.user: 80000`, `maxToolCallsPerTurn: 5`, `answerAt: 0.7`, `pauseAt: 0.9`). The per-visitor minute is house because house is public. OCC clears that minute, the premium cost meter, and the context meter, and inherits the catalog picker. The DataTap trial clears the per-visitor minute and keeps one shared `tokensPerMinute.deployment` allowance (the Azure number is not in this repo). The tool-call cap and the answer guard stay on every overlay. `prompt` and `tokenEnv` stay server-side.
 - Startup: `src/instrumentation.ts` calls `initDigichatConfigAtStartup()` (fail closed)
 
 **Unrendered templates are refused at load (#6023).** The shipped templates
@@ -2048,7 +2052,7 @@ part-driven vs chrome-driven is indexed in digiweb
 | `chrome.defaultLanguage` | curated codes (`languages.ts`) | Seeds the stock language picker |
 | `chrome.transcript.userAlign` | `right \| left` | Stock web default `right` |
 | `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant \| digichat` | The 11 assistant-ui catalog template ids plus first-party `digichat`. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. Catalog / third-party default remains `base`. Unset `skin` on digithings.ai / OCC hosts (and slugs `digithings`, `digithings-ai`, `occ`) defaults to `digichat` so production `DIGICHAT_EMBED_TENANTS` without `skin` still mounts DigichatThread. |
-| `models.default` / `models.available` / `models.allowPicker` / `models.catalog` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`). A `preset:<id>` token resolves to the catalog model before that check. Empty `available` = no restriction. The effective list is the merged deployment list: the tenant's curated list when it has one, else the deployment's (DIG-4589). On the embed surface the request's tenant carries that merged list, so the allowlist and the session lock come from one artefact; on the session surface the deployment config decides. `catalog: true` fills `available`, `default`, and `picker` from `config/model-picker-catalog.json` using the newest generation of each family, then the deployment's price cap, presets, and `showFullList`. A Premium group holds models above the standard cap and at or under `premiumCapUsdPerMillion` (catalog default $2.50). Presets and the router skip that group. `models.costPerWindow` meters premium picks in USD per rolling window. The trace path records that charge in a `finally` block, including when the visitor disconnects after the answer. digithings.ai sets $0.0125565 per day. A model outside the premium picker group is not metered (known limit). A spent window answers with the Auto preset (1017); the notice names Auto, including when `models.default` is a different id. OCC sets no `costPerWindow` and no token budget (Chris, 21 Oct 2026, 22:51 Rome: the invite link is the gate). The #6182 tool-call cap and answer guard stay on OCC; they are stability guardrails, not token limits. OCC `models.occPicker` is on for 2.6.6 after Chris's sign-off (21 Oct 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488 lock". The flag stays the off switch. Tool and MCP locks (`lockSessionControls`) are unchanged. digithings.ai and the OCC embed set the catalog policy (default DeepSeek V4.1 Flash 1017, Reasoning GLM 5.3 Flash). The dashboard keeps an explicit three-slug list. Foundry backends publish no house catalog. OpenRouter appears only as the Router preset when `OPENROUTER_API_KEY` is set at load, never as `:free` rows. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
+| `models.default` / `models.available` / `models.allowPicker` / `models.catalog` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`). A `preset:<id>` token resolves to the catalog model before that check. Empty `available` = no restriction. The effective list is the merged deployment list: the tenant's curated list when it has one, else the deployment's (DIG-4589). On the embed surface the request's tenant carries that merged list, so the allowlist and the session lock come from one artefact; on the session surface the deployment config decides. Checked-in house is `config/defaults.yaml`; the digithings.ai example extends it. `catalog: true` fills `available`, `default`, and `picker` from `config/model-picker-catalog.json` using the newest generation of each family, then the deployment's price cap, presets, and `showFullList`. A Premium group holds models above the standard cap and at or under `premiumCapUsdPerMillion` (catalog default $2.50). Presets and the router skip that group. `models.costPerWindow` meters premium picks in USD per rolling window. The trace path records that charge in a `finally` block, including when the visitor disconnects after the answer. digithings.ai sets $0.0125565 per day. A model outside the premium picker group is not metered (known limit). A spent window answers with the Auto preset (1017); the notice names Auto, including when `models.default` is a different id. OCC inherits the catalog picker and clears the premium meter and the per-visitor minute (Chris, 21 Oct 2026, 22:51 Rome: the invite link is the gate). The #6182 tool-call cap and answer guard stay on OCC; they are stability guardrails, not token limits. `models.occPicker: false` is the off switch; omitting it leaves the picker on (Chris, 21 Oct 2026, 19:19 Rome: "Yes, enable the model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488 lock"). Tool and MCP locks (`lockSessionControls`) are unchanged. digithings.ai and the OCC embed use the catalog policy (default DeepSeek V4.1 Flash 1017, Reasoning GLM 5.3 Flash). The dashboard keeps an explicit three-slug list. Foundry backends publish no house catalog. OpenRouter appears only as the Router preset when `OPENROUTER_API_KEY` is set at load, never as `:free` rows. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
 | `features.attachments` | bool | Default **true** (composer attach). Product / DataTap / dashboard YAML set false. |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |

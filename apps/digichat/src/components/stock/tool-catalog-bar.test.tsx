@@ -76,7 +76,39 @@ describe("ToolCatalogBar", () => {
     expect(document.querySelector("[data-tool-catalog]")).toBeNull();
   });
 
-  it("renders no web toggle for a tenant whose gate is off", () => {
+  it("defaults the web toggle on for baseline and matched tenants (#3859)", () => {
+    // House client fallback, no stored pref: default-on.
+    stubMapStorage();
+    const { unmount } = render(
+      <ToolCatalogBar
+        clientConfig={catalogConfig}
+        sessionKey="baseline-scope"
+        webSearchScope="baseline-web-default"
+      />,
+    );
+    expect(catalogConfig.slug).toBe("digithings-ai");
+    expect(screen.getByRole("button", { name: "Web search" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    unmount();
+    // Matched tenant slug with no stored pref: also default-on now.
+    stubMapStorage();
+    const { unmount: unmountTenant } = render(
+      <ToolCatalogBar
+        clientConfig={{ ...catalogConfig, slug: "occ" }}
+        sessionKey="tenant-scope"
+        webSearchScope="tenant-web-default"
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Web search" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    unmountTenant();
+  });
+
+  it("renders no web toggle for deny tenants (gate off, no web_search entry)", () => {
+    // datatap shape: gate.webSearch false and no web_search catalog entry —
+    // the tenant AND-gate denies, so no toggle renders and nothing sends.
     stubMapStorage();
     // datatap shape: gate.webSearch false and no web_search catalog entry.
     const denyConfig = {

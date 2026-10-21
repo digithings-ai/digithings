@@ -1159,25 +1159,39 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
   });
 
-  it("does not forward web search when env gate is off (#3420)", async () => {
+  it("does not forward web search when the deployment and the env gate are off (#3420)", async () => {
     delete process.env.DIGICHAT_WEB_SEARCH;
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-digi-enable-web-search": "1",
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "plain",
+          backend: { type: "digigraph" },
+          gate: { webSearch: false },
         },
-        body: JSON.stringify({
-          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
-        }),
-      })
+      }),
     );
-    expect(res.status).toBe(200);
-    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
-      headers?: Record<string, string>;
-    };
-    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-enable-web-search": "1",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+    } finally {
+      resetDigichatConfigForTests();
+    }
   });
 
   it("forwards web search for first-party (null embedConfig) when DIGICHAT_WEB_SEARCH=1", async () => {
@@ -1205,7 +1219,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
   });
 
-  it("does not forward web search for first-party (null embedConfig) when env is unset", async () => {
+  it("forwards web search for first-party house when the deployment allows it", async () => {
     delete process.env.DIGICHAT_WEB_SEARCH;
     vi.mocked(resolveChatTenantContext).mockResolvedValue({
       ...mockAuthCtx,
@@ -1227,7 +1241,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
       headers?: Record<string, string>;
     };
-    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
   });
 
   it("forwards X-Digi-License when the container holds a license (spec §7.1)", async () => {
@@ -2859,11 +2873,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       });
       expect(call?.responseHeaders["X-Digichat-Session"]).toBe("sess-trace");
       expect(call?.responseHeaders["X-Request-Id"]).toBe("rid-trace");
-      // The session path now resolves the same deployment the embed path does
-      // (Phase 2b), so the adapter gets that deployment's `gate.activityDetail`
-      // instead of a hard-coded "full". The synthetic dev config in tests leaves
-      // it at the schema default.
-      expect(call?.activityDetail).toBe("labels");
+      // No config file loads house. House sets activityDetail full.
+      expect(call?.activityDetail).toBe("full");
       expect(call?.signal).toBeDefined();
     });
 
