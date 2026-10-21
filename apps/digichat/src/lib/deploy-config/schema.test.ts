@@ -479,6 +479,7 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
     expect(dt?.models.allowPicker).toBe(true);
+    expect(dt?.gate.showContextMeter).toBe(true);
     expect(dt?.models.catalog).toBe(true);
     expect(dt?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(dt?.models.available).toContain("deepseek/deepseek-v4.1-flash-1017");
@@ -539,6 +540,7 @@ describe("DigichatConfigSchema", () => {
       "backlinks",
     ]);
     expect(occHost?.gate?.webSearch).toBe(false);
+    expect(occHost?.gate?.showContextMeter).toBeUndefined();
     expect(occHost?.gate?.lockSessionControls).toBe(true);
     expect(occHost?.features.modelPicker).toBe(true);
     expect(occHost?.models.catalog).toBe(true);

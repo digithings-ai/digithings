@@ -184,6 +184,12 @@ export type EmbedTenantConfig = {
    */
   showLanguageSelector?: boolean;
   /**
+   * Gates the composer context meter on slugs `digithings` and
+   * `digithings-ai`. The live house publishes no models, so this release
+   * shows no bar there. Any other slug that sets the field is refused.
+   */
+  showContextMeter?: boolean;
+  /**
    * When true, this tenant pins the house default model and hides the
    * per-session model/MCP/tool controls: the X-Digi-Model header is ignored
    * (house default model) and digigraph hides session_set_model /
@@ -400,6 +406,9 @@ function validateApiKeyEnv(value: unknown, ctx: string): string {
   }
   return value;
 }
+
+/** House product slugs. A registry entry for any other slug may not set the meter flag. */
+const HOUSE_CONTEXT_METER_SLUGS = new Set(["digithings", "digithings-ai"]);
 
 function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   const ctx = `DIGICHAT_EMBED_TENANTS["${hostKey}"]`;
@@ -677,6 +686,15 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
     throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
   }
+  if (v.showContextMeter !== undefined && typeof v.showContextMeter !== "boolean") {
+    throw new Error(`${ctx}: showContextMeter must be a boolean`);
+  }
+  if (typeof v.showContextMeter === "boolean" && !HOUSE_CONTEXT_METER_SLUGS.has(v.slug)) {
+    throw new Error(
+      `${ctx}: showContextMeter is only valid for slugs digithings and digithings-ai, ` +
+        `not "${v.slug}"`,
+    );
+  }
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
@@ -928,6 +946,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
+    ...(typeof v.showContextMeter === "boolean" ? { showContextMeter: v.showContextMeter } : {}),
     ...(v.lockSessionControls === true ? { lockSessionControls: true } : {}),
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
     view: v.view !== undefined ? normalizeViewMode(v.view) : undefined,

@@ -345,7 +345,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "export",
     names: ["/export"],
     needsArg: false,
-    hint: "Download thread as markdown (/export html for the rendered page)",
+    hint: "Download this thread: /export md or /export html",
     kind: "client",
     category: "actions",
   },

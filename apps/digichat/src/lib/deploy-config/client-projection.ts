@@ -143,6 +143,7 @@ export type DigichatClientConfig = {
     lockedContact?: string;
     showByok?: boolean;
     showLanguageSelector?: boolean;
+    showContextMeter?: boolean;
     webSearch?: boolean;
     searchEngine?: string;
     /** Present only when the host locks session tool/MCP toggles. */
@@ -292,6 +293,9 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       lockedContact: dep.gate.lockedContact,
       showByok: dep.gate.showByok,
       showLanguageSelector: dep.gate.showLanguageSelector,
+      ...(typeof dep.gate.showContextMeter === "boolean"
+        ? { showContextMeter: dep.gate.showContextMeter }
+        : {}),
       webSearch,
       ...(searchEngine ? { searchEngine } : {}),
       ...(dep.gate.lockSessionControls === true ? { lockSessionControls: true } : {}),

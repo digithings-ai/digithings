@@ -16,7 +16,7 @@ Do not reintroduce a second transcript renderer here.
 
 | File | What it is |
 |---|---|
-| `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. `/export` is markdown; `/export html` is the rendered-page argument. The palette row is added by the digichat host. |
+| `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. Bare `/export` and `/export md` are markdown; `/export html` is the rendered page. Any other format shows an unsupported-format error. The digichat host shows both `/export md` and `/export html` in the palette. |
 | `@digithings/ui/chat/transcript` (`activity-view.ts`, `transcript-markdown.ts`, `types.ts`) | Activity rows, markdown export, and `DigiChatActivity` / `DigiChatMessage` / `DigiChatController`. This package re-exports them from `src/index.ts`. There is no local `src/types.ts`. |
 | `src/components/DigiChatMark.tsx` | Brand mark / wordmark (digithings-web nav). |
 | `src/components/DocumentPane.tsx` / `MiniMarkdown.tsx` | Optional helpers. Not mounted by the stock assistant-ui Thread. `MiniMarkdown` delegates to `@digithings/ui` `ChatMarkdown`. |

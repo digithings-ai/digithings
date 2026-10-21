@@ -172,6 +172,21 @@ describe("FoundryToolLeakFilter", () => {
     }
   });
 
+  it("drops a wrapped call whose closing paren never arrives", () => {
+    const text =
+      'Let me check. (remote_functions.azure_ai_search({"query":"weather"})\n\nThe answer is 5 degrees.';
+    const expected = "Let me check. \n\nThe answer is 5 degrees.";
+    const whole = new FoundryToolLeakFilter();
+    expect(`${whole.push(text) ?? ""}${whole.flush() ?? ""}`).toBe(expected);
+    for (let i = 1; i < text.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const first = filter.push(text.slice(0, i));
+      const second = filter.push(text.slice(i));
+      const tail = filter.flush();
+      expect(`${first ?? ""}${second ?? ""}${tail ?? ""}`, `split at ${i}`).toBe(expected);
+    }
+  });
+
   it("drops a remote_functions call streamed one character at a time", () => {
     const filter = new FoundryToolLeakFilter();
     const call = 'remote_functions.azure_ai_search({"query":"Acme"})';

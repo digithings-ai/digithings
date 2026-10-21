@@ -113,17 +113,59 @@ export function activeThreadRoot(root: ParentNode): HTMLElement | null {
  * `visibility: hidden` is left out. A closed disclosure panel stays, so a
  * folded tool call is still in the file. The open page is not changed.
  */
-export function snapshotSource(doc: Document): HTMLElement | null {
-  const thread = activeThreadRoot(doc);
-  if (!thread) return null;
+const MESSAGE_ROOT = "[data-role='user'], [data-role='assistant']";
+
+/**
+ * The assistant message that owns this menu trigger. The trigger sits in
+ * the message; the menu item does not. A duplicate id earlier in the page
+ * is a different element, so this does not search the document.
+ */
+export function messageAnchor(trigger: HTMLElement | null, messageId: string): HTMLElement | null {
+  const id = messageId.trim();
+  if (!trigger || !id) return null;
+  const selector = `[data-role="assistant"][data-message-id="${cssEscape(id)}"]`;
+  const message = trigger.closest(selector);
+  return message instanceof HTMLElement ? message : null;
+}
+
+/**
+ * A thread the message action may export. The open menu sets aria-hidden on
+ * an ancestor; that is not a closed thread. The thread element itself still
+ * has to be showing, and a memory-sidebar thread is never exported.
+ */
+function isMessageThread(thread: HTMLElement): boolean {
+  if (thread.closest("[data-memory-thread-list]")) return false;
+  if (thread.hidden || thread.getAttribute("aria-hidden") === "true") return false;
+  return true;
+}
+
+/**
+ * `anchor` limits the file to that assistant message and the user message
+ * before it. Omitted, the file is the whole thread. An anchor that is not
+ * inside its thread, or not inside an assistant message, returns null — it
+ * does not widen to the whole thread.
+ */
+export function snapshotSource(doc: Document, anchor?: HTMLElement | null): HTMLElement | null {
+  const thread = anchor ? anchor.closest<HTMLElement>(".aui-thread-root") : activeThreadRoot(doc);
+  if (!thread || (anchor && !isMessageThread(thread))) return null;
+  if (anchor && !thread.contains(anchor)) return null;
   const html = doc.createElement("html");
   copyShellAttributes(doc.documentElement, html);
-  html.append(threadShell(doc, thread));
+  const body = threadShell(doc, thread, anchor ?? null);
+  if (!body) return null;
+  html.append(body);
   stripDeploymentAttributes(html);
+  stripPageLock(html);
   return html;
 }
 
-function threadShell(doc: Document, thread: HTMLElement): HTMLElement {
+function threadShell(
+  doc: Document,
+  thread: HTMLElement,
+  scope: HTMLElement | null,
+): HTMLElement | null {
+  const clone = cloneWithoutHidden(thread, scope);
+  if (!clone) return null;
   const body = doc.createElement("body");
   if (doc.body) copyShellAttributes(doc.body, body);
   const ancestors: HTMLElement[] = [];
@@ -142,7 +184,7 @@ function threadShell(doc: Document, thread: HTMLElement): HTMLElement {
     parent.append(wrap);
     parent = wrap;
   }
-  parent.append(cloneWithoutHidden(thread));
+  parent.append(clone);
   return body;
 }
 
@@ -150,20 +192,51 @@ function threadShell(doc: Document, thread: HTMLElement): HTMLElement {
  * Read computed style on the live thread first, then clone. Dropping the
  * live nodes would change the open chat.
  */
-function cloneWithoutHidden(live: HTMLElement): HTMLElement {
+function cloneWithoutHidden(live: HTMLElement, scope: HTMLElement | null): HTMLElement | null {
   const liveNodes = [live, ...live.querySelectorAll("*")];
   const hidden = new Set<number>();
   for (let i = 1; i < liveNodes.length; i += 1) {
     if (suppressed(liveNodes[i]!)) hidden.add(i);
   }
   const clone = live.cloneNode(true) as HTMLElement;
-  if (hidden.size === 0) return clone;
   const cloneNodes = [clone, ...clone.querySelectorAll("*")];
+  const liveMessages = [...live.querySelectorAll<HTMLElement>(MESSAGE_ROOT)];
+  const cloneMessages = [...clone.querySelectorAll<HTMLElement>(MESSAGE_ROOT)];
   for (const index of [...hidden].sort((a, b) => b - a)) {
     const node = cloneNodes[index];
     if (node && clone.contains(node)) node.remove();
   }
+  if (scope && !keepInteraction(liveMessages, cloneMessages, clone, scope)) return null;
   return clone;
+}
+
+/**
+ * The assistant message that holds `anchor`, plus the user message before it.
+ * False when that message cannot be resolved — the caller must not keep the
+ * rest of the thread.
+ */
+function keepInteraction(
+  liveMessages: readonly HTMLElement[],
+  cloneMessages: readonly HTMLElement[],
+  clone: HTMLElement,
+  anchor: HTMLElement,
+): boolean {
+  const answer = anchor.closest<HTMLElement>("[data-role='assistant']");
+  if (!answer) return false;
+  const index = liveMessages.indexOf(answer);
+  if (index < 0) return false;
+  const keep = new Set<number>([index]);
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (liveMessages[i]?.getAttribute("data-role") === "user") {
+      keep.add(i);
+      break;
+    }
+  }
+  for (let i = cloneMessages.length - 1; i >= 0; i -= 1) {
+    const node = cloneMessages[i];
+    if (node && !keep.has(i) && clone.contains(node)) node.remove();
+  }
+  return true;
 }
 
 function suppressed(el: Element): boolean {
@@ -204,6 +277,76 @@ function stripDeploymentAttributes(root: Element): void {
       if (isDeploymentAttribute(attr.name)) node.removeAttribute(attr.name);
     }
   }
+}
+
+/**
+ * An open menu locks the page: aria-hidden where Radix also sets
+ * data-aria-hidden, inert on the shell, and react-remove-scroll's
+ * `data-scroll-locked` plus `pointer-events: none` on the body. A
+ * decorative aria-hidden inside the thread stays. The open page is
+ * left as it is.
+ */
+function stripPageLock(root: Element): void {
+  const nodes = [root, ...root.querySelectorAll("*")];
+  for (const node of nodes) {
+    node.removeAttribute("data-scroll-locked");
+    if (node.hasAttribute("data-aria-hidden")) {
+      node.removeAttribute("aria-hidden");
+      node.removeAttribute("data-aria-hidden");
+    }
+    if (node.tagName !== "BODY") continue;
+    const style = node.getAttribute("style");
+    if (!style) continue;
+    const kept = style
+      .split(";")
+      .map((part) => part.trim())
+      .filter((part) => part && !/^pointer-events\s*:/i.test(part));
+    if (kept.length === 0) node.removeAttribute("style");
+    else node.setAttribute("style", kept.join("; "));
+  }
+  const thread = root.querySelector(".aui-thread-root");
+  for (let cursor = thread?.parentElement ?? null; cursor; cursor = cursor.parentElement) {
+    cursor.removeAttribute("inert");
+  }
+}
+
+/** Drop rules that only exist while a menu holds the page scroll lock. */
+export function omitScrollLockCss(css: string): string {
+  let out = "";
+  let i = 0;
+  while (i < css.length) {
+    const open = css.indexOf("{", i);
+    if (open < 0) {
+      out += css.slice(i);
+      break;
+    }
+    let depth = 0;
+    let j = open;
+    for (; j < css.length; j += 1) {
+      const ch = css[j];
+      if (ch === "{") depth += 1;
+      else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          j += 1;
+          break;
+        }
+      }
+    }
+    const block = css.slice(i, j);
+    if (!block.includes("data-scroll-locked")) {
+      out += block;
+    } else {
+      const prelude = css.slice(i, open).trim();
+      const inner = css.slice(open + 1, Math.max(open + 1, j - 1));
+      if (prelude.startsWith("@") && inner.includes("{")) {
+        const kept = omitScrollLockCss(inner);
+        if (kept.trim()) out += `${css.slice(i, open)}{${kept}}`;
+      }
+    }
+    i = j;
+  }
+  return out;
 }
 
 function copyShellAttributes(from: Element, to: Element): void {
@@ -261,7 +404,7 @@ export function serializeSnapshot(root: HTMLElement, css: string): string {
   head.prepend(csp);
   const style = doc.createElement("style");
   style.setAttribute("data-snapshot-css", "");
-  style.textContent = escapeStyleText(`${css}\n${SNAPSHOT_CSS}`);
+  style.textContent = escapeStyleText(`${omitScrollLockCss(css)}\n${SNAPSHOT_CSS}`);
   head.append(style);
   for (const el of root.querySelectorAll<HTMLElement>("[style]")) {
     const inline = el.getAttribute("style");

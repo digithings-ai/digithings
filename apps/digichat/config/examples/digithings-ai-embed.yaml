@@ -109,6 +109,11 @@ hosts:
       llmAccess: free_then_byok
       showByok: true
       showLanguageSelector: true
+      # Composer context meter for this host. The live tenant publishes no
+      # models, so this release shows no bar there. This example catalog
+      # does publish a default, so a local example can show the bar.
+      # Does not open the model picker.
+      showContextMeter: true
       # The digigraph license has no hosted-web-search scope. Requesting it
       # 403s the whole turn. Leave this off; the stream adapter still retries
       # once as plain inference if an overlay turns it back on.

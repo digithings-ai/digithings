@@ -47,6 +47,13 @@ import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/emb
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
+import {
+  contextMeterEnabled,
+  contextMeterModel,
+  modelSentOnTurn,
+  sessionModelSeed,
+  showModelPicker,
+} from "@/lib/session-model-seed";
 import { toolControlFor } from "@/lib/tool-control";
 import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
@@ -555,12 +562,14 @@ function EmbedChat({
     ...DEFAULT_EMBED_CHAT_PREFS,
     // Start on the tenant's curated default so the first turn uses the model
     // the picker shows as selected (v4.1-flash on OCC) instead of falling
-    // through to the digigraph operator default. Only tenants that publish a
-    // list can be picked, so only they get a preselected value.
-    model:
-      stockClient.models.available.length > 0
-        ? stockClient.models.default?.trim() || stockClient.models.available[0] || ""
-        : "",
+    // through to the digigraph operator default. An empty list leaves the
+    // session model unset, even when a default is set, so the turn sends
+    // no X-Digi-Model until the user picks one. The live house publishes
+    // no models, so this release shows no house bar.
+    model: sessionModelSeed({
+      available: stockClient.models.available,
+      defaultModel: stockClient.models.default,
+    }),
     language: tenantLanguage,
     view: stockClient.features.view,
     thinking: stockClient.features.thinking,
@@ -614,14 +623,10 @@ function EmbedChat({
   // eslint-disable-next-line react-hooks/refs -- see comment above
   chatPrefsRef.current = chatPrefs;
   const getResponseLanguage = useCallback(() => chatPrefsRef.current.language, []);
-  const getSelectedModel = useCallback(() => {
-    if (byokIsSet) {
-      const bound = byokModel.trim();
-      if (bound) return bound;
-    }
-    const id = chatPrefsRef.current.model.trim();
-    return id || undefined;
-  }, [byokIsSet, byokModel]);
+  const getSelectedModel = useCallback(
+    () => modelSentOnTurn(chatPrefsRef.current.model, { isSet: byokIsSet, model: byokModel }),
+    [byokIsSet, byokModel],
+  );
   const planProofRef = useRef(planProof);
   // eslint-disable-next-line react-hooks/refs -- send-time HMAC proof (#1339)
   planProofRef.current = planProof ?? null;
@@ -1216,9 +1221,11 @@ function EmbedChat({
 
   const catalog = stockClient.tools.catalog;
   const catalogTools = useMemo(() => catalogToolsFromClient(stockClient), [stockClient]);
-  const showModels =
-    (stockClient.models.allowPicker === true || stockClient.features.modelPicker === true) &&
-    stockClient.models.available.length > 0;
+  const showModels = showModelPicker({
+    allowPicker: stockClient.models.allowPicker,
+    featureModelPicker: stockClient.features.modelPicker,
+    available: stockClient.models.available,
+  });
   const prefsApi = useMemo<EmbedChatPrefsApi>(
     () => ({
       prefs: chatPrefs,
@@ -1278,6 +1285,13 @@ function EmbedChat({
         stockClient.backendType,
       ),
       showModels,
+      showContextMeter: contextMeterEnabled(tenantCfg.showContextMeter, tenantCfg.slug),
+      // The model the turn sends, including a bring-your-own-key binding.
+      // Not the session model alone, and not written back into the session.
+      meterModel: contextMeterModel({
+        sessionModel:
+          modelSentOnTurn(chatPrefs.model, { isSet: byokIsSet, model: byokModel }) ?? "",
+      }),
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
@@ -1392,8 +1406,11 @@ function EmbedChat({
       tenantAllowsWeb,
       showByok,
       byokIsSet,
+      byokModel,
       byokProvider,
       showModels,
+      tenantCfg.showContextMeter,
+      tenantCfg.slug,
       catalog,
       catalogTools,
       gate.host,

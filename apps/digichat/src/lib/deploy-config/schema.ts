@@ -650,6 +650,11 @@ export const GateSchema = z
     lockedContact: z.string().optional(),
     showByok: z.boolean().optional(),
     showLanguageSelector: z.boolean().optional(),
+    /**
+     * Gates the composer context meter. Only the house slugs may set it.
+     * The live house publishes no models, so this release shows no bar.
+     */
+    showContextMeter: z.boolean().optional(),
     lockSessionControls: z.boolean().optional(),
     /** Legacy embed field — also implies tools.catalog web_search when true */
     webSearch: z.boolean().optional(),
@@ -684,7 +689,7 @@ export function toolCallCapSupport(backendType: string): ToolCallCapSupport {
     case "anthropic":
     case "google-vertex":
       return "enforce";
-    case "digigraph":
+    case "digigraph": // notice only: records the cap and does not abort the loop
     case "langgraph":
     case "ag-ui":
       return "best-effort";
