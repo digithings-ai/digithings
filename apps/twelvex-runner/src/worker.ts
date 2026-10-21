@@ -12,12 +12,20 @@ import {
   SESSION_LABEL,
 } from "./alerts";
 import type { Env } from "./env";
-import { defaultTimeoutSeconds, isBucket, isRoute, isSession, type Route } from "./routes";
+import {
+  defaultTimeoutSeconds,
+  isBucket,
+  isIsoDate,
+  isRoute,
+  isSession,
+  type Route,
+} from "./routes";
 
 export type RunBody = {
   job_id?: string;
   bucket?: string;
   session?: string;
+  run_date?: string;
   timeout_seconds?: number;
   dry_run?: boolean;
 };
@@ -36,6 +44,19 @@ function authorized(request: Request, env: Env): boolean {
   const token = env.RUNNER_AUTH_TOKEN;
   if (!token) return false;
   return (request.headers.get("Authorization") ?? "") === `Bearer ${token}`;
+}
+
+/**
+ * The workflow's run_date input: optional, a calendar date, empty means the
+ * forward path. A missing value or a JSON null is absent, the same as the
+ * workflow's empty default; a returned null means malformed.
+ */
+function readRunDate(value: unknown): string | undefined | null {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  return isIsoDate(trimmed) ? trimmed : null;
 }
 
 function logLine(fields: Record<string, unknown>): void {
@@ -82,12 +103,19 @@ export async function handle(
   if (route === "session" && (typeof parsed.session !== "string" || !isSession(parsed.session))) {
     return Response.json({ error: "invalid_session" }, { status: 400 });
   }
+  const runDate = readRunDate(parsed.run_date);
+  if (runDate === null) {
+    return Response.json({ error: "invalid_run_date" }, { status: 400 });
+  }
 
   const dryRun = env.DRY_RUN === "1" || parsed.dry_run === true;
   const body: RunBody = {
     job_id: typeof parsed.job_id === "string" ? parsed.job_id : route,
     bucket: parsed.bucket,
     session: parsed.session,
+    // Only the session route runs the graph, and only the graph reads a
+    // backfill date. The other routes ignore it.
+    run_date: route === "session" ? runDate : undefined,
     timeout_seconds:
       typeof parsed.timeout_seconds === "number"
         ? parsed.timeout_seconds
