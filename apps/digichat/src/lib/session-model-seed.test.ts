@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DEPLOY_DEFAULT_MODELS } from "./deploy-config/deploy-models";
 import {
   contextMeterEnabled,
   contextMeterModel,
+  modelSentOnTurn,
   sessionModelSeed,
   showModelPicker,
 } from "./session-model-seed";
@@ -20,36 +20,28 @@ describe("sessionModelSeed", () => {
   });
 
   it("leaves the session model empty when the house list is empty", () => {
-    expect(sessionModelSeed({ available: [] })).toBe("");
-    expect(
-      contextMeterModel({
-        slug: "digithings",
-        sessionModel: "",
-      }),
-    ).toBe(DEPLOY_DEFAULT_MODELS.default);
-    expect(DEPLOY_DEFAULT_MODELS.default).toBe(FLASH);
+    const sessionModel = sessionModelSeed({ available: [] });
+    expect(sessionModel).toBe("");
+    expect(contextMeterModel({ sessionModel })).toBe("");
+    expect(modelSentOnTurn(sessionModel, { isSet: false, model: "" })).toBeUndefined();
   });
 
-  it("does not size the meter for a non-house slug that sets the flag", () => {
+  it("sizes the meter to the model the turn reported", () => {
     expect(sessionModelSeed({ available: [], defaultModel: FLASH })).toBe("");
     expect(
       contextMeterModel({
-        slug: "example",
-        showContextMeter: true,
         sessionModel: "",
+        reportedModel: "z-ai/glm-4.7-flash",
       }),
-    ).toBe("");
+    ).toBe("z-ai/glm-4.7-flash");
+    expect(contextMeterModel({ sessionModel: FLASH, reportedModel: "z-ai/glm-4.7-flash" })).toBe(
+      "z-ai/glm-4.7-flash",
+    );
   });
 
-  it("leaves other hosts and an explicit house opt-out on an empty model", () => {
+  it("leaves other hosts on an empty model", () => {
     expect(sessionModelSeed({ available: [] })).toBe("");
-    expect(contextMeterModel({ slug: "occ", sessionModel: "" })).toBe("");
-    expect(
-      contextMeterModel({ slug: "trial-foundry", showContextMeter: true, sessionModel: "" }),
-    ).toBe("");
-    expect(
-      contextMeterModel({ slug: "digithings", showContextMeter: false, sessionModel: "" }),
-    ).toBe("");
+    expect(contextMeterModel({ sessionModel: "" })).toBe("");
     expect(contextMeterEnabled(undefined, "digithings")).toBe(true);
     expect(contextMeterEnabled(undefined, "digithings-ai")).toBe(true);
     expect(contextMeterEnabled(true, "digithings")).toBe(true);

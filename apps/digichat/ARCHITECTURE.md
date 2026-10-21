@@ -641,10 +641,11 @@ for per-tenant corpus isolation — forwarded as `X-Digi-Corpus-Index` /
 `trial_form`), `theme`
 (`dark` | `light`), optional `accent` hex pair, `activityDetail`
 (`off` | `labels` | `full`), optional UI flags `showByok` / `showStatusBar` / `showContextMeter`
-(size the existing context meter when `models.available` is empty; only house slugs
-`digithings` and `digithings-ai` may set the flag, and they show the meter unless it
-is false; the window is not the session model, so the turn sends no `X-Digi-Model`
-until the user picks one; a non-house slug that sets it is refused and stays off) /
+(the existing context meter; only house slugs `digithings` and `digithings-ai` may
+set the flag. The bar uses the model id the turn reports, else the session model.
+An empty list leaves the session model unset, so the turn sends no `X-Digi-Model`
+until the user picks one, and the bar stays hidden until a reported id has a known
+window. A non-house slug that sets the flag is refused) /
 `layout` (`page` | `embed`) — independent of `gateMode` (never derive
 `showByok = !ungated`), optional `llmAccess`
 (`free_then_byok` | `byok_only` | `backend_only` | `operator`) for LLM spend

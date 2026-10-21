@@ -46,7 +46,12 @@ import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/emb
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
-import { contextMeterModel, sessionModelSeed, showModelPicker } from "@/lib/session-model-seed";
+import {
+  contextMeterModel,
+  modelSentOnTurn,
+  sessionModelSeed,
+  showModelPicker,
+} from "@/lib/session-model-seed";
 import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
   useBYOKKey,
@@ -555,8 +560,8 @@ function EmbedChat({
     // Start on the tenant's curated default so the first turn uses the model
     // the picker shows as selected (v4.1-flash on OCC) instead of falling
     // through to the digigraph operator default. An empty list leaves the
-    // session model unset: the meter reads its window separately, and the
-    // turn sends no X-Digi-Model until the user picks one.
+    // session model unset, so the turn sends no X-Digi-Model until the
+    // user picks one. The meter uses the model the turn reports.
     model: sessionModelSeed({
       available: stockClient.models.available,
       defaultModel: stockClient.models.default,
@@ -590,14 +595,10 @@ function EmbedChat({
   // eslint-disable-next-line react-hooks/refs -- see comment above
   chatPrefsRef.current = chatPrefs;
   const getResponseLanguage = useCallback(() => chatPrefsRef.current.language, []);
-  const getSelectedModel = useCallback(() => {
-    if (byokIsSet) {
-      const bound = byokModel.trim();
-      if (bound) return bound;
-    }
-    const id = chatPrefsRef.current.model.trim();
-    return id || undefined;
-  }, [byokIsSet, byokModel]);
+  const getSelectedModel = useCallback(
+    () => modelSentOnTurn(chatPrefsRef.current.model, { isSet: byokIsSet, model: byokModel }),
+    [byokIsSet, byokModel],
+  );
   const planProofRef = useRef(planProof);
   // eslint-disable-next-line react-hooks/refs -- send-time HMAC proof (#1339)
   planProofRef.current = planProof ?? null;
@@ -1257,11 +1258,7 @@ function EmbedChat({
       ),
       showModels,
       // Window for the bar only. Not the session model, so it is not X-Digi-Model.
-      meterModel: contextMeterModel({
-        slug: tenantCfg.slug,
-        showContextMeter: tenantCfg.showContextMeter,
-        sessionModel: chatPrefs.model,
-      }),
+      meterModel: contextMeterModel({ sessionModel: chatPrefs.model }),
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
@@ -1368,8 +1365,6 @@ function EmbedChat({
       byokIsSet,
       byokProvider,
       showModels,
-      tenantCfg.slug,
-      tenantCfg.showContextMeter,
       catalog,
       catalogTools,
       gate.host,

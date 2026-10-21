@@ -1,13 +1,10 @@
-import { DEPLOY_DEFAULT_MODELS } from "./deploy-config/deploy-models";
-
 /**
  * Product hosts for digithings.ai. Their live tenant publishes
- * `models.available: []`, so the session model stays empty. The context
- * meter still needs a known window: `contextMeterModel` supplies the
- * catalog default for these slugs and does not write the session model.
- * OCC omits `models` and inherits the deploy catalog, so its session
- * model is that default and the meter follows it. A true flag on any
- * other slug does nothing.
+ * `models.available: []`, so the session model stays empty and a turn
+ * sends no X-Digi-Model. The context meter then uses the model id the
+ * turn reports, not the deploy catalog default. OCC omits `models` and
+ * inherits the deploy catalog, so its session model is that default.
+ * A true flag on any other slug does nothing.
  */
 const HOUSE_CONTEXT_METER_SLUGS = new Set(["digithings", "digithings-ai"]);
 
@@ -39,19 +36,36 @@ export function sessionModelSeed(input: {
 }
 
 /**
- * Model id for the context meter only. A selected session model sizes the
- * bar. With none, the house slugs use the catalog default's window. That
- * id is not the session model and is not sent on the turn.
+ * Model id whose context window the bar draws.
+ *
+ * The id the turn reported is the one that served it. With no report yet,
+ * the session model is the id the next turn will send. An empty session
+ * and no report resolve to "" — the catalog default is not a stand-in,
+ * and this id is never written into the session.
  */
 export function contextMeterModel(input: {
-  slug?: string;
-  showContextMeter?: boolean;
   sessionModel?: string;
+  reportedModel?: string;
 }): string {
-  const selected = input.sessionModel?.trim() || "";
-  if (selected) return selected;
-  if (!contextMeterEnabled(input.showContextMeter, input.slug)) return "";
-  return DEPLOY_DEFAULT_MODELS.default;
+  const reported = input.reportedModel?.trim() || "";
+  if (reported) return reported;
+  return input.sessionModel?.trim() || "";
+}
+
+/**
+ * Model id `getSelectedModel` returns. Empty means the turn sends no
+ * X-Digi-Model. BYOK's bound model wins, matching the embed callback.
+ */
+export function modelSentOnTurn(
+  sessionModel: string,
+  byok?: { isSet: boolean; model: string },
+): string | undefined {
+  if (byok?.isSet) {
+    const bound = byok.model.trim();
+    if (bound) return bound;
+  }
+  const id = sessionModel.trim();
+  return id || undefined;
 }
 
 /** Model chip in the composer footer. A known window for the meter is not a picker. */

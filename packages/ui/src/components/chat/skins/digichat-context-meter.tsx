@@ -123,11 +123,12 @@ export function DigichatContextMeter({
     return total;
   });
 
-  // The window must be known: a bar drawn against a guessed window is a lie
-  // about how full the context is, so an unknown model gets no bar at all.
-  const window =
-    CONTEXT_WINDOWS[model] ??
-    (reportedModel ? CONTEXT_WINDOWS[reportedModel] : undefined);
+  // The window is the model that served the turn. A report names that
+  // model; until one arrives, the session model is the id the next turn
+  // will send. A known window only — an unknown id, including a catalog
+  // guess the turn did not run, draws no bar.
+  const activeModel = reportedModel?.trim() || model.trim();
+  const window = activeModel ? CONTEXT_WINDOWS[activeModel] : undefined;
   // No bar without a known window: the fill is a fraction of it.
   if (window === undefined) return null;
 

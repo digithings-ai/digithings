@@ -11,12 +11,15 @@ import { toEmbedClientConfig } from "./embed-client-config";
 import { clientConfigFromEmbedTenant } from "./deploy-config/embed-bridge";
 import { contextMeterModel, sessionModelSeed, showModelPicker } from "./session-model-seed";
 
+const thread = vi.hoisted(() => ({ messages: [] as unknown[] }));
+
 vi.mock("@assistant-ui/react", () => ({
   useAuiState: (selector: (state: unknown) => unknown) =>
-    selector({ thread: { messages: [] as unknown[] } }),
+    selector({ thread: { messages: thread.messages } }),
 }));
 
 afterEach(() => {
+  thread.messages = [];
   cleanup();
 });
 
@@ -44,19 +47,13 @@ describe("house host context meter", () => {
       defaultModel: client.models.default,
     });
     expect(model).toBe(FLASH);
-    expect(
-      contextMeterModel({
-        slug: client.slug,
-        showContextMeter: tenant.showContextMeter,
-        sessionModel: model,
-      }),
-    ).toBe(FLASH);
+    expect(contextMeterModel({ sessionModel: model })).toBe(FLASH);
     expect(client.models.available).toEqual([FLASH, "openai/gpt-oss-120b", "z-ai/glm-5.3-flash"]);
     paint(model);
     expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
   });
 
-  it("renders the bar for the live house shape without opening the picker", () => {
+  it("leaves the live house shape without a bar until a turn reports a model", () => {
     const client = clientConfigFromEmbedTenant({
       slug: "digithings",
       gateMode: "ungated",
@@ -73,11 +70,8 @@ describe("house host context meter", () => {
       defaultModel: client.models.default,
     });
     expect(model).toBe("");
-    const meterModel = contextMeterModel({
-      slug: client.slug,
-      sessionModel: model,
-    });
-    expect(meterModel).toBe(FLASH);
+    const meterModel = contextMeterModel({ sessionModel: model });
+    expect(meterModel).toBe("");
     expect(
       showModelPicker({
         allowPicker: client.models.allowPicker,
@@ -85,8 +79,30 @@ describe("house host context meter", () => {
         available: client.models.available,
       }),
     ).toBe(false);
-    paint(meterModel);
-    expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
+    const { container } = paint(meterModel);
+    expect(container.querySelector(".aui-context-meter")).toBeNull();
+  });
+
+  it("sizes the bar to the model the turn reported", () => {
+    thread.messages = [
+      {
+        metadata: {
+          custom: { model: "z-ai/glm-4.7-flash", usage: { inputTokens: 0 } },
+        },
+      },
+    ];
+    paint(FLASH);
+    expect(screen.getByRole("img", { name: "Context 0 / 200.0k tokens" })).toBeTruthy();
+
+    thread.messages = [
+      {
+        metadata: {
+          custom: { model: "digigraph-rag", usage: { inputTokens: 12 } },
+        },
+      },
+    ];
+    const { container } = paint(FLASH);
+    expect(container.querySelector(".aui-context-meter")).toBeNull();
   });
 
   it("keeps the meter off for the foundry trial and for an OCC host with an empty list", () => {
@@ -100,8 +116,6 @@ describe("house host context meter", () => {
       toEmbedClientConfig(deploymentToEmbedTenant(trial)),
     );
     const trialModel = contextMeterModel({
-      slug: trialClient.slug,
-      showContextMeter: true,
       sessionModel: sessionModelSeed({
         available: trialClient.models.available,
         defaultModel: trialClient.models.default,
@@ -125,8 +139,6 @@ describe("house host context meter", () => {
     );
     expect(
       contextMeterModel({
-        slug: occYamlClient.slug,
-        showContextMeter: occYamlClient.gate.showContextMeter,
         sessionModel: sessionModelSeed({
           available: occYamlClient.models.available,
           defaultModel: occYamlClient.models.default,

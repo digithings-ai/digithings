@@ -17,8 +17,9 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UIMessage } from "ai";
+import type { EmbedTenantClientConfig } from "@/lib/embed-client-config";
 import { useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
-import {
+import EmbedClient, {
   embedParentOrigin,
   readTrialProofMessage,
   TRIAL_PROOF_MESSAGE_TYPE,
@@ -235,6 +236,17 @@ vi.mock("@assistant-ui/ai-sdk", async (importOriginal) => {
 vi.mock("@/lib/warmup-gate", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/warmup-gate")>();
   return { ...actual, warmFetch: warmFetchMock };
+});
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+// The model header is set in EmbedChat, before this shell paints. The shell
+// needs a live assistant runtime, which this file does not build.
+vi.mock("@/components/stock/product-shell", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/stock/product-shell")>();
+  return { ...actual, ProductStockShell: () => null };
 });
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -677,5 +689,51 @@ describe("the embed composer provider chip", () => {
     // third time.
     expect((code.match(/\bbackendLabel\b/g) ?? []).length).toBe(2);
     expect(code.match(helperImport)).toHaveLength(1);
+  });
+});
+
+/** Live house tenant: empty model list, no curated default. */
+const HOUSE_TENANT: EmbedTenantClientConfig = {
+  slug: "digithings",
+  gateMode: "ungated",
+  theme: "dark",
+  skin: "digichat",
+  accent: null,
+  attribution: true,
+  backendType: "digigraph",
+  models: { available: [] },
+};
+
+describe("a default house turn sends no X-Digi-Model", () => {
+  beforeEach(() => {
+    capturedTransportConfig = undefined;
+    document.cookie = "digichat_byok_pref=; path=/; max-age=0";
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("omits the header when the embed client seeds an empty house list", async () => {
+    const code = codeOnly(embedClientSrc);
+    expect(code).toMatch(/model:\s*sessionModelSeed\(/);
+    expect(code).toMatch(/modelSentOnTurn\(\s*chatPrefsRef\.current\.model/);
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(EmbedClient, { initialTenantCfg: HOUSE_TENANT }));
+    });
+    try {
+      const headers = await preparedHeaders();
+      expect(headers.get("X-Digi-Model")).toBeNull();
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
   });
 });
