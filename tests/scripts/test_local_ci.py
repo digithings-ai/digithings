@@ -33,12 +33,19 @@ class _AllowedGuard:
     """The launch guard, stubbed to allow the run (DIG-4796).
 
     The real guard lives in scripts/local-ci/launch_guard.py and is tested in
-    test_launch_guard.py. The tests here cover the flow behind it.
+    test_launch_guard.py. The tests here cover the flow behind it, so the
+    guard is stubbed for the whole module: the runner asks the guard at every
+    entry point that does work, and a stub that is only in place for one test
+    would leave the others refused.
     """
 
     @staticmethod
     def enforce(runner_path, ctx, facts=None):
         return True
+
+
+_mod.launch_guard = _AllowedGuard
+
 
 # vm_stat sample shaped like the 09:20 CEST evidence on DIG-3783: free 3,635 +
 # speculative 10,206 + purgeable 7,206 pages read ~345MB while 991,764 inactive
@@ -208,10 +215,12 @@ class WorkerBuildTest(unittest.TestCase):
 
         return calls, rec
 
-    def test_build_all_green_runs_eight_steps(self):
+    def test_build_all_green_runs_every_step(self):
         calls, rec = self._rec()
         self.assertEqual(_mod.worker_build("/wt-4010", rec), [])
-        self.assertEqual(len(calls), 8)
+        # One npm ci, then one build per app. The count follows WORKER_APPS, so a
+        # new app does not leave this test asserting a number that is a lie.
+        self.assertEqual(len(calls), 1 + len(_mod.WORKER_APPS))
         name0, cmd0, t0, cwd0 = calls[0]
         self.assertEqual(name0, "worker-build:npm-ci")
         self.assertEqual(cmd0, ["npm", "ci", "--no-audit", "--no-fund"])
@@ -234,7 +243,7 @@ class WorkerBuildTest(unittest.TestCase):
         calls, rec = self._rec(fails_on=("worker-build:dashboard-api",))
         self.assertEqual(_mod.worker_build("/wt-4010", rec),
                          ["worker-build:dashboard-api"])
-        self.assertEqual(len(calls), 8)
+        self.assertEqual(len(calls), 1 + len(_mod.WORKER_APPS))
 
     def test_build_npm_ci_failure_single_call(self):
         calls, rec = self._rec(npm_ci_ok=False)
@@ -715,7 +724,7 @@ class ExplicitPrStateTest(unittest.TestCase):
         _mod.watchdog = lambda: None
         # The launch guard refuses a run that no trusted launcher started
         # (DIG-4796). These tests drive the flow behind that check, so the
-        # guard is stubbed here; test_launch_guard.py is where it is tested.
+        # guard is stubbed; test_launch_guard.py is where it is tested.
         _mod.launch_guard = _AllowedGuard
         _mod.process = lambda pr, dry: (self.calls.append("process"), "success")[1]
         _mod.process_applied = lambda pr, dry: (self.calls.append("process_applied"), "success")[1]

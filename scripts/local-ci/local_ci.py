@@ -41,8 +41,26 @@ except ImportError:  # fail closed in run_checks, never crash the tick
     pr_template = None
 try:
     import launch_guard
-except ImportError:  # fail closed in main: a run without the guard does not run at all
+except ImportError:  # fail closed everywhere: a run without the guard does not run at all
     launch_guard = None
+
+
+def _guard(ctx="local-ci"):
+    """Ask the launch guard that a trusted launcher started this run (DIG-4796).
+
+    The guard is asked at every entry point that does work, not only in main():
+    the post-merge launchd job drives run_checks() in-process and never goes
+    through main(), so a guard that only lived in main() would not be asked on
+    the path the live job takes. A run that no trusted launcher started is
+    refused with exit 78 before the lock, the worktree, the log or GitHub.
+    """
+    if launch_guard is None:
+        sys.stderr.write("local_ci: the launch_guard module is missing; refusing to "
+                         "run rather than run unguarded (DIG-4796)\n")
+        sys.exit(78)
+    launch_guard.enforce(__file__, ctx)
+
+
 HOME = os.path.expanduser("~")
 REPO = "digithings-ai/digithings"
 MAIN = os.environ.get("LOCAL_CI_MAIN") or f"{HOME}/Code/digithings"
@@ -553,6 +571,7 @@ def prepare_wt(n, sha, base, out):
     Now every step's rc is logged, a worktree git cannot read is rebuilt,
     and HEAD must equal the PR head before any gate runs. origin/main is
     fetched too: check_vendor_content.py baselines on merge-base(HEAD, origin/main)."""
+    _guard()
     out.write(f"===== worktree {sha[:12]}\n")
     sh(["git", "fetch", "-q", "origin", base, "main", f"pull/{n}/head"], cwd=MAIN, timeout=600, out=out)
     if os.path.isdir(WT) and wt_head() is None:
@@ -580,6 +599,8 @@ def prepare_wt(n, sha, base, out):
 
 
 def run_checks(pr, out):
+    """Run every gate on the PR. Returns the list of failed gate names."""
+    _guard()
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
     fails = []
     def step(name, cmd, timeout=1800, cwd=None):
@@ -713,6 +734,7 @@ def lock_holder_alive():
 
 def acquire_lock():
     """Take the tick lock. A lock whose holder is dead is taken over and logged, never waited on."""
+    _guard()
     try:
         os.mkdir(LOCK)
     except FileExistsError:
@@ -1198,12 +1220,9 @@ def main():
     # The launch guard runs first, before any side effect: a run that no trusted
     # launcher started (a hand-run from any shell, a seat's shell, a detached
     # script) is refused with exit 78 and never reaches the lock, the watchdog
-    # or GitHub (DIG-4796).
-    if launch_guard is None:
-        sys.stderr.write("local_ci: the launch_guard module is missing; refusing to "
-                         "run rather than run unguarded (DIG-4796)\n")
-        sys.exit(78)
-    launch_guard.enforce(__file__, "local-ci")
+    # or GitHub (DIG-4796). The guard is asked again at every entry point that
+    # does work, because the post-merge launchd job never comes through here.
+    _guard()
     dry = "--dry-run" in sys.argv
     if os.environ.get("LOCAL_CI_WT") and os.path.isdir(WT) and not wt_is_ours(WT):
         sys.exit(f"local_ci: LOCAL_CI_WT={WT} exists and is not a worktree of {MAIN}; "

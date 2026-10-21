@@ -9,38 +9,49 @@ launcher the org controls.
 
 Two launchers are trusted:
 
-  * the launchd daemon (`ai.digithings.local-ci`, `ai.digithings.twelvex-ci`).
-    launchd starts it with ppid 1, sets XPC_SERVICE_NAME to the job label,
-    loads it from the plist scripts/local-ci/install.sh writes, the loaded
-    job's arguments are exactly the interpreter and the runner file that is
-    running now - no extra arguments, so a job that asks for one PR is not the
-    daemon and is refused - and the pid launchctl reports for the job is the
-    pid of this very process. That last fact is what makes the label
-    worthless to forge: a seat that orphans itself to launchd and claims the
-    label is not the job's process, so it is refused;
+  * the launchd daemon (`ai.digithings.local-ci`, `ai.digithings.twelvex-ci`,
+    `ai.digithings.local-ci-postmerge`, `ai.digithings.twelvex-ci-postmerge`).
+    The label is not taken from the environment - a seat can set
+    XPC_SERVICE_NAME to anything - but from launchd's own table: `launchctl
+    list` lists the jobs launchd runs and the pid of each, and the row whose
+    pid is this process's pid is the job that started it. On top of that
+    launchd started it (ppid 1), the process tree starts at launchd, the
+    loaded job reports this very pid, the loaded job was loaded from the
+    canonical plist (`~/Library/LaunchAgents/<label>.plist`), the loaded job's
+    arguments are exactly the arguments the canonical plist names, and the
+    script the job runs is either the runner that is running now or a trusted
+    driver script that sits next to it in the runner's own directory
+    (postmerge_ci.py drives local_ci.run_checks() for the post-merge check).
+    The pid tie is what makes the label worthless to forge: a seat that
+    orphans itself to launchd and claims the label is not the job's process,
+    so it is refused;
 
   * the CI container (the Woodpecker worker), which runs the runner from
     /opt/local-ci under /opt/local-ci/worker_entrypoint.sh with the CI
     credential in the environment.
 
 Everything else is refused: a hand-run from any shell, a seat's shell, a script
-a seat detached, a job a seat installed. The decision reads kernel and launchd
-facts only - the pid of this process, the process tree, the pid launchd reports
-for the job, the container's entrypoint - never BASH_ENV, PAPERCLIP_*,
-ZDOTDIR, and never `gh` - so unsetting those variables changes nothing. The
-tools it asks those questions of are the system's own: launchctl and ps are run
-from their absolute path and only when they are root-owned files, never from
-the PATH, so a seat that puts a fake launchctl first on PATH cannot answer the
-guard's own question.
+a seat detached. The one thing the guard cannot see is a job a seat installs
+itself at the canonical plist path and reloads under a trusted label - that is
+the same-uid limit the paragraph below names, and the queue-side provenance
+check (DIG-4794) is what closes it. The decision reads kernel and launchd
+facts only - the pid of this process, the process tree, launchd's own job
+table, the pid launchd reports for the job, the canonical plist, the
+container's entrypoint - never BASH_ENV, PAPERCLIP_*, ZDOTDIR, and never `gh`
+- so unsetting those variables changes nothing. The tools it asks those
+questions of are the system's own: launchctl and ps are run from their
+absolute path and only when they are root-owned files, never from the PATH, so
+a seat that puts a fake launchctl first on PATH cannot answer the guard's own
+question.
 
 What this is not: a proof. At the same uid a seat can copy the runner and run
 its own copy without this module, drive the container with its own token, or
 rewrite the daemon's plist and reload the job under the same label. What the
 guard does buy is that the cheap forgeries fail: an unset environment, a
-forged label, an orphaned process tree, a job loaded from somewhere else, a job
-that asks for one PR, a shadowed launchctl. The authoritative boundary is the
-queue-side provenance check (DIG-4794): only a `local-ci` status that carries
-the verified Woodpecker target_url counts.
+forged label, an orphaned process tree, a job loaded from somewhere else, a
+job that asks for one PR, a shadowed launchctl. The authoritative boundary is
+the queue-side provenance check (DIG-4794): only a `local-ci` status that
+carries the verified Woodpecker target_url counts.
 
 Usage:
   python3 scripts/local-ci/launch_guard.py --runner scripts/local-ci/local_ci.py
@@ -51,6 +62,7 @@ This module is byte-identical in the digithings and twelve-x repositories.
 """
 import json
 import os
+import plistlib
 import re
 import stat
 import subprocess
@@ -61,8 +73,21 @@ import time
 EX_CONFIG = 78
 
 # The launchd jobs that are allowed to start a runner. A label outside this set
-# is refused even when the process claims it.
-TRUSTED_LAUNCHD_LABELS = ("ai.digithings.local-ci", "ai.digithings.twelvex-ci")
+# is refused even when launchd says the job is running this very process.
+TRUSTED_LAUNCHD_LABELS = (
+    "ai.digithings.local-ci",
+    "ai.digithings.twelvex-ci",
+    "ai.digithings.local-ci-postmerge",
+    "ai.digithings.twelvex-ci-postmerge",
+)
+
+# A trusted job may run the runner itself, or a driver script that sits next to
+# it in the runner's own directory and imports it: postmerge_ci.py is what the
+# post-merge launchd job runs, and it calls local_ci.run_checks() in-process.
+# The driver has to be the file the installed plist names and the file has to
+# live next to the runner that is asking, so a seat cannot point a job at a
+# script of its own.
+TRUSTED_DRIVER_SCRIPTS = ("postmerge_ci.py",)
 
 # The CI container's runner directory and entrypoint (see Dockerfile.worker).
 CONTAINER_RUNNER_ROOT = "/opt/local-ci"
@@ -91,9 +116,14 @@ LOG_NAME = "launch-guard.jsonl"
 # ------------------------------------------------------------- system tools --
 
 def _is_system_binary(path):
-    """True when the path is a regular file owned by root that nobody else can write."""
+    """True when the path is a regular file owned by root that nobody else can write.
+
+    The link itself is checked, not the file behind it: a symlink in the way
+    would point at a file the seat owns, and a seat cannot make a file
+    root-owned, so the link is refused rather than followed.
+    """
     try:
-        info = os.stat(path)
+        info = os.lstat(path)
     except OSError:
         return False
     if not stat.S_ISREG(info.st_mode):
@@ -240,6 +270,26 @@ def parse_launchctl_print(text):
     return job
 
 
+def parse_launchctl_list(text):
+    """The pid -> label table out of `launchctl list`.
+
+    This is launchd's own table of the jobs it runs. The row whose pid is this
+    process's pid is the job that started it - the label in the environment is
+    not used for the decision, because a seat can set that to anything.
+    """
+    jobs = {}
+    for line in (text or "").splitlines():
+        fields = line.split("\t")
+        if len(fields) < 3:
+            continue
+        pid_text = fields[0].strip()
+        label = fields[2].strip()
+        if not pid_text.isdigit() or not label:
+            continue
+        jobs.setdefault(int(pid_text), label)
+    return jobs
+
+
 def canonical_plist_path(label):
     """Where the house tooling installs a launchd job's plist.
 
@@ -250,23 +300,58 @@ def canonical_plist_path(label):
                         f"{label}.plist")
 
 
-def launchctl_job(label, uid=None):
-    """The loaded job's facts, or None when the job is not loaded."""
+def installed_plist_arguments(label):
+    """The ProgramArguments of the canonical installed plist, or None.
+
+    The installed plist is what the house says the job runs. The loaded job
+    has to agree with it, so a job that was loaded from somewhere else - or a
+    job whose arguments were changed after the fact - is not the job the org
+    installed.
+    """
+    try:
+        with open(canonical_plist_path(label), "rb") as fh:
+            plist = plistlib.load(fh)
+    except (OSError, ValueError):
+        return None
+    arguments = plist.get("ProgramArguments")
+    if not isinstance(arguments, list) or not arguments:
+        return None
+    return [str(argument) for argument in arguments]
+
+
+def _launchctl(args, timeout=15):
+    """Run the system's launchctl and return its stdout, or None."""
     tool = trusted_tool("launchctl")
     if tool is None:
         return None
-    if uid is None:
-        uid = os.getuid()
     try:
-        proc = subprocess.run(
-            [tool, "print", f"gui/{uid}/{label}"],
-            capture_output=True, text=True, timeout=15, check=False,
-        )
+        proc = subprocess.run([tool] + args, capture_output=True, text=True,
+                              timeout=timeout, check=False)
     except (OSError, subprocess.SubprocessError):
         return None
     if proc.returncode != 0:
         return None
-    return parse_launchctl_print(proc.stdout)
+    return proc.stdout
+
+
+def launchctl_job_labels():
+    """The pid -> label table launchd reports, or None when it cannot be read."""
+    out = _launchctl(["list"])
+    if out is None:
+        return None
+    return parse_launchctl_list(out)
+
+
+def launchctl_job(label, uid=None):
+    """The loaded job's facts, or None when the job is not loaded."""
+    if not label:
+        return None
+    if uid is None:
+        uid = os.getuid()
+    out = _launchctl(["print", f"gui/{uid}/{label}"])
+    if out is None:
+        return None
+    return parse_launchctl_print(out)
 
 
 # -------------------------------------------------------------------- facts --
@@ -274,7 +359,8 @@ def launchctl_job(label, uid=None):
 def collect_facts(runner_path):
     """Everything the decision reads. No environment value is ever recorded."""
     label = os.environ.get("XPC_SERVICE_NAME")
-    job = launchctl_job(label) if label in TRUSTED_LAUNCHD_LABELS else None
+    jobs = launchctl_job_labels() or {}
+    own_label = jobs.get(os.getpid())
     return {
         "runner": os.path.realpath(runner_path),
         "pid": os.getpid(),
@@ -284,7 +370,10 @@ def collect_facts(runner_path):
         "dockerenv": os.path.exists("/.dockerenv"),
         "xpc_service_name": label,
         "ci_token": bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")),
-        "launchd_job": job,
+        "launchd_label": own_label,
+        "launchd_job": launchctl_job(own_label) if own_label else None,
+        "installed_arguments": (installed_plist_arguments(own_label)
+                                if own_label else None),
     }
 
 
@@ -316,15 +405,44 @@ def _decide_container(facts):
     return True, "the CI container worker entrypoint started this run"
 
 
-def _decide_launchd(facts, label):
+def _script_is_trusted(script, runner):
+    """True when the script a job runs is the runner, or a trusted driver beside it.
+
+    The post-merge launchd job runs postmerge_ci.py, which imports the runner
+    and calls its run_checks() in-process; that is the same launcher as far as
+    the org is concerned. The driver has to live in the runner's own directory
+    and to be one of the known driver scripts, so a job cannot be pointed at
+    something a seat wrote.
+    """
+    if not script or not runner:
+        return False
+    try:
+        script_path = os.path.realpath(script)
+    except OSError:
+        return False
+    if script_path == runner:
+        return True
+    if os.path.dirname(script_path) != os.path.dirname(runner):
+        return False
+    return os.path.basename(script_path) in TRUSTED_DRIVER_SCRIPTS
+
+
+def _decide_launchd(facts):
     """The launchd daemon: launchd started this very process, from the trusted job."""
+    label = facts.get("launchd_label")
+    if not label:
+        return False, ("no launchd job is running this process: launchd lists no job "
+                       "with this pid")
+    if label not in TRUSTED_LAUNCHD_LABELS:
+        return False, (f"the launchd job {label} is running this process, but it is not "
+                       "a trusted runner job")
     if facts.get("ppid") != 1:
-        return False, (f"the launchd job {label} claims this run, but the parent pid is "
-                       f"{facts.get('ppid')} and not launchd")
+        return False, (f"the launchd job {label} runs this process, but the parent pid "
+                       f"is {facts.get('ppid')} and not launchd")
     ancestors = facts.get("ancestors") or []
     if not ancestors or ancestors[0].get("pid") != 1:
-        return False, (f"the launchd job {label} claims this run, but the process tree "
-                       "does not start at launchd")
+        return False, (f"the launchd job {label} runs this process, but the process "
+                       "tree does not start at launchd")
     job = facts.get("launchd_job")
     if not job:
         return False, f"the launchd job {label} is not loaded"
@@ -340,20 +458,24 @@ def _decide_launchd(facts, label):
         return False, (f"the launchd job {label} was loaded from "
                        f"{job.get('path') or 'an unknown path'} and not from the canonical "
                        f"{expected_plist}; reinstall it with scripts/local-ci/install.sh")
+    installed = facts.get("installed_arguments")
+    if not installed:
+        return False, (f"the canonical plist {expected_plist} is missing or unreadable, "
+                       "so the job is not the one install.sh wrote; reinstall it with "
+                       "scripts/local-ci/install.sh")
     arguments = job.get("arguments") or []
-    if len(arguments) != 2:
-        return False, (f"the launchd job {label} runs {len(arguments)} arguments; the "
-                       "daemon runs the runner with none")
-    program, runner_argument = arguments
+    if arguments != installed:
+        return False, (f"the launchd job {label} runs {arguments} and the canonical plist "
+                       f"says {installed}, so the loaded job is not the installed one")
+    if len(installed) != 2:
+        return False, (f"the canonical plist for {label} runs {len(installed)} arguments; "
+                       "the house jobs run the runner with none")
+    program, script = installed
     if not os.path.basename(program).startswith("python"):
         return False, f"the launchd job {label} does not run a python interpreter"
-    try:
-        same = os.path.realpath(runner_argument) == facts.get("runner")
-    except OSError:
-        same = False
-    if not same:
-        return False, (f"the launchd job {label} runs a different file than the runner "
-                       "that is running now")
+    if not _script_is_trusted(script, facts.get("runner")):
+        return False, (f"the launchd job {label} runs {script}, which is neither the "
+                       "runner that is running now nor a trusted driver next to it")
     return True, f"the launchd daemon {label} started this run"
 
 
@@ -369,15 +491,7 @@ def decide(facts):
     if facts.get("dockerenv"):
         allowed, reason = _decide_container(facts)
     else:
-        label = facts.get("xpc_service_name")
-        if label and label in TRUSTED_LAUNCHD_LABELS:
-            allowed, reason = _decide_launchd(facts, label)
-        elif label:
-            allowed, reason = False, (f"XPC_SERVICE_NAME is {label!r}, which is not a "
-                                      "trusted runner job")
-        else:
-            allowed, reason = False, ("the runner was not started by a trusted "
-                                      "launcher: no launchd job and no CI container")
+        allowed, reason = _decide_launchd(facts)
     if not allowed and "trusted launcher" not in reason:
         reason = f"{reason}: no trusted launcher started this run"
     return allowed, reason
@@ -404,8 +518,10 @@ def _record(facts, allowed, reason):
         "dockerenv": facts.get("dockerenv"),
         "xpc_service_name": facts.get("xpc_service_name"),
         "ci_token": facts.get("ci_token"),
+        "launchd_label": facts.get("launchd_label"),
         "job_pid": job.get("pid"),
         "job_path": job.get("path"),
+        "installed_arguments": facts.get("installed_arguments"),
         "ancestors": [
             {"pid": a.get("pid"), "argv": (a.get("argv") or [])[:3]}
             for a in (facts.get("ancestors") or [])
@@ -427,15 +543,32 @@ def append_decision(ctx, record):
 
 # ------------------------------------------------------------------ enforcing --
 
+# The decision is asked for once per process and then remembered: the runner
+# asks the guard at every entry point that does work (main, the lock, the
+# worktree, the checks), and the facts cannot change under it.
+_DECISIONS = {}
+
+
+def reset_decisions():
+    """Forget the remembered decisions. Only the tests need this."""
+    _DECISIONS.clear()
+
+
 def enforce(runner_path, ctx, facts=None):
     """Refuse the run unless a trusted launcher started it. Exits 78 on refusal."""
-    if facts is None:
-        facts = collect_facts(runner_path)
-    allowed, reason = decide(facts)
-    append_decision(ctx, _record(facts, allowed, reason))
+    key = os.path.realpath(runner_path) if runner_path else ""
+    decision = _DECISIONS.get(key)
+    if decision is None:
+        if facts is None:
+            facts = collect_facts(runner_path)
+        allowed, reason = decide(facts)
+        append_decision(ctx, _record(facts, allowed, reason))
+        decision = (allowed, reason)
+        _DECISIONS[key] = decision
+    allowed, reason = decision
     if allowed:
         return True
-    name = os.path.basename(facts.get("runner") or runner_path or "the runner")
+    name = os.path.basename((facts or {}).get("runner") or runner_path or "the runner")
     sys.stderr.write(f"launch_guard: refusing to run {name}: {reason}\n")
     sys.stderr.write("launch_guard: the runner runs from its launchd job or from the "
                      "CI container only (DIG-4796).\n")

@@ -9,7 +9,9 @@ container are not, and the answer does not move when the shell environment
 changes, when `gh` is put on the PATH, or when a fake `launchctl` is put there
 too.
 """
+import ast
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -52,7 +54,9 @@ def _seat_facts(**overrides):
         "dockerenv": False,
         "xpc_service_name": None,
         "ci_token": True,
+        "launchd_label": None,
         "launchd_job": None,
+        "installed_arguments": None,
     }
     facts.update(overrides)
     return facts
@@ -64,6 +68,8 @@ def _launchd_facts(**overrides):
         ppid=1,
         xpc_service_name="ai.digithings.local-ci",
         ancestors=[{"pid": 1, "argv": ["/sbin/launchd"]}],
+        # The label comes from launchd's own job table, never from the environment.
+        launchd_label="ai.digithings.local-ci",
         launchd_job={
             "program": "/usr/bin/python3",
             "arguments": ["/usr/bin/python3", os.path.realpath(_RUNNER)],
@@ -71,6 +77,7 @@ def _launchd_facts(**overrides):
             # launchd reports the pid of the process the job's program runs in.
             "pid": 4242,
         },
+        installed_arguments=["/usr/bin/python3", os.path.realpath(_RUNNER)],
     )
     facts.update(overrides)
     return facts
@@ -101,11 +108,17 @@ export -f gh ps
 """
 
 # A fake launchctl, first on the PATH. It answers the guard the way a seat
-# wants it to be answered: the canonical plist path, the runner's own path as
-# the job's argument, and the pid of whoever asked. A guard that ran this would
-# believe every word of it.
+# wants it to be answered, for both questions the guard asks launchd: `launchctl
+# list` reports a row with the pid of whoever asked under the trusted label,
+# and `launchctl print` reports the canonical plist path, the runner's own path
+# as the job's argument, and the pid of whoever asked. A guard that ran this
+# would believe every word of it.
 _FAKE_LAUNCHCTL = r"""#!/bin/sh
 touch "$LAUNCH_GUARD_LAUNCHCTL_MARKER"
+if [ "$1" = "list" ]; then
+  printf 'PID\tStatus\tLabel\n%s\t0\tai.digithings.local-ci\n' "$PPID"
+  exit 0
+fi
 printf 'gui/501/ai.digithings.local-ci = {\n\tpath = %s/Library/LaunchAgents/ai.digithings.local-ci.plist\n\tprogram = /usr/bin/python3\n\targuments = {\n\t\t/usr/bin/python3\n\t\t%s\n\t}\n\tpid = %s\n}\n' "$HOME" "$LAUNCH_GUARD_RUNNER" "$PPID"
 """
 
@@ -292,8 +305,9 @@ class DecisionTests(unittest.TestCase):
     def test_a_launchd_job_with_extra_arguments_is_refused(self):
         """A job that asks for one PR is not the daemon, even under a trusted label."""
         facts = _launchd_facts()
-        facts["launchd_job"]["arguments"] = [
-            "/usr/bin/python3", os.path.realpath(_RUNNER), "--pr", "368"]
+        arguments = ["/usr/bin/python3", os.path.realpath(_RUNNER), "--pr", "368"]
+        facts["launchd_job"]["arguments"] = arguments
+        facts["installed_arguments"] = arguments
         allowed, reason = _guard.decide(facts)
         self.assertFalse(allowed)
         self.assertIn("arguments", reason)
@@ -301,15 +315,38 @@ class DecisionTests(unittest.TestCase):
     def test_a_launchd_job_that_runs_another_file_is_refused(self):
         facts = _launchd_facts()
         facts["launchd_job"]["arguments"] = ["/usr/bin/python3", "/tmp/seat/local_ci.py"]
+        facts["installed_arguments"] = ["/usr/bin/python3", "/tmp/seat/local_ci.py"]
         allowed, reason = _guard.decide(facts)
         self.assertFalse(allowed)
-        self.assertIn("different file", reason)
+        self.assertIn("neither the runner", reason)
 
-    def test_an_untrusted_service_name_is_refused(self):
-        facts = _launchd_facts(xpc_service_name="com.digithings.merge-queue")
+    def test_an_untrusted_launchd_job_is_refused(self):
+        """launchd may be running this process for a job that is not a runner job."""
+        facts = _launchd_facts(launchd_label="com.digithings.merge-queue")
         allowed, reason = _guard.decide(facts)
         self.assertFalse(allowed)
         self.assertIn("not a trusted runner job", reason)
+
+    def test_a_forged_label_in_the_environment_is_refused(self):
+        """The label in the environment is a claim; launchd's job table is the proof.
+
+        This is the 21 Oct shape: the seat sets XPC_SERVICE_NAME to a trusted
+        label and runs the runner by hand. Nothing in the environment may make
+        the guard believe it.
+        """
+        facts = _launchd_facts(launchd_label=None, launchd_job=None,
+                               installed_arguments=None,
+                               xpc_service_name="ai.digithings.local-ci")
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("no launchd job is running this process", reason)
+
+    def test_the_environment_never_decides(self):
+        """Swapping the label in the environment cannot move the decision."""
+        honest = _launchd_facts()
+        forged = dict(honest)
+        forged["xpc_service_name"] = "com.digithings.merge-queue"
+        self.assertEqual(_guard.decide(honest), _guard.decide(forged))
 
     def test_a_launchd_claim_from_a_shell_is_refused(self):
         """XPC_SERVICE_NAME alone is not a claim anybody can prove."""
@@ -379,6 +416,85 @@ class DecisionTests(unittest.TestCase):
             os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents",
                          "ai.digithings.twelvex-ci.plist"))
 
+    def test_the_loaded_job_has_to_agree_with_the_installed_plist(self):
+        """The installed plist is what the house says the job runs."""
+        facts = _launchd_facts()
+        facts["installed_arguments"] = ["/usr/bin/python3", "/tmp/seat/local_ci.py"]
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("not the installed one", reason)
+
+    def test_a_job_without_an_installed_plist_is_refused(self):
+        """A job whose canonical plist is missing was not installed by the org."""
+        facts = _launchd_facts(installed_arguments=None)
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("missing or unreadable", reason)
+
+    def test_the_installed_plist_may_not_carry_extra_arguments(self):
+        """The house jobs run the runner with no arguments of their own."""
+        facts = _launchd_facts()
+        arguments = ["/usr/bin/python3", os.path.realpath(_RUNNER), "--pr", "368"]
+        facts["installed_arguments"] = arguments
+        facts["launchd_job"]["arguments"] = arguments
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("arguments", reason)
+
+    def test_the_post_merge_driver_next_to_the_runner_is_trusted(self):
+        """The live post-merge job runs postmerge_ci.py, which drives the runner.
+
+        That is the same launcher as far as the org is concerned, so the driver
+        has to be accepted - and only when it sits in the runner's own
+        directory and is one of the known driver scripts.
+        """
+        driver = os.path.join(os.path.dirname(os.path.realpath(_RUNNER)),
+                              "postmerge_ci.py")
+        facts = _launchd_facts(
+            launchd_label="ai.digithings.local-ci-postmerge",
+            launchd_job={
+                "program": "/usr/bin/python3",
+                "arguments": ["/usr/bin/python3", driver],
+                "path": os.path.expanduser(
+                    "~/Library/LaunchAgents/ai.digithings.local-ci-postmerge.plist"),
+                "pid": 4242,
+            },
+            installed_arguments=["/usr/bin/python3", driver])
+        allowed, reason = _guard.decide(facts)
+        self.assertTrue(allowed, reason)
+
+    def test_a_driver_outside_the_runner_directory_is_refused(self):
+        driver = "/tmp/seat/postmerge_ci.py"
+        facts = _launchd_facts(
+            launchd_label="ai.digithings.local-ci-postmerge",
+            launchd_job={
+                "program": "/usr/bin/python3",
+                "arguments": ["/usr/bin/python3", driver],
+                "path": os.path.expanduser(
+                    "~/Library/LaunchAgents/ai.digithings.local-ci-postmerge.plist"),
+                "pid": 4242,
+            },
+            installed_arguments=["/usr/bin/python3", driver])
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("neither the runner", reason)
+
+    def test_a_script_that_is_not_a_known_driver_is_refused(self):
+        """A job may not point at a script of its own, next to the runner or not."""
+        script = os.path.join(os.path.dirname(os.path.realpath(_RUNNER)), "seat_ci.py")
+        facts = _launchd_facts(
+            launchd_job={
+                "program": "/usr/bin/python3",
+                "arguments": ["/usr/bin/python3", script],
+                "path": os.path.expanduser(
+                    "~/Library/LaunchAgents/ai.digithings.local-ci.plist"),
+                "pid": 4242,
+            },
+            installed_arguments=["/usr/bin/python3", script])
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("neither the runner", reason)
+
     def test_the_ci_container_is_allowed(self):
         allowed, reason = _guard.decide(_container_facts())
         self.assertTrue(allowed, reason)
@@ -428,18 +544,20 @@ class RefusalWordingTests(unittest.TestCase):
 
     def _refusal_facts(self):
         """One set of facts per way the guard can refuse a run."""
-        untrusted_label = _seat_facts(xpc_service_name="com.digithings.merge-queue")
+        untrusted_label = _launchd_facts(launchd_label="com.digithings.merge-queue")
+        forged_label = _seat_facts(xpc_service_name="ai.digithings.local-ci")
         wrong_parent = _launchd_facts(ppid=1234)
         not_loaded = _launchd_facts(launchd_job=None)
         other_file = _launchd_facts()
         other_file["launchd_job"]["arguments"] = ["/usr/bin/python3", "/tmp/seat/local_ci.py"]
+        other_file["installed_arguments"] = ["/usr/bin/python3", "/tmp/seat/local_ci.py"]
         container_root = _container_facts(runner="/tmp/local_ci.py")
         container_parent = _container_facts()
         container_parent["ancestors"] = [
             {"pid": 1, "argv": ["/bin/sh", "-c", "python3 local_ci.py --pr 368"]}]
         no_credential = _container_facts(ci_token=False)
-        return [_seat_facts(), untrusted_label, wrong_parent, not_loaded, other_file,
-                container_root, container_parent, no_credential]
+        return [_seat_facts(), untrusted_label, forged_label, wrong_parent, not_loaded,
+                other_file, container_root, container_parent, no_credential]
 
     def test_every_refusal_names_the_trusted_launcher(self):
         for facts in self._refusal_facts():
@@ -498,6 +616,46 @@ class LaunchctlParsingTests(unittest.TestCase):
 
     def test_a_missing_job_is_not_a_job(self):
         self.assertIsNone(_guard.launchctl_job("ai.digithings.local-ci-not-a-job"))
+
+
+class LaunchctlListTests(unittest.TestCase):
+    """The job table launchctl prints: this is where the label comes from.
+
+    The label in the environment is forgeable, so the guard reads the label out
+    of launchd's own table and only believes a job whose pid is this process's
+    pid.
+    """
+
+    REAL = """PID\tStatus\tLabel
+47393\t0\tai.digithings.local-ci-postmerge
+-\t0\tai.digithings.local-ci
+1234\t-9\tcom.digithings.merge-queue
+"""
+
+    def test_the_pid_of_every_running_job_is_read(self):
+        jobs = _guard.parse_launchctl_list(self.REAL)
+        self.assertEqual(jobs[47393], "ai.digithings.local-ci-postmerge")
+        self.assertEqual(jobs[1234], "com.digithings.merge-queue")
+
+    def test_a_job_that_is_not_running_has_no_pid(self):
+        jobs = _guard.parse_launchctl_list(self.REAL)
+        self.assertNotIn("-", jobs)
+        self.assertNotIn("ai.digithings.local-ci", jobs.values())
+
+    def test_the_header_is_not_a_job(self):
+        jobs = _guard.parse_launchctl_list(self.REAL)
+        self.assertNotIn("PID", jobs.values())
+        self.assertNotIn("Label", jobs.values())
+
+    def test_the_table_is_read_from_the_system_launchctl(self):
+        """The real table on this machine has to parse, and the guard's own pid
+        is in it or is not - either way the parse must not raise."""
+        jobs = _guard.launchctl_job_labels()
+        if jobs is not None:
+            self.assertIsInstance(jobs, dict)
+            for pid, label in jobs.items():
+                self.assertIsInstance(pid, int)
+                self.assertIsInstance(label, str)
 
 
 class EnvironmentIndependenceTests(unittest.TestCase):
@@ -666,6 +824,7 @@ class RunnerWiringTests(unittest.TestCase):
     """The runner asks the guard first, and stops there when the answer is no."""
 
     def setUp(self):
+        _guard.reset_decisions()
         self._spec = importlib.util.spec_from_file_location(
             "local_ci_under_test", _RUNNER)
         self._mod = importlib.util.module_from_spec(self._spec)
@@ -676,6 +835,7 @@ class RunnerWiringTests(unittest.TestCase):
         os.environ["HOME"] = self._home
 
     def tearDown(self):
+        _guard.reset_decisions()
         if self._old_home is None:
             os.environ.pop("HOME", None)
         else:
@@ -731,6 +891,126 @@ class RunnerWiringTests(unittest.TestCase):
             record = json.loads(fh.read().strip().splitlines()[-1])
         self.assertFalse(record["allowed"])
         self.assertIn("reason", record)
+
+    # --- the path the live post-merge job takes -----------------------------
+    #
+    # The post-merge launchd job runs postmerge_ci.py, which imports the runner
+    # and calls run_checks() in-process. It never goes through main(), so a
+    # guard that only lived in main() would not be asked on the path the live
+    # job takes - and that path takes the worktree, the log and the checks.
+
+    def _refuse(self, call):
+        """Run `call` with seat-shaped facts and return the exit code."""
+        original = _guard.collect_facts
+        _guard.collect_facts = lambda runner_path: _seat_facts()
+        _guard.reset_decisions()
+        try:
+            with self.assertRaises(SystemExit) as caught:
+                call()
+            return caught.exception.code
+        finally:
+            _guard.collect_facts = original
+            _guard.reset_decisions()
+
+    def test_the_post_merge_path_asks_the_guard(self):
+        """run_checks() is the entry point the live post-merge job uses."""
+        out = io.StringIO()
+        pr = {"headRefOid": "0" * 40, "baseRefName": "develop",
+              "title": "chore(develop): post-merge tip check"}
+        code = self._refuse(lambda: self._mod.run_checks(pr, out))
+        self.assertEqual(code, _guard.EX_CONFIG)
+        self.assertEqual(out.getvalue(), "", "the checks ran before they were refused")
+
+    def test_the_lock_asks_the_guard(self):
+        code = self._refuse(self._mod.acquire_lock)
+        self.assertEqual(code, _guard.EX_CONFIG)
+        self.assertFalse(
+            os.path.exists(os.path.join(self._home, ".config", "digithings", "state",
+                                        "local-ci.lock")),
+            "the lock was taken before the run was refused")
+
+    def test_the_worktree_asks_the_guard(self):
+        out = io.StringIO()
+        code = self._refuse(lambda: self._mod.prepare_wt(368, "0" * 40, "develop", out))
+        self.assertEqual(code, _guard.EX_CONFIG)
+        self.assertEqual(out.getvalue(), "", "the worktree ran before it was refused")
+
+    def test_every_entry_point_that_does_work_asks_the_guard(self):
+        """The guard is asked where the work happens, not only in main()."""
+        with open(_RUNNER, "r", encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        functions = {node.name: node for node in ast.walk(tree)
+                     if isinstance(node, ast.FunctionDef)}
+        for name in ("main", "acquire_lock", "prepare_wt", "run_checks"):
+            self.assertIn(name, functions, f"the runner has no {name}()")
+            calls = [node for node in ast.walk(functions[name])
+                     if isinstance(node, ast.Call)
+                     and isinstance(node.func, ast.Name)
+                     and node.func.id == "_guard"]
+            self.assertTrue(calls, f"{name}() does not ask the guard")
+
+    def test_the_guard_is_asked_before_the_first_side_effect(self):
+        """In main() the ask comes before the lock, the watchdog and GitHub."""
+        with open(_RUNNER, "r", encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        main = next(node for node in ast.walk(tree)
+                    if isinstance(node, ast.FunctionDef) and node.name == "main")
+        asked_at = None
+        for index, statement in enumerate(main.body):
+            for node in ast.walk(statement):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id == "_guard"):
+                    asked_at = index
+        self.assertIsNotNone(asked_at, "main() does not ask the guard")
+        for index, statement in enumerate(main.body):
+            if index >= asked_at:
+                continue
+            for node in ast.walk(statement):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id in ("acquire_lock", "watchdog", "status",
+                                             "list_prs")):
+                    self.fail("main() does something before it asks the guard")
+
+
+class EnforceCacheTests(unittest.TestCase):
+    """The decision is asked for once per process and then remembered.
+
+    The runner asks the guard at every entry point that does work, and the
+    facts cannot change under it, so the guard asks the system once.
+    """
+
+    def setUp(self):
+        _guard.reset_decisions()
+
+    def tearDown(self):
+        _guard.reset_decisions()
+
+    def test_the_second_ask_does_not_ask_the_system_again(self):
+        calls = []
+
+        def counting_collect(runner_path):
+            calls.append(runner_path)
+            return _seat_facts()
+
+        original = _guard.collect_facts
+        _guard.collect_facts = counting_collect
+        try:
+            with self.assertRaises(SystemExit):
+                _guard.enforce(_RUNNER, "local-ci")
+            with self.assertRaises(SystemExit):
+                _guard.enforce(_RUNNER, "local-ci")
+        finally:
+            _guard.collect_facts = original
+        self.assertEqual(len(calls), 1, "the guard asked the system twice")
+
+    def test_an_allowed_decision_is_remembered(self):
+        original = _guard.collect_facts
+        _guard.collect_facts = lambda runner_path: _launchd_facts()
+        try:
+            self.assertTrue(_guard.enforce(_RUNNER, "local-ci"))
+            self.assertTrue(_guard.enforce(_RUNNER, "local-ci"))
+        finally:
+            _guard.collect_facts = original
 
 
 if __name__ == "__main__":
