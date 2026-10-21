@@ -192,12 +192,22 @@ jobs:
               echo "::error::$tag does not match apps/digichat/package.json ($version) — refusing to publish."
               exit 1
             fi
+            # The image is built from the CHECKED-OUT tree, so the commit the
+            # image is labelled with has to be the commit that tree is at. The
+            # tag is resolved a second time only to prove the two agree: a tag
+            # that moved between the checkout and this step would otherwise
+            # label the image with a commit the tree was never built from.
             # `|| true` so the emptiness check below is reachable: under `set -e` a
             # bad ref would abort the step with git's own `fatal: ambiguous
             # argument` before this diagnostic could explain what went wrong.
-            commit="$(git rev-list -n1 "$tag" 2>/dev/null || true)"
-            if [ -z "$commit" ]; then
+            commit="$(git rev-parse HEAD 2>/dev/null || true)"
+            tag_commit="$(git rev-list -n1 "$tag" 2>/dev/null || true)"
+            if [ -z "$tag_commit" ]; then
               echo "::error::$tag does not resolve to a commit — there is nothing to bind an image to."
+              exit 1
+            fi
+            if [ "$commit" != "$tag_commit" ]; then
+              echo "::error::the checked-out tree ($commit) is not the commit of $tag ($tag_commit) — refusing to bind an image to a tree it was not built from."
               exit 1
             fi
             image="${image_repo}:v${version}"
@@ -401,25 +411,53 @@ jobs:
           # version it was built as, and a failing check is tolerated only when
           # it is one of those four ecosystem services and the database is
           # skipped.
-          api_response="$(curl --silent --show-error --max-time 30 --write-out '\n%{http_code}' "$base/api/health" || true)"
+          #
+          # Only two answers are honest here: 200 (every check reachable) and
+          # 503 (the route telling the truth about a degraded environment).
+          # Any other status - a 500 from a route regression that still
+          # serialises `version`, a 502 from something in front of the app -
+          # is a fault and stops the lane.
+          api_response="$(curl --silent --show-error --max-time 60 --write-out '\n%{http_code}' "$base/api/health" || true)"
           api_status="$(printf '%s\n' "$api_response" | tail -n1)"
           api_body="$(printf '%s\n' "$api_response" | sed '$d')"
+          case "$api_status" in
+            200|503) ;;
+            *)
+              echo "::error::/api/health answered $api_status, not 200 or 503."
+              exit 1
+              ;;
+          esac
+          if [ -z "$api_body" ]; then
+            echo "::error::/api/health answered $api_status with no body — the route did not answer."
+            exit 1
+          fi
           reported="$(jq -r '.version // ""' <<< "$api_body" 2>/dev/null || true)"
           if [ "$reported" != "$VERSION" ]; then
             echo "::error::/api/health reports version '$reported', but this image was built as '$VERSION'."
             exit 1
           fi
           # Every check that is neither ok nor skipped has to be one of the four
-          # ecosystem services this container cannot reach. Anything else - a
-          # broken service, a failed database - is a real fault and stops here.
-          failing="$(jq -r '[(.checks // {}) | to_entries[] | select(.value != "ok" and .value != "skipped") | .key] | join(",")' <<< "$api_body" 2>/dev/null || true)"
+          # ecosystem services this container cannot reach, AND it has to have
+          # failed by not answering at all: the route records a fetch that never
+          # completed as "unreachable", and an upstream that ANSWERED with a
+          # non-2xx as "http_<status>". Only the first is the degradation this
+          # probe is allowed to tolerate. Anything else - a broken service, a
+          # failed database - is a real fault and stops here.
+          failing="$(jq -r '[(.checks // {}) | to_entries[] | select(.value != "ok" and .value != "skipped") | "\(.key)=\(.value)"] | join(",")' <<< "$api_body" 2>/dev/null || true)"
           unexpected=""
           if [ -n "$failing" ]; then
-            IFS=',' read -r -a failing_keys <<< "$failing"
-            for key in "${failing_keys[@]}"; do
+            IFS=',' read -r -a failing_checks <<< "$failing"
+            for check in "${failing_checks[@]}"; do
+              key="${check%%=*}"
+              value="${check#*=}"
               case "$key" in
-                digraph|digiquant|digitrace|digisearch) ;;
-                *) unexpected="${unexpected:+$unexpected,}$key" ;;
+                digraph|digiquant|digitrace|digisearch)
+                  if [ "$value" != "unreachable" ]; then
+                    unexpected="${unexpected:+$unexpected,}$check"
+                  fi
+                  ;;
+                service|database) ;;
+                *) unexpected="${unexpected:+$unexpected,}$check" ;;
               esac
             done
           fi
@@ -429,7 +467,7 @@ jobs:
             echo "::error::/api/health answered $api_status with checks that are not only the unreachable ecosystem services (service: $service, database: $database, unexpected: ${unexpected:-none})."
             exit 1
           fi
-          if [ "$api_status" != "200" ]; then
+          if [ "$api_status" = "503" ]; then
             echo "::warning::/api/health answered $api_status: the image serves version $reported, and only the ecosystem services it cannot reach failed (${failing:-none})."
           fi
 
