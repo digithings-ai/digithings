@@ -1544,7 +1544,7 @@ export function EmbedComposerMenu({
                   Commands
                 </span>
                 <span className="font-mono">
-                  /models · /language · /tools · /mcp · /settings · /new
+                  /models · /language · /tools · /mcp · /settings · /theme · /new
                 </span>
               </div>
               <span className="text-muted-foreground">Enter sends · Shift+Enter adds a line</span>
