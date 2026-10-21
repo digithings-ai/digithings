@@ -41,11 +41,13 @@ import {
   useStoredDensityAfterMount,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
+  isStockComposerMenuKind,
 } from "@digithings/ui/chat/stock";
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
+import { toolControlFor } from "@/lib/tool-control";
 import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
   useBYOKKey,
@@ -577,6 +579,30 @@ function EmbedChat({
   }));
   useStoredDensityAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const draftSink = useRef<(text: string) => void>(() => {});
+  const [composerDraftBound, setComposerDraftBound] = useState(false);
+  const syncPalette = useCallback(
+    (next: {
+      kind: "closed" | "commands" | "pane";
+      menu: "close" | "keep" | string;
+      filter: string;
+    }) => {
+      setPaletteQuery(next.filter);
+      if (next.menu === "close") setComposerMenu(null);
+      else if (next.menu !== "keep" && isStockComposerMenuKind(next.menu)) {
+        setComposerMenu(next.menu);
+      }
+    },
+    [],
+  );
+  const bindComposerDraft = useCallback((setText: (text: string) => void) => {
+    draftSink.current = setText;
+    setComposerDraftBound(true);
+  }, []);
+  const setComposerDraft = useCallback((text: string) => {
+    draftSink.current(text);
+  }, []);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
@@ -1350,6 +1376,16 @@ function EmbedChat({
       redo: () => {
         chat.regenerate?.();
       },
+      toolControl: toolControlFor({
+        backendType: stockClient.backendType,
+        lockSessionControls: stockClient.gate.lockSessionControls === true,
+        allowUserToggle: stockClient.tools.allowUserToggle,
+      }),
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      syncPalette,
     }),
     [
       chatPrefs,
@@ -1372,6 +1408,14 @@ function EmbedChat({
       theme.palette,
       onThemePick,
       stockClient.features.density,
+      stockClient.backendType,
+      stockClient.gate.lockSessionControls,
+      stockClient.tools.allowUserToggle,
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      syncPalette,
       stockClient.features.effort,
       stockClient.gate.searchEngine,
       stockClient.chrome.toolbar,

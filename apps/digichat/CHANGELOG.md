@@ -1,3 +1,20 @@
+## [2.6.6](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.5...digichat-v2.6.6) (2026-10-21)
+
+Take the chat with you: `/export html` saves the rendered conversation as one
+self-contained HTML file, and `/theme` now works on every embedded chat.
+
+### Features
+
+* **digichat:** `/export html` saves the open conversation as a single self-contained HTML file, built in the browser from the rendered thread, with scripts, frames and non-http links stripped and redaction applied to the page text ([#6190](https://github.com/digithings-ai/digithings/pull/6190))
+* **digichat:** `/theme` works on every embed tenant and starts from the tenant's own theme ([#6189](https://github.com/digithings-ai/digithings/pull/6189))
+* **digichat:** worked-chain density, palette defaults and a braces tool mark ([#6180](https://github.com/digithings-ai/digithings/pull/6180))
+* **digichat:** the trial tenant's welcome and placeholder describe the sample email archive ([#6184](https://github.com/digithings-ai/digithings/pull/6184))
+
+### Bug Fixes
+
+* **ui:** the worked chain has one spacing rhythm ([#6178](https://github.com/digithings-ai/digithings/pull/6178))
+* **digichat:** MCP call arguments streamed on `mcp_call_arguments` events are shown ([#6183](https://github.com/digithings-ai/digithings/pull/6183))
+
 ## [2.6.5](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.4...digichat-v2.6.5) (2026-10-21)
 
 One caret and your own colours: every collapsible row in a turn opens with
