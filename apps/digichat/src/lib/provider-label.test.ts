@@ -26,6 +26,16 @@ describe("backendLabel (#4597)", () => {
   it("names the Foundry backend when the session runs on one", () => {
     expect(backendLabel(null, "foundry")).toBe("Azure AI Foundry");
     expect(backendLabel(undefined, "foundry")).toBe("Azure AI Foundry");
-    expect(backendLabel(null, "foundry")).not.toBe(HOUSE_BACKEND_ID);
+  });
+
+  // The branch is narrow on purpose: a Foundry tenant is answered by its
+  // own agent, every other backend is the house one, and a session that
+  // carries its own key names that key. A branch that answered every
+  // backend with the Foundry name would name a lie on every other tenant.
+  it("names the Foundry backend only when the session runs on one", () => {
+    expect(backendLabel(null, "digigraph")).toBe(HOUSE_BACKEND_ID);
+    expect(backendLabel(undefined, "digigraph")).toBe(HOUSE_BACKEND_ID);
+    // The own key still wins over the serving backend.
+    expect(backendLabel("openrouter", "foundry")).toBe("openrouter");
   });
 });
