@@ -61,7 +61,10 @@ describe("the proxy call site", () => {
 
   it("routes the container call through the bounded retry", () => {
     expect(indexSource).toMatch(/import \{ fetchContainerWithRetry \} from "\.\/container-retry";/);
-    expect(indexSource).toMatch(/return fetchContainerWithRetry\(request, \(req\) => container\.fetch\(req\)\);/);
+    // Wrapped only so a failed page/frame load renders as HTML (frame-safe-error.ts).
+    expect(indexSource).toMatch(
+      /return frameSafeErrorResponse\(\s*request,\s*await fetchContainerWithRetry\(request, \(req\) => container\.fetch\(req\)\),\s*\);/,
+    );
   });
 
   it("keeps the container id derived from the deploying commit", () => {

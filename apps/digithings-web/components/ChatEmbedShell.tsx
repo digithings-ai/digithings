@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { DIGICHAT } from "@digithings/hero-banner/definitions";
 import { HeroBanner } from "@digithings/hero-banner/web";
 import { BootLabOverlay } from "@digithings/ui/chat/boot-lab";
+import { ChatNoticeContent, chatNoticeRootProps } from "@digithings/ui/chat/notice";
+import { Button } from "@digithings/ui/ui";
 import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 import { readInviteToken, stripInviteTokenFromUrl } from "@/lib/inviteToken";
@@ -132,13 +134,84 @@ export function buildEmbedParentErrorMessage(
 }
 
 /**
- * Fallback when the iframe never loads (cannot postMessage into digichat).
- * Keep in sync with digichat `formatParentErrorLine("embed_unloadable")`.
+ * What a visitor reads when the chat never loads (the embed answered an error
+ * page, never painted, or the build has no embed origin). User-facing only:
+ * no env var names, origins or container internals ever reach the page.
  */
-export function formatShellLoadErrorLine(): string {
+export const EMBED_LOAD_ERROR_TITLE = "The chat could not load. Please try again in a moment.";
+export const EMBED_LOAD_ERROR_RETRY = "Retry";
+
+/**
+ * Operator detail for the same failure. Console only, and only outside
+ * production builds: never rendered.
+ */
+export function formatShellLoadDiagnostic(reason: string): string {
   return (
-    "error: digichat embed failed to load — check DIGICHAT_EMBED_ORIGIN and " +
-    "Container readiness, then refresh"
+    `digichat embed failed to load (${reason}) — check DIGICHAT_EMBED_ORIGIN and ` +
+    "Container readiness"
+  );
+}
+
+function logEmbedLoadFailure(reason: string): void {
+  if (process.env.NODE_ENV === "production") return;
+  console.error(formatShellLoadDiagnostic(reason));
+}
+
+/**
+ * True when the frame loaded a document that is not the chat: an error page
+ * (500, 503, a platform error), a 404, or anything else without the embed
+ * shell. Only knowable same-origin (production serves /embed on the page's
+ * own origin); a cross-origin frame (local dev) reads as "unknown" and the
+ * ready timeout decides instead.
+ */
+export function embedDocumentFailed(
+  frame: { contentDocument: Document | null } | null | undefined,
+): boolean {
+  try {
+    const doc = frame?.contentDocument;
+    if (!doc || doc.URL === "about:blank") return false;
+    return doc.querySelector(".dc-embed-shell") === null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The in-chat error notice (`@digithings/ui` chat-notice, the box a failed
+ * turn shows) centered in the chat slot, with the same Retry action.
+ */
+export function EmbedLoadErrorCard({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div
+      data-thread-skin="digichat"
+      data-slot="embed-load-error"
+      style={{
+        flex: 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1.5rem",
+        minHeight: 0,
+      }}
+    >
+      <div {...chatNoticeRootProps("error", "max-w-md")}>
+        <ChatNoticeContent
+          tone="error"
+          title={EMBED_LOAD_ERROR_TITLE}
+          extra={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              className="aui-message-error-retry mt-2 shrink-0 items-center self-start border-destructive/25 bg-transparent text-destructive hover:bg-destructive/10"
+            >
+              {EMBED_LOAD_ERROR_RETRY}
+            </Button>
+          }
+        />
+      </div>
+    </div>
   );
 }
 
@@ -220,8 +293,9 @@ export type ChatEmbedShellProps = {
  * `[data-theme]`), so a white default document never flashes.
  *
  * Ready failures: posts `digichat:parent-error` into the iframe for in-chat
- * terminal lines (no page banner). If the iframe never loads, shows the same
- * `error: …` line in the iframe slot.
+ * terminal lines when the chat painted but never said ready. When the frame
+ * holds an error page, or never loads, the shell centers the in-chat error
+ * card (user-facing copy + Retry) in the chat slot instead.
  */
 export function ChatEmbedShell({
   embedOrigin,
@@ -233,8 +307,10 @@ export function ChatEmbedShell({
   const iframeLoadedRef = useRef(false);
   const embedReadyRef = useRef(false);
   const themeRef = useRef<EmbedShellTheme>("dark");
-  /** Only when iframe never loads — cannot deliver parent-error postMessage. */
-  const [shellLoadError, setShellLoadError] = useState<string | null>(null);
+  /** The embed never became the chat (error page, no frame, no ready). */
+  const [loadFailed, setLoadFailed] = useState(false);
+  /** Bumped by Retry: remounts the frame and restarts the ready wait. */
+  const [attempt, setAttempt] = useState(0);
   const [embedReady, setEmbedReady] = useState(false);
   // Every sleep-on-idle service answered warm-up (or the budget was spent).
   const [servicesReady, setServicesReady] = useState(false);
@@ -269,9 +345,10 @@ export function ChatEmbedShell({
   });
   const [shellTheme, setShellTheme] = useState<EmbedShellTheme>("light");
   const targetOrigin = useMemo(() => parseOrigin(embedOrigin), [embedOrigin]);
-  const configError = targetOrigin
-    ? null
-    : "Invalid NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN";
+  const configError = !targetOrigin;
+  useEffect(() => {
+    if (configError) logEmbedLoadFailure("invalid NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN");
+  }, [configError]);
 
   useEffect(() => {
     if (!targetOrigin) return;
@@ -334,7 +411,7 @@ export function ChatEmbedShell({
     embedReadyRef.current = false;
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
-      setShellLoadError(null);
+      setLoadFailed(false);
       setEmbedReady(false);
     });
 
@@ -345,7 +422,7 @@ export function ChatEmbedShell({
       ready = true;
       embedReadyRef.current = true;
       setEmbedReady(true);
-      setShellLoadError(null);
+      setLoadFailed(false);
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
       // Always sync theme on ready (covers cold load + late handshake).
@@ -375,14 +452,15 @@ export function ChatEmbedShell({
         setForceReveal(true);
         return;
       }
-      // No browsing context to post into — terminal line in the iframe slot.
-      setShellLoadError(formatShellLoadErrorLine());
+      // No browsing context to post into — the error card in the chat slot.
+      logEmbedLoadFailure("no digichat:ready and the frame never loaded");
+      setLoadFailed(true);
     }, EMBED_READY_TIMEOUT_MS);
     return () => {
       window.removeEventListener("message", onMessage);
       window.clearTimeout(t);
     };
-  }, [targetOrigin]);
+  }, [targetOrigin, attempt]);
 
   // Wake every service before the chat is revealed (boot step "services").
   // Same-origin only: the probe is a plain GET on the embed origin, and a
@@ -413,10 +491,10 @@ export function ChatEmbedShell({
   // (WARMUP_DELAY_MS), so ordinary navigation never flashes a loader. setState
   // lives in the timer callback (react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (revealed || shellLoadError) return;
+    if (revealed || loadFailed) return;
     const t = window.setTimeout(() => setWarmupMounted(true), WARMUP_DELAY_MS);
     return () => window.clearTimeout(t);
-  }, [revealed, shellLoadError]);
+  }, [revealed, loadFailed]);
 
   // Unmount after the crossfade has run (the overlay is opacity-0 by then).
   useEffect(() => {
@@ -425,12 +503,20 @@ export function ChatEmbedShell({
     return () => window.clearTimeout(t);
   }, [warmupMounted, revealed]);
 
+  // Retry reloads the embed in place: the invite key (if any) already lives in
+  // `src`, and a page reload would lose it once the address bar was stripped.
+  const retryEmbed = () => {
+    iframeLoadedRef.current = false;
+    embedReadyRef.current = false;
+    setLoadFailed(false);
+    setForceReveal(false);
+    setEmbedReady(false);
+    setAttempt((n) => n + 1);
+  };
+
   if (configError) {
-    return (
-      <p className="dc-page" style={{ padding: "2rem" }}>
-        {configError}
-      </p>
-    );
+    // A build with no embed origin cannot recover in place; reload the page.
+    return <EmbedLoadErrorCard onRetry={() => window.location.reload()} />;
   }
 
   return (
@@ -467,24 +553,9 @@ export function ChatEmbedShell({
         colorScheme: shellTheme,
       }}
     >
-      {shellLoadError ? (
-        <p
-          className="font-mono"
-          style={{
-            flex: 1,
-            margin: 0,
-            padding: "0.85rem 0.75rem",
-            fontSize: "0.8rem",
-            color: "color-mix(in srgb, var(--danger) 80%, var(--ink))",
-          }}
-          role="alert"
-        >
-          <span aria-hidden="true">! </span>
-          {shellLoadError}
-        </p>
-      ) : null}
+      {loadFailed ? <EmbedLoadErrorCard onRetry={retryEmbed} /> : null}
 
-      {warmupMounted && !shellLoadError ? (
+      {warmupMounted && !loadFailed ? (
         <div
           aria-busy={!revealed}
           aria-live="polite"
@@ -544,8 +615,9 @@ export function ChatEmbedShell({
         </div>
       ) : null}
 
-      {src && !shellLoadError ? (
+      {src && !loadFailed ? (
         <iframe
+          key={attempt}
           ref={iframeRef}
           id="dc-digichat-frame"
           title="digichat"
@@ -571,7 +643,15 @@ export function ChatEmbedShell({
           allow="clipboard-write"
           onLoad={() => {
             iframeLoadedRef.current = true;
-            setShellLoadError(null);
+            // Same-origin error page (the container's 500, a 503 while the
+            // slot is busy): show the card now rather than after the ready
+            // timeout, and never reveal the raw error document.
+            if (embedDocumentFailed(iframeRef.current)) {
+              logEmbedLoadFailure("the frame loaded an error page");
+              setLoadFailed(true);
+              return;
+            }
+            setLoadFailed(false);
           }}
         />
       ) : null}

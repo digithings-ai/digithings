@@ -7,7 +7,7 @@ import {
   THEME,
   buildEmbedParentErrorMessage,
   buildEmbedThemeMessage,
-  formatShellLoadErrorLine,
+  formatShellLoadDiagnostic,
   readParentDocumentTheme,
 } from "@/components/ChatEmbedShell";
 
@@ -48,13 +48,21 @@ describe("ChatEmbedShell contracts", () => {
     );
   });
 
-  it("formats shell load fallback without tunnel/DIGICHAT_EMBED_HOSTS copy", () => {
-    const line = formatShellLoadErrorLine();
-    expect(line.startsWith("error: ")).toBe(true);
+  it("keeps the operator diagnostic for the dev console only", async () => {
+    const line = formatShellLoadDiagnostic("test");
     expect(line).toContain("DIGICHAT_EMBED_ORIGIN");
-    expect(line).toContain("Container");
     expect(line).not.toContain("tunnel");
-    expect(line).not.toContain("DIGICHAT_EMBED_HOSTS");
+    // Logged, never rendered: the only caller is the console helper, and it
+    // is silent in production builds.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const src = readFileSync(
+      fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(src.split("formatShellLoadDiagnostic(").length - 1).toBe(2); // definition + console.error
+    expect(src).toContain('if (process.env.NODE_ENV === "production") return;');
+    expect(src).toContain("console.error(formatShellLoadDiagnostic(reason))");
   });
 
   it("reads parent html data-theme as light or dark", () => {
