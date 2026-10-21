@@ -364,12 +364,12 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     in ARCHITECTURE.md (query helpers removed; format_results_table stays) —
     fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 134 for the DIG-2203 OCC census re-cut (PR #5937):
-    Re-recorded at count 135 for DIG-4657 (the per-index bge-m3 override prose in the
-    Vectorize section and the three env-table rows in ARCHITECTURE.md) —
-    fixture prose only; RecursiveChunker unchanged.
     ARCHITECTURE.md now carries the multi-index fan-out paragraph and the
     trackers-ingest CC0-1.0 row, which added one chunk — fixture prose only;
     RecursiveChunker unchanged.
+    Re-recorded at count 135 for DIG-4657 (the per-index bge-m3 override prose in the
+    Vectorize section and the three env-table rows in ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
