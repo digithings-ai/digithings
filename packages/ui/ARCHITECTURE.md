@@ -705,8 +705,8 @@ control that keeps its name from its glyph),
 
 ## Chat HTML export
 
-`/export` downloads the thread as markdown. `/export html` downloads the
-active thread as one file (`packages/ui/src/replay/`), not the memory
+`/export` and `/export md` download the thread as markdown. `/export html`
+downloads the active thread as one file (`packages/ui/src/replay/`), not the memory
 sidebar or any other thread. Ancestors of that thread are attribute-only
 wrappers, so deployment rules scoped to `[data-stock-product]` still match,
 and a node the live page has computed as `display: none` or `visibility:
@@ -728,4 +728,5 @@ still get through. The filename is
 `<deployment>-<YYYY-MM-DD-HHMM>-<question-slug>.html` (UTC, latest question,
 id-like words dropped). The filename reads the slug from the open page.
 The file itself does not keep `data-deployment` or any other deployment
-or tenant attribute.
+or tenant attribute. The assistant message menu's Export as HTML uses
+that same path for the question and answer of that one interaction.

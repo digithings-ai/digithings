@@ -113,17 +113,24 @@ export function activeThreadRoot(root: ParentNode): HTMLElement | null {
  * `visibility: hidden` is left out. A closed disclosure panel stays, so a
  * folded tool call is still in the file. The open page is not changed.
  */
-export function snapshotSource(doc: Document): HTMLElement | null {
+const MESSAGE_ROOT = "[data-role='user'], [data-role='assistant']";
+
+/**
+ * `anchor` limits the file to that assistant message and the user message
+ * before it. Omitted, the file is the whole thread.
+ */
+export function snapshotSource(doc: Document, anchor?: HTMLElement | null): HTMLElement | null {
   const thread = activeThreadRoot(doc);
   if (!thread) return null;
   const html = doc.createElement("html");
   copyShellAttributes(doc.documentElement, html);
-  html.append(threadShell(doc, thread));
+  const scope = anchor && thread.contains(anchor) ? anchor : null;
+  html.append(threadShell(doc, thread, scope));
   stripDeploymentAttributes(html);
   return html;
 }
 
-function threadShell(doc: Document, thread: HTMLElement): HTMLElement {
+function threadShell(doc: Document, thread: HTMLElement, scope: HTMLElement | null): HTMLElement {
   const body = doc.createElement("body");
   if (doc.body) copyShellAttributes(doc.body, body);
   const ancestors: HTMLElement[] = [];
@@ -142,7 +149,7 @@ function threadShell(doc: Document, thread: HTMLElement): HTMLElement {
     parent.append(wrap);
     parent = wrap;
   }
-  parent.append(cloneWithoutHidden(thread));
+  parent.append(cloneWithoutHidden(thread, scope));
   return body;
 }
 
@@ -150,20 +157,46 @@ function threadShell(doc: Document, thread: HTMLElement): HTMLElement {
  * Read computed style on the live thread first, then clone. Dropping the
  * live nodes would change the open chat.
  */
-function cloneWithoutHidden(live: HTMLElement): HTMLElement {
+function cloneWithoutHidden(live: HTMLElement, scope: HTMLElement | null): HTMLElement {
   const liveNodes = [live, ...live.querySelectorAll("*")];
   const hidden = new Set<number>();
   for (let i = 1; i < liveNodes.length; i += 1) {
     if (suppressed(liveNodes[i]!)) hidden.add(i);
   }
   const clone = live.cloneNode(true) as HTMLElement;
-  if (hidden.size === 0) return clone;
   const cloneNodes = [clone, ...clone.querySelectorAll("*")];
+  const liveMessages = [...live.querySelectorAll<HTMLElement>(MESSAGE_ROOT)];
+  const cloneMessages = [...clone.querySelectorAll<HTMLElement>(MESSAGE_ROOT)];
   for (const index of [...hidden].sort((a, b) => b - a)) {
     const node = cloneNodes[index];
     if (node && clone.contains(node)) node.remove();
   }
+  if (scope) keepInteraction(liveMessages, cloneMessages, clone, scope);
   return clone;
+}
+
+/** The assistant message that holds `anchor`, plus the user message before it. */
+function keepInteraction(
+  liveMessages: readonly HTMLElement[],
+  cloneMessages: readonly HTMLElement[],
+  clone: HTMLElement,
+  anchor: HTMLElement,
+): void {
+  const answer = anchor.closest<HTMLElement>("[data-role='assistant']");
+  if (!answer) return;
+  const index = liveMessages.indexOf(answer);
+  if (index < 0) return;
+  const keep = new Set<number>([index]);
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (liveMessages[i]?.getAttribute("data-role") === "user") {
+      keep.add(i);
+      break;
+    }
+  }
+  for (let i = cloneMessages.length - 1; i >= 0; i -= 1) {
+    const node = cloneMessages[i];
+    if (node && !keep.has(i) && clone.contains(node)) node.remove();
+  }
 }
 
 function suppressed(el: Element): boolean {

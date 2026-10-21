@@ -164,13 +164,14 @@ export function showSnapshotError(doc: Document, message: string): void {
 export async function downloadThreadSnapshot(
   doc: Document | null = typeof document === "undefined" ? null : document,
   exportedAt = new Date().toISOString(),
+  anchor?: HTMLElement | null,
 ): Promise<void> {
   if (!doc?.documentElement) throw new Error(MISSING_THREAD_MESSAGE);
   // Closed reasoning and tool panels unmount on the live page. Mount them
   // only for this read, then put the page back.
   setExportKeepMounted(true);
   try {
-    const shell = snapshotSource(doc);
+    const shell = snapshotSource(doc, anchor);
     if (!shell) {
       showSnapshotError(doc, MISSING_THREAD_MESSAGE);
       throw new Error(MISSING_THREAD_MESSAGE);

@@ -210,12 +210,22 @@ describe("buildProductSlashCommands", () => {
     expect(ids).toContain("datatap");
   });
 
-  it("lists /export html next to the markdown export", () => {
-    const row = buildProductSlashCommands(api()).find((c) => c.id === "export-html");
-    expect(row?.label).toBe("/export html");
+  it("lists /export md and /export html, and bare /export stays markdown", () => {
+    const rows = buildProductSlashCommands(api());
+    const md = rows.find((c) => c.id === "export");
+    const html = rows.find((c) => c.id === "export-html");
+    expect(md?.label).toBe("/export md");
+    expect(html?.label).toBe("/export html");
+    expect(rows.indexOf(html!) - rows.indexOf(md!)).toBe(1);
+    expect(slashItemPrefixMatch({ id: "export", label: "/export md" }, "export md")).toBe(true);
     expect(slashItemPrefixMatch({ id: "export-html", label: "/export html" }, "export html")).toBe(
       true,
     );
+    expect(slashSubmitAction("/export md")).toMatchObject({
+      kind: "run",
+      command: { id: "export" },
+      arg: "md",
+    });
     expect(slashSubmitAction("/export html")).toMatchObject({
       kind: "run",
       command: { id: "export" },

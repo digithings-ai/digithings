@@ -39,6 +39,7 @@ import {
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
+import { downloadThreadSnapshot, showSnapshotError } from "../../../replay/browser";
 import { connectionStatusText } from "../connection-status";
 import { WorkStatusLead } from "../work-status-lead";
 import { Skeleton } from "../../../ui/skeleton";
@@ -1411,6 +1412,23 @@ const AssistantActionBar: FC = () => {
               Export as Markdown
             </ActionBarMorePrimitive.Item>
           </ActionBarPrimitive.ExportMarkdown>
+          <ActionBarMorePrimitive.Item
+            className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink"
+            onClick={(event) => {
+              const anchor = event.currentTarget;
+              void downloadThreadSnapshot(
+                anchor.ownerDocument,
+                new Date().toISOString(),
+                anchor,
+              ).catch((error: unknown) => {
+                const message = error instanceof Error ? error.message : "HTML export failed.";
+                showSnapshotError(anchor.ownerDocument, message);
+              });
+            }}
+          >
+            <DotMatrix state="export" decorative className="size-3.5" />
+            Export as HTML
+          </ActionBarMorePrimitive.Item>
         </ActionBarMorePrimitive.Content>
       </ActionBarMorePrimitive.Root>
       <MessageTiming />

@@ -399,9 +399,13 @@ export function DigichatSkin({
         if (action.kind === "run") {
           event.preventDefault();
           if (action.command.id === "copy") copyExport.copy();
-          else if (action.command.id === "export" && action.arg.trim().toLowerCase() === "html") {
-            copyExport.exportHtml();
-          } else if (action.command.id === "export") copyExport.exportThread();
+          else if (action.command.id === "export") {
+            const format = action.arg.trim().toLowerCase();
+            if (format === "html") copyExport.exportHtml();
+            else if (format === "" || format === "md" || format === "markdown") {
+              copyExport.exportThread();
+            }
+          }
           else if (action.command.id === "compact") {
             // Palette compact serializes the thread and queues a summary.
             // executeDef only resets prefs and opens an empty thread.

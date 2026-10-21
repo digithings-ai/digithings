@@ -264,6 +264,32 @@ describe("deployment hide rules", () => {
   });
 });
 
+describe("one interaction", () => {
+  it("keeps the question and that answer, and leaves the rest of the thread", () => {
+    document.body.innerHTML = [
+      '<div class="aui-thread-root" data-deployment="Northwind">',
+      '<div data-role="user"><div class="aui-user-message-content">First question</div></div>',
+      '<div data-role="assistant"><div class="aui-assistant-message-content">First answer</div></div>',
+      '<div data-role="user"><div class="aui-user-message-content">Second question</div></div>',
+      '<div data-role="assistant">',
+      '<div class="aui-assistant-message-content">Second answer</div>',
+      '<button id="export-html">Export as HTML</button>',
+      "</div>",
+      "</div>",
+    ].join("");
+    const anchor = document.getElementById("export-html");
+    expect(anchor).not.toBeNull();
+    const shell = snapshotSource(document, anchor);
+    expect(shell).not.toBeNull();
+    const html = serializeSnapshot(shell!, "");
+    expect(html).toContain("Second question");
+    expect(html).toContain("Second answer");
+    expect(html).not.toContain("First question");
+    expect(html).not.toContain("First answer");
+    expect(document.body.textContent).toContain("First question");
+  });
+});
+
 describe("refresh meta", () => {
   it("strips a refresh meta in the thread and inside a template", () => {
     document.body.innerHTML =
