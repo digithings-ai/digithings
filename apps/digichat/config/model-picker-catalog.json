@@ -1,7 +1,8 @@
 {
-  "source": "Cheaper Inference public markets page https://api.cheaperinference.com/markets fetched 2026-10-21. No API key. No chat/completions call. Prices are ourInputPerM and ourOutputPerM in USD per million tokens. Cheaper Inference publishes no router model on that listing (the only router hit was a page-router key, not a model id), so this catalog has no Cheaper Inference router. Each row has a family and a generation. The resolver keeps the newest latestGenerationsPerFamily generations of each family before the price cap. Superseded rows stay in this file so that rule drops them. reasoningScore only orders presets inside the kept set; it is not a published benchmark. maxAgeDays is null, so a release date does not drop a row unless a caller sets a max age. asOf is the markets fetch date.",
+  "source": "Cheaper Inference public markets page https://api.cheaperinference.com/markets fetched 2026-10-21. No API key. No chat/completions call. Prices are ourInputPerM and ourOutputPerM in USD per million tokens. Cheaper Inference publishes no router model on that listing (the only router hit was a page-router key, not a model id), so this catalog has no Cheaper Inference router. Each row has a family and a generation. The resolver keeps the newest latestGenerationsPerFamily generations of each family before the price cap. Superseded rows stay in this file so that rule drops them. Models above the standard cap and at or under premiumCapUsdPerMillion are a manual Premium group. Presets and the router do not select them. reasoningScore only orders presets inside the standard cap; it is not a published benchmark. maxAgeDays is null, so a release date does not drop a row unless a caller sets a max age. asOf is the markets fetch date.",
   "policy": {
     "priceCapUsdPerMillion": 2,
+    "premiumCapUsdPerMillion": 2.5,
     "minContextTokens": 128000,
     "minTtftSamples": 100,
     "latestGenerationsPerFamily": 1,

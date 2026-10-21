@@ -20,7 +20,7 @@ import {
   VIEW_MODES,
 } from "@/lib/view-modes";
 import { HEX_COLOR } from "@/lib/hex-color";
-import { resolveModelCatalog } from "@/lib/model-picker-catalog";
+import { premiumIdsFromGroups, resolveModelCatalog } from "@/lib/model-picker-catalog";
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
@@ -241,6 +241,8 @@ const ModelPickerGroupSchema = z
   .object({
     provider: z.string().min(1),
     models: z.array(z.object({ id: z.string().min(1), label: z.string().min(1) }).strict()),
+    /** Manual Premium group. Presets and the router never select these ids. */
+    premium: z.boolean().optional(),
   })
   .strict();
 
@@ -273,6 +275,23 @@ export const ModelsSchema = z
     catalog: z.boolean().optional(),
     /** USD per million output tokens. Omit to use the catalog default. */
     priceCapUsdPerMillion: z.number().positive().optional(),
+    /**
+     * Manual Premium tier: above the standard cap, at or under this cap.
+     * Omit to use the catalog default. Presets do not select these models.
+     */
+    premiumCapUsdPerMillion: z.number().positive().optional(),
+    /**
+     * Per-user premium spend, USD over a rolling window. Omit to leave
+     * premium picks unmetered. Fold into guardrails beside tokensPerMinute
+     * when #6182 lands; that block is not on this branch.
+     */
+    costPerWindow: z
+      .object({
+        usd: z.number().positive(),
+        windowSeconds: z.number().int().positive().default(86400),
+      })
+      .strict()
+      .optional(),
     /** Which preset rows the picker offers. Omit to offer every catalog preset. */
     presets: z.array(z.enum(["auto", "reasoning", "fast", "light", "router"])).optional(),
     /** When false, the picker shows presets only and the allowlist is those models. */
@@ -740,7 +759,18 @@ export function routerModelsHeader(
 ): string | undefined {
   const router = models?.picker?.presets.find((preset) => preset.id === "router");
   if (!router || !selected || router.model !== selected) return undefined;
-  const ids = (models?.available ?? []).filter((id) => id !== router.model).slice(0, 64);
+  const premium = new Set(premiumIdsFromGroups(models?.picker?.groups));
+  const ids = (models?.available ?? [])
+    .filter((id) => id !== router.model && !premium.has(id))
+    .slice(0, 64);
+  return ids.length ? ids.join(",") : undefined;
+}
+
+/** Comma list of manual Premium ids, so digillm can drop them from a router allowlist. */
+export function premiumModelsHeader(
+  models: DigichatDeployment["models"] | undefined,
+): string | undefined {
+  const ids = premiumIdsFromGroups(models?.picker?.groups);
   return ids.length ? ids.join(",") : undefined;
 }
 
@@ -768,6 +798,7 @@ function applyModelCatalog(
     {
       default: models.default,
       priceCapUsdPerMillion: models.priceCapUsdPerMillion,
+      premiumCapUsdPerMillion: models.premiumCapUsdPerMillion,
       presets: models.presets,
       showFullList: models.showFullList,
       minContextTokens: models.minContextTokens,

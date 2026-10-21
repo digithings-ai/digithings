@@ -19,6 +19,7 @@ export {
   allowlistModelId,
   resolveHouseModelSelection,
   routerModelsHeader,
+  premiumModelsHeader,
   type WelcomeCopy,
   type DigichatConfig,
   type DigichatDeployment,

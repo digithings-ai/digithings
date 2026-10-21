@@ -24,7 +24,8 @@
         "default": "deepseek/deepseek-v4.1-flash-1017",
         "priceCapUsdPerMillion": 2,
         "presets": ["auto", "reasoning", "fast", "light"],
-        "showFullList": true
+        "showFullList": true,
+        "costPerWindow": { "usd": 0.0125565, "windowSeconds": 86400 }
       },
       "backend": {
         "type": "digigraph",

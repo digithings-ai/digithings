@@ -7,9 +7,8 @@ from typing import Any  # score:allow untyped any
 # Justification: fake OpenAI kwargs + captured call dicts over untyped client boundary.
 from unittest.mock import MagicMock, patch
 
-from openai.types.chat import ChatCompletion
-
 import pytest
+from openai.types.chat import ChatCompletion
 
 import digillm
 import digillm.client as client_mod
@@ -255,3 +254,19 @@ def test_openrouter_auto_sends_the_allowlist_to_openrouter(
         "openai/gpt-oss-120b",
         "deepseek/deepseek-v4-pro",
     ]
+
+
+def test_router_allowlist_drops_premium_ids() -> None:
+    """Premium ids are manual picks. The router must not spend them."""
+    router = client_mod.push_router_models(
+        "openai/gpt-oss-120b,z-ai/glm-5.3,deepseek/deepseek-v4-pro"
+    )
+    premium = client_mod.push_premium_models("z-ai/glm-5.3,google/gemini-3.8-flash")
+    try:
+        assert client_mod.get_router_models() == (
+            "openai/gpt-oss-120b",
+            "deepseek/deepseek-v4-pro",
+        )
+    finally:
+        client_mod.pop_premium_models(premium)
+        client_mod.pop_router_models(router)

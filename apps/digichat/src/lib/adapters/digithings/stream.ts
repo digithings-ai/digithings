@@ -382,6 +382,10 @@ export async function createDigigraphTraceStreamResponse(opts: {
   model?: string;
   /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
   signal?: AbortSignal;
+  /** Shown before the answer when a premium pick falls back to Auto. */
+  preface?: string;
+  /** Reported token usage for the premium spend window. Omitted usage charges a typical turn. */
+  onUsage?: (usage?: { inputTokens: number; outputTokens: number }) => void;
 }) {
   const stripped = uiMessagesForUpstream(opts.messages).map((m) => {
     const { id: _omit, ...rest } = m;
@@ -416,6 +420,11 @@ export async function createDigigraphTraceStreamResponse(opts: {
         textOpen = false;
         textSeq += 1;
       };
+      if (opts.preface) {
+        openText();
+        writer.write({ type: "text-delta", id: textId, delta: `${opts.preface}\n\n` });
+        textEmitted = true;
+      }
       writer.write({
         type: "data-connection",
         id: "digigraph-connection",
@@ -699,6 +708,9 @@ export async function createDigigraphTraceStreamResponse(opts: {
       // failure. `activityCtx.seq` counts every non-text part written (reasoning,
       // tool, source, data-status), so a tool-only or reasoning-only reply is
       // not misclassified as empty.
+      if (opts.onUsage && (textEmitted || usageMetadata)) {
+        opts.onUsage(usageMetadata);
+      }
       if (!textEmitted && activityCtx.seq === 0) {
         console.error(
           `[digigraph] upstream ${res.status} streamed no text or activity (content-type=${res.headers.get("content-type") ?? "none"}; reason=empty_stream)`

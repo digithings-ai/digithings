@@ -47,6 +47,7 @@ type CatalogFile = {
   source: string;
   policy: {
     priceCapUsdPerMillion: number;
+    premiumCapUsdPerMillion: number;
     minContextTokens: number;
     minTtftSamples: number;
     latestGenerationsPerFamily: number;
@@ -71,6 +72,8 @@ export type ModelPickerPreset = {
 export type ModelPickerGroup = {
   provider: string;
   models: { id: string; label: string }[];
+  /** Manual selection only. Presets and the router never use this group. */
+  premium?: boolean;
 };
 
 export type ModelPickerView = {
@@ -82,6 +85,7 @@ export type ModelPickerView = {
 export type CatalogPolicy = {
   default?: string;
   priceCapUsdPerMillion?: number;
+  premiumCapUsdPerMillion?: number;
   presets?: readonly string[];
   showFullList?: boolean;
   minContextTokens?: number;
@@ -97,6 +101,29 @@ export type ResolvedCatalog = {
 
 export function catalogSource(): string {
   return catalog.source;
+}
+
+export function catalogModelRate(
+  id: string,
+): { inputPerM: number; outputPerM: number } | undefined {
+  const row = catalog.models.find((model) => model.id === id);
+  if (!row) return undefined;
+  return { inputPerM: row.inputPerM, outputPerM: row.outputPerM };
+}
+
+/** Ids in a picker group marked premium. The router allowlist drops these. */
+export function premiumIdsFromGroups(
+  groups: readonly { premium?: boolean; models: readonly { id: string }[] }[] | undefined,
+): string[] {
+  if (!groups) return [];
+  const ids: string[] = [];
+  for (const group of groups) {
+    if (!group.premium) continue;
+    for (const model of group.models) {
+      if (!ids.includes(model.id)) ids.push(model.id);
+    }
+  }
+  return ids;
 }
 
 function isPresetId(id: string): id is PresetId {
@@ -205,6 +232,8 @@ export function resolveModelCatalog(
   opts: { openRouterConfigured: boolean },
 ): ResolvedCatalog {
   const cap = policy.priceCapUsdPerMillion ?? catalog.policy.priceCapUsdPerMillion;
+  const premiumCap =
+    policy.premiumCapUsdPerMillion ?? catalog.policy.premiumCapUsdPerMillion;
   const minSamples = catalog.policy.minTtftSamples;
   const showFullList = policy.showFullList !== false;
   const requested = policy.presets ?? catalog.presets.map((preset) => preset.id);
@@ -221,9 +250,16 @@ export function resolveModelCatalog(
       "model catalog: default model is not in the current generation or is under the context floor",
     );
   }
-  const capped = current
+  const standard = current
     .filter((model) => model.outputPerM <= cap || model.id === pinned.id)
     .sort(byProviderThenPrice);
+  const premium = current
+    .filter(
+      (model) =>
+        model.id !== pinned.id && model.outputPerM > cap && model.outputPerM <= premiumCap,
+    )
+    .sort(byProviderThenPrice);
+  const capped = standard;
 
   const presets: ModelPickerPreset[] = [];
 
@@ -314,6 +350,13 @@ export function resolveModelCatalog(
       }
       group.models.push({ id: model.id, label: model.label });
     }
+    if (premium.length) {
+      groups.push({
+        provider: "Premium",
+        premium: true,
+        models: premium.map((model) => ({ id: model.id, label: model.label })),
+      });
+    }
   }
 
   const available: string[] = [];
@@ -322,6 +365,7 @@ export function resolveModelCatalog(
   };
   if (showFullList) {
     for (const model of capped) push(model.id);
+    for (const model of premium) push(model.id);
   }
   for (const preset of presets) push(preset.model);
   push(pinned.id);

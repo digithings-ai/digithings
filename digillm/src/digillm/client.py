@@ -841,7 +841,34 @@ def pop_router_models(token: Token[tuple[str, ...] | None]) -> None:
 
 
 def get_router_models() -> tuple[str, ...] | None:
-    return _router_models.get()
+    models = _router_models.get()
+    if not models:
+        return None
+    premium = _premium_models.get()
+    if not premium:
+        return models
+    kept = tuple(model for model in models if model not in premium)
+    return kept or None
+
+
+# Manual Premium picks. The OpenRouter router must not spend them. The BFF
+# sends the ids on X-Digi-Premium-Models; an empty value clears the set.
+_premium_models: ContextVar[frozenset[str]] = ContextVar(
+    "digillm_premium_models", default=frozenset()
+)
+
+
+def push_premium_models(value: str | None) -> Token[frozenset[str]]:
+    """Bind the premium ids the router has to drop. Comma-separated."""
+    raw = (value or "").strip()
+    if not raw:
+        return _premium_models.set(frozenset())
+    ids = frozenset(part.strip() for part in raw.split(",") if part.strip())
+    return _premium_models.set(ids)
+
+
+def pop_premium_models(token: Token[frozenset[str]]) -> None:
+    _premium_models.reset(token)
 
 
 def _is_openrouter_auto(model: str) -> bool:
@@ -857,7 +884,7 @@ def _openrouter_auto_routed(model: str) -> bool:
     Requires a non-empty router context and ``OPENROUTER_API_KEY``. Without
     either, the call is not given an unconstrained OpenRouter route.
     """
-    models = _router_models.get()
+    models = get_router_models()
     key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
     return bool(models) and bool(key) and _is_openrouter_auto(model)
 
@@ -2071,7 +2098,7 @@ def completion(
         # OpenAI SDK extra_body is merged onto the JSON body. OpenRouter reads
         # a top-level ``models`` array as the router's allowlist.
         extra = dict(kwargs.get("extra_body") or {})
-        extra["models"] = list(_router_models.get() or ())
+        extra["models"] = list(get_router_models() or ())
         kwargs["extra_body"] = extra
 
     try:

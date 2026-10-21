@@ -50,6 +50,13 @@ hosts:
       catalog: true
       default: deepseek/deepseek-v4.1-flash-1017
       priceCapUsdPerMillion: 2
+      # Premium sits above that cap and at or under $2.50 (GLM 5.3, Gemini
+      # 3.8 Flash). Manual picks only. costPerWindow is three typical turns
+      # of the pricier one, GLM 5.3, per rolling day ($0.0125565). OCC leaves
+      # this unset, so premium picks there are not metered.
+      costPerWindow:
+        usd: 0.0125565
+        windowSeconds: 86400
       presets: [auto, reasoning, fast, light]
       showFullList: true
     backend:

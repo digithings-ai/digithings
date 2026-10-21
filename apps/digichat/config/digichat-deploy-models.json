@@ -11,7 +11,9 @@
     "qwen/qwen3.8-27b",
     "xiaomi/mimo-v2.6-flash",
     "xiaomi/mimo-v2.6-pro",
-    "minimax/minimax-m3"
+    "minimax/minimax-m3",
+    "google/gemini-3.8-flash",
+    "z-ai/glm-5.3"
   ],
   "sessionAllowlist": [
     "deepseek/deepseek-v4.1-flash-1017",
@@ -24,6 +26,8 @@
     "qwen/qwen3.8-27b",
     "xiaomi/mimo-v2.6-flash",
     "xiaomi/mimo-v2.6-pro",
-    "minimax/minimax-m3"
+    "minimax/minimax-m3",
+    "google/gemini-3.8-flash",
+    "z-ai/glm-5.3"
   ]
 }

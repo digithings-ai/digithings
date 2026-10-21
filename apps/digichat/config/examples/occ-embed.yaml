@@ -43,6 +43,7 @@ hosts:
       catalog: true
       default: deepseek/deepseek-v4.1-flash-1017
       priceCapUsdPerMillion: 2
+      # No costPerWindow: premium picks stay unmetered unless a deploy sets one.
       presets: [auto, reasoning, fast, light]
       showFullList: true
     backend:

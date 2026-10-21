@@ -266,12 +266,18 @@ export type EmbedTenantConfig = {
     allowPicker?: boolean;
     catalog?: boolean;
     priceCapUsdPerMillion?: number;
+    premiumCapUsdPerMillion?: number;
+    costPerWindow?: { usd: number; windowSeconds?: number };
     presets?: Array<"auto" | "reasoning" | "fast" | "light" | "router">;
     showFullList?: boolean;
     minContextTokens?: number;
     picker?: {
       presets: Array<{ id: string; label: string; description: string; model: string }>;
-      groups: Array<{ provider: string; models: Array<{ id: string; label: string }> }>;
+      groups: Array<{
+        provider: string;
+        models: Array<{ id: string; label: string }>;
+        premium?: boolean;
+      }>;
       showFullList: boolean;
     };
   };
@@ -934,6 +940,38 @@ function parseTenantModels(
   ) {
     throw new Error(`embed tenant "${hostKey}": models.priceCapUsdPerMillion must be a positive number`);
   }
+  if (
+    r.premiumCapUsdPerMillion !== undefined &&
+    (typeof r.premiumCapUsdPerMillion !== "number" ||
+      !Number.isFinite(r.premiumCapUsdPerMillion) ||
+      r.premiumCapUsdPerMillion <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.premiumCapUsdPerMillion must be a positive number`);
+  }
+  let costPerWindow: { usd: number; windowSeconds?: number } | undefined;
+  if (r.costPerWindow !== undefined) {
+    const cost = r.costPerWindow;
+    if (!cost || typeof cost !== "object" || Array.isArray(cost)) {
+      throw new Error(`embed tenant "${hostKey}": models.costPerWindow must be an object`);
+    }
+    const usd = (cost as { usd?: unknown }).usd;
+    const windowSeconds = (cost as { windowSeconds?: unknown }).windowSeconds;
+    if (typeof usd !== "number" || !Number.isFinite(usd) || usd <= 0) {
+      throw new Error(`embed tenant "${hostKey}": models.costPerWindow.usd must be a positive number`);
+    }
+    if (
+      windowSeconds !== undefined &&
+      (typeof windowSeconds !== "number" || !Number.isInteger(windowSeconds) || windowSeconds <= 0)
+    ) {
+      throw new Error(
+        `embed tenant "${hostKey}": models.costPerWindow.windowSeconds must be a positive integer`,
+      );
+    }
+    costPerWindow = {
+      usd,
+      ...(typeof windowSeconds === "number" ? { windowSeconds } : {}),
+    };
+  }
   if (r.showFullList !== undefined && typeof r.showFullList !== "boolean") {
     throw new Error(`embed tenant "${hostKey}": models.showFullList must be a boolean`);
   }
@@ -954,6 +992,10 @@ function parseTenantModels(
       ...(typeof r.priceCapUsdPerMillion === "number"
         ? { priceCapUsdPerMillion: r.priceCapUsdPerMillion }
         : {}),
+      ...(typeof r.premiumCapUsdPerMillion === "number"
+        ? { premiumCapUsdPerMillion: r.premiumCapUsdPerMillion }
+        : {}),
+      ...(costPerWindow ? { costPerWindow } : {}),
       ...(presets ? { presets } : {}),
       ...(typeof r.showFullList === "boolean" ? { showFullList: r.showFullList } : {}),
       ...(typeof r.minContextTokens === "number" ? { minContextTokens: r.minContextTokens } : {}),

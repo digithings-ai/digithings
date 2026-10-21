@@ -70,12 +70,17 @@ digithings.ai and the OCC embed resolve the picker from
 Reasoning, Fast, Light, and the OpenRouter router when that key is set), then
 the newest generation of each family that is tool-capable, at or above the
 context floor, and under the deployment's output-price cap. Older generations
-stay in the catalog file; the resolver drops them. The default
+stay in the catalog file; the resolver drops them. Models above that cap and
+at or under the premium cap ($2.50) are a separate Premium group: manual
+picks only, never Auto, the other presets, or the router. digithings.ai meters
+those picks at $0.0125565 per user per rolling day (three typical turns of
+GLM 5.3). OCC leaves that budget unset. The default
 preset is `deepseek/deepseek-v4.1-flash-1017` (DeepSeek V4.1 Flash 1017 on
 Cheaper Inference). Cheaper Inference has no router model. OpenRouter is not a
 free model list on that picker; `openrouter/auto` appears only as the Router
 preset, and only when `OPENROUTER_API_KEY` is set at load. The router receives
-the deployment's allowed ids.
+the deployment's allowed ids except the Premium group. digillm drops any
+Premium id that still arrives on `X-Digi-Premium-Models`.
 
 The dashboard (`dashboard-modal.yaml`) keeps its own three-slug list:
 `deepseek/deepseek-v4.1-flash-1017`, `openai/gpt-oss-120b`, and

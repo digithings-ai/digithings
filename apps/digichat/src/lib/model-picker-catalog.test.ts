@@ -24,6 +24,8 @@ describe("model picker catalog", () => {
     expect(catalogJson.source).toMatch(/cheaperinference.com\/markets/);
     expect(catalogJson.source).toMatch(/No chat\/completions/);
     expect(catalogJson.source.toLowerCase()).toMatch(/no router model/);
+    expect(catalogJson.policy.priceCapUsdPerMillion).toBe(2);
+    expect(catalogJson.policy.premiumCapUsdPerMillion).toBe(2.5);
     expect(catalogJson.policy.latestGenerationsPerFamily).toBe(1);
     expect(catalogJson.policy.maxAgeDays).toBeNull();
     expect(catalogJson.policy.asOf).toBe("2026-10-21");
@@ -44,7 +46,18 @@ describe("model picker catalog", () => {
       "xiaomi/mimo-v2.6-flash",
       "xiaomi/mimo-v2.6-pro",
       "minimax/minimax-m3",
+      "google/gemini-3.8-flash",
+      "z-ai/glm-5.3",
     ]);
+    const premium = resolved.picker.groups.find((group) => group.premium);
+    expect(premium?.provider).toBe("Premium");
+    expect(premium?.models.map((model) => model.id)).toEqual([
+      "google/gemini-3.8-flash",
+      "z-ai/glm-5.3",
+    ]);
+    expect(resolved.picker.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
+      "z-ai/glm-5.3-flash",
+    );
     for (const id of [
       "deepseek/deepseek-v4-pro",
       "deepseek/deepseek-v4-flash",
@@ -67,10 +80,14 @@ describe("model picker catalog", () => {
 
   it("drops models over the output cap and keeps a pinned current-generation default", () => {
     const resolved = policy();
-    expect(resolved.available).not.toContain("z-ai/glm-5.3");
-    expect(resolved.available).not.toContain("google/gemini-3.8-flash");
+    expect(resolved.available).toContain("z-ai/glm-5.3");
+    expect(resolved.available).toContain("google/gemini-3.8-flash");
     expect(resolved.available).not.toContain("openai/gpt-6.1-sol");
     expect(resolved.available).not.toContain("qwen/qwen3.8-max");
+    expect(resolved.picker.presets.map((preset) => preset.model)).not.toContain("z-ai/glm-5.3");
+    expect(resolved.picker.presets.map((preset) => preset.model)).not.toContain(
+      "google/gemini-3.8-flash",
+    );
     const high = resolveModelCatalog(
       { default: "z-ai/glm-5.3", priceCapUsdPerMillion: 2, showFullList: true },
       { openRouterConfigured: false },
@@ -147,6 +164,7 @@ describe("model picker catalog", () => {
       "Alibaba",
       "Xiaomi",
       "MiniMax",
+      "Premium",
     ]);
     const deepseek = resolved.picker.groups[0]?.models ?? [];
     const prices = deepseek.map(
@@ -174,13 +192,21 @@ describe("model picker catalog", () => {
     // digigraph's list is the capped list: no over-cap id, no router.
     expect(deployModels.sessionAllowlist).toEqual(deployModels.available);
     expect(deployModels.sessionAllowlist).not.toContain("openrouter/auto");
+    const premiumIds =
+      resolved.picker.groups.find((group) => group.premium)?.models.map((model) => model.id) ??
+      [];
+    expect(premiumIds).toEqual(["google/gemini-3.8-flash", "z-ai/glm-5.3"]);
     const catalogRows = JSON.parse(JSON.stringify(catalogJson)).models as Array<{
       id: string;
       outputPerM: number;
     }>;
     for (const id of deployModels.sessionAllowlist) {
       const row = catalogRows.find((model) => model.id === id);
-      if (id !== deployModels.default) expect(row?.outputPerM ?? Infinity).toBeLessThanOrEqual(2);
+      if (id === deployModels.default) continue;
+      expect(row?.outputPerM ?? Infinity).toBeLessThanOrEqual(2.5);
+      const premium = premiumIds.includes(id);
+      if (premium) expect(row?.outputPerM ?? 0).toBeGreaterThan(2);
+      else expect(row?.outputPerM ?? Infinity).toBeLessThanOrEqual(2);
     }
   });
 });

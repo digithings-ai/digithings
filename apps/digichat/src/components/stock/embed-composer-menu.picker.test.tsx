@@ -403,6 +403,10 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(screen.getByText("Gemini 3.5 Flash Lite. Fastest model in this list.")).not.toBeNull();
     expect(screen.getByText("GPT-OSS 120B. Lowest price in this list.")).not.toBeNull();
     expect(screen.getByText("Qwen 3.8 Flash")).not.toBeNull();
+    expect(screen.getByText("Premium")).not.toBeNull();
+    expect(screen.getByText("Manual selection")).not.toBeNull();
+    expect(screen.getByText("GLM 5.3")).not.toBeNull();
+    expect(screen.getByText("Gemini 3.8 Flash")).not.toBeNull();
     expect(screen.getByText("Qwen 3.8 27B")).not.toBeNull();
     expect(screen.queryByText("DeepSeek V4 Pro")).toBeNull();
     expect(screen.queryByText("GLM 4.7 Flash")).toBeNull();

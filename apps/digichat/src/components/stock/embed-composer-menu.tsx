@@ -121,7 +121,11 @@ export type MenuRow = {
 
 export type ComposerModelPicker = {
   presets: readonly { id: string; label: string; description: string; model: string }[];
-  groups: readonly { provider: string; models: readonly { id: string; label: string }[] }[];
+  groups: readonly {
+    provider: string;
+    models: readonly { id: string; label: string }[];
+    premium?: boolean;
+  }[];
   showFullList: boolean;
 };
 
@@ -554,7 +558,7 @@ export function EmbedComposerMenu({
             {
               id: `heading:${group.provider}`,
               label: group.provider,
-              value: "",
+              value: group.premium ? "Manual selection" : "",
               heading: true,
               activate: () => {},
             },
@@ -1648,9 +1652,12 @@ export function EmbedComposerMenu({
                     <div
                       key={row.id}
                       role="presentation"
-                      className="text-muted-foreground px-2 pt-2 pb-0.5 text-[11px] uppercase tracking-wide"
+                      className="text-muted-foreground flex items-baseline gap-2 px-2 pt-2 pb-0.5 text-[11px] uppercase tracking-wide"
                     >
-                      {row.label}
+                      <span>{row.label}</span>
+                      {row.value ? (
+                        <span className="normal-case tracking-normal">{row.value}</span>
+                      ) : null}
                     </div>
                   );
                 }

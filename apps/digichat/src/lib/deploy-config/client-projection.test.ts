@@ -164,7 +164,7 @@ describe("foundry tenants do not inherit the house catalog", () => {
 describe("baseline embed models catalog (Cheaper Inference default)", () => {
   it("ships the deploy catalog with the V4.1 Flash default and an enabled picker", () => {
     expect(DEFAULT_CLIENT_CONFIG.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
-    expect(DEFAULT_CLIENT_CONFIG.models.available).toHaveLength(11);
+    expect(DEFAULT_CLIENT_CONFIG.models.available).toHaveLength(13);
     expect(DEFAULT_CLIENT_CONFIG.models.available).toContain("deepseek/deepseek-v4.1-flash-1017");
     expect(DEFAULT_CLIENT_CONFIG.models.allowPicker).toBe(true);
   });

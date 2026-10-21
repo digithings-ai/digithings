@@ -10,6 +10,7 @@ import {
   GateSchema,
   parseDigichatConfig,
   resolveHouseModelSelection,
+  premiumModelsHeader,
   routerModelsHeader,
   welcomeTitle,
 } from "./schema";
@@ -335,6 +336,17 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.models.available).toContain("openai/gpt-6-luna");
     expect(dt?.models.available).toContain("qwen/qwen3.8-flash");
     expect(dt?.models.available).toContain("z-ai/glm-5.3-flash");
+    expect(dt?.models.available).toContain("z-ai/glm-5.3");
+    expect(dt?.models.available).toContain("google/gemini-3.8-flash");
+    expect(dt?.models.available).not.toContain("qwen/qwen3.8-max");
+    expect(dt?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
+    expect(dt?.models.picker?.groups.find((group) => group.premium)?.models.map((model) => model.id)).toEqual([
+      "google/gemini-3.8-flash",
+      "z-ai/glm-5.3",
+    ]);
+    expect(dt?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
+      "z-ai/glm-5.3-flash",
+    );
     expect(dt?.models.available).not.toContain("openai/gpt-5.6-luna");
     expect(dt?.models.available).not.toContain("google/gemini-3.1-flash-lite");
     expect(dt?.models.available).not.toContain("deepseek/deepseek-v4-pro");
@@ -379,6 +391,10 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.models.catalog).toBe(true);
     expect(occHost?.models.allowPicker).toBe(true);
     expect(occHost?.models.picker?.presets[0]?.id).toBe("auto");
+    expect(occHost?.models.costPerWindow).toBeUndefined();
+    expect(occHost?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
+      "z-ai/glm-5.3-flash",
+    );
     expect(occHost?.chrome.theme).toBe("light");
     expect(occHost?.mcp?.allowUserServers).toBe(false);
     expect(occHost?.mcp?.servers.map((s) => s.id)).toEqual([
@@ -712,6 +728,22 @@ describe("preset selection on the BFF", () => {
     expect(routerModelsHeader(models, undefined)).toBeUndefined();
     const withRouter = { ...models, available: [...models.available, "openrouter/auto"] };
     expect(routerModelsHeader(withRouter, "openrouter/auto")).toBe("m/auto,m/reason,m/light");
+    const withPremium = {
+      ...withRouter,
+      available: [...withRouter.available, "z-ai/glm-5.3"],
+      picker: {
+        ...withRouter.picker,
+        groups: [
+          {
+            provider: "Premium",
+            premium: true,
+            models: [{ id: "z-ai/glm-5.3", label: "GLM 5.3" }],
+          },
+        ],
+      },
+    };
+    expect(routerModelsHeader(withPremium, "openrouter/auto")).toBe("m/auto,m/reason,m/light");
+    expect(premiumModelsHeader(withPremium)).toBe("z-ai/glm-5.3");
     const noRouterPreset = { ...models, picker: { ...models.picker, presets: [] } };
     expect(routerModelsHeader(noRouterPreset, "openrouter/auto")).toBeUndefined();
   });

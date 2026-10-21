@@ -31,6 +31,9 @@ import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { resolveLanguageCode } from "@/lib/languages";
+import { premiumModelsHeader } from "@/lib/deploy-config/schema";
+import { catalogModelRate, premiumIdsFromGroups } from "@/lib/model-picker-catalog";
+import { applyPremiumBudget, premiumUserKey } from "@/lib/premium-budget/budget";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getHeartbeatContext, licenseRefusal } from "@/lib/license/state";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
@@ -275,7 +278,7 @@ async function handleChat(
   const turnMode = turnModeParsed;
   const runId = req.headers.get("x-digi-run-id")?.trim() || null;
 
-  const responseHeaders = {
+  const responseHeaders: Record<string, string> = {
     "X-Digichat-Session": sessionId,
     "X-Request-Id": rid,
   };
@@ -609,6 +612,29 @@ async function handleChat(
     }
   }
 
+  let premiumNotice: string | undefined;
+  let chargePremium: ((usage?: { inputTokens: number; outputTokens: number }) => void) | undefined;
+  if (!byokKey && dep?.models) {
+    const premiumIds = premiumIdsFromGroups(dep.models.picker?.groups);
+    const applied = applyPremiumBudget({
+      modelId,
+      defaultModel: tenantDefaultModel,
+      premium: premiumIds.includes(modelId),
+      rate: catalogModelRate(modelId),
+      budget: dep.models.costPerWindow,
+      userKey: premiumUserKey(tenantSlug, sessionId),
+    });
+    if (applied.notice) {
+      modelId = applied.modelId;
+      houseSessionModel = applied.modelId;
+      routerModels = undefined;
+      premiumNotice = applied.notice;
+      responseHeaders["X-Digi-Premium-Fallback"] = "auto";
+    } else {
+      chargePremium = applied.charge;
+    }
+  }
+
   if (adapter.protocol === "foundry-responses" && isFoundryConfig(backend)) {
     const foundryBackend = backend;
     let foundryRes: Response;
@@ -862,6 +888,10 @@ async function handleChat(
     upstreamHeaders["X-Digi-House-Model"] = houseSessionModel;
     if (routerModels) upstreamHeaders["X-Digi-Router-Models"] = routerModels;
   }
+  if (!byokKey && dep?.models) {
+    const premiumHeader = premiumModelsHeader(dep.models);
+    if (premiumHeader) upstreamHeaders["X-Digi-Premium-Models"] = premiumHeader;
+  }
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;
     if (byokProvider) {
@@ -894,6 +924,8 @@ async function handleChat(
           // tenant curates a list) or the curated default.
           model: byokKey ? undefined : modelId,
           signal: req.signal,
+          preface: premiumNotice,
+          onUsage: chargePremium,
         }),
       );
     } catch (err) {
@@ -901,6 +933,8 @@ async function handleChat(
       throw err;
     }
   }
+
+  if (chargePremium) chargePremium();
 
   const result = streamText({
     model,

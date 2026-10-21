@@ -11,6 +11,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { load as loadYaml } from "js-yaml";
+import { DEFAULT_PREMIUM_WINDOW_SECONDS } from "@/lib/premium-budget/budget";
 // js-yaml v4 — default safe schema via load() with no schema override.
 import {
   parseDigichatConfig,
@@ -122,6 +123,18 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       ...(cfg.models?.catalog === true ? { catalog: true as const } : {}),
       ...(typeof cfg.models?.priceCapUsdPerMillion === "number"
         ? { priceCapUsdPerMillion: cfg.models.priceCapUsdPerMillion }
+        : {}),
+      ...(typeof cfg.models?.premiumCapUsdPerMillion === "number"
+        ? { premiumCapUsdPerMillion: cfg.models.premiumCapUsdPerMillion }
+        : {}),
+      ...(cfg.models?.costPerWindow
+        ? {
+            costPerWindow: {
+              usd: cfg.models.costPerWindow.usd,
+              windowSeconds:
+                cfg.models.costPerWindow.windowSeconds ?? DEFAULT_PREMIUM_WINDOW_SECONDS,
+            },
+          }
         : {}),
       ...(cfg.models?.presets ? { presets: [...cfg.models.presets] } : {}),
       ...(typeof cfg.models?.showFullList === "boolean"

@@ -157,11 +157,14 @@ ALLOWED_NESTED_KEYS = {
             "allowPicker",
             "catalog",
             "priceCapUsdPerMillion",
+            "premiumCapUsdPerMillion",
+            "costPerWindow",
             "presets",
             "showFullList",
             "minContextTokens",
         ]
     ),
+    "models.costPerWindow": frozenset(["usd", "windowSeconds"]),
     "tools": frozenset(["allowUserToggle", "catalog"]),
     "tools.catalog": frozenset(["id", "default", "label", "tools"]),
 }

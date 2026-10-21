@@ -41,7 +41,9 @@ from digillm import (
     get_provider_api_key_env,
     is_registered_provider,
 )
+from digillm.client import pop_premium_models as _pop_premium_models
 from digillm.client import pop_router_models as _pop_router_models
+from digillm.client import push_premium_models as _push_premium_models
 from digillm.client import push_router_models as _push_router_models
 from pydantic import (
     BaseModel,
@@ -851,6 +853,15 @@ def push_router_models(value: str | None) -> Token[tuple[str, ...] | None]:
 
 def pop_router_models(token: Token[tuple[str, ...] | None]) -> None:
     _pop_router_models(token)
+
+
+def push_premium_models(value: str | None) -> Token[frozenset[str]]:
+    """Bind manual Premium ids so the OpenRouter router cannot spend them."""
+    return _push_premium_models(value)
+
+
+def pop_premium_models(token: Token[frozenset[str]]) -> None:
+    _pop_premium_models(token)
 
 
 def get_model_for_mode() -> str:
