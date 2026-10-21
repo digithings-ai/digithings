@@ -1689,8 +1689,8 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   font-size: 0.68rem;
   line-height: 1.45;
   color: var(--ink-soft);
-  /* DIG-4459: the JSON view sizes itself (long blocks cap at 18rem with a
-     "Show all" toggle); arguments are never cut. */
+  /* DIG-4459: arguments are never cut; long ones scroll inside an 18rem
+     area (no expand button). */
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -2335,7 +2335,10 @@ html:has(.aui-theme-stage) :focus-visible {
   border-width: 1px 0 0 0;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-view[data-long="true"][data-expanded="false"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-view,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice-detail {
+  overflow: auto;
+  overscroll-behavior: contain;
   max-height: 18rem;
 }
 

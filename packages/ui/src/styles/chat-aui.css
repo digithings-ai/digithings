@@ -634,9 +634,8 @@
 .digichat-thread [data-slot="tool-fallback-dump"],
 .digichat-launcher [data-slot="tool-fallback-dump"] {
   margin: 0;
-  /* DIG-4459: JSON views size themselves (a long block caps at 18rem with
-     its own scroll and a "Show all" toggle); only the legacy dump keeps the
-     short cap. */
+  /* DIG-4459: JSON views and error details sit in an 18rem scroll area (no
+     expand button); only the legacy dump keeps the short cap. */
   max-height: none;
   overflow: auto;
   overscroll-behavior: contain;
@@ -866,7 +865,10 @@ html:has([data-thread-skin="digichat"]) [data-slot="tooltip-content"] {
   max-height: 8.5rem;
 }
 
-.digichat-thread .aui-json-view[data-long="true"][data-expanded="false"],
-.digichat-launcher .aui-json-view[data-long="true"][data-expanded="false"] {
+.digichat-thread .aui-json-view,
+.digichat-launcher .aui-json-view,
+.digichat-thread .aui-chat-notice-detail,
+.digichat-launcher .aui-chat-notice-detail {
+  overflow: auto;
   max-height: 18rem;
 }
