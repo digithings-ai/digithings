@@ -36,8 +36,7 @@ function parseArgs(argv) {
     if (key === "--status") args.status = String(argv[i + 1] ?? "");
     else if (key === "--version") args.version = String(argv[i + 1] ?? "");
     else {
-      process.stdout.write(`REFUSE unknown argument '${key}'\n`);
-      process.exit(1);
+      refuse(`unknown argument '${key}'`);
     }
     i += 1;
   }
@@ -45,7 +44,11 @@ function parseArgs(argv) {
 }
 
 function refuse(reason) {
-  process.stdout.write(`REFUSE ${reason}\n`);
+  // One line, always. The reason can carry the health route's own values
+  // (a version, a check value), and a lane that echoes it into a GitHub
+  // annotation would let a newline in the body start a new command there.
+  const flat = String(reason).replace(/[\r\n]+/g, " ");
+  process.stdout.write(`REFUSE ${flat}\n`);
   process.exit(1);
 }
 

@@ -8,6 +8,7 @@ embeds a secret. No network, Docker or Cloudflare credential is needed.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -296,7 +297,9 @@ def test_the_probe_refuses_on_the_verdict_text_and_not_on_the_exit_status(tmp_pa
     block = _marked_block(body, "probe-verdict")
     stub = tmp_path / "stub_helper.sh"
     stub.write_text("printf 'REFUSE stubbed refusal\\n'\n")
-    block = block.replace("node scripts/digichat_probe_verdict.mjs", f"cat {stub}")
+    # bash, not cat: the stub has to RUN and exit 0, so that a lane deciding
+    # on the exit status instead of the text cannot pass this test.
+    block = block.replace("node scripts/digichat_probe_verdict.mjs", f"bash {stub}")
     script = tmp_path / "probe.sh"
     script.write_text(
         "set -u\napi_body='{}'\napi_status='503'\nVERSION='2.6.4'\n" + block
@@ -304,6 +307,54 @@ def test_the_probe_refuses_on_the_verdict_text_and_not_on_the_exit_status(tmp_pa
     result = subprocess.run(["bash", str(script)], capture_output=True, text=True, check=False)
     assert result.returncode != 0
     assert "stubbed refusal" in result.stderr
+
+
+def test_the_probe_accepts_a_verdict_that_says_ok(tmp_path: Path) -> None:
+    """The same block must let an OK verdict through.
+
+    A block that refuses everything would pass the refusal test above, so the
+    OK path is driven here as well.
+    """
+    body = read("publish_image.sh")
+    block = _marked_block(body, "probe-verdict")
+    stub = tmp_path / "stub_helper.sh"
+    stub.write_text("printf 'OK version=2.6.4 status=503 tolerated=digraph=unreachable\\n'\n")
+    block = block.replace("node scripts/digichat_probe_verdict.mjs", f"bash {stub}")
+    script = tmp_path / "probe.sh"
+    script.write_text(
+        "set -u\napi_body='{}'\napi_status='503'\nVERSION='2.6.4'\n" + block
+    )
+    result = subprocess.run(["bash", str(script)], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    assert "stubbed refusal" not in result.stderr
+
+
+def test_the_clean_tree_refusal_stops_the_publish(tmp_path: Path) -> None:
+    """An image may not carry content the commit it is labelled with does not have.
+
+    The lane builds the working tree, so uncommitted edits would end up in an
+    image labelled with a commit that does not contain them.
+    """
+    body = read("publish_image.sh")
+    block = _marked_block(body, "clean-tree")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    git = bindir / "git"
+    git.write_text("#!/bin/sh\nprintf ' M apps/digichat/page.tsx\\n'\n")
+    git.chmod(0o755)
+    script = tmp_path / "clean.sh"
+    script.write_text("set -u\nCOMMIT=abc123\n" + block)
+    env = dict(os.environ, PATH=f"{bindir}:{os.environ.get('PATH', '')}")
+    result = subprocess.run(
+        ["bash", str(script)], capture_output=True, text=True, check=False, env=env
+    )
+    assert result.returncode != 0
+    assert "uncommitted changes" in result.stderr
+    git.write_text("#!/bin/sh\nexit 0\n")
+    result = subprocess.run(
+        ["bash", str(script)], capture_output=True, text=True, check=False, env=env
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_the_tree_guard_refuses_a_tree_that_is_not_the_tag(tmp_path: Path) -> None:

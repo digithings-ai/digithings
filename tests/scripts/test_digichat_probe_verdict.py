@@ -174,6 +174,38 @@ def test_a_failing_check_cannot_hide_behind_a_newline() -> None:
     assert result.returncode == 1, result.stdout
 
 
+def test_only_the_four_ecosystem_services_are_tolerated() -> None:
+    """The tolerated set is exactly the four services a container cannot reach.
+
+    Tolerating "unreachable" for any key would hide a fault of any other
+    dependency behind the one degradation this probe exists to allow.
+    """
+    if shutil.which("node") is None:
+        pytest.skip("node is needed to drive the probe verdict helper")
+    body = {
+        "version": VERSION,
+        "checks": {"service": "ok", "database": "skipped", "redis": "unreachable"},
+    }
+    result = _verdict(json.dumps(body))
+    assert result.returncode == 1, result.stdout
+    assert "redis=unreachable" in result.stdout
+
+
+def test_the_refusal_reason_is_one_line() -> None:
+    """A reason that carries the body's own text may not break the line.
+
+    The GitHub lane echoes the reason into an ::error:: annotation, so a
+    newline in the body could start a new command in the runner log.
+    """
+    if shutil.which("node") is None:
+        pytest.skip("node is needed to drive the probe verdict helper")
+    body = {"version": f"{VERSION}\nevil: true", "checks": {"service": "ok", "database": "skipped"}}
+    result = _verdict(json.dumps(body))
+    assert result.returncode == 1, result.stdout
+    assert result.stdout.count("\n") == 1, result.stdout
+    assert "evil: true" in result.stdout
+
+
 def test_both_lanes_judge_with_the_same_helper() -> None:
     """The rules live in one place, and both lanes have to call it.
 

@@ -455,7 +455,7 @@ jobs:
           case "$verdict" in
             "OK "*) ;;
             *)
-              reason="$(printf '%s' "$verdict" | sed -e 's/^REFUSE //')"
+              reason="$(printf '%s' "$verdict" | sed -e 's/^REFUSE //' | tr '\n\r' '  ')"
               echo "::error::${reason:-the probe verdict helper returned no verdict.}"
               exit 1
               ;;

@@ -73,11 +73,13 @@ if [ "$IMAGE" = "digichat" ]; then
   # well: uncommitted edits (or untracked files in the build context) would
   # put content in the image that the commit it is labelled with does not
   # have. A commit label is a promise about the tree.
+  # clean-tree:begin
   dirty="$(git status --porcelain 2>/dev/null || true)"
   if [ -n "$dirty" ]; then
     echo "ERROR: the working tree has uncommitted changes, so the image would not be the tree of $COMMIT." >&2
     exit 1
   fi
+  # clean-tree:end
   BUILD_ARGS=(--build-arg "DIGICHAT_VERSION=$VERSION" --build-arg "DIGICHAT_REVISION=$COMMIT")
   LABELS=(--label "org.opencontainers.image.revision=$COMMIT")
   HEALTH_PATH="/healthz"; VERSION_PATH="/api/health"
@@ -177,7 +179,7 @@ if [ "$IMAGE" = "digichat" ]; then
   case "$verdict" in
     "OK "*) ;;
     *)
-      reason="$(printf '%s' "$verdict" | sed -e 's/^REFUSE //')"
+      reason="$(printf '%s' "$verdict" | sed -e 's/^REFUSE //' | tr '\n\r' '  ')"
       echo "ERROR: ${reason:-the probe verdict helper returned no verdict.}" >&2
       exit 1
       ;;
