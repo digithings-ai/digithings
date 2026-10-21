@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extraOffFromCatalog,
   createDefaultEmbedChatPrefs,
+  chromePrefsFromDeploy,
   DEFAULT_EMBED_CHAT_PREFS,
   disabledCatalogIds,
 } from "./embed-chat-prefs";
@@ -51,5 +52,43 @@ describe("composer chrome prefs", () => {
   it("keeps scrollbars always visible by default", () => {
     expect(DEFAULT_EMBED_CHAT_PREFS.scrollbars).toBe("always");
     expect(createDefaultEmbedChatPrefs().scrollbars).toBe("always");
+  });
+
+  it("starts on the default worked-chain rhythm", () => {
+    expect(DEFAULT_EMBED_CHAT_PREFS.density).toBe("default");
+    expect(createDefaultEmbedChatPrefs().density).toBe("default");
+  });
+});
+
+describe("chromePrefsFromDeploy", () => {
+  it("lets a stored density win over the deployment, and ignores an unknown stored value", () => {
+    const stored = {
+      getItem: (key: string) => (key === "dt-density" ? "airy" : null),
+    };
+    expect(chromePrefsFromDeploy({ density: "compact" }, stored).density).toBe("airy");
+    expect(
+      chromePrefsFromDeploy({ density: "compact" }, { getItem: () => "roomy" }).density,
+    ).toBe("compact");
+    expect(chromePrefsFromDeploy({ density: "nope" }, null).density).toBe("default");
+  });
+
+  it("seeds the other palette settings from the deployment and keeps today's defaults", () => {
+    expect(chromePrefsFromDeploy({}, null)).toMatchObject({
+      effort: "medium",
+      searchEngine: "",
+      toolbar: true,
+      scrollbars: "always",
+    });
+    expect(
+      chromePrefsFromDeploy(
+        { effort: "high", searchEngine: "exa", toolbar: false, scrollbars: "auto" },
+        null,
+      ),
+    ).toMatchObject({
+      effort: "high",
+      searchEngine: "exa",
+      toolbar: false,
+      scrollbars: "auto",
+    });
   });
 });

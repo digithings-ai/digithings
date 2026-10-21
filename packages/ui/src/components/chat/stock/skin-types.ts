@@ -188,6 +188,7 @@ export type StockComposerMenuKind =
   | "effort"
   | "search-engine"
   | "view"
+  | "density"
   | "theme"
   | "thinking"
   | "provider"
