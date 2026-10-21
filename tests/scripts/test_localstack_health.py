@@ -431,3 +431,97 @@ def test_a_refused_contract_row_fails_the_check_instead_of_skipping(tmp_path):
     assert "8000@evil.com" in report.results[0].detail
     # No URL was built, so no request can leave the machine.
     assert report.results[0].url is None
+
+
+def test_a_refused_contract_row_opens_no_connection(tmp_path, monkeypatch):
+    """A refused row sends no request: there is no URL to open.
+
+    Control: the refusal is about the row, not about a check that never
+    runs -- the request recorder is the thing that proves it.
+    """
+    seen: list[str] = []
+
+    def _record(url, **kwargs):
+        seen.append(url)
+        raise AssertionError(f"the gate opened {url} for a refused row")
+
+    monkeypatch.setattr(health, "_request", _record)
+    (tmp_path / "config" / "contract").mkdir(parents=True)
+    (tmp_path / "config" / "contract" / "services.yaml").write_text(
+        "services:\n  - name: digigraph\n    port: '8000@evil.com'\n",
+        encoding="utf-8",
+    )
+    checks, _origin = contracts.load_checks(tmp_path)
+    row = next(c for c in checks if c.name == "digigraph")
+
+    report = health.run_gate((row,), timeout=1.0)
+
+    assert seen == [], "a refused row must not open a connection"
+    assert _names(report.failed) == ("digigraph",)
+
+
+def test_a_refused_contract_row_without_a_built_in_twin_still_fails(tmp_path):
+    """A contract-only row is refused the same way.
+
+    A row the built-ins do not know is the one a merge can drop silently,
+    so the refusal has to reach the gate on its own.
+    """
+    (tmp_path / "config" / "contract").mkdir(parents=True)
+    (tmp_path / "config" / "contract" / "services.yaml").write_text(
+        "services:\n  - name: bespoke\n    port: '8000@evil.com'\n",
+        encoding="utf-8",
+    )
+    checks, _origin = contracts.load_checks(tmp_path)
+    row = next(c for c in checks if c.name == "bespoke")
+
+    report = health.run_gate((row,), timeout=1.0)
+
+    assert not report.ok
+    assert _names(report.failed) == ("bespoke",)
+    assert _names(report.skipped) == ()
+    assert "8000@evil.com" in report.results[0].detail
+
+
+def test_a_row_whose_requires_is_not_a_name_fails_instead_of_crashing(tmp_path):
+    """A malformed row fails the gate; it does not take the gate down.
+
+    ``config.get(<a list>)`` raises a TypeError, and the gate caught only
+    the port refusal, so the traceback reached the terminal.
+    """
+    (tmp_path / "config" / "contract").mkdir(parents=True)
+    (tmp_path / "config" / "contract" / "services.yaml").write_text(
+        "services:\n"
+        "  - name: digigraph\n"
+        "    requires:\n"
+        "      - DT_DIGIGRAPH_URL\n",
+        encoding="utf-8",
+    )
+    checks, _origin = contracts.load_checks(tmp_path)
+    row = next(c for c in checks if c.name == "digigraph")
+
+    report = health.run_gate((row,), timeout=1.0)
+
+    assert not report.ok
+    assert _names(report.failed) == ("digigraph",)
+    assert "requires" in report.results[0].detail
+
+
+def test_a_row_the_catalogue_cannot_read_fails_instead_of_crashing():
+    """A broken row fails the gate; it does not take the gate down.
+
+    The row is not one the contract reader could produce -- the point is
+    that the gate survives a row it cannot make sense of, and reports it as
+    failed instead of raising.
+    """
+    broken = contracts.Check(
+        name="broken",
+        kind="http",
+        url=123,
+        profiles=("all",),
+        source="test fixture",
+    )
+
+    report = health.run_gate((broken,), timeout=1.0)
+
+    assert not report.ok
+    assert _names(report.failed) == ("broken",)
