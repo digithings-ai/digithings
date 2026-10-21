@@ -132,13 +132,21 @@ describe.each([
     const json = args!.querySelector("pre")!.textContent ?? "";
     expect(json).toContain('"mailbox_29"');
     expect(json).toContain('\n  "pageSize": 20,');
-    // Long block: capped with its own toggle, not truncated.
-    expect(args!.querySelector('[data-slot="tool-fallback-args-json-toggle"]')?.textContent).toMatch(/Show all/);
+    // Long block: a max-height scroll area, no expand button (Chris, 21 Oct).
+    const pre = args!.querySelector<HTMLElement>('[data-slot="tool-fallback-args-json"]')!;
+    expect(pre.className).toMatch(/\bmax-h-72\b/);
+    expect(pre.className).toMatch(/\boverflow-auto\b/);
+    expect(host.querySelector('[data-slot$="-toggle"]')).toBeNull();
+    expect(host.textContent).not.toMatch(/Show all|Show full error/);
     // Error after the arguments, in the red error notice, whole.
     expect(args!.compareDocumentPosition(error!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(error!.getAttribute("data-tone")).toBe("error");
     expect(error!.textContent).toContain("'pageSize' must be a string");
     expect(error!.textContent).toContain("McpServer.handle (server.ts:203)");
+    // The traceback sits in a scroll area, never behind a fold.
+    expect(error!.querySelector("details")).toBeNull();
+    const detail = error!.querySelector<HTMLElement>('[data-slot="chat-notice-detail"]')!;
+    expect(detail.className).toMatch(/\bmax-h-72\b.*\boverflow-auto\b/);
     unmount();
   });
 
@@ -150,6 +158,7 @@ describe.each([
     expect(root!.getAttribute("role")).toBe("alert");
     expect(root!.textContent).toContain("Response exceeded the token limit (250000 tokens per minute).");
     expect(root!.textContent).toMatch(/Retry/);
+    expect(root!.querySelector("details")).toBeNull();
     unmount();
   });
 

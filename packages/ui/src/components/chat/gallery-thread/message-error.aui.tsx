@@ -87,11 +87,10 @@ export const MessageError: FC = () => {
           detail={detail}
           extra={
             code || (rawDetail && !detail) ? (
-              <details className="aui-message-error-details mt-1 text-muted-foreground">
-                <summary className="cursor-pointer select-none">API details</summary>
+              <div className="aui-message-error-details mt-1 text-muted-foreground">
                 {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
                 {rawDetail && !detail ? <ChatNoticeDetail text={rawDetail} /> : null}
-              </details>
+              </div>
             ) : null
           }
           action={

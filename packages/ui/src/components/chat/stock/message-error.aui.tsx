@@ -30,7 +30,6 @@ function messageStatusErrorText(status: {
   return error != null ? String(error) : undefined;
 }
 
-const SUMMARY_CLASS = "cursor-pointer select-none"; // canon-allow: native <details>/<summary>; the kit owns no disclosure-summary part
 
 /** assistant-ui error banner: short copy plus optional API-detail disclosure. */
 export const MessageError: FC<Partial<SkinErrorParsers>> = ({
@@ -70,11 +69,10 @@ export const MessageError: FC<Partial<SkinErrorParsers>> = ({
           extra={
             <>
               {code || (rawDetail && !detail) ? (
-                <details className="mt-2 text-xs opacity-90">
-                  <summary className={SUMMARY_CLASS}>API details</summary>
-                  {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
-                  {rawDetail && !detail ? <ChatNoticeDetail text={rawDetail} /> : null}
-                </details>
+                <div className="aui-message-error-details mt-1 text-muted-foreground">
+                {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
+                {rawDetail && !detail ? <ChatNoticeDetail text={rawDetail} /> : null}
+              </div>
               ) : null}
               {/* #3910: the errored turn must offer retry where the copy shows. */}
               <ActionBarPrimitive.Reload asChild>

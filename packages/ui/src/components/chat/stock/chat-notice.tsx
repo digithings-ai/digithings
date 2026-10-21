@@ -40,53 +40,27 @@ export function chatNoticeRootProps(
   };
 }
 
-/** Lines or characters past which the detail folds behind a toggle. */
-const LONG_DETAIL_LINES = 8;
-const LONG_DETAIL_CHARS = 600;
-
-export function isLongDetail(text: string): boolean {
-  return (
-    text.length > LONG_DETAIL_CHARS || text.split("\n").length > LONG_DETAIL_LINES
-  );
-}
-
 /**
- * The full detail (error text, traceback, JSON payload). Never cut: a long
- * one folds behind "Show full error" and scrolls when open; a short one shows
- * inline.
+ * The full detail (error text, traceback, JSON payload). Never cut and never
+ * folded: it sits in a max-height scroll area (Chris, 21 Oct).
  */
-export const ChatNoticeDetail: FC<{ text: string; label?: string }> = ({
-  text,
-  label = "Show full error",
-}) => {
-  const body = (
-    <pre
-      data-slot="chat-notice-detail"
-      className="aui-chat-notice-detail mt-1 max-h-80 overflow-auto whitespace-pre-wrap break-words font-mono text-[0.68rem] leading-relaxed"
-    >
-      {text}
-    </pre>
-  );
-  if (!isLongDetail(text)) return body;
-  return (
-    <details data-slot="chat-notice-disclosure" className="aui-chat-notice-disclosure mt-1">
-      <summary className="cursor-pointer select-none text-muted-foreground">
-        {label} ({text.split("\n").length} lines)
-      </summary>
-      {body}
-    </details>
-  );
-};
+export const ChatNoticeDetail: FC<{ text: string }> = ({ text }) => (
+  <pre
+    data-slot="chat-notice-detail"
+    className="aui-chat-notice-detail mt-1 max-h-72 overflow-auto overscroll-contain whitespace-pre-wrap break-words font-mono text-[0.68rem] leading-relaxed"
+  >
+    {text}
+  </pre>
+);
 
 /** Marker + title + optional detail + optional action, inside a notice root. */
 export const ChatNoticeContent: FC<{
   tone: ChatNoticeTone;
   title: ReactNode;
   detail?: string;
-  detailLabel?: string;
   extra?: ReactNode;
   action?: ReactNode;
-}> = ({ tone, title, detail, detailLabel, extra, action }) => (
+}> = ({ tone, title, detail, extra, action }) => (
   <>
     <DotMatrix
       state={tone === "error" ? "error" : "idle"}
@@ -103,7 +77,7 @@ export const ChatNoticeContent: FC<{
       >
         {title}
       </div>
-      {detail ? <ChatNoticeDetail text={detail} label={detailLabel} /> : null}
+      {detail ? <ChatNoticeDetail text={detail} /> : null}
       {extra}
     </div>
     {action}
@@ -117,7 +91,7 @@ export const ChatStatusNotice: FC<{
   className?: string;
 }> = ({ message, detail, className }) => (
   <div {...chatNoticeRootProps("status", cn("my-1", className))}>
-    <ChatNoticeContent tone="status" title={message} detail={detail} detailLabel="Show details" />
+    <ChatNoticeContent tone="status" title={message} detail={detail} />
   </div>
 );
 
