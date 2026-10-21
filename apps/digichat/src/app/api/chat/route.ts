@@ -280,6 +280,12 @@ export async function POST(req: Request) {
   // When the tenant configures gate.consumeUrl and the client presents a chat
   // token, server-side quota supersedes the unlock header and the IP quota.
   let quotaSatisfied = false;
+  // Set when the tenant's quota service could not answer (5xx, timeout, transport
+  // error). The visitor is still admitted — a tenant outage must not 402 someone who
+  // already completed the form, because verifying that form *is* the call that is down
+  // — but the entitlement is unverified, so it is bounded server-side below instead of
+  // being granted outright.
+  let quotaServiceUnavailable = false;
   if (embedConfig?.gateMode === "trial_form") {
     const chatToken = req.headers.get("x-embed-chat-token");
     if (embedConfig.gate && chatToken) {
@@ -295,7 +301,20 @@ export async function POST(req: Request) {
           { status: 402, headers: { "content-type": "application/json" } },
         );
       }
-      quotaSatisfied = true;
+      if (verdict === "unavailable") {
+        // The tenant could not answer. Fall through to the per-IP budget with the
+        // entitlement bounded server-side (see the degraded raise below) rather than
+        // skipping the budget entirely, which is what an outage used to do.
+        // Logged like the two sibling fail-open paths in this gate: without a log, a
+        // tenant quota-service outage silently changes the entitlement from unbounded
+        // to capped and ops never sees it.
+        console.warn(
+          "[trial-gate] tenant quota service unavailable, bounding the entitlement to the trial cap:",
+        );
+        quotaServiceUnavailable = true;
+      } else {
+        quotaSatisfied = true;
+      }
     }
 
     if (!quotaSatisfied) {
@@ -370,6 +389,16 @@ export async function POST(req: Request) {
         // with this module's "best-effort, not an authorization boundary"
         // philosophy (embed-turn-quota.ts).
         if (ip !== "unknown") {
+          if (quotaServiceUnavailable) {
+            // Degraded path: the tenant's quota service could not answer, so the
+            // entitlement is unverified. Bound it server-side at the trial cap (100
+            // turns per IP per 24h) instead of skipping the budget, which is what an
+            // outage used to do — that granted unbounded free turns to anyone
+            // presenting a chat token. Same counter and same cap as the
+            // client-asserted unlock below, so a forged header buys nothing the server
+            // did not grant.
+            unlockEmbedTrial(ip);
+          }
           if (req.headers.get("x-embed-trial-unlock") === "1") {
             unlockEmbedTrial(ip);
           }
