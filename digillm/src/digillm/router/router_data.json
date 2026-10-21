@@ -26,13 +26,7 @@
   ],
   "token_pattern": "[a-z0-9]+",
   "bind": "catalog_presets",
-  "presets": {
-    "auto": "deepseek/deepseek-v4.1-flash-1017",
-    "reasoning": "deepseek/deepseek-v4-pro",
-    "fast": "z-ai/glm-4.7-flash",
-    "light": "openai/gpt-oss-120b"
-  },
-  "price_note": "presets are the default resolution of the digichat model-picker catalog (digithings-ai/digithings PR 6193, commit 74f7b6c6ea2a): tool-capable models, context floor 128k, output cap $2 per million. Auto is pinned to DeepSeek V4.1 Flash 1017. Reasoning is the highest reasoning score under that cap, Fast is the lowest time-to-first-token with at least 100 samples, Light is the lowest output price. prompt_usd_per_million is that catalog's inputPerM and output_usd_per_million is outputPerM, from the Cheaper Inference markets page on 2026-10-21. The router binds a route to its preset. It does not walk these prices.",
+  "price_note": "Reasoning, Fast, and Light are resolved from model_catalog.json (newest generation per family, then the output-price cap in that file). Auto is the pinned model and the fallback. The router does not store those ids and does not walk prices.",
   "rules": [
     {
       "id": "greeting",
@@ -123,32 +117,6 @@
         "Rewrite this sentence to sound friendlier",
         "Say that more briefly"
       ]
-    }
-  ],
-  "models": [
-    {
-      "id": "deepseek/deepseek-v4.1-flash-1017",
-      "prompt_usd_per_million": 0.075,
-      "output_usd_per_million": 0.3,
-      "tool_call": true
-    },
-    {
-      "id": "deepseek/deepseek-v4-pro",
-      "prompt_usd_per_million": 0.561,
-      "output_usd_per_million": 1.683,
-      "tool_call": true
-    },
-    {
-      "id": "z-ai/glm-4.7-flash",
-      "prompt_usd_per_million": 0.0455,
-      "output_usd_per_million": 0.26,
-      "tool_call": true
-    },
-    {
-      "id": "openai/gpt-oss-120b",
-      "prompt_usd_per_million": 0.04,
-      "output_usd_per_million": 0.2,
-      "tool_call": true
     }
   ]
 }

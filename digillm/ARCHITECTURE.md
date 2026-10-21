@@ -69,14 +69,14 @@ only when `DIGILLM_ROUTER_PYTHON=1`. That is not a service and not a new
 package. The deployment turns the picker row on with `digillm.router.enabled`
 (default off). digichat shows it as "Router".
 
-Reasoning, Fast, and Light call the model the digichat model-picker catalog
-resolved for that preset (PR 6193, commit 74f7b6c6ea2a, default policy:
-tool-capable, 128k context, output cap $2 per million). That resolution is
-DeepSeek V4 Pro, GLM 4.7 Flash, and GPT-OSS 120B. Auto (DeepSeek V4.1 Flash
-1017) is the fallback when that preset is not on the deployment allowlist.
-An operator pin (`routes[].model`) wins. The router does not walk prices
-across the allowlist. The preset rows, including DeepSeek V4.1 Flash 1017,
-record the catalog's input and output prices.
+Reasoning, Fast, and Light call whatever `model_catalog.json` resolves for
+that preset. The file is the newest-generation picker catalog: tool-capable
+models, 128k context, one generation per family, then the output-price cap
+stored in the file ($2.50). Auto is pinned to DeepSeek V4.1 Flash 1017 and
+is the fallback when the resolved preset is not on the deployment allowlist.
+An operator pin (`routes[].model`) wins. The router does not store the
+winning ids and does not walk prices across the allowlist. Changing the
+catalog cap or a model's score changes the route on the next decision.
 
 Arch-Router-1.5B was rejected: the Katanemo Community License needs a
 separate commercial license, and a CPU call is seconds. RouteLLM was

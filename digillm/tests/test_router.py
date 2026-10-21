@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from digillm.router import RouterRoute, route_query
-from digillm.router.data import router_table
+from digillm.router.catalog import load_catalog, preset_ids, resolve_preset_ids
 from digillm.router.decide import route_query as decide_route_query
 
 pytestmark = pytest.mark.unit
@@ -23,8 +23,8 @@ _ROUTER = _SRC / "digillm" / "router"
 
 ALLOWED = [
     "deepseek/deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4-pro",
-    "z-ai/glm-4.7-flash",
+    "z-ai/glm-5.3",
+    "google/gemini-3.5-flash-lite",
     "openai/gpt-oss-120b",
 ]
 FALLBACK = "deepseek/deepseek-v4.1-flash-1017"
@@ -56,9 +56,9 @@ def test_categories_on_the_demo_allowlist() -> None:
     assert light.route_id == "light"
     assert light.model == "openai/gpt-oss-120b"
     assert fast.route_id == "fast"
-    assert fast.model == "z-ai/glm-4.7-flash"
+    assert fast.model == "google/gemini-3.5-flash-lite"
     assert reasoning.route_id == "reasoning"
-    assert reasoning.model == "deepseek/deepseek-v4-pro"
+    assert reasoning.model == "z-ai/glm-5.3"
     assert code.route_id == "reasoning"
     assert "capital" not in fast.reason.lower()
     assert "sqrt" not in reasoning.reason.lower()
@@ -144,9 +144,29 @@ def test_empty_allowlist_uses_the_preset() -> None:
 
 
 def test_flash_1017_price_comes_from_the_picker_catalog() -> None:
-    row = next(item for item in router_table().models if item.id == FALLBACK)
-    assert row.prompt_usd_per_million == 0.075
-    assert row.output_usd_per_million == 0.3
+    row = next(item for item in load_catalog().models if item.id == FALLBACK)
+    assert row.input_per_m == 0.075
+    assert row.output_per_m == 0.3
+
+
+def test_the_catalog_cap_selects_reasoning() -> None:
+    catalog = load_catalog()
+    assert catalog.policy.price_cap_usd_per_million == 2.5
+    under_two = resolve_preset_ids(catalog, price_cap=2)
+    at_shipped_cap = preset_ids()
+    assert under_two["reasoning"] == "z-ai/glm-5.3-flash"
+    assert at_shipped_cap == {
+        "auto": "deepseek/deepseek-v4.1-flash-1017",
+        "reasoning": "z-ai/glm-5.3",
+        "fast": "google/gemini-3.5-flash-lite",
+        "light": "openai/gpt-oss-120b",
+    }
+    reasoning = route_query(
+        text="Prove that the square root of 2 is irrational, step by step",
+        allowed=ALLOWED,
+        fallback=FALLBACK,
+    )
+    assert reasoning.model == at_shipped_cap["reasoning"]
 
 
 def test_embed_allowlist_splits_the_three_demo_prompts() -> None:

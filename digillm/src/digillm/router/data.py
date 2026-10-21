@@ -1,9 +1,9 @@
 """The router table both implementations read.
 
-``router_data.json`` is the only copy of the example phrases, the structural
-rules, and the preset each category calls. This module loads it. The
-TypeScript port in digichat imports the same file. Neither copy of the
-scorer may restate those lists.
+``router_data.json`` is the only copy of the example phrases and the
+structural rules. Preset model ids are resolved from ``model_catalog.json``.
+The TypeScript port in digichat imports both files. Neither copy of the
+scorer may restate those lists or hard-code the winners.
 """
 
 from __future__ import annotations
@@ -43,26 +43,6 @@ class RouterTableRoute(BaseModel):
     exemplars: list[str]
 
 
-class RouterPresetModels(BaseModel):
-    """Models the digichat picker resolved for its default catalog policy."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    auto: str
-    reasoning: str
-    fast: str
-    light: str
-
-
-class RouterCatalogModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    prompt_usd_per_million: float | None = None
-    output_usd_per_million: float | None = None
-    tool_call: bool
-
-
 class RouterTable(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -71,11 +51,9 @@ class RouterTable(BaseModel):
     stopwords: list[str]
     token_pattern: str
     bind: Literal["catalog_presets"]
-    presets: RouterPresetModels
     price_note: str
     rules: list[RouterRule]
     routes: list[RouterTableRoute]
-    models: list[RouterCatalogModel]
 
 
 @cache

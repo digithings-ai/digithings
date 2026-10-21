@@ -92,7 +92,7 @@
       "name": "catalog-presets-when-allowlisted",
       "route_id": "fast",
       "label": "Fast",
-      "model": "z-ai/glm-4.7-flash",
+      "model": "google/gemini-3.5-flash-lite",
       "reason": "Short factual lookup.",
       "confidence": 0.86
     },
@@ -100,7 +100,7 @@
       "name": "catalog-reasoning-when-allowlisted",
       "route_id": "reasoning",
       "label": "Reasoning",
-      "model": "deepseek/deepseek-v4-pro",
+      "model": "z-ai/glm-5.3",
       "reason": "Multi-step reasoning, math, or a long question.",
       "confidence": 0.88
     },

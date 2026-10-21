@@ -14,6 +14,7 @@ import {
   type DigillmRouterDecision,
   type DigillmRouterRouteInput,
 } from "@/lib/digillm-router";
+import { resolveDigillmPresets } from "@/lib/digillm-router-catalog";
 
 const FNV_OFFSET = 2166136261;
 const FNV_PRIME = 16777619;
@@ -44,20 +45,12 @@ type TableRoute = {
   exemplars: string[];
 };
 
-type PresetModels = {
-  auto: string;
-  reasoning: string;
-  fast: string;
-  light: string;
-};
-
 type RouterTable = {
   dim: number;
   weak: number;
   stopwords: string[];
   token_pattern: string;
   bind: string;
-  presets: PresetModels;
   rules: RouterRule[];
   routes: TableRoute[];
 };
@@ -107,7 +100,6 @@ function loadTable(raw: RouterTable): {
   token: RegExp;
   rules: CompiledRule[];
   routes: WorkingRoute[];
-  presets: PresetModels;
 } {
   if (raw.bind !== "catalog_presets") {
     throw new DigillmRouterEngineError("router_data.json bind is not catalog_presets");
@@ -145,20 +137,20 @@ function loadTable(raw: RouterTable): {
     token: flagsToRegExp(raw.token_pattern, "i"),
     rules,
     routes,
-    presets: raw.presets,
   };
 }
 
 const TABLE = loadTable(routerData as RouterTable);
+const PRESETS = resolveDigillmPresets();
 
 function cleanAllow(allowed: readonly string[]): string[] {
   return allowed.map((item) => item.trim()).filter((item) => item.length > 0);
 }
 
 function presetModel(routeId: string): string {
-  if (routeId === "reasoning") return TABLE.presets.reasoning;
-  if (routeId === "fast") return TABLE.presets.fast;
-  if (routeId === "light") return TABLE.presets.light;
+  if (routeId === "reasoning") return PRESETS.reasoning;
+  if (routeId === "fast") return PRESETS.fast;
+  if (routeId === "light") return PRESETS.light;
   return "";
 }
 
@@ -179,7 +171,7 @@ function bindModel(route: WorkingRoute, allow: readonly string[], fallback: stri
   }
   const preset = presetModel(route.id).trim();
   if (onAllowList(preset, allowSet)) return preset;
-  const auto = TABLE.presets.auto.trim();
+  const auto = PRESETS.auto.trim();
   if (onAllowList(auto, allowSet)) return auto;
   const fallbackId = fallback.trim();
   if (onAllowList(fallbackId, allowSet)) return fallbackId;
@@ -401,7 +393,7 @@ export function decideDigillmRoute(input: DigillmRouterEngineInput): DigillmRout
 
 function defaultModel(allow: readonly string[], fallback: string): string {
   const allowSet = new Set(allow);
-  const auto = TABLE.presets.auto.trim();
+  const auto = PRESETS.auto.trim();
   if (onAllowList(auto, allowSet)) return auto;
   const fallbackId = fallback.trim();
   if (onAllowList(fallbackId, allowSet)) return fallbackId;

@@ -118,8 +118,8 @@
       "text": "What is the capital of France?",
       "allowed": [
         "deepseek/deepseek-v4.1-flash-1017",
-        "deepseek/deepseek-v4-pro",
-        "z-ai/glm-4.7-flash",
+        "z-ai/glm-5.3",
+        "google/gemini-3.5-flash-lite",
         "openai/gpt-oss-120b"
       ],
       "fallback": "deepseek/deepseek-v4.1-flash-1017"
@@ -129,8 +129,8 @@
       "text": "Prove that the square root of 2 is irrational, step by step",
       "allowed": [
         "deepseek/deepseek-v4.1-flash-1017",
-        "deepseek/deepseek-v4-pro",
-        "z-ai/glm-4.7-flash",
+        "z-ai/glm-5.3",
+        "google/gemini-3.5-flash-lite",
         "openai/gpt-oss-120b"
       ],
       "fallback": "deepseek/deepseek-v4.1-flash-1017"

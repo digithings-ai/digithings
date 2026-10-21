@@ -1,27 +1,21 @@
 """Built-in categories and how they bind to a deployment's allowlist.
 
-Each category calls the model the digichat picker resolved for that preset
-(Reasoning, Fast, Light). Auto (``deepseek/deepseek-v4.1-flash-1017`` on the
-default catalog) is the fallback when that preset is not on the allowlist.
-An operator pin (``routes[].model``) wins. An id that is not allowed is never
-returned. Prices are recorded for the preset rows. They are not walked.
+Each category calls the model ``model_catalog.json`` resolves for that
+preset (Reasoning, Fast, Light). Auto is the pinned catalog model and the
+fallback when that preset is not on the allowlist. An operator pin
+(``routes[].model``) wins. An id that is not allowed is never returned.
+Prices stay in the catalog. They are not walked.
 """
 
 from __future__ import annotations
 
+from digillm.router.catalog import preset_ids
 from digillm.router.data import router_table
 from digillm.router.types import RouterError, RouterRoute
 
 
 def _preset_model(route_id: str) -> str:
-    presets = router_table().presets
-    if route_id == "reasoning":
-        return presets.reasoning
-    if route_id == "fast":
-        return presets.fast
-    if route_id == "light":
-        return presets.light
-    return ""
+    return preset_ids().get(route_id, "")
 
 
 BUILTIN_ROUTES: tuple[RouterRoute, ...] = tuple(
@@ -80,7 +74,7 @@ def default_model(allowed: list[str], fallback: str) -> str:
 
     allow = [item.strip() for item in allowed if item.strip()]
     allow_set = set(allow)
-    auto = router_table().presets.auto.strip()
+    auto = preset_ids()["auto"].strip()
     if _allowed(auto, allow_set):
         return auto
     fallback_id = fallback.strip()
@@ -111,7 +105,7 @@ def bind_model(
     preset = _preset_model(route.id).strip()
     if _allowed(preset, allow_set):
         return preset
-    auto = router_table().presets.auto.strip()
+    auto = preset_ids()["auto"].strip()
     if _allowed(auto, allow_set):
         return auto
     fallback_id = fallback.strip()
