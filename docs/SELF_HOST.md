@@ -316,6 +316,16 @@ Run these after the stack comes up. All six are cheap and none of them needs a p
 
 The plan replaces this manual list with `dt status` / `make local-stack-health`, which also covers the database, every Worker `/healthz`, `dashboard-api`, MCP `tools/list`, a digitrace ingest round trip and an R2/KV/D1 put-and-get, and which exits non-zero on failure so CI can reuse it. That is S7.
 
+The digigraph probe follows the port the digigraph really serves, through `DT_DIGIGRAPH_PORT` (default `8000`, the port compose publishes). On a host where `8000` already belongs to another stack the probe reads that other service and reports a healthy digigraph as FAIL — measured on a Mac with another stack on `8000`: `8000` answered `204` (a woodpecker server) while the real digigraph on `18000` answered `200`. Point the probe at the right port:
+
+```bash
+DT_DIGIGRAPH_PORT=18000 make local-stack-health
+```
+
+Three things about the knob. The gate reads the **process environment**, not the root `.env`, so export it or prefix the command as above. It takes a port number: a value that is not one makes the URL unparseable, and the probe fails rather than pointing anywhere else. And it is not the `DIGIGRAPH_PORT` in the root `.env` — that contract key ("the port the digigraph dev server binds to") is a different name, and nothing reads it today.
+
+The port digigraph actually listens on is set elsewhere, so the two have to agree: the host dev server takes `DG_PORT` (`scripts/run_local.sh`, default `18000`), and the no-Docker stack takes `PORT_GRAPH` (`scripts/run_stack_local.sh`, default `8000`, the same ports as compose).
+
 ---
 
 ## 12. digichat configuration
@@ -340,6 +350,18 @@ The plan replaces this manual list with `dt status` / `make local-stack-health`,
 ## 13. Optional MCP servers and optional model gateways
 
 **digisearch MCP:** `docker compose --profile digisearch-mcp up`, on port **8765**. For IDE and OpenClaw clients; digigraph and digichat normally speak HTTP to digisearch directly.
+
+**digivault MCP:** `docker compose --profile digivault-mcp up`, on port **8769**.
+
+Both MCP servers bind every interface **inside** their container: `DIGISEARCH_MCP_HOST` and `DIGIVAULT_MCP_HOST`, default `0.0.0.0`, set in `docker-compose.yml` the same way the other MCP services set theirs. A process that listens on `127.0.0.1` inside the container is unreachable through a published port: the host curl answers nothing at all, and the other containers cannot reach `http://digisearch-mcp:8765/mcp`, the URL the OCC embed config uses. The host side of both published ports stays on the loopback (`127.0.0.1:8765`, `127.0.0.1:8769`).
+
+To bind elsewhere, write the variable in the root `.env` — compose interpolates it from there and it wins over the default:
+
+```bash
+DIGIVAULT_MCP_HOST=127.0.0.1   # in the root .env
+```
+
+The servers answer on the FastMCP allowlist: `127.0.0.1`, `localhost` and the service name (`digisearch-mcp`, `digivault-mcp`). A request carrying any other `Host` header is refused, so the machine's LAN name does not reach them — use the loopback address or the service name.
 
 **OmniRoute (optional):** `docker compose --profile omniroute up`, on loopback **20128**. It needs `OMNIROUTE_AUTH_PASSWORD` at start — never the vendor default, and note that the default `docker compose config` does not supply it. Overlay: [`config/litellm.omniroute.yaml`](../config/litellm.omniroute.yaml). The house model pins stay on the OpenRouter slugs in `config/litellm.yaml`. See [providers/omniroute.md](providers/omniroute.md).
 
