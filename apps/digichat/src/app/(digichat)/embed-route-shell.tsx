@@ -33,8 +33,8 @@ import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
    document. */
 const THEME_PIN_SCRIPTS = {
   light:
-    "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.removeAttribute('data-palette');e.classList.add('light');e.classList.remove('dark')}catch(t){}",
-  dark: "try{var e=document.documentElement;e.setAttribute('data-theme','dark');e.removeAttribute('data-palette');e.classList.add('dark');e.classList.remove('light')}catch(t){}",
+    "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('light');e.classList.remove('dark')}catch(t){}",
+  dark: "try{var e=document.documentElement;e.setAttribute('data-theme','dark');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('dark');e.classList.remove('light')}catch(t){}",
 } as const;
 
 function themePinScript(theme: "dark" | "light"): string {

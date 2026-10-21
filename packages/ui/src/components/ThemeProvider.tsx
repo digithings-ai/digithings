@@ -117,6 +117,9 @@ export function ThemeProvider({
   const [palette, setPaletteState] = useState<PaletteName>("default");
 
   useEffect(() => {
+    // A pinned embed owns the document. Applying storage here would put a
+    // visitor's palette back after the pin script cleared it.
+    if (document.documentElement.getAttribute("data-theme-pin") === "1") return;
     const initial = readThemeState();
     const resolved = applyDocumentTheme(initial.preference, initial.palette);
     setPreference(initial.preference);
