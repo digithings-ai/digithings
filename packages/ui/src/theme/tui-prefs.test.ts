@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { detectTerminalDark, readTuiPrefs, resolveTuiMode, writeTuiPrefs } from "./tui-prefs";
+import { applyTuiThemeArg, detectTerminalDark, readTuiPrefs, resolveTuiMode, writeTuiPrefs } from "./tui-prefs";
 
 describe("tui theme file", () => {
   it("round-trips through a temp path", () => {
@@ -17,6 +17,15 @@ describe("tui theme file", () => {
     const path = join(dir, "theme.json");
     writeFileSync(path, `${JSON.stringify({ mode: "auto", palette: "not-a-palette" })}\n`);
     expect(readTuiPrefs(path)).toEqual({ mode: "auto", palette: "default" });
+  });
+
+  it("sets mode or palette and rejects an unknown name", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dt-theme-"));
+    const path = join(dir, "theme.json");
+    expect(applyTuiThemeArg("dracula", path)).toBe("theme auto · dracula");
+    expect(applyTuiThemeArg("light", path)).toBe("theme light · dracula");
+    expect(applyTuiThemeArg("nope", path)).toBe("unknown theme");
+    expect(readTuiPrefs(path)).toEqual({ mode: "light", palette: "dracula" });
   });
 
   it("reads COLORFGBG and falls back to dark", () => {

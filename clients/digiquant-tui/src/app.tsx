@@ -24,8 +24,13 @@ import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
 import { deskForPath, railLine, stepRailCols, RAIL_COLS_DEFAULT } from "./rail";
 import { readBlock, type ReadResult } from "./read";
-import { ACCENT, BG, DANGER, DOWN, HAIR, HAIR_STRONG, INK, MUTE, SOFT, UP, WASH } from "./theme";
+import { applyTuiThemeArg } from "../../../packages/ui/src/theme/tui-prefs";
+import { applyStoredTheme, ACCENT, BG, DANGER, DOWN, HAIR, HAIR_STRONG, INK, MUTE, SOFT, UP, WASH } from "./theme";
 import { asOfStatus } from "./format";
+
+const themeFlag = process.argv.find((entry) => entry.startsWith("--theme="));
+if (themeFlag) applyTuiThemeArg(themeFlag.slice("--theme=".length));
+applyStoredTheme();
 
 const STATUS = process.env.DQ_TUI_STATUS;
 

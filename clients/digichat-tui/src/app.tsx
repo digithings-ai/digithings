@@ -39,7 +39,27 @@ import {
   type ChatScreen,
   type UiChatMessage,
 } from "./read";
-import { ATTACH, BG, DANGER, FILL, HAIR, INK, MUTE, NEW_CHAT, SCROLL, SEND, SOFT, STOP, VOICE } from "./theme";
+import { applyTuiThemeArg } from "../../../packages/ui/src/theme/tui-prefs";
+import {
+  applyStoredTheme,
+  ATTACH,
+  BG,
+  DANGER,
+  FILL,
+  HAIR,
+  INK,
+  MUTE,
+  NEW_CHAT,
+  SCROLL,
+  SEND,
+  SOFT,
+  STOP,
+  VOICE,
+} from "./theme";
+
+const themeFlag = process.argv.find((entry) => entry.startsWith("--theme="));
+if (themeFlag) applyTuiThemeArg(themeFlag.slice("--theme=".length));
+applyStoredTheme();
 import { FRAME, reducedMotion, STILL_SPINNER } from "./motion";
 import { DigichatWordmark, WORDMARK_ROWS } from "./wordmark";
 

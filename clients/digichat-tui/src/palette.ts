@@ -4,6 +4,8 @@
  * session-prefs / view-modes schema (C7); send applies them as DigiChat
  * BFF headers on `/api/v1/chat`.
  */
+import { applyTuiThemeArg } from "../../../packages/ui/src/theme/tui-prefs";
+import { applyStoredTheme } from "./theme";
 
 export type ChatPrefs = {
   webSearch: boolean;
@@ -100,6 +102,7 @@ const COMMANDS: readonly Command[] = [
   { id: "models", names: ["/models"], hint: "Pick model", kind: "action" },
   { id: "effort", names: ["/effort"], hint: "low / medium / high", kind: "choice" },
   { id: "view", names: ["/view"], hint: "hidden / compact / balanced / detailed", kind: "choice" },
+  { id: "theme", names: ["/theme"], hint: "dark / light / auto, or a colour palette", kind: "action" },
   { id: "thinking", names: ["/thinking"], hint: "auto / collapsed / open", kind: "choice" },
   { id: "search-engine", names: ["/search-engine"], hint: "auto / exa / tavily / parallel / firecrawl / tinyfish", kind: "choice" },
   { id: "byok", names: ["/provider", "/byok", "/key"], hint: "API provider", kind: "action" },
@@ -278,6 +281,11 @@ export function runCommand(id: string, prefs: ChatPrefs, arg: string): CommandRe
     }
     if (id === "websearch" || id === "digisearch" || id === "digivault") return toggleTool(id, prefs);
     return { type: "note", note: "" };
+  }
+  if (id === "theme") {
+    const note = applyTuiThemeArg(arg);
+    applyStoredTheme();
+    return { type: "note", note };
   }
   if (id === "view" || id === "thinking" || id === "effort" || id === "search-engine" || id === "lang") {
     if (!arg.trim()) return { type: "choices", id, note: "" };

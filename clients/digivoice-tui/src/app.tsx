@@ -9,7 +9,12 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DigivoiceWordmark, WORDMARK_ROWS } from "./wordmark";
-import { ACCENT, BG, CURSOR, DANGER, HAIR, INK, MUTE, SOFT, WARN } from "./theme";
+import { applyTuiThemeArg } from "../../../packages/ui/src/theme/tui-prefs";
+import { applyStoredTheme, ACCENT, BG, CURSOR, DANGER, HAIR, INK, MUTE, SOFT, WARN } from "./theme";
+
+const themeFlag = process.argv.find((entry) => entry.startsWith("--theme="));
+if (themeFlag) applyTuiThemeArg(themeFlag.slice("--theme=".length));
+applyStoredTheme();
 import {
   type Line,
   type Tone,

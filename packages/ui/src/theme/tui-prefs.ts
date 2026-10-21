@@ -10,6 +10,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  isPaletteId,
   isThemePreference,
   normalizePalette,
   type PaletteName,
@@ -24,6 +25,8 @@ export type TuiThemePrefs = {
 export const DEFAULT_TUI_PREFS: TuiThemePrefs = { mode: "auto", palette: "default" };
 
 export function themeFilePath(home = homedir()): string {
+  const override = process.env.DIGITHINGS_THEME_FILE;
+  if (override) return override;
   return join(home, ".digithings", "theme.json");
 }
 
@@ -54,6 +57,25 @@ export function readTuiPrefs(path = themeFilePath()): TuiThemePrefs {
   } catch {
     return { ...DEFAULT_TUI_PREFS };
   }
+}
+
+/** `/theme` and `--theme=`. Writes the shared file and reports the result. */
+export function applyTuiThemeArg(arg: string, path = themeFilePath()): string {
+  const prefs = readTuiPrefs(path);
+  const token = arg.trim().toLowerCase();
+  if (!token) {
+    const mode = resolveTuiMode(prefs.mode, detectTerminalDark());
+    return `theme ${prefs.mode} · ${prefs.palette} (${mode})`;
+  }
+  if (isThemePreference(token)) {
+    writeTuiPrefs({ mode: token, palette: prefs.palette }, path);
+  } else if (token === "default" || isPaletteId(token)) {
+    writeTuiPrefs({ mode: prefs.mode, palette: normalizePalette(token) }, path);
+  } else {
+    return "unknown theme";
+  }
+  const next = readTuiPrefs(path);
+  return `theme ${next.mode} · ${next.palette}`;
 }
 
 export function writeTuiPrefs(prefs: TuiThemePrefs, path = themeFilePath()): void {

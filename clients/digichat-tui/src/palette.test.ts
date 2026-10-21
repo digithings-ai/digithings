@@ -1,7 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { exportMarkdown, historySkeleton, sessionTitle, spinnerFrame } from "./chrome";
 import { INITIAL_UI, reduceKey } from "./keys";
 import { DEFAULT_PREFS, commandIds, paletteRows, submitDraft } from "./palette";
+import { applyStoredTheme, BG } from "./theme";
 
 const ctx = {
   busy: false,
@@ -23,6 +27,28 @@ test("the slash palette lists the web configure commands and featured languages"
   expect(commandIds()).toContain("mcp");
   expect(paletteRows("/dig", DEFAULT_PREFS).map((row) => row.id)).toEqual(["digisearch", "digivault"]);
   expect(paletteRows("/digisearch ", DEFAULT_PREFS)).toEqual([]);
+});
+
+test("/theme writes the shared file and keeps the default colours until asked", () => {
+  const previous = process.env.DIGITHINGS_THEME_FILE;
+  const dir = mkdtempSync(join(tmpdir(), "dt-theme-"));
+  process.env.DIGITHINGS_THEME_FILE = join(dir, "theme.json");
+  try {
+    expect(paletteRows("/theme", DEFAULT_PREFS).map((row) => row.id)).toContain("theme");
+    const set = submitDraft("/theme dracula", DEFAULT_PREFS);
+    expect(set).toMatchObject({ type: "note", note: "theme auto · dracula" });
+    applyStoredTheme();
+    expect(BG).not.toBe("#08090b");
+    const cleared = submitDraft("/theme default", DEFAULT_PREFS);
+    expect(cleared).toMatchObject({ type: "note", note: "theme auto · default" });
+    applyStoredTheme();
+    expect(BG).toBe("#08090b");
+    expect(submitDraft("/theme nope", DEFAULT_PREFS)).toMatchObject({ type: "note", note: "unknown theme" });
+  } finally {
+    if (previous === undefined) delete process.env.DIGITHINGS_THEME_FILE;
+    else process.env.DIGITHINGS_THEME_FILE = previous;
+    applyStoredTheme();
+  }
 });
 
 test("an empty tool command toggles and a query is sent as text", () => {

@@ -47,7 +47,7 @@ test("terminal colors are the web desk tokens", () => {
   expect(WASH).toBe("#0D0D0D");
 });
 
-test("the terminal does not keep a second palette", () => {
+test("the default desk tokens stay; a stored palette comes from the registry", () => {
   const forbidden = ["#14120f", "#e7e1d6", "#8a8175", "#3a342c", "#d4b483", "#c47a6a", "#7d9a78"];
   const root = new URL(".", import.meta.url);
   for (const path of sources(root.pathname)) {
