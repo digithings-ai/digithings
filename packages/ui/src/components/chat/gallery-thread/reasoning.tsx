@@ -215,6 +215,7 @@ function ReasoningContent({
 
   return (
     <CollapsibleContent
+      keepMounted
       data-slot="reasoning-content"
       className={cn(
         "aui-reasoning-content text-muted-foreground relative overflow-hidden text-sm outline-none",

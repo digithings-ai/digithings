@@ -162,6 +162,7 @@ function ToolGroupContent({
 }: React.ComponentProps<typeof CollapsibleContent>) {
   return (
     <CollapsibleContent
+      keepMounted
       data-slot="tool-group-content"
       className={cn(
         "aui-tool-group-content relative overflow-hidden text-sm outline-none",

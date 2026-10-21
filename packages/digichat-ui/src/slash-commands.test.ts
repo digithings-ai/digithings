@@ -124,10 +124,10 @@ describe("parseSlashInput", () => {
       command: { id: "export", kind: "client" },
       arg: "",
     });
-    expect(parseSlashInput("/export replay")).toMatchObject({
+    expect(parseSlashInput("/export html")).toMatchObject({
       kind: "command",
       command: { id: "export", kind: "client" },
-      arg: "replay",
+      arg: "html",
     });
   });
 });

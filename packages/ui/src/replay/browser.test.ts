@@ -1,24 +1,8 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { describe, expect, it, vi } from "vitest";
-import { cssLooksLikeChat, inlineAssetUrls, replayAssetsUrl, resolveReplayCss } from "./browser";
-
-describe("resolveReplayCss", () => {
-  it("inlines the live sheet when it is the chat stylesheet", async () => {
-    const inline = vi.fn(async (css: string) => `${css}/*inlined*/`);
-    const bundled = vi.fn(async () => "bundled");
-    const css = await resolveReplayCss(
-      ".aui-user-message-content { color: red; }",
-      bundled,
-      inline,
-    );
-    expect(css).toContain("/*inlined*/");
-    expect(bundled).not.toHaveBeenCalled();
-  });
-
-  it("uses the asset route when the page has no chat rules", async () => {
-    const bundled = vi.fn(async () => "bundled");
-    await expect(resolveReplayCss("body { margin: 0 }", bundled)).resolves.toBe("bundled");
-  });
-});
+import { inlineAssetUrls, inlineDomAssets } from "./browser";
 
 describe("inlineAssetUrls", () => {
   it("embeds same-origin fonts and drops every other url", async () => {
@@ -44,18 +28,26 @@ describe("inlineAssetUrls", () => {
   });
 });
 
-describe("cssLooksLikeChat", () => {
-  it("recognises the user message and markdown hooks", () => {
-    expect(cssLooksLikeChat(".aui-md { }")).toBe(true);
-    expect(cssLooksLikeChat("body {}")).toBe(false);
-  });
-});
-
-describe("replayAssetsUrl", () => {
-  it("prefixes the app base path", () => {
-    expect(replayAssetsUrl("/chat")).toBe("/chat/api/replay-assets");
-    expect(replayAssetsUrl("/chat/")).toBe("/chat/api/replay-assets");
-    expect(replayAssetsUrl("")).toBe("/api/replay-assets");
-    expect(replayAssetsUrl(undefined)).toBe("/api/replay-assets");
+describe("inlineDomAssets", () => {
+  it("inlines a same-origin image and drops a remote one", async () => {
+    const doc = document.implementation.createHTMLDocument("chat");
+    doc.body.innerHTML = [
+      '<img id="local" src="/logo.png" alt="local">',
+      '<img id="remote" src="https://cdn.example/icon.png" alt="remote">',
+    ].join("");
+    const fetchImpl = vi.fn(async () => {
+      return new Response(new Uint8Array([9, 9]), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    });
+    await inlineDomAssets(doc, {
+      origin: "https://desk.example",
+      href: "https://desk.example/chat",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(doc.getElementById("local")?.getAttribute("src")).toContain("data:image/png;base64,");
+    expect(doc.getElementById("remote")?.getAttribute("src")).toBeNull();
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });

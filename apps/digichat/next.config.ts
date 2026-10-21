@@ -5,15 +5,6 @@ import {
   DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
 } from "./src/lib/security-headers-bake";
 
-const REPLAY_ASSET_FILES = [
-  "../../packages/design/palettes.css",
-  "../../packages/design/tokens.css",
-  "../../packages/ui/src/styles/chat-aui.css",
-  "../../packages/ui/src/styles/chat-digichat.css",
-  "../../packages/ui/src/styles/chat-widgets.css",
-  "../../packages/ui/src/replay/fonts/*.woff2",
-];
-
 const nextConfig: NextConfig = {
   output: "standalone",
   // Separate `next dev` lock when previewing a second config (e.g. a baked skin YAML)
@@ -32,12 +23,6 @@ const nextConfig: NextConfig = {
   // root from surrounding lockfiles, which breaks in git worktrees and would
   // silently move server.js out from under the Dockerfile's COPY paths (#675).
   outputFileTracingRoot: path.join(__dirname, "../.."),
-  // The replay export reads the chat sheets and Geist Mono from disk at request
-  // time (packages/ui/src/replay/assets.ts); trace them into the standalone tree.
-  outputFileTracingIncludes: {
-    "/api/conversations/[id]/replay": REPLAY_ASSET_FILES,
-    "/api/replay-assets": REPLAY_ASSET_FILES,
-  },
   // The dev badge is fixed to a viewport corner, and /embed is routinely viewed
   // inside a ~400px popup frame where every corner is chrome — it landed on the
   // composer and hid the placeholder. Dev-only; the error overlay is unaffected.

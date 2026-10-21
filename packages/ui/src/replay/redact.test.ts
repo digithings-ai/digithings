@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { REDACTED, redactString, redactValue } from "./redact";
+import { REDACTED, redactHtml, redactString, redactValue } from "./redact";
+
+const HEX48 = "a1b2c3d4".repeat(6);
+const HEX40 = "0123456789".repeat(4);
+const HEX64 = "f".repeat(64);
 
 const JWT =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
@@ -35,6 +39,28 @@ describe("redactString", () => {
     expect(out).not.toContain("query-plain-9f3c2a");
     expect(out).toContain("ok=1");
     expect(out).toContain("?token=[redacted]");
+  });
+
+  it("replaces a standalone 48-hex invite key and leaves other hex lengths", () => {
+    const out = redactString(
+      `invite ${HEX48} sha ${HEX40} long ${HEX64} https://desk.example/embed?token=${HEX48}&ok=1`,
+    );
+    expect(out).not.toContain(HEX48);
+    expect(out).toContain(HEX40);
+    expect(out).toContain(HEX64);
+    expect(out).toContain("?token=[redacted]");
+    expect(out).toContain("ok=1");
+  });
+});
+
+describe("redactHtml", () => {
+  it("redacts page text and leaves an inlined data uri alone", () => {
+    const uri = `data:font/woff2;base64,${HEX48}eyJhbGciOiJIUzI1NiJ9`;
+    const html = `<p>${HEX48}</p><style>src:url("${uri}")</style>`;
+    const out = redactHtml(html);
+    expect(out).toContain(uri);
+    expect(out).not.toContain(`<p>${HEX48}</p>`);
+    expect(out).toContain(`<p>${REDACTED}</p>`);
   });
 });
 

@@ -1,36 +1,18 @@
 /**
- * Download the open thread as one HTML file. Styles come from the live page
- * when they are the chat sheets (the closest match to the tab Chris is in),
- * and from the authenticated asset route otherwise.
+ * Download the open thread as one HTML file. Styles and same-origin images
+ * come from the live page, so the file matches the tab it was saved from.
  */
 
 import { downloadTextFile } from "../components/chat/transcript";
-import { readPaintedTheme, readThemeState } from "../theme";
-import { messagesToReplay, type ReplayChromeInput } from "./from-messages";
-import { buildReplayHtml, replayDownloadName } from "./html";
-import { REPLAY_SHELL_CSS } from "./styles";
-import type { ReplayAccent, ReplayView } from "./types";
+import { snapshotFilename } from "./filename";
+import {
+  deploymentText,
+  questionText,
+  serializeSnapshot,
+  transformSnapshotDom,
+} from "./snapshot";
 
-export type BrowserReplayInput = {
-  messages: readonly unknown[];
-  deployment?: string;
-  title?: string;
-  welcome?: string;
-  welcomeBody?: readonly string[];
-  suggestions?: readonly string[];
-  placeholder?: string;
-  accent?: ReplayAccent | null;
-  view?: ReplayView;
-  /** App base path for the asset route; defaults to NEXT_PUBLIC_DIGICHAT_BASE_PATH. */
-  basePath?: string;
-};
-
-const VIEWS = new Set<ReplayView>(["quiet", "balanced", "verbose"]);
 const URL_RE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
-
-export function cssLooksLikeChat(css: string): boolean {
-  return css.includes(".aui-user-message-content") || css.includes(".aui-md");
-}
 
 export function liveSheetText(
   doc: Document | null = typeof document === "undefined" ? null : document,
@@ -41,19 +23,10 @@ export function liveSheetText(
     try {
       for (const rule of Array.from(sheet.cssRules)) chunks.push(rule.cssText);
     } catch {
-      /* A cross-origin sheet cannot be read. The asset route covers that case. */
+      /* A cross-origin sheet cannot be read. Those rules are dropped. */
     }
   }
   return chunks.join("\n");
-}
-
-export async function resolveReplayCss(
-  liveCss: string,
-  loadBundled: () => Promise<string>,
-  inline: (css: string) => Promise<string> = inlineAssetUrls,
-): Promise<string> {
-  if (cssLooksLikeChat(liveCss)) return inline(liveCss);
-  return loadBundled();
 }
 
 export async function inlineAssetUrls(
@@ -87,10 +60,8 @@ export async function inlineAssetUrls(
       }
       const bytes = new Uint8Array(await res.arrayBuffer());
       const mime = (res.headers.get("content-type") || mimeOf(absolute)).split(";")[0].trim();
-      replacements.set(
-        raw,
-        `data:${mime || "application/octet-stream"};base64,${bytesToBase64(bytes)}`,
-      );
+      const encoded = bytesToBase64(bytes);
+      replacements.set(raw, `data:${mime || "application/octet-stream"};base64,${encoded}`);
     } catch {
       replacements.set(raw, "");
     }
@@ -102,78 +73,67 @@ export async function inlineAssetUrls(
   });
 }
 
-export async function downloadThreadReplay(input: BrowserReplayInput): Promise<void> {
-  const doc = messagesToReplay(input.messages, chromeFromBrowser(input), new Date().toISOString());
-  const live = liveSheetText();
-  // The asset route's bundle already ends with the replay shell CSS.
-  const css = cssLooksLikeChat(live)
-    ? `${await inlineAssetUrls(live)}\n${REPLAY_SHELL_CSS}`
-    : await loadAssetRoute(replayAssetsUrl(input.basePath ?? publicBasePath()));
-  const html = buildReplayHtml(doc, css);
-  downloadTextFile(replayDownloadName(doc), html, "text/html;charset=utf-8");
-}
-
-/** `/api/replay-assets` under the app's base path (digithings.ai serves digichat at /chat). */
-export function replayAssetsUrl(basePath: string | undefined): string {
-  const base = (basePath ?? "").trim().replace(/\/+$/, "");
-  return `${base}/api/replay-assets`;
-}
-
-function publicBasePath(): string {
-  try {
-    // Inlined by Next at build time, like the app's own base-path helper.
-    return process.env.NEXT_PUBLIC_DIGICHAT_BASE_PATH ?? "";
-  } catch {
-    return "";
+export async function inlineDomAssets(
+  root: ParentNode,
+  options: {
+    origin?: string;
+    href?: string;
+    fetchImpl?: typeof fetch;
+  } = {},
+): Promise<void> {
+  const origin = options.origin ?? (typeof location === "undefined" ? "" : location.origin);
+  const href = options.href ?? (typeof location === "undefined" ? "" : location.href);
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const nodes = [
+    ...root.querySelectorAll<HTMLElement>("img, image, use, source, video"),
+  ];
+  for (const node of nodes) {
+    node.removeAttribute("srcset");
+    for (const attr of ["src", "href", "poster"] as const) {
+      const raw = node.getAttribute(attr);
+      if (!raw || raw.startsWith("data:") || raw.startsWith("#")) continue;
+      const absolute = origin ? sameOriginUrl(raw, origin, href) : null;
+      if (!absolute) {
+        node.removeAttribute(attr);
+        continue;
+      }
+      try {
+        const res = await fetchImpl(absolute);
+        if (!res.ok) {
+          node.removeAttribute(attr);
+          continue;
+        }
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        const mime = (res.headers.get("content-type") || mimeOf(absolute)).split(";")[0].trim();
+        node.setAttribute(
+          attr,
+          `data:${mime || "application/octet-stream"};base64,${bytesToBase64(bytes)}`,
+        );
+      } catch {
+        node.removeAttribute(attr);
+      }
+    }
+  }
+  if (!origin) return;
+  for (const el of root.querySelectorAll<HTMLElement>("[style]")) {
+    const style = el.getAttribute("style");
+    if (!style || !style.includes("url(")) continue;
+    el.setAttribute("style", await inlineAssetUrls(style, { origin, href, fetchImpl }));
   }
 }
 
-async function loadAssetRoute(url: string): Promise<string> {
-  const res = await fetch(url, { credentials: "same-origin" });
-  if (!res.ok) throw new Error("replay assets unavailable");
-  return res.text();
-}
-
-function chromeFromBrowser(input: BrowserReplayInput): ReplayChromeInput {
-  const painted = readPaintedTheme();
-  const stored = readThemeState();
-  const deployment =
-    input.deployment?.trim() ||
-    (typeof document === "undefined"
-      ? ""
-      : document.querySelector("[data-deployment]")?.getAttribute("data-deployment") || "");
-  return {
-    deployment,
-    title: input.title,
-    welcome: input.welcome,
-    welcomeBody: input.welcomeBody,
-    suggestions: input.suggestions,
-    placeholder: input.placeholder,
-    accent: input.accent ?? readAccent(),
-    theme: {
-      preference: stored.preference,
-      resolved: painted.resolved,
-      palette: painted.palette,
-      view: input.view ?? readView(),
-    },
-  };
-}
-
-function readView(): ReplayView {
-  if (typeof document === "undefined") return "balanced";
-  const raw = document.querySelector("[data-view]")?.getAttribute("data-view") ?? "";
-  return VIEWS.has(raw as ReplayView) ? (raw as ReplayView) : "balanced";
-}
-
-function readAccent(): ReplayAccent | null {
-  if (typeof document === "undefined") return null;
-  const host = document.querySelector("[data-stock-product]");
-  if (!host) return null;
-  const style = getComputedStyle(host);
-  const color = style.getPropertyValue("--accent").trim();
-  const foreground = style.getPropertyValue("--accent-foreground").trim();
-  if (!/^#[0-9a-fA-F]{6}$/.test(color) || !/^#[0-9a-fA-F]{6}$/.test(foreground)) return null;
-  return { color, foreground };
+export async function downloadThreadSnapshot(
+  doc: Document | null = typeof document === "undefined" ? null : document,
+  exportedAt = new Date().toISOString(),
+): Promise<void> {
+  if (!doc?.documentElement) return;
+  const css = await inlineAssetUrls(liveSheetText(doc));
+  const clone = doc.documentElement.cloneNode(true) as HTMLElement;
+  transformSnapshotDom(clone);
+  await inlineDomAssets(clone);
+  const html = serializeSnapshot(clone, css);
+  const name = snapshotFilename(deploymentText(doc), exportedAt, questionText(doc));
+  downloadTextFile(name, html, "text/html;charset=utf-8");
 }
 
 function sameOriginUrl(raw: string, origin: string, href: string): string | null {

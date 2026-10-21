@@ -216,6 +216,7 @@ function ToolFallbackContent({
 }: React.ComponentProps<typeof CollapsibleContent>) {
   return (
     <CollapsibleContent
+      keepMounted
       data-slot="tool-fallback-content"
       className={cn(
         "aui-tool-fallback-content relative overflow-hidden text-sm outline-none",

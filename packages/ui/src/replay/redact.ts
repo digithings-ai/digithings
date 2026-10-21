@@ -27,8 +27,13 @@ const TOKEN_SHAPES: readonly RegExp[] = [
   /\bsk-(?:ant-|or-|proj-)?[A-Za-z0-9_\-]{8,}\b/g,
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
   /\bBearer\s+[A-Za-z0-9\-._~+/]{8,}={0,2}/gi,
+  // OCC invite keys are a standalone 48-hex token. A shorter or longer hex
+  // run (a git sha, a 32-byte hex secret) does not match.
+  /\b[0-9a-fA-F]{48}\b/g,
   /(?:x-api-key|x-embed-token|x-embed-chat-token|x-invite-key|api[_-]?key|embed[_-]?(?:key|token)|invite[_-]?(?:key|token)|access[_-]?token|refresh[_-]?token|auth[_-]?secret|nextauth[_-]?secret|client[_-]?secret|private[_-]?key|password|passwd|(?<![A-Za-z0-9_?&-])token)["']?[ \t]{0,8}[:=][ \t]{0,8}["']?[^"'\s,}&]{6,}/gi,
 ];
+
+const DATA_URI = /data:[^"'()\s]+/gi;
 
 const QUERY_SECRET =
   /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key)=)[^&#\s"']*/gi;
@@ -61,6 +66,20 @@ export function redactString(value: string): string {
   }
   QUERY_SECRET.lastIndex = 0;
   return out.replace(QUERY_SECRET, `$1${REDACTED}`);
+}
+
+/** Redact a serialized page. Inlined `data:` payloads are left intact. */
+export function redactHtml(html: string): string {
+  DATA_URI.lastIndex = 0;
+  let out = "";
+  let last = 0;
+  for (const match of html.matchAll(DATA_URI)) {
+    const start = match.index ?? 0;
+    out += redactString(html.slice(last, start));
+    out += match[0];
+    last = start + match[0].length;
+  }
+  return out + redactString(html.slice(last));
 }
 
 export function redactValue<T>(value: T): T {

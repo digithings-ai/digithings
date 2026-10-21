@@ -696,3 +696,14 @@ control that keeps its name from its glyph),
 `packages/ui/src/components/chat/dot-matrix-aria.test.tsx` (the two modes) and
 `packages/ui/src/components/chat/gallery-thread/work-chain-status.test.tsx`
 (the chain trigger's name).
+
+## Chat HTML export
+
+`/export` downloads the thread as markdown. `/export html` downloads the open
+page as one file (`packages/ui/src/replay/`). The file is the rendered DOM:
+styles and same-origin images are inlined, the composer is removed, and
+work-chain, reasoning, tool, and source disclosures become `<details>` so
+they still open offline. Closed panels stay mounted (`keepMounted`) so a
+folded tool call is still in the file. Secrets, including a standalone
+48-hex invite key, are stripped from the HTML. The filename is
+`<deployment>-<YYYY-MM-DD-HHMM>-<question-slug>.html`.

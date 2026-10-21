@@ -208,16 +208,21 @@ describe("buildProductSlashCommands", () => {
     expect(ids).toContain("datatap");
   });
 
-  it("lists /export replay next to the markdown export", () => {
-    const row = buildProductSlashCommands(api()).find((c) => c.id === "export-replay");
-    expect(row?.label).toBe("/export replay");
-    expect(slashItemPrefixMatch({ id: "export-replay", label: "/export replay" }, "export replay")).toBe(
+  it("lists /export html next to the markdown export", () => {
+    const row = buildProductSlashCommands(api()).find((c) => c.id === "export-html");
+    expect(row?.label).toBe("/export html");
+    expect(slashItemPrefixMatch({ id: "export-html", label: "/export html" }, "export html")).toBe(
       true,
     );
-    expect(slashSubmitAction("/export replay")).toMatchObject({
+    expect(slashSubmitAction("/export html")).toMatchObject({
       kind: "run",
       command: { id: "export" },
-      arg: "replay",
+      arg: "html",
+    });
+    expect(slashSubmitAction("/export")).toMatchObject({
+      kind: "run",
+      command: { id: "export" },
+      arg: "",
     });
   });
 

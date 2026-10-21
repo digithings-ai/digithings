@@ -350,6 +350,12 @@ function Harness({
   );
 }
 
+function visibleText(root: ParentNode): string {
+  const clone = (root instanceof Element ? root : document.body).cloneNode(true) as HTMLElement;
+  clone.querySelectorAll("[hidden]").forEach((node) => node.remove());
+  return clone.textContent ?? "";
+}
+
 async function mount(props: HarnessProps = {}) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -584,7 +590,7 @@ describe("DigichatThread", () => {
       }
       // And the work itself is not on the page.
       for (const text of shape.work) {
-        expect(host.textContent, shape.name).not.toContain(text);
+        expect(visibleText(host), shape.name).not.toContain(text);
       }
       // The answer is still there: the fold takes the work, not the reply.
       expect(host.textContent, shape.name).toContain("grounded answer");
@@ -609,8 +615,9 @@ describe("DigichatThread", () => {
     const row = host.querySelector('[data-slot="tool-group-root"]');
     expect(row).toBeTruthy();
     expect(row?.hasAttribute("data-closed")).toBe(true);
-    // The running tool is not on the page either.
-    expect(host.textContent).not.toContain("Running tool: digisearch");
+    // The running tool stays in the DOM (so an HTML export can still open it)
+    // but it is hidden with the closed panel.
+    expect(visibleText(host)).not.toContain("Running tool: digisearch");
     unmount();
 
     // The control: the same turn under the balanced level opens the row.

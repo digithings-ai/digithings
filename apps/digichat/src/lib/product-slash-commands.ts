@@ -190,9 +190,9 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
   }
 
   rows.push({
-    id: "export-replay",
-    label: "/export replay",
-    description: "Self-contained HTML replay",
+    id: "export-html",
+    label: "/export html",
+    description: "Rendered HTML of this chat",
     execute: () => {},
   });
   rows.push(...featuredLanguageCommands(api.setLanguage));

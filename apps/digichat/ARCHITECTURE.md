@@ -223,8 +223,6 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/app/api/v1/chat/route.ts` | Machine-client alias — re-exports the chat route |
 | `src/app/api/conversations/route.ts` | List + create conversations |
 | `src/app/api/conversations/[id]/route.ts` | Get + update + delete a conversation |
-| `src/app/api/conversations/[id]/replay/route.ts` | Self-contained HTML replay of a stored conversation |
-| `src/app/api/replay-assets/route.ts` | Inlined chat CSS and fonts for a browser replay export |
 | `src/app/api/conversations/[id]/quant-runs/route.ts` | List + insert quant runs |
 | `src/app/api/ecosystem/config/route.ts` | Read / write ecosystem endpoint cookie (server-side; no client caller) |
 | `src/app/api/health/route.ts` | Readiness probe for all services |
@@ -297,11 +295,7 @@ endpoint except `GET /api/health` (unauthenticated status probe) and
 
 **`GET /api/conversations/[id]`** — returns `{ id, title, messages: UIMessage[] }`.
 
-**`GET /api/conversations/[id]/replay`** — auth required. Returns one self-contained `text/html` file (`content-disposition: attachment`, filename `<deployment>-<YYYY-MM-DD>.html`). The transcript is the stored messages with the deployment's title, welcome, suggestions, placeholder, and accent. Query `theme` (`light`|`dark`), `palette`, `view` (`quiet`|`balanced`|`verbose`), and `at` (ISO instant for the filename day) override the deployment defaults. Tokens, embed keys, invite keys, and auth headers are removed before the HTML is built. CSS and Geist Mono are inlined; the file opens from `file://`.
-
-**`GET /api/replay-assets`** — auth required. Returns the same inlined stylesheet (`text/css`) the browser export uses when it cannot read the live page's style sheets.
-
-`apps/digichat/scripts/export-replay.ts` calls the replay route (`--id`) or writes the fixture conversation locally (`--fixture`). It does not call a model.
+**HTML export** — `/export html` in the open thread downloads one file, `<deployment>-<YYYY-MM-DD-HHMM>-<slug>.html`. It is the rendered page (theme, toolbar chrome, work chain, tool calls, sources) with CSS, fonts, and same-origin images inlined. The composer and send controls are removed. Disclosures stay collapsible via `<details>`. Tokens, embed keys, invite keys, auth headers, and bare 48-hex invite keys are removed, including values in URLs. The file opens from `file://`. Markdown `/export` is unchanged. There is no server route: the file is the live DOM, not a transcript rebuilt from stored messages.
 
 **`PUT /api/conversations/[id]`** — body `{ title?: string, messages: UIMessage[] }`. Full replace of stored messages (delete + re-insert). Returns 204.
 
