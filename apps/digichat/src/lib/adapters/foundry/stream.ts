@@ -988,8 +988,8 @@ function scanRemoteFunctionsCall(
   }
   if (wrapped) {
     if (i >= t.length) return prefix();
-    if (t[i] !== ")") return null;
-    i++;
+    // An unclosed wrapper still hides the call. Only a real ")" is consumed.
+    if (t[i] === ")") i++;
   }
   return { kind: "complete", end: i };
 }
