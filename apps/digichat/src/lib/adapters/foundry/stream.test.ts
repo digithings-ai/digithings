@@ -5,6 +5,7 @@ import {
   createFoundryStreamResponse,
   applyGroundingDirective,
   FoundryToolLeakFilter,
+  consumeLeakDrop,
   stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
   capacityRetryDelayMs,
@@ -139,6 +140,54 @@ describe("FoundryToolLeakFilter", () => {
     expect(filter.push("Result: remote_functions.azu")).toBe("Result: ");
     expect(filter.push('re_ai_search({"query":"Acme"}) done')).toBe(" done");
     expect(filter.flush()).toBeNull();
+  });
+
+  it("holds a chunk that ends inside the word remote", () => {
+    for (const partial of ["r", "re", "rem", "remo", "remot", "(r", "(re", "(rem", "(remo", "(remot"]) {
+      const filter = new FoundryToolLeakFilter();
+      expect(filter.push(`Look ${partial}`)).toBe("Look ");
+      expect(filter.flush()).toBe(partial);
+    }
+    expect(new FoundryToolLeakFilter().push("for")).toBe("for");
+    expect(new FoundryToolLeakFilter().push("Look (")).toBe("Look (");
+  });
+
+  it("drops a remote_functions call streamed one character at a time", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    let out = "";
+    for (const ch of `See ${call} now`) out += filter.push(ch) ?? "";
+    out += filter.flush() ?? "";
+    expect(out).toBe("See  now");
+    expect(out).not.toContain("remote_functions");
+  });
+
+  it("drops every two-way split of a remote_functions call", () => {
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    for (let i = 1; i < call.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const first = filter.push(call.slice(0, i));
+      const second = filter.push(call.slice(i));
+      const tail = filter.flush();
+      expect(`${first ?? ""}${second ?? ""}${tail ?? ""}`, `split at ${i}`).toBe("");
+    }
+  });
+
+  it("releases an unclosed call as prose once the hold passes 8KB", () => {
+    const filter = new FoundryToolLeakFilter();
+    const open = 'remote_functions.azure_ai_search({"query":"';
+    expect(filter.push(open)).toBeNull();
+    const answer = `${"n".repeat(8 * 1024)} Acme is the customer.`;
+    const released = filter.push(answer);
+    expect(released).toContain("Acme is the customer.");
+    expect(filter.push(" Still here.")).toBe(" Still here.");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("emits the remainder when a leak drop does not advance", () => {
+    expect(consumeLeakDrop("Seen", " kept", 2, 2)).toEqual({ emit: "Seen kept", rest: null });
+    expect(consumeLeakDrop("", "Answer", 1, 0)).toEqual({ emit: "Answer", rest: null });
+    expect(consumeLeakDrop("Pre ", "Hi there", 0, 3)).toEqual({ emit: "Pre ", rest: "there" });
   });
 });
 
