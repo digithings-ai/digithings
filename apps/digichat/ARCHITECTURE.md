@@ -641,11 +641,11 @@ for per-tenant corpus isolation — forwarded as `X-Digi-Corpus-Index` /
 `trial_form`), `theme`
 (`dark` | `light`), optional `accent` hex pair, `activityDetail`
 (`off` | `labels` | `full`), optional UI flags `showByok` / `showStatusBar` / `showContextMeter`
-(`showContextMeter` and `contextMeterEnabled` do not gate the bar. The house bar
-shows only once digigraph reports the model it served. That reporting is a 2.6.8
-follow-up. An empty list leaves the session model unset, so the turn sends no
-`X-Digi-Model` until the user picks one. A non-house slug that sets the flag is
-still refused) /
+(`showContextMeter` gates the composer bar through `contextMeterEnabled`: on for
+the house slugs unless explicitly false, off for every other host. The live house
+publishes no models, so this release shows no house bar. Digigraph reporting the
+served model is a 2.6.8 follow-up and is not in this change. An empty list sends
+no `X-Digi-Model`. A non-house slug that sets the flag is still refused) /
 `layout` (`page` | `embed`) — independent of `gateMode` (never derive
 `showByok = !ungated`), optional `llmAccess`
 (`free_then_byok` | `byok_only` | `backend_only` | `operator`) for LLM spend

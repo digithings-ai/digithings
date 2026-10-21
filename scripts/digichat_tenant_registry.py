@@ -193,7 +193,7 @@ OBJECT_OVERLAY_PATHS = frozenset(
 # nor change them. The corpus name itself stays in the private release-lane
 # paths: this public script states the rule without writing it down.
 OCC_HOST = "occ.digithings.ai"
-# showContextMeter does not gate the bar. Only these slugs may set the field.
+# showContextMeter gates the composer bar. Only these slugs may set the field.
 HOUSE_CONTEXT_METER_SLUGS = frozenset(("digithings", "digithings-ai"))
 # Backend keys the overlay may not set for the OCC tenant.
 OCC_LOCKED_BACKEND_KEYS = ("digisearchIndex", "vaultPathPrefix")
@@ -502,7 +502,7 @@ def _overlay_context_meter_slug(overlay_entry, base_entry):
 
 
 def _refuse_house_context_meter(host, slug):
-    """The field does not gate the bar. Other slugs may not set it."""
+    """The field gates the bar. Other slugs may not set it."""
     raise RegistryRefusal(
         "overlay entry %r sets 'showContextMeter' for slug %r; only the "
         "house slugs digithings and digithings-ai may carry that flag" % (host, slug)

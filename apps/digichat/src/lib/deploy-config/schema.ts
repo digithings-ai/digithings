@@ -651,9 +651,8 @@ export const GateSchema = z
     showByok: z.boolean().optional(),
     showLanguageSelector: z.boolean().optional(),
     /**
-     * Does not gate the context meter. The house bar shows only once
-     * digigraph reports the model it served (a 2.6.8 follow-up). Only
-     * the house slugs may set the field.
+     * Gates the composer context meter. Only the house slugs may set it.
+     * The live house publishes no models, so this release shows no bar.
      */
     showContextMeter: z.boolean().optional(),
     lockSessionControls: z.boolean().optional(),

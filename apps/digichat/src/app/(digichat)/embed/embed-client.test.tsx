@@ -692,7 +692,10 @@ describe("the embed composer provider chip", () => {
   });
 });
 
-/** Live house tenant: empty model list, no curated default. */
+/**
+ * Live house tenant: empty model list, plus a curated default. Seeding that
+ * default would send X-Digi-Model. Develop's empty-list seed does not.
+ */
 const HOUSE_TENANT: EmbedTenantClientConfig = {
   slug: "digithings",
   gateMode: "ungated",
@@ -701,7 +704,7 @@ const HOUSE_TENANT: EmbedTenantClientConfig = {
   accent: null,
   attribution: true,
   backendType: "digigraph",
-  models: { available: [] },
+  models: { available: [], default: "deepseek/deepseek-v4.1-flash-1017" },
 };
 
 describe("a default house turn sends no X-Digi-Model", () => {
@@ -719,6 +722,10 @@ describe("a default house turn sends no X-Digi-Model", () => {
     const code = codeOnly(embedClientSrc);
     expect(code).toMatch(/model:\s*sessionModelSeed\(/);
     expect(code).toMatch(/modelSentOnTurn\(\s*chatPrefsRef\.current\.model/);
+    expect(code).toMatch(/showContextMeter:\s*contextMeterEnabled\(/);
+    expect(code).toMatch(
+      /meterModel:\s*contextMeterModel\(\{\s*sessionModel:\s*modelSentOnTurn\(\s*chatPrefs\.model/,
+    );
 
     const container = document.createElement("div");
     document.body.appendChild(container);

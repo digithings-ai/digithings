@@ -167,10 +167,16 @@ export type EmbedChatPrefsApi = {
   providerLabel?: string;
   showModels: boolean;
   /**
-   * Model id used only to size the context meter. Not the session model:
-   * an empty session model still sends no X-Digi-Model.
+   * Model id the turn sends, including a bring-your-own-key binding.
+   * Sizes the context meter only. An empty session still sends no
+   * X-Digi-Model.
    */
   meterModel?: string;
+  /**
+   * Render gate for the context meter. The toolbar draws the bar only
+   * when this is true.
+   */
+  showContextMeter?: boolean;
   hasDigisearch: boolean;
   hasVault: boolean;
   hasSessions: boolean;

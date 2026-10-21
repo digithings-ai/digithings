@@ -70,9 +70,8 @@ export type EmbedTenantClientConfig = {
   llmAccess?: EmbedLlmAccess;
   showLanguageSelector?: boolean;
   /**
-   * Carried for house slugs. It does not gate the context meter. The
-   * house bar shows only once digigraph reports the model it served
-   * (a 2.6.8 follow-up).
+   * Gates the composer context meter for house slugs. The live house
+   * publishes no models, so this release shows no bar there.
    */
   showContextMeter?: boolean;
   /** Tenant allows opt-in web search UI (#3420). Default false. */

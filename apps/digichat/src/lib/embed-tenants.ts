@@ -184,9 +184,9 @@ export type EmbedTenantConfig = {
    */
   showLanguageSelector?: boolean;
   /**
-   * Accepted on slugs `digithings` and `digithings-ai`. It does not gate
-   * the context meter. The house bar shows only once digigraph reports
-   * the model it served (a 2.6.8 follow-up). Any other slug is refused.
+   * Gates the composer context meter on slugs `digithings` and
+   * `digithings-ai`. The live house publishes no models, so this release
+   * shows no bar there. Any other slug that sets the field is refused.
    */
   showContextMeter?: boolean;
   /**

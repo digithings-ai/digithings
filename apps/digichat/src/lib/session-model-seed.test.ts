@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  contextMeterEnabled,
   contextMeterModel,
   modelSentOnTurn,
   sessionModelSeed,
@@ -45,15 +44,12 @@ describe("sessionModelSeed", () => {
     expect(contextMeterModel({ sessionModel: FLASH, reportedModel: "constructor" })).toBe(FLASH);
   });
 
-  it("leaves other hosts on an empty model", () => {
-    expect(sessionModelSeed({ available: [] })).toBe("");
-    expect(contextMeterModel({ sessionModel: "" })).toBe("");
-    expect(contextMeterEnabled(undefined, "digithings")).toBe(true);
-    expect(contextMeterEnabled(undefined, "digithings-ai")).toBe(true);
-    expect(contextMeterEnabled(true, "digithings")).toBe(true);
-    expect(contextMeterEnabled(undefined, "occ")).toBe(false);
-    expect(contextMeterEnabled(false, "digithings-ai")).toBe(false);
-    expect(contextMeterEnabled(true, "example")).toBe(false);
+  it("sizes the meter to the bring-your-own-key model the turn sends", () => {
+    const sent = modelSentOnTurn("", { isSet: true, model: "z-ai/glm-4.7-flash" });
+    expect(contextMeterModel({ sessionModel: sent ?? "" })).toBe("z-ai/glm-4.7-flash");
+    expect(modelSentOnTurn(FLASH, { isSet: true, model: "z-ai/glm-4.7-flash" })).toBe(
+      "z-ai/glm-4.7-flash",
+    );
   });
 
   it("does not open the picker just because the meter has a window", () => {

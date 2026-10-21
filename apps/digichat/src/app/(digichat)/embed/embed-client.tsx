@@ -48,6 +48,7 @@ import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } f
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
 import {
+  contextMeterEnabled,
   contextMeterModel,
   modelSentOnTurn,
   sessionModelSeed,
@@ -562,9 +563,9 @@ function EmbedChat({
     // Start on the tenant's curated default so the first turn uses the model
     // the picker shows as selected (v4.1-flash on OCC) instead of falling
     // through to the digigraph operator default. An empty list leaves the
-    // session model unset, so the turn sends no X-Digi-Model until the
-    // user picks one. The house bar shows only once digigraph reports
-    // the model it served.
+    // session model unset, even when a default is set, so the turn sends
+    // no X-Digi-Model until the user picks one. The live house publishes
+    // no models, so this release shows no house bar.
     model: sessionModelSeed({
       available: stockClient.models.available,
       defaultModel: stockClient.models.default,
@@ -1284,8 +1285,13 @@ function EmbedChat({
         stockClient.backendType,
       ),
       showModels,
-      // Window for the bar only. Not the session model, so it is not X-Digi-Model.
-      meterModel: contextMeterModel({ sessionModel: chatPrefs.model }),
+      showContextMeter: contextMeterEnabled(tenantCfg.showContextMeter, tenantCfg.slug),
+      // The model the turn sends, including a bring-your-own-key binding.
+      // Not the session model alone, and not written back into the session.
+      meterModel: contextMeterModel({
+        sessionModel:
+          modelSentOnTurn(chatPrefs.model, { isSet: byokIsSet, model: byokModel }) ?? "",
+      }),
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
@@ -1400,8 +1406,11 @@ function EmbedChat({
       tenantAllowsWeb,
       showByok,
       byokIsSet,
+      byokModel,
       byokProvider,
       showModels,
+      tenantCfg.showContextMeter,
+      tenantCfg.slug,
       catalog,
       catalogTools,
       gate.host,

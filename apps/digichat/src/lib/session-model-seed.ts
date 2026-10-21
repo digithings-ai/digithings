@@ -1,17 +1,16 @@
 import { contextWindowFor } from "@digithings/ui/chat/context-meter";
 
 /**
- * Product hosts for digithings.ai. Their live tenant publishes
- * `models.available: []`, so the session model stays empty and a turn
- * sends no X-Digi-Model. The house bar shows only once digigraph reports
- * the model it served. That report is a 2.6.8 follow-up. OCC omits
- * `models` and inherits the deploy catalog, so its session model keeps
- * the bar when a report has no known window. `showContextMeter` and
- * `contextMeterEnabled` do not gate the bar.
+ * Product hosts for digithings.ai. `contextMeterEnabled` is the toolbar
+ * render gate: on for slugs `digithings` and `digithings-ai` unless the
+ * flag is explicitly false, and off for every other slug. The live house
+ * tenant publishes no models, so this release shows no house bar.
+ * Digigraph reporting the model it served is a 2.6.8 follow-up and is
+ * not implemented here.
  */
 const HOUSE_CONTEXT_METER_SLUGS = new Set(["digithings", "digithings-ai"]);
 
-/** Slug check kept for callers. It does not show or hide the bar. */
+/** Toolbar render gate. An omitted flag is on for the house slugs only. */
 export function contextMeterEnabled(
   showContextMeter: boolean | undefined,
   slug: string | undefined,
