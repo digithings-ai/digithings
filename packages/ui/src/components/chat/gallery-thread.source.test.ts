@@ -93,6 +93,16 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(aui).not.toMatch(/\.aui-composer-trigger-popover \{/);
   });
 
+  it("product app command lists paint the canvas when the footer clears --bg", () => {
+    const chatbot = read("../../styles/chat-digichat.css");
+    const rule =
+      '[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .aui-composer-trigger-popover,\n' +
+      '[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .dc-composer-menu {\n' +
+      "  background: var(--term-bg);\n" +
+      "}";
+    expect(chatbot).toContain(rule);
+  });
+
   it("product tooltip suppresses the canonical kit rotated-square arrow", () => {
     const product = read("gallery-thread/ui/tooltip.tsx");
     // The single canonical tooltip is the kit's; the chat adapter opts out of
