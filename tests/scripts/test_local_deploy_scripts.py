@@ -272,10 +272,51 @@ def test_the_local_publish_binds_the_image_to_the_tree_it_builds() -> None:
     assert 'head_commit="$(git rev-parse HEAD' in body, (
         "the rehearsal must resolve the commit it actually builds from"
     )
-    assert '"$head_commit" = "$COMMIT"' in body, (
+    assert 'if [ "$head_commit" != "$COMMIT" ]; then' in body, (
         "the rehearsal must refuse to label an image with a commit it was not "
         "built from"
     )
     assert _refuses(body, "check the tag out"), (
         "a refusal to publish an unbound image has to stop the publish"
     )
+
+
+def _marked_block(body: str, name: str) -> str:
+    match = re.search(rf"# {name}:begin\n(.*?)# {name}:end", body, re.S)
+    assert match, f"the {name} block is not marked in publish_image.sh"
+    return match.group(1)
+
+
+def test_the_probe_refuses_on_the_verdict_text_and_not_on_the_exit_status(tmp_path: Path) -> None:
+    """A helper that refuses but exits 0 still stops the lane.
+
+    The decision is the helper's OUTPUT. If it were the exit status, a wrapper
+    that swallowed the status would turn a refusal into a pass and the lane
+    would publish an image it just refused.
+    """
+    body = read("publish_image.sh")
+    block = _marked_block(body, "probe-verdict")
+    stub = tmp_path / "stub_helper.sh"
+    stub.write_text("printf 'REFUSE stubbed refusal\\n'\n")
+    block = block.replace("node scripts/digichat_probe_verdict.mjs", f"cat {stub}")
+    script = tmp_path / "probe.sh"
+    script.write_text(
+        "set -u\napi_body='{}'\napi_status='503'\nVERSION='2.6.4'\n" + block
+    )
+    result = subprocess.run(["bash", str(script)], capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "stubbed refusal" in result.stderr
+
+
+def test_the_tree_guard_refuses_a_tree_that_is_not_the_tag(tmp_path: Path) -> None:
+    """The guard is a plain comparison, so no operator can turn it into a no-op."""
+    body = read("publish_image.sh")
+    block = _marked_block(body, "tree-guard")
+    script = tmp_path / "guard.sh"
+    script.write_text("set -u\nhead_commit=aaaa\nCOMMIT=bbbb\nTAG=v9.9.9\n" + block)
+    result = subprocess.run(["bash", str(script)], capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "check the tag out" in result.stderr
+    script.write_text("set -u\nhead_commit=aaaa\nCOMMIT=aaaa\nTAG=v9.9.9\n" + block)
+    result = subprocess.run(["bash", str(script)], capture_output=True, text=True, check=False)
+    assert result.returncode == 0

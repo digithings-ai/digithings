@@ -51,6 +51,10 @@ function refuse(reason) {
 
 const { status, version } = parseArgs(process.argv.slice(2));
 
+if (version === "") {
+  refuse("no --version was given: the version this image was built as is part of the verdict");
+}
+
 if (status !== "200" && status !== "503") {
   refuse(`/api/health answered '${status}', not 200 or 503`);
 }
@@ -74,7 +78,7 @@ try {
 if (body === null || typeof body !== "object" || Array.isArray(body)) {
   refuse(`/api/health answered '${status}' with a body that is not the health route's JSON`);
 }
-if (body.version === undefined || body.version === null) {
+if (body.version === undefined || body.version === null || String(body.version) === "") {
   refuse(`/api/health answered '${status}' with JSON that carries no version`);
 }
 if (String(body.version) !== version) {

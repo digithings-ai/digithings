@@ -448,10 +448,18 @@ jobs:
               --output "$helper" \
               || { echo "::error::the probe verdict helper is not in the checkout and could not be fetched from ${GITHUB_SHA}."; exit 1; }
           fi
-          verdict="$(printf '%s' "$api_body" | node "$helper" --status "$api_status" --version "$VERSION")" || {
-            echo "::error::$(printf '%s' "$verdict" | sed 's/^REFUSE //')"
-            exit 1
-          }
+          # The verdict is the helper's OUTPUT, not its exit status: a wrapper
+          # that swallowed the exit code must not be able to turn a refusal
+          # into a pass.
+          verdict="$(printf '%s' "$api_body" | node "$helper" --status "$api_status" --version "$VERSION" || true)"
+          case "$verdict" in
+            "OK "*) ;;
+            *)
+              reason="$(printf '%s' "$verdict" | sed -e 's/^REFUSE //')"
+              echo "::error::${reason:-the probe verdict helper returned no verdict.}"
+              exit 1
+              ;;
+          esac
           reported="${verdict#OK version=}"
           reported="${reported%% *}"
           if [ "$api_status" = "503" ]; then

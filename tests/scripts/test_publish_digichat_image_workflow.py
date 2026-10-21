@@ -453,7 +453,7 @@ def test_the_probe_fails_closed() -> None:
         "the container exited before it served one probe",
         "never returned 200",
         "did not report ok=true",
-        "sed 's/^REFUSE //'",
+        "sed -e 's/^REFUSE //'",
     ):
         assert _refuses(probe, marker), (
             f"the probe reports {marker!r} but no exit 1 follows it — a diagnostic "
@@ -620,7 +620,7 @@ def test_the_probe_reads_the_health_status_instead_of_demanding_a_200() -> None:
         "the version the image was built as has to be handed to the helper"
     )
     # And the refusal has to actually exit.
-    assert _refuses(probe, "sed 's/^REFUSE //'")
+    assert _refuses(probe, "sed -e 's/^REFUSE //'")
 
 
 def test_a_tag_push_resolves_the_release_name() -> None:
@@ -720,4 +720,30 @@ def test_a_multi_line_tags_value_is_written_with_the_heredoc_form() -> None:
     assert 'echo "tags=$tags"' not in resolve, (
         "a plain echo splits a multi-line value at the newline, and the runner "
         "then reads the second name as an output key and rejects it"
+    )
+
+
+def test_the_probe_decides_on_the_verdict_text_and_not_on_the_exit_status() -> None:
+    """The helper's OUTPUT is the decision.
+
+    If the exit status were the decision, a wrapper that swallowed it would
+    turn a refusal into a pass, the step would report success, and the push
+    step (gated on that success) would publish the refused image.
+    """
+    guards = _guards(_doc())
+    assert 'case "$verdict" in' in guards
+    assert '"OK "*)' in guards
+    assert "sed -e 's/^REFUSE //'" in guards
+    assert '--version "$VERSION" || true)' in guards
+    assert '"$VERSION")" || {' not in guards
+
+
+def test_the_probe_helper_falls_back_to_the_workflow_commit_for_an_older_tag() -> None:
+    """A repair dispatch for a tag cut before the helper existed still works."""
+    guards = _guards(_doc())
+    assert 'helper="scripts/digichat_probe_verdict.mjs"' in guards
+    assert 'helper="/tmp/digichat_probe_verdict.mjs"' in guards
+    assert (
+        "raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}"
+        "/scripts/digichat_probe_verdict.mjs" in guards
     )

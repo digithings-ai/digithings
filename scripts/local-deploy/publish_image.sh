@@ -58,14 +58,25 @@ if [ "$IMAGE" = "digichat" ]; then
     # hole this lane exists to close. The GitHub lane checks the tag out and
     # compares HEAD with it; the rehearsal has to hold the same line.
     head_commit="$(git rev-parse HEAD 2>/dev/null || true)"
-    [ "$head_commit" = "$COMMIT" ] || {
+    # tree-guard:begin
+    if [ "$head_commit" != "$COMMIT" ]; then
       echo "ERROR: $TAG resolves to $COMMIT, but the working tree is at ${head_commit:-no commit} — check the tag out before publishing it." >&2
       exit 1
-    }
+    fi
+    # tree-guard:end
     NAME="$REPO:v$VERSION"
   else
     COMMIT="$(git rev-parse HEAD)"
     NAME="$REPO:sha-$(git rev-parse --short=12 HEAD)"
+  fi
+  # The image is built from the working tree, so the tree has to be CLEAN as
+  # well: uncommitted edits (or untracked files in the build context) would
+  # put content in the image that the commit it is labelled with does not
+  # have. A commit label is a promise about the tree.
+  dirty="$(git status --porcelain 2>/dev/null || true)"
+  if [ -n "$dirty" ]; then
+    echo "ERROR: the working tree has uncommitted changes, so the image would not be the tree of $COMMIT." >&2
+    exit 1
   fi
   BUILD_ARGS=(--build-arg "DIGICHAT_VERSION=$VERSION" --build-arg "DIGICHAT_REVISION=$COMMIT")
   LABELS=(--label "org.opencontainers.image.revision=$COMMIT")
@@ -159,10 +170,19 @@ if [ "$IMAGE" = "digichat" ]; then
   # GitHub lane calls too. The two lanes used to keep their own copy of the
   # contract and drifted - the local lane never read the status code the CI
   # lane read - so a rehearsal could pass where the release failed.
-  verdict="$(printf '%s' "$api_body" | node scripts/digichat_probe_verdict.mjs --status "$api_status" --version "$VERSION")" || {
-    echo "ERROR: $(printf '%s' "$verdict" | sed 's/^REFUSE //')" >&2
-    exit 1
-  }
+  # probe-verdict:begin
+  # The verdict is the helper's OUTPUT, not its exit status: a wrapper that
+  # swallowed the exit code must not be able to turn a refusal into a pass.
+  verdict="$(printf '%s' "$api_body" | node scripts/digichat_probe_verdict.mjs --status "$api_status" --version "$VERSION" || true)"
+  case "$verdict" in
+    "OK "*) ;;
+    *)
+      reason="$(printf '%s' "$verdict" | sed -e 's/^REFUSE //')"
+      echo "ERROR: ${reason:-the probe verdict helper returned no verdict.}" >&2
+      exit 1
+      ;;
+  esac
+  # probe-verdict:end
   echo "Probe: /api/health $verdict"
 else
   for _ in $(seq 60); do

@@ -200,3 +200,46 @@ def test_the_helper_refuses_an_unknown_argument() -> None:
         check=False,
     )
     assert result.returncode == 1, result.stdout
+
+
+def test_a_missing_version_is_a_usage_error() -> None:
+    result = subprocess.run(
+        ["node", str(HELPER), "--status", "503"],
+        input=json.dumps({"version": VERSION, "checks": {"service": "ok"}}),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert result.stdout.startswith("REFUSE")
+    assert "--version" in result.stdout
+
+
+def test_a_body_without_a_version_is_refused() -> None:
+    result = _verdict(json.dumps({"checks": {"service": "ok", "database": "skipped"}}))
+    assert result.returncode != 0
+    assert result.stdout.startswith("REFUSE")
+
+
+def test_a_body_with_an_empty_version_is_refused() -> None:
+    body = {"version": "", "checks": {"service": "ok", "database": "skipped"}}
+    result = _verdict(json.dumps(body))
+    assert result.returncode != 0
+    assert result.stdout.startswith("REFUSE")
+
+
+def test_an_extra_check_that_is_ok_is_tolerated() -> None:
+    body = {
+        "version": VERSION,
+        "checks": {"service": "ok", "database": "skipped", "redis": "ok"},
+    }
+    result = _verdict(json.dumps(body))
+    assert result.returncode == 0
+    assert "tolerated=none" in result.stdout
+
+
+def test_a_skipped_service_is_refused() -> None:
+    body = {"version": VERSION, "checks": {"service": "skipped", "database": "skipped"}}
+    result = _verdict(json.dumps(body))
+    assert result.returncode != 0
+    assert result.stdout.startswith("REFUSE")
