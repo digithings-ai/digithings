@@ -1103,7 +1103,7 @@ trailing space returns to the command list. Choosing an option writes the full
 sequence (`/language English`) and then runs it. The slash popover and the menu
 are never both open.
 
-Tools are not slash commands. `/digisearch`, `/digivault`, `/websearch`, `/zammad`,
+Tools are not slash commands. `/digisearch`, `/digivault`, `/zammad`,
 and other catalog or MCP ids are not in the palette. Enabling or disabling a tool
 happens in `/tools`, which lists every tool and MCP server for the host.
 `session_toggle_tool` does not flip a tool: on an unlocked host it answers
@@ -1311,7 +1311,7 @@ tenant-rollout reference.
 
 In-iframe “ask digichat” chrome is omitted on the first-party skin; outer launcher title /
 new chat / close and marketing footer attribution stay. Signed-in ChatShell keeps `/clear`
-`/history` `/scope` plus the same `/provider` / `/websearch` / `/settings` surface.
+`/history` `/scope` plus the same `/provider` / `/settings` surface.
 
 **Sources on the transcript (#3419 / 2.0).** assistant-ui `Source` parts and tool
 output document lists render inline in `ThreadSkinView` (`ThreadSource` for
