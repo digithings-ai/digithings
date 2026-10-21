@@ -12,16 +12,20 @@ deployment:
     skin: digichat
     title: ask datatap
     # Client-facing copy for the trial. The trial tenant holds a sample
-    # dataset (the public Enron email archive and its attached documents),
-    # not the visitor's own data, so the copy says what is actually there.
-    # The agent reaches it through the DataTap MCP.
+    # dataset (the public Enron email archive), not the visitor's own data,
+    # so the copy says what is actually there. The agent reaches it through
+    # the DataTap MCP; the UI shows each tool call as a row (search, open),
+    # not a per-answer source list, and the copy promises only that.
+    # Attachments are not promised until a live run has opened one.
+    # Template note: the pipeline clones this file per trial, so a tenant on
+    # other data needs its own title, body and placeholder.
     welcome:
       title: Ask about the Enron email archive.
       body:
-        - This DataTap trial runs on a sample dataset, the public Enron email
-          archive and the documents attached to those emails.
-        - The agent searches and opens them through the DataTap MCP, and shows
-          which emails and documents each answer used.
+        - "This DataTap trial runs on a sample dataset: the public Enron email
+          archive."
+        - The agent searches and opens the emails through the DataTap MCP, and
+          shows each search it ran and each email it opened.
     # Starters are tested live against the trial agent (Enron sample data):
     # each must finish with no tool error on two runs and show a different
     # tool path. Re-test them when the trial data or agent changes.
@@ -31,7 +35,7 @@ deployment:
       - Which emails mention Arthur Andersen, and what was the concern?
       - Who sends the most email in this archive, and what about?
       - Find an email about the Dabhol power plant and open it.
-    placeholder: Ask about the Enron emails and documents
+    placeholder: Ask about the Enron emails
   persistence: none
   auth: anonymous
   features:

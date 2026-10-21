@@ -66,6 +66,28 @@ const CONSUME_URL_FIXTURE = [
   "    consumeUrl: https://example.invalid/consume?k=fixture",
 ].join("\n");
 
+/** The trial template: the one shipped config whose slug ends in "-trial-foundry". */
+const TRIAL = SHIPPED.find((cfg) => cfg.slug.endsWith("-trial-foundry"))!;
+
+describe("trial welcome copy (2.6.6)", () => {
+  it("promises only what the trial UI shows", () => {
+    const parsed = validateDevkitDraftText(read(TRIAL.rel), TRIAL.scope);
+    expect(parsed.ok, parsed.issues.join(" ")).toBe(true);
+    const chrome = parsed.deployment!.chrome as {
+      welcome?: { title?: string; body?: string | string[] };
+      placeholder?: string;
+    };
+    expect(chrome.welcome?.title).toBe("Ask about the Enron email archive.");
+    const body = chrome.welcome?.body as string[];
+    expect(body).toHaveLength(2);
+    expect(body[0]).toMatch(/runs on a sample dataset: the public Enron email archive\.$/);
+    expect(body[1]).toMatch(/shows each search it ran and each email it opened\.$/);
+    expect(chrome.placeholder).toBe("Ask about the Enron emails");
+    const copy = JSON.stringify(chrome.welcome) + chrome.placeholder;
+    expect(copy).not.toMatch(/your own data|attached|each answer used/i);
+  });
+});
+
 describe("YAML export round-trips", () => {
   it("covers every shipped config (control: the census is not empty)", () => {
     expect(SHIPPED.length).toBe(9);
