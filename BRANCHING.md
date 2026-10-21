@@ -107,6 +107,7 @@ module branch being force-pushed also stops it being quietly dropped.
 | `fix/<slug>` | Bug fix not bound to a single Issue. | `fix/auth-retry` |
 | `docs/<slug>` | Docs-only change (eligible for auto-merge via the `automerge-docs` label). | `docs/vision-update` |
 | `chore/<slug>` | Tooling, CI, config. | `chore/bump-pydantic` |
+| `revert/<slug>` | Reverting or rolling back an earlier change (e.g. a `git revert` of a merged PR, or restoring paths to a known-good commit). Name what is being undone. | `revert/digiquant-to-7de39ec9a` |
 | `DIG-<n>-<slug>` | A Paperclip **execution workspace**. Paperclip checks the workspace out on `DIG-<n>-<title-slug>`, so this is not a branch a human creates — the taxonomy has to admit what the harness already produces, or every commit made there is unpushable. See [Execution-workspace branches](#execution-workspace-branches-never-blanket-push) before pushing one. | `DIG-1122-pre-push-taxonomy-has-no-dig-slug-rule` |
 
 Slugs: lowercase, dashes, no underscores. Numbers permitted.

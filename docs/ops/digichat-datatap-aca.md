@@ -366,6 +366,8 @@ The ACR is the ledger of record for what is deployed. Digests below are verified
 |---|---|---|---|
 | `v2.3.2` | `sha256:c5708729fea2` | 2026-09-21T11:47Z | **prod** (`digichat--0000007`) |
 | `v2.3.3` | `sha256:fc06e0a57902` | 2026-09-21T20:46Z | dev (`digichat--0000040`) |
+| `v2.5.0` | none published (GHCR) | — | **OCC prod** (Cloudflare container `shared-a9bf1b9117be`, 2026-10-19T18:39Z) |
+| `v2.5.1` | none published (GHCR) | — | **OCC prod** (Cloudflare container `shared-7a3239fc05f1`, 2026-10-19T21:59Z) |
 | `trial-1d0a8149-2.5.1` | `sha256:b41f25e7afe7` | 2026-10-19 | trial (`digichat-datatap-trial--0000005`) |
 | `trial-1d0a8149-2.6.0` | `sha256:c85574ba24ed` | 2026-10-20 | superseded (`digichat-datatap-trial--0000008`) |
 | `trial-1d0a8149-2.6.1` | `sha256:6b8e5c492f4f` | 2026-10-21 | superseded (revision `--0000009`) |
@@ -374,7 +376,15 @@ The ACR is the ledger of record for what is deployed. Digests below are verified
 
 `trial-1d0a8149-2.6.3` is built from the `digichat-v2.6.3` tag (`713098487531f8640f018ad9f43bf839abc18ddf`) and is bound to it: `scripts/check_digichat_image_binding.py --facts` reports `OK bound: 713098487531f8640f018ad9f43bf839abc18ddf via digichat-v2.6.3 -> sha256:91e9e709e37e2c20f58303abcda2b34fb9d1c867dd0e22e45f9cec23b0646e8a`.
 
-The GHCR publish of the same release is `ghcr.io/digithings-ai/digichat:sha-3e3c384c1ea3` (VERSION 2.6.1, COMMIT 3e3c384c1ea3).
+### GHCR: what is actually published (measured 2026-10-21)
+
+Measured with `docker manifest inspect` against `ghcr.io/digithings-ai/digichat`, with the impossible tag `v9.9.9` as the control: `v2.3.2` resolves (`sha256:df9d220210b4e…`) and `v9.9.9` answers `manifest unknown`.
+
+**Until 2026-10-21 no digichat image was published to GHCR for any `v2.4.x`, `v2.5.x` or `v2.6.x` tag** — every one of them answers `manifest unknown`, byte-identical to the control. Two reasons, both now understood: the `v2.5.x` builds failed because `apps/digichat/Dockerfile` did not carry the `packages/hero-banner` workspace package (DIG-4489, fixed by PR #5958), and the publish lane's boot probe demanded a `200` from `/api/health` on a standalone container that cannot reach the four ecosystem services, so the route answered `503` and the lane aborted. The probe now boots the image bare — no environment, no secret, the way the release runs it — reads the status code instead of demanding one, and tolerates a failure whose only failing checks are those four unreachable services, while still demanding the version the image was built as (`scripts/local-deploy/publish_image.sh` and `.github/workflows/publish-digichat-image.yml` now hold that same contract, and `tests/scripts/test_publish_digichat_image_workflow.py` pins it).
+
+The earlier line in this section — "The GHCR publish of the same release is `ghcr.io/digithings-ai/digichat:sha-3e3c384c1ea3` (VERSION 2.6.1, COMMIT 3e3c384c1ea3)" — is **wrong**: that name answers `manifest unknown` as well. `sha-3e3c384c1ea3` is the rehearsal name the lane built for the `digichat-v2.6.1` tag push, because a tag push carries no `inputs.tag` and the lane fell through to the rehearsal branch; the boot probe aborted that run before the push step, so the name was never pushed — and the release name `v2.6.1` was never even attempted. The lane now resolves a tag push to the release name (`vX.Y.Z` plus `:latest`).
+
+`v2.5.0` was released from tag `digichat-v2.5.0` = `a9bf1b9117be` and deployed to the Cloudflare OCC container at 2026-10-19T18:39Z; it was **superseded by 2.5.1** the same evening (the OCC lane's release, deployed 2026-10-19T21:02Z — `GET https://digithings.ai/api/health` read `version: 2.5.1` at 2026-10-19T22:04Z, container `shared-7a3239fc05f1`) and then by the 2.6.x line. The Cloudflare path was never blocked by the missing image: that worker builds its own container from the repo tree, which is why the OCC release is live while no published image existed. **The ACR rows above are not re-verified in this record**: `az` cannot authenticate to the digichat ACR registry from this host (AAD refresh error, then 401), so the ACR side of "published" is unmeasured here. No 2.4.0 image exists either: 2.4.0 was never tagged.
 
 ---
 

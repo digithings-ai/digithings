@@ -18,6 +18,14 @@ PLACEHOLDER_PATTERNS = [
     r'^(?:replace|change_?me|todo|fixme|placeholder|your|example|test|dummy)(?:[^A-Za-z0-9]|$)',
     r'^<.*>$',
     r'^$',
+    # The GitHub App token placeholder (DIG-4803): `ghs_<appid>_<jwt>`. A real
+    # token is base64url - no angle bracket can be in it - so a `ghs_` value
+    # that holds one is the documented placeholder and not a credential. The
+    # rule covers the **whole value** and only that shape, like the `<...>`
+    # rule above: a bracket anywhere else - in a trailing comment, or after the
+    # token - does not turn a real token into a placeholder, and the vendor
+    # prefix loop keeps its promise.
+    r'^ghs_<[^>]+>_<[^>]+>$',
 ]
 #: Name-side patterns. This is a substring test (`p in var.upper()`), so an entry
 #: claims every name containing it. Matching is only half the guard: a line is
@@ -97,6 +105,25 @@ CRED_VALUE_PATTERNS = [
     # generic patterns back.
     r'^sk-[A-Za-z0-9_+/-]{20,}',
     r'^ghp_', r'^gho_', r'^glpat-',
+    # GitHub App tokens. GitHub issues an installation token as `ghs_` plus an
+    # opaque body, and the digithings App plan (DIG-4803) writes the form down
+    # as `ghs_<appid>_<jwt>`: the numeric app id, an underscore, then the token
+    # body. Two rules, because the two shapes carry different bodies.
+    #
+    # Neither rule can be a bare `ghs_` prefix. A prefix-only rule would report
+    # `ghs_<appid>_<jwt>` - the exact spelling the docs and the example files
+    # use - as a credential, and the guard has to accept that placeholder: it
+    # is the documented form, not a leaked value. The angle bracket is what
+    # separates the placeholder from a real token, and neither rule below can
+    # match it.
+    #
+    # The token body is base64url, so the class holds `-` and `_`; a JWT body
+    # also carries the `.` between its segments, so the class holds that too.
+    # The plain installation token GitHub issues has no separator and no `.`,
+    # which is why it takes a rule of its own. Neither rule is end-anchored: a
+    # token followed by a `# comment` is still reported.
+    r'^ghs_[0-9]+_[A-Za-z0-9_\-\.]{20,}',
+    r'^ghs_[A-Za-z0-9]{20,}',
     # Stripe. `sk_live_` is 8 characters, and the rest of a real key is a
     # 24-character body, so a floor of 20 sits under the real length rather
     # than at a copied constant.

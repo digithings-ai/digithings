@@ -140,9 +140,35 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
     Check(
         name="digigraph",
         kind="http",
-        url="http://127.0.0.1:8000/healthz",
+        url="http://127.0.0.1:${DT_DIGIGRAPH_PORT:-8000}/healthz",
         profiles=_ALL,
-        source="digigraph/src/digigraph/server.py:321",
+        # The HOST-published port, and the only one a probe can reach. compose
+        # publishes digigraph as 127.0.0.1:8000 -> 8000 (docker-compose.yml),
+        # and the host dev server (scripts/run_local.sh) binds 18000 so it does
+        # not collide with the containers. A host where 8000 already belongs to
+        # another stack makes this probe read that other service and report a
+        # healthy digigraph as FAIL: measured, 8000 answered 204 (a woodpecker
+        # server) while the real digigraph on 18000 answered 200.
+        #
+        # DT_DIGIGRAPH_PORT is the knob for the port digigraph actually serves;
+        # the default follows the compose publish port. The ${...:-default}
+        # syntax is expanded by _expand_env() at resolve time, so an operator
+        # who exports the knob moves the probe with the service. It takes a
+        # port number: the gate reads the process environment, not the root
+        # .env, and a value that is not a port makes the URL unparseable
+        # rather than pointing it somewhere else.
+        #
+        # Only the PORT is templated, for the digichat reason: templating the
+        # host would let this gate point off the developer's machine, and
+        # test_builtin_urls_are_labelled_local_loopback requires a provably
+        # loopback default.
+        #
+        # Not to be confused with the contract key DIGIGRAPH_PORT ("the port
+        # the digigraph dev server binds to"), which nothing reads today.
+        source=(
+            "digigraph/src/digigraph/server.py:332 serves /healthz; "
+            "docker-compose.yml digigraph ports: 127.0.0.1:8000:8000"
+        ),
     ),
     Check(
         name="digisearch",

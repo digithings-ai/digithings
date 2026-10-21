@@ -14,6 +14,7 @@
     "DIGISEARCH_EMBEDDING_PROVIDER": "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
     "DIGISEARCH_INDEX": "digithings_docs",
     "DIGISEARCH_URL": "http://127.0.0.1:8002",
+    "DIGISEARCH_WORKERS_AI_INDEXES": "occ-tickets",
     "DIGITRACE_URL": "",
     "DIGIVAULT_ROOT": "/data/vault",
     "DIGIVAULT_URL": "http://127.0.0.1:8004",
