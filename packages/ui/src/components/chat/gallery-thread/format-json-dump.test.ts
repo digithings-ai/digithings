@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatJsonDump, formatToolDurationMs, humanizeToolName } from "./format-json-dump";
+import {
+  MAX_REPAIR_INPUT_CHARS,
+  formatJsonDump,
+  formatToolDurationMs,
+  humanizeToolName,
+  repairPartialJson,
+} from "./format-json-dump";
 
 describe("formatJsonDump", () => {
   it("pretty-prints compact JSON strings", () => {
@@ -27,6 +33,46 @@ describe("formatJsonDump", () => {
 
   it("leaves non-JSON strings alone", () => {
     expect(formatJsonDump("not json")).toBe("not json");
+  });
+});
+
+/**
+ * DIG-4818: CodeQL js/polynomial-redos alert 196 on the whitespace strip in
+ * repairPartialJson. A whitespace run inside the text made the old
+ * out.replace(/\s+$/, "") re-try the anchor at every position of the run, so
+ * the repair cost quadratic time and froze the render thread.
+ */
+describe("formatJsonDump on a long whitespace payload (DIG-4818)", () => {
+  it("repairs a 50000-space run inside the text in linear time", () => {
+    const payload = `{"a":${" ".repeat(50000)}tru}`;
+    const started = performance.now();
+    const out = formatJsonDump(payload);
+    const elapsed = performance.now() - started;
+    // The old regex needed ~875 ms for this payload on this machine.
+    expect(elapsed).toBeLessThan(500);
+    // Nothing is cut: the text does not parse, so it is shown raw.
+    expect(out).toBe(payload);
+  });
+
+  it("repairs a payload that is exactly at the cap", () => {
+    const head = `{"a":1,`;
+    const tail = `"b":`;
+    const payload = head + " ".repeat(MAX_REPAIR_INPUT_CHARS - head.length - tail.length) + tail;
+    expect(payload.length).toBe(MAX_REPAIR_INPUT_CHARS);
+    expect(formatJsonDump(payload)).toBe('{\n  "a": 1\n}');
+  });
+
+  it("does not repair past the cap and never cuts the text", () => {
+    const head = `{"a":1,`;
+    const tail = `"b":`;
+    const payload = head + " ".repeat(MAX_REPAIR_INPUT_CHARS) + tail;
+    expect(payload.length).toBeGreaterThan(MAX_REPAIR_INPUT_CHARS);
+    const started = performance.now();
+    const out = formatJsonDump(payload);
+    const elapsed = performance.now() - started;
+    expect(elapsed).toBeLessThan(500);
+    expect(out).toBe(payload);
+    expect(repairPartialJson(payload)).toBeUndefined();
   });
 });
 
