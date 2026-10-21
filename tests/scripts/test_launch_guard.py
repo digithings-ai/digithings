@@ -131,7 +131,7 @@ def _collect_in_child(case, hostile=False, extra=None):
     os.makedirs(bindir)
     shim = os.path.join(bindir, "gh")
     with open(shim, "w", encoding="utf-8") as fh:
-        fh.write("#!/bin/sh\ntouch '%s'\nexit 0\n" % gh_marker)
+        fh.write(f"#!/bin/sh\ntouch '{gh_marker}'\nexit 0\n")
     os.chmod(shim, 0o755)
     poison = os.path.join(tmp, "poison.bash")
     with open(poison, "w", encoding="utf-8") as fh:
@@ -159,9 +159,9 @@ def _collect_in_child(case, hostile=False, extra=None):
     env.update(extra or {})
     result = subprocess.run(
         ["/bin/bash", wrapper, sys.executable, child, _SCRIPTS, _RUNNER],
-        capture_output=True, text=True, env=env, timeout=120)
+        capture_output=True, text=True, env=env, timeout=120, check=False)
     if result.returncode != 0:
-        raise AssertionError("the collecting child failed: %s" % result.stderr)
+        raise AssertionError(f"the collecting child failed: {result.stderr}")
     report = json.loads(result.stdout)
     markers = {"gh": gh_marker, "poison": poison_marker}
     return report, markers
@@ -308,6 +308,43 @@ class DecisionTests(unittest.TestCase):
         self.assertIn("/opt/local-ci", reason)
 
 
+class RefusalWordingTests(unittest.TestCase):
+    """Every refusal names the trusted launcher, whichever path the check took.
+
+    The reason is read in a log by a human deciding whether the run may go on,
+    so it must not depend on where the run happened: a refusal in the CI
+    container and a refusal on a laptop name the trusted launcher the same way.
+    """
+
+    def _refusal_facts(self):
+        """One set of facts per way the guard can refuse a run."""
+        untrusted_label = _seat_facts(xpc_service_name="com.digithings.merge-queue")
+        wrong_parent = _launchd_facts(ppid=1234)
+        not_loaded = _launchd_facts(launchd_job=None)
+        other_file = _launchd_facts()
+        other_file["launchd_job"]["arguments"] = ["/usr/bin/python3", "/tmp/seat/local_ci.py"]
+        container_root = _container_facts(runner="/tmp/local_ci.py")
+        container_parent = _container_facts()
+        container_parent["ancestors"] = [
+            {"pid": 1, "argv": ["/bin/sh", "-c", "python3 local_ci.py --pr 368"]}]
+        no_credential = _container_facts(ci_token=False)
+        return [_seat_facts(), untrusted_label, wrong_parent, not_loaded, other_file,
+                container_root, container_parent, no_credential]
+
+    def test_every_refusal_names_the_trusted_launcher(self):
+        for facts in self._refusal_facts():
+            allowed, reason = _guard.decide(facts)
+            self.assertFalse(allowed, reason)
+            self.assertIn("trusted launcher", reason)
+
+    def test_the_refusal_the_container_gives_names_it_too(self):
+        """The container path is the one the CI lane walks, so it is checked here."""
+        facts = _container_facts(runner="/tmp/local_ci.py")
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("trusted launcher", reason)
+
+
 class LaunchctlParsingTests(unittest.TestCase):
     """The parser against the shape launchctl actually prints."""
 
@@ -428,7 +465,7 @@ class CliTests(unittest.TestCase):
             env = {"PATH": "/usr/bin:/bin", "HOME": tmp}
             result = subprocess.run(
                 [sys.executable, _GUARD_CLI, "--runner", _RUNNER, "--facts-json", facts_path],
-                capture_output=True, text=True, env=env, timeout=60)
+                capture_output=True, text=True, env=env, timeout=60, check=False)
             self.assertEqual(result.returncode, _guard.EX_CONFIG)
             report = json.loads(result.stdout)
             self.assertFalse(report["allowed"])
@@ -446,14 +483,14 @@ class CliTests(unittest.TestCase):
             env = {"PATH": "/usr/bin:/bin", "HOME": tmp}
             result = subprocess.run(
                 [sys.executable, _GUARD_CLI, "--runner", _RUNNER],
-                capture_output=True, text=True, env=env, timeout=60)
+                capture_output=True, text=True, env=env, timeout=60, check=False)
             self.assertEqual(result.returncode, expected, result.stderr)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_the_cli_needs_a_runner(self):
         result = subprocess.run([sys.executable, _GUARD_CLI], capture_output=True, text=True,
-                                timeout=60)
+                                timeout=60, check=False)
         self.assertEqual(result.returncode, 2)
 
 

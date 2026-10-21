@@ -260,8 +260,8 @@ def _decide_container(facts):
         return False, ("inside a container, but the runner was not started by the "
                        "worker entrypoint")
     if not facts.get("ci_token"):
-        return False, ("the CI container started this run but carries no CI "
-                       "credential, so it cannot be the trusted pipeline")
+        return False, ("the trusted launcher (the CI container) started this run but "
+                       "carries no CI credential, so it cannot be the trusted pipeline")
     return True, "the CI container worker entrypoint started this run"
 
 
@@ -307,17 +307,29 @@ def _decide_launchd(facts, label):
 
 
 def decide(facts):
-    """Deny by default. Returns (allowed, reason)."""
+    """Deny by default. Returns (allowed, reason).
+
+    Every refusal names the trusted launcher. A run that the launchd daemon or
+    the CI container did not start is refused, and the reason says so in the
+    same words whichever path the check took: the reason is read in a log by a
+    human deciding whether the run may go on, and it must not depend on where
+    the run happened.
+    """
     if facts.get("dockerenv"):
-        return _decide_container(facts)
-    label = facts.get("xpc_service_name")
-    if label:
-        if label not in TRUSTED_LAUNCHD_LABELS:
-            return False, (f"XPC_SERVICE_NAME is {label!r}, which is not a trusted "
-                           "runner job")
-        return _decide_launchd(facts, label)
-    return False, ("the runner was not started by a trusted launcher: no launchd job "
-                   "and no CI container")
+        allowed, reason = _decide_container(facts)
+    else:
+        label = facts.get("xpc_service_name")
+        if label and label in TRUSTED_LAUNCHD_LABELS:
+            allowed, reason = _decide_launchd(facts, label)
+        elif label:
+            allowed, reason = False, (f"XPC_SERVICE_NAME is {label!r}, which is not a "
+                                      "trusted runner job")
+        else:
+            allowed, reason = False, ("the runner was not started by a trusted "
+                                      "launcher: no launchd job and no CI container")
+    if not allowed and "trusted launcher" not in reason:
+        reason = f"{reason}: no trusted launcher started this run"
+    return allowed, reason
 
 
 # ------------------------------------------------------------------- logging --
