@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { HashScrollManager, MotionProvider, ThemeProvider, themeInitScript } from "@digithings/ui";
+import { HashScrollManager, MotionProvider, ThemeProvider } from "@digithings/ui";
 import { SiteChrome } from "@/components/site-chrome";
 import { HERO_PLAYED_SCRIPT } from "@/lib/hero-play";
 import { fontVariables } from "./fonts";
@@ -59,9 +59,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning className={`${fontVariables} accent-digiquant no-js`}>
       <head>
-        {/* Default paint is dark. themeInitScript applies a stored mode and palette
-            before hydration; the dark --bg rule keeps an unset palette black. */}
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* One solid black canvas: the page is pinned to the dark theme, so the
+            system-light flip themeInitScript does is deliberately not used. */}
+        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.setAttribute('data-theme','dark')" }} />
         {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals,
             the strategy deck); removed pre-paint when scripts run. */}

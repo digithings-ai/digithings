@@ -20,6 +20,7 @@ export function SiteChrome({ children }: { children: ReactNode }) {
         links={DQ_NAV_PRIMARY}
         homeLabel="digiquant home"
         skipTo="#main"
+        showThemeToggle={false}
         scrollRevealDelta={120}
         hoverRevealZone={24}
       />

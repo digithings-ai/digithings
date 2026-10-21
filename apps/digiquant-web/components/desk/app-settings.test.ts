@@ -62,17 +62,17 @@ describe("app settings", () => {
     expect(chatRequestBody("hello", { ...DEFAULT_SETTINGS, chatModel: "nope" }).model).toBe(DEFAULT_SETTINGS.chatModel);
   });
 
-  it("sets density and leaves the document theme alone", () => {
-    const attrs = new Map<string, string>([["data-theme", "light"]]);
+  it("puts the pinned dark document back when the desk lets go", () => {
+    const attrs = new Map<string, string>();
     const root = {
       setAttribute: (name: string, value: string) => void attrs.set(name, value),
       removeAttribute: (name: string) => void attrs.delete(name),
     };
     applyDocumentPrefs({ ...DEFAULT_SETTINGS, density: "compact" }, root);
-    expect(attrs.get("data-theme")).toBe("light");
+    expect(attrs.get("data-theme")).toBe("dark");
     expect(attrs.get("data-density")).toBe("compact");
     clearDocumentPrefs(root);
-    expect(attrs.get("data-theme")).toBe("light");
+    expect(attrs.get("data-theme")).toBe("dark");
     expect(attrs.has("data-density")).toBe(false);
   });
 
