@@ -474,13 +474,13 @@ async function handleChat(
     if (!quotaSatisfied) {
       try {
         const ip = clientIpForEmbedLimit(req);
-        // "unknown" is what the embed limiter returns when no visitor address
-        // can be derived. It is not an identity. Treating it as one would
-        // collapse every such visitor into a single shared quota bucket.
-        // Skip the quota in that case and fail open. A shared ingress with
-        // DIGICHAT_TRUSTED_PROXIES unset still resolves through the develop
-        // visitor header, so this skip is not the steady state there.
-        // (embed-turn-quota.ts).
+        // "unknown" is develop's key when no visitor header parses. The trial
+        // quota skips it and admits the visitor uncounted, so header-less
+        // traffic does not share one trial bucket. The embed limiter still
+        // records embed_ip:unknown, which is develop's collapse for that
+        // case. With DIGICHAT_TRUSTED_PROXIES unset, cf-connecting-ip then
+        // the leftmost X-Forwarded-For hop are the keys and the stamp is
+        // ignored (embed-turn-quota.ts).
         if (ip !== "unknown") {
           if (quotaServiceUnavailable) {
             // Degraded path: the tenant's quota service could not answer, so the

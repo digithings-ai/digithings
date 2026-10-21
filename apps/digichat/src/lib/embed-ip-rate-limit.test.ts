@@ -103,63 +103,78 @@ describe("clientIpForRateLimit", () => {
     expect(store.read("tpm:user:public:198.51.100.2", 1_000).events).toHaveLength(0);
   });
 
-  it("ignores forwarded client headers from an untrusted socket peer", () => {
+  it("does not read a caller-supplied peer header when the allowlist is set and the request is unstamped", () => {
     process.env.DIGICHAT_TRUSTED_PROXIES = "10.0.0.8/29";
-    const req = reqWithHeaders({
+    const spend = (peer: string) =>
+      clientIpForRateLimit(
+        reqWithHeaders({
+          "cf-connecting-ip": "198.51.100.1",
+          "x-forwarded-for": "198.51.100.2, 10.0.0.1",
+          "x-digichat-peer-ip": peer,
+        }),
+      );
+    expect(spend("203.0.113.7")).toBe("unknown");
+    expect(spend("203.0.113.8")).toBe("unknown");
+    expect(clientIpForEmbedLimit(reqWithHeaders({ "x-digichat-peer-ip": "203.0.113.9" }))).toBe(
+      "unknown",
+    );
+  });
+
+  it("ignores forwarded client headers from a stamped untrusted socket peer", () => {
+    process.env.DIGICHAT_TRUSTED_PROXIES = "10.0.0.8/29";
+    process.env.DIGICHAT_PEER_STAMP = STAMP;
+    const req = stamped("203.0.113.7", {
       "cf-connecting-ip": "198.51.100.1",
       "x-forwarded-for": "198.51.100.2, 10.0.0.1",
-      "x-digichat-peer-ip": "203.0.113.7",
     });
 
     expect(clientIpForRateLimit(req)).toBe("203.0.113.7");
   });
 
-  it("honors Cloudflare's client header from a trusted socket peer", () => {
+  it("honors Cloudflare's client header from a stamped trusted socket peer", () => {
     process.env.DIGICHAT_TRUSTED_PROXIES = "10.0.0.8/29";
-    const req = reqWithHeaders({
-      "cf-connecting-ip": "198.51.100.1",
-      "x-digichat-peer-ip": "10.0.0.9",
-    });
+    process.env.DIGICHAT_PEER_STAMP = STAMP;
+    const req = stamped("10.0.0.9", { "cf-connecting-ip": "198.51.100.1" });
 
     expect(clientIpForRateLimit(req)).toBe("198.51.100.1");
   });
 
   it("walks trusted X-Forwarded-For hops from the right", () => {
     process.env.DIGICHAT_TRUSTED_PROXIES = "10.0.0.1, 10.0.0.2";
-    const req = reqWithHeaders({
-      "x-forwarded-for": "198.51.100.9, 10.0.0.1",
-      "x-digichat-peer-ip": "10.0.0.2",
-    });
+    process.env.DIGICHAT_PEER_STAMP = STAMP;
+    const req = stamped("10.0.0.2", { "x-forwarded-for": "198.51.100.9, 10.0.0.1" });
 
     expect(clientIpForRateLimit(req)).toBe("198.51.100.9");
   });
 
   it("falls back to the direct peer at a malformed forwarded boundary", () => {
     process.env.DIGICHAT_TRUSTED_PROXIES = "10.0.0.1";
-    const req = reqWithHeaders({
-      "x-forwarded-for": "198.51.100.9, not-an-ip",
-      "x-digichat-peer-ip": "10.0.0.1",
-    });
+    process.env.DIGICHAT_PEER_STAMP = STAMP;
+    const req = stamped("10.0.0.1", { "x-forwarded-for": "198.51.100.9, not-an-ip" });
 
     expect(clientIpForRateLimit(req)).toBe("10.0.0.1");
   });
 
   it("fails safe when trusted-proxy configuration has no valid networks", () => {
     process.env.DIGICHAT_TRUSTED_PROXIES = "not-an-ip";
-    const req = reqWithHeaders({
-      "cf-connecting-ip": "198.51.100.1",
-      "x-digichat-peer-ip": "203.0.113.7",
-    });
+    process.env.DIGICHAT_PEER_STAMP = STAMP;
+    const req = stamped("203.0.113.7", { "cf-connecting-ip": "198.51.100.1" });
 
     expect(clientIpForRateLimit(req)).toBe("203.0.113.7");
+    expect(
+      clientIpForRateLimit(
+        reqWithHeaders({
+          "cf-connecting-ip": "198.51.100.1",
+          "x-digichat-peer-ip": "203.0.113.8",
+        }),
+      ),
+    ).toBe("unknown");
   });
 
   it("rejects a trusted-proxy CIDR with an empty prefix", () => {
     process.env.DIGICHAT_TRUSTED_PROXIES = "10.0.0.1/";
-    const req = reqWithHeaders({
-      "cf-connecting-ip": "198.51.100.1",
-      "x-digichat-peer-ip": "203.0.113.7",
-    });
+    process.env.DIGICHAT_PEER_STAMP = STAMP;
+    const req = stamped("203.0.113.7", { "cf-connecting-ip": "198.51.100.1" });
 
     expect(clientIpForRateLimit(req)).toBe("203.0.113.7");
   });
@@ -245,11 +260,51 @@ describe("checkEmbedIpRateLimit", () => {
     expect(checkEmbedIpRateLimit(reqB).allowed).toBe(true);
   });
 
-  it("counts stamped direct sockets separately", () => {
+  it("develop parity: a stamped peer with no visitor header is unknown, and the embed limiter collapses onto embed_ip:unknown (trial quota skips unknown)", () => {
+    // develop's clientIpForRateLimit ignores the socket when the allowlist is
+    // unset and returns "unknown" with no cf-connecting-ip and no
+    // X-Forwarded-For. checkEmbedIpRateLimit still keys embed_ip:unknown, so
+    // header-less visitors share one embed bucket. The trial quota in route.ts
+    // skips "unknown" and does not count them together.
     process.env.DIGICHAT_PEER_STAMP = STAMP;
-    const reqA = stamped("203.0.113.21");
-    const reqB = stamped("203.0.113.22");
-    expect(clientIpForRateLimit(reqA)).toBe("203.0.113.21");
+    const reqA = stamped("10.0.0.9");
+    const reqB = stamped("10.0.0.10");
+    expect(clientIpForRateLimit(reqA)).toBe("10.0.0.9");
+    expect(clientIpForRateLimit(reqB)).toBe("10.0.0.10");
+    expect(clientIpForEmbedLimit(reqA)).toBe("unknown");
+    expect(clientIpForEmbedLimit(reqB)).toBe("unknown");
+    for (let i = 0; i < EMBED_IP_MAX; i++) {
+      expect(checkEmbedIpRateLimit(reqA).allowed).toBe(true);
+    }
+    expect(checkEmbedIpRateLimit(reqA).allowed).toBe(false);
+    expect(checkEmbedIpRateLimit(reqB).allowed).toBe(false);
+  });
+
+  it("develop parity: a stamped peer plus cf-connecting-ip keys the embed limiter and trial quota on that visitor", () => {
+    process.env.DIGICHAT_PEER_STAMP = STAMP;
+    const ingress = "10.0.0.9";
+    const ipA = "198.51.100.81";
+    const ipB = "198.51.100.82";
+    const reqA = stamped(ingress, { "cf-connecting-ip": ipA, "x-forwarded-for": "203.0.113.9" });
+    const reqB = stamped(ingress, { "cf-connecting-ip": ipB });
+    expect(clientIpForRateLimit(reqA)).toBe("unknown");
+    expect(clientIpForEmbedLimit(reqA)).toBe(ipA);
+    expect(clientIpForEmbedLimit(reqB)).toBe(ipB);
+    for (let i = 0; i < EMBED_IP_MAX; i++) {
+      expect(checkEmbedIpRateLimit(reqA).allowed).toBe(true);
+    }
+    expect(checkEmbedIpRateLimit(reqA).allowed).toBe(false);
+    expect(checkEmbedIpRateLimit(reqB).allowed).toBe(true);
+  });
+
+  it("develop parity: a stamped peer plus X-Forwarded-For only keys the embed limiter and trial quota on the leftmost hop", () => {
+    process.env.DIGICHAT_PEER_STAMP = STAMP;
+    const ingress = "10.0.0.9";
+    const reqA = stamped(ingress, { "x-forwarded-for": "203.0.113.81, 10.0.0.9" });
+    const reqB = stamped(ingress, { "x-forwarded-for": "203.0.113.82, 203.0.113.1" });
+    expect(clientIpForRateLimit(reqA)).toBe(ingress);
+    expect(clientIpForEmbedLimit(reqA)).toBe("203.0.113.81");
+    expect(clientIpForEmbedLimit(reqB)).toBe("203.0.113.82");
     for (let i = 0; i < EMBED_IP_MAX; i++) {
       expect(checkEmbedIpRateLimit(reqA).allowed).toBe(true);
     }

@@ -35,7 +35,7 @@ const hopByHopHeaders = [
  * The mjs entrypoint cannot import that module.
  */
 export const trustedProxiesUnsetWarning =
-  "DIGICHAT_TRUSTED_PROXIES is unset. The entrypoint stamps the socket peer. Per-client limits use that socket when it is the client. A shared ingress keeps the embed limit and trial quota on the visitor header from develop. Set DIGICHAT_TRUSTED_PROXIES to the container ingress or overlay peer the entrypoint logs, never Cloudflare's edge ranges. Spoofable headers are not guardrail or premium keys.";
+  "DIGICHAT_TRUSTED_PROXIES is unset. The entrypoint stamps the socket peer. Guardrail and premium keys use that socket when it is the client, and unknown when it is a shared ingress. The embed limiter and trial quota follow develop: cf-connecting-ip, then the leftmost X-Forwarded-For hop, otherwise unknown. A header-less request is unknown: the embed limiter collapses onto embed_ip:unknown, and the trial quota skips it. Set DIGICHAT_TRUSTED_PROXIES to the container ingress or overlay peer the entrypoint logs, never Cloudflare's edge ranges. Spoofable headers are not guardrail or premium keys.";
 
 /**
  * Copy request headers while reserving the peer headers for this process.
