@@ -14,8 +14,9 @@ const SENSITIVE_KEY_SUFFIX = /(?:token|secret|password|passwd|api[-_]?key|privat
 
 const TOKEN_SHAPES: readonly RegExp[] = [
   // A whole Authorization header value, whatever the scheme (Bearer, Basic,
-  // Zammad's `Token token=…`), up to the end of the quoted value or line.
-  /\b(?:proxy-)?authorization\b\s*["']?\s*[:=]\s*["']?[^"'\n\r,}]+/gi,
+  // helpdesk-style `Token token=…`), up to the end of the quoted value or line.
+  // Separators use bounded runs so long inputs stay linear (CodeQL js/polynomial-redos).
+  /\b(?:proxy-)?authorization\b["']?[ \t]{0,8}[:=][ \t]{0,8}["']?[^"'\n\r,}]{1,2048}/gi,
   /\bToken\s+token=[^\s"',}&]+/gi,
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b/g,
   /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
@@ -27,7 +28,7 @@ const TOKEN_SHAPES: readonly RegExp[] = [
   /\bsk-(?:ant-|or-|proj-)?[A-Za-z0-9_\-]{8,}\b/g,
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
   /\bBearer\s+[A-Za-z0-9\-._~+/]{8,}={0,2}/gi,
-  /(?:authorization|x-api-key|x-embed-token|x-embed-chat-token|x-invite-key|api[_-]?key|embed[_-]?(?:key|token)|invite[_-]?(?:key|token)|access[_-]?token|refresh[_-]?token|auth[_-]?secret|nextauth[_-]?secret|client[_-]?secret|private[_-]?key|password|passwd|(?<![A-Za-z0-9_?&-])token)\s*["']?\s*[:=]\s*["']?[^"'\s,}&]{6,}/gi,
+  /(?:authorization|x-api-key|x-embed-token|x-embed-chat-token|x-invite-key|api[_-]?key|embed[_-]?(?:key|token)|invite[_-]?(?:key|token)|access[_-]?token|refresh[_-]?token|auth[_-]?secret|nextauth[_-]?secret|client[_-]?secret|private[_-]?key|password|passwd|(?<![A-Za-z0-9_?&-])token)["']?[ \t]{0,8}[:=][ \t]{0,8}["']?[^"'\s,}&]{6,}/gi,
 ];
 
 const QUERY_SECRET =

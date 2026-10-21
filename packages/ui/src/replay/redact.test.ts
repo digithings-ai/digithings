@@ -39,19 +39,19 @@ describe("redactString", () => {
 });
 
 describe("redactString: header schemes and provider shapes", () => {
-  it("replaces Authorization values for every scheme, including Zammad tokens", () => {
+  it("replaces Authorization values for every scheme, including helpdesk Token tokens", () => {
     const raw = [
-      "Authorization: Token token=zammad-plain-9f3c2a",
+      "Authorization: Token token=helpdesk-plain-9f3c2a",
       'curl -H "Authorization: Basic dXNlcjpwYXNzd29yZA=="',
-      '{"headers":{"Authorization":"Token token=zammad-json-9f3c2a"}}',
-      "see Token token=zammad-prose-9f3c2a in the log",
+      '{"headers":{"Authorization":"Token token=helpdesk-json-9f3c2a"}}',
+      "see Token token=helpdesk-prose-9f3c2a in the log",
     ].join("\n");
     const out = redactString(raw);
     for (const secret of [
-      "zammad-plain-9f3c2a",
+      "helpdesk-plain-9f3c2a",
       "dXNlcjpwYXNzd29yZA==",
-      "zammad-json-9f3c2a",
-      "zammad-prose-9f3c2a",
+      "helpdesk-json-9f3c2a",
+      "helpdesk-prose-9f3c2a",
     ]) {
       expect(out).not.toContain(secret);
     }

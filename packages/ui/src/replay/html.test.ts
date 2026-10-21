@@ -13,8 +13,8 @@ const JWT =
 
 function boot(html: string): Window {
   const win = new Window({ url: "https://replay.local/northwind.html" });
-  const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1] ?? "";
-  win.document.write(html.replace(/<script>[\s\S]*<\/script>/, ""));
+  const script = html.match(/<script>([\s\S]*)<\/script\s*>/i)?.[1] ?? "";
+  win.document.write(html.replace(/<script>[\s\S]*<\/script\s*>/i, ""));
   win.document.close();
   win.eval(script);
   return win;
