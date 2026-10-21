@@ -557,24 +557,33 @@ async function handleChat(
   // keeps the first turn on the same model the visitor sees (v4.1-flash for
   // OCC) instead of the digigraph operator default. Only a slug the tenant
   // actually offers is trusted; anything else falls back.
-  const curatedDefault = dep?.models?.default?.trim();
+  // ONE artefact decides the session lock and the model allowlist (DIG-4589).
+  // On the embed surface that artefact is the request's tenant: in production
+  // it is the projection of the MERGED host deployment, so it carries the
+  // deployment's lock and model list together with the registry tenant's own.
+  // The lock is an embed control (DIG-1210), so it never reaches the
+  // authenticated session surface, where the deployment config alone decides
+  // the allowlist.
+  const policyModels = embedConfig?.models ?? dep?.models;
+  const policyAvailable = policyModels?.available ?? [];
+  const policyLocked = embedConfig?.lockSessionControls === true;
+  const curatedDefault = policyModels?.default?.trim();
   const tenantDefaultModel =
     curatedDefault &&
-    ((dep?.models?.available?.length ?? 0) === 0 ||
-      dep!.models!.available!.includes(curatedDefault))
+    (policyAvailable.length === 0 || policyAvailable.includes(curatedDefault))
       ? curatedDefault
       : undefined;
   let modelId = tenantDefaultModel || digigraphModelName();
   // A tenant with lockSessionControls pins the house default model (DIG-1210):
   // a visitor's /model pick or session_set_model result is never forwarded.
-  // The lock and the allowlist below both come from the merged deployment
-  // (DIG-4589), so a lock set in the deployment config is honoured too and
-  // the two sources can never disagree.
+  // The lock and the allowlist below come from the same artefact, so the two
+  // sources can never disagree: the merge keeps a lock set in the deployment
+  // config AND a lock set in the tenant registry (a lock is a restriction,
+  // so a merge never drops one), and it folds the registry's model list into
+  // the deployment the tenant is projected from.
   // Exception: a locked tenant that curates its own `models.available` list
   // lets the visitor pick from exactly that list (allowlist enforced below).
-  const lockedWithoutModelList =
-    dep?.gate.lockSessionControls === true &&
-    (dep?.models?.available?.length ?? 0) === 0;
+  const lockedWithoutModelList = policyLocked && policyAvailable.length === 0;
   const requestedModel = lockedWithoutModelList
     ? undefined
     : req.headers.get("x-digi-model")?.trim() || undefined;
@@ -586,8 +595,8 @@ async function handleChat(
     const { resolveHouseModelSelection, routerModelsHeader } = await import("@/lib/deploy-config");
     if (byokKey) {
       if (requestedModel) modelId = requestedModel;
-    } else if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
-      const allowed = resolveHouseModelSelection(dep.models, requestedModel);
+    } else if (policyModels && policyAvailable.length > 0) {
+      const allowed = resolveHouseModelSelection(policyModels, requestedModel);
       if (requestedModel && allowed === undefined) {
         runLock.release();
         return new Response(
@@ -601,7 +610,7 @@ async function handleChat(
       if (allowed) modelId = allowed;
       if (requestedModel && allowed) {
         houseSessionModel = allowed;
-        routerModels = routerModelsHeader(dep.models, allowed);
+        routerModels = routerModelsHeader(policyModels, allowed);
       }
     } else if (configFailed && requestedModel) {
       // The deployment config could not be read, so we cannot prove the model

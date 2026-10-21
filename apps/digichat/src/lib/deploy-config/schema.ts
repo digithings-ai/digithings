@@ -320,6 +320,19 @@ export const ModelsSchema = z
   })
   .strict();
 
+/**
+ * The model offer both the deployment config and the embed tenant registry
+ * describe (DIG-4589). The deployment config always carries `available`
+ * (`ModelsSchema` defaults it to `[]`); the registry leaves it optional, so
+ * the shared shape keeps it optional and the allowlist treats a missing list
+ * as "no restriction" — the same as an empty one.
+ */
+export type ModelOffer = {
+  default?: string;
+  available?: string[];
+  allowPicker?: boolean;
+};
+
 export const CliSchema = z
   .object({
     /**
@@ -845,9 +858,13 @@ export function disclosureIsLocked(mode: DisclosureMode): boolean {
  * Empty `available` → no restriction (requested or `default`).
  * Non-empty list → requested must be listed; missing request uses `default`
  * if listed, else first available entry.
+ *
+ * The offer may come from the deployment config or from the embed tenant
+ * registry (DIG-4589) — one artefact decides it, so the caller passes the
+ * merged offer and this function stays the only place that reads it.
  */
 export function allowlistModelId(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
   requested: string | null | undefined,
 ): string | undefined {
   const id = requested?.trim() || undefined;

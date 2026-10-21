@@ -2591,47 +2591,24 @@ vi.mocked(createFoundryStreamResponse).mockClear();
   describe("DIG-4589: one source decides the session lock and the model allowlist", () => {
     // The embed tenant registry and the deployment config are two sources
     // that can disagree. The loader merges them once, so the route reads the
-    // lock and the allowlist from the same artefact.
+    // lock and the allowlist from ONE artefact: the request's tenant, which
+    // in production is the projection of the merged host deployment. These
+    // tests drive the real embed tenant resolution, so the tenant the route
+    // sees has the production shape.
     const OCC_HOST = "occ.digithings.ai";
+    const OCC_TOKEN = "occ-secret";
 
-    const occCtx = {
-      tenantSlug: "occ",
-      ownerUserSub: "embed:anonymous",
-      embedConfig: {
-        slug: "occ",
-        gateMode: "ungated",
-        theme: "dark",
-        attribution: false,
-        token: "occ-secret",
-        backend: { type: "digigraph" },
-        activityDetail: "full",
-      },
-    };
-
-    function occReq(headers: Record<string, string> = {}): Request {
-      return new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-embed-host": `https://${OCC_HOST}`,
-          "x-embed-token": "occ-secret",
-          ...headers,
-        },
-        body: JSON.stringify({
-          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
-        }),
-      });
-    }
-
-    function occYaml(gate: string[] = []): string {
+    function occYaml(opts: { host?: string[]; deployment?: string[] } = {}): string {
       return [
         "version: 1",
+        ...(opts.deployment ? ["deployment:", ...opts.deployment] : []),
         "hosts:",
         `  ${OCC_HOST}:`,
         "    slug: occ",
+        `    token: ${OCC_TOKEN}`,
         "    backend:",
         "      type: digigraph",
-        ...gate,
+        ...(opts.host ?? []),
         "",
       ].join("\n");
     }
@@ -2647,12 +2624,62 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       );
     }
 
+    function occReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": `https://${OCC_HOST}`,
+          "x-embed-token": OCC_TOKEN,
+          ...headers,
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    }
+
+    // A referer-resolved tenant: the browser sends no X-Embed-Host, so the
+    // host comes from the Referer. The route must decide from the tenant it
+    // resolved, never from the header-only deployment lookup.
+    function occRefererReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          referer: `https://${OCC_HOST}/embed`,
+          "x-embed-token": OCC_TOKEN,
+          ...headers,
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    }
+
+    /** Captures the model the route forwards to digigraph. */
+    function captureForwardedModel(): string[] {
+      const forwarded: string[] = [];
+      vi.mocked(createDigiGraphClient).mockImplementation(
+        (() =>
+          ((modelId: string) => {
+            forwarded.push(modelId);
+            return {};
+          }) as never) as never,
+      );
+      return forwarded;
+    }
+
     beforeEach(() => {
-      vi.mocked(resolveChatTenantContext).mockResolvedValue(occCtx as never);
+      // The embed surface: auth refuses, the route resolves the embed tenant.
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
     });
 
     afterEach(() => {
       resetDigichatConfigForTests();
+      vi.mocked(createDigiGraphClient).mockImplementation(
+        (() => (() => ({})) as never) as never,
+      );
     });
 
     it("enforces the tenant model offer when the deployment config has no list", async () => {
@@ -2661,7 +2688,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       // ran and any x-digi-model was forwarded unchecked.
       installConfig(occYaml(), {
         slug: "occ",
-        token: "occ-secret",
+        token: OCC_TOKEN,
         gateMode: "ungated",
         backend: { type: "digigraph" },
         models: { default: "only-this-model", available: ["only-this-model"] },
@@ -2677,37 +2704,107 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     });
 
     it("honours a session lock set in the deployment config", async () => {
-      // The lock is set in the deployment config only. The tenant registry
-      // does not set it, so before the fix nothing was locked and the
-      // visitor's model pick was forwarded.
+      // The lock is set in the deployment config only. The merged tenant
+      // carries it, so the visitor's model pick is never forwarded.
       installConfig(
-        occYaml(["    gate:", "      mode: ungated", "      lockSessionControls: true"]),
+        occYaml({
+          host: ["    gate:", "      mode: ungated", "      lockSessionControls: true"],
+        }),
         {
           slug: "occ",
-          token: "occ-secret",
+          token: OCC_TOKEN,
           gateMode: "ungated",
           backend: { type: "digigraph" },
         },
       );
 
-      const forwarded: string[] = [];
-      vi.mocked(createDigiGraphClient).mockImplementation(
-        (() =>
-          ((modelId: string) => {
-            forwarded.push(modelId);
-            return {};
-          }) as never) as never,
+      const forwarded = captureForwardedModel();
+      const res = await POST(occReq({ "x-digi-model": "some-model" }));
+      expect(res.status).toBe(200);
+      // The house default, never the visitor's pick.
+      expect(forwarded).toEqual(["digigraph"]);
+    });
+
+    it("never drops a session lock set in the tenant registry", async () => {
+      // The mirror image: the lock is set in the tenant registry while the
+      // deployment config has a host for the same host without a lock. The
+      // merge keeps the stricter of the two, so the pick is not forwarded.
+      installConfig(occYaml(), {
+        slug: "occ",
+        token: OCC_TOKEN,
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        lockSessionControls: true,
+      });
+
+      const forwarded = captureForwardedModel();
+      const res = await POST(occReq({ "x-digi-model": "some-model" }));
+      expect(res.status).toBe(200);
+      expect(forwarded).toEqual(["digigraph"]);
+    });
+
+    it("keeps the tenant's own lock when the default deployment locks another tenant", async () => {
+      // The config has a default `deployment:` block (locked) and an OCC host
+      // (not locked). The tenant is resolved from the Referer, so the
+      // header-only deployment lookup falls back to the default deployment.
+      // The tenant's own lock decides: OCC is not locked.
+      installConfig(
+        occYaml({
+          deployment: [
+            "  slug: default",
+            "  backend:",
+            "    type: digigraph",
+            "  gate:",
+            "    mode: ungated",
+            "    lockSessionControls: true",
+          ],
+        }),
+        {
+          slug: "occ",
+          token: OCC_TOKEN,
+          gateMode: "ungated",
+          backend: { type: "digigraph" },
+        },
       );
-      try {
-        const res = await POST(occReq({ "x-digi-model": "some-model" }));
-        expect(res.status).toBe(200);
-        // The house default, never the visitor's pick.
-        expect(forwarded).toEqual(["digigraph"]);
-      } finally {
-        vi.mocked(createDigiGraphClient).mockImplementation(
-          (() => (() => ({})) as never) as never,
-        );
-      }
+
+      const forwarded = captureForwardedModel();
+      const res = await POST(occRefererReq({ "x-digi-model": "some-model" }));
+      expect(res.status).toBe(200);
+      expect(forwarded).toEqual(["some-model"]);
+    });
+
+    it("merges a registry tenant into an origin-form deployment host key", async () => {
+      // The deployment config keys the host as an origin, the registry keys it
+      // as a bare host. The lookup normalises both, so the merge has to as
+      // well — otherwise the host ends up with two entries and the
+      // registry-only duplicate wins, dropping the deployment's own gate.
+      installConfig(
+        [
+          "version: 1",
+          "hosts:",
+          `  "https://${OCC_HOST}":`,
+          "    slug: occ",
+          `    token: ${OCC_TOKEN}`,
+          "    backend:",
+          "      type: digigraph",
+          "    gate:",
+          "      mode: ungated",
+          "      lockSessionControls: true",
+          "",
+        ].join("\n"),
+        {
+          slug: "occ",
+          token: OCC_TOKEN,
+          gateMode: "ungated",
+          backend: { type: "digigraph" },
+        },
+      );
+
+      const forwarded = captureForwardedModel();
+      const res = await POST(occReq({ "x-digi-model": "some-model" }));
+      expect(res.status).toBe(200);
+      // The deployment's lock survived the merge and still pins the model.
+      expect(forwarded).toEqual(["digigraph"]);
     });
   });
 

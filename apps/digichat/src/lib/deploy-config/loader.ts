@@ -357,9 +357,7 @@ function unresolveCatalog(dep: DigichatDeployment): DigichatDeployment {
  *   models block is spread on top, so the picker, the catalog and the
  *   premium meter still travel to a host that also has a deployment entry.
  *
- * The deployment's own `models` fields are carried over, so a field added to
- * `ModelsSchema` later is not dropped by the merge.
- *
+
  * `gate.requiredPlanTier` is NOT merged here: #3662 keeps its own rule in
  * `mergeEmbedTenantsOverlay` (the registry fills it in only when the
  * deployment omitted it).
@@ -424,21 +422,40 @@ function mergeEmbedTenantsOverlay(
       : {}),
   };
 
+  // Index the config hosts by NORMALISED host. `matchHostDeployment` looks a
+  // host up the same way, so a config key written as an origin
+  // (`https://occ.digithings.ai`) or with a port has to merge with the
+  // registry key for the same host. Without this index one host ended up with
+  // two entries and the lookup returned the registry-only duplicate, so the
+  // deployment's own gate and model list were silently dropped (DIG-4589).
+  const configKeyByHost = new Map<string, string>();
+  for (const key of Object.keys(hosts)) {
+    const normalized = normalizeConfigHost(key);
+    if (normalized && !configKeyByHost.has(normalized)) {
+      configKeyByHost.set(normalized, key);
+    }
+  }
+
   // Registry is host → config. New hosts hydrate fully. Existing YAML hosts
   // keep chrome, but the session lock and the model allowlist are merged so
   // one artefact decides both (DIG-4589). `requiredPlanTier` is still copied
   // when YAML omitted it so a baked example file cannot drop the live
   // DIGICHAT_EMBED_TENANTS Desk+ gate (#3662).
   for (const [host, cfg] of registry) {
-    if (!hosts[host]) {
+    const normalized = normalizeConfigHost(host) ?? host;
+    // An exact key match wins: `matchHostDeployment` returns the exact
+    // normalised key before it scans the entries.
+    const existingKey = hosts[host] ? host : configKeyByHost.get(normalized);
+    if (!existingKey) {
       hosts[host] = embedTenantToDeployment(cfg);
+      configKeyByHost.set(normalized, host);
       continue;
     }
-    hosts[host] = mergeEmbedTenantIntoDeployment(hosts[host], cfg);
-    if (cfg.requiredPlanTier && !hosts[host].gate.requiredPlanTier) {
-      hosts[host] = {
-        ...hosts[host],
-        gate: { ...hosts[host].gate, requiredPlanTier: cfg.requiredPlanTier },
+    hosts[existingKey] = mergeEmbedTenantIntoDeployment(hosts[existingKey], cfg);
+    if (cfg.requiredPlanTier && !hosts[existingKey].gate.requiredPlanTier) {
+      hosts[existingKey] = {
+        ...hosts[existingKey],
+        gate: { ...hosts[existingKey].gate, requiredPlanTier: cfg.requiredPlanTier },
       };
     }
   }

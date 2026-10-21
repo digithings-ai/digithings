@@ -964,4 +964,140 @@ describe("tenants merge: one source for the session lock and the model allowlist
 
     expect(host.gate.lockSessionControls).toBe(true);
   });
+
+  it("merges a registry tenant into an origin-form deployment host key", () => {
+    // The deployment config keys the host as an origin, the registry keys it
+    // as a bare host. `matchHostDeployment` normalises both, so the merge has
+    // to normalise too — otherwise the host ends up with two entries and the
+    // lookup returns the registry-only duplicate, dropping the deployment's
+    // own gate and model list.
+    const config = loadDigichatConfig({
+      fileContents: [
+        "version: 1",
+        "hosts:",
+        `  "https://${OCC_HOST}":`,
+        "    slug: occ",
+        "    token: occ-secret",
+        "    backend:",
+        "      type: digigraph",
+        "    gate:",
+        "      mode: ungated",
+        "      lockSessionControls: true",
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+        "",
+      ].join("\n"),
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          [OCC_HOST]: {
+            slug: "occ",
+            token: "occ-secret",
+            gateMode: "ungated",
+            backend: { type: "digigraph" },
+            models: { default: "tenant-model", available: ["tenant-model"] },
+          },
+        }),
+      },
+    });
+
+    // One entry for the host, under the key the deployment config used.
+    expect(Object.keys(config.hosts ?? {})).toEqual([`https://${OCC_HOST}`]);
+    const host = matchHostDeployment(OCC_HOST, config);
+    expect(host).toBeDefined();
+    expect(host!.gate.lockSessionControls).toBe(true);
+    expect(host!.models?.available).toEqual(["tenant-model"]);
+  });
+
+  it("keeps the deployment model list when the tenant curates an empty list", () => {
+    // An empty tenant list is "no curation", not "no models": the
+    // deployment's own list stays binding.
+    const host = mergedHost(
+      occYaml([
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+      ]),
+      {
+        slug: "occ",
+        token: "occ-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        models: { available: [] },
+      },
+    );
+
+    expect(host.models?.available).toEqual(["deployment-model"]);
+  });
+
+  it("takes the tenant allowPicker over the deployment's", () => {
+    const host = mergedHost(
+      occYaml([
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+        "      allowPicker: false",
+      ]),
+      {
+        slug: "occ",
+        token: "occ-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        models: { available: ["tenant-model"], allowPicker: true },
+      },
+    );
+
+    expect(host.models?.allowPicker).toBe(true);
+  });
+
+  it("keeps the deployment allowPicker when the tenant sets none", () => {
+    const host = mergedHost(
+      occYaml([
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+        "      allowPicker: false",
+      ]),
+      {
+        slug: "occ",
+        token: "occ-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+      },
+    );
+
+    expect(host.models?.allowPicker).toBe(false);
+  });
+
+  it("hydrates a registry-only host", () => {
+    // No deployment entry for this host: the registry entry is the whole
+    // deployment, exactly as before the merge.
+    const config = loadDigichatConfig({
+      fileContents: [
+        "version: 1",
+        "hosts:",
+        "  other.digithings.ai:",
+        "    slug: other",
+        "    backend:",
+        "      type: digigraph",
+        "",
+      ].join("\n"),
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          [OCC_HOST]: {
+            slug: "occ",
+            token: "occ-secret",
+            gateMode: "ungated",
+            backend: { type: "digigraph" },
+            models: { available: ["tenant-model"] },
+          },
+        }),
+      },
+    });
+
+    const host = config.hosts?.[OCC_HOST];
+    expect(host).toBeDefined();
+    expect(host!.models?.available).toEqual(["tenant-model"]);
+    expect(matchHostDeployment(OCC_HOST, config)).toBe(host);
+  });
 });
