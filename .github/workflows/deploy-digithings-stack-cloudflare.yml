@@ -62,8 +62,9 @@
 # scripts/package_r5_image_inputs.py. A checkout never carries it, so every
 # job that leads to the image build packages it first - the deploy job
 # (the build context needs it), the deploy gate (so a broken generator is red
-# BEFORE Chris's production approval) and the pull-request check (so the
-# generator is proven in CI before a change can reach main). Run 39485748555
+# BEFORE Chris's production approval) and the pull-request check (so a broken
+# generator is visible in CI before a change can reach main - a signal, not a
+# merge gate: the gate on a develop PR is the `local-ci` status). Run 39485748555
 # is what that missing step cost: the build died computing its cache key with
 # "/image-packages/stack/digisearch-seeds: not found".
 #

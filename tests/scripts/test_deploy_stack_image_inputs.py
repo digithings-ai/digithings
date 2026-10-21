@@ -432,13 +432,24 @@ def test_the_packaged_paths_survive_the_dockerignore_filter() -> None:
 
 
 def test_the_path_filters_include_the_packaging_action() -> None:
-    """The action decides what the image carries, so a change to it must run the lane."""
+    """The action decides what the image carries, so a change to it must run the lane.
+
+    The frozen lockfile is in the same class: the image installs what
+    `uv export --frozen` writes out of it, so a merge that only bumps a
+    transitive pin changes the image and matches no filter - it would deploy
+    nothing and the image would keep the old pins.
+    """
     triggers = _doc()[True]
     for trigger in ("push", "pull_request"):
         paths = set(triggers[trigger]["paths"])
         assert ".github/actions/package-stack-image-inputs/action.yml" in paths, (
             f"the {trigger} path filter does not match the packaging action, so a change "
             "to it is never proven in CI and the merge deploys the previous recipe"
+        )
+        assert "uv.lock" in paths, (
+            f"the {trigger} path filter does not match uv.lock, so a merge that only "
+            "bumps a transitive pin changes the image and matches no filter: it would "
+            "deploy nothing and the image would keep the old pins"
         )
 
 
