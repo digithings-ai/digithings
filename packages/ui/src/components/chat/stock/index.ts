@@ -56,6 +56,8 @@ export {
   useEmbedChatPrefsOptional,
   DEFAULT_EMBED_CHAT_PREFS,
   createDefaultEmbedChatPrefs,
+  chromePrefsFromDeploy,
+  persistDensity,
   disabledCatalogIds,
   catalogToolsFromClient,
   extraOffFromCatalog,

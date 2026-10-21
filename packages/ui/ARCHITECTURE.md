@@ -297,7 +297,9 @@ title, the gap between sibling groups, the gap inside a group, and the
 reasoning header-to-body step all read those tokens. Sibling groups share
 `--trace-group-gap`; a tool group and a reasoning group do not carry their
 own margins. The chain header's marker-to-label gap stays `0.45rem` so it
-still matches the pre-response loader.
+still matches the pre-response loader. `data-density` (`compact`, `default`,
+`airy`) reassigns the tokens. The palette stores the user's choice in
+`dt-density`; a deployment `features.density` applies when that key is absent.
 
 **Reason.** The quiet contract was once a single `summaryOnly` branch inside
 the `group-chainOfThought` case, which read as if it covered only the

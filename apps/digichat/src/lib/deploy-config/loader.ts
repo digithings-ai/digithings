@@ -95,6 +95,9 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       accent: cfg.accent,
       attribution: cfg.attribution,
       defaultLanguage: cfg.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
+      ...(cfg.palette ? { palette: cfg.palette } : {}),
+      toolbar: cfg.toolbar !== false,
+      scrollbars: cfg.scrollbars ?? "always",
       transcript: { userAlign: "right" },
     },
     persistence: "none",
@@ -108,6 +111,8 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       speech: cfg.speech === true,
       view: cfg.view ?? DEFAULT_VIEW_MODE,
       thinking: cfg.thinking ?? DEFAULT_THINKING_MODE,
+      density: cfg.density ?? "default",
+      effort: cfg.effort ?? "medium",
       sources: cfg.sources !== false,
       modelPicker: false,
       branchPicker: cfg.branchPicker !== false,
@@ -140,6 +145,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       showLanguageSelector: cfg.showLanguageSelector,
       lockSessionControls: cfg.lockSessionControls,
       webSearch: cfg.webSearch,
+      ...(cfg.searchEngine ? { searchEngine: cfg.searchEngine } : {}),
       requiredPlanTier: cfg.requiredPlanTier,
     },
     token: cfg.token,
@@ -183,6 +189,14 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     pageContext: dep.features.pageContext,
     view: dep.features.view,
     thinking: dep.features.thinking,
+    ...(dep.features.density !== "default" ? { density: dep.features.density } : {}),
+    ...(dep.features.effort !== "medium" ? { effort: dep.features.effort } : {}),
+    ...(dep.chrome.toolbar === false ? { toolbar: false as const } : {}),
+    ...(dep.chrome.scrollbars === "auto" ? { scrollbars: "auto" as const } : {}),
+    ...(dep.chrome.palette && dep.chrome.palette !== "default"
+      ? { palette: dep.chrome.palette }
+      : {}),
+    ...(dep.gate.searchEngine ? { searchEngine: dep.gate.searchEngine } : {}),
     webSearch:
       dep.gate.webSearch === true ||
       dep.tools?.catalog?.some((t) => t.id === "web_search") === true,

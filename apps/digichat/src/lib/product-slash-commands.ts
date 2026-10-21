@@ -21,11 +21,7 @@ import {
   languageLabel,
   tryResolveLanguageInput,
 } from "@/lib/languages";
-import {
-  isLegacyViewMode,
-  isViewMode,
-  normalizeViewMode,
-} from "@/lib/view-modes";
+import { isTraceDensity } from "@digithings/ui/chat/trace-spacing";
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import {
   applyDocumentTheme,
@@ -34,6 +30,12 @@ import {
   matchThemeStep,
   readThemeState,
 } from "@digithings/ui/theme";
+import {
+  isLegacyViewMode,
+  isViewMode,
+  normalizeViewMode,
+} from "@/lib/view-modes";
+import { readEffectiveThemeState } from "@/lib/palette-prefs";
 import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
 
 export type SlashSubmitAction =
@@ -154,8 +156,10 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = toggleHint(prefs.vault, "vault notes", "disabled this session");
     } else if (def.id === "view") {
       description = `View: ${prefs.view}`;
+    } else if (def.id === "density") {
+      description = `Density: ${prefs.density}`;
     } else if (def.id === "theme") {
-      const state = readThemeState();
+      const state = readEffectiveThemeState();
       description = matchThemeStep(state.preference, state.palette, state.resolved).label;
     } else if (def.id === "thinking") {
       description = `Thinking: ${prefs.thinking}`;
@@ -218,6 +222,12 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       if (isViewMode(mode)) api.setView(mode);
       else if (isLegacyViewMode(mode)) api.setView(normalizeViewMode(mode));
       else api.openView();
+      return;
+    }
+    case "density": {
+      const raw = arg.trim().toLowerCase();
+      if (isTraceDensity(raw)) api.setDensity(raw);
+      else api.openDensity();
       return;
     }
     case "theme": {

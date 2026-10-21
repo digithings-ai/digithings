@@ -1816,6 +1816,18 @@ part-driven vs chrome-driven is indexed in digiweb
 | `features.attachments` | bool | Default **true** (composer attach). Product / DataTap / dashboard YAML set false. |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |
+| `features.density` | `compact \| default \| airy` | Worked-chain rhythm. Default `default` (the fixed spacing). A browser `dt-density` choice wins over this for that user. |
+| `features.effort` | `low \| medium \| high` | Seeds `/effort`. Default `medium`. A palette choice overrides it for the session; `/new` returns to this value. |
+| `features.view` | `quiet \| balanced \| verbose` | Already the chain disclosure. Seeds `/view`. Session choice wins until `/new`. |
+| `features.thinking` | `auto \| collapsed \| open` | Seeds `/thinking`. Session choice wins until `/new`. |
+| `chrome.palette` | `default` or a palette id | Deployment palette. Omitted means the digichat skin palette. A stored `dt-palette` wins and is not overwritten. Does not change `data-theme`. |
+| `chrome.toolbar` | bool, default `true` | Seeds `/toolbar`. |
+| `chrome.scrollbars` | `always \| auto`, default `always` | Seeds `/scrollbar`. |
+| `gate.searchEngine` | `auto \| internal \| exa \| tavily \| parallel \| firecrawl \| tinyfish` | Seeds `/search-engine`. Omitted means auto. Engine name only. |
+
+`/models` reads `models.default`. `/language` reads `chrome.defaultLanguage`. `/theme` mode reads `chrome.theme` for the no-JS paint; a stored `dt-theme` still follows the OS when absent, which is unchanged. Web search, digisearch, and digivault stay capability flags (`gate` / catalog), not new defaults.
+
+DataTap trial, OCC, and digithings.ai omit the new keys, so they stay on these defaults.
 
 `chrome.skin` selects one of the 11 official assistant-ui catalog templates
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`

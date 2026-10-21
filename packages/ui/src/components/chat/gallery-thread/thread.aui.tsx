@@ -191,6 +191,8 @@ export type ThreadProps = {
   composerToolbar?: ReactNode;
   /** `always` reserves a scrollbar gutter; `auto` shows bars only on scroll. */
   scrollbars?: "always" | "auto";
+  /** Worked-chain rhythm. `default` is the fixed spacing. */
+  density?: "compact" | "default" | "airy";
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -437,6 +439,7 @@ export const Thread: FC<ThreadProps> = ({
   workVisibility = "balanced",
   composerToolbar,
   scrollbars = "always",
+  density = "default",
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -470,6 +473,7 @@ export const Thread: FC<ThreadProps> = ({
                   composerLayout={composerLayout}
                   composerToolbar={composerToolbar}
                   scrollbars={scrollbars}
+                  density={density}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -496,7 +500,8 @@ const ThreadRoot: FC<{
   composerLayout: ComposerLayout;
   composerToolbar?: ReactNode;
   scrollbars: "always" | "auto";
-}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars }) => {
+  density: "compact" | "default" | "airy";
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -522,6 +527,7 @@ const ThreadRoot: FC<{
       // of each surface having to remember to wrap the Thread.
       data-thread-skin="digichat"
       data-scrollbars={scrollbars}
+      data-density={density}
       style={{
         ["--thread-max-width" as string]: "44rem",
         // `--card` (not `--color-card`) so a scoped palette wins: the
