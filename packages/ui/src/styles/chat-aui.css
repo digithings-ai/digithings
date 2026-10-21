@@ -872,3 +872,19 @@ html:has([data-thread-skin="digichat"]) [data-slot="tooltip-content"] {
   overflow: auto;
   max-height: 18rem;
 }
+
+/* Chat notices (DIG-4459), faded red (Chris, 21 Oct): danger pulled 28%
+   toward the muted ink, a 5% wash and a 24% hairline; the title mixes 20%
+   ink so it stays WCAG AA on the wash in dark and light. */
+.digichat-thread .aui-chat-notice[data-tone="error"],
+.digichat-launcher .aui-chat-notice[data-tone="error"] {
+  --notice-danger: color-mix(in srgb, var(--danger) 72%, var(--ink-mute));
+  border: 1px solid color-mix(in srgb, var(--notice-danger) 24%, transparent);
+  background: color-mix(in srgb, var(--notice-danger) 5%, transparent);
+  color: var(--ink-soft);
+}
+
+.digichat-thread .aui-chat-notice[data-tone="error"] .aui-chat-notice-title,
+.digichat-launcher .aui-chat-notice[data-tone="error"] .aui-chat-notice-title {
+  color: color-mix(in srgb, var(--notice-danger) 80%, var(--ink));
+}

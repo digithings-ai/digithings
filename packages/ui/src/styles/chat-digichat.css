@@ -1174,7 +1174,7 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 /* The row is muted like the rest of the trace; the red cross and the retry
    action carry the failure. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root .aui-message-error-message {
-  color: var(--danger);
+  color: inherit;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root [data-slot="dot-matrix"] {
@@ -2308,13 +2308,19 @@ html:has(.aui-theme-stage) :focus-visible {
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="error"] {
-  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
-  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  /* Faded red (Chris, 21 Oct): the danger hue pulled 28% toward the muted
+     ink (HSL saturation 0.76 → 0.49), a 5% wash and a 24% hairline. The
+     same rules serve dark and light: the vars switch per theme. */
+  --notice-danger: color-mix(in srgb, var(--danger) 72%, var(--ink-mute));
+  border: 1px solid color-mix(in srgb, var(--notice-danger) 24%, transparent);
+  background: color-mix(in srgb, var(--notice-danger) 5%, transparent);
   color: var(--ink-soft);
 }
 
+/* Title: the faded red nudged toward the ink so it clears WCAG AA on the
+   wash in both themes (dark ≈ 5.9:1, light ≈ 4.7:1). */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="error"] .aui-chat-notice-title {
-  color: var(--danger);
+  color: color-mix(in srgb, var(--notice-danger) 80%, var(--ink));
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="status"] {
