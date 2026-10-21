@@ -41,8 +41,11 @@ import {
   containerEvictedResponse,
   containerFailedResponse,
   containerRestartMessage,
+  containerUnavailableResponse,
+  describeValue,
   isContainerEvictedError,
   isContainerFailedError,
+  isNonErrorRejection,
 } from "./container-errors";
 import { fetchWithContainerRetry } from "./container-retry";
 import { getStackStatus, runIsolated } from "./route-modules";
@@ -260,6 +263,25 @@ export class DigiStackContainer extends Container {
     try {
       response = await this.containerFetch(request, targetPort);
     } catch (err) {
+      // A hop that rejected with a value that is not an Error (DIG-4928): the
+      // @cloudflare/containers package rethrows such a value verbatim from its
+      // proxy catch, so it would leave this Durable Object as an uncaught
+      // exception and the platform would record it as it stands — a thrown
+      // Date leaves nothing but a bare date in the log.
+      //
+      // Such a value states no failure of its own, so it is neither an
+      // eviction nor a failed container: it cannot be classified, and it is
+      // not replayed either (a value that came out of the hop says nothing
+      // about whether the request reached the container). The client is told
+      // to come back instead.
+      if (isNonErrorRejection(err)) {
+        const description = describeValue(err);
+        console.error(
+          "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
+          description,
+        );
+        return containerUnavailableResponse("stack", description);
+      }
       const message = err instanceof Error ? err.message : String(err);
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("stack", message);
@@ -363,6 +385,25 @@ export class DigiQuantMcpContainer extends Container {
     try {
       response = await this.containerFetch(request, DIGIQUANT_MCP_PORT);
     } catch (err) {
+      // A hop that rejected with a value that is not an Error (DIG-4928): the
+      // @cloudflare/containers package rethrows such a value verbatim from its
+      // proxy catch, so it would leave this Durable Object as an uncaught
+      // exception and the platform would record it as it stands — a thrown
+      // Date leaves nothing but a bare date in the log.
+      //
+      // Such a value states no failure of its own, so it is neither an
+      // eviction nor a failed container: it cannot be classified, and it is
+      // not replayed either (a value that came out of the hop says nothing
+      // about whether the request reached the container). The client is told
+      // to come back instead.
+      if (isNonErrorRejection(err)) {
+        const description = describeValue(err);
+        console.error(
+          "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
+          description,
+        );
+        return containerUnavailableResponse("mcp", description);
+      }
       const message = err instanceof Error ? err.message : String(err);
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("mcp", message);
@@ -740,8 +781,11 @@ export default {
       return runIsolated("container-routes", () => import("./ports"), async ({ MCP_CONTAINER_ID }) => {
         const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
         // DIG-4477: retry once on a recycled container (see
-        // ./container-retry.ts).
-        return fetchWithContainerRetry(() => container.fetch(request.clone()));
+        // ./container-retry.ts). DIG-4928: the answer for a hop that rejected
+        // with a value that is not an Error names the container it came from.
+        return fetchWithContainerRetry(() => container.fetch(request.clone()), {
+          service: "mcp",
+        });
       });
     }
 

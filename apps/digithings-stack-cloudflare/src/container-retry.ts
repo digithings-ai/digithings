@@ -35,8 +35,11 @@ import {
   CONTAINER_EVSCITED_CODE,
   CONTAINER_FAILED_CODE,
   containerRestartMessage,
+  containerUnavailableResponse,
+  describeValue,
   isContainerEvictedError,
   isContainerFailedError,
+  isNonErrorRejection,
 } from "./container-errors";
 
 /**
@@ -103,6 +106,12 @@ export interface ContainerRetryOptions {
    * instance, and a third would only bill another cold start.
    */
   retries?: number;
+
+  /**
+   * Which container this hop serves, for the wording of the answer. Default
+   * "stack"; the reserved digiquant-mcp container passes "mcp".
+   */
+  service?: "stack" | "mcp";
 }
 
 /**
@@ -116,6 +125,10 @@ export interface ContainerRetryOptions {
  *   - a response that is neither an error nor a container code is returned
  *     untouched, after exactly ONE attempt (a served request is never
  *     re-served);
+ *   - a hop that rejected with a value that is not an Error is answered with
+ *     the retryable 503 `container_unavailable`, after exactly ONE attempt
+ *     (the value states no failure of its own, and replaying it could submit
+ *     the same request twice — see DIG-4928);
  *   - a thrown error that is not a recycle signal is re-thrown immediately —
  *     an application error inside the container must not be retried, and it
  *     must not be masked by the answer of an earlier attempt either: if the
@@ -147,6 +160,26 @@ export async function fetchWithContainerRetry(
       }
       return response;
     } catch (error) {
+      // A hop that rejected with a value that is not an Error (DIG-4928): the
+      // @cloudflare/containers package rethrows such a value verbatim from its
+      // proxy catch, so it would leave the Worker as an uncaught exception and
+      // the platform would record it as it stands — a thrown Date leaves
+      // nothing but a bare date in the log.
+      //
+      // Such a value states no failure of its own, so it is neither an
+      // eviction nor a failed container. It is answered with the retryable
+      // `container_unavailable` and it is NOT replayed: a value that came out
+      // of the hop says nothing about whether the request reached the
+      // container, so a second attempt could submit it twice. The client is
+      // told to come back instead.
+      if (isNonErrorRejection(error)) {
+        const description = describeValue(error);
+        console.error(
+          "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
+          description,
+        );
+        return containerUnavailableResponse(options.service ?? "stack", description);
+      }
       if (attemptIndex >= retries || !isContainerRecycledError(error)) {
         throw error;
       }
