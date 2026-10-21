@@ -679,6 +679,55 @@ describe("McpServerSchema operator tool allowlist (DIG-284)", () => {
   });
 });
 
+describe("digillm router config", () => {
+  it("is off when the block is omitted", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: { slug: "acme", backend: { type: "digigraph" } },
+    });
+    expect(cfg.deployment?.digillm).toBeUndefined();
+  });
+
+  it("parses an enabled router", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        models: { available: ["deepseek/deepseek-v4-pro"] },
+        digillm: { router: { enabled: true } },
+      },
+    });
+    expect(cfg.deployment?.digillm?.router?.enabled).toBe(true);
+  });
+
+  it("rejects a pinned model that is not on the allowlist", () => {
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "acme",
+          backend: { type: "digigraph" },
+          models: { available: ["deepseek/deepseek-v4-pro"] },
+          digillm: {
+            router: {
+              enabled: true,
+              routes: [
+                {
+                  id: "reasoning",
+                  label: "Reasoning",
+                  description: "Hard questions.",
+                  model: "not-on-the-list",
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrow(/not in models.available/);
+  });
+});
+
 describe("allowlistModelId", () => {
   it("passes through when available is empty", () => {
     expect(allowlistModelId(undefined, "any-model")).toBe("any-model");

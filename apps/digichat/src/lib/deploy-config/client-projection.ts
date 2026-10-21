@@ -148,6 +148,13 @@ export type DigichatClientConfig = {
   };
   /** Discriminator only — never project endpoints / agent names */
   backendType: DigichatDeployment["backend"]["type"];
+  /**
+   * Present only when digillm's router is on. The browser learns the picker
+   * id, not the exemplar phrases or the pinned model ids.
+   */
+  digillm?: {
+    router: { enabled: true; modelId: "digillm/router" };
+  };
 };
 
 export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
@@ -294,6 +301,9 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       ...(searchEngine ? { searchEngine } : {}),
     },
     backendType: dep.backend.type,
+    ...(dep.digillm?.router?.enabled === true
+      ? { digillm: { router: { enabled: true as const, modelId: "digillm/router" as const } } }
+      : {}),
   };
 }
 

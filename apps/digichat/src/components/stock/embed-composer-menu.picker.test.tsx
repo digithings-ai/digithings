@@ -720,6 +720,34 @@ describe("EmbedComposerMenu current value", () => {
     expect(api.setSearchEngine).not.toHaveBeenCalledWith("auto");
   });
 
+  it("offers Router only when digillm's router is on", async () => {
+    const user = userEvent.setup();
+    const api = prefs();
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="models" models={["alpha"]} onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(screen.queryByRole("menuitemradio", { name: /Router/ })).toBeNull();
+    unmount();
+
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu
+          kind="models"
+          models={["alpha"]}
+          routerEnabled
+          onClose={onClose}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+    const row = await screen.findByRole("menuitemradio", { name: /Router/ });
+    expect(row.textContent).toContain("digillm picks Reasoning, Fast, or Light");
+    await user.click(row);
+    expect(api.setModel).toHaveBeenCalledWith("digillm/router");
+  });
+
   it("opens /models on the model that is set, not on the first row", async () => {
     const user = userEvent.setup();
     const api = prefs();

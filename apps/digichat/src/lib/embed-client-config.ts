@@ -111,6 +111,13 @@ export type EmbedTenantClientConfig = {
     };
   };
   /**
+   * Present only when digillm's router is on. Exemplars and pinned model ids
+   * stay on the server; the browser learns the picker id.
+   */
+  digillm?: {
+    router: { enabled: true; modelId: "digillm/router" };
+  };
+  /**
    * Discriminator only — never project Foundry endpoints / digigraph URLs.
    * CliThread uses this to enable regenerate/edit when the BFF turn
    * mutation API is available (#3475).
@@ -207,6 +214,13 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
         }
       : undefined,
     models: cfg.models,
+    ...(cfg.digillm?.router?.enabled === true
+      ? {
+          digillm: {
+            router: { enabled: true as const, modelId: "digillm/router" as const },
+          },
+        }
+      : {}),
     backendType: cfg.backend.type,
   };
 }

@@ -6,6 +6,8 @@ coupling; optional LangSmith tracing via digitrace degrades to a no-op when
 absent.
 
 Public API:
+- :func:`route_query` — pick one allowlisted model for a question. Local
+  classifier, no provider call. Off unless a deployment turns it on.
 - :func:`completion` — single completion (optional tools / json_schema output),
   mirroring ``litellm.completion``; returns the OpenAI ``ChatCompletion`` object.
 - :func:`run_tools` — agentic tool-calling loop (optional streaming).
@@ -59,6 +61,7 @@ from digillm.egress_record import (
     EgressRecord,
     set_egress_observer,
 )
+from digillm.router import RouterDecision, RouterRoute, route_query
 from digillm.structured import resolve_model, structured_completion
 from digillm.telemetry import (
     ArtifactRef,
@@ -97,6 +100,8 @@ __all__ = [
     "ProviderCallOutcome",
     "ProviderCallRecord",
     "ProviderCallContextHandle",
+    "RouterDecision",
+    "RouterRoute",
     "RetryReason",
     "TelemetryFailureReporter",
     "TelemetryObserver",
@@ -127,6 +132,7 @@ __all__ = [
     "reset_byok",
     "reset_proxy_key",
     "resolve_model",
+    "route_query",
     "run_tools",
     "set_byok",
     "set_egress_observer",

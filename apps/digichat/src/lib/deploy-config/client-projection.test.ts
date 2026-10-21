@@ -246,4 +246,34 @@ describe("baseline embed defaults (unconfigured container) are least-privilege",
     } as unknown as DigichatDeployment);
     expect(client.gate.searchEngine).toBeUndefined();
   });
+
+  it("projects digillm's router as a picker flag and drops exemplars", () => {
+    const client = toDigichatClientConfig({
+      slug: "configured",
+      chrome: { mode: "embed", theme: "dark" },
+      persistence: "none",
+      auth: "anonymous",
+      features: {},
+      models: { available: ["deepseek/deepseek-v4-pro"] },
+      gate: { mode: "turn_limited", activityDetail: "labels" },
+      backend: { type: "digigraph" },
+      digillm: {
+        router: {
+          enabled: true,
+          routes: [
+            {
+              id: "reasoning",
+              label: "Reasoning",
+              description: "Hard questions.",
+              exemplars: ["prove this"],
+            },
+          ],
+        },
+      },
+    } as unknown as DigichatDeployment);
+    expect(client.digillm).toEqual({
+      router: { enabled: true, modelId: "digillm/router" },
+    });
+    expect(JSON.stringify(client)).not.toContain("prove this");
+  });
 });

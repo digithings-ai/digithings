@@ -29,6 +29,13 @@ import {
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
+import {
+  isDigillmRouterModel,
+  latestUserText,
+  type DigillmRouterDecision,
+} from "@/lib/digillm-router";
+import { routeWithDigillm } from "@/lib/digillm-router-process";
+import { withDigillmRouterNotice } from "@/lib/digillm-router-notice";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { resolveLanguageCode } from "@/lib/languages";
 import { premiumModelsHeader } from "@/lib/deploy-config/schema";
@@ -530,7 +537,12 @@ async function handleChat(
     );
   }
 
-  const finish = (res: Response) => releaseChatRunLockOnResponseEnd(res, runLock.release);
+  let routerDecision: DigillmRouterDecision | null = null;
+  const finish = (res: Response) =>
+    releaseChatRunLockOnResponseEnd(
+      routerDecision ? withDigillmRouterNotice(res, routerDecision) : res,
+      runLock.release,
+    );
 
   // Deploy `models.available` allowlist (fail closed when non-empty). Resolved
   // before the backend branch so it applies to foundry too, not just digigraph.
@@ -563,52 +575,113 @@ async function handleChat(
   // when the slug is also on its own DIGI_SESSION_MODEL_ALLOWLIST.
   let houseSessionModel: string | undefined;
   let routerModels: string | undefined;
-  try {
-    const { resolveHouseModelSelection, routerModelsHeader } = await import("@/lib/deploy-config");
+  if (isDigillmRouterModel(requestedModel)) {
     if (byokKey) {
-      if (requestedModel) modelId = requestedModel;
-    } else if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
-      const allowed = resolveHouseModelSelection(dep.models, requestedModel);
-      if (requestedModel && allowed === undefined) {
+      runLock.release();
+      return jsonError(
+        400,
+        "router_house_only",
+        "digillm's router uses the deployment's models, not a visitor key.",
+      );
+    }
+    if (dep?.digillm?.router?.enabled !== true) {
+      runLock.release();
+      return jsonError(
+        400,
+        "router_disabled",
+        "digillm's router is off for this deployment.",
+      );
+    }
+    const routerSupported =
+      adapter.protocol === "digigraph-trace" || AI_SDK_PROTOCOLS.has(adapter.protocol);
+    if (!routerSupported) {
+      runLock.release();
+      return jsonError(
+        400,
+        "router_unsupported",
+        "This backend cannot apply a per-turn model from digillm's router.",
+      );
+    }
+    const allowed = dep?.models?.available ?? [];
+    try {
+      const decision = await routeWithDigillm({
+        text: latestUserText(messages),
+        allowed,
+        fallback: modelId,
+        ...(dep?.digillm?.router?.routes
+          ? { routes: dep.digillm.router.routes }
+          : {}),
+      });
+      if (allowed.length > 0 && !allowed.includes(decision.model)) {
+        runLock.release();
+        return jsonError(
+          502,
+          "router_unavailable",
+          "digillm's router could not choose a model.",
+        );
+      }
+      modelId = decision.model;
+      houseSessionModel = decision.model;
+      routerDecision = decision;
+    } catch {
+      runLock.release();
+      return jsonError(
+        502,
+        "router_unavailable",
+        "digillm's router could not choose a model.",
+      );
+    }
+  }
+  if (!routerDecision) {
+    try {
+      const { resolveHouseModelSelection, routerModelsHeader } = await import(
+        "@/lib/deploy-config"
+      );
+      if (byokKey) {
+        if (requestedModel) modelId = requestedModel;
+      } else if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
+        const allowed = resolveHouseModelSelection(dep.models, requestedModel);
+        if (requestedModel && allowed === undefined) {
+          runLock.release();
+          return new Response(
+            JSON.stringify({
+              error: "model_not_allowed",
+              message: "Requested model is not in the deployment allowlist.",
+            }),
+            { status: 400, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (allowed) modelId = allowed;
+        if (requestedModel && allowed) {
+          houseSessionModel = allowed;
+          routerModels = routerModelsHeader(dep.models, allowed);
+        }
+      } else if (configFailed && requestedModel) {
+        // The deployment config could not be read, so we cannot prove the model
+        // is allowed → fail closed rather than forward an unverified id.
         runLock.release();
         return new Response(
           JSON.stringify({
             error: "model_not_allowed",
-            message: "Requested model is not in the deployment allowlist.",
+            message: "Deployment model allowlist could not be loaded.",
+          }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        );
+      } else if (requestedModel) {
+        modelId = requestedModel;
+      }
+    } catch {
+      // Invalid deploy config with an explicit request → fail closed.
+      if (requestedModel) {
+        runLock.release();
+        return new Response(
+          JSON.stringify({
+            error: "model_not_allowed",
+            message: "Deployment model allowlist could not be loaded.",
           }),
           { status: 400, headers: { "content-type": "application/json" } },
         );
       }
-      if (allowed) modelId = allowed;
-      if (requestedModel && allowed) {
-        houseSessionModel = allowed;
-        routerModels = routerModelsHeader(dep.models, allowed);
-      }
-    } else if (configFailed && requestedModel) {
-      // The deployment config could not be read, so we cannot prove the model
-      // is allowed → fail closed rather than forward an unverified id.
-      runLock.release();
-      return new Response(
-        JSON.stringify({
-          error: "model_not_allowed",
-          message: "Deployment model allowlist could not be loaded.",
-        }),
-        { status: 400, headers: { "content-type": "application/json" } },
-      );
-    } else if (requestedModel) {
-      modelId = requestedModel;
-    }
-  } catch {
-    // Invalid deploy config with an explicit request → fail closed.
-    if (requestedModel) {
-      runLock.release();
-      return new Response(
-        JSON.stringify({
-          error: "model_not_allowed",
-          message: "Deployment model allowlist could not be loaded.",
-        }),
-        { status: 400, headers: { "content-type": "application/json" } },
-      );
     }
   }
 
@@ -727,6 +800,7 @@ async function handleChat(
           responseHeaders,
           webSearch: webSearchEnabled,
           signal: req.signal,
+          ...(routerDecision ? { modelId: routerDecision.model } : {}),
         }),
       );
     } catch (err) {

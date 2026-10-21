@@ -46,6 +46,7 @@ import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/emb
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
+import { digillmRouterOffered } from "@/lib/digillm-router";
 import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
   useBYOKKey,
@@ -1518,6 +1519,10 @@ function EmbedChat({
           models={stockClient.models.available}
           defaultModel={stockClient.models.default}
           picker={stockClient.models.picker}
+          routerEnabled={digillmRouterOffered({
+            enabled: stockClient.digillm?.router.enabled,
+            backendType: stockClient.backendType,
+          })}
           onClose={() => {
             setComposerMenu(null);
             setProviderSeed(undefined);

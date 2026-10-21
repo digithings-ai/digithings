@@ -653,6 +653,35 @@ export const GateSchema = z
   })
   .strict();
 
+/**
+ * digillm's router. Off unless ``enabled`` is true. ``routes`` overlays the
+ * built-in Reasoning / Fast / Light categories (same id replaces, a new id is
+ * added). Exemplars stay on the server; the browser only learns that the
+ * picker row exists.
+ */
+export const DigillmRouterRouteSchema = z
+  .object({
+    id: z.string().regex(/^[a-z][a-z0-9-]{0,32}$/),
+    label: z.string().min(1).max(40),
+    description: z.string().min(1).max(240),
+    model: z.string().min(1).max(120).optional(),
+    exemplars: z.array(z.string().min(1).max(200)).max(12).optional(),
+  })
+  .strict();
+
+export const DigillmRouterSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    routes: z.array(DigillmRouterRouteSchema).max(8).optional(),
+  })
+  .strict();
+
+export const DigillmSchema = z
+  .object({
+    router: DigillmRouterSchema.optional(),
+  })
+  .strict();
+
 export const DeploymentSchema = z
   .object({
     slug: z.string().regex(SLUG, "slug must be lowercase alphanumeric/hyphens"),
@@ -682,6 +711,8 @@ export const DeploymentSchema = z
       pageContext: "visible",
     }),
     models: ModelsSchema.default({ available: [] }),
+    /** digillm's router. Omitted means off. */
+    digillm: DigillmSchema.optional(),
     cli: CliSchema.default({ enabled: false }),
     backend: BackendSchema,
     tools: ToolsSchema.optional(),
@@ -693,7 +724,29 @@ export const DeploymentSchema = z
      */
     token: z.string().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((dep, ctx) => {
+    const routes = dep.digillm?.router?.routes ?? [];
+    const available = new Set(dep.models?.available ?? []);
+    const seen = new Set<string>();
+    routes.forEach((route, index) => {
+      if (seen.has(route.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `duplicate router route ${route.id}`,
+          path: ["digillm", "router", "routes", index, "id"],
+        });
+      }
+      seen.add(route.id);
+      if (route.model && available.size > 0 && !available.has(route.model)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `router route ${route.id} model is not in models.available`,
+          path: ["digillm", "router", "routes", index, "model"],
+        });
+      }
+    });
+  });
 
 export const DigichatConfigSchema = z
   .object({
@@ -723,6 +776,7 @@ export type AuthMode = z.infer<typeof AuthModeSchema>;
 export type UserAlign = z.infer<typeof UserAlignSchema>;
 export type PageContextMode = z.infer<typeof PageContextModeSchema>;
 export type DigichatDeployment = z.infer<typeof DeploymentSchema>;
+export type DigillmConfig = z.infer<typeof DigillmSchema>;
 export type DigichatConfig = z.infer<typeof DigichatConfigSchema>;
 export type ToolCatalogEntry = z.infer<typeof ToolCatalogEntrySchema>;
 

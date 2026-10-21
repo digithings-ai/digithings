@@ -27,6 +27,7 @@ export async function createAiSdkStreamResponse({
   responseHeaders,
   webSearch = false,
   signal,
+  modelId,
 }: {
   backend: AiSdkBackendConfig;
   messages: ModelMessage[];
@@ -37,11 +38,16 @@ export async function createAiSdkStreamResponse({
    */
   webSearch?: boolean;
   signal: AbortSignal;
+  /**
+   * Per-turn model from digillm's router. Absent on every other call, so a
+   * manual picker choice still uses `backend.model`.
+   */
+  modelId?: string;
 }): Promise<Response> {
   let model: LanguageModel;
   let tools: ToolSet | undefined;
   try {
-    model = resolveAiSdkModel(backend);
+    model = resolveAiSdkModel(modelId ? { ...backend, model: modelId } : backend);
     tools = webSearch ? resolveAiSdkSearchTools(backend) : undefined;
   } catch (err) {
     // A missing credential is an operator misconfiguration, not a client error:

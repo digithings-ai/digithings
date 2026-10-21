@@ -24,6 +24,7 @@ import { DotMatrix } from "@digithings/ui/chat/dot-matrix";
 import { Button, Input, Label } from "@digithings/ui/ui";
 import { nextPaletteIndex, VIEW_LABELS } from "@digithings/digichat-ui";
 import { useEmbedChatPrefs } from "@digithings/ui/chat/stock";
+import { DIGILLM_ROUTER_MODEL_ID } from "@/lib/digillm-router";
 import {
   applyWellKnownMcp,
   wellKnownMcpGrouped,
@@ -334,6 +335,7 @@ export function EmbedComposerMenu({
   models,
   defaultModel,
   picker,
+  routerEnabled = false,
   onClose,
   onActivateProvider,
   onClearProvider,
@@ -349,6 +351,8 @@ export function EmbedComposerMenu({
   defaultModel?: string;
   /** Catalog presets and provider groups. Absent keeps the id list. */
   picker?: ComposerModelPicker;
+  /** digillm's router is on for a backend that accepts a per-turn model. */
+  routerEnabled?: boolean;
   onClose: () => void;
   onActivateProvider?: (key: string, provider: BYOKProvider, model: string) => void;
   onClearProvider?: () => void;
@@ -539,6 +543,22 @@ export function EmbedComposerMenu({
     // provider's own models. The catalog picker is the house list.
     if (picker && !providerActive) {
       const selected = api.prefs.model;
+      const digillmRouterRows: MenuRow[] = routerEnabled
+        ? [
+            {
+              id: DIGILLM_ROUTER_MODEL_ID,
+              label: "Router",
+              value: "digillm picks Reasoning, Fast, or Light",
+              checked: selected === DIGILLM_ROUTER_MODEL_ID,
+              exclusive: true,
+              activate: () => {
+                api.setModel(DIGILLM_ROUTER_MODEL_ID);
+                onPickSessionModel?.(DIGILLM_ROUTER_MODEL_ID);
+                onClose();
+              },
+            },
+          ]
+        : [];
       const presetRows: MenuRow[] = picker.presets.map((preset) => {
         const token = `preset:${preset.id}`;
         const checked =
@@ -582,7 +602,9 @@ export function EmbedComposerMenu({
             })),
           ])
         : [];
-      if (presetRows.length || groupRows.length) return [...presetRows, ...groupRows];
+      if (digillmRouterRows.length || presetRows.length || groupRows.length) {
+        return [...digillmRouterRows, ...presetRows, ...groupRows];
+      }
     }
     // Auto is only a real option when the deployment default is Auto (no
     // pinned model); a tenant that pins a default should not offer a way to
@@ -606,8 +628,25 @@ export function EmbedComposerMenu({
           },
         ]
       : [];
+    const routerRows: MenuRow[] =
+      routerEnabled && !providerActive
+        ? [
+            {
+              id: DIGILLM_ROUTER_MODEL_ID,
+              label: "Router",
+              value: "digillm picks Reasoning, Fast, or Light",
+              checked: api.prefs.model === DIGILLM_ROUTER_MODEL_ID,
+              exclusive: true,
+              activate: () => {
+                api.setModel(DIGILLM_ROUTER_MODEL_ID);
+                onPickSessionModel?.(DIGILLM_ROUTER_MODEL_ID);
+                onClose();
+              },
+            },
+          ]
+        : [];
     if (!available.length) {
-      if (autoRows.length) return autoRows;
+      if (autoRows.length || routerRows.length) return [...autoRows, ...routerRows];
       return [
         {
           id: "none",
@@ -621,6 +660,7 @@ export function EmbedComposerMenu({
     }
     return [
       ...autoRows,
+      ...routerRows,
       ...available.map((id) => ({
         id,
         label: id,
@@ -634,7 +674,16 @@ export function EmbedComposerMenu({
         },
       })),
     ];
-  }, [available, api, defaultModel, onClose, onPickSessionModel, picker, providerActive]);
+  }, [
+    available,
+    api,
+    defaultModel,
+    onClose,
+    onPickSessionModel,
+    picker,
+    providerActive,
+    routerEnabled,
+  ]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>

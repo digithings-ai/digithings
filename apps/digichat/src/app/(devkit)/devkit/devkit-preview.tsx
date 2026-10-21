@@ -72,6 +72,7 @@ const PREFS_DEPS = {
     };
     providerSeed?: string;
     mcpSeed?: string;
+    routerEnabled?: boolean;
     onClose: () => void;
   }) => (
     <EmbedComposerMenu
@@ -79,6 +80,7 @@ const PREFS_DEPS = {
       models={menu.models}
       defaultModel={menu.defaultModel}
       picker={menu.modelPicker}
+      routerEnabled={menu.routerEnabled}
       onClose={menu.onClose}
       providerSeed={menu.providerSeed}
       mcpSeed={menu.mcpSeed}

@@ -19,7 +19,9 @@ import { DigichatContextMeter } from "./digichat-context-meter";
 export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi }) {
   const rawModel = prefs.prefs.model.trim();
   // Routing names, not presentation: the backend sees the full model id.
-  const modelLabel = rawModel || "auto";
+  // digillm's router is a virtual id; the footer shows the picker label.
+  const modelLabel =
+    rawModel === "digillm/router" ? "Router" : rawModel || "auto";
   const providerLabel = prefs.providerLabel?.trim() ?? "";
   // The backend is named whenever the host named one — a Foundry tenant is
   // served by Azure AI Foundry, not by the house model provider. It is a

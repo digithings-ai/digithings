@@ -27,6 +27,10 @@ vi.mock("@/lib/adapters/ai-sdk/stream", () => ({
   createAiSdkStreamResponse: vi.fn(async () => new Response("ai-sdk", { status: 200 })),
 }));
 
+vi.mock("@/lib/digillm-router-process", () => ({
+  routeWithDigillm: vi.fn(),
+}));
+
 vi.mock("@/lib/adapters/digithings/stream", async () => {
   const actual =
     await vi.importActual<typeof import("@/lib/adapters/digithings/stream")>(
@@ -87,6 +91,7 @@ import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
+import { routeWithDigillm } from "@/lib/digillm-router-process";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
@@ -2500,6 +2505,182 @@ vi.mocked(createFoundryStreamResponse).mockClear();
           resetDigichatConfigForTests();
         }
       });
+    });
+  });
+
+  describe("digillm router", () => {
+    const allowed = [
+      "deepseek/deepseek-v4.1-flash-1017",
+      "deepseek/deepseek-v4-pro",
+      "google/gemini-3.1-flash-lite",
+    ];
+
+    function routerConfig(over: Record<string, unknown> = {}) {
+      return parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "local",
+          backend: { type: "digigraph" },
+          models: {
+            default: "deepseek/deepseek-v4.1-flash-1017",
+            available: allowed,
+            allowPicker: true,
+          },
+          digillm: { router: { enabled: true } },
+          ...over,
+        },
+      });
+    }
+
+    function routerReq(
+      headers: Record<string, string> = {},
+      text = "thanks",
+    ): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-model": "digillm/router",
+          ...headers,
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text }] }],
+        }),
+      });
+    }
+
+    afterEach(() => {
+      resetDigichatConfigForTests();
+      vi.mocked(routeWithDigillm).mockReset();
+    });
+
+    it("rejects the picker id when the router is off, before the allowlist", async () => {
+      setDigichatConfigForTests(
+        parseDigichatConfig({
+          version: 1,
+          deployment: {
+            slug: "local",
+            backend: { type: "digigraph" },
+            models: { available: [] },
+          },
+        }),
+      );
+      const res = await POST(routerReq());
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toBe("router_disabled");
+      expect(routeWithDigillm).not.toHaveBeenCalled();
+      expect(createDigigraphTraceStreamResponse).not.toHaveBeenCalled();
+    });
+
+    it("forwards the chosen model, not the picker id", async () => {
+      delete process.env.DIGICHAT_TRACE_UI;
+      setDigichatConfigForTests(routerConfig());
+      vi.mocked(routeWithDigillm).mockResolvedValue({
+        routeId: "light",
+        label: "Light",
+        model: "google/gemini-3.1-flash-lite",
+        reason: "Short greeting or acknowledgment.",
+        confidence: 0.92,
+      });
+      const res = await POST(routerReq());
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        upstreamHeaders: Record<string, string>;
+      };
+      expect(call.model).toBe("google/gemini-3.1-flash-lite");
+      expect(call.model).not.toBe("digillm/router");
+      expect(call.upstreamHeaders["X-Digi-House-Model"]).toBe("google/gemini-3.1-flash-lite");
+      expect(res.headers.get("x-digillm-router-route")).toBe("light");
+      expect(res.headers.get("x-digillm-router-model")).toBe("google/gemini-3.1-flash-lite");
+      expect(routeWithDigillm).toHaveBeenCalledWith(
+        expect.objectContaining({ text: "thanks", allowed, fallback: allowed[0] }),
+      );
+    });
+
+    it("does not spend a visitor key across house models", async () => {
+      setDigichatConfigForTests(routerConfig());
+      const res = await POST(
+        routerReq({ "x-byok-key": "sk-visitor", "x-byok-provider": "openai" }),
+      );
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toBe("router_house_only");
+      expect(routeWithDigillm).not.toHaveBeenCalled();
+      expect(createDigigraphTraceStreamResponse).not.toHaveBeenCalled();
+    });
+
+    it("refuses a backend that cannot apply a per-turn model", async () => {
+      setDigichatConfigForTests(
+        parseDigichatConfig({
+          version: 1,
+          deployment: {
+            slug: "local",
+            backend: {
+              type: "foundry",
+              projectEndpoint: "https://example.services.ai.azure.com",
+              agentName: "agent",
+            },
+            models: { available: allowed },
+            digillm: { router: { enabled: true } },
+          },
+        }),
+      );
+      const res = await POST(routerReq());
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toBe("router_unsupported");
+      expect(createFoundryStreamResponse).not.toHaveBeenCalled();
+    });
+
+    it("passes the chosen model into an AI-SDK backend and leaves a manual pick alone", async () => {
+      setDigichatConfigForTests(
+        parseDigichatConfig({
+          version: 1,
+          deployment: {
+            slug: "local",
+            backend: {
+              type: "openai-responses",
+              baseUrl: "https://api.example.com/v1",
+              model: "gpt-4o-mini",
+              apiKeyEnv: "DIGICHAT_BACKEND_EXAMPLE_KEY",
+            },
+            models: { available: allowed, default: allowed[0] },
+            digillm: { router: { enabled: true } },
+          },
+        }),
+      );
+      vi.mocked(routeWithDigillm).mockResolvedValue({
+        routeId: "reasoning",
+        label: "Reasoning",
+        model: "deepseek/deepseek-v4-pro",
+        reason: "Multi-step reasoning, math, or a long question.",
+        confidence: 0.88,
+      });
+      const routed = await POST(routerReq({}, "Prove this step by step"));
+      expect(routed.status).toBe(200);
+      const routedCall = vi.mocked(createAiSdkStreamResponse).mock.calls.at(-1)?.[0] as {
+        modelId?: string;
+        backend: { model: string };
+      };
+      expect(routedCall.modelId).toBe("deepseek/deepseek-v4-pro");
+      expect(routedCall.backend.model).toBe("gpt-4o-mini");
+
+      const manual = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-model": allowed[0],
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(manual.status).toBe(200);
+      const manualCall = vi.mocked(createAiSdkStreamResponse).mock.calls.at(-1)?.[0] as {
+        modelId?: string;
+      };
+      expect(manualCall.modelId).toBeUndefined();
     });
   });
 });

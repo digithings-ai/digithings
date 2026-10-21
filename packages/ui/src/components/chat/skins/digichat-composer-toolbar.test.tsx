@@ -140,6 +140,17 @@ describe("DigichatComposerToolbar provider chip (#4597)", () => {
     expect((row?.textContent ?? "").trim().startsWith("/")).toBe(false);
   });
 
+  it("labels digillm's router as Router", () => {
+    render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "digillm/router" },
+        })}
+      />,
+    );
+    expect(screen.getByLabelText("Open models").textContent).toBe("Router");
+  });
+
   it("gates the provider chip on its own preference, not the model chip's", () => {
     render(
       <DigichatComposerToolbar

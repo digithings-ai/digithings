@@ -28,6 +28,7 @@ to it later (their current in-tree LLM modules are superseded by this package).
 | `digillm/client.py` | Compatibility import surface plus provider registry/routing, retry/backoff, completion, telemetry runtime, and the tool-calling loop. |
 | `digillm/mcp_server.py` | Optional MCP server (`complete` tool over house routing; `[mcp]` extra). |
 | `digillm/structured.py` | `structured_completion` (json_schema → validated Pydantic model) and `resolve_model` (opt-in test/medium/best resolution). |
+| `digillm/router/` | Query router. Picks one allowlisted model for a question. Library subpackage, not a service. |
 | `digillm/telemetry.py` | Strict provider-agnostic records for node runs, logical calls, physical attempts, artifact references, and fail-soft observer delivery. |
 | `digillm/egress_record.py` | GDPR egress ledger: one frozen `EgressRecord` per provider attempt (plus one for the `completion()` cache-hit path), carrying a keyed `HMAC-SHA256` digest of the outbound messages and never the payload itself. |
 | `digillm/__init__.py` | Public API surface (re-exports). |
@@ -40,6 +41,7 @@ from digillm import (
   ProviderCallRecord, ProviderAttemptRecord, TelemetryObserver, emit_telemetry,
     completion, run_tools, structured_completion,
     get_client_for_model, get_client, register_provider, resolve_model,
+    route_query, RouterDecision, RouterRoute,                 # query router
     set_proxy_key, reset_proxy_key, get_proxy_key, proxy_key,   # proxy override
     set_byok, reset_byok, get_byok, byok, clear_byok,           # BYOK override
     set_fan_out_detach_hook,                                    # consumer detach hook
@@ -48,6 +50,29 @@ from digillm import (
     clear_caches,
 )
 ```
+
+## Query router
+
+`route_query` lives in `digillm.router`. It is digillm's router: a local
+classifier that chooses one model from the caller's allowlist (Reasoning,
+Fast, or Light unless the deployment overlays those categories). It does not
+call a provider, download weights, or open a socket. The decision is a
+Pydantic `RouterDecision` (`route_id`, `label`, `model`, `reason`,
+`confidence`). `reason` names the category and never quotes the question.
+
+A process that cannot import Python (digichat's BFF) runs the same function
+with `python -m digillm.router`: one JSON object on stdin, one decision on
+stdout. That is a library entry point, not a service and not a new package.
+The deployment turns it on with `digillm.router.enabled` (default off).
+digichat shows it in the model picker as "Router".
+
+Arch-Router-1.5B was rejected: the Katanemo Community License needs a
+separate commercial license, and a CPU call is seconds. RouteLLM was
+rejected: it is a strong-vs-weak switch, and the recommended router calls
+out for embeddings. The scorer here is the utterance-centroid idea from
+aurelio-labs/semantic-router (MIT), with a deterministic feature hash
+instead of a downloaded embedding model, plus a few structural rules
+(greeting, code, short lookup).
 
 ## Non-goals (generic router)
 

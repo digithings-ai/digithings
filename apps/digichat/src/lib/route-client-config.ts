@@ -23,6 +23,7 @@ import type { StockChatPrefsConfig } from "@digithings/ui/chat/stock";
 import { isEmbedHexColor } from "./embed-accent-style";
 import { parseEmbedThemeParam } from "./embed-theme-messages";
 import { HOUSE_BACKEND_ID } from "./provider-label";
+import { digillmRouterOffered } from "@/lib/digillm-router";
 
 /**
  * One call per route: product projects the primary deployment, embed
@@ -128,6 +129,10 @@ export function toStockChatPrefsConfig(
     allowModelPicker:
       clientConfig.models.allowPicker === true ||
       clientConfig.features.modelPicker === true,
+    routerEnabled: digillmRouterOffered({
+      enabled: clientConfig.digillm?.router.enabled,
+      backendType: clientConfig.backendType,
+    }),
     view: clientConfig.features.view,
     thinking: clientConfig.features.thinking,
     density: clientConfig.features.density,

@@ -1217,3 +1217,38 @@ describe("lockSessionControls (DIG-1210)", () => {
     expect(() => parseEmbedTenants(JSON.stringify(entry("yes")))).toThrow(/lockSessionControls/);
   });
 });
+
+describe("digillm router on an embed tenant", () => {
+  const base = {
+    slug: "example",
+    backend: { type: "digigraph" as const },
+    gateMode: "ungated" as const,
+    theme: "dark" as const,
+    attribution: false,
+    token: "t",
+  };
+
+  it("parses an enabled router and leaves it off when omitted", () => {
+    const on = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": { ...base, digillm: { router: { enabled: true } } },
+      }),
+    );
+    expect(on.get("example.com")?.digillm?.router?.enabled).toBe(true);
+    const off = parseEmbedTenants(JSON.stringify({ "example.com": base }));
+    expect(off.get("example.com")?.digillm).toBeUndefined();
+  });
+
+  it("rejects a route id the schema does not allow", () => {
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            ...base,
+            digillm: { router: { routes: [{ id: "Bad", label: "X", description: "Y" }] } },
+          },
+        }),
+      ),
+    ).toThrow(/digillm/);
+  });
+});

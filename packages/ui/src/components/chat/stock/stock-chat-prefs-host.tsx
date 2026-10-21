@@ -46,6 +46,8 @@ export type StockChatPrefsConfig = {
   };
   /** Host pre-computes models.allowPicker || features.modelPicker. */
   allowModelPicker?: boolean;
+  /** digillm's router is on and this backend accepts a per-turn model. */
+  routerEnabled?: boolean;
   view: ViewMode;
   thinking: ThinkingMode;
   /** Deployment default. A stored `dt-density` still wins for this user. */
@@ -94,6 +96,7 @@ export type StockChatPrefsDeps = {
     modelPicker?: StockChatPrefsConfig["modelPicker"];
     providerSeed?: string;
     mcpSeed?: string;
+    routerEnabled?: boolean;
     onClose: () => void;
   }) => ReactNode;
   onOpenSessions?: () => void;
@@ -371,6 +374,7 @@ export function useStockChatPrefs({
       modelPicker: config.modelPicker,
       providerSeed,
       mcpSeed,
+      routerEnabled: config.routerEnabled === true,
       onClose: () => {
         setComposerMenu(null);
         setProviderSeed(undefined);

@@ -849,3 +849,51 @@ describe("compat web_search default-on (#3871)", () => {
     expect(filterForceToolHeader(dep, "web_search")).toBeUndefined();
   });
 });
+
+describe("digillm router config round-trip", () => {
+  it("keeps the server block and projects only the picker flag", () => {
+    const tenant = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          theme: "dark",
+          attribution: false,
+          token: "t",
+          models: {
+            available: ["deepseek/deepseek-v4-pro"],
+            default: "deepseek/deepseek-v4-pro",
+          },
+          digillm: {
+            router: {
+              enabled: true,
+              routes: [
+                {
+                  id: "reasoning",
+                  label: "Reasoning",
+                  description: "Hard questions.",
+                  model: "deepseek/deepseek-v4-pro",
+                  exemplars: ["prove this"],
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).get("example.com");
+    expect(tenant?.digillm?.router?.routes?.[0]?.exemplars).toEqual(["prove this"]);
+    const dep = embedTenantToDeployment(tenant!);
+    expect(dep.digillm?.router?.routes?.[0]?.model).toBe("deepseek/deepseek-v4-pro");
+    const back = deploymentToEmbedTenant(dep);
+    expect(back.digillm?.router?.enabled).toBe(true);
+    const projected = toEmbedClientConfig(back);
+    expect(projected.digillm).toEqual({
+      router: { enabled: true, modelId: "digillm/router" },
+    });
+    expect(JSON.stringify(projected)).not.toContain("prove this");
+    expect(clientConfigFromEmbedTenant(projected).digillm).toEqual(projected.digillm);
+    const off = toDigichatClientConfig({ ...dep, digillm: undefined });
+    expect(off.digillm).toBeUndefined();
+  });
+});

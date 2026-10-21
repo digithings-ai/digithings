@@ -175,6 +175,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       requiredPlanTier: cfg.requiredPlanTier,
     },
     token: cfg.token,
+    ...(cfg.digillm ? { digillm: cfg.digillm } : {}),
   };
 }
 
@@ -236,6 +237,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
       ? { requiredPlanTier: dep.gate.requiredPlanTier }
       : {}),
     ...(dep.gate.consumeUrl ? { gate: { consumeUrl: dep.gate.consumeUrl } } : {}),
+    ...(dep.digillm ? { digillm: dep.digillm } : {}),
   };
 }
 

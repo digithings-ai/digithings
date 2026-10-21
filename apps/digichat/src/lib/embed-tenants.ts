@@ -13,7 +13,12 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
-import { SEARCH_ENGINES, type PageContextMode } from "@/lib/deploy-config/schema";
+import {
+  DigillmSchema,
+  SEARCH_ENGINES,
+  type DigillmConfig,
+  type PageContextMode,
+} from "@/lib/deploy-config/schema";
 import {
   MAX_MCP_TOOL_ENTRIES,
   MAX_MCP_TOOL_NAME_LENGTH,
@@ -292,6 +297,11 @@ export type EmbedTenantConfig = {
       showFullList: boolean;
     };
   };
+  /**
+   * digillm's router. Omitted means off. Exemplars never reach the browser;
+   * `toEmbedClientConfig` keeps only `enabled`.
+   */
+  digillm?: DigillmConfig;
   /**
    * LLM spend policy for this embed. Independent of gateMode — digithings.ai
    * is `ungated` + `free_then_byok` so free-quota errors still open BYOK.
@@ -914,6 +924,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     gate,
     ...parseTenantTools(v.tools, hostKey),
     ...parseTenantModels(v.models, hostKey),
+    ...parseTenantDigillm(v.digillm, hostKey),
     ...(REQUIRED_PLAN_TIERS.includes(v.requiredPlanTier as "desk" | "studio" | "enterprise")
       ? { requiredPlanTier: v.requiredPlanTier as "desk" | "studio" | "enterprise" }
       : {}),
@@ -1058,6 +1069,22 @@ function parseTenantModels(
       ...(typeof r.minContextTokens === "number" ? { minContextTokens: r.minContextTokens } : {}),
     },
   };
+}
+
+/** Optional digillm.router block. Unknown shapes fail the tenant entry. */
+function parseTenantDigillm(
+  raw: unknown,
+  hostKey: string,
+): Pick<EmbedTenantConfig, "digillm"> {
+  if (raw === undefined) return {};
+  const parsed = DigillmSchema.safeParse(raw);
+  if (!parsed.success) {
+    const detail = parsed.error.issues
+      .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+      .join("; ");
+    throw new Error(`embed tenant "${hostKey}": digillm ${detail}`);
+  }
+  return { digillm: parsed.data };
 }
 
 export function parseEmbedTenants(raw: string | undefined): Map<string, EmbedTenantConfig> {

@@ -112,6 +112,13 @@ export function clientConfigFromEmbedTenant(
       ...(embed.searchEngine ? { searchEngine: embed.searchEngine } : {}),
     },
     backendType: embed.backendType ?? base.backendType,
+    ...(embed.digillm?.router.enabled === true
+      ? {
+          digillm: {
+            router: { enabled: true as const, modelId: "digillm/router" as const },
+          },
+        }
+      : {}),
   };
 }
 
