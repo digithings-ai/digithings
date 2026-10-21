@@ -2,7 +2,8 @@
  * Preset resolution for digillm's router.
  *
  * Same rules as `digillm.router.catalog`: newest generation of each family,
- * then the output-price cap. The winners come from `model_catalog.json`.
+ * then the standard output-price cap. `premium: true` (or a price above that
+ * cap and at or under the premium cap) is manual selection only.
  */
 
 import catalogJson from "../../../../digillm/src/digillm/router/model_catalog.json";
@@ -27,11 +28,13 @@ type CatalogModel = {
   ttftSamples: number;
   ttftP50Ms: number;
   released?: string;
+  premium?: boolean;
 };
 
 type CatalogFile = {
   policy: {
     priceCapUsdPerMillion: number;
+    premiumCapUsdPerMillion: number;
     minContextTokens: number;
     minTtftSamples: number;
     latestGenerationsPerFamily: number;
@@ -86,7 +89,25 @@ function generationWindow(): CatalogModel[] {
   return kept;
 }
 
-/** Auto, Reasoning, Fast, and Light for the catalog's own cap. */
+function isPremium(model: CatalogModel, pinnedId: string): boolean {
+  if (model.premium) return true;
+  if (model.id === pinnedId) return false;
+  const { priceCapUsdPerMillion, premiumCapUsdPerMillion } = catalog.policy;
+  return model.outputPerM > priceCapUsdPerMillion && model.outputPerM <= premiumCapUsdPerMillion;
+}
+
+/** Newest-generation models the picker marks manual-only. */
+export function premiumModelIds(): ReadonlySet<string> {
+  const pinnedId = catalog.presets.find((preset) => preset.id === "auto")?.model ?? "";
+  const window = new Set(generationWindow().map((model) => model.id));
+  return new Set(
+    catalog.models
+      .filter((model) => window.has(model.id) && isPremium(model, pinnedId))
+      .map((model) => model.id),
+  );
+}
+
+/** Auto, Reasoning, Fast, and Light for the catalog's standard cap. */
 export function resolveDigillmPresets(): ResolvedPresets {
   const cap = catalog.policy.priceCapUsdPerMillion;
   const minSamples = catalog.policy.minTtftSamples;
@@ -98,7 +119,10 @@ export function resolveDigillmPresets(): ResolvedPresets {
       "model catalog: default model is not in the current generation or is under the context floor",
     );
   }
-  const capped = current.filter((model) => model.outputPerM <= cap || model.id === pinned.id);
+  const blocked = premiumModelIds();
+  const capped = current.filter(
+    (model) => !blocked.has(model.id) && (model.outputPerM <= cap || model.id === pinned.id),
+  );
   const reasoning = capped
     .filter((model) => model.reasoning && model.reasoningScore > 0)
     .sort(

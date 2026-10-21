@@ -9,7 +9,7 @@ Prices stay in the catalog. They are not walked.
 
 from __future__ import annotations
 
-from digillm.router.catalog import preset_ids
+from digillm.router.catalog import premium_ids, preset_ids
 from digillm.router.data import router_table
 from digillm.router.types import RouterError, RouterRoute
 
@@ -97,6 +97,8 @@ def bind_model(
     allow_set = set(allow)
     pinned = (route.model or "").strip()
     if pinned:
+        if pinned in premium_ids():
+            raise RouterError(f"router will not use premium model {pinned}")
         if allow_set and pinned not in allow_set:
             raise RouterError(
                 f"router route {route.id} pins {pinned}, which is not on the allowlist"

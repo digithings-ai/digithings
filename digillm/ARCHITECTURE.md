@@ -71,12 +71,14 @@ package. The deployment turns the picker row on with `digillm.router.enabled`
 
 Reasoning, Fast, and Light call whatever `model_catalog.json` resolves for
 that preset. The file is the newest-generation picker catalog: tool-capable
-models, 128k context, one generation per family, then the output-price cap
-stored in the file ($2.50). Auto is pinned to DeepSeek V4.1 Flash 1017 and
-is the fallback when the resolved preset is not on the deployment allowlist.
-An operator pin (`routes[].model`) wins. The router does not store the
-winning ids and does not walk prices across the allowlist. Changing the
-catalog cap or a model's score changes the route on the next decision.
+models, 128k context, one generation per family, then the standard
+output-price cap ($2 per million). Models flagged `premium` sit above that
+cap and at or under the premium cap ($2.50): GLM 5.3 and Gemini 3.8 Flash.
+They are manual selection only. The router never returns one. Auto is pinned
+to DeepSeek V4.1 Flash 1017 and is the fallback when the resolved preset is
+not on the deployment allowlist. An operator pin (`routes[].model`) wins
+when that id is not premium. The router does not store the winning ids and
+does not walk prices across the allowlist.
 
 Arch-Router-1.5B was rejected: the Katanemo Community License needs a
 separate commercial license, and a CPU call is seconds. RouteLLM was

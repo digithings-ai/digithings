@@ -119,10 +119,22 @@
       "allowed": [
         "deepseek/deepseek-v4.1-flash-1017",
         "z-ai/glm-5.3",
+        "z-ai/glm-5.3-flash",
+        "google/gemini-3.8-flash",
         "google/gemini-3.5-flash-lite",
         "openai/gpt-oss-120b"
       ],
       "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "premium-allowlist-is-skipped",
+      "text": "Prove that the square root of 2 is irrational, step by step",
+      "allowed": [
+        "z-ai/glm-5.3",
+        "google/gemini-3.8-flash",
+        "openai/gpt-oss-120b"
+      ],
+      "fallback": "z-ai/glm-5.3"
     },
     {
       "name": "catalog-reasoning-when-allowlisted",
@@ -130,6 +142,8 @@
       "allowed": [
         "deepseek/deepseek-v4.1-flash-1017",
         "z-ai/glm-5.3",
+        "z-ai/glm-5.3-flash",
+        "google/gemini-3.8-flash",
         "google/gemini-3.5-flash-lite",
         "openai/gpt-oss-120b"
       ],

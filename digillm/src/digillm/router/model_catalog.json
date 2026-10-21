@@ -1,12 +1,13 @@
 {
-  "source": "Newest-generation digichat model catalog (PR 6193). The router resolves Auto, Reasoning, Fast, and Light from this file. It does not store those winners. latestGenerationsPerFamily keeps the newest generation of each family. priceCapUsdPerMillion is the output-price cap in USD per million tokens. Auto stays the pinned model. Prices are inputPerM and outputPerM from the Cheaper Inference markets page on 2026-10-21.",
+  "source": "Newest-generation digichat model catalog (PR 6193). The router resolves Auto, Reasoning, Fast, and Light from models at or under priceCapUsdPerMillion. premium: true marks the manual tier (above that cap and at or under premiumCapUsdPerMillion). The router never selects those models. Prices are inputPerM and outputPerM from the Cheaper Inference markets page on 2026-10-21.",
   "policy": {
-    "priceCapUsdPerMillion": 2.5,
+    "priceCapUsdPerMillion": 2,
     "minContextTokens": 128000,
     "minTtftSamples": 100,
     "latestGenerationsPerFamily": 1,
     "maxAgeDays": null,
-    "asOf": "2026-10-21"
+    "asOf": "2026-10-21",
+    "premiumCapUsdPerMillion": 2.5
   },
   "providerOrder": [
     "DeepSeek",
@@ -395,7 +396,8 @@
       "ttftP50Ms": 7127,
       "tags": [
         "reasoning"
-      ]
+      ],
+      "premium": true
     },
     {
       "id": "google/gemini-3.7-flash",
@@ -465,7 +467,8 @@
       "ttftP50Ms": 8350,
       "tags": [
         "reasoning"
-      ]
+      ],
+      "premium": true
     },
     {
       "id": "z-ai/glm-5.3-flash",

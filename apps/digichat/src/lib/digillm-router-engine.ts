@@ -14,7 +14,7 @@ import {
   type DigillmRouterDecision,
   type DigillmRouterRouteInput,
 } from "@/lib/digillm-router";
-import { resolveDigillmPresets } from "@/lib/digillm-router-catalog";
+import { premiumModelIds, resolveDigillmPresets } from "@/lib/digillm-router-catalog";
 
 const FNV_OFFSET = 2166136261;
 const FNV_PRIME = 16777619;
@@ -162,6 +162,9 @@ function bindModel(route: WorkingRoute, allow: readonly string[], fallback: stri
   const allowSet = new Set(allow);
   const pinned = route.model?.trim() ?? "";
   if (pinned) {
+    if (premiumModelIds().has(pinned)) {
+      throw new DigillmRouterEngineError(`router will not use premium model ${pinned}`);
+    }
     if (allowSet.size > 0 && !allowSet.has(pinned)) {
       throw new DigillmRouterEngineError(
         `router route ${route.id} pins ${pinned}, which is not on the allowlist`,
@@ -338,6 +341,9 @@ function checked(
   confidence: number,
   allow: readonly string[],
 ): DigillmRouterDecision {
+  if (premiumModelIds().has(model)) {
+    throw new DigillmRouterEngineError(`router will not use premium model ${model}`);
+  }
   if (allow.length > 0 && !allow.includes(model)) {
     throw new DigillmRouterEngineError(`router chose ${model}, which is not on the allowlist`);
   }
@@ -355,8 +361,14 @@ export type DigillmRouterEngineInput = {
 export function decideDigillmRoute(input: DigillmRouterEngineInput): DigillmRouterDecision {
   const chosen = resolveRoutes(input.routes);
   if (chosen.length === 0) throw new DigillmRouterEngineError("router has no routes");
-  const allow = cleanAllow(input.allowed);
-  const bound = chosen.map((route) => ({ route, model: bindModel(route, allow, input.fallback) }));
+  const blocked = premiumModelIds();
+  const raw = cleanAllow(input.allowed);
+  const allow = raw.filter((item) => !blocked.has(item));
+  if (raw.length > 0 && allow.length === 0) {
+    throw new DigillmRouterEngineError("router will not use a premium model");
+  }
+  const usableFallback = blocked.has(input.fallback.trim()) ? "" : input.fallback;
+  const bound = chosen.map((route) => ({ route, model: bindModel(route, allow, usableFallback) }));
   if (allow.length === 1) {
     const only = allow[0] ?? "";
     const match = bound.find((item) => item.model === only) ?? bound[0];
@@ -379,7 +391,7 @@ export function decideDigillmRoute(input: DigillmRouterEngineInput): DigillmRout
     if (!found) throw new DigillmRouterEngineError("router hit a route that is not on offer");
     return checked(found.route.id, found.route.label, found.model, hit.reason, hit.confidence, allow);
   }
-  const model = defaultModel(allow, input.fallback);
+  const model = defaultModel(allow, usableFallback);
   const reason = input.text.trim()
     ? "No strong signal — using the deployment default."
     : "Empty question — using the deployment default.";

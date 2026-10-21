@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from digillm.router.catalog import premium_ids
 from digillm.router.classify import centroid_route, rule_route
 from digillm.router.policy import bind_model, default_model, resolve_routes
 from digillm.router.types import RouterDecision, RouterError, RouterRoute
@@ -24,8 +25,13 @@ def route_query(
     chosen_routes = resolve_routes(routes)
     if not chosen_routes:
         raise RouterError("router has no routes")
-    bound = [(route, bind_model(route, allowed, fallback)) for route in chosen_routes]
-    allow = [item.strip() for item in allowed if item.strip()]
+    blocked = premium_ids()
+    raw = [item.strip() for item in allowed if item.strip()]
+    allow = [item for item in raw if item not in blocked]
+    if raw and not allow:
+        raise RouterError("router will not use a premium model")
+    usable_fallback = "" if fallback.strip() in blocked else fallback
+    bound = [(route, bind_model(route, allow, usable_fallback)) for route in chosen_routes]
     if len(allow) == 1:
         only = allow[0]
         route = next((item for item, model in bound if model == only), bound[0][0])
@@ -47,7 +53,7 @@ def route_query(
         route, model = by_id[route_id]
         return _checked(route.id, route.label, model, reason, confidence, allow)
 
-    model = default_model(allow, fallback)
+    model = default_model(allow, usable_fallback)
     reason = (
         "Empty question — using the deployment default."
         if not text.strip()
@@ -67,6 +73,8 @@ def _checked(
     confidence: float,
     allow: list[str],
 ) -> RouterDecision:
+    if model in premium_ids():
+        raise RouterError(f"router will not use premium model {model}")
     if allow and model not in allow:
         raise RouterError(f"router chose {model}, which is not on the allowlist")
     return RouterDecision(

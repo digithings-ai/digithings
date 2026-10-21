@@ -1,8 +1,9 @@
 """Resolve Auto, Reasoning, Fast, and Light from the model catalog.
 
 The rules match the digichat model picker (PR 6193): newest generation of
-each family, then the output-price cap. Winners are computed from
-``model_catalog.json``. They are not stored as model ids.
+each family, then the standard output-price cap. A model flagged ``premium``
+(above that cap and at or under the premium cap) is manual selection only.
+Winners are computed from ``model_catalog.json``. They are not stored as ids.
 """
 
 from __future__ import annotations
@@ -32,12 +33,14 @@ class CatalogModel(BaseModel):
     ttft_samples: int = Field(alias="ttftSamples")
     ttft_p50_ms: float = Field(alias="ttftP50Ms")
     released: str | None = None
+    premium: bool = False
 
 
 class CatalogPolicy(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     price_cap_usd_per_million: float = Field(alias="priceCapUsdPerMillion")
+    premium_cap_usd_per_million: float = Field(alias="premiumCapUsdPerMillion")
     min_context_tokens: int = Field(alias="minContextTokens")
     min_ttft_samples: int = Field(alias="minTtftSamples")
     latest_generations_per_family: int = Field(alias="latestGenerationsPerFamily")
@@ -104,6 +107,39 @@ def _generation_window(catalog: ModelCatalog) -> list[CatalogModel]:
     return kept
 
 
+def _is_premium(model: CatalogModel, policy: CatalogPolicy, pinned_id: str) -> bool:
+    """True when the catalog flags the row, or its price sits in the premium band.
+
+    The band is above the standard cap and at or under the premium cap. The
+    pinned Auto model stays standard even if a deployment price would catch it.
+    """
+
+    if model.premium:
+        return True
+    if model.id == pinned_id:
+        return False
+    return (
+        policy.price_cap_usd_per_million < model.output_per_m <= policy.premium_cap_usd_per_million
+    )
+
+
+def premium_ids(catalog: ModelCatalog | None = None) -> frozenset[str]:
+    """Ids in the newest generation that the picker marks manual-only.
+
+    That is the premium group #6193 builds: ``premium: true``, or an output
+    price above the standard cap and at or under the premium cap.
+    """
+
+    table = catalog if catalog is not None else load_catalog()
+    pinned_id = _auto_id(table)
+    window = {model.id for model in _generation_window(table)}
+    return frozenset(
+        model.id
+        for model in table.models
+        if model.id in window and _is_premium(model, table.policy, pinned_id)
+    )
+
+
 def _auto_id(catalog: ModelCatalog) -> str:
     for preset in catalog.presets:
         if preset.id == "auto" and preset.model:
@@ -133,7 +169,12 @@ def resolve_preset_ids(
             "model catalog: default model is not in the current generation "
             "or is under the context floor"
         )
-    capped = [model for model in current if model.output_per_m <= cap or model.id == pinned.id]
+    blocked = premium_ids(table)
+    capped = [
+        model
+        for model in current
+        if model.id not in blocked and (model.output_per_m <= cap or model.id == pinned.id)
+    ]
 
     reasoning = sorted(
         (model for model in capped if model.reasoning and model.reasoning_score > 0),

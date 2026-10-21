@@ -20,7 +20,7 @@
       "name": "demo-reasoning-proof",
       "route_id": "reasoning",
       "label": "Reasoning",
-      "model": "deepseek/deepseek-v4.1-flash-1017",
+      "model": "z-ai/glm-5.3-flash",
       "reason": "Multi-step reasoning, math, or a long question.",
       "confidence": 0.88
     },
@@ -36,7 +36,7 @@
       "name": "code-fence",
       "route_id": "reasoning",
       "label": "Reasoning",
-      "model": "deepseek/deepseek-v4.1-flash-1017",
+      "model": "z-ai/glm-5.3-flash",
       "reason": "Code or an error trace.",
       "confidence": 0.9
     },
@@ -97,10 +97,18 @@
       "confidence": 0.86
     },
     {
+      "name": "premium-allowlist-is-skipped",
+      "route_id": "reasoning",
+      "label": "Reasoning",
+      "model": "openai/gpt-oss-120b",
+      "reason": "Only one model is on the allowlist.",
+      "confidence": 1.0
+    },
+    {
       "name": "catalog-reasoning-when-allowlisted",
       "route_id": "reasoning",
       "label": "Reasoning",
-      "model": "z-ai/glm-5.3",
+      "model": "z-ai/glm-5.3-flash",
       "reason": "Multi-step reasoning, math, or a long question.",
       "confidence": 0.88
     },

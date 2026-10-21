@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from digillm.router import RouterRoute, route_query
-from digillm.router.catalog import load_catalog, preset_ids, resolve_preset_ids
+from digillm.router.catalog import load_catalog, premium_ids, preset_ids
 from digillm.router.decide import route_query as decide_route_query
 
 pytestmark = pytest.mark.unit
@@ -23,7 +23,7 @@ _ROUTER = _SRC / "digillm" / "router"
 
 ALLOWED = [
     "deepseek/deepseek-v4.1-flash-1017",
-    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash",
     "google/gemini-3.5-flash-lite",
     "openai/gpt-oss-120b",
 ]
@@ -58,7 +58,7 @@ def test_categories_on_the_demo_allowlist() -> None:
     assert fast.route_id == "fast"
     assert fast.model == "google/gemini-3.5-flash-lite"
     assert reasoning.route_id == "reasoning"
-    assert reasoning.model == "z-ai/glm-5.3"
+    assert reasoning.model == "z-ai/glm-5.3-flash"
     assert code.route_id == "reasoning"
     assert "capital" not in fast.reason.lower()
     assert "sqrt" not in reasoning.reason.lower()
@@ -149,24 +149,37 @@ def test_flash_1017_price_comes_from_the_picker_catalog() -> None:
     assert row.output_per_m == 0.3
 
 
-def test_the_catalog_cap_selects_reasoning() -> None:
+def test_router_never_routes_to_a_premium_model() -> None:
     catalog = load_catalog()
-    assert catalog.policy.price_cap_usd_per_million == 2.5
-    under_two = resolve_preset_ids(catalog, price_cap=2)
-    at_shipped_cap = preset_ids()
-    assert under_two["reasoning"] == "z-ai/glm-5.3-flash"
-    assert at_shipped_cap == {
-        "auto": "deepseek/deepseek-v4.1-flash-1017",
-        "reasoning": "z-ai/glm-5.3",
-        "fast": "google/gemini-3.5-flash-lite",
-        "light": "openai/gpt-oss-120b",
-    }
+    assert catalog.policy.price_cap_usd_per_million == 2
+    assert catalog.policy.premium_cap_usd_per_million == 2.5
+    blocked = premium_ids(catalog)
+    assert blocked == {"google/gemini-3.8-flash", "z-ai/glm-5.3"}
+    for model_id in blocked:
+        row = next(item for item in catalog.models if item.id == model_id)
+        assert row.premium is True
+    assert preset_ids()["reasoning"] == "z-ai/glm-5.3-flash"
     reasoning = route_query(
         text="Prove that the square root of 2 is irrational, step by step",
-        allowed=ALLOWED,
+        allowed=[*ALLOWED, "z-ai/glm-5.3", "google/gemini-3.8-flash"],
         fallback=FALLBACK,
     )
-    assert reasoning.model == at_shipped_cap["reasoning"]
+    assert reasoning.route_id == "reasoning"
+    assert reasoning.model == "z-ai/glm-5.3-flash"
+    assert reasoning.model not in blocked
+    skipped = route_query(
+        text="Prove that the square root of 2 is irrational, step by step",
+        allowed=["z-ai/glm-5.3", "google/gemini-3.8-flash", "openai/gpt-oss-120b"],
+        fallback="z-ai/glm-5.3",
+    )
+    assert skipped.route_id == "reasoning"
+    assert skipped.model == "openai/gpt-oss-120b"
+    with pytest.raises(Exception, match="premium"):
+        route_query(
+            text="Prove that the square root of 2 is irrational, step by step",
+            allowed=["z-ai/glm-5.3", "google/gemini-3.8-flash"],
+            fallback="z-ai/glm-5.3",
+        )
 
 
 def test_embed_allowlist_splits_the_three_demo_prompts() -> None:
@@ -181,10 +194,10 @@ def test_embed_allowlist_splits_the_three_demo_prompts() -> None:
     assert light.reason == "Short greeting or acknowledgment."
     assert (fast.route_id, fast.model) == ("fast", "deepseek/deepseek-v4.1-flash-1017")
     assert fast.reason == "Short factual lookup."
-    # The embed list has neither the Fast preset nor the Reasoning preset.
+    # Fast's preset is not on this list. Reasoning's preset, GLM 5.3 Flash, is.
     assert (reasoning.route_id, reasoning.model) == (
         "reasoning",
-        "deepseek/deepseek-v4.1-flash-1017",
+        "z-ai/glm-5.3-flash",
     )
     assert reasoning.reason == "Multi-step reasoning, math, or a long question."
 

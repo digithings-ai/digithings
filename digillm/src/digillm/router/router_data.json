@@ -26,7 +26,7 @@
   ],
   "token_pattern": "[a-z0-9]+",
   "bind": "catalog_presets",
-  "price_note": "Reasoning, Fast, and Light are resolved from model_catalog.json (newest generation per family, then the output-price cap in that file). Auto is the pinned model and the fallback. The router does not store those ids and does not walk prices.",
+  "price_note": "Reasoning, Fast, and Light are resolved from model_catalog.json (newest generation per family, then the standard output-price cap). Models flagged premium are manual only and are never selected. Auto is the pinned model and the fallback. The router does not store those ids and does not walk prices.",
   "rules": [
     {
       "id": "greeting",
