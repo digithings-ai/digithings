@@ -835,12 +835,19 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
 
     The port value is validated as it was written, not as a stripped copy: a
     port is plain decimal digits, so ``" 8000"`` is refused like any other
-    value that is not a port (DIG-4911, ask 1). A reference outside the port
-    slot is an ordinary value, and its surrounding whitespace is stripped.
+    value that is not a port (DIG-4911, ask 1). What lands in the port slot
+    is the validated integer, so the URL carries the port and not the text
+    of the value. A reference outside the port slot is an ordinary value,
+    and its surrounding whitespace is stripped.
 
-    The Supabase pair keeps its own soft policy: ``localstack.localenv``
-    normalizes ``DT_SUPABASE_PORT`` before the contracts see it, so the
-    contracts never receive a padded value for that knob.
+    The Supabase pair keeps its own soft policy, and the policy is applied
+    before the contracts ever see the value: ``localstack.supabase_ports``
+    accepts only an ASCII-digit port and
+    ``localstack.localenv.apply_defaults`` writes the resolved port back
+    into the environment before any handler runs (``scripts/dt`` calls it
+    before it dispatches). So on the gate path the contracts are handed the
+    canonical port, never a padded one; a caller that hands a padded value
+    straight to :func:`resolve` is refused, which is fail-closed.
 
     The URL that comes out is then parsed and refused unless it is still the
     loopback probe on the validated port (:func:`_assert_loopback_port`), so

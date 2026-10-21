@@ -416,8 +416,10 @@ def test_the_digigraph_probe_refuses_a_value_that_is_not_a_port(value):
 
     Surrounding whitespace is in the list: a port is plain decimal digits
     (DIG-4911 ask 1), so " 8000" is refused and never trimmed into a port.
-    The Supabase pair keeps its own soft policy, because localstack.localenv
-    normalizes DT_SUPABASE_PORT before the contracts see it.
+    The Supabase pair keeps its own soft policy, because
+    localstack.supabase_ports accepts only an ASCII-digit port and
+    localstack.localenv.apply_defaults writes the resolved port back into
+    the environment before any handler runs.
     """
     check = _digigraph_check()
     with pytest.raises(contracts.InvalidPort) as excinfo:
@@ -465,6 +467,22 @@ def test_the_digigraph_probe_accepts_a_plain_port(value):
     split = urlsplit(url)
     assert split.hostname == "127.0.0.1"
     assert split.port == int(value)
+
+
+def test_the_port_that_lands_in_the_url_is_the_integer_it_validates_to():
+    """The URL carries the port, not the text of the value.
+
+    The knob is validated and the validated integer is what lands in the URL
+    slot, so a value written with a leading zero cannot leave a padded port
+    in the URL the gate opens. Deleting the substitution (templating the raw
+    value instead) changes the URL text and nothing else, which is exactly
+    why the text has to be pinned here.
+    """
+    check = _digigraph_check()
+    url, reason = contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "00800"})
+    assert reason is None
+    assert url == "http://127.0.0.1:800/healthz"
+    assert urlsplit(url).port == 800
 
 
 @pytest.mark.parametrize("config", [{}, {"DT_DIGIGRAPH_PORT": ""}])
@@ -564,6 +582,26 @@ def test_a_knob_outside_the_port_slot_keeps_the_plain_expansion():
         source="test",
     )
     assert contracts.resolve(other, {"DT_OTHER_PATH": "api"})[0] == (
+        "http://127.0.0.1:8000/api/x"
+    )
+
+
+def test_a_padded_value_outside_the_port_slot_is_trimmed_and_not_refused():
+    """The strip outside the port slot is pinned by the padded value.
+
+    A reference that does not stand for the port is an ordinary value, so its
+    surrounding whitespace is noise and is trimmed. An unpadded value cannot
+    tell the trim from its absence, so the padded one is the case that holds
+    the branch in place: dropping the trim leaves the padding in the URL.
+    """
+    other = contracts.Check(
+        name="probe",
+        kind="http",
+        url="http://127.0.0.1:8000/${DT_OTHER_PATH:-api}/x",
+        profiles=("core",),
+        source="test",
+    )
+    assert contracts.resolve(other, {"DT_OTHER_PATH": " api "})[0] == (
         "http://127.0.0.1:8000/api/x"
     )
 
