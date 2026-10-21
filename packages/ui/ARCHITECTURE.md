@@ -292,7 +292,9 @@ content not mounted while the rows stay closed. (`showDetails` is set by every
 level and read by no renderer yet; it is not part of the contract.)
 
 **Spacing.** The chain's vertical rhythm is the `--trace-space-1` … `--trace-space-7` scale
-and the `--trace-*` tokens on `.digichat-thread` (`chat-aui.css`). The Worked
+and the `--trace-*` tokens, declared once on `.digichat-thread, .digichat-launcher` in
+`src/styles/chat-aui.css` (the skin, `chat-digichat.css`, only reads them). The scale is
+separate from the design tokens' `--space-*` names; `trace-spacing.source.test.ts` keeps it so. The Worked
 title, the gap between sibling groups, the gap inside a group, and the
 reasoning header-to-body step all read those tokens. Sibling groups share
 `--trace-group-gap`; a tool group and a reasoning group do not carry their
