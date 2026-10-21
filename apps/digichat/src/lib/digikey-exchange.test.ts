@@ -195,7 +195,7 @@ describe("exchangeDigikeyBffSession", () => {
     expect(timing.elapsedMs).toBeLessThan(DIGIKEY_BFF_RETRY_BUDGET_MS);
   });
 
-  it("pins the retry schedule and the per-attempt abort window", () => {
+  it("pins the retry schedule and the per-attempt abort cap", () => {
     expect(DIGIKEY_BFF_RETRY_DELAYS_MS).toEqual([
       0, 2_000, 4_000, 8_000, 12_000, 15_000, 15_000,
     ]);
@@ -236,11 +236,13 @@ describe("exchangeDigikeyBffSession", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("states the real budget of one exchange", () => {
+  it("pins the stated budget of one exchange", () => {
     // The budget bounds the whole retry loop, not each attempt: the loop is
     // abandoned once this much wall clock has passed, and no attempt starts
-    // after the budget is spent. It is the time a blocked caller waits, so it
-    // is exported and pinned here instead of being claimed in a comment.
+    // after the budget is spent. It is the time a blocked caller waits, so
+    // the number is exported and pinned here instead of being claimed in a
+    // comment. This test pins the number; the loop's enforcement of it is
+    // pinned by the test below ("gives up exactly at the stated budget").
     expect(DIGIKEY_BFF_RETRY_BUDGET_MS).toBe(100_000);
   });
 
