@@ -761,12 +761,14 @@ already follows, one for the model chip and one for this one.
   where BYOK is on the table.** The gate is the label, not BYOK:
   `packages/ui/src/components/chat/skins/digichat-composer-toolbar.tsx`
   sets `showProvider = providerLabel.length > 0`, so a host that names no
-  backend shows no chip at all. The `showByok` preference the `/byok`
-  slash command uses (`src/lib/product-slash-commands.ts`) decides only
-  what the chip is: where BYOK is on the table the chip is a button that
-  opens the provider menu, and where it is not the same label renders as
-  a static span, so a surface that does not offer BYOK still shows the
-  house backend chip.
+  backend shows no chip at all. The tenant's `showByok` gate flag — the
+  one that decides whether the `/byok` slash command is offered
+  (`src/lib/product-slash-commands.ts`; the command itself is defined in
+  `packages/digichat-ui/src/slash-commands.ts`) — decides only what the
+  chip is: where BYOK is on the table the chip is a button that opens the
+  provider menu, and where it is not the same label renders as a static
+  span, so a surface that does not offer BYOK still shows the house
+  backend chip.
 - **The label is derived from the backend that actually serves the chat.**
   The host names it: `EmbedChatPrefsApi.providerLabel` carries one of
   three kinds of value — a provider id (`openrouter`) while the session
@@ -783,7 +785,8 @@ vocabulary**: it renders the label it is handed, and the app owns the
 names. The static surfaces (home, baseline, devkit) have no BYOK state of
 their own — the provider menu they render cannot activate an own key — so
 they name the house backend; the embed surface names its own provider while
-a key is set.
+a key is set, and names a foundry tenant's real backend (`Azure AI
+Foundry`) when no key is set.
 
 **The chip follows the label, not the BYOK gate (DIG-4888).** Decision: the
 chip appears when the host names a backend, and `showByok` decides only
