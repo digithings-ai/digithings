@@ -66,10 +66,10 @@ export async function exchangeDigikeyBffSession(
     }
     const attemptBudget = Math.min(ATTEMPT_TIMEOUT_MS, BUDGET_MS - (Date.now() - startedAt));
     if (attemptBudget <= 0) break;
-    let res: Response;
+    let res: Response | null = null;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), attemptBudget);
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), attemptBudget);
       res = await fetch(`${base}/v1/oauth/token`, {
         method: "POST",
         signal: ctrl.signal,
@@ -83,10 +83,12 @@ export async function exchangeDigikeyBffSession(
           subject,
         }),
       });
-      clearTimeout(t);
     } catch {
       continue; // network error / timeout while waking
+    } finally {
+      clearTimeout(t);
     }
+    if (!res) continue;
     if (res.ok) {
       const data = (await res.json()) as TokenJson;
       return parseTokenPayload(data);
