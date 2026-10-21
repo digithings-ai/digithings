@@ -47,17 +47,85 @@ const proofCodeLines = codeLinesOf(embedClientSrc).filter((line) =>
 );
 
 /**
- * A line without its trailing comment.
+ * The source with its comments removed.
  *
- * A pin that reads a comment reads nothing: prose can carry the marker, so
- * the pin would read the prose while the wiring says something else, and a
- * word in prose can stand in for the wiring, so the pin would pass on code
- * that no longer names the backend. The scan runs on code only.
+ * A pin that reads a comment reads nothing: a comment can carry the marker
+ * (the pin would read the prose while the wiring says something else) and a
+ * word in prose can stand in for the wiring (the pin would pass on code that
+ * no longer names the backend). The comments become spaces, so the code keeps
+ * its place and the line of a site does not move.
  */
-function stripTrailingComment(line: string): string {
+function codeOnly(source: string): string {
+  let out = "";
+  let i = 0;
   let quote: string | null = null;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line.charAt(i);
+  while (i < source.length) {
+    const ch = source.charAt(i);
+    const next = source.charAt(i + 1);
+    if (quote !== null) {
+      out += ch;
+      if (ch === "\\" && i + 1 < source.length) {
+        out += next;
+        i += 2;
+        continue;
+      }
+      if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      while (i < source.length && source.charAt(i) !== "\n") {
+        out += " ";
+        i += 1;
+      }
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      while (
+        i < source.length &&
+        !(source.charAt(i) === "*" && source.charAt(i + 1) === "/")
+      ) {
+        out += source.charAt(i) === "\n" ? "\n" : " ";
+        i += 1;
+      }
+      out += "  ";
+      i += 2;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+/**
+ * The expression that wires the provider label.
+ *
+ * The wiring is one property, so the expression is the whole statement: it
+ * ends at the first comma or semicolon outside brackets and parentheses, so
+ * a call that spans several lines is captured whole. The marker has to
+ * appear exactly once: a second site fails loudly instead of quietly
+ * re-targeting the pin.
+ */
+function providerLabelExpression(code: string): string {
+  const sites = [...code.matchAll(/providerLabel\s*:/g)];
+  if (sites.length !== 1) {
+    throw new Error(
+      `the source wires ${sites.length} provider labels, expected exactly one`,
+    );
+  }
+  const at = (sites[0].index ?? 0) + sites[0][0].length;
+  const rest = code.slice(at);
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < rest.length; i++) {
+    const ch = rest.charAt(i);
     if (quote !== null) {
       if (ch === quote) quote = null;
       continue;
@@ -66,44 +134,30 @@ function stripTrailingComment(line: string): string {
       quote = ch;
       continue;
     }
-    if (ch === "/" && line.charAt(i + 1) === "/") return line.slice(0, i);
+    if (ch === "(" || ch === "[" || ch === "{") {
+      depth++;
+      continue;
+    }
+    if (ch === ")" || ch === "]" || ch === "}") {
+      depth--;
+      if (depth < 0) break;
+      continue;
+    }
+    if (depth === 0 && (ch === "," || ch === ";")) {
+      return rest.slice(0, i).trim();
+    }
   }
-  return line;
+  return rest.trim();
 }
 
-/**
- * The statement that wires the provider label.
- *
- * The wiring is one property, so the statement is the property line plus
- * the lines its brackets span. The marker has to start a line: a marker
- * inside a comment, or inside another statement, is not the wiring. The
- * marker has to appear exactly once, so a second site fails loudly instead
- * of quietly re-targeting the pin.
- */
-function providerLabelStatement(source: string): string {
-  const lines = codeLinesOf(source).map(stripTrailingComment);
-  const sites = lines.filter((line) => /^\s*providerLabel\s*:/.test(line));
-  if (sites.length !== 1) {
-    throw new Error(
-      `the source wires ${sites.length} provider labels, expected exactly one`,
-    );
-  }
-  const at = lines.indexOf(sites[0]);
-  const markerAt = sites[0].indexOf("providerLabel");
-  const colonAt = sites[0].indexOf(":", markerAt);
-  let statement = sites[0].slice(colonAt + 1);
-  const open = (line: string) => (line.match(/\(/g) ?? []).length;
-  const close = (line: string) => (line.match(/\)/g) ?? []).length;
-  let depth = open(statement) - close(statement);
-  let next = at + 1;
-  while (depth > 0 && next < lines.length) {
-    const line = lines[next];
-    statement += `\n${line}`;
-    depth += open(line) - close(line);
-    next += 1;
-  }
-  // The trailing comma belongs to the object literal around the wiring.
-  return statement.trim().replace(/,$/, "").trim();
+/** The expression without the whitespace that formatting may change. */
+function normalised(expression: string): string {
+  return expression
+    .replace(/\s+/g, " ")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(/,\)/g, ")")
+    .trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -600,33 +654,23 @@ describe("an expired trial proof is dropped and the page is asked for a new one"
 
 describe("the embed composer provider chip", () => {
   it("derives the label from the BYOK state and the serving backend, not from a literal", () => {
-    const wiring = providerLabelStatement(embedClientSrc);
-    // The shared helper owns the naming: the app has one vocabulary.
-    expect(wiring).toMatch(/^backendLabel\(/);
-    // The own-key provider wins while the session carries a key, and it is
-    // the first thing the helper is given: the state is not inverted and
-    // the arguments are not swapped.
-    expect(wiring).toMatch(
-      /^backendLabel\(\s*byokIsSet\s*\?\s*byokProvider\s*:\s*null\s*,/,
+    const wiring = normalised(providerLabelExpression(codeOnly(embedClientSrc)));
+    // The whole wiring, pinned: the shared helper owns the naming, the
+    // own-key provider comes first and is not inverted, the backend that
+    // serves the chat comes second, and no literal names a backend.
+    expect(wiring).toBe(
+      "backendLabel(byokIsSet ? byokProvider : null, stockClient.backendType)",
     );
-    expect(wiring).not.toMatch(/!\s*byokIsSet/);
-    // The backend that serves the chat is named too, so a Foundry tenant
-    // does not get the house backend's name. The source of that backend is
-    // named, not any local that happens to be called backendType.
-    expect(wiring).toMatch(/,\s*stockClient\.backendType\s*,?\s*\)$/);
-    // No literal backend name: a copy of one drifts the moment the house
-    // backend changes.
-    expect(wiring).not.toMatch(/["'`]/);
   });
 
   it("reads the naming helper from its one home, not from a local copy", () => {
+    const code = codeOnly(embedClientSrc);
     const helperImport =
-      /import\s*\{[^}]*\bbackendLabel\b[^}]*\}\s*from\s*["']@\/lib\/provider-label["']/g;
-    expect(embedClientSrc.match(helperImport)).toHaveLength(1);
-    // A local copy of the helper shadows the import and answers with a
-    // label of its own.
-    expect(embedClientSrc).not.toMatch(
-      /(?:const|let|var|function)\s+backendLabel\b/,
-    );
+      /import\s*\{[^}]*\bbackendLabel\b[^}]*\}\s*from\s*["'](?:@\/lib\/|\.{1,2}\/)*provider-label["']/g;
+    // The helper is named twice: in the import and in the wiring. A local
+    // copy, a shadowed parameter or a destructured binding would name it a
+    // third time.
+    expect((code.match(/\bbackendLabel\b/g) ?? []).length).toBe(2);
+    expect(code.match(helperImport)).toHaveLength(1);
   });
 });

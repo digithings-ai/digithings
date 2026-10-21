@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CLIENT_CONFIG } from "./deploy-config";
@@ -7,14 +7,69 @@ import { HOUSE_BACKEND_ID } from "./provider-label";
 import { toStockChatPrefsConfig } from "./route-client-config";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const routeClientConfigSrc = readFileSync(
-  join(here, "route-client-config.ts"),
-  "utf8",
-);
+const appSrc = join(here, "..");
+
+/**
+ * The source with its comments removed.
+ *
+ * A pin that reads a comment reads nothing: a comment can carry the marker
+ * (the pin would read the prose while the wiring says something else) and a
+ * word in prose can stand in for the wiring (the pin would pass on code that
+ * no longer names the backend). The comments become spaces, so the code keeps
+ * its place.
+ */
+function codeOnly(source: string): string {
+  let out = "";
+  let i = 0;
+  let quote: string | null = null;
+  while (i < source.length) {
+    const ch = source.charAt(i);
+    const next = source.charAt(i + 1);
+    if (quote !== null) {
+      out += ch;
+      if (ch === "\\" && i + 1 < source.length) {
+        out += next;
+        i += 2;
+        continue;
+      }
+      if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      while (i < source.length && source.charAt(i) !== "\n") {
+        out += " ";
+        i += 1;
+      }
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      while (
+        i < source.length &&
+        !(source.charAt(i) === "*" && source.charAt(i + 1) === "/")
+      ) {
+        out += source.charAt(i) === "\n" ? "\n" : " ";
+        i += 1;
+      }
+      out += "  ";
+      i += 2;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
 
 /** The one import the house backend id may come from. */
 const houseBackendImport =
-  /import\s*\{[^}]*\bHOUSE_BACKEND_ID\b[^}]*\}\s*from\s*["'](?:\.\/|@\/lib\/)provider-label["']/g;
+  /import\s*\{[^}]*\bHOUSE_BACKEND_ID\b[^}]*\}\s*from\s*["'](?:@\/lib\/|\.{1,2}\/)*provider-label["']/g;
 
 /**
  * The static surfaces that render the chip without a session of their own:
@@ -23,57 +78,58 @@ const houseBackendImport =
  * of today's value.
  */
 const staticSurfaces = [
-  "../app/(digichat)/home-stock-client.tsx",
-  "../app/(baseline)/baseline/baseline-client.tsx",
-  "../app/(devkit)/devkit/devkit-preview.tsx",
+  "app/(digichat)/home-stock-client.tsx",
+  "app/(baseline)/baseline/baseline-client.tsx",
+  "app/(devkit)/devkit/devkit-preview.tsx",
 ];
 
-/** Code lines only - comments state the rule, they do not implement it. */
-function codeLinesOf(source: string): string[] {
-  return source
-    .split("\n")
-    .filter((line) => {
-      const trimmed = line.trim();
-      return (
-        trimmed.length > 0 &&
-        !trimmed.startsWith("//") &&
-        !trimmed.startsWith("*") &&
-        !trimmed.startsWith("/*")
-      );
-    });
+/** Every app source file under a directory, test files excluded. */
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFiles(full);
+    if (!/\.tsx?$/.test(entry.name)) return [];
+    if (/\.test\.tsx?$/.test(entry.name)) return [];
+    return [full];
+  });
 }
 
 describe("the static composer provider chip", () => {
   it("derives the label from the shared house-backend constant, not from a literal", () => {
-    // One place wires the label for the static surfaces.
-    const labelLines = codeLinesOf(routeClientConfigSrc).filter((line) =>
-      /providerLabel\s*:/.test(line),
+    const code = codeOnly(
+      readFileSync(join(here, "route-client-config.ts"), "utf8"),
     );
-    expect(labelLines).toHaveLength(1);
-    expect(labelLines[0]).toMatch(/providerLabel\s*:\s*HOUSE_BACKEND_ID\b/);
-    // No literal backend name: a copy of today's value renders the same
-    // label today and drifts the moment the house backend changes.
-    expect(labelLines[0]).not.toMatch(/["'`]/);
-  });
-
-  it("reads the constant from its one home, with no copy of its own", () => {
-    expect(routeClientConfigSrc.match(houseBackendImport)).toHaveLength(1);
-    // A local copy of the constant shadows the import and drifts with it.
-    expect(routeClientConfigSrc).not.toMatch(
-      /(?:const|let|var|function)\s+HOUSE_BACKEND_ID\b/,
-    );
+    // One wiring for the static surfaces, and it names the constant.
+    const sites = [...code.matchAll(/providerLabel\s*[:=]/g)];
+    expect(sites).toHaveLength(1);
+    expect(code).toMatch(/providerLabel\s*:\s*HOUSE_BACKEND_ID\b/);
+    // The constant is named twice: in the import and in the wiring. A copy
+    // of it - declared, destructured or shadowed - would name it a third
+    // time, and a second write of the label would name it a fourth.
+    expect((code.match(/\bHOUSE_BACKEND_ID\b/g) ?? []).length).toBe(2);
+    expect(code.match(houseBackendImport)).toHaveLength(1);
   });
 
   it("leaves the static surfaces without a label of their own", () => {
     for (const surface of staticSurfaces) {
-      const lines = codeLinesOf(readFileSync(join(here, surface), "utf8"));
-      // A surface that names a backend itself holds a copy of it. The
-      // shared helper is the one home of the house backend id.
-      expect(
-        lines.filter((line) => /providerLabel\s*:/.test(line)),
-        surface,
-      ).toEqual([]);
+      const code = codeOnly(readFileSync(join(appSrc, surface), "utf8"));
+      // A surface names no backend of its own, in any form: a property, an
+      // assignment, a spread that carries one.
+      expect((code.match(/providerLabel/g) ?? []).length).toBe(0);
+      // And it still reads the label from the one home.
+      expect(code).toMatch(/toStockChatPrefsConfig\(/);
     }
+  });
+
+  it("holds every static surface that renders the chip", () => {
+    // A surface that renders the chip and is not held by the case above
+    // would name a backend of its own with the suite green, so the list of
+    // surfaces is checked against the tree.
+    const rendering = sourceFiles(join(appSrc, "app"))
+      .filter((file) => readFileSync(file, "utf8").includes("toStockChatPrefsConfig("))
+      .map((file) => relative(appSrc, file))
+      .sort();
+    expect(rendering).toEqual([...staticSurfaces].sort());
   });
 
   it("names the house backend on the static surfaces", () => {
