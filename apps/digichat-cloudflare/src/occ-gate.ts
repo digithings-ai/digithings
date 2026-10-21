@@ -77,10 +77,60 @@ export async function occGate(
     }
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   }
-  const nf = await upstream(`${url.origin}${SITE_NOT_FOUND_PATH}`, {
+  return siteNotFound(url.origin, upstream);
+}
+
+/**
+ * The site's ordinary 404, passed through untouched: same status, body and
+ * headers as a path the site does not have (/xyz). Nothing extra (not even
+ * cache-control) may mark a gated address as special.
+ */
+export async function siteNotFound(
+  origin: string,
+  upstream: (req: Request | string, init?: RequestInit) => Promise<Response> = fetch,
+): Promise<Response> {
+  const nf = await upstream(`${origin}${SITE_NOT_FOUND_PATH}`, {
     headers: { accept: "text/html" },
   });
-  const headers = new Headers(nf.headers);
-  headers.set("cache-control", "no-store");
-  return new Response(nf.body, { status: 404, headers });
+  return new Response(nf.body, { status: 404, statusText: nf.statusText, headers: nf.headers });
+}
+
+/** Invite-only embed tenants (mirrors digichat INVITE_ONLY_EMBED_HOSTS). */
+export const INVITE_ONLY_EMBED_HOSTS: ReadonlySet<string> = new Set(["occ.digithings.ai"]);
+
+/** Same normalisation as digichat `normalizeEmbedHost`. */
+function embedHostOf(raw: string | null): string | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (!v) return null;
+  if (v.includes("://")) {
+    try {
+      return new URL(v).hostname.replace(/\.$/, "") || null;
+    } catch {
+      return null;
+    }
+  }
+  return v.split("/")[0]!.split(":")[0]!.replace(/\.$/, "") || null;
+}
+
+/** /embed (or /embed/*) asking for an invite-only tenant via ?host=. */
+export function isInviteOnlyEmbedRequest(url: URL): boolean {
+  if (url.pathname !== "/embed" && !url.pathname.startsWith("/embed/")) return false;
+  const host = embedHostOf(url.searchParams.get("host"));
+  return host !== null && INVITE_ONLY_EMBED_HOSTS.has(host);
+}
+
+/**
+ * The /embed form of an invite-only tenant without its key answers the site
+ * 404, exactly like /chat/occ and like any nonexistent path — never the
+ * container's own error page. Null means "invited, proxy as usual".
+ */
+export async function occEmbedGate(
+  request: Request,
+  expected: string | undefined,
+  upstream: (req: Request | string, init?: RequestInit) => Promise<Response> = fetch,
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (!isInviteOnlyEmbedRequest(url)) return null;
+  if (inviteTokenValid(url.searchParams.get("token"), expected)) return null;
+  return siteNotFound(url.origin, upstream);
 }
