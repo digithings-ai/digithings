@@ -99,7 +99,7 @@ export function applySessionTool(
   if (name === "session_set_view") {
     const mode = str(args, "mode", "view").toLowerCase();
     if (!isViewMode(mode)) {
-      return { ok: false, message: "View must be hidden, compact, balanced, or detailed." };
+      return { ok: false, message: "View must be quiet, balanced, or verbose." };
     }
     api.setView(mode);
     return { ok: true, message: `View set to ${mode}.` };

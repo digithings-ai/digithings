@@ -7,6 +7,11 @@ import {
   FoundryToolLeakFilter,
   stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
+  capacityRetryDelayMs,
+  isRateLimitFailure,
+  rateLimitHintMs,
+  rateLimitResumeDelayMs,
+  RATE_LIMIT_EXHAUSTED_TEXT,
   type FoundryStreamEvent,
   type FoundryConversationItem,
 } from "./stream";
@@ -397,6 +402,83 @@ describe("createFoundryStreamResponse", () => {
     expect(createSpy.calls[0][1]).toMatchObject({
       body: { agent_reference: { name: "digichat", type: "agent_reference" } },
     });
+  });
+
+  it("surfaces the Responses API token usage and the serving model", async () => {
+    // The context meter reads `metadata.custom.usage`; a Foundry turn has to
+    // carry the real counts or the bar can never be drawn.
+    const { client } = fakeClient([
+      { type: "response.output_text.delta", delta: "Hi" },
+      {
+        type: "response.completed",
+        response: {
+          model: "gpt-4o",
+          usage: { input_tokens: 1200, output_tokens: 340, total_tokens: 1540 },
+        },
+      },
+    ]);
+
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("hello?")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+
+    expect(out).toContain('"type":"message-metadata"');
+    expect(out).toContain('"inputTokens":1200');
+    expect(out).toContain('"outputTokens":340');
+    expect(out).toContain('"totalTokens":1540');
+    expect(out).toContain('"model":"gpt-4o"');
+  });
+
+  it("surfaces a tool-invocation failure instead of the generic outage line", async () => {
+    // What the trial actually produced: the agent called the MCP tool
+    // with a number where the tool wants a string, the MCP refused, and the
+    // response died. The reader must see the tool's complaint, not "the
+    // assistant is unavailable".
+    const client = {
+      conversations: {
+        async create() {
+          return { id: "conv_fail" };
+        },
+      },
+      responses: {
+        async create() {
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield {
+                type: "response.output_item.added",
+                item: { type: "mcp_call", name: "list_collector_reports" },
+              } as unknown as FoundryStreamEvent;
+              throw new Error(
+                "An error occurred invoking 'list_collector_reports': 'pageSize' must be a string, but a number was provided.",
+              );
+            },
+          };
+        },
+      },
+    } as unknown as OpenAIResponsesClientLike;
+
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("show me the collector reports")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+
+    expect(out).toContain("pageSize");
+    expect(out).toContain("list_collector_reports");
+    // The generic line hid the real reason.
+    expect(out).not.toContain("The assistant is unavailable");
   });
 
   it("flushes a held leak-prefix instead of silently dropping the tail of a reply", async () => {
@@ -1303,5 +1385,369 @@ describe("mapFoundryEvent call_id correlation (#3861)", () => {
     expect(mapFoundryEvent(message, state)).toBeNull();
     // Stateless callers (and native file_search agents) keep the old behavior.
     expect(mapFoundryEvent(message)?.type).toBe("activity");
+  });
+});
+
+describe("capacity retry (#5979)", () => {
+  function flakyClient(failures: number, events: FoundryStreamEvent[], status = 429) {
+    let calls = 0;
+    let conversations = 0;
+    const options: unknown[] = [];
+    const client = {
+      conversations: {
+        async create() {
+          conversations += 1;
+          return { id: "conv_429" };
+        },
+      },
+      responses: {
+        async create(_params: unknown, opts?: unknown) {
+          calls += 1;
+          options.push(opts);
+          if (calls <= failures) {
+            const err = new Error(`${status} error`) as Error & { status?: number };
+            err.status = status;
+            throw err;
+          }
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+            },
+          };
+        },
+      },
+    } as unknown as OpenAIResponsesClientLike;
+    return { client, calls: () => calls, conversations: () => conversations, options };
+  }
+
+  it("waits and resumes when the deployment is throttled, without duplicating text", async () => {
+    const { client, calls, conversations, options } = flakyClient(2, [
+      { type: "response.output_text.delta", delta: "Hello" },
+      { type: "response.output_text.delta", delta: " world" },
+      { type: "response.completed" },
+    ]);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    expect(calls()).toBe(3);
+    // The waiting state reaches the client twice (one per 429) and is cleared.
+    expect(out.match(/"state":"warming_up"/g)?.length).toBe(2);
+    expect(out).toContain("Waiting for model capacity");
+    expect(out).toContain('"state":"ready"');
+    // The answer is streamed once, not once per retry.
+    expect(out.match(/Hello/g)?.length).toBe(1);
+    // A retry must not mint a second conversation or re-emit its part.
+    expect(conversations()).toBe(1);
+    expect(out.match(/"conversationId"/g)?.length).toBe(1);
+    expect(out).not.toContain("The assistant is unavailable right now");
+    // The SDK's own retries must not multiply our schedule.
+    expect(options.map((o) => (o as { maxRetries?: number }).maxRetries)).toEqual([0, 0, 0]);
+  });
+
+  it("gives up after the retry schedule and explains the rate limit", async () => {
+    const { client, calls } = flakyClient(Number.POSITIVE_INFINITY, []);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    // Initial attempt plus one retry per configured delay.
+    expect(calls()).toBe(3);
+    // DC-18: a rate limit that outlives the retries says so plainly.
+    expect(out).toContain("per-minute token limit");
+    expect(out).not.toContain("The assistant is unavailable right now");
+    // The waiting state must not be left behind: the last connection part is
+    // `ready`, even though the error part follows it.
+    const states = [...out.matchAll(/"state":"(warming_up|ready)"/g)].map((m) => m[1]);
+    expect(states.length).toBeGreaterThan(0);
+    expect(states.at(-1)).toBe("ready");
+  });
+
+  it("does not retry a non-capacity error", async () => {
+    const { client, calls } = flakyClient(Number.POSITIVE_INFINITY, [], 400);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(out).not.toContain("Waiting for model capacity");
+    expect(out).toContain("The assistant is unavailable right now");
+  });
+
+  describe("delay classification", () => {
+    function throttle(headers: Record<string, string>) {
+      const err = new Error("429") as Error & { status: number; headers: { get(name: string): string | null } };
+      err.status = 429;
+      err.headers = { get: (name) => headers[name] ?? null };
+      return err;
+    }
+
+    it("reads retry-after seconds", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after": "7" }), 0, [1])).toBe(7000);
+    });
+
+    it("reads Azure's millisecond headers as milliseconds", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after-ms": "250" }), 0, [1])).toBe(250);
+      expect(capacityRetryDelayMs(throttle({ "x-ms-retry-after-ms": "900" }), 0, [1])).toBe(900);
+    });
+
+    it("falls back to the schedule when no header is present", () => {
+      // Regression: Number(null) === 0 used to win and zero every backoff.
+      expect(capacityRetryDelayMs(throttle({}), 1, [1, 4, 8])).toBe(4);
+    });
+
+    it("caps a hostile retry-after", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after": "3600" }), 0, [1])).toBe(30_000);
+    });
+
+    it("does not retry a non-capacity status or a hard quota stop", () => {
+      const notFound = throttle({});
+      notFound.status = 404;
+      expect(capacityRetryDelayMs(notFound, 0, [1])).toBeNull();
+
+      const quota = throttle({}) as Error & { code?: string };
+      quota.code = "insufficient_quota";
+      expect(capacityRetryDelayMs(quota, 0, [1])).toBeNull();
+    });
+  });
+});
+
+describe("mid-stream rate limit resume (DC-18)", () => {
+  const RATE_LIMIT_MESSAGE =
+    "Your requests to gpt-5.6-terra for gpt-5-6-terra in westeurope have exceeded token rate limit.";
+
+  /** Foundry fails the response in-stream, after tool calls already ran. */
+  function failedEvent(message = RATE_LIMIT_MESSAGE, code = "rate_limit_exceeded"): FoundryStreamEvent {
+    return {
+      type: "response.failed",
+      response: { status: "failed", error: { code, message } },
+    } as unknown as FoundryStreamEvent;
+  }
+
+  /** What the openai SDK throws when an SSE payload carries `error`. */
+  function sdkStreamError(message = RATE_LIMIT_MESSAGE) {
+    const err = new Error(message) as Error & { status?: number; code?: string; error?: unknown };
+    err.status = undefined;
+    err.code = "rate_limit_exceeded";
+    err.error = { code: "rate_limit_exceeded", message };
+    return err;
+  }
+
+  type Attempt = FoundryStreamEvent[] | { events: FoundryStreamEvent[]; throwAfter: Error };
+
+  function scriptedClient(attempts: Attempt[]) {
+    const params: Array<{ conversation: string; input?: string; stream: true }> = [];
+    let conversations = 0;
+    const client = {
+      conversations: {
+        async create() {
+          conversations += 1;
+          return { id: "conv_rl" };
+        },
+      },
+      responses: {
+        async create(p: { conversation: string; input?: string; stream: true }) {
+          const attempt = attempts[Math.min(params.length, attempts.length - 1)];
+          params.push({ ...p });
+          const events = Array.isArray(attempt) ? attempt : attempt.events;
+          const throwAfter = Array.isArray(attempt) ? undefined : attempt.throwAfter;
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+              if (throwAfter) throw throwAfter;
+            },
+          };
+        },
+      },
+    } as unknown as OpenAIResponsesClientLike;
+    return { client, params, conversations: () => conversations };
+  }
+
+  const toolCall = (id: string): FoundryStreamEvent[] =>
+    [
+      {
+        type: "response.output_item.added",
+        item: { type: "mcp_call", id, name: "list_collector_reports", arguments: "" },
+      },
+      {
+        type: "response.output_item.done",
+        item: {
+          type: "mcp_call",
+          id,
+          name: "list_collector_reports",
+          arguments: '{"jobTypes":"BACKUP","pageSize":"20"}',
+          output: "{}",
+        },
+      },
+    ] as unknown as FoundryStreamEvent[];
+
+  async function run(client: OpenAIResponsesClientLike, delays: readonly number[] = [1, 1, 1]) {
+    return drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "trial-agent",
+        messages: [userMessage("which mailboxes were backed up in the last 3 days")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1],
+        rateLimitResumeDelaysMs: delays,
+      }),
+    );
+  }
+
+  it("waits, shows the notice, and continues the same turn without re-sending the question", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { client, params, conversations } = scriptedClient([
+      [...toolCall("mcp_1"), failedEvent()],
+      [
+        { type: "response.output_text.delta", delta: "30 mailboxes" },
+        { type: "response.completed" },
+      ] as FoundryStreamEvent[],
+    ]);
+
+    const out = await run(client);
+
+    expect(params).toHaveLength(2);
+    expect(params[0].input).toContain("which mailboxes were backed up");
+    // The resume continues from the saved tool results: same conversation, no new input.
+    expect(params[1]).toEqual({ conversation: "conv_rl", stream: true });
+    expect(conversations()).toBe(1);
+    expect(out).toContain("Hit the model's per-minute token limit");
+    expect(out).toContain("30 mailboxes");
+    expect(out).not.toContain("The assistant is unavailable right now");
+    expect(out).not.toContain('"type":"error"');
+    const states = [...out.matchAll(/"state":"(warming_up|ready)"/g)].map((m) => m[1]);
+    expect(states.at(-1)).toBe("ready");
+  });
+
+  it("resumes when the SDK throws the rate limit while iterating", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { client, params } = scriptedClient([
+      { events: [{ type: "response.output_text.delta", delta: "Checking" }] as FoundryStreamEvent[], throwAfter: sdkStreamError() },
+      [
+        { type: "response.output_text.delta", delta: "done" },
+        { type: "response.completed" },
+      ] as FoundryStreamEvent[],
+    ]);
+
+    const out = await run(client);
+
+    expect(params).toHaveLength(2);
+    expect(params[1].input).toBeUndefined();
+    // Text before the limit stays; the continuation starts on a new paragraph.
+    expect(out).toContain("Checking");
+    expect(out).toContain('"delta":"\\n\\ndone"');
+    expect(out).not.toContain("The assistant is unavailable right now");
+  });
+
+  it("gives up after the cap with a clear explanation instead of the generic error", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { client, params } = scriptedClient([[failedEvent()]]);
+
+    const out = await run(client, [1, 1, 1]);
+
+    // First attempt plus three resumes.
+    expect(params).toHaveLength(4);
+    expect(out).toContain(JSON.stringify(RATE_LIMIT_EXHAUSTED_TEXT).slice(1, 40));
+    expect(out).not.toContain("The assistant is unavailable right now");
+    const states = [...out.matchAll(/"state":"(warming_up|ready)"/g)].map((m) => m[1]);
+    expect(states.at(-1)).toBe("ready");
+  });
+
+  it("does not resume a non-rate-limit failure", async () => {
+    const { client, params } = scriptedClient([
+      [failedEvent("The server had an error.", "server_error")],
+    ]);
+
+    const out = await run(client);
+
+    expect(params).toHaveLength(1);
+    expect(out).not.toContain("per-minute token limit");
+  });
+
+  it("does not resume a hard quota stop", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const quota = sdkStreamError("You exceeded your current quota.");
+    (quota as unknown as { code: string }).code = "insufficient_quota";
+    (quota as unknown as { error: unknown }).error = { code: "insufficient_quota", message: quota.message };
+    const { client, params } = scriptedClient([{ events: [], throwAfter: quota }]);
+
+    const out = await run(client);
+
+    expect(params).toHaveLength(1);
+    expect(out).toContain("The assistant is unavailable right now");
+  });
+
+  describe("classification", () => {
+    it("recognises every shape the limit arrives in", () => {
+      expect(isRateLimitFailure(failedEvent())).toBe(true);
+      expect(isRateLimitFailure({ type: "error", code: "rate_limit_exceeded", message: "x" })).toBe(true);
+      expect(isRateLimitFailure(sdkStreamError())).toBe(true);
+      expect(isRateLimitFailure({ status: 429 })).toBe(true);
+      expect(isRateLimitFailure(new Error(RATE_LIMIT_MESSAGE))).toBe(true);
+      expect(isRateLimitFailure(failedEvent("boom", "server_error"))).toBe(false);
+      expect(isRateLimitFailure({ status: 429, code: "insufficient_quota" })).toBe(false);
+    });
+
+    it("maps an in-stream rate-limit failure and leaves other failures alone", () => {
+      expect(mapFoundryEvent(failedEvent())).toEqual({ type: "rate-limit", message: RATE_LIMIT_MESSAGE });
+      expect(mapFoundryEvent(failedEvent("boom", "server_error"))).toBeNull();
+      expect(mapFoundryEvent({ type: "response.error", message: "Bad request" } as unknown as FoundryStreamEvent)).toEqual({
+        type: "error",
+        message: "Bad request",
+      });
+    });
+
+    it("reads the wait from the message text or headers", () => {
+      expect(rateLimitHintMs(new Error("Rate limit exceeded. Please try again in 12 seconds."))).toBe(12_000);
+      expect(rateLimitHintMs(new Error("rate limit reached; retry after 500ms"))).toBe(500);
+      expect(rateLimitHintMs(new Error(RATE_LIMIT_MESSAGE))).toBeNull();
+      const withHeader = Object.assign(new Error("429"), {
+        status: 429,
+        headers: { get: (n: string) => (n === "retry-after" ? "7" : null) },
+      });
+      expect(rateLimitHintMs(withHeader)).toBe(7_000);
+    });
+
+    it("uses the hint (plus margin, capped) or the schedule", () => {
+      const hinted = new Error("Rate limit exceeded. Please try again in 12 seconds.");
+      expect(rateLimitResumeDelayMs(hinted, 0, [30_000])).toBe(13_000);
+      expect(rateLimitResumeDelayMs(new Error("Rate limit exceeded. Try again in 600 seconds."), 0, [1])).toBe(90_000);
+      expect(rateLimitResumeDelayMs(new Error(RATE_LIMIT_MESSAGE), 1, [30_000, 60_000])).toBe(60_000);
+      expect(rateLimitResumeDelayMs(new Error(RATE_LIMIT_MESSAGE), 2, [30_000, 60_000])).toBeNull();
+      expect(rateLimitResumeDelayMs(new Error("nope"), 0, [1])).toBeNull();
+    });
   });
 });

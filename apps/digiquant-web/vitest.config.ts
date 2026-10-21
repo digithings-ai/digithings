@@ -29,9 +29,22 @@ export default defineConfig({
         __dirname,
         "../../packages/ui/src/components/finance-charts/chart-scale.ts",
       ),
+      "@digithings/ui/chat/stock": path.resolve(
+        __dirname,
+        "../../packages/ui/src/components/chat/stock/index.ts",
+      ),
       "@digithings/ui/cn": path.resolve(__dirname, "../../packages/ui/src/lib/utils.ts"),
       "@digithings/ui/ui": path.resolve(__dirname, "../../packages/ui/src/ui/index.ts"),
+      "@digithings/ui/lib/stub-payload": path.resolve(
+        __dirname,
+        "../../packages/ui/src/lib/stub-payload.ts",
+      ),
+      "@digithings/ui/pixel-wordmark": path.resolve(
+        __dirname,
+        "../../packages/ui/src/components/landing/PixelWordmark.tsx",
+      ),
       "@digithings/ui": path.resolve(__dirname, "../../packages/ui/src/index.ts"),
+      "digiquant-tui": path.resolve(__dirname, "../../clients/digiquant-tui/src"),
     },
   },
 });

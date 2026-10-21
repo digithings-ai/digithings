@@ -323,10 +323,19 @@ export function ProductStockShell({
     () => ({
       reasoning: reasoningMode,
       toolCalls: toolCallsMode,
+      view,
+      thinking,
       userAlign:
         cfg.chrome.skin === "digichat" ? "left" : cfg.chrome.transcript.userAlign,
     }),
-    [reasoningMode, toolCallsMode, cfg.chrome.skin, cfg.chrome.transcript.userAlign],
+    [
+      reasoningMode,
+      toolCallsMode,
+      view,
+      thinking,
+      cfg.chrome.skin,
+      cfg.chrome.transcript.userAlign,
+    ],
   );
 
   const skinChrome = useMemo<SkinChromeValue>(

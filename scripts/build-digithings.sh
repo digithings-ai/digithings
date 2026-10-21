@@ -143,6 +143,30 @@ if [ -d apps/digithings-web/functions ] && [ -n "$(find apps/digithings-web/func
   # happen to export, not a guarantee. Strip them from the mirrored copy so
   # it stays true by construction (#2348).
   find functions -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) -delete
+  # The OCC invite gate is shared with the digichat Worker
+  # (apps/digichat-cloudflare/src/occ-gate.ts) and the function imports it by
+  # relative path. The mirror sits one level shallower than the source tree
+  # (functions/chat/occ/ instead of apps/digithings-web/functions/chat/occ/),
+  # so the same relative path points one level above the repository. Rewrite
+  # it to the source tree's depth: without this the Pages build fails with
+  # "Could not resolve .../digichat-cloudflare/src/occ-gate" and the site
+  # stops deploying.
+  #
+  # The Pages project also needs the invite key bound, or the /chat/occ
+  # function fails closed and answers 404 to every request:
+  #   npx wrangler pages secret put OCC_INVITE_KEY --project-name digithings-ai
+  python3 - <<'PYEOF'
+import pathlib
+
+DEPTH_FROM_SOURCE = "../../../../digichat-cloudflare/src/occ-gate"
+DEPTH_FROM_MIRROR = "../../../apps/digichat-cloudflare/src/occ-gate"
+for path in pathlib.Path("functions").rglob("*.ts"):
+    text = path.read_text()
+    rewritten = text.replace(DEPTH_FROM_SOURCE, DEPTH_FROM_MIRROR)
+    if rewritten != text:
+        path.write_text(rewritten)
+        print(f"rewrote the shared-gate import in {path}")
+PYEOF
 else
   echo "ERROR: expected apps/digithings-web/functions (digivault /api/chat)" >&2
   exit 1

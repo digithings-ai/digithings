@@ -22,6 +22,71 @@ beforeEach(() => {
 });
 
 describe("loadDigichatConfig", () => {
+  it("refuses a config whose endpoint still holds a template placeholder", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+deployment:
+  slug: trial
+  backend:
+    type: foundry
+    projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/p
+    agentName: agent
+`,
+      }),
+    ).toThrow(/backend\.projectEndpoint still holds a REPLACE- placeholder/);
+  });
+
+  it("refuses a config whose agent name still holds a template placeholder", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+deployment:
+  slug: trial
+  backend:
+    type: foundry
+    projectEndpoint: https://example.services.ai.azure.com/api/projects/p
+    agentName: REPLACE-AGENT-NAME
+`,
+      }),
+    ).toThrow(/backend\.agentName still holds a REPLACE- placeholder/);
+  });
+
+  it("refuses a registry tenant that still holds a template placeholder", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+hosts:
+  tenant.example:
+    slug: tenant
+    backend:
+      type: foundry
+      projectEndpoint: https://example.services.ai.azure.com/api/projects/p
+      agentName: REPLACE-AGENT-NAME
+`,
+      }),
+    ).toThrow(/hosts\.tenant\.example\.backend\.agentName still holds a REPLACE- placeholder/);
+  });
+
+  it("accepts a name that merely contains the word replace", () => {
+    expect(() =>
+      loadDigichatConfig({
+        fileContents: `
+version: 1
+deployment:
+  slug: trial
+  backend:
+    type: foundry
+    projectEndpoint: https://my-REPLACE-tenant.services.ai.azure.com/api/projects/p
+    agentName: my-REPLACE-agent
+`,
+      }),
+    ).not.toThrow();
+  });
+
   it("loads YAML from injected file contents", () => {
     const cfg = loadDigichatConfig({
       fileContents: `

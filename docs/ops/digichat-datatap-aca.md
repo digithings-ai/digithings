@@ -26,7 +26,7 @@ So the lane being absent is not a missing workflow to restore. It is the absence
 |---|---|
 | prod image | `datatapchatregistry.azurecr.io/digichat:v2.3.2` (digest `sha256:c5708729fea2…`) |
 | prod revision | `digichat--0000007`, created 2026-09-21, still the only revision |
-| `develop` version | `2.5.1` |
+| `develop` version | `2.6.4` |
 | commits behind prod on `apps/digichat` | **67** |
 | last push to the ACR | **2026-09-21** — nothing since, not even a 2.4.0 image |
 
@@ -144,6 +144,33 @@ Two traps in that recipe, both hit while writing it:
 | `/healthz` | **404** | **404** |
 
 Subscription `fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0` ("DataTap WebSite"), region East US 2.
+
+### The trial app — the one that runs
+
+The `prod` / `dev` pair above is history: neither app exists in that shape any more. The environment that serves today is the **trial**, and it lives in a different subscription and region.
+
+| | **trial** |
+|---|---|
+| subscription | `0071922f-05ec-48aa-b20e-2a12333b0adf` ("Datatap Trials") |
+| resource group | `1d0a8149-9387-4574-9d10-e83948e7fcd5` |
+| app | `digichat-datatap-trial` |
+| region | West Europe |
+| revision mode | `Single` (no probes) |
+| image | `datatapregistry.azurecr.io/digichat:trial-1d0a8149-2.6.3` |
+| revision | `digichat-datatap-trial--0000011` |
+| fqdn | `digichat-datatap-trial.victoriouswater-cd6b01f3.westeurope.azurecontainerapps.io` |
+| `/api/health` | `200 {"ok":true,…,"version":"2.6.3"}` |
+| `DIGICHAT_CONFIG_PATH` | `/app/config/datatap-trial-foundry.yaml` |
+
+**The tenant config must be rendered before the image is built.** The repository ships `apps/digichat/config/datatap-trial-foundry.yaml` as a *template*: `REPLACE-FOUNDRY-ACCOUNT`, `REPLACE-PROJECT` and `REPLACE-AGENT-NAME`. The loader fails closed on a `REPLACE-` placeholder (`apps/digichat/src/lib/deploy-config/loader.ts`), so an image built straight from the template **does not boot** — the container dies in the instrumentation hook with "render the tenant config before deploying" and the app answers 500. The per-trial values are substituted before the build:
+
+| placeholder | trial value |
+|---|---|
+| `REPLACE-FOUNDRY-ACCOUNT` | `dg-agentic-1d0a8149` |
+| `REPLACE-PROJECT` | `datatap-trial-chat` |
+| `REPLACE-AGENT-NAME` | `datatap-trial` |
+
+The GHCR image cannot be imported into the ACR from this machine — the package is private and the local token is rejected — so the trial image is **built locally** from the release tag for `linux/amd64` and pushed to `datatapregistry.azurecr.io` directly.
 
 ### `/healthz` returns 404 on both — and that is expected, not a bug
 
@@ -341,8 +368,23 @@ The ACR is the ledger of record for what is deployed. Digests below are verified
 | `v2.3.3` | `sha256:fc06e0a57902` | 2026-09-21T20:46Z | dev (`digichat--0000040`) |
 | `v2.5.0` | none published (GHCR) | — | **OCC prod** (Cloudflare container `shared-a9bf1b9117be`, 2026-10-19T18:39Z) |
 | `v2.5.1` | none published (GHCR) | — | **OCC prod** (Cloudflare container `shared-7a3239fc05f1`, 2026-10-19T21:59Z) |
+| `trial-1d0a8149-2.5.1` | `sha256:b41f25e7afe7` | 2026-10-19 | trial (`digichat-datatap-trial--0000005`) |
+| `trial-1d0a8149-2.6.0` | `sha256:c85574ba24ed` | 2026-10-20 | superseded (`digichat-datatap-trial--0000008`) |
+| `trial-1d0a8149-2.6.1` | `sha256:6b8e5c492f4f` | 2026-10-21 | superseded (revision `--0000009`) |
+| `trial-1d0a8149-2.6.2` | `sha256:2ed4f6c7f947` | 2026-10-21 | superseded (revision `--0000010`) |
+| `trial-1d0a8149-2.6.3` | `sha256:91e9e709e37e` | 2026-10-21 | **trial** (revision `--0000011`) |
 
-`v2.5.0` was released from tag `digichat-v2.5.0` = `a9bf1b9117be` and deployed to the Cloudflare OCC container at 2026-10-19T18:39Z; it was **superseded by 2.5.1** the same evening (the OCC lane's release, deployed 2026-10-19T21:02Z — `GET https://digithings.ai/api/health` read `version: 2.5.1` at 2026-10-19T22:04Z, container `shared-7a3239fc05f1`). **No `v2.5.x` container image is published to GHCR**: `docker manifest inspect ghcr.io/digithings-ai/digichat:v2.5.0` and `…:v2.5.1` both answer `manifest unknown` — identical to a tag that cannot exist — while `…:v2.3.2` resolves to `sha256:df9d220210b4e…`, so `v2.3.2` is the only published image. The build fails because `apps/digichat/Dockerfile` does not carry the `packages/hero-banner` workspace package (DIG-4489, tracked from DIG-4485). The Cloudflare path is unaffected — that worker builds its own image from the repo tree, which is why the OCC release is live while no published image exists. **The ACR rows above are not re-verified in this record**: `az` cannot authenticate to `datatapchatregistry` from this host (AAD refresh error, then 401), so the ACR side of "published" is unmeasured here. No 2.4.0 image exists in GHCR either: 2.4.0 was never tagged.
+`trial-1d0a8149-2.6.3` is built from the `digichat-v2.6.3` tag (`713098487531f8640f018ad9f43bf839abc18ddf`) and is bound to it: `scripts/check_digichat_image_binding.py --facts` reports `OK bound: 713098487531f8640f018ad9f43bf839abc18ddf via digichat-v2.6.3 -> sha256:91e9e709e37e2c20f58303abcda2b34fb9d1c867dd0e22e45f9cec23b0646e8a`.
+
+### GHCR: what is actually published (measured 2026-10-21)
+
+Measured with `docker manifest inspect` against `ghcr.io/digithings-ai/digichat`, with the impossible tag `v9.9.9` as the control: `v2.3.2` resolves (`sha256:df9d220210b4e…`) and `v9.9.9` answers `manifest unknown`.
+
+**Until 2026-10-21 no digichat image was published to GHCR for any `v2.4.x`, `v2.5.x` or `v2.6.x` tag** — every one of them answers `manifest unknown`, byte-identical to the control. Two reasons, both now understood: the `v2.5.x` builds failed because `apps/digichat/Dockerfile` did not carry the `packages/hero-banner` workspace package (DIG-4489, fixed by PR #5958), and the publish lane's boot probe asked a standalone container for `/api/health`, which answers 503 when `DIGICHAT_ENABLED_SERVICES` is unset and the four ecosystem services are unreachable (`scripts/local-deploy/publish_image.sh` now runs the probe with `DIGICHAT_ENABLED_SERVICES=` set and empty, so `getEnabledServiceIds()` enables none of them and the route reports the image's own version).
+
+The earlier line in this section — "The GHCR publish of the same release is `ghcr.io/digithings-ai/digichat:sha-3e3c384c1ea3` (VERSION 2.6.1, COMMIT 3e3c384c1ea3)" — is **wrong**: that name answers `manifest unknown` as well. The publish lane refuses to push a rehearsal (`:sha-*`) image under any name, so 2.6.1 never reached the registry.
+
+`v2.5.0` was released from tag `digichat-v2.5.0` = `a9bf1b9117be` and deployed to the Cloudflare OCC container at 2026-10-19T18:39Z; it was **superseded by 2.5.1** the same evening (the OCC lane's release, deployed 2026-10-19T21:02Z — `GET https://digithings.ai/api/health` read `version: 2.5.1` at 2026-10-19T22:04Z, container `shared-7a3239fc05f1`) and then by the 2.6.x line. The Cloudflare path was never blocked by the missing image: that worker builds its own container from the repo tree, which is why the OCC release is live while no published image existed. **The ACR rows above are not re-verified in this record**: `az` cannot authenticate to `datatapchatregistry` from this host (AAD refresh error, then 401), so the ACR side of "published" is unmeasured here. No 2.4.0 image exists either: 2.4.0 was never tagged.
 
 ---
 

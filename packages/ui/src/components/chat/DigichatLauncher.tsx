@@ -308,7 +308,7 @@ export function DigichatLauncher({
                   data-tooltip="New chat"
                   onClick={onNewChat}
                 >
-                  <DotMatrix state="newChat" label="New chat" className="size-3.5" />
+                  <DotMatrix state="newChat" decorative className="size-3.5" />
                 </button>
               ) : null}
               <button
@@ -318,7 +318,7 @@ export function DigichatLauncher({
                 aria-label="Close digichat"
                 onClick={() => closePanel()}
               >
-                <DotMatrix state="remove" label="Close" className="size-3.5" />
+                <DotMatrix state="remove" decorative className="size-3.5" />
               </button>
             </div>
           </header>

@@ -46,6 +46,7 @@ from scripts.localstack import (
     contracts,
     deploy,
     health,
+    localenv,
     orchestrate,
     preflight,
     render,
@@ -356,6 +357,13 @@ def cmd_deploy(args: argparse.Namespace, root: Path) -> int:
 def main(argv: "list[str] | None" = None) -> int:
     args = build_parser().parse_args(argv)
     root = repo_root()
+    # The local stack's defaults live in the environment, so the plan's
+    # subprocesses, the health gate and the URL table all read the same
+    # values. The port knob is resolved, not merely defaulted: a value that
+    # cannot carry the whole port set never becomes one, and everything
+    # downstream reads the port that is actually used. The other knobs are
+    # setdefault only, so an explicit value from the operator wins.
+    localenv.apply_defaults(root)
     handlers = {
         "preflight": cmd_preflight,
         "status": cmd_status,

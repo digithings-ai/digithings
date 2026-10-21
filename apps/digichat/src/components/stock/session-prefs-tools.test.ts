@@ -21,6 +21,8 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setModel: vi.fn(),
     setEffort: vi.fn(),
     setSearchEngine: vi.fn(),
+    setToolbar: vi.fn(),
+    setScrollbars: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -34,6 +36,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     mcpServers: [],
     sessionKey: "t",
     openSettings: vi.fn(),
+    openHelp: vi.fn(),
     openTools: vi.fn(),
     openMcp: vi.fn(),
     openByok: vi.fn(),
@@ -75,6 +78,17 @@ describe("applySessionTool", () => {
     expect(a.setThinking).toHaveBeenCalledWith("open");
     applySessionTool("session_toggle_tool", { id: "digisearch", enabled: false }, a);
     expect(a.setDigisearch).toHaveBeenCalledWith(false);
+  });
+
+  it("names only the live view levels when a view is refused", () => {
+    // The model-facing message must teach the levels the product ships:
+    // `hidden` / `compact` / `detailed` were renamed away (#6034) and
+    // `hidden` was retired (#6079).
+    const a = api();
+    const result = applySessionTool("session_set_view", { mode: "compact" }, a);
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("View must be quiet, balanced, or verbose.");
+    expect(a.setView).not.toHaveBeenCalled();
   });
 
   it("opens /mcp after upserting a new URL", () => {

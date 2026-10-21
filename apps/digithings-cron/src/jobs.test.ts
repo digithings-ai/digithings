@@ -313,13 +313,31 @@ describe("jobsForCron", () => {
       const job = JOBS.find((row) => row.id === id);
       expect(job?.enabled).toBe(true);
       const onRunner =
-        id.startsWith("twelve-x-market-context-") || id === "twelve-x-primemarket-heartbeat";
+        id.startsWith("twelve-x-market-context-") ||
+        id === "twelve-x-primemarket-heartbeat" ||
+        id === "twelve-x-asia" ||
+        id === "twelve-x-london" ||
+        id === "twelve-x-new-york";
       if (onRunner) {
         expect(job?.kind).toBe("twelvex");
       } else {
         expect(["workflow_dispatch", "twelvex-watch"]).toContain(job?.kind);
       }
       expect(job?.repo).toBe("digithings-ai/twelve-x");
+    }
+    for (const [id, session] of [
+      ["twelve-x-asia", "asia"],
+      ["twelve-x-london", "london"],
+      ["twelve-x-new-york", "new_york"],
+    ] as const) {
+      expect(JOBS.find((row) => row.id === id)).toMatchObject({
+        kind: "twelvex",
+        route: "session",
+        inputs: { session },
+        timeoutSeconds: 7200,
+        repo: "digithings-ai/twelve-x",
+        enabled: true,
+      });
     }
     const occHelp = JOBS.find((job) => job.id === "occ-help-recrawl");
     expect(occHelp).toMatchObject({

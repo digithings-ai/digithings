@@ -94,13 +94,24 @@ export function isSearchEngine(value: string): value is SearchEngineCode {
   return (SEARCH_ENGINE_CODES as readonly string[]).includes(value.trim().toLowerCase());
 }
 
-export const VIEW_CODES = ["hidden", "compact", "balanced", "detailed"] as const;
+export const VIEW_CODES = ["quiet", "balanced", "verbose"] as const;
 export type ViewCode = (typeof VIEW_CODES)[number];
-const VIEW_LABELS: Record<ViewCode, string> = {
-  hidden: "Hidden \u00b7 answer only",
-  compact: "Compact \u00b7 closed",
-  balanced: "Balanced \u00b7 collapse when done",
-  detailed: "Detailed \u00b7 stays open",
+/**
+ * The one home of the view-level wording. The composer menu's `/view` page
+ * prints it beside each level, and the palette's `/view` choice list is built
+ * from the same map, so the two surfaces name a level the same way. Keep it
+ * exported: a second, private copy of this map is what let a rename drift and
+ * leave one surface unlabelled (DIG-4665).
+ *
+ * The wording is the one the product prints today: `quiet` shows the titles
+ * only, `balanced` opens the rows while they stream, `verbose` leaves
+ * everything open. The retired `hidden` level has no entry: it folded into
+ * `quiet` (#6079).
+ */
+export const VIEW_LABELS: Record<ViewCode, string> = {
+  quiet: "Quiet \u00b7 titles only",
+  balanced: "Balanced \u00b7 open while it runs",
+  verbose: "Verbose \u00b7 everything open",
 };
 export const VIEW_CHOICES: readonly { value: ViewCode; label: string }[] = VIEW_CODES.map(
   (code) => ({ value: code, label: VIEW_LABELS[code] }),
@@ -200,7 +211,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "view",
     names: ["/view"],
     needsArg: false,
-    hint: "hidden / compact / balanced / detailed",
+    hint: "quiet / balanced / verbose",
     choiceOptions: VIEW_CHOICES,
     kind: "client",
     category: "setup",
@@ -236,6 +247,22 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     names: ["/settings"],
     needsArg: false,
     hint: "Settings",
+    kind: "action",
+    category: "setup",
+  },
+  {
+    id: "toolbar",
+    names: ["/toolbar"],
+    needsArg: false,
+    hint: "Composer toolbar",
+    kind: "action",
+    category: "setup",
+  },
+  {
+    id: "scrollbar",
+    names: ["/scrollbar"],
+    needsArg: false,
+    hint: "Scrollbars: always or on scroll",
     kind: "action",
     category: "setup",
   },

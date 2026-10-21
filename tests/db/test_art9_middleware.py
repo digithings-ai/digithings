@@ -15,9 +15,9 @@ import asyncio
 import json
 from typing import Any
 
+import digibase.art9_middleware as art9_middleware
 import pytest
 from digibase.art9 import ROUTE_UNREGISTERED, no_match_reason
-from digibase.art9_middleware import Art9AdmissionMiddleware, install_art9_admission
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -60,7 +60,7 @@ def _build_app(calls: list[str], *, max_body_bytes: int = 1_048_576) -> FastAPI:
         calls.append("/health")
         return {"ok": True}
 
-    install_art9_admission(
+    art9_middleware.install_art9_admission(
         application,
         app_name="digisearch",
         service="digisearch",
@@ -297,7 +297,7 @@ def test_a_read_kind_route_is_screened_when_it_carries_a_body(calls: list[str]) 
         calls.append("/v1/notes/{name}")
         return payload
 
-    install_art9_admission(application, app_name="digivault", service="digivault")
+    art9_middleware.install_art9_admission(application, app_name="digivault", service="digivault")
 
     with TestClient(application) as client:
         response = client.post("/v1/notes/weekly", json=TRIPPING)
@@ -329,7 +329,7 @@ def test_middleware_can_be_added_with_add_middleware_directly(calls: list[str]) 
         return payload
 
     application.add_middleware(
-        Art9AdmissionMiddleware,
+        art9_middleware.Art9AdmissionMiddleware,
         fastapi_app=application,
         app_name="digisearch",
     )
@@ -348,8 +348,8 @@ def test_the_package_re_exports_the_public_surface() -> None:
     """`digibase/__init__.py` is the fleet's import path; both names must be there."""
     import digibase
 
-    assert digibase.Art9AdmissionMiddleware is Art9AdmissionMiddleware
-    assert digibase.install_art9_admission is install_art9_admission
+    assert digibase.Art9AdmissionMiddleware is art9_middleware.Art9AdmissionMiddleware
+    assert digibase.install_art9_admission is art9_middleware.install_art9_admission
 
 
 def test_the_module_imports_nothing_from_authentication() -> None:
@@ -361,9 +361,7 @@ def test_the_module_imports_nothing_from_authentication() -> None:
     """
     import ast
 
-    import digibase.art9_middleware as middleware
-
-    source = middleware.__file__
+    source = art9_middleware.__file__
     assert source is not None
     with open(source, encoding="utf-8") as handle:
         tree = ast.parse(handle.read())
@@ -429,7 +427,9 @@ def _drive(app: FastAPI, *, path: str, chunks: list[dict[str, Any]]) -> tuple[li
     async def send(message: Any) -> None:
         answered.extend(bytes(message.get("body", b"")))
 
-    middleware = Art9AdmissionMiddleware(downstream, fastapi_app=app, app_name="digisearch")
+    middleware = art9_middleware.Art9AdmissionMiddleware(
+        downstream, fastapi_app=app, app_name="digisearch"
+    )
     asyncio.run(middleware(_asgi_scope(path, "POST"), receive, send))
     return reached, bytes(answered)
 

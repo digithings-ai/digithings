@@ -316,6 +316,12 @@ const PATTERNS = {
     unionRows(1, 3),
     unionRows(1, 3),
   ],
+  /**
+   * A full grid — the mark on the tool row. Solid and still, the same weight
+   * as the reasoning glyph, and it never changes size, so the label beside it
+   * cannot shift.
+   */
+  tools: [Array.from({ length: 25 }, (_, i) => i)],
   /** Scanline down the rows. */
   executing: [0, 1, 2, 3, 4].map(rowCells),
   /** Scanline across the columns (web search). */
@@ -506,10 +512,29 @@ export type DotMatrixState = keyof typeof PATTERNS;
 
 const dotMatrixStates = Object.keys(PATTERNS) as readonly DotMatrixState[];
 
-export type DotMatrixProps = Omit<ComponentProps<"span">, "children"> & {
+// `role` and `aria-label` are the component's own: a caller cannot set a
+// name the component would not announce, and cannot put a name on a glyph
+// the component renders as decorative.
+type DotMatrixBaseProps = Omit<ComponentProps<"span">, "children" | "role" | "aria-label"> & {
   state?: DotMatrixState;
-  label?: string;
 };
+
+/**
+ * A dot matrix is either a named glyph or a decorative one, never both.
+ *
+ * - Named (no `decorative`): the glyph carries `label` as its accessible name
+ *   and is the only thing in its control that names it. Use it when the glyph
+ *   is the whole content of a control.
+ * - Decorative (`decorative`): the glyph is hidden from assistive technology
+ *   and carries no name. Use it when the control already has visible text, so
+ *   the text is the name and the glyph is not read out a second time.
+ *
+ * The type refuses a label on a decorative glyph: a name that is never
+ * announced is a name that will be read as a bug.
+ */
+export type DotMatrixProps =
+  | (DotMatrixBaseProps & { decorative?: false; label?: string })
+  | (DotMatrixBaseProps & { decorative: true; label?: never });
 
 function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -519,6 +544,7 @@ function DotMatrix({
   className,
   state = "loading",
   label,
+  decorative = false,
   ...props
 }: DotMatrixProps) {
   const frames = PATTERNS[state];
@@ -536,17 +562,21 @@ function DotMatrix({
   }, [frames]);
 
   const lit = new Set(frames[frame] ?? frames[0]);
+  const name = label ?? state;
 
   return (
     <span
       {...props}
       data-slot="dot-matrix"
       data-state={state}
-      role="img"
-      aria-label={label ?? state}
+      // One name, one home: a named glyph is named by its aria-label (the
+      // role makes its children presentational, so there is no second copy of
+      // the label in the tree), a decorative glyph has no name at all.
+      {...(decorative
+        ? { "aria-hidden": true }
+        : { role: "img", "aria-label": name })}
       className={cx("inline-block size-4 shrink-0", className)}
     >
-      <span className="sr-only">{label ?? state}</span>
       <svg
         data-slot="dot-matrix-grid"
         aria-hidden

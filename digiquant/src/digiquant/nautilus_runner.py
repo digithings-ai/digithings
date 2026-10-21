@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pandas as pd
 import polars as pl
@@ -50,9 +50,6 @@ from digiquant.constraints import normalize_drawdown_pct
 from digiquant.models import BacktestResult
 from digiquant.paths import resolve_under_data_root
 from digiquant.stats import HonestRateBlock, normalize_series, stability_split
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -799,8 +796,12 @@ def _run_backtest_ohlcv(
     )
 
     run_id = f"nautilus-{uuid.uuid4().hex[:8]}"
+    # The fill report holds one row per order fill, and a closed round trip
+    # produces two of them (entry + exit), so len(fills) is twice the trade
+    # count (DIG-1808). The report itself is unchanged and still reaches the
+    # tearsheet as fills_report below; only the published count moves, and it is
+    # derived from the realized-PnL series instead.
     fills = engine.trader.generate_order_fills_report()
-    num_trades = len(fills) if fills is not None else 0
     account_report = engine.trader.generate_account_report(Venue(venue_name))
     start_ts = bars[0].ts_init
     end_ts = bars[-1].ts_init
@@ -808,6 +809,16 @@ def _run_backtest_ohlcv(
     pnl_errors: list[str] = []
     total_pnl, total_return_pct = _extract_pnl(account_report, errors=pnl_errors)
     perf = _extract_perf_stats(engine, USD, account_report)
+
+    # num_trades is the sample size (N) printed beside the strategy's statistics.
+    # It counts closed positions, the same population as honest_rate.n.
+    # nautilus 1.230 returns one row per realization part, so len(raw) counts
+    # a position closed in two parts as two. normalize_series collapses those
+    # parts to one position. An open position never realizes, so it does not
+    # count. A missing or empty series publishes 0 (DIG-1808).
+    realized = perf.get("realized_pnls_series")
+    normalized = normalize_series(realized)
+    num_trades = len(normalized[1]) if normalized else 0
 
     engine.dispose()
 
@@ -947,6 +958,9 @@ def _run_multi_symbol_backtest(
             per_symbol_sharpe[sym] = result.sharpe_ratio
         if result.max_drawdown_pct is not None:
             per_symbol_max_dd[sym] = result.max_drawdown_pct
+        # Per-symbol closed round trips, summed. Nautilus positions are keyed by
+        # instrument_id, so no position can close across a symbol boundary and
+        # the sum cannot double count a round trip (DIG-1808).
         num_trades_total += result.num_trades
         if start_time is None or result.start_time < start_time:
             start_time = result.start_time

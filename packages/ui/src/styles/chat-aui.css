@@ -157,7 +157,7 @@
 .digichat-thread .aui-composer-send:not(:disabled):hover,
 .digichat-thread .aui-composer-send:focus-visible {
   background: transparent;
-  color: var(--ink-mute);
+  color: color-mix(in oklab, var(--ink-mute) 22%, transparent);
   box-shadow: none;
 }
 
@@ -634,7 +634,9 @@
 .digichat-thread [data-slot="tool-fallback-dump"],
 .digichat-launcher [data-slot="tool-fallback-dump"] {
   margin: 0;
-  max-height: 8.5rem;
+  /* DIG-4459: JSON views and error details sit in an 18rem scroll area (no
+     expand button); only the legacy dump keeps the short cap. */
+  max-height: none;
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -676,7 +678,9 @@
 .digichat-thread [data-slot="tool-fallback-trigger-label"],
 .digichat-launcher [data-slot="reasoning-trigger-label"],
 .digichat-launcher [data-slot="tool-fallback-trigger-label"] {
-  flex: 1;
+  /* No grow: the disclosure arrow belongs right next to the label, not at
+     the far edge of the row. */
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -710,12 +714,8 @@
   transform: rotate(90deg);
 }
 
-.digichat-thread [data-slot="reasoning-root"],
-.digichat-thread [data-slot="tool-fallback-root"],
-.digichat-launcher [data-slot="reasoning-root"],
-.digichat-launcher [data-slot="tool-fallback-root"] {
-  --animation-duration: 0ms;
-}
+/* The disclosure animates at the upstream duration (200ms): switching it off
+   made the chain snap shut between two tool calls. */
 
 .digichat-thread [data-slot="reasoning-content"],
 .digichat-thread [data-slot="tool-fallback-content"],
@@ -730,6 +730,39 @@
 }
 
 /* Grouped tool-call disclosure: match the reasoning trigger rhythm. */
+.digichat-thread [data-slot="aui_work-chain-trigger"],
+.digichat-launcher [data-slot="aui_work-chain-trigger"] {
+  display: inline-flex;
+  width: fit-content;
+}
+
+.digichat-thread [data-slot="aui_work-chain-chevron"],
+.digichat-launcher [data-slot="aui_work-chain-chevron"] {
+  display: inline-flex;
+  width: 0.55rem;
+  height: 0.55rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.digichat-thread [data-slot="aui_work-chain-chevron"] [data-slot="dot-matrix"],
+.digichat-launcher [data-slot="aui_work-chain-chevron"] [data-slot="dot-matrix"] {
+  width: 0.55rem;
+  height: 0.55rem;
+}
+
+.digichat-thread [data-slot="aui_work-chain"][data-state="open"] [data-slot="aui_work-chain-chevron"],
+.digichat-launcher [data-slot="aui_work-chain"][data-state="open"] [data-slot="aui_work-chain-chevron"] {
+  transform: rotate(90deg);
+}
+
+.digichat-thread [data-slot="aui_work-chain-content"],
+.digichat-launcher [data-slot="aui_work-chain-content"] {
+  padding-left: 0.25rem;
+  /* A little air between the chain header and the rows inside it. */
+  padding-top: 0.3rem;
+}
+
 .digichat-thread [data-slot="tool-group-trigger"],
 .digichat-launcher [data-slot="tool-group-trigger"] {
   width: 100%;
@@ -744,7 +777,7 @@
 
 .digichat-thread [data-slot="tool-group-trigger-label"],
 .digichat-launcher [data-slot="tool-group-trigger-label"] {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -781,10 +814,7 @@
   transform: rotate(90deg);
 }
 
-.digichat-thread [data-slot="tool-group-root"],
-.digichat-launcher [data-slot="tool-group-root"] {
-  --animation-duration: 0ms;
-}
+/* Same as the reasoning and tool rows: keep the upstream 200ms collapse. */
 
 .digichat-thread [data-slot="tool-group-content"],
 .digichat-thread [data-slot="tool-group-content"] > div,
@@ -828,4 +858,33 @@ html.light:has([data-thread-skin="digichat"]) {
 /* Portaled tooltips follow the chat's mono stack instead of the page body font. */
 html:has([data-thread-skin="digichat"]) [data-slot="tooltip-content"] {
   font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.digichat-thread [data-slot="tool-fallback-dump"],
+.digichat-launcher [data-slot="tool-fallback-dump"] {
+  max-height: 8.5rem;
+}
+
+.digichat-thread .aui-json-view,
+.digichat-launcher .aui-json-view,
+.digichat-thread .aui-chat-notice-detail,
+.digichat-launcher .aui-chat-notice-detail {
+  overflow: auto;
+  max-height: 18rem;
+}
+
+/* Chat notices (DIG-4459), faded red (Chris, 21 Oct): danger pulled 28%
+   toward the muted ink, a 5% wash and a 24% hairline; the title mixes 20%
+   ink so it stays WCAG AA on the wash in dark and light. */
+.digichat-thread .aui-chat-notice[data-tone="error"],
+.digichat-launcher .aui-chat-notice[data-tone="error"] {
+  --notice-danger: color-mix(in srgb, var(--danger) 72%, var(--ink-mute));
+  border: 1px solid color-mix(in srgb, var(--notice-danger) 24%, transparent);
+  background: color-mix(in srgb, var(--notice-danger) 5%, transparent);
+  color: var(--ink-soft);
+}
+
+.digichat-thread .aui-chat-notice[data-tone="error"] .aui-chat-notice-title,
+.digichat-launcher .aui-chat-notice[data-tone="error"] .aui-chat-notice-title {
+  color: color-mix(in srgb, var(--notice-danger) 80%, var(--ink));
 }

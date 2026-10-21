@@ -9,7 +9,6 @@ import {
   isEffortCode,
   isSearchEngine,
   isThinkingCode,
-  isViewCode,
   parseSlashInput,
   type SlashDef,
   type SlashVisibility,
@@ -22,6 +21,11 @@ import {
   languageLabel,
   tryResolveLanguageInput,
 } from "@/lib/languages";
+import {
+  isLegacyViewMode,
+  isViewMode,
+  normalizeViewMode,
+} from "@/lib/view-modes";
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
 
@@ -147,6 +151,10 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = `Reply language (${languageLabel(prefs.language)})`;
     } else if (def.id === "models") {
       description = prefs.model || def.hint;
+    } else if (def.id === "toolbar") {
+      description = toggleHint(prefs.toolbar, "visible", "hidden");
+    } else if (def.id === "scrollbar") {
+      description = prefs.scrollbars === "always" ? "always visible" : "on scroll";
     } else if (def.id === "effort") {
       description = prefs.effort || "medium";
     } else if (def.id === "search-engine") {
@@ -192,7 +200,11 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       return;
     case "view": {
       const mode = arg.trim().toLowerCase();
-      if (isViewCode(mode)) api.setView(mode);
+      // `hidden` / `compact` / `detailed` are the retired ids; they fold
+      // forward. The live ids come from the app's own contract
+      // (`@/lib/view-modes.ts`), the one that owns them.
+      if (isViewMode(mode)) api.setView(mode);
+      else if (isLegacyViewMode(mode)) api.setView(normalizeViewMode(mode));
       else api.openView();
       return;
     }
@@ -214,6 +226,12 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
     }
     case "settings":
       api.openSettings();
+      return;
+    case "toolbar":
+      api.setToolbar(!api.prefs.toolbar);
+      return;
+    case "scrollbar":
+      api.setScrollbars(api.prefs.scrollbars === "always" ? "auto" : "always");
       return;
     case "tools":
       api.openTools();
@@ -249,7 +267,7 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       api.openArtifacts();
       return;
     case "help":
-      // Placeholder — the slash list is the help. Do not dump into the composer.
+      api.openHelp();
       return;
     case "byok":
       api.openByok(arg);

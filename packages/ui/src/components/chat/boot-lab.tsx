@@ -349,7 +349,7 @@ function TypedLabel({ text, instant }: { text: string; instant: boolean }) {
 function SpinnerLine({ label }: { label?: string | null }) {
   return (
     <span className="dboot-lab-line dboot-lab-spin">
-      <DotMatrix state="loading" className="size-3.5" />
+      <DotMatrix state="loading" decorative className="!size-3" />
       {label ? <span>{label}</span> : null}
     </span>
   );
@@ -454,14 +454,14 @@ function ToolChainRow({
   const ms = done ? durationMs : liveMs;
   return (
     <div
-      className="aui-tool-fallback-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-sm"
+      className="aui-tool-fallback-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-xs"
       data-slot="tool-fallback-trigger"
       data-visible={shown ? "true" : "false"}
     >
       <DotMatrix
         state={failed ? "error" : done ? "success" : "tool"}
-        label={failed ? "Error" : done ? "Ok" : "Running"}
-        className="aui-tool-fallback-trigger-icon size-3.5 shrink-0"
+        decorative
+        className="aui-tool-fallback-trigger-icon !size-3 shrink-0"
       />
       <span
         className="aui-tool-fallback-trigger-label-wrapper min-w-0 flex-1 truncate text-start leading-none"
@@ -487,17 +487,17 @@ function ReasoningRow({
 }) {
   return (
     <div
-      className="aui-reasoning-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-sm"
+      className="aui-reasoning-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-xs"
       data-slot="reasoning-trigger"
     >
       <span
-        className="aui-reasoning-trigger-icon inline-flex size-3.5 shrink-0 items-center justify-center"
+        className="aui-reasoning-trigger-icon inline-flex size-3 shrink-0 items-center justify-center"
         data-slot="reasoning-trigger-icon"
       >
         <DotMatrix
           state={active ? "thinking" : "thought"}
-          label={active ? "Reasoning" : "Thought"}
-          className="size-3.5"
+          decorative
+          className="!size-3"
         />
       </span>
       <span
@@ -513,8 +513,8 @@ function ReasoningRow({
       <span data-slot="reasoning-trigger-chevron">
         <DotMatrix
           state="expand"
-          label="Toggle reasoning"
-          className="size-3.5"
+          decorative
+          className="size-3"
         />
       </span>
     </div>

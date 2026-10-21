@@ -1859,6 +1859,12 @@ secrets:
 - name: DIGICHAT_MONITOR_TOKENS
   worker: digithings-digichat
   required: false
+- name: DIGICHAT_TRIAL_PROOF_SECRET
+  worker: digithings-digichat
+  required: false
+- name: DIGICHAT_TENANT_MINT_CREDENTIALS
+  worker: digithings-digichat
+  required: false
 - name: DATABASE_URL
   worker: digitrace-langfuse
   required: true
@@ -1936,17 +1942,23 @@ bindings:
   name: TWELVEX_RUNNER
   service: twelvex-runner
   source: apps/digithings-cron/wrangler.toml
+# DIG-4487: two slots, so a deploy can start the new instance while the
+# previous id's instance drains. Mirrors apps/digichat-cloudflare/wrangler.toml.
 - worker: digithings-digichat
   type: container
   class_name: DigiChatContainer
   image: ../../infra/docker/Dockerfile.digichat-cloudflare
-  max_instances: 5
+  max_instances: 2
   instance_type: null
   source: apps/digichat-cloudflare/wrangler.toml
 - worker: digithings-digichat
   type: durable_object
   name: DIGICHAT
   class_name: DigiChatContainer
+  source: apps/digichat-cloudflare/wrangler.toml
+- worker: digithings-digichat
+  type: kv_namespace
+  name: DIGICHAT_TENANTS_KV
   source: apps/digichat-cloudflare/wrangler.toml
 - worker: digithings-stack
   type: container

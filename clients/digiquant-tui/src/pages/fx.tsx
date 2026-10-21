@@ -1,3 +1,4 @@
+import { API_BASE as API } from "../api";
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { DASH, EMPTY_READ, presentResponse, type ReadResult } from "../read";
@@ -7,7 +8,6 @@ import { cell } from "../format";
 import { shapeLines } from "./shape";
 import { calendarDay, todayYmd, tradingSessionsSince } from "./trading-calendar";
 
-const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
 const FX_BLOCK_IDS = [
   "fx-summary",

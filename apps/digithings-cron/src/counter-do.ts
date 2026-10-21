@@ -1,3 +1,4 @@
+import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./env";
 
 /**
@@ -72,18 +73,25 @@ const slotDayKey = (key: string): string => `slotDay:${key}`;
 /** An unrecorded job or day reads as zeros, never `undefined` and never a throw. */
 const emptyDay = (): DayCounts => ({ total: 0, byMinute: {}, byHour: {} });
 
-export class StartCounter {
+export class StartCounter extends DurableObject<Env> {
   /** One instance serves every job. `env` is the Durable Object constructor
    *  contract; this leaf reads no binding. `START_COUNTER` is bound in
-   *  wrangler.toml (migration v2) and used by scheduled() in index.ts. */
-  constructor(private readonly state: DurableObjectState, env: Env) {
-    void env;
+   *  wrangler.toml (migration v2) and used by scheduled() in index.ts.
+   *
+   *  `extends DurableObject` is what makes this class callable over RPC. A
+   *  Durable Object class that does not extend it has no callable methods on
+   *  its stub, and the runtime refuses the call with "The receiving Durable
+   *  Object does not support RPC, because its class was not declared with
+   *  `extends DurableObject`". Every claim then fails open and the dedupe
+   *  this class exists for never runs. */
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
   }
 
   /** Add one start. Increments, so two starts in the same minute stay two. */
   async record(job: string, day: string, minute: string, hour: string): Promise<void> {
     const key = countsKey(job, day);
-    await this.state.storage.transaction(async (txn) => {
+    await this.ctx.storage.transaction(async (txn) => {
       const counts = (await txn.get<DayCounts>(key)) ?? emptyDay();
       counts.total += 1;
       counts.byMinute[minute] = (counts.byMinute[minute] ?? 0) + 1;
@@ -95,7 +103,7 @@ export class StartCounter {
   /** What this job started on this day. Persisted on every record, so an
    *  eviction cannot lose a day. */
   async get(job: string, day: string): Promise<StartCounts> {
-    const stored = (await this.state.storage.get<DayCounts>(countsKey(job, day))) ?? emptyDay();
+    const stored = (await this.ctx.storage.get<DayCounts>(countsKey(job, day))) ?? emptyDay();
     return { job, day, ...stored };
   }
 
@@ -123,7 +131,7 @@ export class StartCounter {
     const day = slot.slice(0, 10);
     const dayKey = slotsKey(key, day);
     const markerKey = slotDayKey(key);
-    return this.state.storage.transaction(async (txn) => {
+    return this.ctx.storage.transaction(async (txn) => {
       const slots = (await txn.get<DaySlots>(dayKey)) ?? {};
       const held = slots[slot];
       if (held !== undefined && !claimExpired(held, now)) return null;
@@ -153,7 +161,7 @@ export class StartCounter {
     now: number = Date.now(),
   ): Promise<boolean> {
     const dayKey = slotsKey(key, slot.slice(0, 10));
-    return this.state.storage.transaction(async (txn) => {
+    return this.ctx.storage.transaction(async (txn) => {
       const slots = await txn.get<DaySlots>(dayKey);
       const held = slots?.[slot];
       if (!slots || !held || held.token !== token) return false;
@@ -170,7 +178,7 @@ export class StartCounter {
   /** Mark the dispatch accepted, so the claim no longer expires. Fenced by token. */
   async confirmSlot(key: string, slot: string, token: string): Promise<void> {
     const dayKey = slotsKey(key, slot.slice(0, 10));
-    await this.state.storage.transaction(async (txn) => {
+    await this.ctx.storage.transaction(async (txn) => {
       const slots = await txn.get<DaySlots>(dayKey);
       const held = slots?.[slot];
       if (!slots || !held || held.token !== token) return;
@@ -186,7 +194,7 @@ export class StartCounter {
    */
   async releaseSlot(key: string, slot: string, token: string): Promise<void> {
     const dayKey = slotsKey(key, slot.slice(0, 10));
-    await this.state.storage.transaction(async (txn) => {
+    await this.ctx.storage.transaction(async (txn) => {
       const slots = await txn.get<DaySlots>(dayKey);
       const held = slots?.[slot];
       if (!slots || !held || held.token !== token) return;

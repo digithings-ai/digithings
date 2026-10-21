@@ -12,6 +12,7 @@ import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
 import { warmFetch } from "@/lib/warmup-gate";
+import { isTrialProofExpiredSignal } from "@/lib/embed-trial-messages";
 import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
 import { resolveLanguageCode } from "@/lib/languages";
 import { omitForcedCatalogIds } from "@/lib/deploy-config/force-tool";
@@ -209,6 +210,20 @@ type UseEmbedDigiChatOptions = {
    * getSelectedModel / getResponseLanguage). Dashboard mint is async after mount.
    */
   getPlanProof?: () => string | null | undefined;
+  /**
+   * Send-time accessor for the host-scoped trial proof (DIG-4523). The proof is
+   * signed by the server and forwarded in X-Embed-Trial-Proof; the chat route
+   * re-verifies it. Read at send time (same freeze reason as getPlanProof) so
+   * a proof that arrives after mount still reaches the header.
+   */
+  getTrialProof?: () => string | null | undefined;
+  /**
+   * Called when a chat response says the trial proof it carried has expired
+   * (DIG-4538). The caller drops the proof it holds and asks the page for a
+   * fresh one. Fired only on that signal, so a page that does not implement
+   * the request yet cannot cause a loop.
+   */
+  onTrialProofExpired?: () => void;
   /** Send-time MCP session overlay (id+token, optional session url). */
   getMcpSession?: () => string | undefined;
   /** Send-time effort: low | medium | high. */
@@ -243,6 +258,8 @@ export function useEmbedDigiChat({
   getSearchEngine,
   planProof,
   getPlanProof,
+  getTrialProof,
+  onTrialProofExpired,
   allowClientTurnMutation = true,
   features,
 }: UseEmbedDigiChatOptions): Omit<DigiChatController, "send"> & {
@@ -258,12 +275,26 @@ export function useEmbedDigiChat({
   armRegenerate?: () => void;
   armEditLastUser?: () => void;
 } {
+  // The server reports an expired trial proof with a response header
+  // (DIG-4538). The callback is read when the response arrives, so the
+  // transport carries the one the caller passed on this render.
+  const fetchWithTrialProofSignal = useCallback(
+    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const response = await warmFetch(input, init);
+      if (isTrialProofExpiredSignal(response.headers)) {
+        onTrialProofExpired?.();
+      }
+      return response;
+    },
+    [onTrialProofExpired],
+  );
+
   const transport = useMemo(
     () =>
       new AssistantChatTransport({
         api: p("/api/chat"),
         // Hold sends made during cold boot until warm-up reports ready.
-        fetch: warmFetch as typeof fetch,
+        fetch: fetchWithTrialProofSignal as typeof fetch,
         prepareSendMessagesRequest: ({ messages, body, trigger }) => {
           const urlAuth = readEmbedUrlAuth();
           const effectiveToken = urlAuth.token ?? token;
@@ -365,6 +396,14 @@ export function useEmbedDigiChat({
           if (proof) {
             headers["X-Embed-Plan-Proof"] = proof;
           }
+          // Host-scoped trial proof (DIG-4523): forwarded on every request
+          // when one is held, and re-verified by the chat route — the client
+          // never decides whether a proof is valid. Read at send time so a
+          // proof that arrives after mount still reaches the header.
+          const trialProof = getTrialProof?.()?.trim();
+          if (trialProof) {
+            headers["X-Embed-Trial-Proof"] = trialProof;
+          }
           try {
             const conversationId = window.sessionStorage.getItem(
               conversationStorageKey(resolvedHost),
@@ -390,6 +429,7 @@ export function useEmbedDigiChat({
     // []), so its identity never changes and the transport is never rebuilt
     // on a language change — while satisfying react-hooks/exhaustive-deps.
       [
+        fetchWithTrialProofSignal,
         accent,
         token,
         host,
@@ -406,6 +446,7 @@ export function useEmbedDigiChat({
         getEffort,
         getSearchEngine,
         getPlanProof,
+        getTrialProof,
         allowClientTurnMutation,
       ],
   );
