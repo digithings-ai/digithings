@@ -137,6 +137,27 @@ def test_the_occ_only_overlay_carries_one_tenant_and_no_credential():
     assert "vaultPathPrefix" not in backend
 
 
+def test_the_occ_only_overlay_carries_the_overlay_note():
+    """An operator who opens only this file reads that it is an overlay.
+
+    The note is a sibling of the tenant payload, so the composer never reads
+    it: Guard 3 refuses an unknown key inside a tenant entry.
+    """
+    document = _occ_only_overlay()
+    note = document.get("DIGICHAT_EMBED_TENANTS_note")
+    assert isinstance(note, str)
+    assert "OVERLAY, not the registry" in note
+    assert "Never write this file to the worker secret" in note
+
+    overlay = registry.load_registry(document, str(OCC_ONLY))
+    assert sorted(overlay) == ["occ.digithings.ai"]
+    assert "DIGICHAT_EMBED_TENANTS_note" not in overlay["occ.digithings.ai"]
+
+    composed, report = registry.compose_registry(LIVE, overlay)
+    assert sorted(composed) == sorted(LIVE)
+    assert report["changed_paths"] == []
+
+
 def test_the_occ_only_overlay_leaves_the_digithings_tenant_alone():
     overlay = registry.load_registry(_occ_only_overlay(), str(OCC_ONLY))
     composed, report = registry.compose_registry(LIVE, overlay)
