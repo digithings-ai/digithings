@@ -201,10 +201,19 @@ Host must supply Azure identity for Foundry; do not put a Foundry API key in dig
 
 ## The tenant registry is composed, never applied from the repo
 
-The digichat Worker reads its tenant registry (`DIGICHAT_EMBED_TENANTS`) from a
-Worker secret. Every tenant entry carries a `token`, and the operator MCP rows
-carry their own credentials. The OCC token is a client secret, so the registry
-lives only in the host secret store, never in this repository.
+The digichat Worker reads its tenant registry from two places and merges them
+host by host:
+
+- **Workers KV** — key `embed-tenants`, binding `DIGICHAT_TENANTS_KV`. This copy
+  holds **references by name only** (`tokenEnv`, `mcp.servers[].tokenEnv`), never
+  a credential value.
+- **Worker secret** — `DIGICHAT_EMBED_TENANTS`. This copy holds the credential
+  values.
+
+A KV host whose credential references all resolve replaces the secret entry for
+that host; a KV host with an unresolved reference keeps the secret entry, and a
+KV change then changes nothing in production for that host. So **the KV copy
+wins** for every host whose references resolve, and only for those hosts.
 
 The repository may carry an **overlay**: the non-secret tenant fields (slug,
 corpus routing, presentation). The overlay is merged onto the live registry at
@@ -215,10 +224,12 @@ a token.
 # plan only: offline, prints no secret value
 python3 scripts/digichat_tenant_registry.py compose \
   --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
+  --kv-from <file-with-the-live-kv-copy> \
   --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
 
-# write the Worker secret and recycle the container (human-gated, asks for a
-# typed confirmation before it writes)
+# write the KV key, then the Worker secret, then recycle the container
+# (human-gated, asks for a typed confirmation before it writes). The apply
+# always reads the live KV itself.
 python3 scripts/digichat_tenant_registry.py apply \
   --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
   --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
@@ -228,7 +239,36 @@ The compose refuses, and names the reason: an overlay that drops a tenant, an
 overlay that carries a `token` or `mcp` rows, an overlay that adds a tenant the
 live registry does not have, an overlay key the runtime does not read, and a
 composed registry that routes a tenant to the retired OCC ticket corpus. The
-composed registry can also not be written inside the repository.
+composed registry can also not be written inside the repository. The KV copy
+additionally refuses a base that carries a credential value: it carries
+references only.
+
+The KV copy refuses four more things, because the Worker replaces the secret
+entry for a host whose references resolve:
+
+- a tenant with no credential reference. Such a tenant is served without its
+  token, and the container then refuses the whole registry, every tenant.
+- a credential reference the runtime cannot resolve, such as a name that does
+  not start with a capital. An unresolved reference keeps the secret entry, so
+  the write would have no effect.
+- a copy that drops a field the secret copy carries. The plan prints the
+  credential references the copy needs, so the operator can check that the
+  Worker has every secret the copy names.
+- a corpus index that is not a string.
+
+The apply always reads the live KV copy, because the write replaces the whole
+document: a copy read earlier would drop every tenant another operator added
+since. `--kv-from` in an apply is therefore a staleness check, and the apply
+refuses when the copy names other tenants than the live one. `--plan-only`
+writes nothing at all: no file, no KV key, no secret, no recycle. If the
+secret write fails after the KV write, the apply puts the previous KV copy
+back, so the two copies never disagree about a tenant.
+
+The OCC tenant entry carries **no `models` section**, in either copy. With no
+model list the embed shows no model choice and forwards no visitor-picked model
+id, and the house default model answers every OCC turn. An overlay that tries to
+set a `models` section for that host is refused; the compose instead removes a
+`models` section the live copy carries and reports it as a removed path.
 
 The container reads its environment at boot, so a registry change needs the
 container recycle the script performs. A digichat release that carries
@@ -251,7 +291,7 @@ rotation runbook.
 | Profile B (Foundry) | `docker compose -f infra/digichat-release/compose.profile-b.yml --env-file infra/digichat-release/.env.profile-b up -d` |
 | Local monorepo build | `make up-digichat` |
 | Validate the deployment config | `make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml` |
-| Plan the digichat tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json` |
+| Plan the digichat tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json` |
 | Client install guide | [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) |
 | Populate client docs (offline) | [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../docs/digichat/CLIENT-DOCS-ONBOARD.md) |
 | Post-publish smoke | [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md) |
