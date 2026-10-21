@@ -13,7 +13,15 @@
  * Uses stock assistant-ui Thread (ProductStockShell) against POST /api/chat.
  */
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useSearchParams } from "next/navigation";
 import { isWebSearchEnabled } from "@/lib/web-search-pref";
 import { Key, ExternalLink } from "lucide-react";
@@ -105,9 +113,18 @@ import {
 } from "@/lib/embed-parent-error-messages";
 import {
   applyEmbedDocumentTheme,
+  applyEmbedPalette,
+  embedThemePrefs,
+  embedUserThemeKey,
   parseEmbedThemeParam,
+  parseEmbedUserTheme,
   parseThemeMessage,
+  readEmbedUserThemeRaw,
+  resolveEmbedTheme,
+  subscribeEmbedUserTheme,
+  writeEmbedUserTheme,
   type EmbedTheme,
+  type EmbedUserTheme,
 } from "@/lib/embed-theme-messages";
 import {
   pageContextCreateAttachment,
@@ -298,9 +315,28 @@ function EmbedPageInner({
 
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
-  // Parent postMessage > ?theme= URL pin > tenant registry (default dark).
-  const effectiveTheme: EmbedTheme =
-    parentTheme ?? urlTheme ?? (tenantCfg.theme === "light" ? "light" : "dark");
+  // The visitor's own /theme pick: this tab only, per embed host (2.6.6).
+  const userThemeKey = embedUserThemeKey(tenantCfg.slug);
+  const userThemeRaw = useSyncExternalStore(
+    subscribeEmbedUserTheme,
+    () => readEmbedUserThemeRaw(userThemeKey),
+    () => null,
+  );
+  const userTheme = useMemo(() => parseEmbedUserTheme(userThemeRaw), [userThemeRaw]);
+  const setUserTheme = useCallback(
+    (next: EmbedUserTheme | null) => {
+      writeEmbedUserTheme(userThemeKey, next);
+    },
+    [userThemeKey],
+  );
+  // /theme pick > parent postMessage > ?theme= URL pin > tenant registry (default dark).
+  const effectiveTheme: EmbedTheme = resolveEmbedTheme({
+    pick: userTheme,
+    parent: parentTheme,
+    url: urlTheme,
+    tenant: tenantCfg.theme,
+  });
+  const effectivePalette = userTheme?.palette ?? "default";
 
   // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
   // postMessage; we exchange it at /api/plan-proof (server verifies claims) and
@@ -393,24 +429,28 @@ function EmbedPageInner({
   // ThemeClassSync mirrors [data-theme] onto .dark/.light; the wrapper below
   // keeps its class for Tailwind `dark:` inside the subtree.
   //
-  // The app-wide ThemeProvider installs a prefers-color-scheme listener that
-  // rewrites <html data-theme> whenever there is no `dt-theme` key — always
-  // true for an anonymous embed visitor. Re-assert the effective theme via a
-  // MutationObserver so OS flips (and ThemeProvider) cannot silently override
-  // a parent- or tenant-forced theme (#1434).
+  // ThemeProvider bails on a pinned document, so it does not repaint the
+  // embed today. The MutationObserver stays as a guard: anything else that
+  // rewrites <html data-theme> (an OS-flip listener, a stray script) cannot
+  // silently override the effective theme (#1434).
   useEffect(() => {
     const el = document.documentElement;
     const desired = effectiveTheme;
+    const palette = effectivePalette === "default" ? null : effectivePalette;
     const apply = () => {
-      if (el.getAttribute("data-theme") !== desired) {
+      const modeChanged = el.getAttribute("data-theme") !== desired;
+      if (modeChanged) {
         applyEmbedDocumentTheme(desired);
+      }
+      if (modeChanged || el.getAttribute("data-palette") !== palette) {
+        applyEmbedPalette(effectivePalette, desired);
       }
     };
     apply();
     const observer = new MutationObserver(apply);
-    observer.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
+    observer.observe(el, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
     return () => observer.disconnect();
-  }, [effectiveTheme]);
+  }, [effectiveTheme, effectivePalette]);
 
   // The embedding site can theme the widget to its own brand by passing
   // `?accent=#rrggbb` (+ optional `?accentForeground=`), the same override
@@ -458,6 +498,8 @@ function EmbedPageInner({
           uiParams={urlColors}
           planProof={planProof}
           bootLab={initialBoot}
+          theme={{ mode: effectiveTheme, palette: effectivePalette }}
+          onThemePick={setUserTheme}
         />
       </div>
     </>
@@ -472,6 +514,8 @@ function EmbedChat({
   uiParams,
   planProof,
   bootLab,
+  theme,
+  onThemePick,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
@@ -480,6 +524,9 @@ function EmbedChat({
   uiParams: EmbedUiParams;
   planProof?: string | null;
   bootLab?: string | null;
+  /** What the embed paints now, and where a /theme pick goes (EmbedPageInner owns it). */
+  theme: EmbedUserTheme;
+  onThemePick: (next: EmbedUserTheme | null) => void;
 }) {
   const {
     key: byokKey,
@@ -1248,8 +1295,15 @@ function EmbedChat({
       openDensity: () => {
         setComposerMenu("density");
       },
-      themeLocked: true,
-      openTheme: () => {},
+      // /theme is open on every embed (2.6.6). The tenant's theme is the
+      // start; a pick lasts for this tab and is not written to localStorage.
+      ...embedThemePrefs({
+        theme,
+        onThemePick,
+        openTheme: () => {
+          setComposerMenu("theme");
+        },
+      }),
       openThinking: () => {
         setComposerMenu("thinking");
       },
@@ -1314,6 +1368,9 @@ function EmbedChat({
       stockClient.mcp.servers,
       stockClient.features.view,
       stockClient.features.thinking,
+      theme.mode,
+      theme.palette,
+      onThemePick,
       stockClient.features.density,
       stockClient.features.effort,
       stockClient.gate.searchEngine,
