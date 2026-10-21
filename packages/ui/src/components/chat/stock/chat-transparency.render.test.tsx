@@ -199,4 +199,16 @@ describe("notice helpers", () => {
     expect(host.querySelector('[data-json="number"]')?.textContent).toBe("1");
     act(() => root.unmount());
   });
+
+  it("scans an unterminated string in linear time and keeps every character", () => {
+    const text = '"' + '\\"'.repeat(50_000);
+    const started = performance.now();
+    const nodes = highlightJson(text);
+    expect(performance.now() - started).toBeLessThan(500);
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    act(() => root.render(<pre>{nodes}</pre>));
+    expect(host.textContent).toBe(text);
+    act(() => root.unmount());
+  });
 });

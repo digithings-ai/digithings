@@ -12,8 +12,11 @@ import { cn } from "@/lib/utils";
  * max-height scroll area (18rem), no expand button (Chris, 21 Oct).
  */
 
+// The closing quote is optional so an unterminated string still matches to
+// the end in one pass instead of rescanning from every later quote (CodeQL
+// js/polynomial-redos). formatJsonDump output is always well formed anyway.
 const TOKEN =
-  /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false)\b|\b(null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+  /("(?:\\.|[^"\\])*"?)(\s*:)?|\b(true|false)\b|\b(null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
 
 export function highlightJson(text: string): ReactNode[] {
   const out: ReactNode[] = [];
