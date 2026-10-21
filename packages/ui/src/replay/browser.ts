@@ -10,6 +10,7 @@ import { snapshotFilename } from "./filename";
 import {
   deploymentText,
   messageAnchor,
+  omitScrollLockCss,
   questionText,
   serializeSnapshot,
   snapshotSource,
@@ -39,7 +40,10 @@ export function liveSheetText(
   const chunks: string[] = [];
   for (const sheet of Array.from(doc.styleSheets)) {
     try {
-      for (const rule of Array.from(sheet.cssRules)) chunks.push(rule.cssText);
+      for (const rule of Array.from(sheet.cssRules)) {
+        const text = omitScrollLockCss(rule.cssText);
+        if (text.trim()) chunks.push(text);
+      }
     } catch {
       /* A cross-origin sheet cannot be read. Those rules are dropped. */
     }
@@ -196,18 +200,19 @@ export async function downloadThreadSnapshot(
 }
 
 /**
- * The message-menu export. `messageId` is the assistant message from the
- * message context. A miss shows an error and does not save the thread.
+ * The message-menu export. `trigger` is the menu button inside that
+ * assistant message. A miss shows an error and does not save the thread.
  */
 export async function downloadMessageSnapshot(
   doc: Document | null = typeof document === "undefined" ? null : document,
   exportedAt = new Date().toISOString(),
   messageId = "",
+  trigger: HTMLElement | null = null,
 ): Promise<void> {
   if (!doc?.documentElement) throw new Error(MISSING_THREAD_MESSAGE);
   setExportKeepMounted(true);
   try {
-    const anchor = messageAnchor(doc, messageId);
+    const anchor = messageAnchor(trigger, messageId);
     if (!anchor) {
       showSnapshotError(doc, MISSING_MESSAGE_MESSAGE);
       throw new Error(MISSING_MESSAGE_MESSAGE);

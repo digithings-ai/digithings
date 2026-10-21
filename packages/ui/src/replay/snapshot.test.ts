@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { describe, expect, it } from "vitest";
-import { inlineDomAssets } from "./browser";
+import { inlineDomAssets, liveSheetText } from "./browser";
 import { snapshotFilename } from "./filename";
 import { messageAnchor, serializeSnapshot, snapshotSource, transformSnapshotDom } from "./snapshot";
 
@@ -313,13 +313,17 @@ describe("one interaction", () => {
       '<div data-role="user"><div class="aui-user-message-content">Second question</div></div>',
       '<div data-role="assistant" data-message-id="a2">',
       '<div class="aui-assistant-message-content">Second answer</div>',
+      '<button id="more">More</button>',
       "</div>",
       "</div>",
       "</div>",
       '<div role="menu"><button>Export as HTML</button></div>',
     ].join("");
     expect(snapshotSource(document)).toBeNull();
-    const anchor = messageAnchor(document, "a2");
+    const trigger = document.getElementById("more");
+    expect(trigger).not.toBeNull();
+    expect(messageAnchor(trigger, "a1")).toBeNull();
+    const anchor = messageAnchor(trigger, "a2");
     expect(anchor).not.toBeNull();
     const shell = snapshotSource(document, anchor);
     expect(shell).not.toBeNull();
@@ -328,6 +332,79 @@ describe("one interaction", () => {
     expect(html).toContain("Second answer");
     expect(html).not.toContain("First question");
     expect(html).not.toContain("First answer");
+  });
+
+  it("resolves the trigger's message when an earlier copy has the same id", () => {
+    document.body.innerHTML = [
+      "<div hidden>",
+      '<div class="aui-thread-root">',
+      '<div data-role="user"><div class="aui-user-message-content">Embed question</div></div>',
+      '<div data-role="assistant" data-message-id="dup">',
+      '<div class="aui-assistant-message-content">embed-duplicate-token</div>',
+      "</div>",
+      "</div>",
+      "</div>",
+      '<div class="aui-thread-root">',
+      '<div data-role="user"><div class="aui-user-message-content">Real question</div></div>',
+      '<div data-role="assistant" data-message-id="dup">',
+      '<div class="aui-assistant-message-content">Real answer</div>',
+      '<button id="more">More</button>',
+      "</div>",
+      "</div>",
+    ].join("");
+    const trigger = document.getElementById("more");
+    expect(trigger).not.toBeNull();
+    const anchor = messageAnchor(trigger, "dup");
+    expect(anchor?.textContent).toContain("Real answer");
+    expect(anchor?.textContent).not.toContain("embed-duplicate-token");
+    const shell = snapshotSource(document, anchor);
+    expect(shell).not.toBeNull();
+    const html = serializeSnapshot(shell!, "");
+    expect(html).toContain("Real question");
+    expect(html).toContain("Real answer");
+    expect(html).not.toContain("embed-duplicate-token");
+    expect(html).not.toContain("Embed question");
+  });
+
+  it("drops the open menu's page lock and keeps the question", () => {
+    document.head.innerHTML =
+      "<style>body[data-scroll-locked]{overflow:hidden}.ok{color:CanvasText}</style>";
+    document.body.setAttribute("data-scroll-locked", "1");
+    document.body.setAttribute("style", "pointer-events: none; color: CanvasText");
+    document.body.innerHTML = [
+      '<div aria-hidden="true" data-aria-hidden="true" inert>',
+      '<div class="aui-thread-root">',
+      '<div data-role="user"><div class="aui-user-message-content">Locked question</div></div>',
+      '<div data-role="assistant" data-message-id="a2">',
+      '<div class="aui-assistant-message-content">Locked answer</div>',
+      '<button id="more">More</button>',
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+    const trigger = document.getElementById("more");
+    const anchor = messageAnchor(trigger, "a2");
+    expect(anchor).not.toBeNull();
+    const shell = snapshotSource(document, anchor);
+    expect(shell).not.toBeNull();
+    const css = liveSheetText(document);
+    expect(css).not.toContain("data-scroll-locked");
+    expect(css).toContain(".ok");
+    const html = serializeSnapshot(shell!, `${css}\nbody[data-scroll-locked]{overflow:hidden}`);
+    expect(html).toContain("Locked question");
+    expect(html).toContain("Locked answer");
+    expect(html).not.toContain("aria-hidden");
+    expect(html).not.toContain("data-aria-hidden");
+    expect(html).not.toContain("data-scroll-locked");
+    expect(html).not.toContain("inert");
+    expect(html).toContain(".ok");
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    expect(parsed.body.getAttribute("style") ?? "").not.toMatch(/pointer-events/i);
+    expect(parsed.body.getAttribute("style") ?? "").toMatch(/color/i);
+    expect(document.body.hasAttribute("data-scroll-locked")).toBe(true);
+    expect(document.body.getAttribute("style") ?? "").toMatch(/pointer-events/i);
+    document.body.removeAttribute("data-scroll-locked");
+    document.body.removeAttribute("style");
   });
 });
 

@@ -40,6 +40,7 @@ import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
 import { downloadMessageSnapshot, showSnapshotError } from "../../../replay/browser";
+import { downloadMarkdown } from "../transcript";
 import { connectionStatusText } from "../connection-status";
 import { WorkStatusLead } from "../work-status-lead";
 import { Skeleton } from "../../../ui/skeleton";
@@ -1347,6 +1348,8 @@ const AssistantMessage: FC = () => {
 const AssistantActionBar: FC = () => {
   const { undo, feedback } = useContext(ThreadActionsContext);
   const messageId = useAuiState((s) => s.message.id);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const exportHtmlAfterClose = useRef(false);
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -1395,8 +1398,24 @@ const AssistantActionBar: FC = () => {
           </ActionBarPrimitive.FeedbackNegative>
         </>
       ) : null}
-      <ActionBarMorePrimitive.Root>
-        <ActionBarMorePrimitive.Trigger asChild>
+      <ActionBarMorePrimitive.Root
+        onOpenChange={(open) => {
+          if (open || !exportHtmlAfterClose.current) return;
+          exportHtmlAfterClose.current = false;
+          const doc = document;
+          const trigger = triggerRef.current;
+          const id = messageId;
+          requestAnimationFrame(() => {
+            void downloadMessageSnapshot(doc, new Date().toISOString(), id, trigger).catch(
+              (error: unknown) => {
+                const message = error instanceof Error ? error.message : "HTML export failed.";
+                showSnapshotError(doc, message);
+              },
+            );
+          });
+        }}
+      >
+        <ActionBarMorePrimitive.Trigger asChild ref={triggerRef}>
           <TooltipIconButton tooltip="More">
             <DotMatrix state="more" decorative className="size-3.5" />
           </TooltipIconButton>
@@ -1407,7 +1426,12 @@ const AssistantActionBar: FC = () => {
           sideOffset={6}
           className="aui-action-bar-more-content z-[110] min-w-[8rem] overflow-hidden border p-1"
         >
-          <ActionBarPrimitive.ExportMarkdown asChild>
+          <ActionBarPrimitive.ExportMarkdown
+            asChild
+            onExport={(content) => {
+              downloadMarkdown("digichat.md", content);
+            }}
+          >
             <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink">
               <DotMatrix state="export" decorative className="size-3.5" />
               Export as Markdown
@@ -1416,13 +1440,7 @@ const AssistantActionBar: FC = () => {
           <ActionBarMorePrimitive.Item
             className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink"
             onClick={() => {
-              const doc = document;
-              void downloadMessageSnapshot(doc, new Date().toISOString(), messageId).catch(
-                (error: unknown) => {
-                  const message = error instanceof Error ? error.message : "HTML export failed.";
-                  showSnapshotError(doc, message);
-                },
-              );
+              exportHtmlAfterClose.current = true;
             }}
           >
             <DotMatrix state="export" decorative className="size-3.5" />

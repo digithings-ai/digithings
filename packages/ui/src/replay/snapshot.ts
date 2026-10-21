@@ -116,24 +116,16 @@ export function activeThreadRoot(root: ParentNode): HTMLElement | null {
 const MESSAGE_ROOT = "[data-role='user'], [data-role='assistant']";
 
 /**
- * The assistant message with this id. An open menu marks the rest of the
- * page aria-hidden, so this does not require the thread to be the active
- * root. A portaled menu item is not inside the thread; the message action
- * passes the id from the message context instead of the click target.
+ * The assistant message that owns this menu trigger. The trigger sits in
+ * the message; the menu item does not. A duplicate id earlier in the page
+ * is a different element, so this does not search the document.
  */
-export function messageAnchor(doc: Document, messageId: string): HTMLElement | null {
+export function messageAnchor(trigger: HTMLElement | null, messageId: string): HTMLElement | null {
   const id = messageId.trim();
-  if (!id) return null;
-  const selector = `[data-message-id="${cssEscape(id)}"]`;
-  for (const node of doc.querySelectorAll(selector)) {
-    if (!(node instanceof HTMLElement)) continue;
-    const thread = node.closest<HTMLElement>(".aui-thread-root");
-    if (!thread || !isMessageThread(thread)) continue;
-    const answer = node.closest<HTMLElement>("[data-role='assistant']");
-    if (!answer || !thread.contains(answer)) continue;
-    return answer;
-  }
-  return null;
+  if (!trigger || !id) return null;
+  const selector = `[data-role="assistant"][data-message-id="${cssEscape(id)}"]`;
+  const message = trigger.closest(selector);
+  return message instanceof HTMLElement ? message : null;
 }
 
 /**
@@ -163,6 +155,7 @@ export function snapshotSource(doc: Document, anchor?: HTMLElement | null): HTML
   if (!body) return null;
   html.append(body);
   stripDeploymentAttributes(html);
+  stripPageLock(html);
   return html;
 }
 
@@ -286,6 +279,68 @@ function stripDeploymentAttributes(root: Element): void {
   }
 }
 
+const PAGE_LOCK_ATTRS = ["aria-hidden", "data-aria-hidden", "inert", "data-scroll-locked"];
+
+/**
+ * An open menu locks the page: aria-hidden on the app, and react-remove-scroll's
+ * `data-scroll-locked` plus `pointer-events: none` on the body. Those are not
+ * part of the chat. The open page is left as it is.
+ */
+function stripPageLock(root: Element): void {
+  const nodes = [root, ...root.querySelectorAll("*")];
+  for (const node of nodes) {
+    for (const name of PAGE_LOCK_ATTRS) node.removeAttribute(name);
+    if (node.tagName !== "BODY") continue;
+    const style = node.getAttribute("style");
+    if (!style) continue;
+    const kept = style
+      .split(";")
+      .map((part) => part.trim())
+      .filter((part) => part && !/^pointer-events\s*:/i.test(part));
+    if (kept.length === 0) node.removeAttribute("style");
+    else node.setAttribute("style", kept.join("; "));
+  }
+}
+
+/** Drop rules that only exist while a menu holds the page scroll lock. */
+export function omitScrollLockCss(css: string): string {
+  let out = "";
+  let i = 0;
+  while (i < css.length) {
+    const open = css.indexOf("{", i);
+    if (open < 0) {
+      out += css.slice(i);
+      break;
+    }
+    let depth = 0;
+    let j = open;
+    for (; j < css.length; j += 1) {
+      const ch = css[j];
+      if (ch === "{") depth += 1;
+      else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          j += 1;
+          break;
+        }
+      }
+    }
+    const block = css.slice(i, j);
+    if (!block.includes("data-scroll-locked")) {
+      out += block;
+    } else {
+      const prelude = css.slice(i, open).trim();
+      const inner = css.slice(open + 1, Math.max(open + 1, j - 1));
+      if (prelude.startsWith("@") && inner.includes("{")) {
+        const kept = omitScrollLockCss(inner);
+        if (kept.trim()) out += `${css.slice(i, open)}{${kept}}`;
+      }
+    }
+    i = j;
+  }
+  return out;
+}
+
 function copyShellAttributes(from: Element, to: Element): void {
   for (const attr of from.attributes) {
     if (attr.name.toLowerCase().startsWith("on")) continue;
@@ -341,7 +396,7 @@ export function serializeSnapshot(root: HTMLElement, css: string): string {
   head.prepend(csp);
   const style = doc.createElement("style");
   style.setAttribute("data-snapshot-css", "");
-  style.textContent = escapeStyleText(`${css}\n${SNAPSHOT_CSS}`);
+  style.textContent = escapeStyleText(`${omitScrollLockCss(css)}\n${SNAPSHOT_CSS}`);
   head.append(style);
   for (const el of root.querySelectorAll<HTMLElement>("[style]")) {
     const inline = el.getAttribute("style");

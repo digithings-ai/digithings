@@ -69,6 +69,22 @@ describe("message menu Export as HTML", () => {
       el.textContent?.includes("beta-answer-token"),
     );
     expect(beta).toBeTruthy();
+    const betaId = beta!.getAttribute("data-message-id") ?? "";
+    expect(betaId).not.toBe("");
+    const decoyHost = document.createElement("div");
+    decoyHost.hidden = true;
+    const decoyThread = document.createElement("div");
+    decoyThread.className = "aui-thread-root";
+    const decoyMessage = document.createElement("div");
+    decoyMessage.setAttribute("data-role", "assistant");
+    decoyMessage.setAttribute("data-message-id", betaId);
+    const decoyBody = document.createElement("div");
+    decoyBody.className = "aui-assistant-message-content";
+    decoyBody.textContent = "embed-duplicate-token";
+    decoyMessage.append(decoyBody);
+    decoyThread.append(decoyMessage);
+    decoyHost.append(decoyThread);
+    document.body.prepend(decoyHost);
     const more = [...beta!.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("More"),
     );
@@ -84,6 +100,11 @@ describe("message menu Export as HTML", () => {
     expect(item!.closest(".aui-thread-root")).toBeNull();
 
     await user.click(item!);
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
     await vi.waitFor(() => expect(saved).toHaveLength(1));
 
     const body = saved[0]!.body;
@@ -91,6 +112,10 @@ describe("message menu Export as HTML", () => {
     expect(body).toContain("beta-answer-token");
     expect(body).not.toContain("alpha-question-token");
     expect(body).not.toContain("alpha-answer-token");
+    expect(body).not.toContain("embed-duplicate-token");
+    expect(body).not.toContain("aria-hidden");
+    expect(body).not.toContain("data-scroll-locked");
+    expect(body).not.toContain("data-aria-hidden");
     expect(document.body.textContent).toContain("alpha-question-token");
 
     await act(async () => root.unmount());
