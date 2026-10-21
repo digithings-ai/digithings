@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { OCC_INVITE_COOKIE } from "../../../../digichat-cloudflare/src/occ-gate";
+import {
+  OCC_INVITE_COOKIE,
+  SITE_NOT_FOUND_PATH,
+} from "../../../../digichat-cloudflare/src/occ-gate";
 import { onRequest, type OccPagesContext } from "./[[path]]";
 
 const KEY = "fixture-invite-key";
@@ -74,7 +77,27 @@ describe("Pages /chat/occ gate", () => {
       expect(got.contentType).toBe(baselines[0]!.contentType);
       expect(got.body).toBe(baselines[0]!.body);
       expect(got.headers).toEqual(baselines[0]!.headers);
-      expect(got.body).not.toMatch(/dc-chat-main|OCC|digichat|iframe|dboot/);
+      expect(got.body).not.toMatch(/dc-chat-main|OCC help assistant|<iframe|dboot/);
+    }
+    // The body really is the site 404 page, not something the gate made up.
+    const asked = assets.fetch.mock.calls.map(([req]) => new URL(req.url).pathname);
+    expect(asked).toContain(SITE_NOT_FOUND_PATH);
+  });
+
+  it("stays a plain 404 when the site 404 cannot be read", async () => {
+    for (const asset of [
+      async () => new Response("<h1>home</h1>", { status: 200 }),
+      async () => {
+        throw new Error("assets unavailable");
+      },
+    ]) {
+      const c = ctx("https://digithings.ai/chat/occ");
+      c.env.ASSETS = { fetch: asset };
+      const r = await onRequest(c);
+      expect(r.status).toBe(404);
+      expect(r.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      expect(await r.text()).not.toContain("home");
+      expect(c.next).not.toHaveBeenCalled();
     }
   });
 
