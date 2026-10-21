@@ -8,7 +8,21 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const publicPort = Number(process.env.PORT ?? "3000");
 const upstreamPort = Number(process.env.DIGICHAT_NEXT_INTERNAL_PORT ?? "3001");
-const upstreamHost = "127.0.0.1";
+/**
+ * Where the Next child listens, and where this process connects to it.
+ *
+ * It must be `localhost`, not `127.0.0.1`. Next builds the router's request
+ * URL from this hostname (`http://127.0.0.1:3001/...`), but `NextRequest`
+ * normalises any 127.x or [::1] host to `localhost`. A proxy.ts rewrite built
+ * from `request.url` (the embed `?token=` strip) then names a different origin
+ * than the router's, so Next treats it as an external rewrite and fetches
+ * `https://localhost:3001` itself: a 500 with no content-type for every
+ * token-bearing tenant request (2.6.6). With `localhost` both sides
+ * agree and the rewrite stays internal. Still loopback-only.
+ */
+export const nextUpstreamHost = "localhost";
+// The in-image helpdesk MCP listens on IPv4 loopback.
+const helpdeskMcpHost = "127.0.0.1";
 // Read-only OCC helpdesk MCP (scripts/zammad_mcp): a second loopback listener
 // inside this image, reached only through the public listener below.
 const zammadPort = Number(process.env.ZAMMAD_MCP_PORT ?? "8770");
@@ -151,7 +165,7 @@ function waitForNext() {
   return new Promise((resolveReady, rejectReady) => {
     const deadline = Date.now() + 30_000;
     const attempt = () => {
-      const socket = net.connect(upstreamPort, upstreamHost);
+      const socket = net.connect(upstreamPort, nextUpstreamHost);
       socket.once("connect", () => {
         socket.destroy();
         resolveReady();
@@ -206,6 +220,11 @@ function startZammadMcp() {
   launch();
 }
 
+/** Environment for the Next child: loopback `localhost` on the internal port. */
+export function nextChildEnv(env, port) {
+  return { ...env, HOSTNAME: nextUpstreamHost, PORT: String(port) };
+}
+
 function start() {
   ensurePeerStamp();
   const bakedVersion = resolveDigichatVersion();
@@ -214,11 +233,7 @@ function start() {
     console.warn(trustedProxiesUnsetWarning);
   }
   const next = spawn(process.execPath, [nextServerPath()], {
-    env: {
-      ...process.env,
-      HOSTNAME: upstreamHost,
-      PORT: String(upstreamPort),
-    },
+    env: nextChildEnv(process.env, upstreamPort),
     stdio: "inherit",
   });
 
@@ -239,9 +254,9 @@ function start() {
     const isZammadMcp = (req.url ?? "").startsWith(zammadPrefix);
     proxyToUpstream(req, res, {
       headers: forwardHeaders(req.headers, peerIp),
-      host: upstreamHost,
-      path: isZammadMcp ? "/mcp" : req.url,
-      port: isZammadMcp ? zammadPort : upstreamPort,
+      ...(isZammadMcp
+        ? { host: helpdeskMcpHost, path: "/mcp", port: zammadPort }
+        : { host: nextUpstreamHost, path: req.url, port: upstreamPort }),
     });
   });
 

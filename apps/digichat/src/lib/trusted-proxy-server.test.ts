@@ -4,6 +4,8 @@ import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import {
   forwardHeaders,
+  nextChildEnv,
+  nextUpstreamHost,
   proxyToUpstream,
   resolveDigichatVersion,
 } from "../../scripts/trusted-proxy-server.mjs";
@@ -221,6 +223,48 @@ describe("trusted-proxy server", () => {
       expect(upstreamClosedEarly).toBe(true);
     } finally {
       await closeServer(proxy);
+      await closeServer(upstream);
+    }
+  });
+});
+
+describe("Next child address", () => {
+  it("starts Next on localhost and the internal port", () => {
+    const env = nextChildEnv({ HOSTNAME: "0.0.0.0", PORT: "3000", KEEP: "1" }, 3001);
+    expect(env.HOSTNAME).toBe("localhost");
+    expect(env.PORT).toBe("3001");
+    expect(env.KEEP).toBe("1");
+  });
+
+  it("names a host NextRequest keeps verbatim, so proxy.ts rewrites stay internal", () => {
+    // NextRequest rewrites 127.x and [::1] to localhost; the router does not.
+    expect(nextUpstreamHost).toBe("localhost");
+    expect(new URL(`http://${nextUpstreamHost}:3001/`).hostname).toBe("localhost");
+  });
+
+  it("reaches a loopback upstream through the localhost name", async () => {
+    const upstream = http.createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end("<!DOCTYPE html><p>ok</p>");
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, nextUpstreamHost, () => resolve()));
+    const port = (upstream.address() as AddressInfo).port;
+    const front = http.createServer((req, res) => {
+      proxyToUpstream(req, res, {
+        headers: forwardHeaders(req.headers, "198.51.100.7", "stamp"),
+        host: nextUpstreamHost,
+        path: req.url,
+        port,
+      });
+    });
+    const frontPort = await listen(front);
+    try {
+      const res = await fetch(`http://127.0.0.1:${frontPort}/embed?host=occ.example.com`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/html");
+      expect(await res.text()).toContain("<!DOCTYPE html>");
+    } finally {
+      await closeServer(front);
       await closeServer(upstream);
     }
   });
