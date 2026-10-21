@@ -69,10 +69,11 @@ import {
 } from "@/components/stock/embed-provider-flow";
 import { listenMcpOAuthResult, startMcpOAuth } from "@/components/stock/embed-mcp-oauth";
 import { THINKING_MODES, VIEW_MODES } from "@/lib/view-modes";
+import { TRACE_DENSITIES, TRACE_DENSITY_LABELS } from "@digithings/ui/chat/trace-spacing";
+import { readEffectiveThemeState } from "@/lib/palette-prefs";
 import {
   applyDocumentTheme,
   matchThemeStep,
-  readThemeState,
   themeCycle,
 } from "@digithings/ui/theme";
 
@@ -85,6 +86,7 @@ export type ComposerMenuKind =
   | "effort"
   | "search-engine"
   | "view"
+  | "density"
   | "theme"
   | "thinking"
   | "provider"
@@ -97,6 +99,7 @@ type MenuView =
   | "effort"
   | "search-engine"
   | "view"
+  | "density"
   | "theme"
   | "thinking"
   | "tools"
@@ -182,6 +185,7 @@ const MENU_PARENT: Record<MenuView, MenuView | null> = {
   effort: "main",
   "search-engine": "main",
   view: "main",
+  density: "main",
   theme: "main",
   thinking: "main",
   tools: "main",
@@ -239,6 +243,7 @@ function initialView(kind: ComposerMenuKind): MenuView {
   if (kind === "effort") return "effort";
   if (kind === "search-engine") return "search-engine";
   if (kind === "view") return "view";
+  if (kind === "density") return "density";
   if (kind === "theme") return "theme";
   if (kind === "thinking") return "thinking";
   if (kind === "tools") return "tools";
@@ -480,6 +485,7 @@ export function EmbedComposerMenu({
       tools: "tools",
       language: "language",
       view: "view",
+      density: "density",
       theme: "theme",
       thinking: "thinking",
       effort: "effort",
@@ -678,8 +684,24 @@ export function EmbedComposerMenu({
     [api, onClose],
   );
 
+  const densityRows = useMemo(
+    (): MenuRow[] =>
+      TRACE_DENSITIES.map((id) => ({
+        id,
+        label: slashName(`density ${id}`),
+        value: TRACE_DENSITY_LABELS[id],
+        checked: api.prefs.density === id,
+        exclusive: true,
+        activate: () => {
+          api.setDensity(id);
+          onClose();
+        },
+      })),
+    [api, onClose],
+  );
+
   const themeRows = useMemo((): MenuRow[] => {
-    const state = readThemeState();
+    const state = readEffectiveThemeState();
     const current = matchThemeStep(state.preference, state.palette, state.resolved);
     return themeCycle().map((step) => ({
       id: step.id,
@@ -990,7 +1012,9 @@ export function EmbedComposerMenu({
           ? effortRows
           : view === "view"
             ? viewRows
-            : view === "thinking"
+            : view === "density"
+              ? densityRows
+              : view === "thinking"
               ? thinkingRows
               : view === "theme"
                 ? themeRows
@@ -1020,7 +1044,9 @@ export function EmbedComposerMenu({
           ? "/effort"
           : view === "view"
             ? "/view"
-            : view === "theme"
+            : view === "density"
+              ? "/density"
+              : view === "theme"
               ? "/theme"
               : view === "thinking"
                 ? "/thinking"

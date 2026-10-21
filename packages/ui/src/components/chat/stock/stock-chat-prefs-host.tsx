@@ -16,6 +16,9 @@ import {
   EmbedChatPrefsProvider,
   catalogToolsFromClient,
   createDefaultEmbedChatPrefs,
+  chromePrefsFromDeploy,
+  persistDensity,
+  useStoredDensityAfterMount,
   disabledCatalogIds,
   extraOffFromCatalog,
   type CatalogToolRow,
@@ -45,6 +48,12 @@ export type StockChatPrefsConfig = {
   allowModelPicker?: boolean;
   view: ViewMode;
   thinking: ThinkingMode;
+  /** Deployment default. A stored `dt-density` still wins for this user. */
+  density?: "compact" | "default" | "airy";
+  effort?: "low" | "medium" | "high";
+  searchEngine?: string;
+  toolbar?: boolean;
+  scrollbars?: "always" | "auto";
   tenantAllowsWeb: boolean;
   showByok: boolean;
   /**
@@ -133,7 +142,20 @@ export function useStockChatPrefs({
     extra: extraOffFromCatalog(catalogTools),
     view: config.view,
     thinking: config.thinking,
+    // No storage on the first render: the server cannot read dt-density, so
+    // the stored choice is applied after mount (useStoredDensityAfterMount).
+    ...chromePrefsFromDeploy(
+      {
+        density: config.density,
+        effort: config.effort,
+        searchEngine: config.searchEngine,
+        toolbar: config.toolbar,
+        scrollbars: config.scrollbars,
+      },
+      null,
+    ),
   }));
+  useStoredDensityAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
@@ -202,12 +224,23 @@ export function useStockChatPrefs({
       setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
       setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
       setScrollbars: (mode) => setChatPrefs((p) => ({ ...p, scrollbars: mode })),
+      setDensity: (density) => {
+        persistDensity(density);
+        setChatPrefs((p) => ({ ...p, density }));
+      },
       reset: () =>
         setChatPrefs({
           ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
+          ...chromePrefsFromDeploy({
+            density: config.density,
+            effort: config.effort,
+            searchEngine: config.searchEngine,
+            toolbar: config.toolbar,
+            scrollbars: config.scrollbars,
+          }),
         }),
       tenantAllowsWeb,
       showByok,
@@ -251,6 +284,9 @@ export function useStockChatPrefs({
       openView: () => {
         setComposerMenu("view");
       },
+      openDensity: () => {
+        setComposerMenu("density");
+      },
       openTheme: () => {
         setComposerMenu("theme");
       },
@@ -268,6 +304,13 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
+          ...chromePrefsFromDeploy({
+            density: config.density,
+            effort: config.effort,
+            searchEngine: config.searchEngine,
+            toolbar: config.toolbar,
+            scrollbars: config.scrollbars,
+          }),
         });
         newThread();
       },
@@ -277,6 +320,13 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
+          ...chromePrefsFromDeploy({
+            density: config.density,
+            effort: config.effort,
+            searchEngine: config.searchEngine,
+            toolbar: config.toolbar,
+            scrollbars: config.scrollbars,
+          }),
         });
         newThread();
       },
@@ -301,6 +351,11 @@ export function useStockChatPrefs({
       config.servers,
       config.view,
       config.thinking,
+      config.density,
+      config.effort,
+      config.searchEngine,
+      config.toolbar,
+      config.scrollbars,
       deps.mcpOps,
       deps.resolveLanguage,
       deps.defaultLanguageCode,

@@ -46,6 +46,8 @@ export type DigichatClientFeatures = {
   speech: boolean;
   view: ViewMode;
   thinking: ThinkingMode;
+  density: "compact" | "default" | "airy";
+  effort: "low" | "medium" | "high";
   sources: boolean;
   modelPicker: boolean;
   branchPicker: boolean;
@@ -55,6 +57,10 @@ export type DigichatClientFeatures = {
 export type DigichatClientChrome = {
   mode: ChromeMode;
   theme: "dark" | "light";
+  /** Named palette. Absent means the skin palette. */
+  palette?: string;
+  toolbar: boolean;
+  scrollbars: "always" | "auto";
   skin: ThreadSkin;
   title?: string;
   /** Headline. Legacy YAML `welcome: "…"` still lands here. */
@@ -150,6 +156,8 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     mode: "embed",
     theme: "dark",
     skin: BASELINE_EMBED_SKIN,
+    toolbar: true,
+    scrollbars: "always",
     welcome: BASELINE_EMBED_WELCOME,
     welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
     placeholder: BASELINE_EMBED_PLACEHOLDER,
@@ -167,6 +175,8 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     speech: false,
     view: "balanced",
     thinking: "auto",
+    density: "default",
+    effort: "medium",
     sources: true,
     modelPicker: false,
     branchPicker: true,
@@ -220,6 +230,9 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
     chrome: {
       mode: dep.chrome.mode,
       theme: dep.chrome.theme,
+      ...(dep.chrome.palette ? { palette: dep.chrome.palette } : {}),
+      toolbar: dep.chrome.toolbar !== false,
+      scrollbars: dep.chrome.scrollbars ?? "always",
       skin: dep.chrome.skin ?? DEFAULT_THREAD_SKIN,
       title: dep.chrome.title,
       welcome: welcomeTitle(dep.chrome.welcome),

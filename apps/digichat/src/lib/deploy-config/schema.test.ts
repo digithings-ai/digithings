@@ -34,6 +34,11 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.auth).toBe("anonymous");
     expect(cfg.deployment?.features.view).toBe("balanced");
     expect(cfg.deployment?.features.thinking).toBe("auto");
+    expect(cfg.deployment?.features.density).toBe("default");
+    expect(cfg.deployment?.features.effort).toBe("medium");
+    expect(cfg.deployment?.chrome.toolbar).toBe(true);
+    expect(cfg.deployment?.chrome.scrollbars).toBe("always");
+    expect(cfg.deployment?.chrome.palette).toBeUndefined();
     expect(cfg.deployment?.chrome.defaultLanguage).toBe("en");
     expect(cfg.deployment?.chrome.transcript.userAlign).toBe("right");
     expect(cfg.deployment?.chrome.skin).toBe("base");

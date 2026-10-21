@@ -406,6 +406,7 @@ def _digigraph_check():
         "65536",
         "-1",
         "+8000",
+        " 8000",
         "８０００",
         "0x1F40",
     ],
@@ -413,10 +414,10 @@ def _digigraph_check():
 def test_the_digigraph_probe_refuses_a_value_that_is_not_a_port(value):
     """Each of these is a value a raw expansion would have templated.
 
-    Surrounding whitespace is not in the list: whitespace is noise around a
-    number, and the Supabase port knob already strips it, so the gate agrees
-    rather than refusing a value the stack accepts
-    (test_a_port_knob_with_surrounding_whitespace_is_still_a_port).
+    Surrounding whitespace is in the list: a port is plain decimal digits
+    (DIG-4911 ask 1), so " 8000" is refused and never trimmed into a port.
+    The Supabase pair keeps its own soft policy, because localstack.localenv
+    normalizes DT_SUPABASE_PORT before the contracts see it.
     """
     check = _digigraph_check()
     with pytest.raises(contracts.InvalidPort) as excinfo:
@@ -754,16 +755,18 @@ def test_every_knob_row_is_guarded():
     assert templated == {name for name, _ in PORT_KNOBS}
 
 
-def test_a_port_knob_with_surrounding_whitespace_is_still_a_port():
-    """Whitespace is noise around a number, not a different number.
+def test_a_port_knob_with_surrounding_whitespace_is_refused():
+    """Whitespace around a port is not a port.
 
-    The Supabase port knob already strips (localstack.supabase_ports), so the
-    gate must agree with it rather than refuse a value the stack accepts.
+    DIG-4911 ask 1: the port is plain decimal digits, so " 18000 " is not one
+    and is refused like any other value that is not a port. The Supabase pair
+    keeps its own soft policy, because localstack.localenv normalizes
+    DT_SUPABASE_PORT before the contracts see it.
     """
     check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
-    url, reason = contracts.resolve(check, {"DT_DIGIGRAPH_PORT": " 18000 "})
-    assert reason is None
-    assert url == "http://127.0.0.1:18000/healthz"
+    with pytest.raises(contracts.InvalidPort) as excinfo:
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": " 18000 "})
+    assert "DT_DIGIGRAPH_PORT" in str(excinfo.value)
 
 
 def test_the_dashboard_api_probe_never_leaves_loopback():

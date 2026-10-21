@@ -75,6 +75,11 @@ export type EmbedTenantClientConfig = {
   view?: ViewMode;
   /** Reasoning-only override on top of `view`. Omit = deploy default. */
   thinking?: ThinkingMode;
+  density?: "compact" | "default" | "airy";
+  effort?: "low" | "medium" | "high";
+  toolbar?: boolean;
+  scrollbars?: "always" | "auto";
+  searchEngine?: string;
   /** Catalog entries — no MCP URLs */
   tools?: {
     catalog: Array<{
@@ -180,6 +185,11 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     webSearch: cfg.webSearch === true,
     view: cfg.view,
     thinking: cfg.thinking,
+    ...(cfg.density ? { density: cfg.density } : {}),
+    ...(cfg.effort ? { effort: cfg.effort } : {}),
+    ...(cfg.toolbar === false ? { toolbar: false } : {}),
+    ...(cfg.scrollbars ? { scrollbars: cfg.scrollbars } : {}),
+    ...(cfg.searchEngine ? { searchEngine: cfg.searchEngine } : {}),
     tools: cfg.tools,
     mcp: cfg.mcp
       ? {

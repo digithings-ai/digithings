@@ -275,6 +275,17 @@ describe("view-level wording", () => {
     // inside the package that owns the wording, and nothing else would see
     // it: the choice options are rendered by no surface today.
     expect(SLASH_COMMANDS.find((c) => c.id === "view")?.choiceOptions).toBe(VIEW_CHOICES);
+    const density = SLASH_COMMANDS.find((c) => c.id === "density");
+    expect(density).toMatchObject({
+      id: "density",
+      names: ["/density"],
+      category: "setup",
+    });
+    expect(density?.choiceOptions?.map((choice) => choice.value)).toEqual([
+      "compact",
+      "default",
+      "airy",
+    ]);
   });
 
   it("prints the wording the product prints today", () => {

@@ -130,6 +130,11 @@ export function toStockChatPrefsConfig(
       clientConfig.features.modelPicker === true,
     view: clientConfig.features.view,
     thinking: clientConfig.features.thinking,
+    density: clientConfig.features.density,
+    effort: clientConfig.features.effort,
+    searchEngine: clientConfig.gate.searchEngine,
+    toolbar: clientConfig.chrome.toolbar,
+    scrollbars: clientConfig.chrome.scrollbars,
     tenantAllowsWeb: clientConfig.gate.webSearch === true,
     showByok: clientConfig.gate.showByok === true,
     // These surfaces have no BYOK state of their own — the provider menu

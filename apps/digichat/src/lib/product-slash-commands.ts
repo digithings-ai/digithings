@@ -21,19 +21,20 @@ import {
   languageLabel,
   tryResolveLanguageInput,
 } from "@/lib/languages";
-import {
-  isLegacyViewMode,
-  isViewMode,
-  normalizeViewMode,
-} from "@/lib/view-modes";
+import { isTraceDensity } from "@digithings/ui/chat/trace-spacing";
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import {
   applyDocumentTheme,
   isPaletteId,
   isThemePreference,
   matchThemeStep,
-  readThemeState,
 } from "@digithings/ui/theme";
+import {
+  isLegacyViewMode,
+  isViewMode,
+  normalizeViewMode,
+} from "@/lib/view-modes";
+import { applyThemeModeKeepingPalette, readEffectiveThemeState } from "@/lib/palette-prefs";
 import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
 
 export type SlashSubmitAction =
@@ -166,8 +167,10 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = toggleHint(prefs.vault, "vault notes", "disabled this session");
     } else if (def.id === "view") {
       description = `View: ${prefs.view}`;
+    } else if (def.id === "density") {
+      description = `Density: ${prefs.density}`;
     } else if (def.id === "theme") {
-      const state = readThemeState();
+      const state = readEffectiveThemeState();
       description = matchThemeStep(state.preference, state.palette, state.resolved).label;
     } else if (def.id === "thinking") {
       description = `Thinking: ${prefs.thinking}`;
@@ -232,6 +235,12 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       else api.openView();
       return;
     }
+    case "density": {
+      const raw = arg.trim().toLowerCase();
+      if (isTraceDensity(raw)) api.setDensity(raw);
+      else api.openDensity();
+      return;
+    }
     case "theme": {
       if (api.themeLocked) return;
       const raw = arg.trim().toLowerCase();
@@ -239,9 +248,11 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
         api.openTheme?.();
         return;
       }
-      const state = readThemeState();
+      // The painted palette, so `/theme light` keeps a deployment palette the
+      // picker and the row description already show (not storage alone).
+      const state = readEffectiveThemeState();
       if (isThemePreference(raw)) {
-        applyDocumentTheme(raw, state.palette);
+        applyThemeModeKeepingPalette(raw);
         return;
       }
       if (raw === "default" || isPaletteId(raw)) {
