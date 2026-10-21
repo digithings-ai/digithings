@@ -61,19 +61,26 @@ jobs:
           # `deepseek-v4.1-flash-1017` is a house CI-catalog id
           # (`config/litellm.cheaperinference.yaml` and
           # `digillm/src/digillm/client.py:_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE`,
-          # added by #6107, which this PR is stacked on; review ticket DIG-4782)
-          # and it is the checkpoint every house DeepSeek flash pin moved to on
-          # 2026-10-21 (#6107).
+          # added by the house flash-pin move — review ticket DIG-4782, PR #6107
+          # — that this PR carries) and it is the checkpoint every house DeepSeek
+          # flash pin moved to on 2026-10-21.
           # It stays on `/chat/completions`: OpenWiki's `openai-compatible`
           # provider sets `useResponsesApi: false`, and no model id
           # `@langchain/openai` prefers the Responses API for matches this one,
-          # so the request never leaves the chat-completions path.
+          # so the request never leaves the chat-completions path. CI pins no
+          # version of that library (`openwiki@0.5.0` takes
+          # `@langchain/openai@^1.5.5`) and the id list moved inside that range:
+          # 1.5.11 -> 1.5.13 added `gpt-5.6-sol`, 1.6.3 widened it to
+          # `gpt-5.6`. None of 1.5.11, 1.5.13 or 1.6.3 matches this id, so the
+          # chat-completions path holds today; a later release that adds it
+          # would move the job to the Responses API.
           #
           # The ~300 KB planning payload in constraint 2 was measured on the
           # models listed there, not on this checkpoint: DIG-4744 forbids the
           # paid Cheaper Inference calls a re-measurement needs, and this
           # workflow calls the gateway with the bare id, so the house map's
-          # `deepseek-v4-flash` alias does not carry the old 200 result over.
+          # `deepseek/deepseek-v4-flash` alias does not carry the old 200 result
+          # over.
           # No run on this checkpoint has happened yet: the first
           # `openwiki code --update` run is the live evidence.
           OPENWIKI_PROVIDER: openai-compatible
