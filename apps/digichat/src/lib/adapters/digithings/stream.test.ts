@@ -1489,7 +1489,11 @@ it("retries a boot-coded 503 and reports warming_up between connecting and conne
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(eventsFrom(body).filter((event) => event.type === "data-connection")).toEqual([
       { type: "data-connection", id: "digigraph-connection", data: { state: "connecting" } },
-      { type: "data-connection", id: "digigraph-connection", data: { state: "warming_up" } },
+      {
+        type: "data-connection",
+        id: "digigraph-connection",
+        data: { state: "warming_up", message: "Waking up services…" },
+      },
       { type: "data-connection", id: "digigraph-connection", data: { state: "connected" } },
     ]);
     expect(errorTextFrom(body)).toBeUndefined();
