@@ -327,6 +327,37 @@ def test_digichat_probe_follows_the_publish_port_override():
     )
 
 
+def test_the_digigraph_probe_defaults_to_the_compose_published_port():
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
+    url, reason = contracts.resolve(check, {})
+    assert reason is None
+    assert url == "http://127.0.0.1:8000/healthz"
+
+
+def test_the_digigraph_probe_follows_the_port_override():
+    """A host where 8000 belongs to another stack needs the real port.
+
+    Measured on this host: 8000 answered 204 (a woodpecker server from another
+    stack) while the digigraph on 18000 answered 200, so the gate called a
+    healthy digigraph FAIL.
+    """
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
+    url, reason = contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "18000"})
+    assert reason is None
+    assert url == "http://127.0.0.1:18000/healthz"
+    # An empty value is not a value: it must take the default, not produce ":".
+    assert contracts.resolve(check, {"DT_DIGIGRAPH_PORT": ""})[0] == (
+        "http://127.0.0.1:8000/healthz"
+    )
+
+
+def test_the_digigraph_probe_never_leaves_loopback():
+    """The knob moves the port; it never points the gate off the machine."""
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
+    assert check.url.startswith("http://127.0.0.1:")
+    assert "DIGIGRAPH_HOST" not in check.url
+
+
 def test_env_expansion_falls_back_to_the_declared_default():
     check = contracts.Check(
         name="probe",

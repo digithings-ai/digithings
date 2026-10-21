@@ -307,3 +307,67 @@ def test_the_mcp_service_uses_the_same_monitor_store():
     assert workspace == ["- DIGI_WORKSPACE=/data/monitors"], workspace
     volumes = [line.strip() for line in block if line.strip().startswith("- digisearch_monitors:")]
     assert volumes == ["- digisearch_monitors:/data/monitors"], volumes
+
+
+# ------------------------------------------- the MCP bind hosts (DIG-4797)
+
+
+def _published_ports(service: str) -> list[str]:
+    """The host ports a compose service publishes, as they sit in the file."""
+    block = _compose_service_block(service)
+    return [line.strip() for line in block if line.strip().startswith("- \"127.0.0.1:")]
+
+
+def test_the_mcp_servers_bind_every_interface_in_their_container(
+    tmp_path: Path,
+) -> None:
+    """A container bound to 127.0.0.1 is unreachable through a published port.
+
+    compose publishes digisearch-mcp as 127.0.0.1:8765 -> 8765 and
+    digivault-mcp as 127.0.0.1:8769 -> 8769. A server listening on 127.0.0.1
+    inside the container answers nothing on the host port (curl 000) and the
+    other containers cannot reach it by service name (the OCC embed config
+    uses http://digisearch-mcp:8765/mcp). The host side stays loopback.
+    """
+    root = _root(tmp_path)
+    localenv.write_env(root, env=ENV)
+    values = _values(root)
+    assert values["DIGISEARCH_MCP_HOST"] == "0.0.0.0"
+    assert values["DIGIVAULT_MCP_HOST"] == "0.0.0.0"
+    # The published ports stay on loopback: the bind is inside the container.
+    assert _published_ports("digisearch-mcp") == ['- "127.0.0.1:8765:8765"']
+    assert _published_ports("digivault-mcp") == ['- "127.0.0.1:8769:8769"']
+
+
+def test_the_mcp_bind_host_is_the_local_stacks_own_on_the_next_bring_up(
+    tmp_path: Path,
+) -> None:
+    """The value the stack wrote stays the stack's, not the operator's."""
+    root = _root(tmp_path)
+    localenv.write_env(root, env=ENV)
+    localenv.write_env(root, env=ENV)
+    values = _values(root)
+    assert values["DIGISEARCH_MCP_HOST"] == "0.0.0.0"
+    assert values["DIGIVAULT_MCP_HOST"] == "0.0.0.0"
+    payload = json.loads(_block(root).split(localenv.STATE_MARKER, 1)[1].strip())
+    assert payload["DIGISEARCH_MCP_HOST"]["source"] == "override"
+    assert payload["DIGIVAULT_MCP_HOST"]["source"] == "override"
+
+
+def test_an_operator_mcp_bind_host_is_theirs(tmp_path: Path) -> None:
+    """The .env is the operator's file: the bind host they set stays."""
+    root = _root(tmp_path, env="DIGISEARCH_MCP_HOST=127.0.0.1\n")
+    localenv.write_env(root, env=ENV)
+    assert _values(root)["DIGISEARCH_MCP_HOST"] == "127.0.0.1"
+
+
+def test_an_operator_edit_of_the_mcp_bind_host_is_theirs(tmp_path: Path):
+    """An edit made after the stack wrote the value is the operator's own."""
+    root = _root(tmp_path)
+    localenv.write_env(root, env=ENV)
+    _replace(root, "DIGISEARCH_MCP_HOST", "0.0.0.0", "127.0.0.1")
+    localenv.write_env(root, env=ENV)
+    assert _values(root)["DIGISEARCH_MCP_HOST"] == "127.0.0.1"
+    # And it stays theirs on the next bring-up.
+    localenv.write_env(root, env=ENV)
+    assert _values(root)["DIGISEARCH_MCP_HOST"] == "127.0.0.1"

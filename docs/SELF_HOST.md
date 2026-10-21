@@ -316,6 +316,14 @@ Run these after the stack comes up. All six are cheap and none of them needs a p
 
 The plan replaces this manual list with `dt status` / `make local-stack-health`, which also covers the database, every Worker `/healthz`, `dashboard-api`, MCP `tools/list`, a digitrace ingest round trip and an R2/KV/D1 put-and-get, and which exits non-zero on failure so CI can reuse it. That is S7.
 
+The digigraph probe follows the port the digigraph really serves, through `DT_DIGIGRAPH_PORT` (default `8000`, the port compose publishes). On a host where `8000` already belongs to another stack the probe reads that other service and reports a healthy digigraph as FAIL — measured on a Mac with another stack on `8000`: `8000` answered `204` (a woodpecker server) while the real digigraph on `18000` answered `200`. Point the probe at the right port:
+
+```bash
+DT_DIGIGRAPH_PORT=18000 make local-stack-health
+```
+
+Only the port is templated: the probe always stays on `127.0.0.1`.
+
 ---
 
 ## 12. digichat configuration
@@ -340,6 +348,10 @@ The plan replaces this manual list with `dt status` / `make local-stack-health`,
 ## 13. Optional MCP servers and optional model gateways
 
 **digisearch MCP:** `docker compose --profile digisearch-mcp up`, on port **8765**. For IDE and OpenClaw clients; digigraph and digichat normally speak HTTP to digisearch directly.
+
+**digivault MCP:** `docker compose --profile digivault-mcp up`, on port **8769**.
+
+The local stack writes `DIGISEARCH_MCP_HOST=0.0.0.0` and `DIGIVAULT_MCP_HOST=0.0.0.0` into the root `.env`. A process that listens on `127.0.0.1` inside the container is unreachable through a published port: the host curl answers nothing at all and the other containers cannot reach `http://digisearch-mcp:8765/mcp`, the URL the OCC embed config uses. The bind is inside the container only — the published ports stay on the host loopback (`127.0.0.1:8765`, `127.0.0.1:8769`), the same shape as `digiquant-mcp` and `zammad-mcp`. Set either variable yourself in the `.env` and the local stack leaves your value alone.
 
 **OmniRoute (optional):** `docker compose --profile omniroute up`, on loopback **20128**. It needs `OMNIROUTE_AUTH_PASSWORD` at start — never the vendor default, and note that the default `docker compose config` does not supply it. Overlay: [`config/litellm.omniroute.yaml`](../config/litellm.omniroute.yaml). The house model pins stay on the OpenRouter slugs in `config/litellm.yaml`. See [providers/omniroute.md](providers/omniroute.md).
 

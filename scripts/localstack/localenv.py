@@ -14,7 +14,8 @@ the next bring-up. Three sources meet in it, lowest precedence first:
 1. the rendered ``.dev.vars``,
 2. the operator's own values from the previous ``.env``,
 3. the local overrides (the local digikey DSN, the local Supabase URL, the
-   omniroute password), which always win.
+   omniroute password), which always win, and the MCP bind hosts, which the
+   local stack sets unless the operator has chosen one themselves.
 
 Which of the first two a value came from is recorded in a managed block at the
 bottom of the ``.env`` itself (digests, never values). The block travels with
@@ -70,6 +71,21 @@ LOCAL_DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
 #: fallback resolves to this path.
 LOCAL_DIGISEARCH_MONITORS_DB = "/data/monitors/.digisearch/monitors.sqlite3"
 
+#: The MCP servers the local stack publishes bind every interface INSIDE the
+#: container. compose publishes them as 127.0.0.1:8765 -> 8765 (digisearch-mcp)
+#: and 127.0.0.1:8769 -> 8769 (digivault-mcp), and a process listening on
+#: 127.0.0.1 inside the container is unreachable through a published port: the
+#: host curl answers nothing at all (000) and the other containers cannot
+#: reach it by service name (the OCC embed config uses
+#: http://digisearch-mcp:8765/mcp). The host side stays loopback - the
+#: published port is 127.0.0.1 on the host - so this exposes the server to
+#: the compose network, not to the network the host sits on. Same shape as
+#: digiquant-mcp and zammad-mcp, which bind 0.0.0.0 in the compose file.
+MCP_BIND_HOSTS = {
+    "DIGISEARCH_MCP_HOST": "0.0.0.0",
+    "DIGIVAULT_MCP_HOST": "0.0.0.0",
+}
+
 #: The provenance of the root .env travels with the values it describes: a
 #: managed block at the bottom of the same file, holding digests and never
 #: values. The .env is git-ignored, mode 0600, and written in one atomic
@@ -114,7 +130,11 @@ def read_env_file(path: Path) -> Dict[str, str]:
     return values
 
 
-def local_overrides(env: Mapping[str, str], existing: Mapping[str, str]) -> Dict[str, str]:
+def local_overrides(
+    env: Mapping[str, str],
+    existing: Mapping[str, str],
+    state: Optional[Mapping[str, Mapping[str, str]]] = None,
+) -> Dict[str, str]:
     """The values the local stack sets over the rendered ones."""
     port = api_port(env)
     overrides = {
@@ -143,6 +163,14 @@ def local_overrides(env: Mapping[str, str], existing: Mapping[str, str]) -> Dict
     overrides["OMNIROUTE_AUTH_PASSWORD"] = (
         existing.get("OMNIROUTE_AUTH_PASSWORD") or secrets.token_hex(24)
     )
+    # The MCP servers the local stack publishes have to bind every interface
+    # inside their container, or the published port answers nothing at all
+    # (MCP_BIND_HOSTS). An operator who set the knob in their own .env keeps
+    # their value: the .env is their file.
+    for name, host in MCP_BIND_HOSTS.items():
+        if operator_chose(name, existing, state or {}):
+            continue
+        overrides[name] = host
     return overrides
 
 
@@ -222,6 +250,30 @@ def operator_owns(
     return entry.get("source") == SOURCE_OPERATOR
 
 
+def operator_chose(
+    name: str,
+    existing: Mapping[str, str],
+    state: Mapping[str, Mapping[str, str]],
+) -> bool:
+    """Did the operator put this name in the .env themselves?
+
+    A value we wrote last time is ours to decide again: the provenance block
+    holds its digest, and a value that no longer matches that digest is the
+    operator's edit, as is a value the block records as the operator's. A
+    value with no record at all is theirs too - it cannot be told apart from
+    our own, and the .env is their file.
+    """
+    value = existing.get(name)
+    if value is None:
+        return False
+    entry = state.get(name)
+    if not entry:
+        # No record: the value cannot be told apart from our own, and the .env
+        # is the operator's file.
+        return True
+    return operator_owns(value, entry)
+
+
 def compose_env(
     rendered: Mapping[str, str],
     existing: Mapping[str, str],
@@ -286,8 +338,8 @@ def write_env(root: Path, env: Optional[Mapping[str, str]] = None) -> Path:
     target = root / ".env"
     existing = read_env_file(target)
     rendered = read_env_file(root / ".dev.vars")
-    overrides = local_overrides(env, existing)
     state = read_state(target)
+    overrides = local_overrides(env, existing, state)
     values, sources = compose_env(rendered, existing, overrides, state)
     body = "".join(f"{name}={value}\n" for name, value in sorted(values.items()))
     # The values and their provenance go out in one atomic write: a record in
