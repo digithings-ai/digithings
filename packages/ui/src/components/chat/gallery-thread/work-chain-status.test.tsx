@@ -43,7 +43,7 @@ const doneReasoning = { type: "reasoning", text: "thought", status: { type: "com
 const answer = { type: "text", text: "grounded answer" };
 
 function headerText(container: HTMLElement): string | null {
-  return container.querySelector('[data-slot="aui_work-chain-label"]')?.textContent ?? null;
+  return container.querySelector('[data-slot="aui_work-status-label"]')?.textContent ?? null;
 }
 
 describe("workStatusText", () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useRef, useState } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix, type DotMatrixState } from "../DotMatrix";
 import {
   toolApprovalAcceptsText,
@@ -204,12 +204,7 @@ function ToolFallbackTrigger({
         {label}: <b>{title ?? toolName}</b>
       </span>
       <ToolFallbackDuration />
-      <span
-        data-slot="tool-fallback-trigger-chevron"
-        className="aui-tool-fallback-trigger-chevron inline-flex shrink-0"
-      >
-        <DotMatrix state="expand" label="Toggle tool" className="size-4" />
-      </span>
+      <DisclosureChevron label="Toggle tool" />
     </CollapsibleTrigger>
   );
 }

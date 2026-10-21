@@ -524,7 +524,7 @@ describe("DigichatThread", () => {
     });
     await act(async () => {});
     const labels = Array.from(
-      host.querySelectorAll('[data-slot="aui_work-chain-label"]'),
+      host.querySelectorAll('[data-slot="aui_work-status-label"]'),
     ).map((el) => el.textContent);
     // The block before the text is done — its folded title follows the last
     // step it took; the block after it is still working.
@@ -535,7 +535,7 @@ describe("DigichatThread", () => {
   it("stops working once the answer starts, even while the turn streams", async () => {
     const { host, unmount } = await mount({ initialMessages: TOOL_MESSAGES });
     await act(async () => {});
-    const label = host.querySelector('[data-slot="aui_work-chain-label"]');
+    const label = host.querySelector('[data-slot="aui_work-status-label"]');
     // Folded, the title follows the last step: the work is done, so it says
     // what it did rather than sitting on a static "Worked".
     expect(label?.textContent).toBe("Used 2 tools");

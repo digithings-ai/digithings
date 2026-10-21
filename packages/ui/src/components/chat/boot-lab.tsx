@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { DisclosureChevron } from "./disclosure-chevron";
 import { DotMatrix } from "./DotMatrix";
 import {
   DIGI_CHAT_BOOT_STEP_EVENT,
@@ -510,13 +511,7 @@ function ReasoningRow({
         {REASONING_LABEL}
         {active ? "" : ` (${(durationMs / 1000).toFixed(1)}s)`}
       </span>
-      <span data-slot="reasoning-trigger-chevron">
-        <DotMatrix
-          state="expand"
-          label="Toggle reasoning"
-          className="size-3"
-        />
-      </span>
+      <DisclosureChevron label="Toggle reasoning" />
     </div>
   );
 }

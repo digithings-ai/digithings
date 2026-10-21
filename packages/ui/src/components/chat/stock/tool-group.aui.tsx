@@ -8,6 +8,7 @@ import {
   type FC,
   type PropsWithChildren,
 } from "react";
+import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix } from "../DotMatrix";
 import { cva, type VariantProps } from "class-variance-authority";
 import { useScrollLock } from "@assistant-ui/react";
@@ -147,18 +148,7 @@ function ToolGroupTrigger({
       >
         {text}
       </span>
-      <span
-        data-slot="tool-group-trigger-chevron"
-        className={cn(
-          "aui-tool-group-trigger-chevron inline-flex shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          "-rotate-90",
-          "group-data-open/trigger:rotate-0",
-          "group-data-panel-open/trigger:rotate-0",
-        )}
-      >
-        <DotMatrix state="expand" label="Toggle tools" className="!size-3 shrink-0" />
-      </span>
+      <DisclosureChevron label="Toggle tools" />
     </CollapsibleTrigger>
   );
 }

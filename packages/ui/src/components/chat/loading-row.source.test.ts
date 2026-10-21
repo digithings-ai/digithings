@@ -25,41 +25,47 @@ function readStyle(name: string): string {
 
 describe("one loading row", () => {
   it("keeps the chain header's 12px marker as the reference", () => {
+    const lead = read("work-status-lead.tsx");
+    expect(lead).toMatch(/className="!size-3 shrink-0"/);
     const chain = read("gallery-thread/work-chain.tsx");
-    expect(chain).toMatch(/<DotMatrix[\s\S]{0,200}className="!size-3 shrink-0"/);
+    const thread = read("gallery-thread/thread.aui.tsx");
+    expect(chain).toContain("WorkStatusLead");
+    expect(thread).toContain("WorkStatusLead");
   });
 
   it("sizes every sender of the marker at 12px in the digichat skin", () => {
     const css = readStyle("chat-digichat.css");
     const block = css.match(
-      /\[data-slot="aui_assistant-message-indicator"\] \[data-slot="dot-matrix"\],[\s\S]*?\{([\s\S]*?)\}/,
+      /\[data-slot="aui_work-status-marker"\] \[data-slot="dot-matrix"\],[\s\S]*?\{([\s\S]*?)\}/,
     );
     expect(block?.[1]).toContain("width: 0.75rem");
     expect(block?.[1]).toContain("height: 0.75rem");
-    // The same block names the rows that must share the marker box.
-    const selectors = css.slice(0, css.indexOf("width: 0.75rem"));
-    expect(selectors).toContain('[data-slot="tool-fallback-trigger"] [data-slot="dot-matrix"]');
+    const selectors = block?.[0] ?? "";
+    expect(selectors).toContain('[data-slot="tool-fallback-trigger"] > [data-slot="dot-matrix"]');
     expect(selectors).toContain('.aui-message-error-root [data-slot="dot-matrix"]');
   });
 
-  it("gives the inline status row the chain header's type and gap", () => {
+  it("gives the loader and the chain header one shared box", () => {
     const css = readStyle("chat-digichat.css");
     const row = css.match(
-      /\[data-slot="aui_assistant-message-indicator"\] \{\n([\s\S]*?)\n\}/,
+      /\[data-slot="aui_assistant-message-indicator"\]\.aui-work-status,\n[\s\S]*?\[data-slot="aui_work-chain-trigger"\]\.aui-work-status \{\n([\s\S]*?)\n\}/,
     );
+    expect(row?.[1]).toContain("display: flex");
+    expect(row?.[1]).toContain("align-items: center");
     expect(row?.[1]).toContain("gap: 0.45rem");
     expect(row?.[1]).toContain("font-size: 0.7rem");
     expect(row?.[1]).toContain("line-height: 1");
     expect(row?.[1]).toContain("color: var(--ink-mute)");
     expect(row?.[1]).toContain("padding: 0");
+    expect(row?.[1]).toContain("margin: 0");
   });
 
   it("renders the boot-loader steps with the shared marker and text size", () => {
     const lab = read("boot-lab.tsx");
     const markers = lab.match(/<DotMatrix[\s\S]*?className="([^"]*)"/g) ?? [];
     expect(markers.length).toBeGreaterThan(0);
-    // Every glyph in the boot chain is a 12px box — the loading marker, the
-    // reasoning marker and the chevron all sit in the same column.
+    // Every status glyph left in the boot chain is a 12px box. The disclosure
+    // caret is DisclosureChevron (0.55rem), not another 12px marker.
     for (const marker of markers) expect(marker).toMatch(/!?size-3\b/);
     expect(lab).not.toContain("size-3.5");
     expect(lab).not.toMatch(/text-sm/);

@@ -7,7 +7,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../../../ui/collapsible";
-import { DotMatrix } from "../DotMatrix";
+import { DisclosureChevron } from "../disclosure-chevron";
+import { WorkStatusLead } from "../work-status-lead";
 import { cn } from "./cn";
 import { workStatusText } from "./work-status";
 
@@ -119,33 +120,16 @@ export function WorkChain({
     >
       <CollapsibleTrigger
         data-slot="aui_work-chain-trigger"
-        className="aui-work-chain-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-xs transition-[color,scale] active:scale-[0.98]"
+        className="aui-work-chain-trigger aui-work-status group/trigger"
       >
-        {/* The marker is always there: the loading trail while the work runs,
-            the quiet corner dots when it is done. The slot keeps its size, so
-            the title never shifts when the turn ends — and the check mark
-            stays where it belongs, on the tool rows. */}
-        <DotMatrix
-          state={markerRunning ? "loading" : "idle"}
+        {/* Same lead as the pre-response loader: the marker and the label
+            keep their slots, so the handoff reads as the words changing. */}
+        <WorkStatusLead
+          marker={markerRunning ? "loading" : "idle"}
+          markerLabel={title}
           label={title}
-          className="!size-3 shrink-0"
         />
-        <span
-          data-slot="aui_work-chain-label"
-          className="aui-work-chain-label inline-block leading-none"
-        >
-          {title}
-        </span>
-        <span
-          data-slot="aui_work-chain-chevron"
-          className="aui-work-chain-chevron inline-flex shrink-0"
-        >
-          <DotMatrix
-            state="expand"
-            label="Toggle the work"
-            className="size-3 shrink-0"
-          />
-        </span>
+        <DisclosureChevron label="Toggle the work" />
       </CollapsibleTrigger>
       <CollapsibleContent
         // Kept mounted: the rows inside keep their own state (and the DOM
