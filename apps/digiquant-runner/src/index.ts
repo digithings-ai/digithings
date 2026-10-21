@@ -3,13 +3,12 @@
  * No public hostname. digithings-cron calls it over the RUNNER service binding.
  */
 import { getContainer } from "@cloudflare/containers";
-import { assertKnownCommand } from "./commands";
 import {
-  DURABLE_OBJECT_UNAVAILABLE,
+  durableObjectUnavailableResponse,
   DurableObjectUnavailableError,
   fetchDurableObject,
-  RECONNECT_RETRY_AFTER_SECONDS,
-} from "./durable-object-reconnect";
+} from "@digithings/durable-object-reconnect";
+import { assertKnownCommand } from "./commands";
 import type { Env } from "./env";
 import { COMMANDS } from "./runner-session";
 import { DigiQuantRunnerContainer, RUNNER_CONTAINER_ID } from "./runner";
@@ -87,15 +86,8 @@ async function durableFetch(env: Env, makeRequest: () => Request): Promise<Respo
     return await fetchDurableObject(() => stub(env), makeRequest);
   } catch (error) {
     if (error instanceof DurableObjectUnavailableError) {
-      return Response.json(
-        {
-          error: DURABLE_OBJECT_UNAVAILABLE,
-          detail: "the runner's Durable Object instance was not available; retry later",
-        },
-        {
-          status: 503,
-          headers: { "Retry-After": String(RECONNECT_RETRY_AFTER_SECONDS) },
-        },
+      return durableObjectUnavailableResponse(
+        "the runner's Durable Object instance was not available; retry later",
       );
     }
     throw error;

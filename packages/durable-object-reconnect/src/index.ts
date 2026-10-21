@@ -1,22 +1,41 @@
 /**
- * digiquant-runner hands every request to the Durable Object that owns the
- * batch container. When that instance disappears while a request is in flight
- * (eviction, a recycle, the platform closing the instance) the runtime closes
- * the connection and the request never reaches the container. The platform's
- * own message says what to do about it:
+ * Reconnect for Workers that call a Durable Object that owns a container.
+ *
+ * Several Workers in this repo hand every request to a Durable Object that
+ * owns a batch container: digiquant-runner (the digiquant desk runner),
+ * twelvex-runner (the twelve-x ingest and heartbeat runner), and the next
+ * Worker with a container binding. When the platform closes that Durable
+ * Object instance while a request is in flight (eviction, a recycle, the
+ * platform closing the instance) the runtime closes the connection and the
+ * request never reaches the container. The platform's own message says what to
+ * do about it:
  *
  *   Connection closed: this Durable Object instance is no longer active.
  *   Reconnect or retry the request.
  *
- * The Worker had no error handling around that hop, so the close surfaced as an
- * unhandled 500 (run-watch DIG-4529: 10 failed requests inside five minutes on
- * 2026-10-20). This module reconnects once and, when even the reconnect fails,
- * raises a typed retryable error so the Worker can answer 503 + Retry-After
- * instead of hammering a runner that is still coming up.
+ * Without error handling around that hop the close escapes the fetch handler
+ * and the caller gets a hard failure it cannot act on. Measured in production:
+ * 10 failed requests inside five minutes on digiquant-runner (run-watch
+ * DIG-4529, 2026-10-20), and 4 error rows inside two hours on twelvex-runner
+ * (run-watch DIG-4753, 2026-10-20). The same platform message appeared on
+ * digithings-stack in the same window: a platform-side recycle wave across the
+ * Workers that hold a container Durable Object.
+ *
+ * This module is the shared answer, so the next Worker with a container
+ * binding inherits it instead of writing its own:
+ *
+ *   - reconnect once, because the Durable Object id is a NAME: the next call
+ *     reaches the live instance (which starts a fresh container on demand);
+ *   - and when even the reconnect fails, raise a typed retryable error so the
+ *     Worker can answer 503 + Retry-After instead of hammering a runner that
+ *     is still coming up.
  *
  * The reconnect is deliberately one attempt: a Durable Object that has just
  * been evicted may need a moment to start, and a tight loop would turn one
  * eviction into a burst.
+ *
+ * It is dependency-free (no `cloudflare:workers`, no `@cloudflare/containers`)
+ * so plain vitest can import it and a Worker can bundle it.
  */
 
 /** Body code the Worker returns when the instance could not be reached. */
@@ -89,4 +108,23 @@ export async function fetchDurableObject(
     }
   }
   throw new DurableObjectUnavailableError(lastError);
+}
+
+/**
+ * The answer a Worker gives when the instance could not be reached, even after
+ * the reconnect: 503 with `Retry-After`, so the caller backs off instead of
+ * hammering a runner that is still coming up.
+ *
+ * `detail` says what happened in the Worker's own words. The cause of the
+ * failure is not in the body: a platform error can carry a stack trace, and
+ * internal detail must not leave the Worker.
+ */
+export function durableObjectUnavailableResponse(detail: string): Response {
+  return Response.json(
+    { error: DURABLE_OBJECT_UNAVAILABLE, detail },
+    {
+      status: 503,
+      headers: { "Retry-After": String(RECONNECT_RETRY_AFTER_SECONDS) },
+    },
+  );
 }

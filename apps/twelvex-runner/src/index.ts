@@ -17,6 +17,8 @@ function containerBinding(env: Env): Fetcher {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    return handle(request, env, containerBinding(env));
+    // The stub is resolved per attempt: a reconnect after a recycle must
+    // address the live instance of the Durable Object (run-watch DIG-4753).
+    return handle(request, env, () => containerBinding(env));
   },
 };

@@ -62,6 +62,29 @@ other module path or any copy of an argv.
 `POST /run/*` requires `Authorization: Bearer $RUNNER_AUTH_TOKEN`. `GET /healthz`
 does not, and it does not start the container.
 
+## Durable Object recycle
+
+The platform recycles the container Durable Object instance on its own
+schedule. When that happens mid-request the hop fails with:
+
+```
+Connection closed: this Durable Object instance is no longer active. Reconnect or retry the request.
+```
+
+The Worker reconnects once and repeats the request against a fresh stub of the
+binding. If that reconnect fails too, the Worker answers `503` with
+`Retry-After: 30` and body:
+
+```json
+{ "error": "durable_object_unavailable", "detail": "the runner's Durable Object instance was not available; retry later" }
+```
+
+The answer is retryable on purpose: the caller retries after the
+`Retry-After` window and the platform starts a new instance. A failure that is
+not a Durable Object recycle is not retried and is not masked. The reconnect
+lives in `@digithings/durable-object-reconnect`, shared with the other
+container Workers.
+
 ## DRY_RUN
 
 `DRY_RUN=1` on this Worker still starts the container and POSTs

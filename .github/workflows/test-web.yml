@@ -94,6 +94,23 @@ jobs:
       - name: Test digiquant-runner allowlist
         run: python3 apps/digiquant-runner/container/exec_job_test.py
 
+      # twelvex-runner is the private container behind digithings-cron kind:
+      # twelvex. Its suite was dark: no lane ran it, so the hop to the Durable
+      # Object that owns the container had no coverage (run-watch DIG-4753).
+      - name: Test twelvex-runner
+        run: npm run test --workspace twelvex-runner
+
+      - name: Typecheck twelvex-runner
+        run: npm run typecheck --workspace twelvex-runner
+
+      # The shared reconnect module the container Workers use. Same lane, same
+      # reason as the Workers above: its suite and tsc live in that package.
+      - name: Test @digithings/durable-object-reconnect
+        run: npm run test --workspace @digithings/durable-object-reconnect
+
+      - name: Typecheck @digithings/durable-object-reconnect
+        run: npm run typecheck --workspace @digithings/durable-object-reconnect
+
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web
 
