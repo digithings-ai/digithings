@@ -17,6 +17,19 @@ re-enable client corpus selection — the exact CWE-639 bypass ``#2366`` closed
 for a *valid* map. Invalid JSON, a non-object top level, or a map whose every
 entry is individually dropped therefore raises ``TenantCorpusMapError`` here
 too, never silently "map unset."
+
+**A known key carrying a bad value fails closed.** ``lockSessionControls``
+hides the session model / MCP / tool controls, so a non-boolean value (a
+JSON string ``"true"``, ``1``, ``null``) is a safety problem, not a
+forward-compatibility problem: the entry is kept and the flag is forced to
+**locked**, with a warning naming the tenant slug, the field and the JSON
+type (never the value). Dropping the entry is forbidden — a missing entry
+defaults to unlocked *and* loses the tenant's corpus routing, which would
+re-point the corpus. The digichat registry validator
+(``apps/digichat/src/lib/embed-tenants.ts``) rejects the same field with
+"lockSessionControls must be a boolean"; both surfaces accept only a real
+boolean and differ only in failure model (one registry document versus
+per-tenant map entries). See ADR-0035.
 """
 
 from __future__ import annotations
@@ -177,12 +190,23 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
         tools = _parse_digisearch_tools(
             value.get("digisearchTools") or value.get("digisearch_tools"), normalized_slug
         )
+        if not isinstance(lock, bool):
+            # A known key carrying a bad value is a safety problem, not a
+            # forward-compatibility problem: fail closed to LOCKED for this
+            # entry and say so loudly. The offending VALUE is never logged.
+            logger.warning(
+                "%s[%s]: lockSessionControls must be a boolean, got %s - failing closed to locked",
+                _ENV_VAR,
+                normalized_slug,
+                type(lock).__name__,
+            )
+            lock = True
         try:
             out[normalized_slug] = TenantCorpusOverride(
                 digisearch_index=str(idx).strip() if idx else None,
                 vault_path_prefix=_normalize_prefix(str(prefix)) if prefix else None,
                 research_system_prompt=str(prompt).strip() if prompt else None,
-                lock_session_controls=lock is True,
+                lock_session_controls=lock,
                 digisearch_tools=tools,
             )
         except Exception as exc:
