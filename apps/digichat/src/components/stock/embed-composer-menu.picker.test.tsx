@@ -353,6 +353,29 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     vi.unstubAllGlobals();
   });
 
+  it("does not store a pick when the checked theme row is chosen again", async () => {
+    const user = userEvent.setup();
+    const setTheme = vi.fn();
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider
+        value={prefs({
+          themeState: { preference: "light", palette: "default", resolved: "light" },
+          setTheme,
+        })}
+      >
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("menuitem", { name: /\/theme/ }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /\/theme default light/i }));
+
+    expect(setTheme).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
   it("shows the search-engine row on the main menu when the tenant allows web", async () => {
     const onClose = vi.fn();
     const { unmount } = render(

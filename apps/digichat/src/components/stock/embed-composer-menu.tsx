@@ -596,7 +596,9 @@ export function EmbedComposerMenu({
       checked: current.id === step.id,
       exclusive: true,
       activate: () => {
-        applyThemePick(api, step.mode, step.palette);
+        // Re-selecting the checked row changes nothing; on an embed it would
+        // otherwise store a pick and stop following the parent's theme.
+        if (current.id !== step.id) applyThemePick(api, step.mode, step.palette);
         onClose();
       },
     }));

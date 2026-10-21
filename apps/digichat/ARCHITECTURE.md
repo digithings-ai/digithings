@@ -1364,8 +1364,19 @@ whenever the parent theme toggles — no iframe reload. The embed accepts theme
 messages from the same first-party allowlist as seed (`parseThemeMessage` in
 `src/lib/embed-theme-messages.ts`) and applies them via the existing
 `[data-theme]` + `.dark`/`.light` path (MutationObserver still defends against
-OS/`ThemeProvider` overrides). Priority: parent postMessage > URL `?theme=` >
-tenant registry theme.
+OS/`ThemeProvider` overrides). Priority: visitor `/theme` pick > parent
+postMessage > URL `?theme=` > tenant registry theme (`resolveEmbedTheme`).
+
+**`/theme` on embeds (2.6.6).** Every tenant embed lists `/theme` in the command
+palette; the #6122 model/tool/session locks are unchanged. A pick is cosmetic and
+lasts for the tab: it is stored in sessionStorage under
+`dc-embed-theme:<tenant slug>` (`embedUserThemeKey`; in memory when
+sessionStorage cannot be written) and never in the platform `dt-theme` /
+`dt-palette` keys. It sets `data-theme`, `data-palette`, and `theme-color` on the
+embed document. `/theme auto` drops the pick, so the embed returns to the
+parent / `?theme=` / tenant theme. Without a pick, an embed hosted by
+digithings.ai follows the parent site's theme; a standalone embed starts on the
+tenant theme.
 
 **postMessage parent-error.** After `READY_TIMEOUT_MS` (30s) without
 `digichat:ready`, `ChatEmbedShell` posts

@@ -168,6 +168,38 @@ describe("embed /theme pick (2.6.6)", () => {
     expect(readEmbedUserTheme(key)).toBeNull();
   });
 
+  it("keeps the pick in memory when sessionStorage reads work but writes throw", () => {
+    const reads = memoryStore();
+    vi.stubGlobal("sessionStorage", {
+      getItem: reads.getItem,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: reads.removeItem,
+    });
+    const key = embedUserThemeKey("quota");
+    writeEmbedUserTheme(key, { mode: "light", palette: "aura" });
+    expect(readEmbedUserTheme(key)).toEqual({ mode: "light", palette: "aura" });
+  });
+
+  it("falls back to memory when a write fails after the probe passed", () => {
+    const backing = memoryStore();
+    let failWrites = false;
+    vi.stubGlobal("sessionStorage", {
+      getItem: backing.getItem,
+      setItem: (k: string, v: string) => {
+        if (failWrites && !k.endsWith(":probe")) throw new Error("QuotaExceededError");
+        backing.setItem(k, v);
+      },
+      removeItem: backing.removeItem,
+    });
+    const key = embedUserThemeKey("late-quota");
+    expect(readEmbedUserTheme(key)).toBeNull();
+    failWrites = true;
+    writeEmbedUserTheme(key, { mode: "dark", palette: "dracula" });
+    expect(readEmbedUserTheme(key)).toEqual({ mode: "dark", palette: "dracula" });
+  });
+
   it("clears the pick, and ignores a malformed one", () => {
     const store = memoryStore();
     const key = embedUserThemeKey("a");

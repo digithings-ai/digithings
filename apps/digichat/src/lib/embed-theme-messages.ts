@@ -95,15 +95,31 @@ const memoryStore: SessionStore = (() => {
   };
 })();
 
+/** One write probe per sessionStorage object; a later failed write also flips it. */
+let probed: { store: SessionStore; writable: boolean } | null = null;
+
 function sessionStore(): SessionStore | null {
+  let session: SessionStore;
   try {
-    if (typeof sessionStorage === "undefined") return typeof window === "undefined" ? null : memoryStore;
-    // Touch it: Safari and some privacy modes expose it but throw on use.
-    sessionStorage.getItem("dc-embed-theme:probe");
-    return sessionStorage;
+    if (typeof sessionStorage === "undefined") {
+      return typeof window === "undefined" ? null : memoryStore;
+    }
+    session = sessionStorage;
   } catch {
     return memoryStore;
   }
+  if (probed?.store !== session) {
+    // Safari private mode and a full quota expose sessionStorage but throw on write.
+    let writable = true;
+    try {
+      session.setItem("dc-embed-theme:probe", "1");
+      session.removeItem("dc-embed-theme:probe");
+    } catch {
+      writable = false;
+    }
+    probed = { store: session, writable };
+  }
+  return probed.writable ? session : memoryStore;
 }
 
 /**
@@ -163,18 +179,29 @@ export function readEmbedUserTheme(
   return parseEmbedUserTheme(readEmbedUserThemeRaw(key, store));
 }
 
+function putPick(store: SessionStore, key: string, value: EmbedUserTheme | null): void {
+  if (value) store.setItem(key, JSON.stringify(value));
+  else store.removeItem(key);
+}
+
 export function writeEmbedUserTheme(
   key: string,
   value: EmbedUserTheme | null,
   store: SessionStore | null = sessionStore(),
 ): void {
   try {
-    if (store) {
-      if (value) store.setItem(key, JSON.stringify(value));
-      else store.removeItem(key);
-    }
+    if (store) putPick(store, key, value);
   } catch {
-    /* private mode */
+    // The write failed after the probe passed (quota, private mode): keep the
+    // pick for this page in memory and read from there from now on.
+    if (probed?.store === store) {
+      probed = { store, writable: false };
+      try {
+        putPick(memoryStore, key, value);
+      } catch {
+        /* unreachable */
+      }
+    }
   }
   try {
     if (typeof window !== "undefined") window.dispatchEvent(new Event(EMBED_USER_THEME_EVENT));
