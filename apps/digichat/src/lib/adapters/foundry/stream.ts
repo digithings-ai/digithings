@@ -870,9 +870,10 @@ function findRemoteFunctionsLeak(
 
 /**
  * A chunk can end inside the word `remote`, before `indexOf("remote")` can
- * see it. Hold that trailing prefix — `r` through `remot`, or `(r` through
- * `(remote` — using the same `head.startsWith` rule as the call scanner.
- * A bare `(` is not a prefix. A letter glued to the previous word is not either.
+ * see it. Hold that trailing prefix — `r` through `remot`, `(`, or `(r`
+ * through `(remote` — using the same `head.startsWith` rule as the call
+ * scanner. A trailing `(` is held so the next chunk can finish the call.
+ * A letter glued to the previous word is not a boundary.
  */
 function trailingCallPrefix(text: string): { kind: "hold"; start: number; hold: CallHold } | null {
   const limit = CALL_HEAD.length + 2;
@@ -924,7 +925,7 @@ function scanRemoteFunctionsCall(
   }
   if (phase === 1) {
     while (headI < CALL_HEAD.length) {
-      if (i >= t.length) return headI > 0 ? prefix() : null;
+      if (i >= t.length) return headI > 0 || wrapped ? prefix() : null;
       if (t[i] !== CALL_HEAD[headI]) return null;
       i++;
       headI++;

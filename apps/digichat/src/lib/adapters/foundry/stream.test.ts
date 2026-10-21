@@ -149,7 +149,27 @@ describe("FoundryToolLeakFilter", () => {
       expect(filter.flush()).toBe(partial);
     }
     expect(new FoundryToolLeakFilter().push("for")).toBe("for");
-    expect(new FoundryToolLeakFilter().push("Look (")).toBe("Look (");
+    expect(new FoundryToolLeakFilter().push("Look(")).toBe("Look(");
+    const paren = new FoundryToolLeakFilter();
+    expect(paren.push("Look (")).toBe("Look ");
+    expect(paren.flush()).toBe("(");
+    const prose = "Here is the answer (remote work is fine).";
+    for (let i = 1; i < prose.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const out = `${filter.push(prose.slice(0, i)) ?? ""}${filter.push(prose.slice(i)) ?? ""}${filter.flush() ?? ""}`;
+      expect(out, `prose split ${i}`).toBe(prose);
+    }
+  });
+
+  it("drops a wrapped call split at every index, including the opening paren", () => {
+    const text = 'Let me check. (remote_functions.azure_ai_search({"q":1}))';
+    for (let i = 1; i < text.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const first = filter.push(text.slice(0, i));
+      const second = filter.push(text.slice(i));
+      const tail = filter.flush();
+      expect(`${first ?? ""}${second ?? ""}${tail ?? ""}`, `split at ${i}`).toBe("Let me check. ");
+    }
   });
 
   it("drops a remote_functions call streamed one character at a time", () => {
