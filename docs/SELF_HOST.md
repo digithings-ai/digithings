@@ -353,7 +353,7 @@ The port digigraph actually listens on is set elsewhere, so the two have to agre
 
 **digivault MCP:** `docker compose --profile digivault-mcp up`, on port **8769**.
 
-Both MCP servers bind every interface **inside** their container: `DIGISEARCH_MCP_HOST` and `DIGIVAULT_MCP_HOST`, default `0.0.0.0`, set in `docker-compose.yml` the same way `digiquant-mcp` and `zammad-mcp` set theirs. A process that listens on `127.0.0.1` inside the container is unreachable through a published port: the host curl answers nothing at all, and the other containers cannot reach `http://digisearch-mcp:8765/mcp`, the URL the OCC embed config uses. The host side of both published ports stays on the loopback (`127.0.0.1:8765`, `127.0.0.1:8769`).
+Both MCP servers bind every interface **inside** their container: `DIGISEARCH_MCP_HOST` and `DIGIVAULT_MCP_HOST`, default `0.0.0.0`, set in `docker-compose.yml` the same way the other MCP services set theirs. A process that listens on `127.0.0.1` inside the container is unreachable through a published port: the host curl answers nothing at all, and the other containers cannot reach `http://digisearch-mcp:8765/mcp`, the URL the OCC embed config uses. The host side of both published ports stays on the loopback (`127.0.0.1:8765`, `127.0.0.1:8769`).
 
 To bind elsewhere, write the variable in the root `.env` — compose interpolates it from there and it wins over the default:
 

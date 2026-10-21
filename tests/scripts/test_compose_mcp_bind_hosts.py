@@ -10,9 +10,9 @@ the other containers cannot reach it by service name - and the OCC embed
 config uses ``http://digisearch-mcp:8765/mcp``.
 
 So the bind host is set in the compose file, with the same shape as the
-services that already do it there (``digiquant-mcp``, ``zammad-mcp``): the
-container binds every interface, the published port stays on the host
-loopback. The default is 0.0.0.0, and an operator who wants another bind
+services that already do it there (``digiquant-mcp`` and the other MCP
+profiles): the container binds every interface, the published port stays on
+the host loopback. The default is 0.0.0.0, and an operator who wants another bind
 writes the variable in the root ``.env`` - compose interpolates it from there
 and it wins over the default (DIG-4797).
 """
