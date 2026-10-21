@@ -6,6 +6,19 @@ record what a heartbeat run did. It covers the **local embedded Paperclip
 instance** (`127.0.0.1:54329`) and the shape the same tables have in the
 managed instance.
 
+## How the deletions are run
+
+**By hand, inside the window. There is no scheduled job for this.** Nothing
+in this repository deletes these tables on a timer: the only tracked files
+that name `heartbeat_run_events` are this document and the one-off cleanup
+script `scripts/paperclip_heartbeat_runs_slim.py`, and neither schedules
+anything. An operator runs the SQL in this document by hand, in the
+maintenance window, and records the numbers at the end (see *The report*).
+
+A scheduled job, when one is ever written, is a behaviour change against
+`heartbeat_runs`. It lands as its own PR with its own review, not inside this
+policy.
+
 ## Why the policy exists
 
 `heartbeat_runs.context_snapshot` is a **render cache**: the issue body, the
@@ -74,8 +87,16 @@ dropping it.
 
 | table | keep | age measured on | batch size | window | method |
 |---|---|---|---|---|---|
-| `heartbeat_run_events` | 14 days | `created_at` | 5,000 rows per transaction | nightly, 03:00–05:00 Europe/Rome | plain `DELETE`, autovacuum reclaims |
-| `heartbeat_runs` | 30 days | `coalesce(finished_at, created_at)` | 500 rows per transaction | nightly, 03:00–05:00 Europe/Rome, after the events pass | plain `DELETE`, autovacuum reclaims |
+| `heartbeat_run_events` | 14 days | `created_at` | 5,000 rows per transaction | by hand, 03:00–05:00 Europe/Rome | plain `DELETE`, autovacuum reclaims |
+| `heartbeat_runs` | 30 days | `coalesce(finished_at, created_at)` | 500 rows per transaction | by hand, 03:00–05:00 Europe/Rome, after the events pass | plain `DELETE`, autovacuum reclaims |
+
+Two batch sizes appear in this document and they are not the same number:
+
+- **500 rows per transaction** is the batch of the retention `DELETE` in the
+  SQL below.
+- **200 rows per transaction** is the default of the one-off cleanup script
+  (`--batch-size`). The measured run on 2026-10-21 used `--batch-size 500`,
+  which is why that run reports 59 batches for the 28,572 rows it scanned.
 
 The stdout inside `result_json` (65% of the remaining TOAST) has the same
 30-day life as the run it belongs to. It is **not** dropped separately: the
@@ -91,12 +112,13 @@ Rules that go with the numbers:
 - **The batch size is a transaction, not a statement.** Each batch commits on
   its own, so a failed batch loses one batch and the next run resumes.
   PostgreSQL has no `DELETE ... LIMIT`, so the batch is a CTE (below).
-- **The window is a window.** The deletions run between 03:00 and 05:00
+- **The window is a window.** The procedure runs between 03:00 and 05:00
   Europe/Rome, when no operator and no board session is on the instance.
-  Outside the window the tables are read-only for this job.
+  Outside the window the tables are not touched by this procedure: it is run
+  by hand, and the window is when the instance is quiet enough for it.
 - **Plain `DELETE` + autovacuum is the default.** It returns the space to the
-  free space map for reuse. `VACUUM FULL` is an operator action, not part of
-  the job (see below).
+  free space map for reuse. `VACUUM FULL` is a separate operator action, not
+  part of this procedure (see below).
 
 ## The order of deletion: the foreign keys decide it
 
@@ -134,15 +156,18 @@ Two traps in that table:
 
 - **`agent_task_sessions.last_run_id`** is a pointer, not ownership. A run
   that is the *last* run of a task session blocks the delete until the
-  session points somewhere else or the session is deleted too. The job
+  session points somewhere else or the session is deleted too. The procedure
   therefore re-points `last_run_id` to the newest surviving run of the same
   session before deleting the old one.
 - **`cost_events` and `finance_events`** are the money trail. They are not
-  deleted by this job — a run with cost or finance rows is **skipped** and
-  reported, because the ledger outlives the run. The run then stays until the
-  ledger is archived separately.
+  deleted by this procedure — a run with cost or finance rows is **skipped**
+  and reported, because the ledger outlives the run. The run then stays until
+  the ledger is archived separately.
 
-## The SQL the job runs
+## The SQL the procedure runs
+
+Run these statements by hand, in this order, inside the window. Each one is
+its own transaction.
 
 ```sql
 -- 1. events first: nothing points at an event, so they go in any order
@@ -156,6 +181,8 @@ WITH doomed AS (
 DELETE FROM heartbeat_run_events e USING doomed d WHERE e.id = d.id;
 
 -- 2. the per-run children that block a delete of the run
+--    doomed_runs = the set of runs selected in step 3 (materialise it
+--    first: the CTE of step 3 is scoped to that statement)
 DELETE FROM native_run_results
  WHERE run_id IN (SELECT id FROM doomed_runs);
 --    ... the same for native_run_finalizations, work_assessments,
@@ -176,8 +203,7 @@ DELETE FROM heartbeat_runs r USING doomed d WHERE r.id = d.id;
 ```
 
 `NOT EXISTS` on the ledger tables is what makes the run batch skip instead of
-fail: a run with money attached is left in place and counted in the run
-report.
+fail: a run with money attached is left in place and counted in the report.
 
 ## Vacuum: plain by default, `VACUUM FULL` by hand
 
@@ -213,12 +239,13 @@ same rule: `--vacuum` is plain, `--vacuum-full` is guarded by
   time by the trigger (DIG-4762). Old rows are slimmed once by the script in
   this repository; the trigger does not retroactively touch them.
 - **The backlog.** A run blocked by the ledger stays until the ledger is
-  archived. The job report counts the skipped runs so the backlog is visible
+  archived. The report counts the skipped runs so the backlog is visible
   instead of silent.
 
 ## The report
 
-Every run of the job ends with the numbers that decide whether the policy is
-working: rows deleted per table, rows skipped and why, free space map size,
-and the size of both tables before and after. The one-off cleanup writes the
+**No job writes this report: the operator records it.** At the end of the
+procedure, write down the numbers that decide whether the policy is working:
+rows deleted per table, rows skipped and why, free space map size, and the
+size of both tables before and after. The one-off cleanup script writes the
 same report as JSON (`--json-out`).
