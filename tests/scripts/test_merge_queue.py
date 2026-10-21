@@ -2182,16 +2182,21 @@ _REAL_WOODPECKER_READ = mq._woodpecker_read
 
 
 @pytest.fixture(autouse=True)
-def _provenance_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def _provenance_off_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """No test may reach the Woodpecker API unless it is about the gate.
 
     The shipped policy runs the gate in `shadow`, and shadow still reads the
     build to be able to say what it would have refused. The switch is off for
     every other test, so the suite never depends on a Woodpecker instance being
     up and never reads the deployment's token file.
+
+    The log path is pinned under `tmp_path` for every test, not deleted: a test
+    that turns the gate on then writes its line to a temporary file instead of
+    the deployment's operator log, which is the queue's own record of what it
+    refused and would read a fixture's text as a real refusal.
     """
     monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_OFF)
-    monkeypatch.delenv(mq.PROVENANCE_LOG_ENV, raising=False)
+    monkeypatch.setenv(mq.PROVENANCE_LOG_ENV, str(tmp_path / "ci-provenance.log"))
     monkeypatch.delenv("WOODPECKER_TOKEN", raising=False)
     # The token and the build reads are cached on the module, so they are
     # cleared for every test: a token read by one test must not answer for the
@@ -2893,6 +2898,31 @@ def test_the_provenance_log_is_capped(
     _evaluate(pr)
     assert log.stat().st_size < mq.PROVENANCE_LOG_MAX_BYTES
     assert (tmp_path / "provenance.log.1").exists()
+
+
+def test_the_suite_never_writes_to_the_deployment_provenance_log(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The deployment's log is written by the queue, not by this suite.
+
+    The file under `~/.config/digithings/merge-queue/` is the operator's record
+    of what the queue refused, and the queue reads it during the shadow window.
+    Fixture text in that file reads as a real refusal, so the suite writes its
+    lines under `tmp_path`: the autouse fixture pins the log path there for
+    every test, and the pinned path wins over the module's default.
+    """
+    deployment_log = tmp_path / "deployment" / "ci-provenance.log"
+    monkeypatch.setattr(mq, "PROVENANCE_LOG_PATH", deployment_log)
+    mq._log_provenance(
+        {"number": 1},
+        DIGITHINGS_REPO,
+        "local-ci",
+        "no target_url",
+        "",
+        mq.PROVENANCE_SHADOW,
+    )
+    assert not deployment_log.exists()
+    assert (tmp_path / "ci-provenance.log").exists()
 
 
 def test_a_redirect_is_refused_and_the_token_stays_home() -> None:
