@@ -117,4 +117,4 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 - **digiquant:** `POST /v1/jobs/backtest`, `GET /v1/jobs/{id}/status`; `digibase` errors and OTel.
 - **digisearch:** `workspace_id` on query; `digisearch-worker` CLI stub; `embeddings.config`; `digibase` integration.
 - **digitrace:** `digibase` errors and OTel; correlation middleware.
-- **digibot:** optional `AUDIT_SINK_URL` for NDJSON POST mirror.
+- **digibot:** optional `AUDIT_SINK_URL` for NDJSON POST mirror. Renamed from `digiclaw` (PR #5441); the module is parked, so it gets no release tag of its own. The self-host `heartbeat` profile in `infra/self-host/compose.ghcr.yml` now pulls `ghcr.io/digithings-ai/digibot`, and **no workflow publishes that image yet** — build it locally (`make up-heartbeat`) until a publish workflow lands.

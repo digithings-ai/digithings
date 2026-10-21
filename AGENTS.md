@@ -144,7 +144,7 @@ Every Digi product, module, package, and service name is **always lowercase** in
 | digisearch | DigiSearch, Digisearch |
 | digikey | DigiKey, Digikey |
 | digitrace | DigiTrace, Digitrace |
-| digibot | Digibot, Digibot |
+| digibot | DigiBot, Digibot |
 | digibase | DigiBase, Digibase |
 | digiskills | DigiSkills, Digiskills |
 | digiweb | DigiWeb, Digiweb |
