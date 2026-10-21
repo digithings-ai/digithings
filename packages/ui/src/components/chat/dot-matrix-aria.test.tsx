@@ -15,4 +15,17 @@ describe("DotMatrix accessible name", () => {
     expect(html).toContain('role="img"');
     expect(html).toContain('aria-label="newChat"');
   });
+
+  it("clips the name in place so it does not paint beside the label", () => {
+    const html = renderToStaticMarkup(<DotMatrix state="success" label="Worked" />);
+    expect(html).toContain('data-slot="screen-reader-name"');
+    expect(html).toContain(">Worked<");
+    expect(html).toContain("position:absolute");
+    expect(html).toContain("width:1px");
+    expect(html).toContain("height:1px");
+    expect(html).toContain("overflow:hidden");
+    expect(html).toContain("clip-path:inset(50%)");
+    expect(html).not.toMatch(/left\s*:/);
+    expect(html).not.toContain("sr-only");
+  });
 });

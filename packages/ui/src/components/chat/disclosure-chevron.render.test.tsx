@@ -54,9 +54,18 @@ function chevron(trigger: Element): HTMLElement {
   const node = trigger.querySelector<HTMLElement>('[data-slot="disclosure-chevron"]');
   expect(node).toBeTruthy();
   expect(node!.className).not.toMatch(/-rotate-90|rotate-0|\bsize-4\b|\bsize-3\b/);
-  const glyph = node!.querySelector<HTMLElement>('[data-slot="dot-matrix"]');
-  expect(glyph?.getAttribute("data-state")).toBe("expand");
-  expect(glyph?.className).toContain("!size-[0.55rem]");
+  expect(node!.querySelector('[data-slot="dot-matrix"]')).toBeNull();
+  const glyph = node!.querySelector<SVGElement>('[data-slot="disclosure-chevron-icon"]');
+  expect(glyph?.tagName.toLowerCase()).toBe("svg");
+  expect(glyph?.parentElement).toBe(node);
+  const name = node!.querySelector<HTMLElement>('[data-slot="screen-reader-name"]');
+  expect(name).toBeTruthy();
+  expect(name!.style.position).toBe("absolute");
+  expect(name!.style.width).toBe("1px");
+  expect(name!.style.height).toBe("1px");
+  expect(name!.style.overflow).toBe("hidden");
+  expect(name!.style.clipPath).toBe("inset(50%)");
+  expect(name!.style.left).toBe("");
   return node!;
 }
 
@@ -131,6 +140,17 @@ describe("trace disclosure chevrons", () => {
     expectClosed(host, "tool-fallback-trigger", 2);
     await openAll(host, "tool-fallback-trigger");
 
+    const names = host.querySelectorAll<HTMLElement>('[data-slot="screen-reader-name"]');
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      expect(name.style.position).toBe("absolute");
+      expect(name.style.width).toBe("1px");
+      expect(name.style.left).toBe("");
+    }
+    const tools = host.querySelector('[data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix-grid"]');
+    expect(tools).toBeTruthy();
+    expect(tools!.closest('[data-slot="disclosure-chevron"]')).toBeNull();
+
     unmount();
   });
 
@@ -152,38 +172,30 @@ describe("trace disclosure chevrons", () => {
         <button type="button" data-slot="aui_work-chain-trigger" aria-expanded="true" data-panel-open data-state="open">
           <span data-slot="aui_work-status-label">Worked</span>
           <span data-slot="disclosure-chevron">
-            <span data-slot="dot-matrix">
-              <span class="sr-only">Toggle the work</span>
-              <svg data-slot="dot-matrix-grid"></svg>
-            </span>
+            <svg data-slot="disclosure-chevron-icon"></svg>
+            <span data-slot="screen-reader-name">Toggle the work</span>
           </span>
         </button>
         <button type="button" data-slot="tool-group-trigger" aria-expanded="true" data-panel-open data-state="open">
           <span data-slot="tool-group-trigger-label">2 tool calls</span>
           <span data-slot="disclosure-chevron">
-            <span data-slot="dot-matrix">
-              <span class="sr-only">Toggle tools</span>
-              <svg data-slot="dot-matrix-grid"></svg>
-            </span>
+            <svg data-slot="disclosure-chevron-icon"></svg>
+            <span data-slot="screen-reader-name">Toggle tools</span>
           </span>
         </button>
         <button type="button" data-slot="tool-fallback-trigger" aria-expanded="false">
           <span data-slot="tool-fallback-trigger-label">digisearch</span>
           <span data-slot="disclosure-chevron">
-            <span data-slot="dot-matrix">
-              <span class="sr-only">Toggle tool</span>
-              <svg data-slot="dot-matrix-grid"></svg>
-            </span>
+            <svg data-slot="disclosure-chevron-icon"></svg>
+            <span data-slot="screen-reader-name">Toggle tool</span>
           </span>
         </button>
       </div>
       <button type="button" data-slot="reasoning-trigger" aria-expanded="false">
         <span data-slot="reasoning-trigger-label">Reasoning</span>
         <span data-slot="disclosure-chevron">
-          <span data-slot="dot-matrix">
-            <span class="sr-only">Toggle reasoning</span>
-            <svg data-slot="dot-matrix-grid"></svg>
-          </span>
+          <svg data-slot="disclosure-chevron-icon"></svg>
+          <span data-slot="screen-reader-name">Toggle reasoning</span>
         </span>
       </button>
     `;
@@ -201,15 +213,18 @@ describe("trace disclosure chevrons", () => {
       const trigger = host.querySelector(`[data-slot="${slot}"]`)!;
       const label = trigger.querySelector("span:not([data-slot='disclosure-chevron'])")!;
       const chevron = trigger.querySelector('[data-slot="disclosure-chevron"]')!;
-      const matrix = chevron.querySelector('[data-slot="dot-matrix"]')!;
-      const name = chevron.querySelector(".sr-only")!;
-      const icon = chevron.querySelector('[data-slot="dot-matrix-grid"]')!;
+      const name = chevron.querySelector('[data-slot="screen-reader-name"]')!;
+      const icon = chevron.querySelector('[data-slot="disclosure-chevron-icon"]')!;
       expect(flat(getComputedStyle(trigger).transform), slot).toBe("flat");
       expect(flat(getComputedStyle(label).transform), slot).toBe("flat");
       expect(flat(getComputedStyle(chevron).transform), slot).toBe("flat");
-      expect(flat(getComputedStyle(matrix).transform), slot).toBe("flat");
       expect(flat(getComputedStyle(name).transform), slot).toBe("flat");
-      expect(getComputedStyle(name).width, slot).toBe("1px");
+      const nameStyle = getComputedStyle(name);
+      expect(nameStyle.position, slot).toBe("absolute");
+      expect(nameStyle.width, slot).toBe("1px");
+      expect(nameStyle.height, slot).toBe("1px");
+      expect(nameStyle.overflow, slot).toBe("hidden");
+      expect(nameStyle.left, slot).not.toMatch(/^-?\d+px$/);
       const open = trigger.getAttribute("aria-expanded") === "true";
       const iconTransform = getComputedStyle(icon).transform;
       if (open) {

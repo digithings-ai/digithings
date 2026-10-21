@@ -53,10 +53,36 @@ describe("shared disclosure chevron", () => {
     }
   });
 
+  it("hides accessible names in place, with no left offset", () => {
+    const name = read("screen-reader-only.tsx");
+    expect(name).toContain('position: "absolute"');
+    expect(name).toContain('width: "1px"');
+    expect(name).toContain('height: "1px"');
+    expect(name).toContain('overflow: "hidden"');
+    expect(name).toContain('clipPath: "inset(50%)"');
+    expect(name).not.toMatch(/\bleft\s*:/);
+    expect(read("DotMatrix.tsx")).not.toContain('className="sr-only"');
+    expect(read("disclosure-chevron.tsx")).toContain('data-slot="disclosure-chevron-icon"');
+    expect(read("disclosure-chevron.tsx")).not.toContain("DotMatrix");
+    for (const sheet of ["chat-digichat.css", "chat-aui.css"]) {
+      const css = readStyle(sheet);
+      expect(css, sheet).toContain('[data-slot="screen-reader-name"]');
+      expect(css, sheet).toContain("clip-path: inset(50%)");
+      const hidden = rules(css).filter(([sel]) => sel.includes('[data-slot="screen-reader-name"]'));
+      expect(hidden.length, sheet).toBeGreaterThan(0);
+      for (const [, body] of hidden) {
+        expect(body, sheet).toContain("position: absolute");
+        expect(body, sheet).toContain("width: 1px");
+        expect(body, sheet).toContain("overflow: hidden");
+        expect(body, sheet).not.toMatch(/\bleft\s*:/);
+      }
+    }
+  });
+
   it("rotates only the icon svg, from that row's open state", () => {
     for (const sheet of ["chat-digichat.css", "chat-aui.css"]) {
       const css = readStyle(sheet);
-      const icon = '[data-slot="dot-matrix-grid"]';
+      const icon = '[data-slot="disclosure-chevron-icon"]';
       expect(css, sheet).toContain(`[data-slot="disclosure-chevron"] ${icon}`);
       expect(css, sheet).toContain("transform: rotate(0deg)");
       expect(css, sheet).toContain("transform: rotate(90deg)");

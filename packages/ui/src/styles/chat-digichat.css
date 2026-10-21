@@ -1111,8 +1111,32 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   color: var(--up);
 }
 
+:is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix"] {
+  position: relative;
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix-grid"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   overflow: visible;
+}
+
+/* Accessible names on status glyphs. Clip in place — no `left` offset, and
+   not Tailwind's `.sr-only`, which is absent unless the app emits it. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="screen-reader-name"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  transform: none;
 }
 
 /* Unlit cells are omitted from the SVG. Only lit cubes paint — no grid. */
@@ -1492,9 +1516,9 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 }
 
 /* Same caret on every trace disclosure. Closed points right. Open rotates
-   the icon svg only (`dot-matrix-grid`), and only when this row's trigger is
-   open. The wrapper and its screen-reader name stay put: a transform on
-   either turns the words. */
+   the chevron svg only (`disclosure-chevron-icon`), and only when this row's
+   trigger is open. The wrapper and its screen-reader name stay put: a
+   transform on either turns the words. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] {
   display: inline-flex;
   position: relative;
@@ -1508,43 +1532,24 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   animation: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] .sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-  transform: none;
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="dot-matrix"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"] {
+  display: block;
   width: 0.55rem;
   height: 0.55rem;
-  transform: none;
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
-  display: block;
-  width: 100%;
-  height: 100%;
   transform: rotate(0deg);
   transform-origin: 50% 50%;
   transition: transform 150ms ease;
   animation: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"] {
   transform: rotate(90deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+  :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"] {
     transition: none;
   }
 }
@@ -1584,11 +1589,15 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   height: 0.75rem;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix-grid"] {
   width: 0.75rem;
   height: 0.75rem;
+  max-width: 0.75rem;
+  max-height: 0.75rem;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-label"] {

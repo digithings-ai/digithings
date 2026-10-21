@@ -685,10 +685,10 @@
 }
 
 /* One disclosure caret for every trace row. Right when closed; a quarter
-   turn down when THAT row is open. The rotate is on the icon svg
-   (`dot-matrix-grid`) only. The wrapper also holds the screen-reader name,
-   and a transform there turns those words with the glyph. The caret is a
-   direct child of its trigger, so the open rule starts at that trigger:
+   turn down when THAT row is open. The rotate is on the chevron svg
+   (`disclosure-chevron-icon`) only. The wrapper holds the screen-reader
+   name, and a transform there turns those words with the glyph. The caret
+   is a direct child of its trigger, so the open rule starts at that trigger:
    an open chain (`data-open` on the Base UI root) must not spin the closed
    rows inside it. */
 .digichat-thread [data-slot="disclosure-chevron"],
@@ -704,15 +704,15 @@
   animation: none;
 }
 
-/* The name is for assistive tech. It ships with the caret, not via Tailwind's
-   `.sr-only`, which is absent unless the consuming app happens to emit it. */
-.digichat-thread [data-slot="disclosure-chevron"] .sr-only,
-.digichat-launcher [data-slot="disclosure-chevron"] .sr-only {
+/* Names stay in the accessibility tree and paint nothing. Not Tailwind's
+   `.sr-only` (missing unless the app emits it) and not a `left` offset. */
+.digichat-thread [data-slot="screen-reader-name"],
+.digichat-launcher [data-slot="screen-reader-name"] {
   position: absolute;
   width: 1px;
   height: 1px;
   padding: 0;
-  margin: -1px;
+  margin: 0;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
@@ -720,36 +720,29 @@
   transform: none;
 }
 
-.digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix"],
-.digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix"] {
+.digichat-thread [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"],
+.digichat-launcher [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"] {
+  display: block;
   width: 0.55rem;
   height: 0.55rem;
-  transform: none;
-}
-
-.digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
-.digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
-  display: block;
-  width: 100%;
-  height: 100%;
   transform: rotate(0deg);
   transform-origin: 50% 50%;
   transition: transform 150ms ease;
   animation: none;
 }
 
-.digichat-thread [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
-.digichat-thread [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
-.digichat-thread [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
-.digichat-launcher [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
-.digichat-launcher [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
-.digichat-launcher [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+.digichat-thread [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"],
+.digichat-thread [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"],
+.digichat-thread [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"],
+.digichat-launcher [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"],
+.digichat-launcher [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"],
+.digichat-launcher [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"] {
   transform: rotate(90deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
-  .digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+  .digichat-thread [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"],
+  .digichat-launcher [data-slot="disclosure-chevron"] [data-slot="disclosure-chevron-icon"] {
     transition: none;
   }
 }
@@ -811,10 +804,21 @@
 .digichat-thread [data-slot="tool-group-trigger-loader"],
 .digichat-launcher [data-slot="tool-group-trigger-loader"] {
   display: inline-flex;
-  width: 0.875rem;
-  height: 0.875rem;
+  width: 0.75rem;
+  height: 0.75rem;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.digichat-thread [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix"],
+.digichat-launcher [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix"],
+.digichat-thread [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix-grid"] {
+  width: 0.75rem;
+  height: 0.75rem;
+  max-width: 0.75rem;
+  max-height: 0.75rem;
 }
 
 
