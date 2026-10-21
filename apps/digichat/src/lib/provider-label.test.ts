@@ -17,4 +17,15 @@ describe("backendLabel (#4597)", () => {
     expect(backendLabel("" as BYOKProvider)).toBe(HOUSE_BACKEND_ID);
     expect(backendLabel("  " as BYOKProvider)).toBe(HOUSE_BACKEND_ID);
   });
+
+  // DIG-4879. A Foundry tenant is answered by its own agent, not by the
+  // house model provider: naming the house backend there would be a lie
+  // (ARCHITECTURE.md, "The composer provider chip names the backend that
+  // serves the chat"). This branch arrived with #6073 and no test read it,
+  // so it could be deleted with the whole suite green.
+  it("names the Foundry backend when the session runs on one", () => {
+    expect(backendLabel(null, "foundry")).toBe("Azure AI Foundry");
+    expect(backendLabel(undefined, "foundry")).toBe("Azure AI Foundry");
+    expect(backendLabel(null, "foundry")).not.toBe(HOUSE_BACKEND_ID);
+  });
 });

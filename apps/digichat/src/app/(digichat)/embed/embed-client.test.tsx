@@ -46,6 +46,46 @@ const proofCodeLines = codeLinesOf(embedClientSrc).filter((line) =>
   /trialProof|getTrialProof|TRIAL_PROOF|trial:proof/.test(line),
 );
 
+/**
+ * The source of the expression that follows `providerLabel:`.
+ *
+ * The statement ends at the first comma or semicolon outside brackets and
+ * parentheses, so a call that spans several lines is captured whole and a
+ * bare identifier stops at the end of its own line.
+ */
+function providerLabelExpression(source: string): string {
+  const marker = "providerLabel:";
+  const at = source.indexOf(marker);
+  if (at < 0) throw new Error("the source wires no provider label");
+  const rest = source.slice(at + marker.length);
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < rest.length; i++) {
+    const ch = rest.charAt(i);
+    if (quote !== null) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "(" || ch === "[" || ch === "{") {
+      depth++;
+      continue;
+    }
+    if (ch === ")" || ch === "]" || ch === "}") {
+      depth--;
+      if (depth < 0) break;
+      continue;
+    }
+    if (depth === 0 && (ch === "," || ch === ";")) {
+      return rest.slice(0, i).trim();
+    }
+  }
+  return rest.trim();
+}
+
 // ---------------------------------------------------------------------------
 // DIG-4538: the expired-proof signal.
 //
@@ -520,5 +560,36 @@ describe("an expired trial proof is dropped and the page is asked for a new one"
     } finally {
       storage.restore();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DIG-4879: the composer provider chip on the embed surface.
+//
+// The chip names the backend that serves the chat (ARCHITECTURE.md, "The
+// composer provider chip names the backend that serves the chat"). The embed
+// surface is the only one that can name its own backend, so its label has to
+// follow the session: the own-key provider while a key is set, the backend
+// type otherwise.
+//
+// The wiring is pinned from the source, the house pattern of this file. It
+// has to be: the rendered chip reads the same label whether the wiring
+// derives it or hard-codes today's value, so a render cannot see the
+// difference - only the source can.
+// ---------------------------------------------------------------------------
+
+describe("the embed composer provider chip", () => {
+  it("derives the label from the BYOK state and the serving backend, not from a literal", () => {
+    const wiring = providerLabelExpression(embedClientSrc);
+    // The shared helper owns the naming: the app has one vocabulary.
+    expect(wiring).toMatch(/^backendLabel\(/);
+    // The own-key provider wins while the session carries a key.
+    expect(wiring).toMatch(/byokIsSet\s*\?\s*byokProvider\s*:\s*null/);
+    // The backend that serves the chat is named too, so a Foundry tenant
+    // does not get the house backend's name.
+    expect(wiring).toMatch(/backendType/);
+    // No literal backend name: a copy of one drifts the moment the house
+    // backend changes.
+    expect(wiring).not.toMatch(/["'`]/);
   });
 });
