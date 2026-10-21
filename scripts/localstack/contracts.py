@@ -361,8 +361,12 @@ def _normalise_profiles(raw: Any, default: tuple[str, ...]) -> tuple[str, ...]:
 def _compose_url(port: Any, path: Any, host: str = "127.0.0.1") -> str | None:
     if port is None:
         return None
+    # A contract row names its port in the file, so it is checked like a
+    # knob: a port that is not a number never becomes a URL.
+    if not _is_port(str(port).strip()):
+        raise InvalidPort(f"contract port {port!r} is not a port number")
     suffix = path if isinstance(path, str) and path.startswith("/") else ""
-    return f"http://{host}:{int(port)}{suffix or '/healthz'}"
+    return f"http://{host}:{int(str(port).strip())}{suffix or '/healthz'}"
 
 
 def checks_from_contract(doc: Any) -> tuple[Check, ...]:
@@ -470,13 +474,16 @@ def _is_port(value: str) -> bool:
 def _authority_span(url: str) -> tuple[int, int]:
     """The character range of a URL template's authority (the host:port part).
 
-    ``(0, 0)`` when the template carries no ``scheme://`` prefix: a bare
+    ``(0, 0)`` when the template carries no ``//`` prefix: a bare
     ``host:port`` string is not a URL and has no authority to point at.
     """
     marker = url.find("://")
-    if marker < 0:
+    if marker >= 0:
+        start = marker + 3
+    elif url.startswith("//"):
+        start = 2
+    else:
         return (0, 0)
-    start = marker + 3
     end = len(url)
     for index in range(start, len(url)):
         if url[index] in "/?#":
@@ -485,15 +492,26 @@ def _authority_span(url: str) -> tuple[int, int]:
     return (start, end)
 
 
+def _in_authority(url: str, start: int) -> bool:
+    """True when the reference at ``start`` sits inside the authority."""
+    auth_start, auth_end = _authority_span(url)
+    return auth_start <= start < auth_end
+
+
 def _fills_the_port_slot(url: str, start: int) -> bool:
     """True when the reference at ``start`` stands for the URL's port.
 
     The port slot is the ``:`` that separates the host from the port inside
     the authority. A reference behind a ``/`` is in the path and one that
-    follows ``://`` is the host -- neither of them is a port.
+    follows ``://`` is the host -- neither of them is a port. A reference
+    that sits before the ``@`` is in the userinfo (the password, most
+    often), and the ``:`` there separates a user name from a password.
     """
     auth_start, auth_end = _authority_span(url)
     if not (auth_start <= start < auth_end):
+        return False
+    at_sign = url.rfind("@", auth_start, auth_end)
+    if at_sign != -1 and start < at_sign:
         return False
     if start == 0 or url[start - 1] != ":":
         return False
@@ -508,11 +526,18 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
     as configured (see :func:`resolve`), because a caller-configured local
     binding route is keyed on the exact path it supplies.
 
-    A reference that fills the port slot has to carry a port number. The
-    value lands in a URL the gate then opens, and a value that is not a port
-    is the one thing that can move that URL off this machine: ``8000@evil.com``
-    makes ``urlsplit(...).hostname`` read ``evil.com``. So such a value is
-    refused loudly (:class:`InvalidPort`) rather than substituted.
+    Two rules keep a knob from moving the probe off this machine:
+
+    * a reference that fills the port slot has to carry a port number. The
+      value lands in a URL the gate then opens, and a value that is not a
+      port is the one thing that can move that URL off the machine:
+      ``8000@evil.com`` makes ``urlsplit(...).hostname`` read ``evil.com``.
+    * a reference anywhere else in the authority is refused. The host of
+      these URLs is fixed at the loopback address; a knob in the host slot
+      (``http://${HOST}/healthz``) would be the same hole with the port
+      left out.
+
+    Both refusals raise :class:`InvalidPort` and name the knob.
     """
     if url is None or "${" not in url:
         return url
@@ -522,11 +547,22 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
         # Surrounding whitespace is noise around a number, not a different
         # number: the Supabase port knob already strips (localstack
         # .supabase_ports), so the gate must agree with it.
-        value = (config.get(name) or default or "").strip()
-        if _fills_the_port_slot(url, match.start()) and not _is_port(value):
+        value = (config.get(name) or "").strip()
+        if not value:
+            # An empty value is not a value: it takes the default, exactly
+            # as it always has.
+            value = (default or "").strip()
+        if _fills_the_port_slot(url, match.start()):
+            if not _is_port(value):
+                raise InvalidPort(
+                    f"{name}={value!r} is not a port number; the probe stays on "
+                    f"127.0.0.1 only when the knob carries a port"
+                )
+            return value
+        if _in_authority(url, match.start()):
             raise InvalidPort(
-                f"{name}={value!r} is not a port number; the probe stays on "
-                f"127.0.0.1 only when the knob carries a port"
+                f"{name} may not be templated into the authority of a loopback "
+                f"URL; only the port carries a knob"
             )
         return value
 

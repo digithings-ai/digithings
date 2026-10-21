@@ -191,8 +191,21 @@ def cmd_preflight(args: argparse.Namespace, root: Path) -> int:
     return 0 if report.ok else 1
 
 
+def _catalogue(root: Path) -> tuple[tuple[contracts.Check, ...], str]:
+    """The checks for the stack rooted at ``root``, and where they came from.
+
+    A contract row that names an unusable port is refused loudly: the
+    command says which row and exits nonzero, instead of a traceback.
+    """
+    try:
+        return contracts.load_checks(root)
+    except contracts.InvalidPort as exc:
+        print(f"dt: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
+
 def _gate(args: argparse.Namespace, root: Path) -> tuple[int, object, str]:
-    checks, origin = contracts.load_checks(root)
+    checks, origin = _catalogue(root)
     selected = contracts.select(checks, args.profile)
     report = health.run_gate(
         selected,
@@ -212,7 +225,7 @@ def cmd_status(args: argparse.Namespace, root: Path) -> int:
 
 
 def cmd_urls(args: argparse.Namespace, root: Path) -> int:
-    checks, origin = contracts.load_checks(root)
+    checks, origin = _catalogue(root)
     selected = contracts.select(checks, args.profile)
     emit(
         {"profile": args.profile, "catalogue": origin},

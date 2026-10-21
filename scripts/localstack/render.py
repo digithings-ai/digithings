@@ -85,7 +85,8 @@ def render_url_table(checks: Sequence[Check], config: Mapping[str, str], profile
         except InvalidPort as exc:
             # A knob that is not a port is not a row that is unconfigured: it
             # is a row whose URL was refused, and the reason says so.
-            rows.append((check.name, "http", f"(invalid: {exc})", check.source))
+            kind = "http" if check.kind == "http" else check.kind
+            rows.append((check.name, kind, f"(invalid: {exc})", check.source))
             continue
         rows.append(
             (
