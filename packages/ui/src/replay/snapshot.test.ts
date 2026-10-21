@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { inlineDomAssets } from "./browser";
 import { snapshotFilename } from "./filename";
-import { serializeSnapshot, snapshotSource, transformSnapshotDom } from "./snapshot";
+import { messageAnchor, serializeSnapshot, snapshotSource, transformSnapshotDom } from "./snapshot";
 
 const HEX48 = "cd".repeat(24);
 const SECRET = "dgk_live_TESTSECRET99";
@@ -287,6 +287,47 @@ describe("one interaction", () => {
     expect(html).not.toContain("First question");
     expect(html).not.toContain("First answer");
     expect(document.body.textContent).toContain("First question");
+  });
+
+  it("does not fall back to the thread when the anchor sits outside it", () => {
+    document.body.innerHTML = [
+      '<div class="aui-thread-root">',
+      '<div data-role="user"><div class="aui-user-message-content">Only question</div></div>',
+      '<div data-role="assistant"><div class="aui-assistant-message-content">Only answer</div></div>',
+      "</div>",
+      '<button id="ported">Export as HTML</button>',
+    ].join("");
+    const anchor = document.getElementById("ported");
+    expect(anchor).not.toBeNull();
+    expect(snapshotSource(document, anchor)).toBeNull();
+  });
+
+  it("scopes by message id while an open menu hides the thread from the page", () => {
+    document.body.innerHTML = [
+      '<div aria-hidden="true">',
+      '<div class="aui-thread-root">',
+      '<div data-role="user"><div class="aui-user-message-content">First question</div></div>',
+      '<div data-role="assistant" data-message-id="a1">',
+      '<div class="aui-assistant-message-content">First answer</div>',
+      "</div>",
+      '<div data-role="user"><div class="aui-user-message-content">Second question</div></div>',
+      '<div data-role="assistant" data-message-id="a2">',
+      '<div class="aui-assistant-message-content">Second answer</div>',
+      "</div>",
+      "</div>",
+      "</div>",
+      '<div role="menu"><button>Export as HTML</button></div>',
+    ].join("");
+    expect(snapshotSource(document)).toBeNull();
+    const anchor = messageAnchor(document, "a2");
+    expect(anchor).not.toBeNull();
+    const shell = snapshotSource(document, anchor);
+    expect(shell).not.toBeNull();
+    const html = serializeSnapshot(shell!, "");
+    expect(html).toContain("Second question");
+    expect(html).toContain("Second answer");
+    expect(html).not.toContain("First question");
+    expect(html).not.toContain("First answer");
   });
 });
 

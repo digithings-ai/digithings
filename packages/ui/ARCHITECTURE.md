@@ -705,7 +705,7 @@ control that keeps its name from its glyph),
 
 ## Chat HTML export
 
-`/export` and `/export md` download the thread as markdown. `/export html`
+`/export` and `/export md` download the thread as markdown. Any other format shows an unsupported-format error. `/export html`
 downloads the active thread as one file (`packages/ui/src/replay/`), not the memory
 sidebar or any other thread. Ancestors of that thread are attribute-only
 wrappers, so deployment rules scoped to `[data-stock-product]` still match,
@@ -729,4 +729,7 @@ still get through. The filename is
 id-like words dropped). The filename reads the slug from the open page.
 The file itself does not keep `data-deployment` or any other deployment
 or tenant attribute. The assistant message menu's Export as HTML uses
-that same path for the question and answer of that one interaction.
+that same path for the question and answer of that one interaction. It
+scopes by the message id, including while the open menu marks the page
+aria-hidden. If that message cannot be resolved, it shows an error and
+does not save the thread.

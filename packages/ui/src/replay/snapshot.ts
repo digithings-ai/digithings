@@ -116,21 +116,63 @@ export function activeThreadRoot(root: ParentNode): HTMLElement | null {
 const MESSAGE_ROOT = "[data-role='user'], [data-role='assistant']";
 
 /**
+ * The assistant message with this id. An open menu marks the rest of the
+ * page aria-hidden, so this does not require the thread to be the active
+ * root. A portaled menu item is not inside the thread; the message action
+ * passes the id from the message context instead of the click target.
+ */
+export function messageAnchor(doc: Document, messageId: string): HTMLElement | null {
+  const id = messageId.trim();
+  if (!id) return null;
+  const selector = `[data-message-id="${cssEscape(id)}"]`;
+  for (const node of doc.querySelectorAll(selector)) {
+    if (!(node instanceof HTMLElement)) continue;
+    const thread = node.closest<HTMLElement>(".aui-thread-root");
+    if (!thread || !isMessageThread(thread)) continue;
+    const answer = node.closest<HTMLElement>("[data-role='assistant']");
+    if (!answer || !thread.contains(answer)) continue;
+    return answer;
+  }
+  return null;
+}
+
+/**
+ * A thread the message action may export. The open menu sets aria-hidden on
+ * an ancestor; that is not a closed thread. The thread element itself still
+ * has to be showing, and a memory-sidebar thread is never exported.
+ */
+function isMessageThread(thread: HTMLElement): boolean {
+  if (thread.closest("[data-memory-thread-list]")) return false;
+  if (thread.hidden || thread.getAttribute("aria-hidden") === "true") return false;
+  return true;
+}
+
+/**
  * `anchor` limits the file to that assistant message and the user message
- * before it. Omitted, the file is the whole thread.
+ * before it. Omitted, the file is the whole thread. An anchor that is not
+ * inside its thread, or not inside an assistant message, returns null — it
+ * does not widen to the whole thread.
  */
 export function snapshotSource(doc: Document, anchor?: HTMLElement | null): HTMLElement | null {
-  const thread = activeThreadRoot(doc);
-  if (!thread) return null;
+  const thread = anchor ? anchor.closest<HTMLElement>(".aui-thread-root") : activeThreadRoot(doc);
+  if (!thread || (anchor && !isMessageThread(thread))) return null;
+  if (anchor && !thread.contains(anchor)) return null;
   const html = doc.createElement("html");
   copyShellAttributes(doc.documentElement, html);
-  const scope = anchor && thread.contains(anchor) ? anchor : null;
-  html.append(threadShell(doc, thread, scope));
+  const body = threadShell(doc, thread, anchor ?? null);
+  if (!body) return null;
+  html.append(body);
   stripDeploymentAttributes(html);
   return html;
 }
 
-function threadShell(doc: Document, thread: HTMLElement, scope: HTMLElement | null): HTMLElement {
+function threadShell(
+  doc: Document,
+  thread: HTMLElement,
+  scope: HTMLElement | null,
+): HTMLElement | null {
+  const clone = cloneWithoutHidden(thread, scope);
+  if (!clone) return null;
   const body = doc.createElement("body");
   if (doc.body) copyShellAttributes(doc.body, body);
   const ancestors: HTMLElement[] = [];
@@ -149,7 +191,7 @@ function threadShell(doc: Document, thread: HTMLElement, scope: HTMLElement | nu
     parent.append(wrap);
     parent = wrap;
   }
-  parent.append(cloneWithoutHidden(thread, scope));
+  parent.append(clone);
   return body;
 }
 
@@ -157,7 +199,7 @@ function threadShell(doc: Document, thread: HTMLElement, scope: HTMLElement | nu
  * Read computed style on the live thread first, then clone. Dropping the
  * live nodes would change the open chat.
  */
-function cloneWithoutHidden(live: HTMLElement, scope: HTMLElement | null): HTMLElement {
+function cloneWithoutHidden(live: HTMLElement, scope: HTMLElement | null): HTMLElement | null {
   const liveNodes = [live, ...live.querySelectorAll("*")];
   const hidden = new Set<number>();
   for (let i = 1; i < liveNodes.length; i += 1) {
@@ -171,21 +213,25 @@ function cloneWithoutHidden(live: HTMLElement, scope: HTMLElement | null): HTMLE
     const node = cloneNodes[index];
     if (node && clone.contains(node)) node.remove();
   }
-  if (scope) keepInteraction(liveMessages, cloneMessages, clone, scope);
+  if (scope && !keepInteraction(liveMessages, cloneMessages, clone, scope)) return null;
   return clone;
 }
 
-/** The assistant message that holds `anchor`, plus the user message before it. */
+/**
+ * The assistant message that holds `anchor`, plus the user message before it.
+ * False when that message cannot be resolved — the caller must not keep the
+ * rest of the thread.
+ */
 function keepInteraction(
   liveMessages: readonly HTMLElement[],
   cloneMessages: readonly HTMLElement[],
   clone: HTMLElement,
   anchor: HTMLElement,
-): void {
+): boolean {
   const answer = anchor.closest<HTMLElement>("[data-role='assistant']");
-  if (!answer) return;
+  if (!answer) return false;
   const index = liveMessages.indexOf(answer);
-  if (index < 0) return;
+  if (index < 0) return false;
   const keep = new Set<number>([index]);
   for (let i = index - 1; i >= 0; i -= 1) {
     if (liveMessages[i]?.getAttribute("data-role") === "user") {
@@ -197,6 +243,7 @@ function keepInteraction(
     const node = cloneMessages[i];
     if (node && !keep.has(i) && clone.contains(node)) node.remove();
   }
+  return true;
 }
 
 function suppressed(el: Element): boolean {
