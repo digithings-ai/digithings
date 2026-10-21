@@ -55,6 +55,7 @@ import {
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
 import { byokActivationGate, pingByokKey } from "@/lib/byok-ping";
+import { HOUSE_BACKEND_ID } from "@/lib/provider-label";
 import {
   CUSTOM_PROVIDER_MODEL,
   PROVIDER_MENU_ORDER,
@@ -843,8 +844,8 @@ export function EmbedComposerMenu({
     // key and returns routing to Cheaper Inference.
     const rows: MenuRow[] = [
       {
-        id: "cheaperinference",
-        label: slashName("cheaperinference"),
+        id: HOUSE_BACKEND_ID,
+        label: slashName(HOUSE_BACKEND_ID),
         value: "Default · no key",
         checked: !providerActive,
         exclusive: true,
