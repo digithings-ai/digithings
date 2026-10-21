@@ -33,8 +33,10 @@
 # OpenRouter litellm.yaml routes were retired). See
 # docs/providers/snapshots/*.yaml for vendor model IDs checked historically;
 # a slug added after a snapshot was last refreshed won't appear there yet.
-# Endpoint capability (tools + strict json_schema + context floor) is live-verified
-# by scripts/validate_digiquant_pools.py (.github/workflows/validate-digiquant-pools.yml).
+# Endpoint capability (tools + strict json_schema + context floor) is checked by
+# scripts/validate_digiquant_pools.py - a manual, paid-call gate (it needs
+# OPENROUTER_API_KEY). No CI workflow runs it: there is no
+# .github/workflows/validate-digiquant-pools.yml.
 #
 # Tool-only grounding (#3859): a requested web_search must succeed or raise;
 # no synthesis fallback, no env gate.

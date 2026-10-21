@@ -461,13 +461,14 @@ Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier 
 rejected** (`openai/*`, `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series); see
 `digigraph.model_config.is_flagship_openrouter_model`.
 
-**Pool changes are endpoint-verified in CI (#1622):** any PR touching
-`config/digiquant_models.yaml` / `config/model_modes.yaml` triggers
-`validate-digiquant-pools.yml`, which runs `scripts/validate_digiquant_pools.py` against live
-OpenRouter — per pooled slug: endpoint metadata (tools + structured_outputs supported,
+**Pool changes are endpoint-verified by hand (#1622):** run
+`scripts/validate_digiquant_pools.py` against live OpenRouter before a PR that touches
+`config/digiquant_models.yaml` / `config/model_modes.yaml` — per pooled slug: endpoint metadata (tools + structured_outputs supported,
 context ≥ 64k), one real function-tool call, one strict `json_schema` call. Model-page
-claims are not trusted (#987 mistral-small: page said tools, every endpoint 404'd). Run
-manually anytime: `OPENROUTER_API_KEY=… python3 scripts/validate_digiquant_pools.py`.
+claims are not trusted (#987 mistral-small: page said tools, every endpoint 404'd). It is a
+paid-call gate that needs `OPENROUTER_API_KEY`, and **no CI workflow runs it** (there is no
+`validate-digiquant-pools.yml`): run it with
+`OPENROUTER_API_KEY=… python3 scripts/validate_digiquant_pools.py`.
 
 
 When the scheduled research pipeline fails (`research baseline`, `research delta`, or `research monthly`), the workflow opens or appends to a deduped tracking issue titled `research-{baseline,delta,monthly}-failure` with `ci:failure` label. Each comment lists the failing step, the last successful run timestamp, the run URL, and the last 200 log lines.
