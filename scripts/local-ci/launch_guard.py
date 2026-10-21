@@ -11,10 +11,13 @@ Two launchers are trusted:
 
   * the launchd daemon (`ai.digithings.local-ci`, `ai.digithings.twelvex-ci`).
     launchd starts it with ppid 1, sets XPC_SERVICE_NAME to the job label,
-    loads it from the plist scripts/local-ci/install.sh writes, and the loaded
+    loads it from the plist scripts/local-ci/install.sh writes, the loaded
     job's arguments are exactly the interpreter and the runner file that is
     running now - no extra arguments, so a job that asks for one PR is not the
-    daemon and is refused;
+    daemon and is refused - and the pid launchctl reports for the job is the
+    pid of this very process. That last fact is what makes the label
+    worthless to forge: a seat that orphans itself to launchd and claims the
+    label is not the job's process, so it is refused;
 
   * the CI container (the Woodpecker worker), which runs the runner from
     /opt/local-ci under /opt/local-ci/worker_entrypoint.sh with the CI
@@ -22,13 +25,18 @@ Two launchers are trusted:
 
 Everything else is refused: a hand-run from any shell, a seat's shell, a script
 a seat detached, a job a seat installed. The decision reads kernel and launchd
-facts only - never BASH_ENV, PAPERCLIP_*, ZDOTDIR, and never `gh` - so
-unsetting those variables changes nothing.
+facts only - the pid of this process, the process tree, the pid launchd reports
+for the job, the container's entrypoint - never BASH_ENV, PAPERCLIP_*,
+ZDOTDIR, and never `gh` - so unsetting those variables changes nothing.
 
 What this is not: a proof. At the same uid a seat can copy the runner and run
-its own copy without this module, or drive the container with its own token.
-The authoritative boundary is the queue-side provenance check (DIG-4794): only a
-`local-ci` status that carries the verified Woodpecker target_url counts.
+its own copy without this module, drive the container with its own token, or
+rewrite the daemon's plist and reload the job under the same label. What the
+guard does buy is that the cheap forgeries fail: an unset environment, a
+forged label, an orphaned process tree, a job loaded from somewhere else, a job
+that asks for one PR. The authoritative boundary is the queue-side provenance
+check (DIG-4794): only a `local-ci` status that carries the verified
+Woodpecker target_url counts.
 
 Usage:
   python3 scripts/local-ci/launch_guard.py --runner scripts/local-ci/local_ci.py
@@ -151,15 +159,28 @@ def collect_ancestors(max_depth=MAX_ANCESTORS):
 # ----------------------------------------------------------------- launchd --
 
 def parse_launchctl_print(text):
-    """Pull the program, the arguments and the plist path out of launchctl print."""
-    job = {"program": None, "arguments": [], "path": None}
+    """Pull the program, the arguments, the plist path and the pid out of launchctl print.
+
+    The pid is the one launchd reports for the job while it is running: the pid
+    of the process the job's own program is running in. It is the fact that
+    ties a run to a job - the label alone can be claimed by anybody.
+    """
+    job = {"program": None, "arguments": [], "path": None, "pid": None}
     lines = (text or "").splitlines()
     index = 0
     while index < len(lines):
         line = lines[index]
-        top = re.match(r"^\t(path|program) = (.*)$", line)
+        top = re.match(r"^\t(path|program|pid) = (.*)$", line)
         if top:
-            job[top.group(1)] = top.group(2).strip()
+            key = top.group(1)
+            value = top.group(2).strip()
+            if key == "pid":
+                # A pid is a number or it is nothing: launchctl prints one for
+                # the running job and omits it for a job that is not running.
+                if value.isdigit():
+                    job["pid"] = int(value)
+            else:
+                job[key] = value
         elif re.match(r"^\targuments = \{$", line):
             index += 1
             while index < len(lines) and lines[index].strip() != "}":
@@ -219,29 +240,50 @@ def collect_facts(runner_path):
 # ------------------------------------------------------------------ decision --
 
 def _decide_container(facts):
-    """The CI container: the worker entrypoint, under /opt/local-ci, with a token."""
+    """The CI container: the worker entrypoint, under /opt/local-ci, with a token.
+
+    The entrypoint has to be the runner's own parent, not merely somewhere up
+    the tree: the worker starts the runner as a direct child of
+    worker_entrypoint.sh, so that is the only shape the pipeline has. A run
+    that some other process in the container started - a shell, an exec of the
+    runner - has a different parent and is refused.
+    """
     runner = facts.get("runner") or ""
     if not runner.startswith(CONTAINER_RUNNER_ROOT + os.sep):
         return False, (f"the runner is not under {CONTAINER_RUNNER_ROOT}, so this is not "
                        "the CI container")
-    for ancestor in facts.get("ancestors") or []:
-        for argument in ancestor.get("argv") or []:
-            if CONTAINER_ENTRYPOINT in argument:
-                if facts.get("ci_token"):
-                    return True, "the CI container worker entrypoint started this run"
-                return False, ("the CI container started this run but carries no CI "
-                               "credential, so it cannot be the trusted pipeline")
-    return False, "inside a container, but not started by the worker entrypoint"
+    ancestors = facts.get("ancestors") or []
+    parent = ancestors[0] if ancestors else None
+    started_by_entrypoint = bool(parent) and any(
+        CONTAINER_ENTRYPOINT in argument for argument in (parent.get("argv") or []))
+    if not started_by_entrypoint:
+        return False, ("inside a container, but the runner was not started by the "
+                       "worker entrypoint")
+    if not facts.get("ci_token"):
+        return False, ("the CI container started this run but carries no CI "
+                       "credential, so it cannot be the trusted pipeline")
+    return True, "the CI container worker entrypoint started this run"
 
 
 def _decide_launchd(facts, label):
-    """The launchd daemon: ppid 1, the trusted label, and the job that matches."""
+    """The launchd daemon: launchd started this very process, from the trusted job."""
     if facts.get("ppid") != 1:
         return False, (f"the launchd job {label} claims this run, but the parent pid is "
                        f"{facts.get('ppid')} and not launchd")
+    ancestors = facts.get("ancestors") or []
+    if not ancestors or ancestors[0].get("pid") != 1:
+        return False, (f"the launchd job {label} claims this run, but the process tree "
+                       "does not start at launchd")
     job = facts.get("launchd_job")
     if not job:
         return False, f"the launchd job {label} is not loaded"
+    job_pid = job.get("pid")
+    if job_pid is None:
+        return False, (f"the launchd job {label} is not running, so it did not start "
+                       "this run")
+    if job_pid != facts.get("pid"):
+        return False, (f"the launchd job {label} is running as pid {job_pid} and this "
+                       f"run is pid {facts.get('pid')}, so this is not the job's process")
     expected_plist = canonical_plist_path(label)
     if job.get("path") != expected_plist:
         return False, (f"the launchd job {label} was loaded from "
@@ -287,6 +329,7 @@ def log_path(ctx):
 
 
 def _record(facts, allowed, reason):
+    job = facts.get("launchd_job") or {}
     return {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "allowed": bool(allowed),
@@ -298,6 +341,8 @@ def _record(facts, allowed, reason):
         "dockerenv": facts.get("dockerenv"),
         "xpc_service_name": facts.get("xpc_service_name"),
         "ci_token": facts.get("ci_token"),
+        "job_pid": job.get("pid"),
+        "job_path": job.get("path"),
         "ancestors": [
             {"pid": a.get("pid"), "argv": (a.get("argv") or [])[:3]}
             for a in (facts.get("ancestors") or [])

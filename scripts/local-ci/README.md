@@ -38,10 +38,26 @@ worktree, the log, GitHub - and the guard refuses anything else with exit 78
 
 The rule used to live only in the operating-rules skill, and on 21 Oct a seat ran
 the runner twice from its own shell. The guard reads kernel and launchd facts
-only: the parent process, the process tree, `XPC_SERVICE_NAME`, the loaded job's
-own arguments, and the container's entrypoint. It never reads `BASH_ENV`,
-`PAPERCLIP_*` or `ZDOTDIR`, and it never calls `gh`, so unsetting those changes
-nothing.
+only: the pid of this process, the process tree, the pid launchd reports for the
+job, the loaded job's own arguments, and the container's entrypoint. It never
+reads `BASH_ENV`, `PAPERCLIP_*` or `ZDOTDIR`, and it never calls `gh`, so
+unsetting those changes nothing.
+
+What each launcher has to show:
+
+- **the launchd daemon**: the parent pid is 1 and the process tree starts at
+  launchd; `XPC_SERVICE_NAME` is the trusted label; the job is loaded from the
+  plist `install.sh` writes; the job's arguments are the interpreter and this
+  file and nothing else; and **the pid launchctl reports for the job is the pid
+  of this process**. That last one is the fact a seat cannot forge cheaply. A
+  seat can orphan its own process to launchd (`ppid` becomes 1) and claim the
+  label - the first version of this guard allowed exactly that - but the job
+  runs under its own pid, and a process that is not the job's process is
+  refused.
+- **the CI container**: the runner is under `/opt/local-ci`, its own parent is
+  `worker_entrypoint.sh`, and the environment carries the CI credential. The
+  container is the trust boundary: a seat that can `docker exec` into the
+  worker already has the CI host and is out of scope.
 
 ```
 python3 scripts/local-ci/launch_guard.py --runner scripts/local-ci/local_ci.py
@@ -51,8 +67,27 @@ prints the decision and exits 0 (the run may proceed) or 78 (it is refused). It
 is a diagnostic: it runs no check and posts nothing.
 
 What the guard is not: a proof. At the same uid a seat can copy the runner and run
-its own copy, and the queue-side provenance check (DIG-4794) is what makes a
-`local-ci` status count only when it comes from the pipeline.
+its own copy, drive the container with its own token, or rewrite the daemon's
+plist and reload the job under the same label. What the guard does buy is that
+the cheap forgeries fail: an unset environment, a forged label, an orphaned
+process tree, a job loaded from somewhere else, a job that asks for one PR. The
+queue-side provenance check (DIG-4794) is what makes a `local-ci` status count
+only when it comes from the pipeline.
+
+## Deploying it
+
+The guard fails closed: a runner without `launch_guard.py` next to it refuses to
+run at all (exit 78, before any side effect). So the two files have to land
+together, and the order matters.
+
+1. the guard lands in the repository (this change),
+2. a trusted launcher is live - the launchd daemon has to be running under the
+   label, or the container has to have the new runner in its image,
+3. only then does the runner reach the host copy and the worker image.
+
+The worker image has to carry the guard as well: `Dockerfile.worker` copies
+`local_ci.py` into `/opt/local-ci`, and it has to copy `launch_guard.py` next to
+it, or the container's runner refuses every run.
 
 ## Running it
 

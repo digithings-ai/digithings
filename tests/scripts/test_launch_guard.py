@@ -67,6 +67,8 @@ def _launchd_facts(**overrides):
             "program": "/usr/bin/python3",
             "arguments": ["/usr/bin/python3", os.path.realpath(_RUNNER)],
             "path": os.path.expanduser("~/Library/LaunchAgents/ai.digithings.local-ci.plist"),
+            # launchd reports the pid of the process the job's program runs in.
+            "pid": 4242,
         },
     )
     facts.update(overrides)
@@ -85,6 +87,84 @@ def _container_facts(**overrides):
     )
     facts.update(overrides)
     return facts
+
+
+# The seat's own attack from 21 Oct, as a shell sets it up: `gh` and every
+# shell the guard might spawn point at a marker file, and the shell's own
+# variables carry the seat's identity.
+_POISON = """\
+touch "$LAUNCH_GUARD_POISON_MARKER"
+gh() { touch "$LAUNCH_GUARD_MARKER"; }
+ps() { touch "$LAUNCH_GUARD_MARKER"; /bin/ps "$@"; }
+export -f gh ps
+"""
+
+# The child collects the facts for real - no injected facts - and decides.
+_COLLECT_CHILD = """\
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import launch_guard as lg
+facts = lg.collect_facts(sys.argv[2])
+allowed, reason = lg.decide(facts)
+print(json.dumps({"allowed": allowed, "reason": reason, "facts": facts}))
+"""
+
+# bash sources BASH_ENV before it runs this, so the poison is in place.
+_WRAPPER = """\
+#!/bin/bash
+exec "$1" "$2" "$3" "$4"
+"""
+
+
+def _collect_in_child(case, hostile=False, extra=None):
+    """Collect the facts in a child process. Returns (report, markers).
+
+    The report is what the child decided. The markers say whether the poison
+    was armed (so the test knows the attack was in place) and whether `gh` was
+    called (so the test knows it was not).
+    """
+    tmp = tempfile.mkdtemp(prefix="launch-guard-")
+    case.addCleanup(shutil.rmtree, tmp, True)
+    gh_marker = os.path.join(tmp, "gh-was-called")
+    poison_marker = os.path.join(tmp, "poison-was-sourced")
+    bindir = os.path.join(tmp, "bin")
+    os.makedirs(bindir)
+    shim = os.path.join(bindir, "gh")
+    with open(shim, "w", encoding="utf-8") as fh:
+        fh.write("#!/bin/sh\ntouch '%s'\nexit 0\n" % gh_marker)
+    os.chmod(shim, 0o755)
+    poison = os.path.join(tmp, "poison.bash")
+    with open(poison, "w", encoding="utf-8") as fh:
+        fh.write(_POISON)
+    child = os.path.join(tmp, "collect.py")
+    with open(child, "w", encoding="utf-8") as fh:
+        fh.write(_COLLECT_CHILD)
+    wrapper = os.path.join(tmp, "wrapper.sh")
+    with open(wrapper, "w", encoding="utf-8") as fh:
+        fh.write(_WRAPPER)
+    env = {
+        "PATH": bindir + ":/usr/bin:/bin:/usr/sbin:/sbin",
+        "HOME": tmp,
+        "LAUNCH_GUARD_MARKER": gh_marker,
+        "LAUNCH_GUARD_POISON_MARKER": poison_marker,
+    }
+    if hostile:
+        env.update({
+            "BASH_ENV": poison,
+            "ZDOTDIR": os.path.join(tmp, "zd"),
+            "PAPERCLIP_AGENT_ID": "2d7f158b-f8de-48e1-9764-6ece84797c20",
+            "PAPERCLIP_RUN_ID": "run-1",
+            "PAPERCLIP_TASK_ID": "5ec14cd7-059e-478c-b8cc-cd8996b1a887",
+        })
+    env.update(extra or {})
+    result = subprocess.run(
+        ["/bin/bash", wrapper, sys.executable, child, _SCRIPTS, _RUNNER],
+        capture_output=True, text=True, env=env, timeout=120)
+    if result.returncode != 0:
+        raise AssertionError("the collecting child failed: %s" % result.stderr)
+    report = json.loads(result.stdout)
+    markers = {"gh": gh_marker, "poison": poison_marker}
+    return report, markers
 
 
 class DecisionTests(unittest.TestCase):
@@ -128,6 +208,44 @@ class DecisionTests(unittest.TestCase):
         self.assertFalse(allowed)
         self.assertIn("parent pid", reason)
 
+    def test_an_orphaned_process_that_forges_the_label_is_refused(self):
+        """The bypass this closes: a seat that orphans itself to launchd.
+
+        A double-forked process is reparented to launchd, so its parent pid is
+        1 and the tree looks like the daemon's. Claiming the trusted label and
+        pointing at the real loaded job is not enough: launchd reports the pid
+        of the job's own process, and this run is not that process.
+        """
+        facts = _launchd_facts(
+            pid=78736,
+            launchd_job={
+                "program": "/usr/bin/python3",
+                "arguments": ["/usr/bin/python3", os.path.realpath(_RUNNER)],
+                "path": os.path.expanduser(
+                    "~/Library/LaunchAgents/ai.digithings.local-ci.plist"),
+                "pid": 43944,
+            })
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("not the job's process", reason)
+
+    def test_a_launchd_job_that_is_not_running_is_refused(self):
+        """A job that is loaded but not running did not start this run."""
+        facts = _launchd_facts()
+        facts["launchd_job"]["pid"] = None
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("not running", reason)
+
+    def test_a_claim_whose_process_tree_does_not_start_at_launchd_is_refused(self):
+        """The tree is read, not just the parent pid."""
+        facts = _launchd_facts(
+            ancestors=[{"pid": 4243, "argv": ["/bin/zsh", "-c", "local_ci.py"]},
+                       {"pid": 1, "argv": ["/sbin/launchd"]}])
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("process tree", reason)
+
     def test_a_launchd_job_that_is_not_loaded_is_refused(self):
         facts = _launchd_facts(launchd_job=None)
         allowed, reason = _guard.decide(facts)
@@ -158,6 +276,21 @@ class DecisionTests(unittest.TestCase):
     def test_the_container_without_the_entrypoint_is_refused(self):
         facts = _container_facts()
         facts["ancestors"] = [{"pid": 1, "argv": ["/bin/sh", "-c", "python3 local_ci.py --pr 368"]}]
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("worker entrypoint", reason)
+
+    def test_the_entrypoint_has_to_be_the_runner_parent(self):
+        """The worker starts the runner as a direct child of the entrypoint.
+
+        An entrypoint that is only somewhere up the tree is a shell in the
+        container that started the runner, not the pipeline.
+        """
+        facts = _container_facts()
+        facts["ancestors"] = [
+            {"pid": 42, "argv": ["/bin/sh", "-c", "python3 local_ci.py --pr 368"]},
+            {"pid": 1, "argv": ["/bin/bash", "/opt/local-ci/worker_entrypoint.sh"]},
+        ]
         allowed, reason = _guard.decide(facts)
         self.assertFalse(allowed)
         self.assertIn("worker entrypoint", reason)
@@ -207,83 +340,69 @@ class LaunchctlParsingTests(unittest.TestCase):
                          ["/usr/bin/python3", "/Users/chrisstefan/Code/local-ci/postmerge_ci.py"])
         self.assertTrue(job["path"].endswith("ai.digithings.local-ci-postmerge.plist"))
 
+    def test_the_pid_of_the_running_job_is_read(self):
+        """The pid launchd reports is the fact that ties a run to a job."""
+        job = _guard.parse_launchctl_print(self.REAL)
+        self.assertEqual(job["pid"], 47393)
+
+    def test_a_job_that_is_not_running_has_no_pid(self):
+        job = _guard.parse_launchctl_print(self.REAL.replace("\tpid = 47393\n", ""))
+        self.assertIsNone(job["pid"])
+
     def test_a_missing_job_is_not_a_job(self):
         self.assertIsNone(_guard.launchctl_job("ai.digithings.local-ci-not-a-job"))
 
 
 class EnvironmentIndependenceTests(unittest.TestCase):
-    """The answer must not move when the shell environment changes."""
+    """The answer must not move when the shell environment changes.
 
-    def _run_cli(self, env, extra=()):
-        tmp = tempfile.mkdtemp(prefix="launch-guard-")
-        try:
-            facts_path = os.path.join(tmp, "facts.json")
-            with open(facts_path, "w", encoding="utf-8") as fh:
-                json.dump(_seat_facts(), fh)
-            child = dict(env)
-            child["HOME"] = tmp
-            return subprocess.run(
-                [sys.executable, _GUARD_CLI, "--runner", _RUNNER, "--facts-json", facts_path]
-                + list(extra),
-                capture_output=True, text=True, env=child, timeout=60)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+    The facts are collected for real here, in a child process, under a bash
+    that sources a hostile BASH_ENV: the seat's own attack from 21 Oct, with
+    `gh` and `ps` pointed at a marker file. A guard that read BASH_ENV, that
+    called `gh`, or that spawned a shell would leave the marker behind.
+    """
 
-    def _bare_env(self):
-        """An environment without a single inherited variable."""
-        return {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": os.path.expanduser("~")}
+    def test_the_answer_is_the_same_in_a_bare_and_in_a_hostile_environment(self):
+        bare, _markers = _collect_in_child(self)
+        hostile, markers = _collect_in_child(self, hostile=True)
+        self.assertTrue(os.path.exists(markers["poison"]),
+                        "the hostile environment was not in place")
+        self.assertFalse(bare["allowed"])
+        self.assertFalse(hostile["allowed"])
+        self.assertEqual(bare["reason"], hostile["reason"])
+
+    def test_the_facts_do_not_carry_the_hostile_environment(self):
+        bare, _markers = _collect_in_child(self)
+        hostile, _markers = _collect_in_child(self, hostile=True)
+        for key in ("runner", "uid", "dockerenv", "xpc_service_name", "ci_token"):
+            self.assertEqual(bare["facts"][key], hostile["facts"][key])
+        self.assertEqual(sorted(bare["facts"]), sorted(hostile["facts"]))
+        for key in ("BASH_ENV", "ZDOTDIR", "PAPERCLIP_AGENT_ID", "PAPERCLIP_RUN_ID",
+                    "PAPERCLIP_TASK_ID"):
+            self.assertNotIn(key, json.dumps(hostile["facts"]))
+
+    def test_a_forged_trusted_label_is_refused_in_a_hostile_environment(self):
+        """The label is a claim; the pid of the job's own process is the proof."""
+        report, _markers = _collect_in_child(
+            self, hostile=True, extra={"XPC_SERVICE_NAME": "ai.digithings.local-ci"})
+        self.assertFalse(report["allowed"])
 
     def test_the_refusal_holds_with_a_bare_environment(self):
-        result = self._run_cli(self._bare_env())
-        self.assertEqual(result.returncode, _guard.EX_CONFIG, result.stderr)
-        self.assertIn("refusing to run", result.stderr)
-
-    def test_the_refusal_holds_with_the_seat_environment(self):
-        """BASH_ENV, PAPERCLIP_* and ZDOTDIR are set here and change nothing."""
-        env = self._bare_env()
-        env.update({
-            "BASH_ENV": "/nonexistent/bash_env",
-            "ZDOTDIR": "/nonexistent/zd",
-            "PAPERCLIP_AGENT_ID": "2d7f158b-f8de-48e1-9764-6ece84797c20",
-            "PAPERCLIP_RUN_ID": "run-1",
-            "PAPERCLIP_TASK_ID": "5ec14cd7-059e-478c-b8cc-cd8996b1a887",
-        })
-        result = self._run_cli(env)
-        self.assertEqual(result.returncode, _guard.EX_CONFIG, result.stderr)
-        self.assertIn("refusing to run", result.stderr)
-
-    def test_both_environments_give_the_same_reason(self):
-        bare = self._run_cli(self._bare_env())
-        noisy = self._run_cli(dict(self._bare_env(), BASH_ENV="/nonexistent/bash_env",
-                                   ZDOTDIR="/nonexistent/zd",
-                                   PAPERCLIP_AGENT_ID="seat"))
-        self.assertEqual(json.loads(bare.stdout)["reason"], json.loads(noisy.stdout)["reason"])
+        report, _markers = _collect_in_child(self)
+        self.assertFalse(report["allowed"])
+        self.assertIn("trusted launcher", report["reason"])
 
 
 class NoGitHubTests(unittest.TestCase):
     """The guard must not reach GitHub, and must not even call `gh`."""
 
     def test_the_guard_never_calls_gh(self):
-        tmp = tempfile.mkdtemp(prefix="launch-guard-")
-        try:
-            marker = os.path.join(tmp, "gh-was-called")
-            bindir = os.path.join(tmp, "bin")
-            os.makedirs(bindir)
-            shim = os.path.join(bindir, "gh")
-            with open(shim, "w", encoding="utf-8") as fh:
-                fh.write("#!/bin/sh\ntouch '%s'\nexit 0\n" % marker)
-            os.chmod(shim, 0o755)
-            facts_path = os.path.join(tmp, "facts.json")
-            with open(facts_path, "w", encoding="utf-8") as fh:
-                json.dump(_seat_facts(), fh)
-            env = {"PATH": bindir + ":/usr/bin:/bin", "HOME": tmp}
-            result = subprocess.run(
-                [sys.executable, _GUARD_CLI, "--runner", _RUNNER, "--facts-json", facts_path],
-                capture_output=True, text=True, env=env, timeout=60)
-            self.assertEqual(result.returncode, _guard.EX_CONFIG, result.stderr)
-            self.assertFalse(os.path.exists(marker), "the guard called gh")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        """`gh` is on the PATH and in the shell's functions, and is never run."""
+        report, markers = _collect_in_child(self, hostile=True)
+        self.assertFalse(report["allowed"])
+        self.assertTrue(os.path.exists(markers["poison"]),
+                        "the hostile environment was not in place")
+        self.assertFalse(os.path.exists(markers["gh"]), "the guard called gh")
 
     def test_the_guard_source_mentions_no_shell_tricks(self):
         """No env-var trust, no shell function removal, no gh call in the source."""
