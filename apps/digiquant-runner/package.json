@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cloudflare/containers": "^0.3.7"
+    "@cloudflare/containers": "^0.3.7",
+    "@digithings/durable-object-reconnect": "*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250801.0",

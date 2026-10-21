@@ -74,7 +74,11 @@ TYPES = "feat|fix|docs|chore|refactor|perf|test|ci|build|revert|style"
 # Worker dry-run build gate (DIG-4010): same worker app paths and build command as
 # ci.yml `worker-build` (PR #5802). Trips only on PRs touching a gated path.
 WORKER_APPS = ("digithings-cron", "dashboard-api", "digidata-api", "digiquant-runner",
-               "digitrace-langfuse", "digichat-cloudflare", "digithings-stack-cloudflare")
+               "digitrace-langfuse", "digichat-cloudflare", "digithings-stack-cloudflare",
+               # twelvex-runner is in the ci.yml worker-build matrix but was missing
+               # here, so the local gate built one Worker less than CI does. It is
+               # the build that proves the app's workspace imports bundle (DIG-4753).
+               "twelvex-runner")
 WORKER_GATE_PATTERNS = tuple(f"apps/{a}/**" for a in WORKER_APPS) + (
     "apps/**/wrangler.toml", "package.json", "package-lock.json",
 )
