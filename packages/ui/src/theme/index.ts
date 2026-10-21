@@ -1,7 +1,6 @@
 export {
   applyDocumentTheme,
   DEFAULT_THEME_COLOR,
-  hasLightVariant,
   isPaletteId,
   isThemePreference,
   matchThemeStep,

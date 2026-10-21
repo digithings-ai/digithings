@@ -155,7 +155,9 @@ export function ThemeProvider({
     window.addEventListener(THEME_CHANGE_EVENT, sync);
     const mq = matchMedia("(prefers-color-scheme: light)");
     const onOS = () => {
-      if (preferenceRef.current !== "auto") return;
+      // As before this provider existed: a stored mode means a choice was
+      // made, so the OS does not override it.
+      if (readThemeState().preference !== "auto") return;
       // Repaint only; the OS changing is not a choice to store.
       setResolved(
         applyDocumentTheme("auto", readPaintedTheme().palette, undefined, { persist: false }),

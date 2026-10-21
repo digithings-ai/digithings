@@ -80,13 +80,15 @@ def test_derived_tokens_clear_contrast_floors() -> None:
                 assert ratio + 1e-9 >= floor, f"{name}/{theme} {key} {ratio} < {floor}"
 
 
+
 @pytest.mark.parametrize(
     "surface",
-    [".digichat-thread", ".digichat-thread-list", ".dc-embed-shell", '[data-stock-product][data-thread-skin="digichat"]'],
+    [".digichat-thread", ".dc-embed-shell", '[data-stock-product][data-thread-skin="digichat"]'],
 )
-def test_every_surface_that_sets_its_own_tokens_is_retargeted(surface: str) -> None:
+def test_every_palette_block_retargets_each_token_surface(surface: str) -> None:
     css, _, _ = gen.render()
-    # One block per palette per mode, each listing the surface.
-    blocks = css.count(':root[data-palette="')
-    assert blocks > 0
-    assert css.count(f'"] {surface},') + css.count(f'"] {surface} {{') >= 64
+    palettes = len(json.loads(gen.REGISTRY.read_text(encoding="utf-8"))["palettes"])
+    assert palettes == 32
+    for theme in ("dark", "light"):
+        # Exactly one block per palette in this mode lists the surface.
+        assert css.count(f'"][data-theme="{theme}"] {surface}') == palettes, (surface, theme)

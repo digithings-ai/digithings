@@ -30,8 +30,8 @@ import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
    document. */
 const THEME_PIN_SCRIPTS = {
   light:
-    "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('light');e.classList.remove('dark');var m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content','#FBFBF9')}catch(t){}", // canon-allow: the theme-color meta is read by the browser chrome, not the cascade (tokens.css --bg)
-  dark: "try{var e=document.documentElement;e.setAttribute('data-theme','dark');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('dark');e.classList.remove('light');var m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content','#0A0E0C')}catch(t){}", // canon-allow: the theme-color meta is read by the browser chrome, not the cascade (tokens.css --bg)
+    "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('light');e.classList.remove('dark');var m=document.querySelector('meta[name=theme-color]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content','#f1f0eb')}catch(t){}", // canon-allow: the theme-color meta matches the embed canvas pair below and is read by the browser chrome, not the cascade
+  dark: "try{var e=document.documentElement;e.setAttribute('data-theme','dark');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('dark');e.classList.remove('light');var m=document.querySelector('meta[name=theme-color]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content','#121417')}catch(t){}", // canon-allow: the theme-color meta matches the embed canvas pair below and is read by the browser chrome, not the cascade
 } as const;
 
 function themePinScript(theme: "dark" | "light"): string {
