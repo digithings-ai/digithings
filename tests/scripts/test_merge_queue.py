@@ -3316,6 +3316,148 @@ def test_a_server_error_is_asked_for_again(
     assert len(timeouts) == 2
 
 
+def test_the_read_numbers_are_the_measured_ones() -> None:
+    """The four numbers are the fix, so the suite has to pin them.
+
+    The slowest answer measured on 2026-10-21 was 36.5 s, so a timeout below
+    45 s turns a slow API back into a refusal — the exact failure this change
+    exists to remove. A budget below the timeout leaves no room for the second
+    attempt, and a backoff of zero hammers a control plane that is already
+    struggling.
+    """
+    assert mq.PAPERCLIP_READ_TIMEOUT >= 45
+    assert mq.PAPERCLIP_READ_BUDGET >= mq.PAPERCLIP_READ_TIMEOUT
+    assert mq.PAPERCLIP_READ_ATTEMPTS == 2
+    assert mq.PAPERCLIP_RETRY_BACKOFF == 3.0
+
+
+def test_a_read_stays_inside_its_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One read costs at most its budget, however slow the API is.
+
+    The budget is the promise that a control plane which does not answer
+    cannot hold the read open for ever. The clock belongs to the test here, so
+    the wall clock of the read is a number and not a hope — and the pause
+    between the attempts is inside the budget, not on top of it.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    clock = {"now": 1_000.0}
+    timeouts: list[float | None] = []
+
+    def _sleep(seconds: float) -> None:
+        clock["now"] += seconds
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        timeouts.append(timeout)
+        clock["now"] += timeout or 0.0
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(mq.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(mq.time, "sleep", _sleep)
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable) as excinfo:
+        reader.ticket("DIG-4795")
+    assert clock["now"] - 1_000.0 <= mq.PAPERCLIP_READ_BUDGET
+    assert all(timeout is not None and timeout > 0 for timeout in timeouts)
+    assert len(timeouts) == 2
+    assert "(after 2 attempts)" in str(excinfo.value)
+
+
+def test_a_spent_budget_names_the_attempts_it_made(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The refusal names the attempts that were made, not the attempts allowed.
+
+    With the budget spent before the second attempt, one request was made. A
+    message that said "2 attempts" would be a claim about the API that the API
+    never saw.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(mq, "PAPERCLIP_READ_BUDGET", 1.0)
+    clock = {"now": 1_000.0}
+    calls: list[float | None] = []
+
+    def _sleep(seconds: float) -> None:
+        clock["now"] += seconds
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        calls.append(timeout)
+        clock["now"] += timeout or 0.0
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(mq.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(mq.time, "sleep", _sleep)
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable) as excinfo:
+        reader.ticket("DIG-4795")
+    assert len(calls) == 1
+    assert "(after 1 attempts)" in str(excinfo.value)
+
+
+def test_a_refusal_from_the_api_is_not_retried(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 403 is the API answering, and its answer does not change when asked again.
+
+    It is also not a transport failure, so the refusal must not wear the
+    transport failure's message. The shadow log counts transport failures, and
+    a refusal about permissions counted as one would hide the real refusals.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(mq.time, "sleep", lambda _seconds: None)
+    calls: list[float | None] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        calls.append(timeout)
+        raise urllib.error.HTTPError(str(request.full_url), 403, "Forbidden", {}, None)
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable) as excinfo:
+        reader.ticket("DIG-4795")
+    message = str(excinfo.value)
+    assert "403" in message
+    assert "attempts" not in message
+    assert len(calls) == 1
+
+
+def test_two_server_errors_name_the_code_and_the_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A server that keeps failing is named in the refusal, with the attempts.
+
+    Without the code in the message the refusal reads as "the budget was
+    spent", which is a different fault with a different fix.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(mq.time, "sleep", lambda _seconds: None)
+    calls: list[float | None] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        calls.append(timeout)
+        raise urllib.error.HTTPError(str(request.full_url), 503, "Unavailable", {}, None)
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable) as excinfo:
+        reader.ticket("DIG-4795")
+    message = str(excinfo.value)
+    assert "503" in message
+    assert "(after 2 attempts)" in message
+    assert len(calls) == 2
+
+
 def test_shadow_mode_merges_and_records_what_it_would_refuse(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

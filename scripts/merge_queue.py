@@ -949,7 +949,16 @@ class Independence:
 #:
 #: The read is a GET, so it is safe to try again: a second attempt asks the
 #: same question, and a question that was not answered is not an answer. The
-#: budget bounds the whole path, so one slow API cannot stall a tick.
+#: budget bounds one read, so a slow answer costs at most that much. It is a
+#: budget per path and not per tick: the gate reads a ticket, a run and a pull
+#: request's runs, so a control plane that does not answer costs that much
+#: again for each of them.
+#:
+#: The four numbers are the fix, and the suite pins them: a timeout below the
+#: slowest answer measured turns a slow API back into a refusal, a budget
+#: below the timeout leaves no room for the second attempt, and a backoff that
+#: hammers a struggling control plane makes the second attempt likelier to
+#: fail than the first.
 PAPERCLIP_READ_TIMEOUT = 45
 PAPERCLIP_READ_BUDGET = 60.0
 PAPERCLIP_READ_ATTEMPTS = 2
@@ -1030,7 +1039,15 @@ class ReviewerProvenance:
         failure: Exception | None = None
         for attempt in range(1, PAPERCLIP_READ_ATTEMPTS + 1):
             if attempt > 1:
-                time.sleep(PAPERCLIP_RETRY_BACKOFF)
+                # The pause is inside the budget, not on top of it: a retry
+                # that starts after the deadline spends the read on a question
+                # that was never going to be asked in time.
+                pause = min(
+                    PAPERCLIP_RETRY_BACKOFF, max(0.0, deadline - time.monotonic())
+                )
+                if pause <= 0:
+                    break
+                time.sleep(pause)
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
