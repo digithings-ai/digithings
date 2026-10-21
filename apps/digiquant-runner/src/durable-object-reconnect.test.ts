@@ -108,9 +108,10 @@ describe("the worker answers 503 when the Durable Object is unreachable", () => 
   });
 
   it("answers 503 with Retry-After when the hop rejects with a Date", async () => {
-    // The @cloudflare/containers package rethrows a non-Error rejection
-    // verbatim, so a thrown Date used to reach the Worker unchanged and the
-    // guard never ran (run-watch DIG-4928).
+    // Defence in depth for the Worker. The Durable Object answers the same
+    // contract when the hop fails inside it (see runner.test.ts), so this
+    // covers the hop that fails outside it: the instance is closed and the
+    // rejection reaches the Worker as it is (run-watch DIG-4928).
     const logged: unknown[][] = [];
     const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
       logged.push(args);
@@ -134,10 +135,14 @@ describe("the worker answers 503 when the Durable Object is unreachable", () => 
       error: DURABLE_OBJECT_UNAVAILABLE,
       detail: "the runner's Durable Object instance was not available; retry later",
     });
-    expect(attempts).toBe(2);
+    // The request is not replayed: a value that came out of the hop says
+    // nothing about whether it reached the container.
+    expect(attempts).toBe(1);
     // The failure is logged with a description, so the log says what happened
     // instead of holding a bare date.
-    expect(logged.map((args) => args.join(" ")).join("\n")).toContain("2026");
+    const line = logged.map((args) => args.join(" ")).join("\n");
+    expect(line).toContain("rejected with a value that is not an Error");
+    expect(line).toContain("2026");
   });
 
   it("answers 503 with Retry-After when the hop rejects with a plain object", async () => {
@@ -161,6 +166,6 @@ describe("the worker answers 503 when the Durable Object is unreachable", () => 
       error: DURABLE_OBJECT_UNAVAILABLE,
       detail: "the runner's Durable Object instance was not available; retry later",
     });
-    expect(attempts).toBe(2);
+    expect(attempts).toBe(1);
   });
 });

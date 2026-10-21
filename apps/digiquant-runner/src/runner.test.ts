@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { DURABLE_OBJECT_UNAVAILABLE } from "@digithings/durable-object-reconnect";
 import worker from "./index";
 import { dataPlaneEnv, type Env, type HouseLedger } from "./env";
 import {
@@ -443,6 +444,45 @@ describe("accept seeds ledger from container (#4761 Kick2)", () => {
     expect(starts).toHaveLength(1);
     expect(reads).toBe(1);
     expect((await session.health()).running).toEqual([starts[0]]);
+  });
+});
+
+describe("the container hop rejects with a value that is not an Error (DIG-4928)", () => {
+  it("answers 503 with Retry-After instead of a 500 with a bare date", async () => {
+    // The @cloudflare/containers package rethrows a non-Error rejection
+    // verbatim, so a thrown Date used to be described with String(err) and
+    // answered as a 500 whose body was the bare date (run-watch DIG-4928). The
+    // instance could not serve the job, so the client is told to come back —
+    // the same contract the Worker gives when the instance itself is gone.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { session } = harness({
+      startRun: async () => {
+        throw new Date("2026-10-21T11:51:44.000Z");
+      },
+    });
+    let res: Response;
+    try {
+      res = await session.fetch(post(job()));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe("30");
+    expect(await res.json()).toEqual({
+      error: DURABLE_OBJECT_UNAVAILABLE,
+      detail: "the runner's Durable Object instance was not available; retry later",
+    });
+  });
+
+  it("keeps the 500 for a real error", async () => {
+    const { session } = harness({
+      startRun: async () => {
+        throw new Error("container /run HTTP 500");
+      },
+    });
+    const res = await session.fetch(post(job()));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "container /run HTTP 500" });
   });
 });
 

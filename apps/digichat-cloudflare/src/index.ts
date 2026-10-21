@@ -60,6 +60,30 @@ function isRealError(value: unknown): boolean {
   }
 }
 
+/**
+ * A description of a thrown value, for the Worker log only.
+ *
+ * `String(value)` is what the platform shows for a value it cannot classify,
+ * but it can throw (a hostile `toString`, a revoked proxy) and a description
+ * that throws inside the catch would turn a caught failure back into an
+ * uncaught one. So the description falls back.
+ *
+ * Only the description is logged, never the value: the cause of a non-Error
+ * stays inside the Worker, the same way the Worker log handles the cause of a
+ * container that could not be reached (see ./container-retry).
+ */
+function describeValue(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    try {
+      return Object.prototype.toString.call(value);
+    } catch {
+      return "[unreadable value]";
+    }
+  }
+}
+
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
   /** Short idle tail: each wake bills for the whole sleepAfter window. */
@@ -135,13 +159,14 @@ export class DigiChatContainer extends Container {
       // is told to come back instead.
       //
       // A real error is rethrown unchanged: it carries a message, a stack and
-      // a type, and the caller has to see it. The cause of a non-Error stays
-      // in the log — the platform records it with String(value), so a thrown
-      // Date would otherwise leave a bare date and nothing else.
+      // a type, and the caller has to see it. A non-Error carries none of
+      // them, so it is described in the log — the platform renders such a
+      // value as it stands, so a thrown Date would leave nothing but a bare
+      // date — and the answer says what happened instead.
       if (isRealError(cause)) throw cause;
       console.error(
-        "[digichat] the container hop rejected with a value that is not an Error:",
-        cause,
+        "digichat: container could not be reached: the container hop rejected with a value that is not an Error:",
+        describeValue(cause),
       );
       return new Response(CONTAINER_UNAVAILABLE_BODY, {
         status: NO_INSTANCE_STATUS,

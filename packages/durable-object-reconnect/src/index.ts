@@ -37,12 +37,18 @@
  * A hop can also reject with a value that is not an Error. The
  * @cloudflare/containers package rethrows such a value verbatim from its
  * proxy catch, so it leaves the Durable Object as an uncaught exception: the
- * platform records it with `String(value)`, so a thrown Date leaves a bare
+ * platform renders the value as it stands, so a thrown Date leaves a bare
  * date in the log, and the value itself carries no type, no stack and no
- * message to classify. It is treated as a retryable failure of the instance —
- * reconnect once, then raise the typed retryable error — so the Worker
- * answers 503 + Retry-After instead of the value escaping (run-watch
- * DIG-4928).
+ * message to classify. It is treated as a retryable failure of the instance
+ * and the typed retryable error is raised at once, so the Worker answers
+ * 503 + Retry-After instead of the value escaping (run-watch DIG-4928).
+ *
+ * That failure is not retried, unlike an eviction. An eviction is safe to
+ * replay: the platform closed the instance before the request was delivered.
+ * A value that came out of the hop says nothing about whether the request
+ * reached the container, so a second attempt could submit it twice. The
+ * client is told to come back instead, which is what a 503 + Retry-After
+ * says.
  *
  * It is dependency-free (no `cloudflare:workers`, no `@cloudflare/containers`)
  * so plain vitest can import it and a Worker can bundle it.
@@ -97,17 +103,23 @@ function describeValue(value: unknown): string {
  * The message of a thrown value.
  *
  * A value that is not an Error and not a string gets a description instead of
- * an empty string: the platform records such a rejection with `String(value)`,
+ * an empty string: the platform renders such a rejection as the value itself,
  * so a thrown Date leaves a bare date in the log, and an empty string would
  * leave nothing at all (run-watch DIG-4928).
  *
  * Only an Error is read for its `message`. A plain object that happens to
  * carry a `message` property is described, not believed, so an object can
  * never talk its way into being a Durable Object eviction.
+ *
+ * The answer is always a string: a caller asks for text to match on, so a
+ * message that is not a string is described like any other value.
  */
 export function errorMessage(error: unknown): string {
   try {
-    if (error instanceof Error) return error.message ?? "";
+    if (error instanceof Error) {
+      const message = error.message;
+      return typeof message === "string" ? message : describeValue(message);
+    }
     if (typeof error === "string") return error;
   } catch {
     // A value that cannot be inspected, or that cannot hand over its message,
@@ -115,6 +127,28 @@ export function errorMessage(error: unknown): string {
     // throws would turn a caught failure back into an uncaught one.
   }
   return describeValue(error);
+}
+
+/**
+ * The failure text of a thrown value, read only from a value that carries one:
+ * the message of an Error, or a string that was thrown as it is.
+ *
+ * This is the text the eviction check reads, and it stays narrow on purpose:
+ * only a value that states its own failure may be read as one. An object that
+ * merely looks like a failure is described by `errorMessage` instead, so it
+ * can never talk its way into being a Durable Object eviction.
+ */
+function failureText(error: unknown): string {
+  try {
+    if (error instanceof Error) {
+      const message = error.message;
+      return typeof message === "string" ? message : "";
+    }
+    if (typeof error === "string") return error;
+  } catch {
+    // A value that cannot be inspected states no failure.
+  }
+  return "";
 }
 
 /**
@@ -131,7 +165,7 @@ export function errorMessage(error: unknown): string {
  * own error instead of being retried and then reported as unavailable.
  */
 export function isDurableObjectGone(error: unknown): boolean {
-  const text = errorMessage(error).toLowerCase();
+  const text = failureText(error).toLowerCase();
   if (!text) return false;
   if (!text.includes("durable object")) return false;
   return (
@@ -164,6 +198,9 @@ export function isNonErrorRejection(error: unknown): boolean {
  * `makeRequest` builds the request for each attempt: a request that carries a
  * body can only be consumed once, so the body is re-created instead of replayed
  * from a spent stream.
+ *
+ * A rejection that is not an Error is not retried at all: it is reported as a
+ * retryable failure of the instance straight away.
  */
 export async function fetchDurableObject(
   connect: () => DurableObjectFetcher,
@@ -186,12 +223,17 @@ export async function fetchDurableObject(
         // description, so the failure is triageable instead of a bare value in
         // the log, and it is treated as a retryable failure of the instance:
         // the Worker answers 503 + Retry-After instead of the value escaping.
+        //
+        // The request is not replayed. An eviction is safe to replay because
+        // the platform closed the instance before the request was delivered; a
+        // value that came out of the hop says nothing about that, so a second
+        // attempt could submit the same request twice.
         console.error(
           "[durable-object-reconnect] the Durable Object hop rejected with a value that is not an Error:",
           errorMessage(error),
         );
         lastError = error;
-        continue;
+        break;
       }
       // A real error that does not name a Durable Object keeps its own error:
       // retrying it and then reporting it as an unavailable instance would

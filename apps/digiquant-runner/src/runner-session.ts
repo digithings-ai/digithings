@@ -4,6 +4,11 @@
  * can drive them without starting a Container.
  */
 import commandsJson from "../commands.json";
+import {
+  durableObjectUnavailableResponse,
+  errorMessage,
+  isNonErrorRejection,
+} from "@digithings/durable-object-reconnect";
 import { assertKnownCommand, loadCommands, type CommandSpec } from "./commands";
 import type { HouseLedger } from "./env";
 
@@ -21,6 +26,16 @@ export const WATCHDOG_GRACE_SECONDS = 120;
 export const LOST_CONFIRMATIONS = 2;
 /** RunRecord.error value for a run the runner container can no longer see. */
 export const RUN_LOST_ERROR = "house_run_lost";
+
+/**
+ * The wording a client sees when the runner's Durable Object instance could
+ * not be reached.
+ *
+ * The Worker owns this text, and the Durable Object answers with the same
+ * words, so a client sees one contract whichever side saw the failure.
+ */
+export const RUNNER_UNAVAILABLE_DETAIL =
+  "the runner's Durable Object instance was not available; retry later";
 
 /**
  * Raised by ContainerPort.readStatus when the container answers 404 for a run
@@ -238,6 +253,20 @@ export class RunnerSession {
         const body = await this.accept(job);
         return Response.json(body, { status: 202 });
       } catch (err) {
+        if (isNonErrorRejection(err)) {
+          // The hop to the container rejected with a value that is not an
+          // Error: the @cloudflare/containers package rethrows such a value
+          // verbatim, so it used to be described with String(err) and answered
+          // as a 500 whose body was a bare date (run-watch DIG-4928). The
+          // instance could not serve the job, so the client is told to come
+          // back — the same contract the Worker gives when the instance
+          // itself is gone.
+          console.error(
+            "digiquant-runner: the container hop rejected with a value that is not an Error:",
+            errorMessage(err),
+          );
+          return durableObjectUnavailableResponse(RUNNER_UNAVAILABLE_DETAIL);
+        }
         const message = err instanceof Error ? err.message : String(err);
         return Response.json({ error: message }, { status: 500 });
       }

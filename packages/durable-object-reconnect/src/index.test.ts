@@ -56,6 +56,22 @@ describe("isDurableObjectGone", () => {
     expect(isDurableObjectGone({ message: PLATFORM_GONE })).toBe(false);
   });
 
+  it("does not claim a value that only looks like a failure", () => {
+    // The eviction text is read from an Error or from a string, never from a
+    // value that merely renders as one: an object must never talk its way
+    // into being an eviction of the instance.
+    expect(isDurableObjectGone({ toString: () => PLATFORM_GONE })).toBe(false);
+    expect(isDurableObjectGone(["Durable Object reset"])).toBe(false);
+  });
+
+  it("does not throw on an error whose message is not a string", () => {
+    // The text is matched on, so it has to be a string. A message that is not
+    // one must not turn the check into a TypeError, which would replace the
+    // real failure with a guard failure.
+    const odd = Object.assign(new Error("boom"), { message: 42 });
+    expect(isDurableObjectGone(odd)).toBe(false);
+  });
+
   it("reads the message of a thrown value", () => {
     expect(errorMessage("plain text")).toBe("plain text");
     expect(errorMessage(goneError())).toBe(PLATFORM_GONE);
@@ -67,7 +83,7 @@ describe("isDurableObjectGone", () => {
 
 describe("errorMessage", () => {
   it("describes a value that is not an Error and not a string", () => {
-    // The platform records such a rejection with String(value), so this is
+    // The platform renders such a rejection as the value itself, so this is
     // what an operator reads in the log. An empty string would leave nothing
     // at all (run-watch DIG-4928).
     expect(errorMessage(new Date("2026-10-21T11:51:44.000Z"))).toBe(
@@ -78,12 +94,36 @@ describe("errorMessage", () => {
     expect(errorMessage({})).toBe("[object Object]");
   });
 
+  it("keeps the whole text of a thrown string", () => {
+    // The platform's message is 98 characters long and the eviction check
+    // matches on its tail, so a shortened description would stop the
+    // reconnect from happening.
+    expect(errorMessage(PLATFORM_GONE)).toBe(PLATFORM_GONE);
+  });
+
+  it("describes a message that is not a string", () => {
+    // The answer is always a string: the callers match on it.
+    expect(errorMessage(Object.assign(new Error("boom"), { message: 42 }))).toBe("42");
+  });
+
   it("describes a value that refuses to be read as text", () => {
     const { proxy, revoke } = Proxy.revocable({}, {});
     revoke();
     // A description that throws would turn a caught failure back into an
     // uncaught one, so the description itself must never throw.
     expect(errorMessage(proxy)).toBe("[unreadable value]");
+  });
+
+  it("describes a value whose toString throws", () => {
+    // The description falls back to the plain tag, so a hostile toString
+    // still leaves a readable text.
+    expect(
+      errorMessage({
+        toString() {
+          throw new Error("boom");
+        },
+      }),
+    ).toBe("[object Object]");
   });
 });
 
@@ -97,6 +137,14 @@ describe("isNonErrorRejection", () => {
 
   it("does not claim a real error", () => {
     expect(isNonErrorRejection(new Error("boom"))).toBe(false);
+  });
+
+  it("claims a value that cannot be inspected", () => {
+    // `instanceof` throws on a revoked proxy, and a guard that throws would
+    // replace the failure with a TypeError.
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    expect(isNonErrorRejection(proxy)).toBe(true);
   });
 });
 
@@ -338,7 +386,10 @@ describe("fetchDurableObject when the hop rejects with a value that is not an Er
     expect((caught as DurableObjectUnavailableError).lastError).toBe(value);
   });
 
-  it("reconnects once before it gives up", async () => {
+  it("does not replay the request", async () => {
+    // A value that came out of the hop says nothing about whether the request
+    // reached the container, so a second attempt could submit it twice. The
+    // client is told to come back instead.
     let attempts = 0;
     await expect(
       fetchDurableObject(
@@ -351,22 +402,48 @@ describe("fetchDurableObject when the hop rejects with a value that is not an Er
         () => jobRequest(),
       ),
     ).rejects.toBeInstanceOf(DurableObjectUnavailableError);
-    expect(attempts).toBe(2);
+    expect(attempts).toBe(1);
   });
 
-  it("serves the request when the reconnect recovers", async () => {
+  it("raises a retryable error when the rejection is a value that cannot be inspected", async () => {
+    // `instanceof` throws on a revoked proxy. A guard that threw there would
+    // replace the failure with a TypeError, which is the uncaught exception
+    // this change exists to stop.
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    let caught: unknown;
+    try {
+      await fetchDurableObject(
+        () => ({
+          fetch: async () => {
+            throw proxy;
+          },
+        }),
+        () => jobRequest(),
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DurableObjectUnavailableError);
+    expect((caught as DurableObjectUnavailableError).lastError).toBe(proxy);
+  });
+
+  it("takes the eviction path for a thrown string that names a Durable Object", async () => {
+    // The order of the two checks is the contract: a string that states the
+    // instance is gone is an eviction, so it is reconnected, not reported as
+    // an unreadable value.
     let attempts = 0;
-    const res = await fetchDurableObject(
-      () => ({
-        fetch: async () => {
-          attempts += 1;
-          if (attempts === 1) throw new Date("2026-10-21T11:51:44.000Z");
-          return new Response("ok");
-        },
-      }),
-      () => jobRequest(),
-    );
-    expect(res.status).toBe(200);
+    await expect(
+      fetchDurableObject(
+        () => ({
+          fetch: async () => {
+            attempts += 1;
+            throw "Durable Object is gone.";
+          },
+        }),
+        () => jobRequest(),
+      ),
+    ).rejects.toBeInstanceOf(DurableObjectUnavailableError);
     expect(attempts).toBe(2);
   });
 
@@ -390,26 +467,12 @@ describe("fetchDurableObject when the hop rejects with a value that is not an Er
     } finally {
       spy.mockRestore();
     }
-    expect(logged.length).toBeGreaterThan(0);
-    expect(logged.map((args) => args.join(" ")).join("\n")).toContain(String(date));
-  });
-
-  it("does not mask a real error that happens on the reconnect", async () => {
-    const boom = new Error("boom on the reconnect");
-    let attempts = 0;
-    await expect(
-      fetchDurableObject(
-        () => ({
-          fetch: async () => {
-            attempts += 1;
-            if (attempts === 1) throw new Date("2026-10-21T11:51:44.000Z");
-            throw boom;
-          },
-        }),
-        () => jobRequest(),
-      ),
-    ).rejects.toBe(boom);
-    expect(attempts).toBe(2);
+    // One line: the failure is not replayed, so it is not reported twice.
+    expect(logged).toHaveLength(1);
+    const line = logged.map((args) => args.join(" ")).join("\n");
+    // The line says what happened, so the log is not a bare date.
+    expect(line).toContain("rejected with a value that is not an Error");
+    expect(line).toContain(String(date));
   });
 });
 
