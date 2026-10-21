@@ -163,3 +163,29 @@ def test_publish_image_packages_the_digichat_inputs_before_it_builds() -> None:
     build = body.index("docker build")
     assert pack < build, "the inputs must be packaged before the build"
     assert "--npm-only" in body, "only the npm inputs are packaged for this image"
+
+
+def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
+    """The rehearsal has to fail where the CI lane fails.
+
+    A rehearsal that passes where the CI probe fails is worse than no
+    rehearsal: it reports the lane green while the lane is red. The CI probe
+    boots the image bare and reads the /api/health status instead of demanding
+    a 200 - a standalone container has no ecosystem services to reach, so 503
+    is the expected answer - so the local probe has to do the same.
+    """
+    body = read("publish_image.sh")
+    assert 'docker run --detach --rm --publish 127.0.0.1::3000 "$NAME"' in body, (
+        "the digichat probe must boot the image bare, the way the CI probe does"
+    )
+    assert "-e DIGICHAT_ENABLED_SERVICES=" not in body, (
+        "an environment flag in the probe proves a configuration the release "
+        "never runs, and hides the ecosystem degradation the CI probe reports"
+    )
+    assert '--fail "$base/api/health"' not in body, (
+        "a bare container answers /api/health with 503; --fail turns the "
+        "expected degradation into a red rehearsal"
+    )
+    assert '[ "$reported" = "$VERSION" ]' in body, (
+        "the version the image serves is still the contract"
+    )
