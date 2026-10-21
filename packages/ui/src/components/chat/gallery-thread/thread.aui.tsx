@@ -25,6 +25,7 @@ import {
   resolveWorkDisclosure,
   type WorkVisibility,
 } from "../stock/skin-types";
+import { BackendNotice } from "../stock/chat-notice";
 import { ToolFallback } from "../stock/tool-fallback.aui";
 import {
   ToolGroupContent,
@@ -1191,7 +1192,9 @@ const AssistantMessage: FC = () => {
                   const kind = messageParts[index]?.type;
                   return kind === "reasoning" || kind === "tool-call";
                 });
-                if (!holdsWork) return null;
+                // The parts still render bare: a backend notice (DIG-4459)
+                // rides a data part and must not vanish with the header.
+                if (!holdsWork) return <>{children}</>;
                 // Quiet clients see one line for the whole chain instead of
                 // the two collapsibles.
                 if (disclosure.summaryOnly) {
@@ -1293,7 +1296,9 @@ const AssistantMessage: FC = () => {
                 if (toolCallsMode === "off") return null;
                 return part.toolUI ?? <ToolFallbackComponent {...part} />;
               case "data":
-                return part.dataRendererUI;
+                // DIG-4459: a backend notice (data-notice, or a data-status
+                // with a message) shows as a boxed status/error line.
+                return part.dataRendererUI ?? <BackendNotice part={part} />;
               case "file":
                 return (
                   <div data-slot="aui_assistant-message-file" className="py-1">

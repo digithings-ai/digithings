@@ -37,7 +37,7 @@ describe("one loading affordance per turn", () => {
     // A status part is not work: the chain header must not appear while the
     // only thing in the group is the connection state.
     expect(thread).toMatch(/const holdsWork = part\.indices\.some/);
-    expect(thread).toMatch(/if \(!holdsWork\) return null;/);
+    expect(thread).toMatch(/if \(!holdsWork\) return <>\{children\}<\/>;/);
   });
 
   it("keeps the phase copy for the pre-response phase", () => {

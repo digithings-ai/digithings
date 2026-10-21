@@ -65,11 +65,14 @@ describe("one loading row", () => {
     expect(lab).not.toMatch(/text-sm/);
   });
 
-  it("brings the error row onto the same row anatomy", () => {
+  it("puts the error row in the shared boxed notice (DIG-4459)", () => {
     const error = read("gallery-thread/message-error.aui.tsx");
-    expect(error).toMatch(/className="aui-message-error-root[^"]*text-xs leading-none/);
-    expect(error).toMatch(/className="!size-3 shrink-0/);
-    expect(error).not.toMatch(/text-sm/);
-    expect(error).not.toMatch(/px-4 py-3/);
+    // ErrorPrimitive.Root carries the notice box; the marker is the shared
+    // 12px one from ChatNoticeContent.
+    expect(error).toMatch(/<ErrorPrimitive\.Root[\s\S]{0,80}chatNoticeRootProps\("error", "aui-message-error-root/);
+    expect(error).toContain("<ChatNoticeContent");
+    const notice = read("stock/chat-notice.tsx");
+    expect(notice).toMatch(/aui-chat-notice-marker !size-3/);
+    expect(notice).not.toMatch(/text-sm/);
   });
 });

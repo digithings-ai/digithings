@@ -634,7 +634,10 @@
 .digichat-thread [data-slot="tool-fallback-dump"],
 .digichat-launcher [data-slot="tool-fallback-dump"] {
   margin: 0;
-  max-height: 8.5rem;
+  /* DIG-4459: JSON views size themselves (a long block caps at 18rem with
+     its own scroll and a "Show all" toggle); only the legacy dump keeps the
+     short cap. */
+  max-height: none;
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -856,4 +859,14 @@ html.light:has([data-thread-skin="digichat"]) {
 /* Portaled tooltips follow the chat's mono stack instead of the page body font. */
 html:has([data-thread-skin="digichat"]) [data-slot="tooltip-content"] {
   font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.digichat-thread [data-slot="tool-fallback-dump"],
+.digichat-launcher [data-slot="tool-fallback-dump"] {
+  max-height: 8.5rem;
+}
+
+.digichat-thread .aui-json-view[data-long="true"][data-expanded="false"],
+.digichat-launcher .aui-json-view[data-long="true"][data-expanded="false"] {
+  max-height: 18rem;
 }

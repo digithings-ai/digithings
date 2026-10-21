@@ -9,6 +9,7 @@ import { MarkdownText } from "../../stock/markdown-text";
 import { DotMatrix } from "./ui/dot-matrix";
 import { useDigichatWarmupPhase } from "../../use-warmup-phase";
 import { MessageTiming } from "./elements/message-timing.aui";
+import { BackendNotice } from "../../stock/chat-notice";
 import { ToolFallback } from "../../stock/tool-fallback.aui";
 import { MessageError } from "../../stock/message-error.aui";
 
@@ -723,7 +724,9 @@ const AssistantMessage: FC = () => {
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "data":
-                return part.dataRendererUI;
+                // DIG-4459: a backend notice (data-notice, or a data-status
+                // with a message) shows as a boxed status/error line.
+                return part.dataRendererUI ?? <BackendNotice part={part} />;
               default:
                 return null;
             }
