@@ -351,3 +351,42 @@ keywords = [
 ]
 regex = '''(?i)\b(?:x[-_ ]?api[-_ ]?key|api[-_ ]?key|apikey|authorization|auth[-_ ]?token|access[-_ ]?token|bearer|client[-_ ]?secret|api[-_ ]?secret|webhook[-_ ]?secret|private[-_ ]?token|session[-_ ]?key)\b[^\n]{0,16}?["']?\s*[:=]\s*(?:["']?\s*)(?:bearer\s+|basic\s+|token\s+)?["']?([A-Za-z0-9_\-+/=.~]{20,}:[A-Za-z0-9_\-+/=.~]{20,})'''
 secretGroup = 1
+
+# ---------------------------------------------------------------------------
+# DIG-4809 (2026-10-21, Repo/CI) — the GitHub App installation token shape.
+#
+# The CI seats mint one installation token per run and it travels as
+# `ghs_<appid>_<jwt>`. gitleaks 8.30.1 was measured against that shape:
+#
+#   shape                                     default ruleset
+#   ghs_<appid>_<body> alone on a line       NOT caught (generic-api-key needs a label)
+#   ghs_<appid>_<body> inside a git URL      NOT caught
+#   GITHUB_TOKEN=ghs_<appid>_<body>          caught (generic-api-key, by the label)
+#   {"token": "ghs_<appid>_<body>"}          caught (generic-api-key, by the label)
+#   ghs_<36 base62 chars> (the classic       caught (github-app-token)
+#     installation token)
+#
+# The two shapes that carry no label — the bare value and the value inside a
+# URL — are structurally invisible to the default ruleset. This rule covers
+# exactly that region: `ghs_`, a numeric app id, an underscore, then the token
+# body in the base64url alphabet a JWT uses (alphanumerics, `-`, `_`, and the
+# `.` that separates the JWT segments).
+#
+# The documented placeholder `ghs_<appid>_<jwt>` cannot match: the app id
+# segment is not numeric and the body starts with `<`, which is not in the
+# body class. The classic `ghs_<36 chars>` token does not match either — it
+# has no underscore after the app id — so the default `github-app-token` rule
+# keeps that shape and this rule adds the other one.
+#
+# Regression test: tests/scripts/test_gitleaks_github_app_token_rule.py
+# (pytest -m unit). It pins the rule to the measured shapes, so a later edit
+# that widens it past the placeholder fails the test.
+#
+# No credential value is recorded in this file or in the test: the fixtures
+# are generated.
+
+[[rules]]
+id = "github-app-installation-token"
+description = "A GitHub App installation token (ghs_<appid>_<jwt>) committed to the repository (DIG-4809)"
+regex = '''ghs_[0-9]+_[A-Za-z0-9_\-\.]{20,}'''
+keywords = ["ghs_"]
