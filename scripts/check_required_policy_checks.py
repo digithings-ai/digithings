@@ -33,8 +33,42 @@ list disagree:
     nowhere. It runs, it goes red, and merges continue. Four of these exist
     right now (gitleaks, PR hygiene, PR title, and, on main,
     review coverage); they are declared in the inventory so they are visible in
-    one place instead of inferred from 53 workflow files. (DCO sign-off was a
+    one place instead of inferred from 66 workflow files. (DCO sign-off was a
     fifth until Chris dropped it entirely on 2026-10-15, DIG-3845.)
+  * **untracked producer** — ``tracked_workflows`` is a hand-maintained
+    allowlist, and an allowlist with no completeness check is not an inventory.
+    Adding ``security-scc.yml`` carrying a real gate leaves this guard green,
+    because it only ever looked at the eight files it was told about. So every
+    ``*.yml`` under ``.github/workflows/`` is parsed, and a workflow that
+    produces a live or declared context while sitting outside the allowlist is
+    a finding. Before this rule, such a context drew
+    ``policy.undeclared-gate`` and the stall analysis never ran on it — the
+    right verdict from the wrong evidence.
+  * **unreachable declared check** — reachability used to be checked only for
+    contexts in the *live required* set, so a workflow-level ``paths-ignore``
+    added to a tracked workflow whose checks are all ``advisory`` was a false
+    green: nothing waits on those names yet, so the guard never asked whether
+    they can report. It now asks for every declared non-``other-branch`` entry,
+    which is what makes promoting one (DIG-1952 child B) safe to plan.
+  * **unowned escape hatch** — ``advisory`` used to require a free-text
+    ``reason`` and nothing else, and nothing ever checked the reason was still
+    true. An entry that was right when written is now indistinguishable from one
+    that is right today, forever. Every non-``required`` entry therefore names
+    an ``owner``, and every ``advisory`` entry must also be dated
+    (``review_by:``), tracked (``issue:``), or gated by a context that is
+    genuinely in the gate (``gated_by:``).
+
+The stall rule itself was also incomplete. ``read_workflow_facts`` read the
+``pull_request`` trigger, ``paths``/``paths-ignore`` and ``branches``, and never
+read ``types`` or ``branches-ignore``. For ``pull_request``, ``GITHUB_SHA`` is the
+last merge commit on the PR merge branch, and a required context has to report
+against that commit for the PR to ever leave "Waiting for status to be
+reported": ``opened`` covers the first report, ``synchronize`` every later push,
+``reopened`` a re-open, so all three or the context is not safe to require. A
+workflow on ``types: [opened]`` therefore reports once and never again: fix the
+title, push, and the PR waits on "Waiting for status to be reported" forever
+while this guard called the workflow reachable. Both are parsed now, and the
+rule is spelled out in ``WorkflowFacts.reports_on_develop_pr``.
 
 WHY A DECLARED INVENTORY AND NOT A NAME PATTERN
 DIG-1952 proposed matching job names against a required-check list. Job names
@@ -67,9 +101,11 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -84,12 +120,32 @@ CONTEXTS_PATH = REPO_ROOT / ".github" / "required-contexts.txt"
 #: this script EXECUTES it and diffs what it would apply against the snapshot.
 WRITER_SCRIPT = REPO_ROOT / "scripts" / "set-branch-protection.sh"
 
-#: The ci.yml aggregator's check name. Its ``needs`` reconciliation is the
+#: The check name. Its ``needs`` reconciliation is the
 #: pre-existing in-file check; this script only asserts the name is accounted
 #: for, and does not duplicate it.
 AGGREGATOR_CONTEXT = "Required checks passed"
 
 ENFORCEMENTS = frozenset({"required", "advisory", "other-branch"})
+
+#: Activity types GitHub uses for ``pull_request`` when the workflow declares no
+#: ``types:`` list. Declared here because the reachability rule is about the
+#: *declared* list, and an absent list means "GitHub's default", not "nothing".
+DEFAULT_PR_TYPES = ("opened", "synchronize", "reopened")
+
+#: The activity types a required status check must survive. For ``pull_request``,
+#: ``GITHUB_SHA`` is the last merge commit on the PR merge branch, so a required
+#: context has to report against that commit for the PR to ever leave "Waiting for
+#: status to be reported": ``opened`` covers the first report, ``synchronize``
+#: every later push, ``reopened`` a re-open. All three or the context is not safe
+#: to require. A workflow whose declared ``types:`` filter misses any of them
+#: reports for the opening push and never again: the PR waits on "Waiting for
+#: status to be reported" forever, with no failing check to explain why.
+#: ``DEFAULT_PR_TYPES`` above is that set, and the rule checks that the declared
+#: filter covers all of it.
+
+#: Suffixes GitHub reads as workflow definitions. ``.yaml`` is rare here but the
+#: completeness scan must not be narrower than the directory.
+WORKFLOW_SUFFIXES = (".yml", ".yaml")
 
 
 class GuardError(RuntimeError):
@@ -105,10 +161,31 @@ class PolicyCheck:
     job: str
     enforcement: str
     reason: str
+    #: Who answers for this entry. Required on every non-``required`` entry,
+    #: because "deliberately not a gate" with no name on it is how an escape
+    #: hatch outlives the decision that justified it.
+    owner: str | None = None
+    #: When this decision must be looked at again (YYYY-MM-DD).
+    review_by: str | None = None
+    #: The issue that tracks closing the gap (DIG-NNNN).
+    issue: str | None = None
+    #: A context that is ``required`` in this inventory *and* present in the live
+    #: gate. Says "this still blocks a merge, just not directly", which is a
+    #: fact the guard checks rather than a claim it takes on trust.
+    gated_by: str | None = None
+    #: An accepted, written-down reachability gap for an entry that is not a
+    #: gate. Suppresses the reachability finding *only* while the entry is not
+    #: in the live required set: promote it and the gap becomes a stall.
+    known_gap: str | None = None
 
     @property
     def is_required(self) -> bool:
         return self.enforcement == "required"
+
+    @property
+    def needs_review_date(self) -> bool:
+        """Is this entry dated, tracked, or gated — i.e. is someone on the hook?"""
+        return bool(self.review_by or self.issue or self.gated_by)
 
 
 @dataclass
@@ -124,6 +201,17 @@ class WorkflowFacts:
     #: A *skipped workflow* reports nothing; a skipped *job* reports Success.
     path_filter: str | None = None
     branch_filter: list[str] | None = None
+    #: ``pull_request.branches-ignore``, which removes the workflow from the
+    #: stated branches rather than restricting it to them.
+    branch_ignore: list[str] | None = None
+    #: True when ``pull_request.branches-ignore`` is declared but unreadable.
+    #: A filter nobody could read is a filter nobody can rule out, so the
+    #: rule fails closed rather than treating it as absent.
+    branch_ignore_unreadable: bool = False
+    #: ``pull_request.types``. ``None`` means the key is absent, which GitHub
+    #: reads as DEFAULT_PR_TYPES, so an absent key is reachable. A declared
+    #: list missing any of ``DEFAULT_PR_TYPES`` is not.
+    pr_types: list[str] | None = None
 
     def reports_on_develop_pr(self, branch: str) -> tuple[bool, str]:
         """Can this workflow be relied on to report for every PR into ``branch``?"""
@@ -144,7 +232,41 @@ class WorkflowFacts:
                 f"({self.branch_filter}) does not include `{branch}`, so this check "
                 f"never reports on a PR into `{branch}`"
             )
+        if self.branch_ignore_unreadable:
+            return False, (
+                "the workflow-level `pull_request:` branches-ignore filter is "
+                "declared but unreadable, so it cannot be shown that it excludes "
+                f"nothing: this check may never report on a PR into `{branch}`. "
+                "Make it a list of patterns, or drop it"
+            )
+        if self.branch_ignore is not None and _branch_matches(branch, self.branch_ignore):
+            return False, (
+                f"the workflow-level `pull_request:` branches-ignore filter "
+                f"({self.branch_ignore}) excludes `{branch}`, so this check never "
+                f"reports on a PR into `{branch}`"
+            )
+        if self.pr_types is not None and not set(DEFAULT_PR_TYPES) <= set(self.pr_types):
+            missing = [t for t in DEFAULT_PR_TYPES if t not in self.pr_types]
+            return False, (
+                f"the workflow-level `pull_request:` types filter "
+                f"({self.pr_types or 'empty or unreadable'}) is missing "
+                f"{', '.join('`' + t + '`' for t in missing)}. For `pull_request`, "
+                "`GITHUB_SHA` is the last merge commit on the PR merge branch, and a "
+                "required context has to report against that commit for the PR to "
+                "ever leave the merge queue: `opened` covers the first report, "
+                "`synchronize` every later push, `reopened` a re-open, so all three "
+                "or the context is not safe to require. Without them this workflow "
+                "reports for the opening push and never again, so the PR waits on "
+                '"Waiting for status to be reported" forever, with no failing check '
+                "to explain why. Add the missing types, or drop the filter so "
+                f"GitHub applies its default ({', '.join(DEFAULT_PR_TYPES)})"
+            )
         return True, ""
+
+
+def _branch_matches(branch: str, patterns: list[str]) -> bool:
+    """Is ``branch`` caught by a ``branches-ignore`` pattern list?"""
+    return any(branch == str(p) or fnmatch.fnmatch(branch, str(p)) for p in patterns)
 
 
 @dataclass(frozen=True)
@@ -195,15 +317,76 @@ def read_workflow_facts(path: Path, branch: str) -> WorkflowFacts:
         return facts
     facts.pr_triggered = True
     pr = on.get("pull_request")
-    if isinstance(pr, dict):
-        for key, label in (("paths", "paths"), ("paths-ignore", "paths-ignore")):
-            if key in pr:
-                facts.path_filter = (label, pr[key])
-                break
-        branches = pr.get("branches")
-        if isinstance(branches, list):
-            facts.branch_filter = [str(b) for b in branches]
+    if not isinstance(pr, dict):
+        return facts
+    for key, label in (("paths", "paths"), ("paths-ignore", "paths-ignore")):
+        if key in pr:
+            facts.path_filter = (label, pr[key])
+            break
+    branches = pr.get("branches")
+    if isinstance(branches, list):
+        facts.branch_filter = [str(b) for b in branches]
+    if "branches-ignore" in pr:
+        ignored = pr["branches-ignore"]
+        if isinstance(ignored, list):
+            facts.branch_ignore = [str(b) for b in ignored]
+        else:
+            # A filter nobody could read is a filter nobody can rule out, so it
+            # fails closed the same way an unreadable `types:` value does.
+            facts.branch_ignore_unreadable = True
+    # A declared `types:` list is the whole reachability story, because for
+    # `pull_request` `GITHUB_SHA` is the last merge commit on the PR merge branch
+    # and a required context has to report against that commit for the PR to ever
+    # leave "Waiting for status to be reported": `opened` covers the first report,
+    # `synchronize` every later push, `reopened` a re-open, so all three or the
+    # context is not safe to require. An absent key is GitHub's default, which is
+    # all three. A present-but-unreadable value becomes the empty list so the rule
+    # fails closed rather than passing on a value nobody could read.
+    if "types" in pr:
+        types = pr["types"]
+        facts.pr_types = [str(t) for t in types] if isinstance(types, list) else []
     return facts
+
+
+def scan_untracked_workflows(
+    tracked: list[str],
+    branch: str,
+    workflows_dir: Path | None = None,
+) -> tuple[dict[str, WorkflowFacts], list[Finding]]:
+    """Parse every workflow file that ``tracked_workflows`` does not name.
+
+    ``tracked_workflows`` is an allowlist, and an allowlist nobody checks for
+    completeness is not an inventory: a brand-new workflow carrying a real gate is
+    invisible to this guard by construction. So the directory is scanned too, and
+    the caller treats an untracked producer of a live or declared context as a
+    finding.
+
+    An untracked file that will not parse is reported, not raised. Raising would
+    let any workflow file on ``develop`` — most of which are not policy surfaces —
+    take the guard down with an unreadable error instead of a diagnosis.
+    """
+    root = workflows_dir or WORKFLOWS_DIR
+    known = set(tracked)
+    facts: dict[str, WorkflowFacts] = {}
+    findings: list[Finding] = []
+    for path in sorted(root.glob("*")):
+        if not path.is_file() or path.suffix not in WORKFLOW_SUFFIXES:
+            continue
+        if path.name in known:
+            continue
+        try:
+            facts[path.name] = read_workflow_facts(path, branch)
+        except GuardError as exc:
+            findings.append(
+                Finding(
+                    "policy.unreadable-workflow",
+                    path.name,
+                    f"is not tracked and could not be parsed, so any check it produces "
+                    f"cannot be reconciled against the inventory: {exc}. If it is a "
+                    "policy surface, add it to tracked_workflows",
+                )
+            )
+    return facts, findings
 
 
 def load_inventory(path: Path = INVENTORY_PATH) -> tuple[list[PolicyCheck], list[str]]:
@@ -251,6 +434,22 @@ def load_inventory(path: Path = INVENTORY_PATH) -> tuple[list[PolicyCheck], list
         reason = str(entry.get("reason") or "").strip()
         if not reason:
             raise GuardError(f"{where} ({context}): every entry needs a 'reason'")
+        # Ownership. `advisory` is an escape hatch that stays open forever unless
+        # someone is on the hook for it: a free-text reason that was true when
+        # written is indistinguishable from one that is true now. `owner:` is
+        # mandatory off the gate, and an advisory entry must additionally be
+        # dated, tracked, or provably gated behind a context that really is in the
+        # gate — three ways of naming whoever revisits it.
+        owner = str(entry.get("owner") or "").strip()
+        if enforcement != "required" and not owner:
+            raise GuardError(
+                f"{where} ({context}): every non-required entry needs an 'owner'. An "
+                "advisory entry with no owner is an escape hatch nobody is on the hook "
+                "for, so the reason it was written stays true forever or stops being "
+                "true, and nothing notices"
+            )
+        if enforcement == "required" and entry.get("owner") is not None and not owner:
+            raise GuardError(f"{where} ({context}): 'owner' must be a non-empty string")
         checks.append(
             PolicyCheck(
                 context=context,
@@ -258,9 +457,37 @@ def load_inventory(path: Path = INVENTORY_PATH) -> tuple[list[PolicyCheck], list
                 job=str(entry["job"]),
                 enforcement=enforcement,
                 reason=" ".join(reason.split()),
+                owner=owner or None,
+                review_by=_checked_review_by(entry.get("review_by"), where, context),
+                issue=_clean_optional(entry.get("issue")),
+                gated_by=_clean_optional(entry.get("gated_by")),
+                known_gap=_clean_optional(entry.get("known_gap")),
             )
         )
+    checks_by_context = {check.context: check for check in checks}
+    for check in checks:
+        where = f"{path}: {check.context}"
+        if check.enforcement != "advisory":
+            continue
+        if not check.needs_review_date:
+            raise GuardError(
+                f"{where}: an advisory entry must also carry one of 'review_by' "
+                "(a date to revisit it), 'issue' (DIG-NNNN tracking the gap), or "
+                "'gated_by' (a context that is really in the gate). Without one, "
+                "nothing ever re-reads the reason"
+            )
+        if check.gated_by and check.gated_by not in checks_by_context:
+            raise GuardError(
+                f"{where}: gated_by {check.gated_by!r} is not declared in this "
+                "inventory, so it names no check and gates nothing"
+            )
     return checks, [str(name) for name in tracked]
+
+
+def _clean_optional(value: Any) -> str | None:
+    """Normalise an optional scalar metadata field to a stripped string."""
+    text = str(value or "").strip()
+    return " ".join(text.split()) or None
 
 
 def read_contexts_file(path: Path = CONTEXTS_PATH) -> list[str]:
@@ -394,31 +621,58 @@ def reconcile(
     facts_by_workflow: dict[str, WorkflowFacts],
     required_contexts: list[str],
     branch: str,
+    untracked_facts: dict[str, WorkflowFacts] | None = None,
+    workflows_dir: Path | None = None,
 ) -> list[Finding]:
     """The three-way reconciliation. Returns every disagreement found."""
     findings: list[Finding] = []
     by_context = {check.context: check for check in inventory}
     live = list(required_contexts)
+    root = workflows_dir or WORKFLOWS_DIR
+    # Untracked workflows are parsed so that producer resolution can name the file
+    # that actually reports a context. They are deliberately *not* candidates for
+    # `policy.ungated`: an untracked workflow is by definition not yet declared to
+    # be a policy surface, and reporting all 58 of them would bury the real
+    # finding under noise nobody would read.
+    untracked_facts = untracked_facts or {}
 
-    def produce(context: str) -> tuple[WorkflowFacts, str] | None:
+    def produce(context: str) -> tuple[WorkflowFacts, str, bool] | None:
+        """(facts, job id, is_tracked) for whoever reports ``context``."""
         for name in tracked:
             facts = facts_by_workflow.get(name)
             if facts and context in facts.named_jobs:
-                return facts, facts.named_jobs[context]
+                return facts, facts.named_jobs[context], True
+        for name in sorted(untracked_facts):
+            facts = untracked_facts[name]
+            if context in facts.named_jobs:
+                return facts, facts.named_jobs[context], False
         return None
 
     # ── 1. inventory vs the workflows ─────────────────────────────────────────
     for check in inventory:
         facts = facts_by_workflow.get(check.workflow)
         if facts is None:
-            findings.append(
-                Finding(
-                    "policy.unknown-workflow",
-                    check.context,
-                    f"names workflow {check.workflow!r}, which is not a readable tracked "
-                    "workflow file",
+            if (root / check.workflow).is_file():
+                findings.append(
+                    Finding(
+                        "policy.untracked-producer",
+                        check.context,
+                        f"names workflow {check.workflow!r}, which exists but is not "
+                        "in tracked_workflows. The allowlist has no completeness "
+                        "check, so an untracked file is out of scope: nothing checks "
+                        "that its named jobs are declared or that it can report. Add "
+                        "it to tracked_workflows",
+                    )
                 )
-            )
+            else:
+                findings.append(
+                    Finding(
+                        "policy.unknown-workflow",
+                        check.context,
+                        f"names workflow {check.workflow!r}, which is not a readable "
+                        "tracked workflow file",
+                    )
+                )
             continue
         job_id = facts.named_jobs.get(check.context)
         if job_id is None:
@@ -484,6 +738,19 @@ def reconcile(
                     "failure blocks nothing",
                 )
             )
+        # `gated_by:` is only honest if the named context really is in the gate.
+        # Checking it here, against the same live set as everything else, is what
+        # stops it from becoming a fresh escape hatch with extra steps.
+        if check.gated_by and check.gated_by not in live:
+            findings.append(
+                Finding(
+                    "policy.bad-gated-by",
+                    check.context,
+                    f"claims gated_by {check.gated_by!r}, but that context is not in "
+                    f"{branch}'s required status-check contexts. Nothing waits on it, "
+                    "so this entry blocks no merge",
+                )
+            )
 
     for context in live:
         if context in declared_contexts:
@@ -504,11 +771,29 @@ def reconcile(
     # is what catches `gitleaks-scan` being added to branch protection while its
     # workflow still carries a workflow-level paths-ignore — the guard has to be
     # able to fail on a gate nobody declared, not only on declared gates.
+    #
+    # `produce` now also resolves untracked producers, so this loop runs on the
+    # workflow that really reports the context. It used to skip undeclared gates
+    # entirely, which is how a gate nobody declared drew the right verdict from
+    # no evidence at all: `policy.undeclared-gate` fired and the stall question
+    # was never asked.
     for context in live:
         produced = produce(context)
         if produced is None:
             continue  # already reported as policy.undeclared-gate
-        facts, _job_id = produced
+        facts, _job_id, is_tracked = produced
+        if not is_tracked:
+            findings.append(
+                Finding(
+                    "policy.untracked-producer",
+                    context,
+                    f"is required on {branch} but is produced by {facts.path}, which "
+                    "is not in tracked_workflows. An untracked producer is out of "
+                    "scope for the allowlist check, so its jobs are never reconciled "
+                    "against the inventory: they can be renamed, dropped, or made "
+                    "unreachable and nothing here would say so. Track the file",
+                )
+            )
         ok, why = facts.reports_on_develop_pr(branch)
         if not ok:
             findings.append(
@@ -517,6 +802,36 @@ def reconcile(
                     context,
                     f"is required on {branch} but {facts.path} cannot be relied on to "
                     f"report for every PR into {branch}: {why}",
+                )
+            )
+
+    # ── 4. declared entries nobody gates yet must still be reachable ───────────
+    # Reachability used to be checked only for the live required set, so a
+    # workflow-level `paths-ignore` on a tracked workflow whose checks are all
+    # advisory was a false green: nothing waits on those names, so the guard never
+    # asked whether they can report — and the day one is promoted (DIG-1952 child
+    # B) every PR it does not cover hangs. `other-branch` is excluded because its
+    # whole purpose is to gate a branch this guard is not looking at.
+    for check in inventory:
+        if check.enforcement == "other-branch" or check.context in live:
+            continue  # live contexts are covered above; no double-reporting
+        facts = facts_by_workflow.get(check.workflow)
+        if facts is None:
+            continue  # already reported
+        if check.known_gap:
+            continue
+        ok, why = facts.reports_on_develop_pr(branch)
+        if not ok:
+            findings.append(
+                Finding(
+                    "policy.stall",
+                    check.context,
+                    f"is declared `{check.enforcement}` and gates nothing today, but "
+                    f"{facts.path} cannot be relied on to report for every PR into "
+                    f"{branch}: {why}. This is the hole DIG-1952 child B would walk "
+                    "into when it promotes this entry. Fix the filter, or record a "
+                    "`known_gap:` on the entry saying the gap is accepted — which "
+                    "stops applying the moment the entry reaches the live gate",
                 )
             )
 
@@ -534,19 +849,75 @@ def reconcile(
     return findings
 
 
-def report(findings: list[Finding], inventory: list[PolicyCheck], live: list[str]) -> str:
+def _checked_review_by(value: Any, where: str, context: str) -> str | None:
+    """Normalise ``review_by:`` and fail closed on a malformed horizon.
+
+    A horizon nobody can parse is a horizon that never fires, which reads
+    exactly like "not yet due" forever. Reject it at load instead.
+    """
+    text = _clean_optional(value)
+    if text is None:
+        return None
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        raise GuardError(
+            f"{where} ({context}): 'review_by' must be a YYYY-MM-DD date, got {text!r}"
+        ) from None
+    return text
+
+
+def stale_advisories(inventory: list[PolicyCheck], today: date | None = None) -> list[Finding]:
+    """Advisory entries whose ``review_by`` horizon has passed.
+
+    Staged rollout (DIG-2237 C-1): this is a warning, not a finding.
+    ``reconcile()`` never emits it, so a stale horizon cannot turn the guard
+    red — the exit-1 promotion lands separately, after one clean cycle.
+    """
+    now = today or datetime.now(timezone.utc).date()
+    stale: list[Finding] = []
+    for check in inventory:
+        if check.enforcement != "advisory" or not check.review_by:
+            continue
+        if check.review_by < now.isoformat():
+            stale.append(
+                Finding(
+                    "policy.stale-advisory",
+                    check.context,
+                    f"review_by {check.review_by} has passed: re-read the reason "
+                    "above and either close the gap, renew the horizon, or "
+                    "promote the check",
+                )
+            )
+    return stale
+
+
+def report(
+    findings: list[Finding],
+    inventory: list[PolicyCheck],
+    live: list[str],
+    today: date | None = None,
+) -> str:
     """Human-readable summary: what is gated, what is not, and what broke."""
     lines: list[str] = []
     gated = [c.context for c in inventory if c.is_required]
     ungated = [
-        (c.context, c.enforcement) for c in inventory if not c.is_required and c.context not in live
+        (c.context, c.enforcement, c.owner or "UNOWNED", c.issue or c.review_by or c.gated_by)
+        for c in inventory
+        if not c.is_required and c.context not in live
     ]
     lines.append(
         f"policy inventory: {len(inventory)} declared check(s), "
         f"{len(gated)} required, {len(ungated)} ungated by decision"
     )
-    for context, enforcement in ungated:
-        lines.append(f"  ungated ({enforcement}): {context}")
+    for context, enforcement, owner, follow_up in ungated:
+        hook = f" [{follow_up}]" if follow_up else ""
+        lines.append(f"  ungated ({enforcement}, owner {owner}{hook}): {context}")
+    stale = stale_advisories(inventory, today)
+    if stale:
+        lines.append("")
+        lines.append(f"{len(stale)} stale advisory review horizon(s) (warning only):")
+        lines.extend(f"  ::warning::{finding}" for finding in stale)
     if findings:
         lines.append("")
         lines.append(f"{len(findings)} policy-gate disagreement(s):")
@@ -591,11 +962,17 @@ def main(argv: list[str] | None = None) -> int:
             for name in tracked
             if (WORKFLOWS_DIR / name).is_file()
         }
+        # Completeness: `tracked_workflows` is an allowlist, so parse the rest of
+        # the directory too. Without this the allowlist is the guard's whole view
+        # of the repository and a new workflow carrying a gate is invisible.
+        untracked_facts, untracked_findings = scan_untracked_workflows(tracked, args.branch)
     except GuardError as exc:
         print(f"check_required_policy_checks: {exc}", file=sys.stderr)
         return 2
 
-    findings = reconcile(inventory, tracked, facts_by_workflow, contexts, args.branch)
+    findings = untracked_findings + reconcile(
+        inventory, tracked, facts_by_workflow, contexts, args.branch, untracked_facts
+    )
     # The writer check always reads the snapshot, even under --live: the coupling
     # is a property of the two committed files, not of the API.
     try:

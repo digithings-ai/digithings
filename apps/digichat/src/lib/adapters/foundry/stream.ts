@@ -228,7 +228,9 @@ type FoundryServerEvent =
   | { type: "text-delta"; delta: string }
   | { type: "activity"; span: ActivitySpan }
   | { type: "done"; usage?: FoundryUsage; model?: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  /** The model deployment's per-minute token/request limit ended the turn mid-stream. */
+  | { type: "rate-limit"; message: string };
 
 /** Provider-reported token counts, in the shape the client expects. */
 export type FoundryUsage = {
@@ -258,13 +260,19 @@ export function extractToolInvocationFailure(
   return { toolName, errorText: sanitizeUpstreamMessage(detail) };
 }
 
-/** An upstream message, capped and stripped of anything that looks like a URL. */
-function sanitizeUpstreamMessage(message: string): string {
+/**
+ * An upstream message, stripped of anything that looks like a URL. Line
+ * breaks survive (a validation list or a traceback reads line by line) and
+ * the cap is generous: the chat shows the whole thing, folded when long
+ * (DIG-4459). The cap only stops a runaway payload.
+ */
+export function sanitizeUpstreamMessage(message: string): string {
   return message
     .replace(/https?:\/\/\S+/gi, "[link]")
-    .replace(/\s+/g, " ")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
     .trim()
-    .slice(0, 400);
+    .slice(0, 8000);
 }
 
 function numberOf(value: unknown): number | undefined {
@@ -604,6 +612,21 @@ function callIdOf(item: { call_id?: string }): string | undefined {
   return typeof item.call_id === "string" && item.call_id.trim() ? item.call_id.trim() : undefined;
 }
 
+/** The MCP server's error, as text the chat can show. */
+function mcpErrorText(error: unknown): string | undefined {
+  if (typeof error === "string") return error.trim() ? sanitizeUpstreamMessage(error) : undefined;
+  if (error && typeof error === "object") {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return sanitizeUpstreamMessage(message);
+    try {
+      return sanitizeUpstreamMessage(JSON.stringify(error, null, 2));
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Per-turn mapping state. Foundry emits a call's output as its own item, and
  * the message item carrying citation annotations is the turn's LAST event — a
@@ -668,7 +691,14 @@ function mapOutputItemDone(
   if (item?.type === "mcp_call") {
     const name = mcpToolName(item);
     const args = parseJsonObject(item.arguments);
-    const output = parseMcpResult(item.output);
+    // A failed MCP call carries the server's complaint on `error` (string or
+    // object) and usually no output. Pass it through as the tool's result so
+    // the failed row shows the MCP's own words under the arguments
+    // (DIG-4459), instead of the bare "Tool failed.".
+    const mcpError = mcpErrorText((item as { error?: unknown }).error);
+    const output =
+      parseMcpResult(item.output) ??
+      (item.status === "failed" && mcpError ? { error: mcpError } : undefined);
     const callId = callIdOf(item);
     return {
       type: "activity",
@@ -858,8 +888,19 @@ export function mapFoundryEvent(
         ? { type: "done", usage: reported.usage, model: reported.model }
         : { type: "done" };
     }
-    case "response.error":
-      return { type: "error", message: String((event as { message?: unknown }).message ?? "Unknown error") };
+    case "response.error": {
+      const message = String((event as { message?: unknown }).message ?? "Unknown error");
+      return isRateLimitFailure(event) ? { type: "rate-limit", message } : { type: "error", message };
+    }
+    // A throttled model call after the response has started (after tool calls,
+    // typically) does not throw at `responses.create`: Foundry fails the
+    // response in-stream. Only the rate-limit case is mapped here; any other
+    // `response.failed` / `error` keeps its previous handling.
+    case "response.failed":
+    case "error": {
+      if (!isRateLimitFailure(event)) return null;
+      return { type: "rate-limit", message: upstreamErrorMessage(event) ?? "rate limit exceeded" };
+    }
     default:
       return null;
   }
@@ -925,6 +966,103 @@ export function capacityRetryDelayMs(
   return retryAfterMs(err) ?? schedule[attempt];
 }
 
+/**
+ * Mid-stream rate-limit resume schedule (DC-18). A turn that fails in-stream
+ * has already spent the minute's token budget (a big tool result re-sent on
+ * every model step), so short waits only fail again: wait about a window.
+ */
+const DEFAULT_RATE_LIMIT_RESUME_DELAYS_MS = [30_000, 60_000, 60_000];
+const RATE_LIMIT_WAIT_CAP_MS = 90_000;
+const RATE_LIMIT_COUNTDOWN_STEP_MS = 5_000;
+
+const RATE_LIMIT_CODES = new Set(["rate_limit_exceeded", "too_many_requests", "429"]);
+const HARD_QUOTA_CODES = new Set(["insufficient_quota", "billing_hard_limit_reached"]);
+const RATE_LIMIT_TEXT = /exceeded (?:the )?(?:token )?rate limit|rate limit (?:is |has been )?(?:exceeded|reached)|too many requests/i;
+
+/** The upstream error object, wherever this payload keeps it. */
+function upstreamErrorObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null) return null;
+  const v = value as Record<string, unknown>;
+  const response = v.response as Record<string, unknown> | undefined;
+  for (const candidate of [response?.error, v.error]) {
+    if (typeof candidate === "object" && candidate !== null) return candidate as Record<string, unknown>;
+  }
+  return v;
+}
+
+function upstreamErrorMessage(value: unknown): string | undefined {
+  const obj = upstreamErrorObject(value);
+  const message = obj?.message ?? (value as { message?: unknown } | null)?.message;
+  return typeof message === "string" && message.length > 0 ? message : undefined;
+}
+
+function upstreamErrorCode(value: unknown): string | undefined {
+  const obj = upstreamErrorObject(value);
+  const code = obj?.code ?? (value as { code?: unknown } | null)?.code;
+  return typeof code === "string" || typeof code === "number" ? String(code) : undefined;
+}
+
+/**
+ * True for the model deployment's per-minute limit, however it arrives: a 429
+ * from `responses.create`, an SDK `APIError` thrown while iterating the stream
+ * (no HTTP status, `code: "rate_limit_exceeded"`), or a `response.failed` /
+ * `error` event carrying the same code. A hard quota or billing stop is not a
+ * rate limit: waiting will not clear it.
+ */
+export function isRateLimitFailure(value: unknown): boolean {
+  if (value instanceof FoundryRateLimitError) return true;
+  const code = upstreamErrorCode(value);
+  if (code && HARD_QUOTA_CODES.has(code)) return false;
+  if (code && RATE_LIMIT_CODES.has(code)) return true;
+  if (httpStatusOf(value) === 429) return true;
+  const message = upstreamErrorMessage(value);
+  return !!message && RATE_LIMIT_TEXT.test(message);
+}
+
+/**
+ * The wait the upstream asked for: Retry-After / retry-after-ms headers first,
+ * then the "try again in N seconds" / "retry after N seconds" text Azure puts
+ * in the message. Null when the upstream named none.
+ */
+export function rateLimitHintMs(value: unknown): number | null {
+  const fromHeaders = retryAfterMs(value);
+  if (fromHeaders !== null) return fromHeaders;
+  const message = upstreamErrorMessage(value) ?? (value instanceof Error ? value.message : undefined);
+  if (!message) return null;
+  const match = /(?:try again|retry)\s+(?:in|after)\s+(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|secs?|seconds?)\b/i.exec(message);
+  if (!match) return null;
+  const n = Number(match[1]);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return /^m/i.test(match[2]) ? n : n * 1000;
+}
+
+/**
+ * Delay before resuming a turn that hit the rate limit mid-stream, or null when
+ * the schedule is spent. An upstream hint wins (plus a 1s margin, capped);
+ * otherwise the schedule, which already approximates a reset window.
+ */
+export function rateLimitResumeDelayMs(
+  value: unknown,
+  attempt: number,
+  schedule: readonly number[],
+): number | null {
+  if (!isRateLimitFailure(value)) return null;
+  if (attempt >= schedule.length) return null;
+  const hint = rateLimitHintMs(value);
+  return hint !== null ? Math.min(hint + 1_000, RATE_LIMIT_WAIT_CAP_MS) : schedule[attempt];
+}
+
+/** An in-stream rate-limit failure, carried out of the event loop. */
+class FoundryRateLimitError extends Error {
+  readonly code = "rate_limit_exceeded";
+}
+
+/** Shown when the retries are spent; replaces the generic outage line. */
+export const RATE_LIMIT_EXHAUSTED_TEXT =
+  "The model's per-minute token limit was reached and did not clear after several retries. " +
+  "Your question and any results gathered so far are saved in this conversation: " +
+  "wait a minute, then send \"continue\" to pick up where it stopped.";
+
 function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   return new Promise((resolve) => {
@@ -944,6 +1082,37 @@ function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/**
+ * Waits out a rate limit with a visible countdown on the same connection part
+ * the create-time capacity retry uses, so both skins render it. Each write
+ * replaces the previous one (same id), and the last write clears it.
+ */
+async function waitOutRateLimit(
+  writer: { write(part: unknown): void },
+  delayMs: number,
+  attempt: number,
+  maxAttempts: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  const until = Date.now() + delayMs;
+  for (;;) {
+    const remaining = until - Date.now();
+    if (remaining <= 0 || signal?.aborted) break;
+    writer.write({
+      type: "data-connection",
+      id: "foundry-capacity",
+      data: {
+        state: "warming_up",
+        message:
+          `Hit the model's per-minute token limit — resuming in ${Math.max(1, Math.ceil(remaining / 1000))}s` +
+          (maxAttempts > 1 ? ` (retry ${attempt} of ${maxAttempts})` : ""),
+      },
+    });
+    await abortableSleep(Math.min(remaining, RATE_LIMIT_COUNTDOWN_STEP_MS), signal);
+  }
+  writer.write({ type: "data-connection", id: "foundry-capacity", data: { state: "ready" } });
+}
+
 export async function createFoundryStreamResponse(opts: {
   projectEndpoint: string;
   agentName: string;
@@ -961,6 +1130,12 @@ export async function createFoundryStreamResponse(opts: {
    * do not spend the real backoff.
    */
   capacityRetryDelaysMs?: readonly number[];
+  /**
+   * Waits before resuming a turn whose response failed mid-stream on the
+   * deployment's rate limit (DC-18). One entry per resume; overridable so
+   * tests do not spend the real minute.
+   */
+  rateLimitResumeDelaysMs?: readonly number[];
 }): Promise<Response> {
   const turnMode: DigiTurnMode = opts.turnMode ?? "send";
   const openai = (opts.openAIClientFactory ?? defaultOpenAIClientFactory)(opts.projectEndpoint);
@@ -1071,11 +1246,13 @@ export async function createFoundryStreamResponse(opts: {
           createParams.input = createdConversation ? applyGroundingDirective(message) : message;
         }
 
-        const responseStream = await (async () => {
+        const createWithCapacityRetry = async (
+          params: { conversation: string; input?: string; stream: true },
+        ) => {
           const schedule = opts.capacityRetryDelaysMs ?? DEFAULT_CAPACITY_RETRY_DELAYS_MS;
           for (let attempt = 0; ; attempt += 1) {
             try {
-              const created = await openai.responses.create(createParams, {
+              const created = await openai.responses.create(params, {
                 signal: opts.signal,
                 // Our schedule owns the retries; the SDK's own retries would
                 // multiply them (up to 21 POSTs for one turn).
@@ -1122,49 +1299,93 @@ export async function createFoundryStreamResponse(opts: {
               if (opts.signal?.aborted) throw err;
             }
           }
-        })();
+        };
 
         const textFilter = new FoundryToolLeakFilter();
         const mapState: FoundryMapState = { sawSearchOutput: false };
-        for await (const event of responseStream) {
-          const mapped = mapFoundryEvent(event, mapState);
-          if (!mapped) continue;
-          if (mapped.type === "text-delta") {
-            const delta = textFilter.push(mapped.delta);
-            if (!delta) continue;
-            openText();
-            writer.write({ type: "text-delta", id: textId, delta });
-          } else if (mapped.type === "activity") {
-            // Foundry's own event carries unbounded upstream strings (a query
-            // list, citation titles/urls); the digigraph and relay providers
-            // cap theirs before writing (see chatActivitySpan) but this path
-            // built the span literal directly and never did. Route it through
-            // the same allowlist/cap the client applies on receipt, so an
-            // oversized or over-long upstream payload never reaches the wire
-            // in the first place.
-            const sanitized = sanitizeActivitySpan(mapped.span);
-            const span = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
-            if (span) {
-              writeStandardActivity(writer, span, activityCtx);
+        const resumeSchedule = opts.rateLimitResumeDelaysMs ?? DEFAULT_RATE_LIMIT_RESUME_DELAYS_MS;
+        let params = createParams;
+        let wroteText = false;
+        let resumeSeparatorPending = false;
+        for (let resume = 0; ; resume += 1) {
+          const responseStream = await createWithCapacityRetry(params);
+          try {
+            for await (const event of responseStream) {
+              const mapped = mapFoundryEvent(event, mapState);
+              if (!mapped) continue;
+              if (mapped.type === "text-delta") {
+                const pushed = textFilter.push(mapped.delta);
+                if (!pushed) continue;
+                // A resumed turn continues below what was already shown.
+                const delta = resumeSeparatorPending ? `\n\n${pushed}` : pushed;
+                resumeSeparatorPending = false;
+                wroteText = true;
+                openText();
+                writer.write({ type: "text-delta", id: textId, delta });
+              } else if (mapped.type === "activity") {
+                // Foundry's own event carries unbounded upstream strings (a query
+                // list, citation titles/urls); the digigraph and relay providers
+                // cap theirs before writing (see chatActivitySpan) but this path
+                // built the span literal directly and never did. Route it through
+                // the same allowlist/cap the client applies on receipt, so an
+                // oversized or over-long upstream payload never reaches the wire
+                // in the first place.
+                const sanitized = sanitizeActivitySpan(mapped.span);
+                const span = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
+                if (span) {
+                  writeStandardActivity(writer, span, activityCtx);
+                }
+              } else if (mapped.type === "rate-limit") {
+                throw new FoundryRateLimitError(mapped.message);
+              } else if (mapped.type === "error") {
+                throw new FoundryProtocolError(mapped.message);
+              } else if (mapped.type === "done") {
+                if (mapped.usage) {
+                  // Real provider-reported token usage (the Responses API counts
+                  // them on `response.completed`). The client folds it into
+                  // `metadata.custom.usage`, which is what the context meter
+                  // reads; nothing is fabricated when the API sends no counts.
+                  writer.write({
+                    type: "message-metadata",
+                    messageMetadata: {
+                      usage: mapped.usage,
+                      ...(mapped.model ? { model: mapped.model } : {}),
+                    },
+                  });
+                }
+                break;
+              }
             }
-          } else if (mapped.type === "error") {
-            throw new FoundryProtocolError(mapped.message);
-          } else if (mapped.type === "done") {
-            if (mapped.usage) {
-              // Real provider-reported token usage (the Responses API counts
-              // them on `response.completed`). The client folds it into
-              // `metadata.custom.usage`, which is what the context meter
-              // reads; nothing is fabricated when the API sends no counts.
-              writer.write({
-                type: "message-metadata",
-                messageMetadata: {
-                  usage: mapped.usage,
-                  ...(mapped.model ? { model: mapped.model } : {}),
-                },
-              });
+          } catch (err) {
+            if (opts.signal?.aborted) throw err;
+            if (!isRateLimitFailure(err)) throw err;
+            const delay = rateLimitResumeDelayMs(err, resume, resumeSchedule);
+            if (delay === null) {
+              writer.write({ type: "data-connection", id: "foundry-capacity", data: { state: "ready" } });
+              throw err;
             }
-            break;
+            console.warn(
+              `[foundry] rate limit mid-stream; resuming in ${Math.round(delay / 1000)}s (attempt ${resume + 1}/${resumeSchedule.length})`,
+            );
+            await waitOutRateLimit(writer, delay, resume + 1, resumeSchedule.length, opts.signal);
+            if (opts.signal?.aborted) throw err;
+            // Keep any held leak-prefix text from the failed attempt.
+            const held = textFilter.flush();
+            if (held) {
+              openText();
+              writer.write({ type: "text-delta", id: textId, delta: held });
+              wroteText = true;
+            }
+            resumeSeparatorPending = wroteText;
+            // Foundry keeps the failed response's items (the user message and
+            // every completed tool call) in the conversation, so a create with
+            // no new input continues the same turn from those tool results,
+            // the same shape regenerate uses. Re-sending the input would
+            // duplicate the user message.
+            params = { conversation: conversationId, stream: true };
+            continue;
           }
+          break;
         }
         // The loop above only ever resolves a held leak-prefix by flushing it
         // ahead of a LATER delta (see FoundryToolLeakFilter.push) — a stream
@@ -1178,10 +1399,15 @@ export async function createFoundryStreamResponse(opts: {
         }
       } catch (err) {
         if (opts.signal?.aborted) return;
-        failure = extractToolInvocationFailure(
-          err instanceof Error ? err.message : String(err),
-        );
-        if (failure) {
+        failure = isRateLimitFailure(err)
+          ? null
+          : extractToolInvocationFailure(err instanceof Error ? err.message : String(err));
+        if (isRateLimitFailure(err)) {
+          // The deployment's per-minute limit, still in force after the
+          // retries: say so plainly instead of the generic outage line.
+          console.warn("[foundry] rate limit retries exhausted");
+          writer.write({ type: "error", errorText: RATE_LIMIT_EXHAUSTED_TEXT });
+        } else if (failure) {
           // A tool refused the call: say which tool and why, instead of the
           // generic outage line that hides it.
           writer.write({

@@ -634,7 +634,9 @@
 .digichat-thread [data-slot="tool-fallback-dump"],
 .digichat-launcher [data-slot="tool-fallback-dump"] {
   margin: 0;
-  max-height: 8.5rem;
+  /* DIG-4459: JSON views and error details sit in an 18rem scroll area (no
+     expand button); only the legacy dump keeps the short cap. */
+  max-height: none;
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -856,4 +858,33 @@ html.light:has([data-thread-skin="digichat"]) {
 /* Portaled tooltips follow the chat's mono stack instead of the page body font. */
 html:has([data-thread-skin="digichat"]) [data-slot="tooltip-content"] {
   font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.digichat-thread [data-slot="tool-fallback-dump"],
+.digichat-launcher [data-slot="tool-fallback-dump"] {
+  max-height: 8.5rem;
+}
+
+.digichat-thread .aui-json-view,
+.digichat-launcher .aui-json-view,
+.digichat-thread .aui-chat-notice-detail,
+.digichat-launcher .aui-chat-notice-detail {
+  overflow: auto;
+  max-height: 18rem;
+}
+
+/* Chat notices (DIG-4459), faded red (Chris, 21 Oct): danger pulled 28%
+   toward the muted ink, a 5% wash and a 24% hairline; the title mixes 20%
+   ink so it stays WCAG AA on the wash in dark and light. */
+.digichat-thread .aui-chat-notice[data-tone="error"],
+.digichat-launcher .aui-chat-notice[data-tone="error"] {
+  --notice-danger: color-mix(in srgb, var(--danger) 72%, var(--ink-mute));
+  border: 1px solid color-mix(in srgb, var(--notice-danger) 24%, transparent);
+  background: color-mix(in srgb, var(--notice-danger) 5%, transparent);
+  color: var(--ink-soft);
+}
+
+.digichat-thread .aui-chat-notice[data-tone="error"] .aui-chat-notice-title,
+.digichat-launcher .aui-chat-notice[data-tone="error"] .aui-chat-notice-title {
+  color: color-mix(in srgb, var(--notice-danger) 80%, var(--ink));
 }

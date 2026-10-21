@@ -8,7 +8,7 @@
     "url": "git+https://github.com/digithings-ai/digithings.git",
     "directory": "apps/digichat"
   },
-  "version": "2.6.2",
+  "version": "2.6.4",
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",

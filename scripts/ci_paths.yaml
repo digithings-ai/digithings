@@ -151,6 +151,17 @@ web:
   - apps/digithings-cron/**
   - apps/digiquant-runner/**
   - infra/docker/Dockerfile.digiquant-runner
+  # twelvex-runner is the private container behind digithings-cron kind: twelvex
+  # (the twelve-x ingest and session heartbeat). Its Vitest suite was dark: no
+  # lane ran it, so the container hop had no coverage at all (run-watch
+  # DIG-4753). The Dockerfile is a test input, not a build input here: the app's
+  # image-pin test re-reads it, so an edit to it must redden this lane too.
+  - apps/twelvex-runner/**
+  - infra/docker/Dockerfile.twelvex-runner
+  # The shared reconnect module the container Workers use (digiquant-runner and
+  # twelvex-runner). Its own suite and typecheck live in that package, so an
+  # edit there must redden this lane.
+  - packages/durable-object-reconnect/**
   # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
   # session.css + cursor.css, so a change there is a change to this app.
   # apps/digithings-web/lib/openapiCatalog.ts imports @digithings/catalog's

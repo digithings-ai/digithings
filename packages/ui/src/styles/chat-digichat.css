@@ -1162,10 +1162,9 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root {
   align-items: flex-start;
   gap: 0.45rem;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--ink-mute);
+  /* DIG-4459: boxed and red-tinted like other chat products; the shared
+     .aui-chat-notice rules below carry the box. */
+  color: var(--ink-soft);
   font-family: var(--font-mono);
   font-size: 0.7rem;
   line-height: 1.35;
@@ -1690,10 +1689,15 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   font-size: 0.68rem;
   line-height: 1.45;
   color: var(--ink-soft);
-  max-height: 8.5rem;
+  /* DIG-4459: arguments are never cut; long ones scroll inside an 18rem
+     area (no expand button). */
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"] {
+  max-height: 8.5rem;
 }
 
 /* Increment 7 — markdown / code. Hairline frames, no card wash. */
@@ -2285,3 +2289,66 @@ html:has(.aui-theme-stage) :focus-visible {
 [data-stock-product]:not([data-boot-reveal="true"]) .aui-composer-root {
   opacity: 0;
 }
+
+/* ── Chat notices (DIG-4459) ──────────────────────────────────────────────
+   One box for what the backend says outside the answer: the failed turn
+   (ErrorPrimitive.Root), a failed tool call (under its arguments) and a
+   status line. Error is red-tinted, status neutral; both mono like the
+   trace. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="error"] {
+  /* Faded red (Chris, 21 Oct): the danger hue pulled 28% toward the muted
+     ink (HSL saturation 0.76 → 0.49), a 5% wash and a 24% hairline. The
+     same rules serve dark and light: the vars switch per theme. */
+  --notice-danger: color-mix(in srgb, var(--danger) 72%, var(--ink-mute));
+  border: 1px solid color-mix(in srgb, var(--notice-danger) 24%, transparent);
+  background: color-mix(in srgb, var(--notice-danger) 5%, transparent);
+  color: var(--ink-soft);
+}
+
+/* Title: the faded red nudged toward the ink so it clears WCAG AA on the
+   wash in both themes (dark ≈ 5.9:1, light ≈ 4.7:1). */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="error"] .aui-chat-notice-title {
+  color: color-mix(in srgb, var(--notice-danger) 80%, var(--ink));
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="status"] {
+  border: 1px solid var(--hair);
+  background: color-mix(in oklab, var(--ink-mute) 6%, transparent);
+  color: var(--ink-mute);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice-detail {
+  color: var(--ink-soft);
+  font-size: 0.66rem;
+}
+
+/* Inside the tool box the notice is the last section: it keeps its tint but
+   sits flush with the frame instead of floating inside it. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-error"].aui-chat-notice {
+  flex-direction: row;
+  border-width: 1px 0 0 0;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-view,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice-detail {
+  overflow: auto;
+  overscroll-behavior: contain;
+  max-height: 18rem;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-key { color: color-mix(in oklab, var(--ink) 80%, #6aa9ff); }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-string { color: color-mix(in oklab, var(--ink-soft) 70%, #5fbf8a); }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-number { color: color-mix(in oklab, var(--ink-soft) 70%, #e0a84f); }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-literal { color: color-mix(in oklab, var(--ink-soft) 70%, #b48ef0); }
