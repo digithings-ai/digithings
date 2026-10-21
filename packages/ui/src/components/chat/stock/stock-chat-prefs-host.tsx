@@ -156,6 +156,7 @@ export function useStockChatPrefs({
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const draftSink = useRef<(text: string) => void>(() => {});
+  const [composerDraftBound, setComposerDraftBound] = useState(false);
   const syncPalette = useCallback(
     (next: {
       kind: "closed" | "commands" | "pane";
@@ -172,6 +173,7 @@ export function useStockChatPrefs({
   );
   const bindComposerDraft = useCallback((setText: (text: string) => void) => {
     draftSink.current = setText;
+    setComposerDraftBound(true);
   }, []);
   const setComposerDraft = useCallback((text: string) => {
     draftSink.current(text);
@@ -355,6 +357,7 @@ export function useStockChatPrefs({
       paletteQuery,
       setComposerDraft,
       bindComposerDraft,
+      composerDraftBound,
       syncPalette,
     }),
     [
@@ -388,6 +391,7 @@ export function useStockChatPrefs({
       paletteQuery,
       setComposerDraft,
       bindComposerDraft,
+      composerDraftBound,
       syncPalette,
     ],
   );

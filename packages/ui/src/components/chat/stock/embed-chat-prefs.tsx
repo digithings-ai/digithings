@@ -223,6 +223,12 @@ export type EmbedChatPrefsApi = {
   paletteQuery?: string;
   /** Composer writer used by menu rows. The skin binds it to `setText`. */
   setComposerDraft?: (text: string) => void;
+  /**
+   * True only after a skin called `bindComposerDraft`. The writer exists on
+   * every host, and until a skin binds it the sink is a no-op, so the menu
+   * must close and change pages itself.
+   */
+  composerDraftBound?: boolean;
   bindComposerDraft?: (setText: (text: string) => void) => void;
   /** One palette frame. `keep` leaves a button-opened menu alone. */
   syncPalette?: (next: {

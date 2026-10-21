@@ -62,6 +62,7 @@ function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     undo: vi.fn(),
     redo: vi.fn(),
     setComposerDraft: vi.fn(),
+    composerDraftBound: true,
     ...over,
   };
 }

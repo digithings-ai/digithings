@@ -456,7 +456,7 @@ export function EmbedComposerMenu({
   const commitExclusive = useCallback(
     (apply: () => void) => {
       apply();
-      if (api.setComposerDraft) queueMicrotask(() => api.setComposerDraft?.(""));
+      if (api.composerDraftBound) queueMicrotask(() => api.setComposerDraft?.(""));
       else onClose();
     },
     [api, onClose],
@@ -494,12 +494,12 @@ export function EmbedComposerMenu({
           ...(draft ? { insert: draft } : {}),
           activate: node
             ? () => {
-                if (api.setComposerDraft && draft) api.setComposerDraft(draft);
+                if (api.composerDraftBound && draft) api.setComposerDraft?.(draft);
                 else setView(node);
               }
             : () => {
                 command.execute();
-                if (api.setComposerDraft) api.setComposerDraft("");
+                if (api.composerDraftBound) api.setComposerDraft?.("");
                 onClose();
               },
         };
@@ -1134,16 +1134,16 @@ export function EmbedComposerMenu({
     }
     const parent = MENU_PARENT[view];
     if (!parent) {
-      if (api.setComposerDraft && kind === "settings") {
-        api.setComposerDraft("/settings");
+      if (api.composerDraftBound && kind === "settings") {
+        api.setComposerDraft?.("/settings");
         return;
       }
       onClose();
       return;
     }
     const back = PANE_BACK_TOKEN[view];
-    if (parent === "main" && api.setComposerDraft && back) {
-      api.setComposerDraft(back);
+    if (parent === "main" && api.composerDraftBound && back) {
+      api.setComposerDraft?.(back);
       return;
     }
     if (view === "mcp-edit") {

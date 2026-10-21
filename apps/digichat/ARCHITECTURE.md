@@ -1090,8 +1090,8 @@ enforces the directive its own way:
 **Embed slash commands (#3418 / #3511 / #3556 / #3733 / #3736).** `@digithings/digichat-ui` `slash-commands.ts`
 owns the public palette. The first-party `digichat` Thread mounts assistant-ui
 `ComposerTriggerPopover` + `unstable_useSlashCommandAdapter` whenever session prefs
-are present (embed, modal popup, and full-app). Full-app `/` also keeps
-`ToolCatalogBar`. The palette is a **flat** composer-width list (command left,
+are present (embed, modal popup, and full-app). The product host does not
+mount tool chips. The palette is a **flat** composer-width list (command left,
 description right). No Tools / Session / Actions / Setup folders and no per-row
 Lucide icons. `/help` is a no-op placeholder — the list itself is the help; it
 must not dump into the composer.
@@ -1902,8 +1902,7 @@ embed stays grounded without a client-controlled prompt surface. YAML that omits
 `occ-embed.yaml`) keep `chrome.skin: digichat` with the digisearch / digivault
 catalog (web_search is not on the digithings.ai catalog: the license has
 no hosted-web-search scope; embed/popup session defaults the remaining tools ON). YAML `hosts` resolve for `/embed` first paint
-(first-party / token rules unchanged). `ProductStockShell` mounts
-`ToolCatalogBar` only for `chrome.mode: app`. Embed / modal / sidebar use
+(first-party / token rules unchanged). `ProductStockShell` does not mount a tool-catalog bar. Embed / modal / sidebar use
 assistant-ui `ComposerTriggerPopover` (`unstable_useSlashCommandAdapter`)
 instead; `/search` and `/vault` still arm `X-Digi-Force-Tool` when those ids
 are in the catalog, and session toggles send `X-Digi-Disabled-Tools`
@@ -1978,7 +1977,7 @@ tokens, Foundry endpoints, MCP URLs, and consume URLs. Widget.js and the
 dashboard popup merge chrome (labels/hotkeys) from that API.
 
 **Default UI:** `ThreadSkinView` inside `ProductStockShell` against
-`POST /api/chat`. `ToolCatalogBar` (tools.catalog) arms force-tool headers;
+`POST /api/chat`. Tool on/off is `/tools` only;
 force-tool values and model ids are catalog/allowlist-gated on the BFF
 (fail closed).
 
