@@ -19,7 +19,8 @@
     "./web": "./src/web.tsx"
   },
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "build": "tsup"
   },
   "peerDependencies": {
     "react": "^19.2.4"
@@ -28,5 +29,8 @@
     "react": {
       "optional": true
     }
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0"
   }
 }

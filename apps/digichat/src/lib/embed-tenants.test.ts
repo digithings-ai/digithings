@@ -82,6 +82,8 @@ describe("parseEmbedTenants", () => {
                 default: true,
                 token: "edge-test-token",
                 authHeader: "x-digi-mcp-key",
+                allowedTools: ["search_tickets", "get_ticket"],
+                mutatingTools: [],
               },
               {
                 id: "digivault",
@@ -106,6 +108,8 @@ describe("parseEmbedTenants", () => {
           default: true,
           token: "edge-test-token",
           authHeader: "x-digi-mcp-key",
+          allowedTools: ["search_tickets", "get_ticket"],
+          mutatingTools: [],
         },
         {
           id: "digivault",
@@ -600,11 +604,28 @@ describe("parseEmbedTenants", () => {
           ...keys,
         },
       });
-    const reg = parseEmbedTenants(entry({ view: "detailed", thinking: "open" }));
-    expect(reg.get("example.com")?.view).toBe("detailed");
+    const reg = parseEmbedTenants(entry({ view: "verbose", thinking: "open" }));
+    expect(reg.get("example.com")?.view).toBe("verbose");
     expect(reg.get("example.com")?.thinking).toBe("open");
     expect(() => parseEmbedTenants(entry({ view: "expanded" }))).toThrow(/view/);
     expect(() => parseEmbedTenants(entry({ thinking: "yes" }))).toThrow(/thinking/);
+  });
+
+  it("folds a tenant that still carries the retired hidden view", () => {
+    // `hidden` described the one-line trace; the folded chain shows that line
+    // as its header now, so the tenant means the titles only.
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "turn_limited",
+          token: "t",
+          view: "hidden",
+        },
+      }),
+    );
+    expect(reg.get("example.com")?.view).toBe("quiet");
   });
 
   it("throws on an invalid gateMode or theme", () => {

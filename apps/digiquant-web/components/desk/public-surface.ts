@@ -1,4 +1,4 @@
-import { PAGES, pageByPath, type Page } from "../../../../clients/digiquant-tui/src/catalog";
+import { PAGES, pageByPath, type Page } from "digiquant-tui/catalog";
 
 /** Invite-only names. The public site does not print them or route to them. */
 const INVITE = /12x|fx hub/i;

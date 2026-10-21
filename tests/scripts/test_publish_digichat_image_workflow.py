@@ -568,3 +568,34 @@ def test_the_probe_starts_the_image_with_no_environment_at_all() -> None:
         "the probe hardcodes container port 3000; the runner stage of "
         "apps/digichat/Dockerfile no longer declares it"
     )
+
+
+def test_the_build_context_carries_the_packaged_inputs() -> None:
+    """The digichat image installs from image-packages/, which is generated.
+
+    A fresh checkout has no image-packages/ — it is gitignored — so the build
+    context had no such directory and the build died computing its cache key
+    before a single build step ran. The lane must package the inputs before it
+    builds, and only the npm ones: this image installs no wheel.
+    """
+    doc = _doc()
+    steps = _steps(doc)
+    package = next(
+        (s for s in steps if "package_r5_image_inputs" in str(s.get("run", ""))), None
+    )
+    assert package is not None, "the lane never packages the image inputs"
+    build = _build_step(doc)
+    assert steps.index(package) < steps.index(build), (
+        "the inputs must be packaged before the build, or the build context "
+        "carries no image-packages/ and the build dies on its cache key"
+    )
+    assert package.get("if") == build.get("if"), (
+        "nothing is packaged when the version is already published; the "
+        "packaging step must share the build step's gate"
+    )
+    assert "--npm-only" in package["run"], (
+        "only the npm inputs are packaged: the digichat image installs no wheel"
+    )
+    # The refusal has to actually exit. A diagnostic without an exit behind it
+    # leaves the step successful and the build runs on an empty context.
+    assert _refuses(_no_comments(package["run"]), "image-packages/digichat/npm is empty")

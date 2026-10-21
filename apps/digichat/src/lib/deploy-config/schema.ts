@@ -15,6 +15,7 @@ import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@digithings/ui/chat/skins";
 import {
   DEFAULT_THINKING_MODE,
   DEFAULT_VIEW_MODE,
+  LEGACY_VIEW_MODE_ALIASES,
   THINKING_MODES,
   VIEW_MODES,
 } from "@/lib/view-modes";
@@ -101,8 +102,20 @@ export const DisclosureModeSchema = z.enum([
 ]);
 export type DisclosureMode = z.infer<typeof DisclosureModeSchema>;
 
-/** Chain-of-thought view mode (reasoning + tool calls). See view-modes.ts. */
-export const ViewModeSchema = z.enum(VIEW_MODES);
+/**
+ * Chain-of-thought view mode (reasoning + tool calls). See view-modes.ts.
+ * `quiet` | `balanced` | `verbose`; the retired ids `hidden` / `compact` /
+ * `detailed` fold forward (`hidden` and `compact` → `quiet`, `detailed` →
+ * `verbose`). Every other unknown value still fails the enum (fail closed).
+ */
+export const ViewModeSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(LEGACY_VIEW_MODE_ALIASES, value)
+      ? LEGACY_VIEW_MODE_ALIASES[value as keyof typeof LEGACY_VIEW_MODE_ALIASES]
+      : value,
+  z.enum(VIEW_MODES),
+);
 /** Reasoning-only override on top of the view mode. */
 export const ThinkingModeSchema = z.enum(THINKING_MODES);
 
@@ -160,8 +173,10 @@ export const ChromeSchema = z
  * Legacy `features.reasoning` / `features.toolCalls` disclosure keys fold
  * forward onto the view-mode pair so older YAML keeps loading. Per-field:
  * a new-style value always wins; a legacy value maps to the closest mode
- * (toolCalls off→hidden / expanded→detailed / collapsed→compact; reasoning
- * expanded→thinking open, anything else→pinned collapsed).
+ * (toolCalls off→quiet / expanded→verbose / collapsed→quiet; reasoning
+ * expanded→thinking open, anything else→pinned collapsed). `off` lands on
+ * `quiet` because the retired `hidden` level is gone: the least a client sees
+ * is the folded chain and its status line.
  */
 function foldLegacyDisclosure(value: unknown): unknown {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -174,11 +189,9 @@ function foldLegacyDisclosure(value: unknown): unknown {
   delete record.reasoning;
   if (record.view == null && toolCalls !== undefined) {
     record.view =
-      toolCalls === false || toolCalls === "off"
-        ? "hidden"
-        : toolCalls === "expanded" || toolCalls === "locked_open"
-          ? "detailed"
-          : "compact";
+      toolCalls === "expanded" || toolCalls === "locked_open"
+        ? "verbose"
+        : "quiet";
   }
   if (record.thinking == null && reasoning !== undefined) {
     record.thinking =

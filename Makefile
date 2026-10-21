@@ -410,10 +410,39 @@ pii-scan-all:
 # variable, org secret, environment secret) and report `dead`, `not repo-level`,
 # `unresolved`, `repo-over-org` and `env-over-repo`. `--strict` exits 1 on a dead repo
 # secret; `--strict-unresolved` does the same for a read no level defines.
-# Local check only — deliberately not a CI gate.
+#
+# This is the LIVE read: it asks `gh` for every level, so it needs a token carrying the
+# `repo` scope (and `admin:org` for the org level). It exits 1 today, on `dead`:
+# `CRON_KICK_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` are repo secrets nothing reads.
+# That is a rotation finding, not a broken reference — the inventory records the
+# decision on `SUPABASE_SERVICE_ROLE_KEY`.
+#
+# CI cannot run this: the secret listings need the `repo` scope, and a workflow's
+# GITHUB_TOKEN is a GitHub App installation token whose `permissions:` vocabulary has
+# no key for secrets (run 37235973852, #5063). So CI checks the committed manifest
+# instead — see `secrets-audit-manifest`.
 .PHONY: secrets-audit
 secrets-audit:
 	python3 scripts/secrets_audit.py --strict
+
+# The CI gate, run by hand: the same command the `workflow-secret-refs` lane in ci.yml
+# runs, against the committed names-only manifest `.github/secret-names.json`. Needs no
+# `gh`, no token and no network, so it works from any checkout.
+.PHONY: secrets-audit-manifest
+secrets-audit-manifest:
+	python3 scripts/secrets_audit.py --manifest .github/secret-names.json --strict-unresolved
+
+# Refresh the committed manifest from the live API. Run this by hand, from a shell whose
+# `gh auth` token carries `repo` (and `admin:org`, for the org level), after a secret is
+# created, renamed or removed.
+#
+# It replaces the FACTS, not the decisions: the `accepted_missing` entries in the file
+# it overwrites are carried over. A name that has become real stops being unresolved,
+# and `tests/scripts/test_secrets_audit.py` then fails until the matching acceptance is
+# deleted — which is the point of dating and owning them.
+.PHONY: secrets-audit-refresh
+secrets-audit-refresh:
+	python3 scripts/secrets_audit.py --write-manifest .github/secret-names.json
 
 # Age every GitHub secret name (repo, org and the `cron` environment), list the ones
 # past the rotation window, and open or update one tracking issue.

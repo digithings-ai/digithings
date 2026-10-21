@@ -75,6 +75,37 @@ describe("routing and auth", () => {
     expect(container).not.toHaveBeenCalled();
   });
 
+  it("rejects a session without a known session", async () => {
+    const container = vi.fn();
+    const res = await handle(post("session", { session: "hourly" }), env(), {
+      fetch: container,
+    } as unknown as Fetcher);
+    expect(res.status).toBe(400);
+    expect(container).not.toHaveBeenCalled();
+  });
+
+  it("forwards a session with the session the workflow passes", async () => {
+    let forwarded: { session: string; timeout_seconds: number } | undefined;
+    const container = vi.fn(async (request: Request) => {
+      forwarded = JSON.parse(await request.text()) as {
+        session: string;
+        timeout_seconds: number;
+      };
+      return Response.json(containerResult({ exit_code: 0 }));
+    });
+    const github = vi.fn();
+    const res = await handle(
+      post("session", { job_id: "twelve-x-asia", session: "asia" }),
+      env(),
+      { fetch: container } as unknown as Fetcher,
+      github as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded?.session).toBe("asia");
+    expect(forwarded?.timeout_seconds).toBe(7200);
+    expect(github).not.toHaveBeenCalled();
+  });
+
   it("forwards ingest with the workflow bucket and auth", async () => {
     const container = vi.fn(async () => Response.json(containerResult({ exit_code: 0 })));
     const github = vi.fn();

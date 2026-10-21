@@ -41,6 +41,11 @@ export type StockChatPrefsConfig = {
   thinking: ThinkingMode;
   tenantAllowsWeb: boolean;
   showByok: boolean;
+  /**
+   * The backend that serves this chat, as a display label. The host owns
+   * the provider vocabulary; absent means unknown.
+   */
+  providerLabel?: string;
   allowUserServers?: boolean;
   allowAddForm?: boolean;
 };
@@ -187,6 +192,8 @@ export function useStockChatPrefs({
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort })),
       setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
+      setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
+      setScrollbars: (mode) => setChatPrefs((p) => ({ ...p, scrollbars: mode })),
       reset: () =>
         setChatPrefs({
           ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
@@ -196,6 +203,7 @@ export function useStockChatPrefs({
         }),
       tenantAllowsWeb,
       showByok,
+      providerLabel: config.providerLabel,
       showModels,
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
@@ -208,6 +216,9 @@ export function useStockChatPrefs({
       sessionKey,
       openSettings: () => {
         setComposerMenu("settings");
+      },
+      openHelp: () => {
+        setComposerMenu("help");
       },
       openTools: () => {
         setComposerMenu("tools");
@@ -275,6 +286,7 @@ export function useStockChatPrefs({
       redo,
       config.allowUserServers,
       config.allowAddForm,
+      config.providerLabel,
       config.servers,
       config.view,
       config.thinking,

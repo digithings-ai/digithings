@@ -99,8 +99,8 @@ def _nesting_ok() -> bool:
         from langchain_core.tracers.langchain import wait_for_all_tracers
 
         wait_for_all_tracers()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001 — tracer flush is best-effort, but never silent
+        print(f"WARNING: tracer flush failed ({exc}) — spans may be missing")
 
     all_nested = all(r["has_parent"] for r in _RECORDS) and len(_RECORDS) > 0
     one_per_invoke = all(len(t) == 1 for t in spans) and spans[0] != spans[1]

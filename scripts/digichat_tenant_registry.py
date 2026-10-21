@@ -126,6 +126,13 @@ ALLOWED_LIST_ITEM_KEYS = {
     "tools.catalog.tools": frozenset(["id", "label"]),
 }
 
+# Paths where the runtime reads an OBJECT. A scalar there is a shape
+# mistake, not a value to set, so it is refused by name instead of
+# failing deep inside the merge.
+OBJECT_OVERLAY_PATHS = frozenset(
+    path for path in ALLOWED_NESTED_KEYS if path not in ALLOWED_LIST_ITEM_KEYS
+)
+
 # The OCC tenant is a client tenant. Its corpus routing and vault path are
 # set by the rollout script (scripts/occ_invite_key_write.sh, DIG-4043) and
 # live in the host secret store, so a repository overlay may neither carry
@@ -137,6 +144,11 @@ OCC_LOCKED_BACKEND_KEYS = ("digisearchIndex", "vaultPathPrefix")
 # The retired OCC ticket corpus must never be routed to
 # (scripts/occ_invite_key_write.sh enforces the same rule).
 FORBIDDEN_INDEX = "occ_tickets"
+
+# The directory this script lives in. The containment guard resolves the
+# repository that OWNS this tool from here, never from the caller's
+# working directory.
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 SECRET_NAME = "DIGICHAT_EMBED_TENANTS"
 DEFAULT_WORKER = "digithings-digichat"
@@ -261,6 +273,13 @@ def _check_overlay_shape(host, value, path):
                 raise RegistryRefusal(
                     "overlay entry %r: %s carries a list item that is not a string" % (host, path)
                 )
+    elif path in OBJECT_OVERLAY_PATHS:
+        # The runtime reads this path as an object. A scalar is a shape
+        # mistake, refused by name: without this the merge below raises
+        # an AttributeError instead of naming the refusal.
+        raise RegistryRefusal(
+            "overlay entry %r: %s must be an object, not a %s" % (host, path, type(value).__name__)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +316,12 @@ def compose_registry(live, overlay):
             raise RegistryRefusal(
                 "live registry entry %r has no token; the live registry is "
                 "incomplete and cannot be the base of a compose" % host
+            )
+        live_backend = live_entry.get("backend")
+        if live_backend is not None and not isinstance(live_backend, dict):
+            raise RegistryRefusal(
+                "live registry entry %r: backend must be an object, not a %s"
+                % (host, type(live_backend).__name__)
             )
         overlay_entry = overlay.get(host, {})
         if not isinstance(overlay_entry, dict):
@@ -419,10 +444,17 @@ def render_plan(composed, report, live_source, overlay_source):
 # ---------------------------------------------------------------------------
 
 
-def repo_root():
+def _git_toplevel(cwd=None):
+    """The top level of the git checkout that holds ``cwd``.
+
+    Returns None when there is no git, no checkout there, or the answer
+    cannot be resolved. The answer is resolved on both sides, so a
+    symlinked spelling of a checkout still names the same tree.
+    """
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
+            cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             universal_newlines=True,
@@ -432,18 +464,70 @@ def repo_root():
         return None
     if out.returncode != 0:
         return None
-    return out.stdout.strip() or None
+    root = out.stdout.strip()
+    if not root:
+        return None
+    return os.path.realpath(root)
+
+
+def repo_root():
+    """The repository that OWNS this tool, resolved.
+
+    The guard is about the checkout this script ships in, so the root
+    comes from the script's own directory and never from the caller's
+    working directory. Returns None when it cannot be resolved; the
+    caller must then refuse to write, because an unknown root cannot
+    contain anything.
+    """
+    return _git_toplevel(SCRIPT_DIR)
+
+
+def cwd_repo_root():
+    """The repository of the working directory, resolved, or None.
+
+    A second root the guard covers: the operator may be standing in
+    another checkout, and the registry carries tenant tokens, so it must
+    not land in that one either.
+    """
+    return _git_toplevel(None)
+
+
+def _is_inside(root, path):
+    """True when path is the root itself or sits under it."""
+    return path == root or path.startswith(root + os.sep)
 
 
 def write_out(composed, out_path):
-    """Write the composed registry. Refuses to write inside the repository."""
+    """Write the composed registry. Refuses to write inside a repository."""
     root = repo_root()
-    target = os.path.abspath(out_path)
-    if root and (target == root or target.startswith(root + os.sep)):
+    if not root:
         raise RegistryRefusal(
-            "refusing to write the composed registry inside the repository "
-            "(%s): it carries tenant tokens" % root
+            "refusing to write the composed registry: the repository root "
+            "could not be resolved, so the guard cannot prove the target is "
+            "outside the repository"
         )
+    root = os.path.realpath(root)
+    roots = [root]
+    other = cwd_repo_root()
+    if other:
+        other = os.path.realpath(other)
+        if other != root:
+            roots.append(other)
+    # Both sides are resolved before they are compared. A symlinked
+    # spelling of the repository otherwise slips past the prefix test and
+    # the token-bearing registry lands inside the checkout. The literal
+    # path is checked as well: a path spelled inside the repository is
+    # refused even when it is a symlink pointing out of it, because
+    # writing it would replace that symlink with a regular file inside
+    # the checkout.
+    target = os.path.abspath(out_path)
+    resolved = os.path.realpath(target)
+    for candidate in roots:
+        if _is_inside(candidate, resolved) or _is_inside(candidate, target):
+            raise RegistryRefusal(
+                "refusing to write the composed registry inside the repository "
+                "(%s): it carries tenant tokens" % candidate
+            )
     directory = os.path.dirname(target) or "."
     handle, temp = tempfile.mkstemp(dir=directory, prefix=".digichat-registry-")
     try:
@@ -484,7 +568,13 @@ def secret_put(worker, secret_name, payload, wrangler_cmd, worker_dir):
 
 
 def recycle_container(admin_key_file, reset_url):
-    """Recycle the digichat container so it reads the new registry at boot."""
+    """Recycle the digichat container so it reads the new registry at boot.
+
+    The admin key is a credential. It is handed to curl on stdin, as a
+    header line, never in the argument list: an argument list is
+    readable by every local process through ps, a pipe is not. The
+    sibling secret_put already sends its value on stdin.
+    """
     try:
         with open(admin_key_file, "r", encoding="utf-8") as handle:
             key = handle.read().strip()
@@ -492,6 +582,8 @@ def recycle_container(admin_key_file, reset_url):
         raise RegistryRefusal("cannot read the admin key file: %s" % exc)
     if not key:
         raise RegistryRefusal("the admin key file is empty")
+    if "\n" in key or "\r" in key:
+        raise RegistryRefusal("the admin key file holds more than one line")
     argv = [
         "curl",
         "-sS",
@@ -502,10 +594,12 @@ def recycle_container(admin_key_file, reset_url):
         "-X",
         "POST",
         reset_url,
+        # "-H @-" reads the header from stdin, so the value never
+        # becomes a command line argument.
         "-H",
-        "x-digi-admin-key: " + key,
+        "@-",
     ]
-    code, out = _run(argv)
+    code, out = _run(argv, stdin_text="x-digi-admin-key: " + key + "\n")
     body = "\n".join(line for line in out.splitlines() if not line.startswith("http_code="))
     status = ""
     for line in out.splitlines():

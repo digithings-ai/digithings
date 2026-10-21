@@ -43,6 +43,7 @@
     "./chat/launcher": "./src/components/chat/DigichatLauncher.tsx",
     "./chat/surfaces": "./src/components/chat/chat-surfaces.ts",
     "./chat/dot-matrix": "./src/components/chat/DotMatrix.tsx",
+    "./chat/overlay-scrollbar": "./src/components/chat/overlay-scrollbar.tsx",
     "./chat/skins": "./src/components/chat/skins/index.ts",
     "./chat/skins/digichat": "./src/components/chat/skins/digichat.tsx",
     "./chat/stock": "./src/components/chat/stock/index.ts",
@@ -62,12 +63,15 @@
     "./styles/account-auth.css": "./src/styles/account-auth.css",
     "./data/modules": "./src/data/modules.ts",
     "./data/subsystems": "./src/data/subsystems.ts",
-    "./ui": "./src/ui/index.ts"
+    "./ui": "./src/ui/index.ts",
+    "./lib/stub-payload": "./src/lib/stub-payload.ts",
+    "./pixel-wordmark": "./src/components/landing/PixelWordmark.tsx"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "build": "tsup"
   },
   "peerDependencies": {
     "@assistant-ui/react": "^0.15.18",
@@ -100,11 +104,16 @@
   },
   "devDependencies": {
     "@assistant-ui/react": "^0.15.18",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
+    "@types/node": "^25.9.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.11.1",
     "jsdom": "^29.1.1",
     "typescript": "^6.0.2",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "tsup": "^8.5.0"
   }
 }

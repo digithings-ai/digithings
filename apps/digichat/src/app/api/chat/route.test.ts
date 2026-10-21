@@ -90,7 +90,8 @@ import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
-import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
+import { EMBED_FREE_TURN_LIMIT, EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
+import { signTrialProof } from "@/lib/trial-proof";
 import { streamText, createUIMessageStreamResponse } from "ai";
 import { parseDigichatConfig } from "@/lib/deploy-config";
 import {
@@ -1390,6 +1391,153 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       vi.mocked(resolveChatTenantContext).mockResolvedValue(trialCtx as never);
     });
 
+    describe("when the tenant quota service cannot answer", () => {
+      const CONSUME_URL = "https://quota.test/consume";
+
+      // The tenant configures a consume URL and the client presents a chat token, so
+      // the server-side quota replaces the per-IP budget entirely.
+      const degradedCtx = {
+        ...trialCtx,
+        embedConfig: {
+          ...trialCtx.embedConfig,
+          gate: { consumeUrl: CONSUME_URL },
+        },
+      };
+
+      beforeEach(() => {
+        vi.mocked(resolveChatTenantContext).mockResolvedValue(degradedCtx as never);
+      });
+
+      afterEach(() => {
+        vi.unstubAllGlobals();
+      });
+
+      /**
+       * Drive the degraded path for one client IP: every turn is admitted and
+       * counted, and the turn after the trial cap is refused with the 402
+       * trial_gate.
+       */
+      async function degradedRun(
+        ip: string,
+        headers: Record<string, string>,
+        provider: () => Promise<Response>,
+      ) {
+        const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
+        const ipSpy = vi.mocked(clientIpForRateLimit).mockReturnValue(ip);
+        const fetchMock = vi.fn(async () => provider());
+        vi.stubGlobal("fetch", fetchMock);
+        const foundryBefore = vi.mocked(createFoundryStreamResponse).mock.calls.length;
+        try {
+          for (let i = 0; i < EMBED_TRIAL_TURN_LIMIT; i++) {
+            const res = await POST(trialReq({ "x-embed-chat-token": "tok", ...headers }));
+            expect(res.status).toBe(200);
+          }
+          const gated = await POST(trialReq({ "x-embed-chat-token": "tok", ...headers }));
+          // A non-JSON body must not throw here: the status assertion is the
+          // load-bearing one, and a parse error would mask it.
+          const body = (await gated.json().catch(() => ({}))) as { error?: string };
+          return {
+            status: gated.status,
+            body,
+            providerCalls: fetchMock.mock.calls.length,
+            consumeUrl: fetchMock.mock.calls[0]?.[0],
+            foundryCalls: vi.mocked(createFoundryStreamResponse).mock.calls.length - foundryBefore,
+          };
+        } finally {
+          ipSpy.mockReturnValue("127.0.0.1");
+          vi.unstubAllGlobals();
+        }
+      }
+
+      it("admits and counts the visitor, and caps the degraded entitlement at the trial budget when the quota service answers 500", async () => {
+        const withoutHeader = await degradedRun("10.0.0.1", {}, async () =>
+          new Response("boom", { status: 500 }),
+        );
+        const withHeader = await degradedRun(
+          "10.0.0.2",
+          { "x-embed-trial-unlock": "1" },
+          async () => new Response("boom", { status: 500 }),
+        );
+
+        // The provider was actually consulted, on the tenant's consume URL.
+        expect(withoutHeader.providerCalls).toBe(EMBED_TRIAL_TURN_LIMIT + 1);
+        expect(withHeader.providerCalls).toBe(EMBED_TRIAL_TURN_LIMIT + 1);
+        expect(withoutHeader.consumeUrl).toBe(CONSUME_URL);
+        expect(withHeader.consumeUrl).toBe(CONSUME_URL);
+        // Every admitted turn reached the backend, so the visitor was not just
+        // counted but actually served.
+        expect(withoutHeader.foundryCalls).toBe(EMBED_TRIAL_TURN_LIMIT);
+        expect(withHeader.foundryCalls).toBe(EMBED_TRIAL_TURN_LIMIT);
+        // The cap is the trial budget, not the free-3 and not unbounded.
+        expect(withoutHeader.status).toBe(402);
+        expect(withHeader.status).toBe(402);
+        expect(withoutHeader.body.error).toBe("trial_gate");
+        expect(withHeader.body.error).toBe("trial_gate");
+        // Identical with and without the client-asserted unlock header.
+        expect(withHeader.status).toBe(withoutHeader.status);
+        expect(withHeader.body).toEqual(withoutHeader.body);
+      });
+
+      it("admits and counts the visitor, and caps the degraded entitlement at the trial budget when the quota service request throws", async () => {
+        const withoutHeader = await degradedRun("10.0.0.3", {}, async () => {
+          throw new Error("network down");
+        });
+        const withHeader = await degradedRun(
+          "10.0.0.4",
+          { "x-embed-trial-unlock": "1" },
+          async () => {
+            throw new Error("network down");
+          },
+        );
+
+        expect(withoutHeader.providerCalls).toBe(EMBED_TRIAL_TURN_LIMIT + 1);
+        expect(withHeader.providerCalls).toBe(EMBED_TRIAL_TURN_LIMIT + 1);
+        expect(withoutHeader.consumeUrl).toBe(CONSUME_URL);
+        expect(withHeader.consumeUrl).toBe(CONSUME_URL);
+        expect(withoutHeader.foundryCalls).toBe(EMBED_TRIAL_TURN_LIMIT);
+        expect(withHeader.foundryCalls).toBe(EMBED_TRIAL_TURN_LIMIT);
+        expect(withoutHeader.status).toBe(402);
+        expect(withHeader.status).toBe(402);
+        expect(withoutHeader.body.error).toBe("trial_gate");
+        expect(withHeader.body.error).toBe("trial_gate");
+        expect(withHeader.status).toBe(withoutHeader.status);
+        expect(withHeader.body).toEqual(withoutHeader.body);
+      });
+
+      it("admits an uncounted visitor when the client IP cannot be resolved: the bound does not reach them", async () => {
+        // Residual, stated here so it is not silently inherited: the degraded raise
+        // lives inside the existing `ip !== "unknown"` guard, so a visitor whose IP
+        // cannot be resolved skips the per-IP quota entirely — admitted, uncounted,
+        // and not bounded by the 100-turn cap. This is pre-existing behaviour of the
+        // per-IP quota, unchanged by this leaf; the degraded path does not widen it.
+        const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
+        const ipSpy = vi.mocked(clientIpForRateLimit).mockReturnValue("unknown");
+        const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const fetchMock = vi.fn(async () => new Response("boom", { status: 500 }));
+        vi.stubGlobal("fetch", fetchMock);
+        const turns = EMBED_TRIAL_TURN_LIMIT + 5;
+        try {
+          for (let i = 0; i < turns; i++) {
+            const res = await POST(trialReq({ "x-embed-chat-token": "tok" }));
+            expect(res.status).toBe(200);
+          }
+          // The provider was consulted on every turn: this is the degraded path
+          // under test, not a path that skipped the quota service.
+          expect(fetchMock.mock.calls.length).toBe(turns);
+          // The degraded path was taken and logged, so this case is not vacuous:
+          // it is the unavailable verdict that produced the admission, not an
+          // "allow" verdict from the provider.
+          expect(warnSpy).toHaveBeenCalledWith(
+            "[trial-gate] tenant quota service unavailable, bounding the entitlement to the trial cap:",
+          );
+        } finally {
+          warnSpy.mockRestore();
+          ipSpy.mockReturnValue("127.0.0.1");
+          vi.unstubAllGlobals();
+        }
+      });
+    });
+
     it(`allows the first ${EMBED_FREE_TURN_LIMIT} turns (server cap) then returns 402 trial_gate without calling Foundry`, async () => {
       // The server-side cap is deliberately looser than the client-advertised
       // free-3 (EMBED_FREE_TURN_LIMIT, see embed-turn-limits.ts) — it's
@@ -1492,6 +1640,85 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         const gated = await POST(trialReq({ "x-embed-monitor-token": MONITOR_SECRET }));
         expect(gated.status).toBe(402);
         expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+    });
+
+    // DIG-3797 leaf 3: the trial_form gate must honour a server-signed trial
+    // proof (apps/digichat/src/lib/trial-proof.ts), minted by the embed mint
+    // endpoint (apps/digichat/src/app/api/embed/trial-proof-mint/route.ts) with
+    // the shared DIGICHAT_TRIAL_PROOF_SECRET.
+    //
+    // The proof binds host|exp|sig only - no tenant, no nonce - so the route
+    // has to compare the verified host itself: a valid signature for a
+    // different host must buy nothing. And the proof's host is the CANONICAL
+    // bare registry host (the registered tenant host), while the browser sends the embed
+    // origin as a URL, so the comparison is against the canonical form of
+    // x-embed-host (embed-tenants.normalizeEmbedHost), not the raw header.
+    // Expiry, a wrong secret and a tampered token are already pinned by
+    // lib/trial-proof.test.ts; what is left for the route is the gate itself.
+    describe("trial proof (DIG-3797 leaf 3)", () => {
+      const PROOF_SECRET = "trial-proof-secret-0123456789abcdef0123456789abcdef";
+      const OTHER_SECRET = "other-secret-0123456789abcdef0123456789abcdef";
+      const PROOF_HOST = new URL(trialReq().headers.get("x-embed-host") ?? "").hostname;
+      const OTHER_HOST = "other.example";
+
+      it("admits a request carrying a valid proof for this host, and never consults the per-IP quota", async () => {
+        process.env.DIGICHAT_TRIAL_PROOF_SECRET = PROOF_SECRET;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq())).status).toBe(200);
+        }
+        // Spy only after the free turns are burnt: a plain turn does consult and
+        // record the per-IP quota, a proof-carrying turn must not.
+        const quotaModule = await import("@/lib/embed-turn-quota");
+        const overSpy = vi.spyOn(quotaModule, "isOverEmbedTrialLimit");
+        const recordSpy = vi.spyOn(quotaModule, "recordEmbedTrialTurn");
+        try {
+          const admitted = await POST(
+            trialReq({ "x-embed-trial-proof": signTrialProof(PROOF_HOST, PROOF_SECRET) }),
+          );
+          expect(admitted.status).toBe(200);
+          expect(overSpy).not.toHaveBeenCalled();
+          expect(recordSpy).not.toHaveBeenCalled();
+          expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT + 1);
+        } finally {
+          overSpy.mockRestore();
+          recordSpy.mockRestore();
+        }
+      });
+
+      it("still gates a request whose proof is valid for a different host", async () => {
+        process.env.DIGICHAT_TRIAL_PROOF_SECRET = PROOF_SECRET;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq())).status).toBe(200);
+        }
+        const gated = await POST(
+          trialReq({ "x-embed-trial-proof": signTrialProof(OTHER_HOST, PROOF_SECRET) }),
+        );
+        expect(gated.status).toBe(402);
+        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+
+      it("still gates a request whose proof was signed with another secret", async () => {
+        process.env.DIGICHAT_TRIAL_PROOF_SECRET = PROOF_SECRET;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq())).status).toBe(200);
+        }
+        const gated = await POST(
+          trialReq({ "x-embed-trial-proof": signTrialProof(PROOF_HOST, OTHER_SECRET) }),
+        );
+        expect(gated.status).toBe(402);
+        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+
+      it("treats a bare proof header exactly like no header at all", async () => {
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq())).status).toBe(200);
+        }
+        const withoutHeader = await POST(trialReq());
+        const withHeader = await POST(trialReq({ "x-embed-trial-proof": "not-a-proof" }));
+        expect(withHeader.status).toBe(402);
+        expect(withHeader.status).toBe(withoutHeader.status);
+        expect(await withHeader.json()).toEqual(await withoutHeader.json());
       });
     });
 

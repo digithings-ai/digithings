@@ -40,7 +40,7 @@ export const SkinCredit: FC<{
     <p
       data-testid="skin-credit"
       className={cn(
-        "pt-0.5 text-center text-xs leading-4 opacity-60",
+        "aui-skin-credit pt-0.5 text-center text-[0.6875rem] leading-3.5",
         className,
       )}
     >
@@ -49,7 +49,7 @@ export const SkinCredit: FC<{
         href="https://digithings.ai"
         target="_blank"
         rel="noreferrer noopener"
-        className="pointer-events-auto font-medium text-primary underline-offset-2 hover:underline"
+        className="pointer-events-auto font-medium text-inherit underline-offset-2 hover:underline"
       >
         digithings
       </a>{" "}

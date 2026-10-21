@@ -4,6 +4,12 @@
  */
 import { getContainer } from "@cloudflare/containers";
 import { assertKnownCommand } from "./commands";
+import {
+  DURABLE_OBJECT_UNAVAILABLE,
+  DurableObjectUnavailableError,
+  fetchDurableObject,
+  RECONNECT_RETRY_AFTER_SECONDS,
+} from "./durable-object-reconnect";
 import type { Env } from "./env";
 import { COMMANDS } from "./runner-session";
 import { DigiQuantRunnerContainer, RUNNER_CONTAINER_ID } from "./runner";
@@ -68,12 +74,40 @@ function stub(env: Env): Fetcher {
   return getContainer(binding, RUNNER_CONTAINER_ID);
 }
 
+/**
+ * Every request to the runner is handed to the Durable Object that owns the
+ * container. When that instance is gone the platform closes the connection and
+ * the request dies; the platform's own message says to reconnect and retry. We
+ * reconnect once, and answer 503 + Retry-After when even the reconnect fails,
+ * so a caller can back off instead of hammering a runner that is still coming
+ * up (run-watch DIG-4529).
+ */
+async function durableFetch(env: Env, makeRequest: () => Request): Promise<Response> {
+  try {
+    return await fetchDurableObject(() => stub(env), makeRequest);
+  } catch (error) {
+    if (error instanceof DurableObjectUnavailableError) {
+      return Response.json(
+        {
+          error: DURABLE_OBJECT_UNAVAILABLE,
+          detail: "the runner's Durable Object instance was not available; retry later",
+        },
+        {
+          status: 503,
+          headers: { "Retry-After": String(RECONNECT_RETRY_AFTER_SECONDS) },
+        },
+      );
+    }
+    throw error;
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const path = normalizePath(new URL(request.url).pathname);
 
     if (request.method === "GET" && path === "/healthz") {
-      return stub(env).fetch(request);
+      return durableFetch(env, () => new Request(request.url, { method: "GET", headers: request.headers }));
     }
 
     if (!path.startsWith("/v1/jobs")) {
@@ -108,13 +142,13 @@ export default {
         const gated = await houseRunGate(parsed, env);
         if (gated) return gated;
       }
-      return stub(env).fetch(
+      return durableFetch(env, () =>
         new Request(request.url, { method: "POST", headers: request.headers, body: raw }),
       );
     }
 
     if (request.method === "GET") {
-      return stub(env).fetch(request);
+      return durableFetch(env, () => new Request(request.url, { method: "GET", headers: request.headers }));
     }
     return new Response("Not Found", { status: 404 });
   },

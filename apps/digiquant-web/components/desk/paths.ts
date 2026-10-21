@@ -1,4 +1,4 @@
-import { PAGES, pageByPath } from "../../../../clients/digiquant-tui/src/catalog";
+import { PAGES, pageByPath } from "digiquant-tui/catalog";
 
 /** /app and /app/ are the brief. Invite paths get a shell; the manifest gates the body. */
 export function deskPathFromSlug(slug: string[] | undefined): string | null {

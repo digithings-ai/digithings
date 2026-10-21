@@ -105,8 +105,14 @@ def _compose_embed_backend() -> dict:
     return json.loads(_compose_env()["DIGICHAT_EMBED_TENANTS"])["occ.digithings.ai"]["backend"]
 
 
-def _occ_map_from_wrangler() -> dict:
-    raw = tomllib.loads(_text(WRANGLER_BLOB))["vars"]["DIGI_TENANT_CORPUS_MAP"]
+def _occ_map_from_wrangler() -> dict | None:
+    """The wrangler leg was retired on 2026-10-14 (82ed363fa): with the OCC
+    prompt the value exceeds Cloudflare's 5.1 kB text-binding limit, so the map
+    ships in ``src/index.ts`` as the fallback default instead. ``None`` when the
+    var is absent, which is the current committed state."""
+    raw = tomllib.loads(_text(WRANGLER_BLOB)).get("vars", {}).get("DIGI_TENANT_CORPUS_MAP")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
     return json.loads(raw)["occ"]
 
 
@@ -129,11 +135,14 @@ def _unjs(literal: str) -> str:
 
 
 def _prompts() -> list[tuple[str, str]]:
-    return [
+    out: list[tuple[str, str]] = [
         ("compose-override", _compose_corpus_map()["researchSystemPrompt"]),
-        ("wrangler-toml", _occ_map_from_wrangler()["researchSystemPrompt"]),
-        ("index-ts-fallback", _index_ts_corpus_map()["researchSystemPrompt"]),
     ]
+    wrangler_map = _occ_map_from_wrangler()
+    if wrangler_map is not None:
+        out.append(("wrangler-toml", wrangler_map["researchSystemPrompt"]))
+    out.append(("index-ts-fallback", _index_ts_corpus_map()["researchSystemPrompt"]))
+    return out
 
 
 # --- payload at rest -------------------------------------------------------
@@ -184,7 +193,11 @@ def test_compose_corpus_map_index_is_occ_help_only() -> None:
 
 
 def test_wrangler_occ_index_is_occ_help_only() -> None:
-    assert _occ_map_from_wrangler()["digisearchIndex"] == "occ_help"
+    """Vacuously true while the wrangler copy is retired (2026-10-14, 82ed363fa)."""
+    wrangler_map = _occ_map_from_wrangler()
+    if wrangler_map is None:
+        return
+    assert wrangler_map["digisearchIndex"] == "occ_help"
 
 
 def test_index_ts_fallback_occ_index_is_occ_help_only() -> None:
@@ -196,7 +209,9 @@ def test_occ_tenant_keeps_its_vault_prefix() -> None:
     prefix = "clients/online-compliance-center"
     assert _compose_embed_backend()["vaultPathPrefix"] == prefix
     assert _compose_corpus_map()["vaultPathPrefix"] == prefix
-    assert _occ_map_from_wrangler()["vaultPathPrefix"] == prefix
+    wrangler_map = _occ_map_from_wrangler()
+    if wrangler_map is not None:
+        assert wrangler_map["vaultPathPrefix"] == prefix
     assert _index_ts_corpus_map()["vaultPathPrefix"] == prefix
 
 

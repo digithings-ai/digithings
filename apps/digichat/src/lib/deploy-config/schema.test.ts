@@ -81,7 +81,7 @@ describe("DigichatConfigSchema", () => {
         features: { reasoning: true, toolCalls: false },
       },
     });
-    expect(cfg.deployment?.features.view).toBe("hidden");
+    expect(cfg.deployment?.features.view).toBe("quiet");
     expect(cfg.deployment?.features.thinking).toBe("collapsed");
 
     const expanded = parseDigichatConfig({
@@ -92,8 +92,42 @@ describe("DigichatConfigSchema", () => {
         features: { reasoning: "expanded", toolCalls: "locked_open" },
       },
     });
-    expect(expanded.deployment?.features.view).toBe("detailed");
+    expect(expanded.deployment?.features.view).toBe("verbose");
     expect(expanded.deployment?.features.thinking).toBe("open");
+  });
+
+  it("folds the retired view ids forward", () => {
+    const quiet = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { view: "compact" },
+      },
+    });
+    expect(quiet.deployment?.features.view).toBe("quiet");
+
+    const verbose = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { view: "detailed" },
+      },
+    });
+    expect(verbose.deployment?.features.view).toBe("verbose");
+
+    // `hidden` was the one-line level; the folded chain shows that line as
+    // its header now, so a config that still says it means the titles only.
+    const hidden = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        features: { view: "hidden" },
+      },
+    });
+    expect(hidden.deployment?.features.view).toBe("quiet");
   });
 
   it("accepts view/thinking modes and cli.enabled", () => {
@@ -102,7 +136,7 @@ describe("DigichatConfigSchema", () => {
       deployment: {
         slug: "acme",
         backend: { type: "digigraph" },
-        features: { view: "detailed", thinking: "open" },
+        features: { view: "verbose", thinking: "open" },
         chrome: { defaultLanguage: "de", transcript: { userAlign: "left" } },
         models: {
           default: "gpt-4o-mini",
@@ -112,7 +146,7 @@ describe("DigichatConfigSchema", () => {
         cli: { enabled: true },
       },
     });
-    expect(cfg.deployment?.features.view).toBe("detailed");
+    expect(cfg.deployment?.features.view).toBe("verbose");
     expect(cfg.deployment?.features.thinking).toBe("open");
     expect(cfg.deployment?.chrome.defaultLanguage).toBe("de");
     expect(cfg.deployment?.chrome.transcript.userAlign).toBe("left");

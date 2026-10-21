@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@digiquant/contract": "*",
+    "@digithings/catalog": "*",
     "@digithings/design": "*",
     "@digithings/ui": "*",
     "@luxalgo/vela": "0.8.2",

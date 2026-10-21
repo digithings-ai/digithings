@@ -8,6 +8,8 @@ import numpy as np
 import pytest
 from digiquant.indicators.adf import RollingADF
 
+pytestmark = pytest.mark.unit
+
 
 def _rw_prices(n: int, seed: int = 42) -> list[float]:
     """Generate a random walk (non-stationary). ADF tau should be close to 0 or positive."""

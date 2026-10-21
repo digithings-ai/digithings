@@ -26,14 +26,18 @@ export async function dispatchTwelvex(
   job: Job,
   cron: string,
 ): Promise<DispatchResult> {
-  if (job.route !== "ingest" && job.route !== "heartbeat") {
-    throw new Error(`job ${job.id}: twelvex requires route ingest or heartbeat`);
+  if (job.route !== "ingest" && job.route !== "heartbeat" && job.route !== "session") {
+    throw new Error(`job ${job.id}: twelvex requires route ingest, heartbeat or session`);
   }
   const bucket = job.inputs?.bucket;
+  const session = job.inputs?.session;
   const body = {
     job_id: job.id,
     bucket,
-    timeout_seconds: job.timeoutSeconds ?? (job.route === "ingest" ? 1200 : 300),
+    session,
+    timeout_seconds:
+      job.timeoutSeconds ??
+      (job.route === "ingest" ? 1200 : job.route === "session" ? 7200 : 300),
   };
   if (env.DRY_RUN === "1") {
     logLine({
@@ -42,6 +46,7 @@ export async function dispatchTwelvex(
       job: job.id,
       route: job.route,
       bucket: bucket ?? null,
+      session: session ?? null,
       github_status: null,
       dry_run: true,
     });

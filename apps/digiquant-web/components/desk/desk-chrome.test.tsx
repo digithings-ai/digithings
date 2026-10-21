@@ -128,8 +128,7 @@ describe("desk chrome", () => {
     expect(narrow).not.toMatch(/max-width:\s*3\.5rem|text-overflow:\s*ellipsis/);
   });
 
-  it("keeps the draft classes and the d binding without a cursor utility", () => {
-    const nav = readFileSync(new URL("./desk-nav.tsx", import.meta.url), "utf8");
+  it("keeps the draft classes and the d binding without a cursor utility", () => {    const nav = readFileSync(new URL("./desk-nav.tsx", import.meta.url), "utf8");
     const picker = readFileSync(new URL("./desk-picker.tsx", import.meta.url), "utf8");
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
     expect(nav).toContain('className="nav-row"');
@@ -158,5 +157,45 @@ describe("desk chrome", () => {
     const deskCss = css.slice(css.indexOf("Desk folder sidebar"));
     expect(`${nav}\n${picker}\n${deskCss}`).not.toMatch(/cursor-/);
     expect(deskCss).not.toMatch(/cursor\s*:/);
+  });
+
+  it("names one h1 per route and a skip link into the desk", () => {
+    const shell = readFileSync(new URL("./desk-shell.tsx", import.meta.url), "utf8");
+    expect(shell).toContain('className="desk-skip"');
+    expect(shell).toContain('href="#desk-main"');
+    expect(shell).toContain('className="desk-sr"');
+    expect(shell).toContain("<h1");
+    expect(shell).toContain('id="desk-main"');
+    expect(shell).toContain("deskRouteLabel");
+    // The skip link is the first Tab stop: it precedes the frame (header/rail).
+    expect(shell.indexOf("desk-skip")).toBeLessThan(shell.indexOf("<DeskFrame"));
+    // Pages that carry their own visible title use h2; the shell h1 is the
+    // only h1 on the route.
+    for (const page of ["settings-page.tsx", "gloomberb-terminal.tsx"]) {
+      const body = readFileSync(new URL(`./${page}`, import.meta.url), "utf8");
+      expect(body).not.toContain("<h1");
+    }
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+    expect(css).toContain(".desk-skip:focus-visible");
+    expect(css).toContain(".desk-sr {");
+  });
+
+  it("makes scrollable pane bodies and chart hosts keyboard-focusable with a visible ring", () => {
+    const view = readFileSync(new URL("./desk-view.tsx", import.meta.url), "utf8");
+    expect(view).toContain("tabIndex={0}");
+    expect(view).toContain('role="region"');
+    const pane = readFileSync(new URL("./pages/pane.tsx", import.meta.url), "utf8");
+    expect(pane).toContain("tabIndex={0}");
+    const chart = readFileSync(new URL("./panel-chart.tsx", import.meta.url), "utf8");
+    expect(chart).toContain("tabIndex={0}");
+    const vela = readFileSync(new URL("./vela-pane.tsx", import.meta.url), "utf8");
+    expect(vela).toContain("tabIndex={0}");
+    expect(vela).toContain('className="vela-host');
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+    expect(css).toContain(".desk-pane-body:focus-visible");
+    expect(css).toContain(".vela-host:focus-visible");
+    expect(css).toContain('.vela-host *:not(.vela-callout):not([style*="border-radius:50%"])');
+    expect(vela).toContain('role="group"');
+    expect(css).toContain(".vela-host button:focus-visible");
   });
 });

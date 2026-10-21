@@ -30,18 +30,20 @@ describe("SkinCredit", () => {
     expect(screen.queryByTestId("skin-credit")).toBeNull();
   });
 
-  it("links digithings to the website in a distinct color", () => {
+  it("links digithings to the website in the line own colour", () => {
     render(<SkinCredit />);
     const link = screen.getByRole("link", { name: "digithings" });
     expect(link.getAttribute("href")).toBe("https://digithings.ai");
     expect(link.getAttribute("target")).toBe("_blank");
-    expect(link.className).toMatch(/text-primary/);
+    // The link inherits the line colour so the whole watermark dims evenly
+    // instead of standing out in the primary accent.
+    expect(link.className).toMatch(/text-inherit/);
   });
 
   it("merges an override class onto the disclaimer styling", () => {
     render(<SkinCredit className="font-mono" />);
     const el = screen.getByTestId("skin-credit");
     expect(el.className).toMatch(/font-mono/);
-    expect(el.className).toMatch(/text-xs/);
+    expect(el.className).toMatch(/text-\[0\.6875rem\]/);
   });
 });

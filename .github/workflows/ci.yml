@@ -117,6 +117,7 @@ jobs:
               - '.github/workflows/test-digifetch.yml'
             digichat:
               - 'apps/digichat/**'
+              - 'packages/catalog/**'
               - 'packages/digichat-ui/**'
               - 'packages/ui/**'
               - 'packages/design/**'
@@ -125,6 +126,7 @@ jobs:
               - '.github/workflows/test-digichat.yml'
             dashboard:
               - 'apps/dashboard/**'
+              - 'packages/catalog/**'
               - 'packages/ui/**'
               - 'packages/design/**'
               - 'package.json'
@@ -138,6 +140,7 @@ jobs:
               - 'apps/digithings-cron/**'
               - 'apps/digiquant-runner/**'
               - 'infra/docker/Dockerfile.digiquant-runner'
+              - 'packages/catalog/**'
               - 'packages/digichat-ui/**'
               - 'packages/ui/**'
               - 'packages/design/**'
@@ -179,6 +182,7 @@ jobs:
               - 'tests/dq/test_tearsheet_isolation.py'
               - 'tests/dq/test_v1_jobs.py'
               - 'tests/dq/data/test_levels_nautilus.py'
+              - 'tests/dq/strategies/test_slapper_config.py'
               - 'tests/dq/strategies/sdca/test_nautilus_strategy.py'
               - 'tests/dq/replay/test_nautilus_portfolio.py'
               - 'tests/dq/replay/test_worker.py'
@@ -392,6 +396,84 @@ jobs:
           python-version: "3.12"
       - name: Example-credentials guard
         run: python3 scripts/check_example_credentials.py
+
+  # ── Workflow secret references (DIG-4717) ───────────────────────────────────
+  # Every `secrets.NAME` a workflow reads must exist as a repository, environment
+  # or organisation secret. The failure this catches is silent by construction:
+  # Actions substitutes an empty string for a name it cannot resolve, so the
+  # pipeline keeps running and only the tool that needed the credential refuses.
+  # That is exactly how `deploy-digithings-stack-cloudflare.yml` came to export an
+  # empty Cloudflare token — the lane failed at wrangler, not at the missing
+  # secret, and nothing in CI said so.
+  #
+  # The secret listings CANNOT be read from a workflow: `GET
+  # repos/{owner}/{repo}/actions/secrets` and the org and environment equivalents
+  # need the `repo` scope, and a workflow's GITHUB_TOKEN is a GitHub App
+  # installation token whose `permissions:` vocabulary has no key for secrets.
+  # Run 37235973852 (#5063, 2026-10-04) proved it: `actions: read` was visibly
+  # granted and all three listings still answered `Resource not accessible by
+  # integration`. So the names come from `.github/secret-names.json`, a committed
+  # manifest an operator refreshes with `make secrets-audit-refresh` — Paperclip
+  # DIG-477 option D: CI gets no repo-scoped credential. The manifest holds NAMES
+  # only; `docs/ops/SECRETS_INVENTORY.md` already publishes the same names.
+  #
+  # `--strict-unresolved` fails on a read no level defines. `--strict` is
+  # deliberately NOT passed: `CRON_KICK_SECRET` and `SUPABASE_SERVICE_ROLE_KEY`
+  # are repo secrets nothing reads, which is a rotation finding rather than the
+  # missing-reference failure this job exists for, and failing on them would
+  # block every merge for a pre-existing condition.
+  #
+  # Unconditional, same shape as example-credentials-guard above: no `needs:`,
+  # no path filter, so the job name is always reported and the aggregator can
+  # fold it into `Required checks passed`.
+  # Stdlib-only; no pip install needed.
+  # Run locally: python3 scripts/secrets_audit.py --manifest .github/secret-names.json --strict-unresolved
+  workflow-secret-refs:
+    name: Workflow secret references
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # PyYAML, because the audit parses a workflow instead of scanning it as
+      # text. ci.yml installs it the same way in two other jobs.
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+      - name: Workflow secret references
+        run: python3 scripts/secrets_audit.py --manifest .github/secret-names.json --strict-unresolved
+
+  # ── R0 client-literal allowance growth guard (DIG-4577) ─────────────────────
+  # The allowance baseline (scripts/r0_client_literals_baseline.json) may only
+  # SHRINK: a client literal that shows up must be removed from the source, not
+  # added to the allowance. This job compares the branch's baseline with the base
+  # branch's baseline and fails when the branch grew it - more files listed, a
+  # higher count for a file, or an entry the base branch does not have. A smaller
+  # or identical baseline passes.
+  #
+  # `fetch-depth: 0` is load-bearing: the base branch's baseline is read from the
+  # base commit, so the checkout needs the history and the remote-tracking refs.
+  # Pull-request only: ci.yml also runs on push, where there is no base branch
+  # to compare against.
+  # Stdlib-only; no pip or npm install needed.
+  r0-client-literals-baseline-growth:
+    name: R0 client-literal baseline growth guard
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: R0 client-literal baseline growth guard
+        run: python3 scripts/check_r0_client_literals_baseline_growth.py --base-ref "origin/${{ github.base_ref }}"
 
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
@@ -870,6 +952,8 @@ jobs:
       - gloomberb-ci-guard
       - vendor-content-gate
       - plaintext-credential-guard
+      - r0-client-literals-baseline-growth
+      - workflow-secret-refs
       - digibase
       - digikey
       - digitrace

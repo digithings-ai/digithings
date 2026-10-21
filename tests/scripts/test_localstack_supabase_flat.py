@@ -68,9 +68,53 @@ def test_materialize_flattens_the_layered_chain(tmp_path):
     ]
     entries = list((dest / "supabase" / "migrations").iterdir())
     assert all(p.is_symlink() for p in entries)
-    # the CLI also reads these from the project dir
-    for name in ("config.toml", "seed.sql", "roles.sql", "functions"):
+    # the CLI also reads these from the project dir. config.toml is a REAL
+    # copy, not a link: it carries the Supabase ports and the CLI has no port
+    # flags, so the generated tree has to carry them (DIG-4501). A link would
+    # send the rewrite into the checked-in file.
+    for name in ("seed.sql", "roles.sql", "functions"):
         assert (dest / "supabase" / name).is_symlink()
+    config = dest / "supabase" / "config.toml"
+    assert not config.is_symlink()
+    assert config.read_text() == (project / "config.toml").read_text()
+
+
+def test_materialize_writes_a_port_rewritten_config_copy(tmp_path):
+    """The generated config.toml carries the ports; the checked-in one does not move."""
+    project = _fake_project(tmp_path)
+    (project / "config.toml").write_text(
+        'project_id = "test"\n'
+        "\n"
+        "[api]\n"
+        "port = 54321\n"
+        "\n"
+        "[db]\n"
+        "port = 54322\n"
+        "shadow_port = 54320\n"
+        "\n"
+        "[db.pooler]\n"
+        "enabled = false\n"
+        "port = 54329\n"
+        "\n"
+        "[studio]\n"
+        "port = 54323\n",
+        encoding="utf-8",
+    )
+    (project / "migrations" / "engine" / "001_a.sql").write_text("", encoding="utf-8")
+
+    dest = supabase_flat.materialize(tmp_path, api_port=55321)
+
+    written = (dest / "supabase" / "config.toml").read_text()
+    assert "port = 55321" in written
+    assert "port = 55322" in written
+    assert "shadow_port = 55320" in written
+    assert "port = 55329" in written
+    assert "port = 55323" in written
+    assert "port = 54321" not in written
+    assert 'project_id = "test"' in written
+    # the checked-in file is untouched: it still carries the canonical ports
+    assert "port = 54321" in (project / "config.toml").read_text()
+    assert (project / "config.toml").is_file()
 
 
 def test_materialize_is_idempotent(tmp_path):
@@ -143,6 +187,43 @@ def test_a_deleted_linked_source_leaves_no_stale_link(tmp_path):
 
     assert not (dest / "supabase" / "roles.sql").exists()
     assert not (dest / "supabase" / "roles.sql").is_symlink()
+
+
+def test_the_generated_root_carries_the_projects_docs_directory(tmp_path):
+    """The CLI resolves the workdir as the project root.
+
+    `supabase start` reads `docs/schemas/execution_policy.v1.json` from the
+    root of the project it is pointed at, so the generated tree has to carry a
+    link to the real project's docs directory. Without it the CLI aborts with
+    "failed to read file: .../docs/schemas/execution_policy.v1.json".
+    """
+    project = _fake_project(tmp_path)
+    (project / "migrations" / "engine" / "001_a.sql").write_text("", encoding="utf-8")
+    docs = project.parent / "docs"
+    (docs / "schemas").mkdir(parents=True)
+    (docs / "schemas" / "execution_policy.v1.json").write_text("{}", encoding="utf-8")
+
+    dest = supabase_flat.materialize(tmp_path)
+
+    link = dest / "docs"
+    assert link.is_symlink()
+    assert link.resolve() == docs.resolve()
+    assert (link / "schemas" / "execution_policy.v1.json").exists()
+
+
+def test_a_missing_docs_directory_leaves_no_stale_link(tmp_path):
+    project = _fake_project(tmp_path)
+    (project / "migrations" / "engine" / "001_a.sql").write_text("", encoding="utf-8")
+    docs = project.parent / "docs"
+    docs.mkdir()
+    dest = supabase_flat.materialize(tmp_path)
+    assert (dest / "docs").is_symlink()
+
+    docs.rmdir()
+    dest = supabase_flat.materialize(tmp_path)
+
+    assert not (dest / "docs").exists()
+    assert not (dest / "docs").is_symlink()
 
 
 def test_the_real_chain_flattens_to_the_layered_order(tmp_path):

@@ -6,26 +6,22 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import digigraph.graph.graph as _graph_module
 import pytest
-from digigraph.graph.graph import (
-    WORKFLOW_PROFILES,
-    _route_after_research,
-    build_workflow_graph,
-)
 from digigraph.project_config import DigiProjectConfig
 from langgraph.graph import END
 
 
 @pytest.mark.unit
 def test_workflow_profile_names() -> None:
-    assert "full_stack" in WORKFLOW_PROFILES
-    assert "research_rag" in WORKFLOW_PROFILES
-    assert "quant_backtest" in WORKFLOW_PROFILES
+    assert "full_stack" in _graph_module.WORKFLOW_PROFILES
+    assert "research_rag" in _graph_module.WORKFLOW_PROFILES
+    assert "quant_backtest" in _graph_module.WORKFLOW_PROFILES
 
 
 @pytest.mark.unit
 def test_build_workflow_graph_compiles() -> None:
-    g = build_workflow_graph()
+    g = _graph_module.build_workflow_graph()
     assert g is not None
 
 
@@ -50,7 +46,7 @@ def test_route_after_research_ends_on_research_rag() -> None:
         "symbols": ["AAPL"],
         "research_response": "ok",
     }
-    assert _route_after_research(state) == END
+    assert _graph_module._route_after_research(state) == END
 
 
 @pytest.mark.unit
@@ -63,7 +59,7 @@ def test_route_after_research_ends_when_digiquant_url_empty() -> None:
         "research_response": "ok",
     }
     with patch.dict(os.environ, {"DIGIQUANT_URL": ""}, clear=False):
-        assert _route_after_research(state) == END
+        assert _graph_module._route_after_research(state) == END
 
 
 @pytest.mark.unit
@@ -93,7 +89,6 @@ def reset_workflow_graph_cache():
     """Reset the process-wide compiled-graph cache so build_workflow_graph() rebuilds
     with this test's env/module state, instead of returning whatever a prior test in
     this session already compiled and cached (graph.py:23-24, no invalidation)."""
-    import digigraph.graph.graph as _graph_module
 
     original = _graph_module._workflow_graph_cache
     _graph_module._workflow_graph_cache = None
@@ -111,7 +106,7 @@ def test_build_workflow_graph_has_a_store(reset_workflow_graph_cache, reset_stor
     get_store() internally, which lazily creates and caches a process-wide InMemoryStore
     in _store_instance -- without reset_store this leaks a live store into every other
     test in the session, the exact leak reset_store exists to prevent."""
-    graph = build_workflow_graph()
+    graph = _graph_module.build_workflow_graph()
     assert graph.store is not None
 
 
@@ -124,7 +119,6 @@ def reset_store():
     _store_instance = None to force a fresh get_store() call leaves a live
     InMemoryStore for the rest of the pytest session with no teardown.
     """
-    import digigraph.graph.graph as _graph_module
 
     original_instance = _graph_module._store_instance
     _graph_module._store_instance = None
@@ -133,13 +127,10 @@ def reset_store():
 
 
 @pytest.mark.unit
-def test_get_store_defaults_to_in_memory(
-    monkeypatch: pytest.MonkeyPatch, reset_store
-) -> None:
-    from digigraph.graph.graph import get_store
+def test_get_store_defaults_to_in_memory(monkeypatch: pytest.MonkeyPatch, reset_store) -> None:
 
     monkeypatch.delenv("DIGI_CHECKPOINTER", raising=False)
-    store = get_store()
+    store = _graph_module.get_store()
     assert type(store).__name__ == "InMemoryStore"
 
 
@@ -151,12 +142,11 @@ def test_get_store_warns_on_postgres_with_missing_uri(
     the missing-URI fallback path logs a warning "matching that same discipline" as
     the ImportError branch -- this pins that it actually does now, instead of
     silently degrading to InMemoryStore with no operator-visible signal."""
-    from digigraph.graph.graph import get_store
 
     monkeypatch.setenv("DIGI_CHECKPOINTER", "postgres")
     monkeypatch.delenv("CORE_POSTGRES_URI", raising=False)
     with caplog.at_level("WARNING"):
-        store = get_store()
+        store = _graph_module.get_store()
     assert type(store).__name__ == "InMemoryStore"
     assert "CORE_POSTGRES_URI is unset" in caplog.text
 
@@ -176,7 +166,7 @@ def test_backtest_and_optimize_nodes_have_no_retry_policy(reset_workflow_graph_c
     protection, so a network-blip retry could kick off two backtest/optimize runs.
     Reintroducing a retry policy here needs real idempotency-key support in digiquant
     first -- a separate body of work. See graph.py's comment above `build_workflow_graph`."""
-    graph = build_workflow_graph()
+    graph = _graph_module.build_workflow_graph()
     for name in ("backtest", "optimize"):
         node = graph.nodes[name]
         assert not node.retry_policy, (

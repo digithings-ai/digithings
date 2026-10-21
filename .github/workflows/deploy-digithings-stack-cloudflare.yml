@@ -1,0 +1,288 @@
+# Deploy: digithings-stack (Cloudflare Containers)
+#
+# The merge-to-main deploy path for the digithings-stack Worker (digikey +
+# digigraph + digisearch + digivault + LiteLLM under supervisord) and its two
+# Containers, publishing graph.digithings.ai / key.digithings.ai and
+# search.digithings.ai.
+#
+# HISTORY - read this before changing anything here.
+#
+# 1. Before a lane existed the stack was deployed by hand, from a developer
+#    machine, with Docker and `npx wrangler login`. DIG-2843 decided that
+#    story: document it as it is, no CI lane. That decision was taken while
+#    the Container id was a HAND-EDITED string that every image-changing
+#    deploy had to remember to bump, and a code-only redeploy left the old
+#    instance serving its old image.
+# 2. That hazard is gone. The Container id is now DERIVED from the deploying
+#    commit (DIG-3229 for this Worker's own id, DIG-3814 for the digichat
+#    id), so every deploy creates a fresh instance and there is nothing left
+#    to hand-edit and nothing to forget. `npm run deploy`
+#    (apps/digithings-stack-cloudflare/scripts/deploy.mjs) injects the rev,
+#    refuses to deploy when the commit cannot be resolved, and reads
+#    /_stack/meta back afterwards to prove the live ids are the ones this
+#    commit implies.
+# 3. So this lane is RE-DERIVED, not `git revert`ed back - DIG-2843's own
+#    precedent is to re-derive a deleted lane, never to revert it. It
+#    deploys through the wrapper, so the rev is never absent.
+#
+# THE GATE IS THE POINT. The deploy job sits behind the `production`
+# environment, whose manifest (.github/environments.json) names Chris as the
+# required reviewer and allows main-branch deployments only. That is what
+# lets Chris stop a deploy; the trigger is only what makes the gate
+# observable. Do not remove `push` without replacing the merge-to-main
+# deploy path, and keep production-deploy-gate-watchdog.yml able to see
+# anything that sits on the gate.
+#
+# CREDENTIALS. wrangler authenticates from the CLOUDFLARE_API_TOKEN
+# environment variable, and the repo secret of that name is the token this
+# lane deploys with: it carries Workers Scripts:Edit on the digithings.ai
+# account. Run 39490394661 uploaded and deployed this Worker with it
+# (main, 2026-10-20). The comment that used to sit here pointed the
+# other way. It read the LOCAL developer's trap
+# (apps/digithings-stack-cloudflare/wrangler.toml: the Vectorize/D1 token in
+# .env shares the name) as if it applied to CI, and renamed the secret this
+# lane reads to CLOUDFLARE_WORKERS_API_TOKEN. No secret of that name exists
+# at any level, so wrangler was handed an empty token and the production
+# deploy failed on auth (run 39482995993). #6066 put the working name back
+# on main at 21:42 on 2026-10-20, and #6076 added a preflight that read a name
+# which exists nowhere, so no deploy could ever pass; #6081 then carried the
+# broken name back to main. #6087 put the working name back on develop and
+# #6097 put it back on main, so both branches read it now and the preflight
+# checks the same name the deploy exports. The lane was green on this
+# exact secret on 2026-10-13 (run 38385151415), and the other deploy lanes -
+# the cron deploy and the digiquant runner deploy - read the same secret name
+# and work with it. If a Workers token ever has to live under a different
+# name, that secret has to be CREATED first: a name with no secret behind it
+# deploys nothing.
+#
+# THE IMAGE INPUTS ARE GENERATED. The image this lane builds COPYs
+# image-packages/stack/requirements.txt, image-packages/stack/wheels and
+# image-packages/stack/digisearch-seeds, and image-packages/ is gitignored
+# (.gitignore "/image-packages/") and produced by
+# scripts/package_r5_image_inputs.py. A checkout never carries it, so every
+# job that leads to the image build packages it first - the deploy job
+# (the build context needs it), the deploy gate (so a broken generator is red
+# BEFORE Chris's production approval) and the pull-request check (so the
+# generator is proven in CI before a change can reach main). Run 39485748555
+# is what that missing step cost: the build died computing its cache key with
+# "/image-packages/stack/digisearch-seeds: not found".
+#
+# The packaging is SCOPED to this image: the action runs the generator's
+# --stack-only mode, which writes the three paths above - plus the frozen
+# exports they are derived from and the provenance record - and nothing the
+# image does not read. The full generator would also build the runner project
+# - a fresh, unpinned `uv lock` against PyPI - and pack five npm workspaces
+# this image never installs, and a production deploy must not inherit a
+# network-dependent resolution step it does not use.
+#
+# SUPERSEDES #6068, #6087 AND #6097. Main took a first version of this step
+# directly (#6068, eb6f2b9493, 2026-10-20 22:01) while develop was still missing
+# it, and that version runs the FULL generator inline. #6087 brought the same
+# step to develop on 2026-10-21, also inline and also with the full generator,
+# and only in the deploy job; #6097 carried it to main as a hotfix, still inline
+# and still with the full generator. This one is the scoped, local-action form,
+# in EVERY job that leads to the image build. All three touch this file, so the
+# promotion of this PR conflicts with them on main: take THIS version of the
+# file when the promotion lands.
+#
+# Do not add `working-directory`: both Containers pin
+# `image_build_context = "../.."`, so the image build needs the repository
+# root as its context (#4046).
+name: "Deploy: digithings-stack (Cloudflare Containers)"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/docker/Dockerfile.digithings-stack-cloudflare"
+      - "apps/digithings-stack-cloudflare/**"
+      - "digiquant/**"
+      - "digivault/**"
+      - "apps/dashboard-api/**"
+      - "apps/digichat-cloudflare/**"
+      - "infra/docker/Dockerfile.digichat-cloudflare"
+      - "apps/digichat/**"
+      - "config/**"
+      - "infra/**"
+      - "scripts/**"
+      - "digibase/**"
+      - "digiclaw/**"
+      - "digifetch/**"
+      - "digigraph/**"
+      - "digikey/**"
+      - "digillm/**"
+      - "digitrace/**"
+      - "digisearch/**"
+      - ".github/workflows/deploy-digithings-stack-cloudflare.yml"
+      # The action that packages the image inputs is a build input of the image
+      # too: it decides what the image carries. A change to it that matches no
+      # filter would never be proven in CI, and the merge would deploy nothing.
+      - ".github/actions/package-stack-image-inputs/action.yml"
+      # The frozen export the image installs is `uv export --frozen` of the
+      # ROOT uv.lock for the nine stack packages, so a merge that only bumps a
+      # transitive pin changes the image and matches no filter - it would
+      # deploy nothing and the image would keep the old pins.
+      - "uv.lock"
+  pull_request:
+    paths:
+      - "infra/docker/Dockerfile.digithings-stack-cloudflare"
+      - "apps/digithings-stack-cloudflare/**"
+      - "digiquant/**"
+      - "digivault/**"
+      - "apps/dashboard-api/**"
+      - "apps/digichat-cloudflare/**"
+      - "infra/docker/Dockerfile.digichat-cloudflare"
+      - "apps/digichat/**"
+      - "config/**"
+      - "infra/**"
+      - "scripts/**"
+      - "digibase/**"
+      - "digiclaw/**"
+      - "digifetch/**"
+      - "digigraph/**"
+      - "digikey/**"
+      - "digillm/**"
+      - "digitrace/**"
+      - "digisearch/**"
+      - ".github/workflows/deploy-digithings-stack-cloudflare.yml"
+      # The action that packages the image inputs is a build input of the image
+      # too: it decides what the image carries. A change to it that matches no
+      # filter would never be proven in CI, and the merge would deploy nothing.
+      - ".github/actions/package-stack-image-inputs/action.yml"
+      # The frozen export the image installs is `uv export --frozen` of the
+      # ROOT uv.lock for the nine stack packages, so a merge that only bumps a
+      # transitive pin changes the image and matches no filter - it would
+      # deploy nothing and the image would keep the old pins.
+      - "uv.lock"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (default: main tip - promote to main first)"
+        required: false
+        default: "main"
+
+permissions:
+  contents: read
+
+# Per-run group, and never superseding: the `production` environment can
+# hold a run at the approval gate, so a shared group with
+# cancel-in-progress: true would cancel a deployment Chris already
+# approved. This is the same shape, and the same reason, as the other
+# production-gated lane in this repo (deploy-digiquant-runner.yml).
+# The serialising race between two quick merges to main is separate work
+# and is not solved here.
+concurrency:
+  group: deploy-digithings-stack-cloudflare-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: "check (pull request - validation only)"
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # The image this lane deploys is built from the repository root, and the
+      # Dockerfile COPYs image-packages/stack/..., a GENERATED and gitignored
+      # tree. Packaging it here proves the generator works in CI before a
+      # change can reach main, instead of at a production deploy.
+      - name: "Package the stack image inputs"
+        uses: ./.github/actions/package-stack-image-inputs
+      - run: npm run typecheck --workspace digithings-stack-cloudflare
+      - run: npm run test --workspace digithings-stack-cloudflare
+
+  check-deploy-gate:
+    name: "check (deploy gate)"
+    # No `needs`: with `needs: [check]` the merge-to-main path skipped
+    # `check`, so it skipped the gate and then skipped `deploy` - DIG-1569
+    # reproduced inside its own fix.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # The gate is the last job before Chris's production approval, so the
+      # packaging runs HERE as well as in the deploy job: a generator that
+      # broke must make the gate red, not a deploy that is already approved.
+      - name: "Package the stack image inputs"
+        uses: ./.github/actions/package-stack-image-inputs
+      - run: npm run typecheck --workspace digithings-stack-cloudflare
+      - run: npm run test --workspace digithings-stack-cloudflare
+
+  deploy:
+    name: "deploy (production)"
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [check-deploy-gate]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # The build context is the repository root, so the tree the Dockerfile
+      # COPYs from has to exist in THIS job. image-packages/ is generated and
+      # gitignored: without this step the build dies computing its cache key
+      # (run 39485748555).
+      #
+      # The local deploy path has always packaged these inputs first
+      # (scripts/local-deploy/deploy_worker.sh) and the digichat publish lane
+      # got the same step in #5968 (DIG-4506). The stack lane never had one.
+      - name: "Package the stack image inputs"
+        uses: ./.github/actions/package-stack-image-inputs
+      # Preflight (DIG-4717). Actions substitutes an EMPTY STRING for a secret
+      # name it cannot resolve, so a missing credential reaches the deploy as an
+      # empty environment variable and the failure lands on wrangler as an auth
+      # error instead of on the missing secret. This step makes the gap loud at
+      # the point of use. It prints whether the variable is empty, never its
+      # value.
+      #
+      # The credential it checks is the one the deploy below exports. #6076
+      # pointed this preflight at `CLOUDFLARE_WORKERS_API_TOKEN`, a name that
+      # exists at NO level, so the deploy job could never pass it and the lane
+      # was dead before it deployed anything. The repo secret that DOES exist,
+      # and that wrangler deploys the stack with, is CLOUDFLARE_API_TOKEN: run
+      # 39490394661 uploaded and deployed this Worker with it (2026-10-20).
+      # The trap that put the two names in conflict is local, not CI:
+      # apps/digithings-stack-cloudflare/wrangler.toml warns that the LOCAL
+      # .env token called CLOUDFLARE_API_TOKEN carries only Vectorize/D1
+      # scopes, and exporting THAT one breaks `wrangler deploy` with code
+      # 10000. The repo secret is a different credential.
+      - name: "Preflight: the Cloudflare token is present"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is empty. This lane needs a Cloudflare API token that can deploy a Worker with a container."
+            echo "::error::The name is the one the repo already holds. A dedicated Workers Scripts:Edit token under a name of its own would also work and is the better long-term shape, but it has to be CREATED first: a name with no secret behind it deploys nothing."
+            exit 1
+          fi
+          echo "CLOUDFLARE_API_TOKEN is present (value not shown)."
+      - name: "Deploy stack container"
+        run: npm run deploy --workspace digithings-stack-cloudflare
+        env:
+          # The repo secret that EXISTS, and that wrangler deploys this stack
+          # with: run 39490394661 uploaded and deployed the Worker with it
+          # (main, 2026-10-20). The name CLOUDFLARE_WORKERS_API_TOKEN
+          # was introduced by #6013, exists at no level, and reached the deploy
+          # as an empty token - run 39482995993 failed on auth because of it.
+          # #6066 put the working name back on main, #6081 carried the broken
+          # one back, and #6087 put the working name back on develop; this line
+          # is here so develop and main agree.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

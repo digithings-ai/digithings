@@ -261,9 +261,13 @@ commits(last: 1) {
   nodes {
     commit {
       statusCheckRollup {
-        contexts {
-          ... on CheckRun { name conclusion }
-          ... on StatusContext { context state }
+        state
+        contexts(first: 100) {
+          nodes {
+            __typename
+            ... on CheckRun { name conclusion }
+            ... on StatusContext { context state }
+          }
         }
       }
     }
@@ -449,7 +453,10 @@ def state_from_graphql_pr(node: dict) -> dict:
     labeled = (node.get("timelineItems") or {}).get("nodes") or []
     commits = (node.get("commits") or {}).get("nodes") or []
     rollup = ((commits[0].get("commit") or {}).get("statusCheckRollup") if commits else None) or {}
-    checks = rollup.get("contexts") or []
+    # `StatusCheckRollup` is an object with a `contexts` connection; it has no
+    # `nodes` field (the schema says so, and the old query failed with
+    # "Field 'nodes' doesn't exist on type 'StatusCheckRollup'").
+    checks = ((rollup.get("contexts") or {}).get("nodes") or [])
     state = {
         "labels": labels,
         "approvals": [],

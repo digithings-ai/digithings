@@ -140,7 +140,12 @@ export interface OpenAIResponsesClientLike {
   responses: {
     create(
       params: { conversation: string; input?: string; stream: true },
-      options: { signal?: AbortSignal; body: { agent_reference: { name: string; type: "agent_reference" } } }
+      options: {
+        signal?: AbortSignal;
+        /** SDK-level retries; the adapter owns capacity retries (#5979). */
+        maxRetries?: number;
+        body: { agent_reference: { name: string; type: "agent_reference" } };
+      }
     ): Promise<AsyncIterable<FoundryStreamEvent>>;
   };
 }
@@ -222,8 +227,74 @@ export function defaultOpenAIClientFactory(projectEndpoint: string): OpenAIRespo
 type FoundryServerEvent =
   | { type: "text-delta"; delta: string }
   | { type: "activity"; span: ActivitySpan }
-  | { type: "done" }
+  | { type: "done"; usage?: FoundryUsage; model?: string }
   | { type: "error"; message: string };
+
+/** Provider-reported token counts, in the shape the client expects. */
+export type FoundryUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
+/**
+ * The agent's own tool-invocation failure, e.g.
+ *
+ *   An error occurred invoking 'list_collector_reports': 'pageSize' must be
+ *   a string, but a number was provided.
+ *
+ * That text is the tool's complaint, not an internal error: it names the tool
+ * and says what was wrong with the call. It is safe to show (no hostnames, no
+ * stack) and it is the only thing that tells the reader — or the client's MCP
+ * author — what to fix. Anything else keeps the generic line.
+ */
+export function extractToolInvocationFailure(
+  message: string,
+): { toolName: string; errorText: string } | null {
+  const match = /An error occurred invoking '([^']+)':\s*([\s\S]+)/.exec(message);
+  const toolName = match?.[1]?.trim();
+  const detail = match?.[2]?.trim();
+  if (!toolName || !detail) return null;
+  return { toolName, errorText: sanitizeUpstreamMessage(detail) };
+}
+
+/** An upstream message, capped and stripped of anything that looks like a URL. */
+function sanitizeUpstreamMessage(message: string): string {
+  return message
+    .replace(/https?:\/\/\S+/gi, "[link]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 400);
+}
+
+function numberOf(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * The token usage the Responses API reports on `response.completed`.
+ *
+ * The Responses API counts input/output tokens (not prompt/completion), and
+ * names the model that served the turn — which is what the context meter
+ * needs to know the window the turn was measured against.
+ */
+export function extractFoundryUsage(event: unknown): {
+  usage: FoundryUsage;
+  model?: string;
+} | null {
+  const response = (event as { response?: Record<string, unknown> })?.response;
+  const raw = response?.usage as Record<string, unknown> | undefined;
+  if (!raw) return null;
+  const input = numberOf(raw.input_tokens ?? raw.prompt_tokens);
+  const output = numberOf(raw.output_tokens ?? raw.completion_tokens);
+  if (input === undefined && output === undefined) return null;
+  const total = numberOf(raw.total_tokens) ?? (input ?? 0) + (output ?? 0);
+  const model = typeof response?.model === "string" ? response.model : undefined;
+  return {
+    usage: { inputTokens: input ?? 0, outputTokens: output ?? 0, totalTokens: total },
+    ...(model ? { model } : {}),
+  };
+}
 
 /**
  * Marks an error surfaced deliberately by Foundry's own `response.error`
@@ -781,13 +852,96 @@ export function mapFoundryEvent(
       }
       return mapped;
     }
-    case "response.completed":
-      return { type: "done" };
+    case "response.completed": {
+      const reported = extractFoundryUsage(event);
+      return reported
+        ? { type: "done", usage: reported.usage, model: reported.model }
+        : { type: "done" };
+    }
     case "response.error":
       return { type: "error", message: String((event as { message?: unknown }).message ?? "Unknown error") };
     default:
       return null;
   }
+}
+
+/**
+ * Retry schedule for a throttled deployment (429). Cumulative wait is ~59s, which
+ * is well inside a demo's patience and far short of a hung request.
+ */
+const DEFAULT_CAPACITY_RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 15_000, 15_000, 15_000];
+const CAPACITY_RETRY_AFTER_CAP_MS = 30_000;
+
+function httpStatusOf(err: unknown): number | undefined {
+  if (typeof err !== "object" || err === null) return undefined;
+  const candidate = err as { status?: unknown; statusCode?: unknown };
+  const raw = typeof candidate.status === "number" ? candidate.status : candidate.statusCode;
+  return typeof raw === "number" ? raw : undefined;
+}
+
+function retryAfterMs(err: unknown): number | null {
+  if (typeof err !== "object" || err === null) return null;
+  const headers = (err as { headers?: { get?: (name: string) => string | null } }).headers;
+  // Azure sends millisecond variants alongside the standard header; prefer the
+  // finer-grained one when both are present.
+  for (const name of ["retry-after-ms", "x-ms-retry-after-ms"]) {
+    const rawMs = headers?.get?.(name);
+    // Headers.get returns null when absent, and Number(null) is 0 — which would
+    // start every retry immediately and make the schedule dead code.
+    if (rawMs == null || rawMs.trim() === "") continue;
+    const ms = Number(rawMs);
+    if (Number.isFinite(ms) && ms >= 0) {
+      return Math.min(ms, CAPACITY_RETRY_AFTER_CAP_MS);
+    }
+  }
+  const raw = headers?.get?.("retry-after");
+  if (raw == null || raw.trim() === "") return null;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1000, CAPACITY_RETRY_AFTER_CAP_MS);
+  }
+  const asDate = Date.parse(raw);
+  if (Number.isNaN(asDate)) return null;
+  return Math.min(Math.max(asDate - Date.now(), 0), CAPACITY_RETRY_AFTER_CAP_MS);
+}
+
+/**
+ * Delay before retrying a capacity failure, or null when it is not retryable.
+ *
+ * 429 only. A 503 can arrive after Foundry has already committed the user item,
+ * and `responses.create` carries the input — retrying it there would append the
+ * user turn twice. Throttling happens before processing, so 429 is safe.
+ */
+export function capacityRetryDelayMs(
+  err: unknown,
+  attempt: number,
+  schedule: readonly number[],
+): number | null {
+  if (httpStatusOf(err) !== 429) return null;
+  const code = (err as { code?: unknown } | null)?.code;
+  // A hard quota/billing stop is not transient: retrying only burns the budget.
+  if (code === "insufficient_quota" || code === "billing_hard_limit_reached") return null;
+  if (attempt >= schedule.length) return null;
+  return retryAfterMs(err) ?? schedule[attempt];
+}
+
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 export async function createFoundryStreamResponse(opts: {
@@ -802,6 +956,11 @@ export async function createFoundryStreamResponse(opts: {
   responseLanguage?: string;
   /** Default `send`. Regen/edit mutate Foundry items then create with no new user input (#3475). */
   turnMode?: DigiTurnMode;
+  /**
+   * Retry schedule for 429/503 on the model call (#5979). Overridable so tests
+   * do not spend the real backoff.
+   */
+  capacityRetryDelaysMs?: readonly number[];
 }): Promise<Response> {
   const turnMode: DigiTurnMode = opts.turnMode ?? "send";
   const openai = (opts.openAIClientFactory ?? defaultOpenAIClientFactory)(opts.projectEndpoint);
@@ -864,6 +1023,10 @@ export async function createFoundryStreamResponse(opts: {
 
       if (opts.signal?.aborted) return;
 
+      // Set when the turn dies because a tool refused the call; the failed
+      // row and the turn error both carry the tool's own complaint.
+      let failure: { toolName: string; errorText: string } | null = null;
+
       try {
         let conversationId = opts.conversationId;
         // The no-invent guard (DIG-509 leaf 1b) rides the turn that creates the
@@ -908,10 +1071,58 @@ export async function createFoundryStreamResponse(opts: {
           createParams.input = createdConversation ? applyGroundingDirective(message) : message;
         }
 
-        const responseStream = await openai.responses.create(createParams, {
-          signal: opts.signal,
-          body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
-        });
+        const responseStream = await (async () => {
+          const schedule = opts.capacityRetryDelaysMs ?? DEFAULT_CAPACITY_RETRY_DELAYS_MS;
+          for (let attempt = 0; ; attempt += 1) {
+            try {
+              const created = await openai.responses.create(createParams, {
+                signal: opts.signal,
+                // Our schedule owns the retries; the SDK's own retries would
+                // multiply them (up to 21 POSTs for one turn).
+                maxRetries: 0,
+                body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
+              });
+              if (attempt > 0) {
+                // Capacity is back: clear the waiting state before the answer
+                // starts, so the indicator does not sit on a stale message
+                // while the first tool call runs.
+                writer.write({
+                  type: "data-connection",
+                  id: "foundry-capacity",
+                  data: { state: "ready" },
+                });
+              }
+              return created;
+            } catch (err) {
+              const delay = capacityRetryDelayMs(err, attempt, schedule);
+              if (delay === null) {
+                if (attempt > 0) {
+                  // Exhausted, or no longer retryable: clear the waiting state
+                  // so the persisted turn does not carry a stale countdown.
+                  writer.write({
+                    type: "data-connection",
+                    id: "foundry-capacity",
+                    data: { state: "ready" },
+                  });
+                }
+                throw err;
+              }
+              writer.write({
+                type: "data-connection",
+                id: "foundry-capacity",
+                data: {
+                  state: "warming_up",
+                  message: `Waiting for model capacity — retrying in ${Math.max(
+                    1,
+                    Math.round(delay / 1000),
+                  )}s`,
+                },
+              });
+              await abortableSleep(delay, opts.signal);
+              if (opts.signal?.aborted) throw err;
+            }
+          }
+        })();
 
         const textFilter = new FoundryToolLeakFilter();
         const mapState: FoundryMapState = { sawSearchOutput: false };
@@ -939,6 +1150,19 @@ export async function createFoundryStreamResponse(opts: {
           } else if (mapped.type === "error") {
             throw new FoundryProtocolError(mapped.message);
           } else if (mapped.type === "done") {
+            if (mapped.usage) {
+              // Real provider-reported token usage (the Responses API counts
+              // them on `response.completed`). The client folds it into
+              // `metadata.custom.usage`, which is what the context meter
+              // reads; nothing is fabricated when the API sends no counts.
+              writer.write({
+                type: "message-metadata",
+                messageMetadata: {
+                  usage: mapped.usage,
+                  ...(mapped.model ? { model: mapped.model } : {}),
+                },
+              });
+            }
             break;
           }
         }
@@ -954,7 +1178,17 @@ export async function createFoundryStreamResponse(opts: {
         }
       } catch (err) {
         if (opts.signal?.aborted) return;
-        if (err instanceof FoundryProtocolError) {
+        failure = extractToolInvocationFailure(
+          err instanceof Error ? err.message : String(err),
+        );
+        if (failure) {
+          // A tool refused the call: say which tool and why, instead of the
+          // generic outage line that hides it.
+          writer.write({
+            type: "error",
+            errorText: `${failure.toolName}: ${failure.errorText}`,
+          });
+        } else if (err instanceof FoundryProtocolError) {
           writer.write({
             type: "error",
             errorText: `Upstream error: ${err.message}`,
@@ -976,7 +1210,13 @@ export async function createFoundryStreamResponse(opts: {
       } finally {
         // Orphaned started rows settle as failed — a row whose tool never
         // returned must not render as a successful completion.
-        finishStandardActivity(writer, activityCtx);
+        finishStandardActivity(
+          writer,
+          activityCtx,
+          failure
+            ? { toolName: failure.toolName, errorText: failure.errorText }
+            : undefined,
+        );
         closeText();
       }
     },
