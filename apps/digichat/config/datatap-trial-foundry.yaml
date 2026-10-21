@@ -13,9 +13,10 @@ deployment:
     title: ask datatap
     # Client-facing copy for the trial. The trial tenant holds a sample
     # dataset (the public Enron email archive), not the visitor's own data,
-    # so the copy says what is actually there. The agent reaches it through
-    # the DataTap MCP; the UI shows each tool call as a row (search, open),
-    # not a per-answer source list, and the copy promises only that.
+    # so the copy says what is actually there. The agent searches it with its
+    # own search tool and opens items with its MCP tool; the UI shows each tool
+    # call as a row, not a per-answer source list. The copy names no mechanism
+    # and promises only those rows.
     # Attachments are not promised until a live run has opened one.
     # Template note: the pipeline clones this file per trial, so a tenant on
     # other data needs its own title, body and placeholder.
@@ -24,8 +25,8 @@ deployment:
       body:
         - "This DataTap trial runs on a sample dataset: the public Enron email
           archive."
-        - The agent searches and opens the emails through the DataTap MCP, and
-          shows each search it ran and each email it opened.
+        - The agent searches and opens the emails, and shows each search it
+          ran and each email it opened.
     # Starters are tested live against the trial agent (Enron sample data):
     # each must finish with no tool error on two runs and show a different
     # tool path. Re-test them when the trial data or agent changes.

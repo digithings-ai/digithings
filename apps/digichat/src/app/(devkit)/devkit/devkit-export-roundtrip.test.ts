@@ -70,7 +70,7 @@ const CONSUME_URL_FIXTURE = [
 const TRIAL = SHIPPED.find((cfg) => cfg.slug.endsWith("-trial-foundry"))!;
 
 describe("trial welcome copy (2.6.6)", () => {
-  it("promises only what the trial UI shows", () => {
+  it("pins the trial welcome copy (no source list, attachments or mechanism claims)", () => {
     const parsed = validateDevkitDraftText(read(TRIAL.rel), TRIAL.scope);
     expect(parsed.ok, parsed.issues.join(" ")).toBe(true);
     const chrome = parsed.deployment!.chrome as {
@@ -84,7 +84,7 @@ describe("trial welcome copy (2.6.6)", () => {
     expect(body[1]).toMatch(/shows each search it ran and each email it opened\.$/);
     expect(chrome.placeholder).toBe("Ask about the Enron emails");
     const copy = JSON.stringify(chrome.welcome) + chrome.placeholder;
-    expect(copy).not.toMatch(/your own data|attached|each answer used/i);
+    expect(copy).not.toMatch(/your own data|attached|each answer used|through the|MCP/i);
   });
 });
 
