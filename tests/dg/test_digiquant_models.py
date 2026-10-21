@@ -35,7 +35,7 @@ _CHEAP_PHASE_MODELS = frozenset(
         # strict JSON (#1617 master-digest JSONDecodeError). Re-adding it here must be a
         # deliberate decision, not a drive-by.
         # #3660: maverick dropped — not on Cheaper Inference catalog.
-        # gemini-3.7-flash dropped 2026-10-21 (house pools DeepSeek-only).
+        "google/gemini-3.7-flash",
     }
 )
 
@@ -239,7 +239,7 @@ def test_balanced_tier_includes_mid_frontier_models(monkeypatch: pytest.MonkeyPa
     balanced = cfg.tiers["balanced"]
     research = balanced.allowed_models["research"]
     assert any("gpt-5.6-luna" in m for m in research)
-    assert not any("gemini" in m for m in research)  # house pools DeepSeek-only (2026-10-21)
+    assert any("gemini" in m for m in research)
     model = model_config.get_model_for_phase("macro")
     assert model is not None
     assert model_config.tier_allows_phase_model(model, "balanced")

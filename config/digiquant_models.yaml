@@ -60,14 +60,15 @@ tiers:
     allowed_models:
       # House CI-only (#3660): every pin must map to the Cheaper Inference catalog
       # (see digillm ``_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE``). meta-llama/* is not
-      # on CI. gemini-3.7-flash held the second slot until 2026-10-21; Chris moved
-      # every house pool to DeepSeek 1017 only (no phase sends images or PDFs).
-      # flash-lite stays OUT of phase pools: lite variants have a
+      # on CI — gemini-3.7-flash (native vision, gate-proven) carries the second
+      # slot instead. flash-lite stays OUT of phase pools: lite variants have a
       # loose/empty-JSON record under strict json_schema (#802).
       extraction:
         - "deepseek/deepseek-v4.1-flash-1017"
+        - "google/gemini-3.7-flash"
       research:
         - "deepseek/deepseek-v4.1-flash-1017"
+        - "google/gemini-3.7-flash"
       reasoning:
         - "deepseek/deepseek-v4.1-flash-1017"
 
@@ -78,14 +79,17 @@ tiers:
       # unmapped frontier — those fail closed when CI is preferred.
       extraction:
         - "deepseek/deepseek-v4.1-flash-1017"
+        - "google/gemini-3.7-flash"
         - "openai/gpt-5.6-luna"
       research:
         - "deepseek/deepseek-v4.1-flash-1017"
         - "deepseek/deepseek-v4-pro"
+        - "google/gemini-3.7-flash"
         - "openai/gpt-5.6-luna"
       reasoning:
         - "deepseek/deepseek-v4.1-flash-1017"
         - "deepseek/deepseek-v4-pro"
+        - "google/gemini-3.7-flash"
         - "openai/gpt-5.6-luna"
 
   quality:
@@ -95,12 +99,15 @@ tiers:
       extraction:
         - "deepseek/deepseek-v4.1-flash-1017"
         - "openai/gpt-5.6-sol"
+        - "google/gemini-3.7-flash"
       research:
         - "deepseek/deepseek-v4-pro"
         - "openai/gpt-5.6-sol"
+        - "google/gemini-3.7-flash"
       reasoning:
         - "deepseek/deepseek-v4-pro"
         - "openai/gpt-5.6-sol"
+        - "google/gemini-3.7-flash"
 
 phase_capabilities:
   macro: research

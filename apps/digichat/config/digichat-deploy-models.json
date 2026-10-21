@@ -10,6 +10,7 @@
     "xiaomi/mimo-v2.6-flash",
     "qwen/qwen3.8-flash",
     "google/gemini-3.1-flash-lite",
+    "google/gemini-3.7-flash",
     "minimax/minimax-m3",
     "openai/gpt-oss-120b"
   ]
