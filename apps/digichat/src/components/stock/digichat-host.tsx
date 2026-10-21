@@ -203,6 +203,7 @@ export function DigiChatHost({
             <SessionPrefsToolBridge />
             <div
               data-stock-product
+              data-deployment={clientConfig.slug}
               data-chrome-mode={clientConfig.chrome.mode}
               data-thread-skin={clientConfig.chrome.skin}
               data-persistence={mode}

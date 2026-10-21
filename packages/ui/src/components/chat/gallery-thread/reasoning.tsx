@@ -18,6 +18,7 @@ import {
   CollapsibleTrigger,
 } from "../../../ui/collapsible";
 import { cn } from "./cn";
+import { useExportKeepMounted } from "../../../replay/export-mount";
 
 export const ANIMATION_DURATION = 200;
 
@@ -212,9 +213,11 @@ function ReasoningContent({
   ...props
 }: React.ComponentProps<typeof CollapsibleContent>) {
   const isPreview = useContext(ReasoningPreviewContext);
+  const keepMounted = useExportKeepMounted();
 
   return (
     <CollapsibleContent
+      keepMounted={keepMounted}
       data-slot="reasoning-content"
       className={cn(
         "aui-reasoning-content text-muted-foreground relative overflow-hidden text-sm outline-none",

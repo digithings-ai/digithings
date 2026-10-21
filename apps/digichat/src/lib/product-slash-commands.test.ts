@@ -185,6 +185,24 @@ describe("buildProductSlashCommands", () => {
     expect(ids).not.toContain("records");
     expect(ids).toContain("tools");
   });
+
+  it("lists /export html next to the markdown export", () => {
+    const row = buildProductSlashCommands(api()).find((c) => c.id === "export-html");
+    expect(row?.label).toBe("/export html");
+    expect(slashItemPrefixMatch({ id: "export-html", label: "/export html" }, "export html")).toBe(
+      true,
+    );
+    expect(slashSubmitAction("/export html")).toMatchObject({
+      kind: "run",
+      command: { id: "export" },
+      arg: "html",
+    });
+    expect(slashSubmitAction("/export")).toMatchObject({
+      kind: "run",
+      command: { id: "export" },
+      arg: "",
+    });
+  });
 });
 
 describe("slashItemPrefixMatch", () => {
