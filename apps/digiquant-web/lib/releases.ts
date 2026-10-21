@@ -1,17 +1,16 @@
 /** Tagged product releases named in the repository changelogs: only versions with a
  *  pushed `<product>-vX.Y.Z` tag. digichat 2.4.0 is in the changelog but untagged;
- *  2.6.7 is the model-picker-and-guardrails release, tagged at its develop-to-main
- *  promotion commit, as 2.6.0-2.6.5 were; 2.6.6 is in the changelog but untagged
- *  (it shipped inside 2.6.7); 2.6.5 was the one-caret-and-themes release.
+ *  2.6.6 is the take-the-chat-with-you release, tagged at its develop-to-main
+ *  promotion commit, as 2.6.0-2.6.5 were; 2.6.5 was the one-caret-and-themes release.
  *  digiquant itself ships on develop and has no product tag.
  *  Each href spans the previous tagged release of that product to this one, the same
  *  range the product changelog heading names. */
 export const TAGGED_RELEASES = [
   {
     product: "digichat",
-    version: "2.6.7",
+    version: "2.6.6",
     date: "2026-10-21",
-    href: "https://github.com/digithings-ai/digithings/compare/digichat-v2.6.5...digichat-v2.6.7",
+    href: "https://github.com/digithings-ai/digithings/compare/digichat-v2.6.5...digichat-v2.6.6",
   },
   {
     product: "digichat",
