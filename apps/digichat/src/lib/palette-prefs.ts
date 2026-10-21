@@ -10,6 +10,7 @@
 import {
   PALETTE_STORAGE_KEY,
   THEME_CHANGE_EVENT,
+  THEME_STORAGE_KEY,
   applyDocumentTheme,
   isPaletteId,
   readPaintedTheme,
@@ -26,29 +27,34 @@ import {
  */
 export function applyThemeModeKeepingPalette(preference: ThemePreference): void {
   const state = readEffectiveThemeState();
-  let storedPalette: string | null = null;
+  // Paint without persisting, then store the mode alone: dt-palette is never
+  // written here, not even briefly.
+  applyDocumentTheme(preference, state.palette, undefined, { persist: false });
   try {
-    storedPalette = localStorage.getItem(PALETTE_STORAGE_KEY);
+    if (preference === "auto") localStorage.removeItem(THEME_STORAGE_KEY);
+    else localStorage.setItem(THEME_STORAGE_KEY, preference);
   } catch {
     /* no storage */
   }
-  applyDocumentTheme(preference, state.palette);
-  if (storedPalette == null) {
-    try {
-      localStorage.removeItem(PALETTE_STORAGE_KEY);
-    } catch {
-      /* no storage */
-    }
-  }
+}
+
+/**
+ * A valid stored palette choice, or null. An unknown or stale id is not a
+ * choice (everywhere else it normalises to "default"), so it does not block
+ * the deployment palette. Throws when storage is unreadable.
+ */
+function storedPaletteChoice(): string | null {
+  const raw = localStorage.getItem(PALETTE_STORAGE_KEY)?.trim().toLowerCase() ?? null;
+  return raw && (raw === "default" || isPaletteId(raw)) ? raw : null;
 }
 
 export function readEffectiveThemeState(): ThemeState {
   const state = readThemeState();
   if (typeof document === "undefined") return state;
   try {
-    if (localStorage.getItem(PALETTE_STORAGE_KEY) != null) return state;
+    if (storedPaletteChoice() != null) return state;
   } catch {
-    return state;
+    /* storage unreadable: what is painted is the truth */
   }
   return { ...state, palette: readPaintedTheme().palette };
 }
@@ -60,7 +66,7 @@ export function applyDeployedPalette(palette: string | null | undefined): void {
   // the embed canvas theme-color); a deployment default must not repaint it.
   if (document.documentElement.getAttribute("data-theme-pin") === "1") return;
   try {
-    if (localStorage.getItem(PALETTE_STORAGE_KEY) != null) return;
+    if (storedPaletteChoice() != null) return;
   } catch {
     return;
   }

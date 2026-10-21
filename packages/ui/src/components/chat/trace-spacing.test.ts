@@ -94,17 +94,26 @@ describe("resolveTraceDensity", () => {
 });
 
 describe("data-density css", () => {
+  // Comments stripped, so a selector named in prose cannot satisfy a test.
   const css = readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), "..", "..", "styles", "chat-aui.css"),
     "utf8",
-  );
+  ).replace(/\/\*[\s\S]*?\*\//g, "");
+
+  function ruleFor(density: string): { selector: string; body: string } {
+    const match = css.match(new RegExp(`([^{}]*data-density="${density}"[^{}]*)\\{([^{}]*)\\}`));
+    return { selector: match?.[1] ?? "", body: match?.[2] ?? "" };
+  }
+
+  it("keys each density off the thread root the skin renders", () => {
+    for (const density of TRACE_DENSITIES) {
+      expect(ruleFor(density).selector).toContain(".digichat-thread");
+    }
+  });
 
   it("reassigns every semantic token from the same table the palette uses", () => {
     for (const density of TRACE_DENSITIES) {
-      const block = css.match(
-        new RegExp(`data-density="${density}"[\\s\\S]*?\\{([\\s\\S]*?)\\n\\}`),
-      );
-      const body = block?.[1] ?? "";
+      const body = ruleFor(density).body;
       for (const [token, length] of Object.entries(TRACE_SPACING[density]) as Array<
         [keyof TraceSpacingTokens, string]
       >) {

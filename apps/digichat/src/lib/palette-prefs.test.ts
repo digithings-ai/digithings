@@ -2,7 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { THEME_CHANGE_EVENT } from "@digithings/ui/theme";
 
-import { applyDeployedPalette, readEffectiveThemeState } from "./palette-prefs";
+import {
+  applyDeployedPalette,
+  applyThemeModeKeepingPalette,
+  readEffectiveThemeState,
+} from "./palette-prefs";
 
 describe("deployment palette default", () => {
   let store: Map<string, string>;
@@ -43,6 +47,46 @@ describe("deployment palette default", () => {
     expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
     expect(store.get("dt-palette")).toBe("aura");
     expect(readEffectiveThemeState().palette).toBe("aura");
+  });
+
+  it("treats an unknown stored palette as no choice", () => {
+    store.set("dt-palette", "draculaa");
+    applyDeployedPalette("dracula");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("dracula");
+  });
+
+  it("reads the painted palette when storage throws", () => {
+    document.documentElement.setAttribute("data-palette", "dracula");
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    });
+    expect(readEffectiveThemeState().palette).toBe("dracula");
+  });
+
+  it("stores only the mode for /theme <mode>, never the painted palette", () => {
+    document.documentElement.setAttribute("data-palette", "dracula");
+    const writes: string[] = [];
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        writes.push(k);
+        store.set(k, String(v));
+      },
+      removeItem: (k: string) => void store.delete(k),
+    });
+    applyThemeModeKeepingPalette("light");
+    expect(writes).toEqual(["dt-theme"]);
+    expect(store.get("dt-theme")).toBe("light");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("dracula");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 
   it("leaves a pinned embed document alone", () => {

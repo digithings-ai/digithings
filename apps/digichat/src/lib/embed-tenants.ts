@@ -668,7 +668,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (
     v.searchEngine !== undefined &&
     (typeof v.searchEngine !== "string" ||
-      !(SEARCH_ENGINES as readonly string[]).includes(v.searchEngine))
+      !(SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase()))
   ) {
     throw new Error(`${ctx}: searchEngine is not a known engine`);
   }
@@ -875,8 +875,10 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       : {}),
     ...(palette ? { palette } : {}),
     ...(typeof v.searchEngine === "string" &&
-    (SEARCH_ENGINES as readonly string[]).includes(v.searchEngine)
-      ? { searchEngine: v.searchEngine as (typeof SEARCH_ENGINES)[number] }
+    (SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase())
+      ? {
+          searchEngine: v.searchEngine.trim().toLowerCase() as (typeof SEARCH_ENGINES)[number],
+        }
       : {}),
     attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
     dictation: typeof v.dictation === "boolean" ? v.dictation : undefined,
