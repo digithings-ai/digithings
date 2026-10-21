@@ -107,6 +107,16 @@ describe("/theme", () => {
     expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
   });
 
+  it("applies a picker row typed as /theme <palette> <mode>", () => {
+    const prefs = api({});
+    executeSlashDef(theme!, "aura light", prefs);
+    expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    executeSlashDef(theme!, "default dark", prefs);
+    expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
   it("opens the picker for an empty or unknown argument", () => {
     const openTheme = vi.fn();
     executeSlashDef(theme!, "", api({ openTheme }));

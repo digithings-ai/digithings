@@ -92,6 +92,17 @@ function prefersLightNow(): boolean {
   }
 }
 
+/** What the document is painting right now (the pre-paint script or a pin set it). */
+export function readPaintedTheme(
+  doc: Document | null = typeof document === "undefined" ? null : document,
+): { resolved: ResolvedTheme; palette: PaletteName } {
+  const root = doc?.documentElement;
+  return {
+    resolved: root?.getAttribute("data-theme") === "light" ? "light" : "dark",
+    palette: normalizePalette(root?.getAttribute("data-palette")),
+  };
+}
+
 export function readThemeState(storage?: GetItem | null, prefersLight?: boolean): ThemeState {
   const store = storage === undefined ? safeStorage() : storage;
   const preference = readPreference(store);
@@ -109,11 +120,16 @@ function writeKey(storage: Storage, key: string, value: string | null): void {
   }
 }
 
-/** Paint `data-theme` / `data-palette` and persist. Auto clears `dt-theme` only. */
+/**
+ * Paint `data-theme` / `data-palette` and, for a user's choice, persist it.
+ * Auto clears `dt-theme`; the default palette clears `dt-palette`. Pass
+ * `{ persist: false }` to repaint without writing (an OS light/dark change).
+ */
 export function applyDocumentTheme(
   preference: ThemePreference,
   palette: string,
   doc: Document | null = typeof document === "undefined" ? null : document,
+  options: { persist?: boolean } = {},
 ): ResolvedTheme {
   const pal = normalizePalette(palette);
   const resolved = resolveTheme(preference, prefersLightNow());
@@ -134,7 +150,7 @@ export function applyDocumentTheme(
       /* ignore */
     }
   }
-  const store = safeStorage();
+  const store = options.persist === false ? null : safeStorage();
   if (store && "setItem" in store) {
     const writable = store as Storage;
     writeKey(writable, THEME_STORAGE_KEY, preference === "auto" ? null : preference);

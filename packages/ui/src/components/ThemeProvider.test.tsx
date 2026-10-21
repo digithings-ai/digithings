@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider, useTheme } from "./ThemeProvider";
 
@@ -139,6 +139,9 @@ describe("ThemeProvider", () => {
     expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
     expect(localStorage.getItem("dt-theme")).toBe("light");
     expect(localStorage.getItem("dt-palette")).toBeNull();
+    // The painted mode is the page's preference, so title and icon agree.
+    expect(screen.getByTestId("theme").textContent).toBe("dark");
+    expect(screen.getByTestId("pref").textContent).toBe("dark");
   });
 
   it("leaves a pinned embed document alone", () => {
@@ -153,7 +156,41 @@ describe("ThemeProvider", () => {
     );
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
+    // useTheme() reports what the pin painted, not a hard-coded default.
+    expect(screen.getByTestId("theme").textContent).toBe("dark");
+    expect(screen.getByTestId("pref").textContent).toBe("dark");
+    expect(screen.getByTestId("pal").textContent).toBe("default");
+    expect(localStorage.getItem("dt-theme")).toBe("light");
+    expect(localStorage.getItem("dt-palette")).toBe("dracula");
     document.documentElement.removeAttribute("data-theme-pin");
+  });
+
+  it("reports a pinned light embed as light", () => {
+    document.documentElement.setAttribute("data-theme-pin", "1");
+    document.documentElement.setAttribute("data-theme", "light");
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    expect(screen.getByTestId("theme").textContent).toBe("light");
+    document.documentElement.removeAttribute("data-theme-pin");
+  });
+
+  it("an OS change repaints auto without writing storage", () => {
+    document.documentElement.setAttribute("data-theme", "dark");
+    document.documentElement.setAttribute("data-palette", "nord");
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    act(() => media.dispatch(true));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("nord");
+    expect(screen.getByTestId("theme").textContent).toBe("light");
+    expect(localStorage.getItem("dt-theme")).toBeNull();
+    expect(localStorage.getItem("dt-palette")).toBeNull();
   });
 
   it("setPalette persists dt-palette and drops an unknown name", () => {

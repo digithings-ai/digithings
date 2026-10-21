@@ -18,14 +18,15 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import {
   applyDocumentTheme,
-  normalizePalette,
   matchThemeStep,
   nextThemeStep,
+  readPaintedTheme,
   readThemeState,
   type PaletteName,
   type ResolvedTheme,
@@ -119,59 +120,70 @@ export function ThemeProvider({
   dir?: Direction;
 }) {
   const [theme, setResolved] = useState<ResolvedTheme>("dark");
-  const [preference, setPreference] = useState<ThemePreference>("auto");
+  const [preference, setPreferenceState] = useState<ThemePreference>("auto");
   const [palette, setPaletteState] = useState<PaletteName>("default");
+  const preferenceRef = useRef<ThemePreference>("auto");
+  const setPreference = useCallback((next: ThemePreference) => {
+    preferenceRef.current = next;
+    setPreferenceState(next);
+  }, []);
 
   useEffect(() => {
-    // A pinned embed owns the document. Applying storage here would put a
-    // visitor's palette back after the pin script cleared it.
+    // The document is the source of truth; storage is only where a user's
+    // choice is kept. Mount READS what is painted and never paints or writes:
+    // themeInitScript has already applied the stored mode and palette on the
+    // surfaces that use it, a pinned embed (data-theme-pin) painted its
+    // tenant's theme, and digiquant.io paints dark itself with no
+    // themeInitScript. Applying storage here flipped such a page to whatever
+    // the dashboard last mirrored into `dt-theme` on that origin.
+    const painted = readPaintedTheme();
+    const stored = readThemeState().preference;
+    // A stored mode the page did not paint (a pinned surface) is not this
+    // page's preference; the painted mode is.
+    setPreference(stored === "auto" || stored === painted.resolved ? stored : painted.resolved);
+    setPaletteState(painted.palette);
+    setResolved(painted.resolved);
+    // A pinned embed owns its document: no OS follow there.
     if (document.documentElement.getAttribute("data-theme-pin") === "1") return;
-    // Mount READS the document; it never paints or writes. The pre-paint
-    // script (themeInitScript) has already applied the stored mode and
-    // palette on the surfaces that use it, and a surface that pins its own
-    // document (digiquant.io paints dark and runs no themeInitScript) keeps
-    // what it painted. Applying storage here flipped such a page to whatever
-    // the dashboard last mirrored into `dt-theme` on the same origin, after
-    // paint, and wrote both keys on surfaces that never wrote before.
-    const root = document.documentElement;
-    const initial = readThemeState();
-    const painted: ResolvedTheme = root.getAttribute("data-theme") === "light" ? "light" : "dark";
-    setPreference(initial.preference);
-    setPaletteState(normalizePalette(root.getAttribute("data-palette")));
-    setResolved(painted);
     const mq = matchMedia("(prefers-color-scheme: light)");
     const onOS = () => {
-      const current = readThemeState();
-      if (current.preference !== "auto") return;
-      setResolved(applyDocumentTheme("auto", current.palette));
+      if (preferenceRef.current !== "auto") return;
+      // Repaint only; the OS changing is not a choice to store.
+      setResolved(
+        applyDocumentTheme("auto", readPaintedTheme().palette, undefined, { persist: false }),
+      );
     };
     mq.addEventListener("change", onOS);
     return () => mq.removeEventListener("change", onOS);
-  }, []);
+  }, [setPreference]);
 
-  const setTheme = useCallback((next: ThemePreference) => {
-    const current = readThemeState();
-    setPreference(next);
-    setResolved(applyDocumentTheme(next, current.palette));
-  }, []);
+  const setTheme = useCallback(
+    (next: ThemePreference) => {
+      setPreference(next);
+      setResolved(applyDocumentTheme(next, readPaintedTheme().palette));
+    },
+    [setPreference],
+  );
 
   const setPalette = useCallback((next: string) => {
-    const current = readThemeState();
-    const resolved = applyDocumentTheme(current.preference, next);
-    setPaletteState(readThemeState().palette);
+    const resolved = applyDocumentTheme(preferenceRef.current, next);
+    setPaletteState(readPaintedTheme().palette);
     setResolved(resolved);
   }, []);
 
-  const applyStep = useCallback((step: ThemeStep) => {
-    const resolved = applyDocumentTheme(step.mode, step.palette);
-    setPreference(step.mode);
-    setPaletteState(step.palette);
-    setResolved(resolved);
-  }, []);
+  const applyStep = useCallback(
+    (step: ThemeStep) => {
+      const resolved = applyDocumentTheme(step.mode, step.palette);
+      setPreference(step.mode);
+      setPaletteState(step.palette);
+      setResolved(resolved);
+    },
+    [setPreference],
+  );
 
   const toggle = useCallback(() => {
-    const current = readThemeState();
-    applyStep(nextThemeStep(current.preference, current.palette, current.resolved));
+    const painted = readPaintedTheme();
+    applyStep(nextThemeStep("auto", painted.palette, painted.resolved));
   }, [applyStep]);
 
   const value = useMemo(

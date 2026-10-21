@@ -236,6 +236,16 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
         applyDocumentTheme(state.preference, raw);
         return;
       }
+      // The picker rows read "/theme <palette> <mode>"; typing one applies it.
+      const [pal, mode, ...rest] = raw.split(/\s+/);
+      if (
+        rest.length === 0 &&
+        (pal === "default" || isPaletteId(pal)) &&
+        (mode === "dark" || mode === "light")
+      ) {
+        applyDocumentTheme(mode, pal);
+        return;
+      }
       api.openTheme?.();
       return;
     }
