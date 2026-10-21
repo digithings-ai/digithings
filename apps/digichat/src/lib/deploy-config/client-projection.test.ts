@@ -130,7 +130,7 @@ describe("page-layout embeds keep embed chrome (#3733)", () => {
 describe("foundry tenants do not inherit the house catalog", () => {
   it("blanks models and the picker even when a catalog was attached", () => {
     const foundry = {
-      slug: "datatap",
+      slug: "foundry-trial",
       gateMode: "ungated",
       theme: "dark",
       accent: null,

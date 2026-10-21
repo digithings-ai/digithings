@@ -77,7 +77,7 @@ the deployment's allowed ids.
 
 The dashboard (`dashboard-modal.yaml`) keeps its own three-slug list:
 `deepseek/deepseek-v4.1-flash-1017`, `openai/gpt-oss-120b`, and
-`z-ai/glm-5.3-flash`. The DataTap trial embed uses Azure Foundry and does not
+`z-ai/glm-5.3-flash`. The Foundry trial embed uses Azure Foundry and does not
 inherit this catalog.
 
 Every house id on the catalog is on `config/litellm.cheaperinference.yaml` and
