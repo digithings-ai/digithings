@@ -166,6 +166,11 @@ describe("matchingSlashCommands", () => {
     expect(matchingSlashCommands("/digis").map((c) => c.id)).toEqual(["digisearch"]);
   });
 
+  it("hides /theme when the embed pins the theme", () => {
+    expect(matchingSlashCommands("/", { theme: false }).map((c) => c.id)).not.toContain("theme");
+    expect(matchingSlashCommands("/theme").map((c) => c.id)).toContain("theme");
+  });
+
   it("shows /sessions only when visibility.sessions is on", () => {
     expect(matchingSlashCommands("/", { sessions: true }).map((c) => c.id)).toContain("sessions");
     expect(matchingSlashCommands("/").map((c) => c.id)).not.toContain("sessions");

@@ -129,6 +129,13 @@ export type EmbedChatPrefsApi = {
   openEffort: () => void;
   openSearchEngine: () => void;
   openView: () => void;
+  /**
+   * Tenant embed: the parent or tenant pins the mode. `/theme` is hidden and
+   * a typed command does nothing. The full app leaves this unset.
+   */
+  themeLocked?: boolean;
+  /** Open the mode + palette picker. No-op when the host does not provide it. */
+  openTheme?: () => void;
   openThinking: () => void;
   openLanguage: () => void;
   openSessions: () => void;
