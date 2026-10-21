@@ -491,8 +491,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
   });
 
   it("keeps rotating x-digichat-peer-ip values on one anonymous premium window", async () => {
-    delete process.env.DIGICHAT_TRUSTED_PROXIES;
     delete process.env.DIGICHAT_PEER_STAMP;
+    process.env.DIGICHAT_TRUSTED_PROXIES = "203.0.113.7,198.51.100.8,192.0.2.10";
     const actual = await vi.importActual<typeof import("@/lib/embed-ip-rate-limit")>(
       "@/lib/embed-ip-rate-limit",
     );
@@ -545,6 +545,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
       }
     } finally {
+      delete process.env.DIGICHAT_TRUSTED_PROXIES;
+      delete process.env.DIGICHAT_PEER_STAMP;
       resetDigichatConfigForTests();
       vi.mocked(clientIpForRateLimit).mockReset();
       vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");

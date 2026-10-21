@@ -57,7 +57,13 @@ and the agent carries the search index + MCP tool server-side.
 - Reasoning summary **enabled** on the agent definition, otherwise thinking
   rows stay dropped by design.
 - `guardrails` (optional) is off unless a key is set. `maxToolCallsPerTurn`
-  caps tool calls per turn on every backend; `backend.maxToolCalls` remains
+  follows the per-adapter matrix in `toolCallCapSupport`
+  (`src/lib/deploy-config/schema.ts`) and the Guardrails section of
+  `apps/digichat/ARCHITECTURE.md`. Foundry and the AI SDK backends
+  (openai-completions, openai-responses, anthropic, google-vertex) enforce
+  it and stop the tool loop. langgraph and ag-ui stop forwarding the next
+  call (notice/best-effort, no `tool_choice: none` follow-up). digigraph is
+  notice only. a2a is refused at config load. `backend.maxToolCalls` remains
   the Foundry alias and the shared key wins. `tokensPerMinute.deployment`
   matches an upstream TPM and `tokensPerMinute.user` is a per-person limit.
   The trial yaml leaves a proposed cap of `5` (alternative `4`) and the

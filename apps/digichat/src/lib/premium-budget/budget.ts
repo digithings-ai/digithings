@@ -87,8 +87,9 @@ export function resetPremiumSpendForTests(): void {
  * Same order as `guardrailIdentity`. A client session header is not a
  * budget key. `embed:anonymous` is not a person, and `unknown` is not an
  * address. The address is `clientIpForRateLimit`: a stamped socket, or a
- * peer listed in `DIGICHAT_TRUSTED_PROXIES`. A caller-supplied header is
- * not a key. Callers with neither share `anonymous`.
+ * forwarded header from a stamped peer on `DIGICHAT_TRUSTED_PROXIES`. An
+ * unstamped peer header is `unknown` even when that allowlist is set.
+ * Callers with neither share `anonymous`.
  */
 export function premiumSpendIdentity(opts: {
   userId?: string | null;

@@ -143,6 +143,12 @@ describe("premium spend budget", () => {
       expect(new Set(barePeer).size).toBe(1);
       expect(barePeer[0]).toBe("public:anonymous");
 
+      process.env.DIGICHAT_TRUSTED_PROXIES = "203.0.113.7,198.51.100.8,192.0.2.10";
+      const listedBare = forwarded.map((xff) => keyFor(xff, "203.0.113.7"));
+      expect(new Set(listedBare).size).toBe(1);
+      expect(listedBare[0]).toBe("public:anonymous");
+      delete process.env.DIGICHAT_TRUSTED_PROXIES;
+
       process.env.DIGICHAT_PEER_STAMP = "stamp-secret";
       const stamped = forwarded.map((xff) => keyFor(xff, "203.0.113.7", "stamp-secret"));
       expect(new Set(stamped).size).toBe(1);
