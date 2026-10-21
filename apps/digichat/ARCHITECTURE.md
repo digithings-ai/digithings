@@ -532,6 +532,71 @@ A new JWT is exchanged on **every** chat request. There is no client-side cachin
 the upstream JWT; this is safe but adds one HTTP round-trip latency to every message
 send (see Section 8).
 
+### digikey BFF session exchange: retry schedule and budget (DIG-4588)
+
+`exchangeDigikeyBffSession` (`src/lib/digikey-exchange.ts`) retries the
+`bff_session` exchange, because digikey runs in a sleep-on-idle container: the
+first call after idle can 5xx or time out for ~50s while it boots. The schedule
+is 7 attempts with backoff `[0, 2s, 4s, 8s, 12s, 15s, 15s]`, a 30s per-attempt
+abort window, and transient = `5xx | 429 | 408`; any other status fails fast
+after one attempt.
+
+The budget of one call is an **overall** budget of **100,000 ms (~1.7 min)**:
+`DIGIKEY_BFF_RETRY_BUDGET_MS` bounds the whole retry loop, not each attempt. The
+loop is abandoned once that much wall clock has passed, and no attempt starts
+after the budget is spent. A bad digikey therefore costs two different amounts,
+depending on how it fails:
+
+- **digikey answers fast with 5xx** (it is up, the request is not): the whole
+  schedule runs and the call gives up after **56,000 ms** of backoff — 7
+  attempts.
+- **digikey never answers**: every attempt burns its 30s abort window, so the
+  budget is spent after **3 attempts** (30s abort, 2s backoff, 30s abort, 4s
+  backoff, 30s abort = 96s) and the fourth iteration breaks before it starts a
+  fetch. The call fails at ~100s.
+
+Before that overall budget existed (the "~100s budget" comment, #5950) the same
+schedule could hold a request for **266,000 ms** (56s of backoff plus 7 × 30s
+of abort window) — more than twice the budget the comment claimed. The number
+is exported and pinned by a test instead of being asserted in a comment.
+
+- **Keep the schedule, do not shorten it.** It encodes digikey's measured ~50s
+  container boot. Shortening it changes how long a down digikey holds a chat
+  request, which is a request-owner decision, not a test leaf's. This change
+  makes that cost visible and pinned instead of silently changing it.
+- **The budget is an exported constant, not prose — and it is a cap, not a
+  derivation.** `DIGIKEY_BFF_RETRY_BUDGET_MS` = 100,000 is an independent cap on
+  the loop, *not* the sum of the schedule (that sum is 266,000, and the loop
+  stops long before it). It is exported so this note and the test pin the same
+  number; the schedule is pinned separately, by
+  `DIGIKEY_BFF_RETRY_DELAYS_MS` and `DIGIKEY_BFF_ATTEMPT_TIMEOUT_MS`.
+- **The per-attempt abort timer is released on every path** (`clearTimeout` in a
+  `finally`). An attempt that rejected used to leave its 30s timer pending after
+  the exchange had already given up.
+- **Only `5xx`, `429` and `408` retry.** A 4xx is digikey's decision (bad
+  token, unknown tenant); retrying it only holds the chat request longer for the
+  same answer.
+- **What a caller sees.** The chat upstream-auth path
+  (`src/lib/digigraph-upstream.ts`) calls this before digigraph, so a down
+  digikey holds the chat request for up to the whole budget (~100s) and then
+  raises `DigigraphUpstreamAuthError`.
+- **What the budget does and does not bound.** The per-attempt abort window
+  covers the request up to the response headers: the timer is released when
+  the headers arrive, so a response that then stalls its body is **not**
+  bounded by this budget. That limit is unchanged here — whether to hold the
+  abort across the body read is a request-owner decision.
+- **How it sits against the route budget.** The exchange budget and digigraph's
+  own upstream-boot retry (a separate ~250s budget, see "Upstream 503s retry on
+  two budgets" in this section) run in sequence, so together they can hold a
+  chat request for ~350s against the chat route's own `maxDuration = 300`
+  (`src/app/api/chat/route.ts`). The exchange no longer eats the route budget
+  on its own, but the two budgets together still exceed it; tightening either
+  one is a request-owner decision.
+
+Coverage: `src/lib/digikey-exchange.test.ts` drives a transient status, each
+arm of the transient set, a 4xx, a thrown attempt and an abort, and pins the
+attempt count, the timer cleanup, the schedule and the stated budget.
+
 ### Drizzle migration approach
 
 Three SQL migration files in `drizzle/`:
