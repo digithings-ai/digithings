@@ -23,6 +23,7 @@ import {
 } from "react";
 import {
   applyDocumentTheme,
+  normalizePalette,
   matchThemeStep,
   nextThemeStep,
   readThemeState,
@@ -125,11 +126,19 @@ export function ThemeProvider({
     // A pinned embed owns the document. Applying storage here would put a
     // visitor's palette back after the pin script cleared it.
     if (document.documentElement.getAttribute("data-theme-pin") === "1") return;
+    // Mount READS the document; it never paints or writes. The pre-paint
+    // script (themeInitScript) has already applied the stored mode and
+    // palette on the surfaces that use it, and a surface that pins its own
+    // document (digiquant.io paints dark and runs no themeInitScript) keeps
+    // what it painted. Applying storage here flipped such a page to whatever
+    // the dashboard last mirrored into `dt-theme` on the same origin, after
+    // paint, and wrote both keys on surfaces that never wrote before.
+    const root = document.documentElement;
     const initial = readThemeState();
-    const resolved = applyDocumentTheme(initial.preference, initial.palette);
+    const painted: ResolvedTheme = root.getAttribute("data-theme") === "light" ? "light" : "dark";
     setPreference(initial.preference);
-    setPaletteState(initial.palette);
-    setResolved(resolved);
+    setPaletteState(normalizePalette(root.getAttribute("data-palette")));
+    setResolved(painted);
     const mq = matchMedia("(prefers-color-scheme: light)");
     const onOS = () => {
       const current = readThemeState();

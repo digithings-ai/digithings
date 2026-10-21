@@ -104,6 +104,9 @@ describe("ThemeProvider", () => {
 
   it("auto clears dt-theme and follows the OS, keeping the palette", () => {
     localStorage.setItem("dt-palette", "dracula");
+    // What themeInitScript paints before hydration.
+    document.documentElement.setAttribute("data-theme", "dark");
+    document.documentElement.setAttribute("data-palette", "dracula");
     render(
       <ThemeProvider>
         <Probe />
@@ -120,6 +123,22 @@ describe("ThemeProvider", () => {
     media.dispatch(true);
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
     expect(localStorage.getItem("dt-palette")).toBe("dracula");
+  });
+
+  it("reads the painted document on mount and writes nothing", () => {
+    // digiquant.io paints dark itself and runs no themeInitScript, while the
+    // dashboard mirrors its own choice into dt-theme on the same origin.
+    localStorage.setItem("dt-theme", "light");
+    document.documentElement.setAttribute("data-theme", "dark");
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
+    expect(localStorage.getItem("dt-theme")).toBe("light");
+    expect(localStorage.getItem("dt-palette")).toBeNull();
   });
 
   it("leaves a pinned embed document alone", () => {
