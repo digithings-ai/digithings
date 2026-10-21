@@ -89,6 +89,8 @@ for line in p.read_text().splitlines():
         print(line.split("=", 1)[1].strip())
 PY
 )"
+# `-U` overwrites, so an empty value would destroy the custody copy. Stop first.
+: "${OCC_INVITE_KEY:?no OCC_INVITE_KEY in the host secret store - stop, do not write an empty copy}"
 security add-generic-password -U -s digithings.occ-invite-key -a DIG-1474 \
   -w "$OCC_INVITE_KEY" -l "digithings occ-invite-key"
 unset OCC_INVITE_KEY
@@ -144,12 +146,14 @@ Consequences:
 
 ## Rollout — Act B1 (Chris-only: this touches a production Worker secret and deploys)
 
-> **The one-command entry is disarmed (2026-10-21).** `scripts/occ_invite_key_rollout.sh` runs
-> `scripts/occ_invite_key_write.sh` and then stops with
-> `DISARMED: R5 deploy is not run from this entry. Nothing was deployed.` and exit code 2. The
-> write script does not run `wrangler secret put` and does not write KV (the KV read path is
-> DIG-3699). **There is no working one-command rollout today** — run the steps below by hand, and
-> read `scripts/occ_invite_key_rollout.sh` before you do.
+> **The one-command entry is disarmed (2026-10-21).** `scripts/occ_invite_key_rollout.sh` calls
+> `scripts/occ_invite_key_write.sh` first, and that write half fails closed: it prints
+> `FATAL: DISARMED: R6 write-secret/KV does not run until Chris approves. Nothing was written.`
+> and exits 1. The rollout script's own `DISARMED: R5 deploy is not run from this entry. Nothing
+> was deployed.` line and its exit code 2 are therefore **never reached** — the write half aborts
+> first. The write script does not run `wrangler secret put` and does not write KV (the KV read
+> path is DIG-3699). **There is no working one-command rollout today** — run the steps below by
+> hand, and read both scripts before you do.
 
 The container boot-env trap applies: `DIGICHAT_EMBED_TENANTS` reaches the digichat Container
 process env (`apps/digichat-cloudflare/src/index.ts:69`, merged from the KV registry at
@@ -208,8 +212,9 @@ built by `scripts/index_occ_tickets.py` from customer ticket text
 ([ADR 0031](../adr/0031-occ-tickets-corpus-retrieval.md)). Counsel's condition for this
 rollout is that the embed reaches the **help corpus only**, so a token rotation that leaves
 `occ_tickets` reachable rotates the credential and leaves the retrieval grant exactly as wide as
-it was. The two fields therefore ship together, and `scripts/occ_invite_key_rollout.sh` step 2
-refuses a put that is not exactly those two fields, or that moves only one of them.
+it was. The two fields therefore ship together, and the write half
+(`scripts/occ_invite_key_write.sh`, step 2) refuses a put that is not exactly those two fields, or
+that moves only one of them.
 
 The index is a **fixed literal in the script, not an operator-supplied value**. Do not parameterise
 it from the environment: an operator who could widen the corpus through the guard is the exact
@@ -251,8 +256,12 @@ is **not** discoverable from the client projection, i.e. the browser is not give
    When the change is a registry change, use the sanctioned tool instead of hand-writing the JSON:
    `python3 scripts/digichat_tenant_registry.py apply --live-from <host-store-file> --overlay
    <overlay-file>` writes both copies and recycles the container as one change. It prints a plan
-   and asks for a typed confirmation before it writes. `scripts/occ_invite_key_rollout.sh` is
-   disarmed — see the banner above.
+   and asks for a typed confirmation before it writes. The tool takes the OCC `token` from the
+   **live** file (`--live-from`, by default
+   `~/.config/digithings/secrets/digichat-embed-tenants.deploy.json`), never from the overlay: an
+   overlay can never carry a token (`FORBIDDEN_OVERLAY_KEYS` in the script). To rotate the key,
+   write the new literal into that live file first, then run the tool.
+   `scripts/occ_invite_key_rollout.sh` is disarmed — see the banner above.
 
 4. **Recycle the container.** `sleepAfter` alone does not evict a Container under steady traffic,
    so the value only reaches the process when the instance changes. The id is derived from the
@@ -319,8 +328,8 @@ The script's checks:
 Check 7 is not a check on the key. It asserts that the response carries neither a
 `digisearchIndex` field nor the name `occ_tickets`, i.e. that the retrieval corpus is not
 discoverable from the client projection. It is the observable half of the narrowing; the
-pre-put half lives in `scripts/occ_invite_key_rollout.sh` step 2, because the registry is a
-write-only secret and no HTTP surface can report the live corpus.
+pre-put half lives in the write half (`scripts/occ_invite_key_write.sh`, step 2), because the
+registry is a write-only secret and no HTTP surface can report the live corpus.
 
 Check 2 is the only one that can tell a **correct** key from a **wrong** one, because it is the
 only one that withholds the first-party origin — and without that origin the allowlist cannot
@@ -335,8 +344,8 @@ and it is the only proof that the whole chain (Pages route → `readInviteToken`
 [Rotation log](SECRETS_ROTATION.md#rotation-log).
 
 **A person does this step, not an agent.** The key rides in the URL, so an agent driving the
-browser would write it into a tool call and into the run transcript, and the OCC turn exercises the
-ticket tool, whose answer carries client ticket text. The key is in the Keychain; the person
+browser would write it into a tool call and into the run transcript, and an OCC turn can reach the
+ticket tool, whose answer can carry client ticket text. The key is in the Keychain; the person
 loads it in their own browser and never pastes it into a chat.
 
 ## Revocation — this is the Act B2 rollback
@@ -408,7 +417,7 @@ and live customer PII anyway.
   first 8 hex of the SHA-256 — non-reversible, and enough to prove which value was installed:
 
   ```bash
-  printf '%s' "$OCC_INVITE_KEY" | wc -c          # 65 with the trailing newline
+  printf '%s' "$OCC_INVITE_KEY" | wc -c          # 64 for a 64-hex key: printf '%s' adds no newline
   printf '%s' "$OCC_INVITE_KEY" | shasum -a 256 | cut -c1-8
   ```
 
@@ -436,7 +445,7 @@ above), so the example below shows the inputs it expects, not a working command:
 ```sh
 OCC_ROLLOUT_AUTH=login \
 OCC_EMBED_TENANTS_CURRENT="$(< ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json)" \
-OCC_INVITE_KEY="$(security find-generic-password -s digithings.occ-invite-key -w)" \
+OCC_INVITE_KEY="$(security find-generic-password -s digithings.occ-invite-key -a DIG-1474 -w)" \
   bash scripts/occ_invite_key_rollout.sh    # type ROLLOUT when prompted
 ```
 

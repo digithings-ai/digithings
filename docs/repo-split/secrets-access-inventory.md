@@ -163,6 +163,7 @@ gate/palette become pluggable (D-X1).
 ## OCC invite key + tenant tokens + edge keys (Keychain, names only)
 
 Live human-held names (Keychain service names, values never touched):
+`digithings.occ-invite-key`,
 `digithings.mcp-edge-key`,
 `digithings.zammad-edge-key`, `digithings.tenant-token-digiquant-io`,
 `digithings.tenant-token-digithings-ai`.
@@ -173,7 +174,7 @@ file move.
 
 `digithings.occ-invite-key` (account `DIG-1474`) **had no copy between 2026-10-18
 and 2026-10-21**. The item was destroyed on 2026-10-18 (DIG-3524, when the key
-gated nothing because the OCC tenant had dropped out of the registry), while the
+gated nothing, because the OCC tenant had dropped out of the registry on that day), while the
 production copies stayed live in the Cloudflare Worker secret, the Pages secret
 and the OCC tenant `token`. All of those surfaces are write-only, so the live
 value could not be read back from them. The value survived in the local host
