@@ -1,3 +1,23 @@
+## [2.6.5](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.4...digichat-v2.6.5) (2026-10-21)
+
+One caret and your own colours: every collapsible row in a turn opens with
+the same pixel chevron, and `/theme` paints the chat in any shared palette,
+light or dark.
+
+### Features
+
+* **digichat:** `/theme` picks a palette from the shared registry and a mode (`/theme aura light`); the choice paints before the first frame and persists, and pinned embeds keep their own theme ([#6122](https://github.com/digithings-ai/digithings/pull/6122))
+
+### Bug Fixes
+
+* **digichat:** the work chain, reasoning, tool group and every tool row share one caret, the square pixel chevron of the user-message mark, which turns down when its own row opens and nowhere else ([#6132](https://github.com/digithings-ai/digithings/pull/6132))
+* **chat:** the disclosure triggers announce their label once ([#6140](https://github.com/digithings-ai/digithings/pull/6140))
+* **ui:** the JSON view's whitespace repair runs in one linear pass; a partial or unparsable payload over 65,536 characters is shown raw instead of repaired ([#6135](https://github.com/digithings-ai/digithings/pull/6135))
+* **digichat:** the trial tenant's starter questions ask about the sample email archive its agent can reach ([#6179](https://github.com/digithings-ai/digithings/pull/6179))
+* **ui:** the theme provider follows every painter, and a pinned embed sets its own `theme-color` ([#6164](https://github.com/digithings-ai/digithings/pull/6164))
+* **chat:** the JSON view that renders tool arguments and results tokenizes in one pass, with no regular expression over strings ([#6129](https://github.com/digithings-ai/digithings/pull/6129))
+* **digichat:** the view-level wording has one home, so the session-preferences refusal no longer names retired command ids ([#6050](https://github.com/digithings-ai/digithings/pull/6050))
+
 ## [2.6.4](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.3...digichat-v2.6.4) (2026-10-21)
 
 The chat shows the backend's own words: what the server says while it works,

@@ -26,7 +26,7 @@ So the lane being absent is not a missing workflow to restore. It is the absence
 |---|---|
 | prod image | `datatapchatregistry.azurecr.io/digichat:v2.3.2` (digest `sha256:c5708729fea2…`) |
 | prod revision | `digichat--0000007`, created 2026-09-21, still the only revision |
-| `develop` version | `2.6.4` |
+| `develop` version | `2.6.5` |
 | commits behind prod on `apps/digichat` | **67** |
 | last push to the ACR | **2026-09-21** — nothing since, not even a 2.4.0 image |
 
@@ -449,6 +449,7 @@ Any doc corrected in this PR that tells a reader to `docker pull ghcr.io/digithi
 - **Historical, needs judgement not correction**: `RELEASES.md:80,82` and `BRANCHING.md:189` tell you not to delete `ghcr.io/digithings-ai/digichat:v0.9.3` because clients consume it. The package is gone from GHCR, so that advice can no longer be verified from this repo — but whether DataTap still depends on it is a DataTap question, not ours.
 - **`openwiki/digichat/operations.md:246`** repeats the claim. `openwiki/` is generated; per `AGENTS.md` it regenerates from source, so fix the source and let the weekly run pick it up rather than hand-editing.
 - **New since 2026-10-21 (the `v2.6.4` publication)**: five sites still say that no digichat image has ever been published, which the run-94 push falsified — `apps/digichat/OPERATIONS.md:9` ("No published image exists yet"), `docs/vision/api/digichat-api.md:103`, `docs/vision/api/guide-digichat-install.md:26`, `docs/digichat/INSTALL.md:29-32`, `docs/digichat/RELEASE-SMOKE.md:3-8`. Each needs one dated correction sentence: an image **is** published (`v2.6.4` and `:latest`, private package, pulled with a `ghcr.io` credential), while the `v2.4.x`–`v2.6.3` tags still have no image behind them.
+  - **Update 2026-10-21 (2.6.5 release, #6172)**: corrected `docs/digichat/INSTALL.md`, `docs/digichat/RELEASE-SMOKE.md`, `apps/digichat/OPERATIONS.md:9`, and the two website sources of the generated vault pages, `apps/digithings-web/lib/sharedDocs.ts` (self-host and install guides) and `apps/digithings-web/lib/apiDocs.ts` (digichat module doc). The three generated copies, `docs/vision/api/digichat-api.md`, `docs/vision/api/guide-digichat-install.md` and `docs/vision/api/guide-self-host.md`, are corrected by hand to match: re-running `make gen-api-vault` today rewrites all 17 vault notes and reverts newer hand edits in them (it was last run 2026-10-12), so the regeneration is its own follow-up.
 
 To find the current set at any time:
 
