@@ -62,7 +62,7 @@ run, and on which head. Fill the values from the environment
 |-------|--------|
 | `agent=` | The seat that claims the review. The queue resolves the run to the seat that owned it and refuses a marker whose two disagree. |
 | `run=` | The Paperclip run the review came from. The queue reads `/api/heartbeat-runs/{run}`; a run the API does not know is refused. |
-| `head=` | The head the review covered. It must be the PR's current head; a marker naming an older head is refused. |
+| `head=` | The head the review covered. It must be the PR's current head; a marker naming an older head is refused. The sha may be written at any length of 7 characters or more and is read as a prefix of the head — post the full sha, but a short one still binds. |
 
 Two rules follow:
 
@@ -73,12 +73,18 @@ Two rules follow:
 - **The head must be the current one.** A verdict on an older head says nothing
   about the code the PR stands at now.
 
+The queue reads the **last** review marker on the PR, and the gate judges that
+one and no other. A stale last marker is a refusal, not a cue to look further
+back: the head only moves forward, so an earlier marker can only bind an older
+head, and the remedy is a new review — by another seat — not an older one.
+
 A marker that breaks either rule is **dropped**, not forgiven: the PR then fails
 the coverage gate and waits for a review from another seat, and the refusal names
-the head the queue expected. A marker the queue could not judge at all — the
-Paperclip API could not be read, or the PR's authoring seat could not be
-identified — is dropped on the same terms. The gate measures in **shadow** mode
-while it rolls out (DIG-4809); see
+the head the queue expected. Every other marker on the PR is dropped with it, so
+no earlier review stands in for the failing one. A marker the queue could not
+judge at all — the Paperclip API could not be read, or the PR's authoring seat
+could not be identified — is dropped on the same terms. The gate measures in
+**shadow** mode while it rolls out (DIG-4809); see
 [MERGE_QUEUE.md § Reviewer independence](../MERGE_QUEUE.md#reviewer-independence).
 
 This is an **accountability record, not proof**: every seat pushes under one

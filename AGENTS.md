@@ -260,11 +260,14 @@ refute, then post survivors as a PR comment opening with
 in-session comment carries a second marker next to the first one —
 `<!-- digithings-review agent=<seat> run=<run> head=<sha> -->` — and the merge
 queue reads it. Two things follow. The marker must name the head the PR stands at
-now, so a verdict on an older head cannot pass as coverage of this one. And the
+now, so a verdict on an older head cannot pass as coverage of this one; the sha is
+read as a prefix of the head, so 7 characters bind it and fewer do not. And the
 seat that owns the PR's ticket cannot be the seat whose review counts: the queue
 drops a marker from the author's own seat, and one posted while that seat's run on
 the ticket was still active — which is what the author's own subagent review looks
-like. So the authoring seat hands the PR to another seat; the Code Reviewer
+like. The queue reads the last review marker on the PR and judges that one, so a
+stale last marker is a refusal rather than a cue to fall back on an older review.
+So the authoring seat hands the PR to another seat; the Code Reviewer
 approves, the queue merges (DIG-4795).
 
 Every line here is written by a coding agent, so an agent reviewing it is not weaker

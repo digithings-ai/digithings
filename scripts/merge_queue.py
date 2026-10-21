@@ -1220,6 +1220,27 @@ def _within_window(at: str, start: str, end: str) -> bool:
     return start_ts <= at_ts <= end_ts
 
 
+MIN_HEAD_BINDING = 7
+
+
+def _head_binds(marked: str, head: str) -> bool:
+    """Whether a posted sha binds this PR's head.
+
+    Reviewers write the reviewed sha at whatever length they have at hand:
+    the QA Lead's census of the open develop PRs found markers naming the
+    head as 7, 8, 12 and 40 characters. So the binding is a prefix
+    comparison against the head, not a fixed-width match — a check that
+    looked for exactly 12 hex characters would read a valid 7-character
+    marker as naming nothing at all. A sha shorter than git's own minimum
+    abbreviation binds no head.
+    """
+    marked = str(marked or "").strip().lower()
+    head = str(head or "").strip().lower()
+    if not head or len(marked) < MIN_HEAD_BINDING:
+        return False
+    return head.startswith(marked)
+
+
 def _marker_problems(
     marker: ReviewMarker,
     *,
@@ -1239,7 +1260,7 @@ def _marker_problems(
             f"names no head SHA, so it says nothing about the head `{head[:12]}` "
             "this PR stands at"
         )
-    elif marker.head.lower() != head.lower():
+    elif not _head_binds(marker.head, head):
         problems.append(
             f"names head `{marker.head[:12]}` while this PR stands at `{head[:12]}`"
         )
@@ -1275,18 +1296,41 @@ def _marker_problems(
     return problems, reviewer
 
 
+def _governing_marker(markers: list[ReviewMarker]) -> ReviewMarker:
+    """The marker that speaks for the PR: the newest one.
+
+    The queue has always read the last review marker on a PR, so the gate
+    judges that one and no other. Falling back to an earlier marker would
+    paper over a stale last marker with an older review — and the head only
+    moves forward, so an earlier marker can only ever bind an older head.
+    The remedy for a stale last marker has to be a new review, not an older
+    one, so a stale last marker is a refusal.
+    """
+    best: ReviewMarker | None = None
+    best_key: tuple[bool, float, int] = (False, 0.0, -1)
+    for index, marker in enumerate(markers):
+        stamp = _parse_ts(marker.at)
+        key = (stamp is not None, stamp if stamp is not None else 0.0, index)
+        if key > best_key:
+            best, best_key = marker, key
+    if best is None:
+        raise ValueError("no marker to govern")
+    return best
+
+
 def _reviewer_independence(
     pr: dict[str, Any],
     cfg: ReviewIndependence,
     prov: ReviewerProvenance,
     comments: list[Any],
 ) -> Independence:
-    """Judge the review markers on one PR.
+    """Judge the review marker that speaks for this PR.
 
-    Every marker is judged, because a PR can carry several and the newest one
-    is not always the one that counts. A marker that passes is the review the
-    queue accepts; a marker that fails is dropped from the coverage evidence
-    and named in the refusal.
+    The newest review marker governs, and it is judged on two counts: it must
+    name the head the PR stands at now, and it must come from a seat that is
+    not the PR's own author. A marker that fails is dropped from the coverage
+    evidence, and every other marker goes with it, so that no older review is
+    used in its place.
     """
     mode = _effective_mode(cfg)
     if mode == "off":
@@ -1297,62 +1341,58 @@ def _reviewer_independence(
     head = str(pr.get("headRefOid") or "")
     # A marker the gate cannot judge does not count: an unjudged marker is
     # dropped from the evidence, exactly like a judged-and-refused one.
-    unjudged = frozenset(m.comment_id for m in markers if m.comment_id)
+    every_marker = frozenset(m.comment_id for m in markers if m.comment_id)
     try:
         authors, author_runs = _author_context(pr, prov)
     except _PaperclipUnavailable as exc:
         return Independence(
-            disqualified=unjudged,
+            disqualified=every_marker,
             unverifiable=f"the review seats could not be checked: {exc}",
         )
     if not authors:
         return Independence(
-            disqualified=unjudged,
+            disqualified=every_marker,
             unverifiable=(
                 "the PR's authoring seat could not be identified, so no review on "
                 "it can be shown to come from a different seat"
             )
         )
-    problems: list[str] = []
-    disqualified: set[str] = set()
-    accepted: list[tuple[ReviewMarker, str]] = []
+    governing = _governing_marker(markers)
     try:
-        for marker in markers:
-            found, reviewer = _marker_problems(
-                marker,
-                head=head,
-                authors=authors,
-                author_runs=author_runs,
-                prov=prov,
-            )
-            if found:
-                problems.append(
-                    f"the review posted at {marker.at or 'an unknown time'} "
-                    + "; ".join(found)
-                )
-                if marker.comment_id:
-                    disqualified.add(marker.comment_id)
-                continue
-            accepted.append((marker, reviewer))
+        found, reviewer = _marker_problems(
+            governing,
+            head=head,
+            authors=authors,
+            author_runs=author_runs,
+            prov=prov,
+        )
     except _PaperclipUnavailable as exc:
         # The API went away mid-judgement. Nothing is concluded about any
         # marker: a partial judgement is not a judgement.
         return Independence(
-            disqualified=unjudged,
+            disqualified=every_marker,
             unverifiable=f"the review seats could not be checked: {exc}",
         )
-    note = ""
-    if accepted:
-        marker, reviewer = accepted[-1]
-        seat = reviewer or marker.agent
-        note = (
-            f"reviewer seat `{seat[:8]}`"
-            + (f" (run `{marker.run[:8]}`)" if marker.run else "")
-            + f" on head `{head[:12]}`"
+    if found:
+        return Independence(
+            # Every marker goes, not just the one that failed: an older review
+            # is not used in place of a last marker that does not count.
+            disqualified=every_marker,
+            problems=(
+                "the last review posted at "
+                f"{governing.at or 'an unknown time'} " + "; ".join(found),
+            ),
         )
+    seat = reviewer or governing.agent
+    note = (
+        f"reviewer seat `{seat[:8]}`"
+        + (f" (run `{governing.run[:8]}`)" if governing.run else "")
+        + f" on head `{head[:12]}`"
+    )
     return Independence(
-        disqualified=frozenset(disqualified),
-        problems=tuple(problems),
+        # The older markers are dropped too, so the coverage evidence carries
+        # the governing marker and nothing else.
+        disqualified=every_marker - {governing.comment_id},
         note=note,
     )
 
@@ -1498,8 +1538,8 @@ def _review_coverage(
                 pr,
                 repo,
                 [
-                    f"dropped {len(independence.problems)} review marker(s) that did "
-                    f"not count; the PR would still have merged on {would_why}"
+                    f"dropped {len(independence.disqualified)} review marker(s) that "
+                    f"did not count; the PR would still have merged on {would_why}"
                 ],
             )
 
@@ -1509,7 +1549,7 @@ def _review_coverage(
             evidence = f"{evidence}; {independence.note}"
         elif independence.problems:
             evidence = (
-                f"{evidence}; {len(independence.problems)} review marker(s) did "
+                f"{evidence}; {len(independence.disqualified)} review marker(s) did "
                 "not count"
             )
         return [], evidence

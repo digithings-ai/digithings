@@ -85,7 +85,7 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
 | Review | No outstanding `CHANGES_REQUESTED` review and no posted verdict of `changes_requested`. Review *evidence* is the row below: the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. |
 | Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. |
-| Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat other than the one that owns the PR's ticket. A marker from the author's own seat, or one posted while that seat's run on the ticket was still active, is dropped — the PR then waits for a review from another seat. See [Reviewer independence](#reviewer-independence). |
+| Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat other than the one that owns the PR's ticket. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from the author's own seat, or one posted while that seat's run on the ticket was still active, is dropped — the PR then waits for a review from another seat. See [Reviewer independence](#reviewer-independence). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
 | Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested` still scoped to the branch, blocks. |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
@@ -206,10 +206,23 @@ gate (`scripts/merge_queue.py`, `_review_coverage`):
    `digithings-ai/digithings` PR #5994 on 2026-10-21: the only marker on the PR was
    a `changes requested` verdict naming head `22d4b3126`, while the head was
    `15414f011d` — a stale verdict, on a stale head, counting as coverage.
+   The sha is compared as a **prefix** of the head, not at one fixed width: the
+   QA Lead's census of the open develop PRs on 2026-10-21 found markers naming
+   the head as 7, 8, 12 and 40 characters, and a check that wanted exactly 12
+   would read a valid 7-character marker as naming nothing at all. Fewer than
+   7 characters binds no head.
 2. **The marker comes from another seat.** The seat that owns the PR's ticket
    cannot be the seat whose review counts: not through its own comment, and not
    through a subagent or same-session review it posted while its own run on that
    ticket was still active.
+
+**The last marker governs.** The queue has always read the last review marker
+on a PR, so the gate judges that one and no other. A stale last marker is a
+refusal, not a cue to look further back: the head only moves forward, so an
+earlier marker can only ever bind an older head, and the remedy for a stale
+last marker has to be a *new* review — posted by another seat — rather than an
+older one. Every other marker on the PR is dropped from the coverage evidence
+alongside the failing one, so no earlier review stands in for it.
 
 The reviewer declares itself in the comment, next to the marker it already posts:
 

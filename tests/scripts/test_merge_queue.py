@@ -2433,6 +2433,110 @@ def test_a_marker_that_names_an_older_head_is_not_review_coverage(
     assert "while this PR stands at" in reason
 
 
+def test_a_marker_that_names_a_short_prefix_of_the_head_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reviewer who writes 7 characters of the head has still named the head.
+
+    The QA Lead's census of the open develop PRs on 21 Oct found markers
+    naming the head as 7, 8, 12 and 40 characters. A check that wanted one
+    fixed width would read a valid 7-character marker as naming nothing.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN, head="a" * 7)],
+        head_sha="a" * 40,
+    )
+    verdict = _judge(pr, prov)
+    assert verdict.eligible
+    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+
+
+def test_a_marker_that_names_too_few_characters_binds_no_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Three characters are not a head binding, whatever they match."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN, head="aaa")],
+        head_sha="a" * 40,
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+
+
+def test_a_stale_last_marker_is_a_refusal_and_not_a_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The last marker governs. An older review does not stand in for it.
+
+    The QA Lead's second implementation detail (21 Oct): the gate reads the
+    last review marker, so if that marker names a stale head the remedy has to
+    be a new review. Falling back to an earlier marker would let a stale last
+    marker be papered over by an older one — and the head only moves forward,
+    so an earlier marker can only ever bind an older head.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    earlier = _provenance_comment(
+        agent=REVIEWER_AGENT,
+        run=REVIEWER_RUN,
+        created="2026-10-20T09:00:00Z",
+        comment_id="IC_kwDOearlier_9001",
+    )
+    later = _provenance_comment(
+        agent=REVIEWER_AGENT,
+        run=REVIEWER_RUN,
+        head="b" * 40,
+        created="2026-10-20T11:00:00Z",
+        comment_id="IC_kwDOlater_9001",
+    )
+    pr = _reviewed_pr([earlier, later], head_sha="a" * 40)
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "names head" in reason
+
+
+def test_a_self_review_marker_last_does_not_fall_back_to_an_earlier_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The author seat cannot post last and let an earlier review cover for it.
+
+    The author seat's own marker is the one the gate reads, so it is refused
+    even though an independent reviewer said something earlier. The remedy is
+    another seat's review, posted after.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)],
+    )
+    earlier = _provenance_comment(
+        agent=REVIEWER_AGENT,
+        run=REVIEWER_RUN,
+        created="2026-10-20T09:00:00Z",
+        comment_id="IC_kwDOearlier_9001",
+    )
+    later = _provenance_comment(
+        agent=AUTHOR_AGENT,
+        run=AUTHOR_RUN,
+        created="2026-10-20T11:00:00Z",
+        comment_id="IC_kwDOlater_9001",
+    )
+    pr = _reviewed_pr([earlier, later])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "author's own seat" in reason
+
+
 def test_a_marker_without_provenance_is_not_review_coverage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
