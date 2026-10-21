@@ -196,10 +196,14 @@ class WorkerBuildTest(unittest.TestCase):
 
         return calls, rec
 
-    def test_build_all_green_runs_eight_steps(self):
+    def test_build_all_green_runs_one_step_per_app(self):
         calls, rec = self._rec()
         self.assertEqual(_mod.worker_build("/wt-4010", rec), [])
-        self.assertEqual(len(calls), 8)
+        # One `npm ci`, then one dry run per app. The count is read from the
+        # list rather than written down: a hard-coded number went stale when
+        # `twelvex-runner` joined the list (DIG-4753) and the suite was red on
+        # develop, so the number says what it means and the list says how many.
+        self.assertEqual(len(calls), 1 + len(_mod.WORKER_APPS))
         name0, cmd0, t0, cwd0 = calls[0]
         self.assertEqual(name0, "worker-build:npm-ci")
         self.assertEqual(cmd0, ["npm", "ci", "--no-audit", "--no-fund"])
@@ -222,7 +226,7 @@ class WorkerBuildTest(unittest.TestCase):
         calls, rec = self._rec(fails_on=("worker-build:dashboard-api",))
         self.assertEqual(_mod.worker_build("/wt-4010", rec),
                          ["worker-build:dashboard-api"])
-        self.assertEqual(len(calls), 8)
+        self.assertEqual(len(calls), 1 + len(_mod.WORKER_APPS))
 
     def test_build_npm_ci_failure_single_call(self):
         calls, rec = self._rec(npm_ci_ok=False)
@@ -831,3 +835,61 @@ class ExplicitPrStateTest(unittest.TestCase):
         self._run(pr["number"])
         self.assertIn("process_review", self.calls)
         self.assertNotIn("process", self.calls)
+
+
+class StatusTargetUrlTest(unittest.TestCase):
+    """DIG-4794: the `local-ci` status must name the build that made it green.
+
+    A commit status is worth what its writer is worth - GitHub's own words: any
+    person or integration with write permissions can set the state of any status
+    check - and both repositories name `local-ci` as their required check. The
+    merge queue reads the build back from Woodpecker before it trusts the green,
+    so the status has to say which build it is talking about.
+    """
+
+    def setUp(self):
+        self._gh = _mod.gh
+        self._env = dict(os.environ)
+        self.calls = []
+        os.environ.pop("LOCAL_CI_TARGET_URL", None)
+        os.environ.pop("CI_PIPELINE_URL", None)
+
+    def tearDown(self):
+        _mod.gh = self._gh
+        os.environ.clear()
+        os.environ.update(self._env)
+
+    def _post(self):
+        _mod.gh = lambda *a: self.calls.append(list(a))
+        _mod.status("abc123", "success", "all gates passed")
+
+    def _target_arg(self):
+        for arg in self.calls[0]:
+            if arg.startswith("target_url="):
+                return arg.split("=", 1)[1]
+        return None
+
+    def test_the_explicit_name_is_posted(self):
+        os.environ["LOCAL_CI_TARGET_URL"] = "http://localhost:8000/repos/6/pipeline/259"
+        self._post()
+        self.assertEqual(self._target_arg(), "http://localhost:8000/repos/6/pipeline/259")
+
+    def test_the_pipeline_url_is_used_when_no_name_is_given(self):
+        # `CI_PIPELINE_URL` is what Woodpecker injects into every step, so the
+        # worker inside the pipeline needs no configuration.
+        os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/260"
+        self._post()
+        self.assertEqual(self._target_arg(), "http://localhost:8000/repos/6/pipeline/260")
+
+    def test_the_explicit_name_wins_over_the_pipeline_url(self):
+        os.environ["LOCAL_CI_TARGET_URL"] = "http://localhost:8000/repos/6/pipeline/259"
+        os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/260"
+        self._post()
+        self.assertEqual(self._target_arg(), "http://localhost:8000/repos/6/pipeline/259")
+
+    def test_a_host_run_names_no_build(self):
+        # A run on the host has no build behind it, and says so: the queue then
+        # refuses the status and names the missing build as the reason.
+        self._post()
+        self.assertIsNone(self._target_arg())
+        self.assertIn("context=local-ci", self.calls[0])

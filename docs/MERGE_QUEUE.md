@@ -80,6 +80,7 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 |---|---|
 | Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3), and a PR whose `baseRefName` is anything else is refused too. |
 | Required check | The names in `required_checks_by_repo` for this repo must each have **reported** and concluded `SUCCESS`. Both repos currently require `local-ci`: `digithings` because its branch protection names it, and `twelve-x` since 2026-10-19 because its Actions job `test` cannot start while billing is blocked (DIG-4454). `local-ci` arrives as a commit StatusContext, never as a workflow run, so the names in `status_context_checks` are exempt from the workflow-run evidence rule (DIG-3707) — see the cost stated below. |
+| CI provenance | The newest `local-ci` status on the head must name a Woodpecker build, and the queue must read that build back from the Woodpecker API: the same repo, the same commit sha, and the repo's own check step concluded `success`. A `local-ci` status without that URL, or whose build does not verify, is not a pass. Ships in **shadow** mode — see the section below. |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
@@ -129,6 +130,106 @@ the queue**, so on that repo the queue is the only gate. What still stands betwe
 status and an unreviewed merge is the review row: a status clears the check gate but not
 review coverage. The exemption is time-boxed — revert `twelve-x` to `test` when the minutes
 reset.
+
+### The `local-ci` provenance gate (DIG-4794)
+
+The exemption above leaves one hole: `local-ci` is a commit status, so any writer with a
+token can type `success` into it. On `twelve-x`, where the queue is the only gate, that is
+the difference between a build and a claim. The provenance gate closes it by asking a
+question the status itself cannot answer: **which build is this?**
+
+The newest `local-ci` status on the PR head must carry a `target_url` that names a
+Woodpecker build. The queue then reads that build back from the Woodpecker API, read-only,
+and requires all of the following:
+
+| Requirement | What it proves |
+|---|---|
+| A `local-ci` status on the head, and it is the newest one | the receipt belongs to this commit, not to an older one |
+| A `target_url` is present and absolute | the status names a build at all |
+| The host is in `ci_provenance.hosts` | the build lives on the Woodpecker we run, not on a page anybody controls |
+| The path is a pipeline link (`/repos/<id>/pipeline/<n>`, `/api/repos/<id>/pipelines/<n>`, `/repo/<owner>/<name>/pipelines/<n>`) | the URL points at one build, not at an arbitrary page |
+| The build is in the Woodpecker repo the policy maps this GitHub repo to | the build is ours |
+| The API answers `200` for that pipeline | the build exists |
+| The build has finished (its status is not `created`, `pending`, `running`, `started`, `waiting`, `blocked` or `skipped`) | the verdict is a verdict |
+| The step the policy maps this repo to (`digithings-check`, `twelve-x-check`) is `success`, and it appears exactly once in the build | the build ran *this* repo's checks |
+| The build reports a `commit`, the PR head has a sha, and the two are equal | the build is about this code |
+
+Any one of them missing is a refusal with a named reason: the queue logs which one.
+
+The pipeline's **overall** status is deliberately not decisive. The launcher pipeline runs
+the two repos' checks side by side, so a failure in `twelve-x-check` must not refuse a
+`digithings` PR. The per-repo step is what decides; the pipeline status only says whether
+the run is over.
+
+The gate reads a token from `WOODPECKER_TOKEN` if it is in the environment, else from the
+`token_file` the policy names (a `KEY=value` file; only the named key is read, and the
+value is never logged). Without a token the build cannot be read, and that is itself a
+refusal with a reason — a missing token is not a pass. The launchd job's environment
+carries only `HOME` and `PATH`, so **no** `WOODPECKER_TOKEN` and no `MQ_CI_PROVENANCE`
+reach it today: `token_file` is where the queue finds the token, and changing the mode on
+the running host means editing `com.digithings.merge-queue.plist` and reloading the launchd
+job. That is a DevOps or Chris action, not a seat's.
+
+`ci_provenance.hosts` is a **deployment address**, not a rule. It lists the Woodpecker as
+this Mac serves it today, including the LAN address the DHCP lease handed out, because
+`CI_PIPELINE_URL` carries whatever host the Woodpecker was told about. A change of local
+IP means a change of that list, and the shadow log names the host it saw when it happens.
+
+Those addresses are plain HTTP on the LAN. The evidence channel is therefore only as
+trustworthy as the LAN: anything able to answer on that address could serve a green
+build that never ran. A TLS endpoint for the Woodpecker is the fix, and it is a deploy
+change outside this change — but the gate does not pretend the risk is not there.
+
+Three modes, in `ci_provenance.mode`, and `MQ_CI_PROVENANCE` in the environment overrides
+the file:
+
+- `off` — the gate reads nothing and refuses nothing.
+- `shadow` — the gate verifies as above and **logs** what it would have refused, on stderr
+  and in `~/.config/digithings/merge-queue/ci-provenance.log` (override with
+  `MQ_CI_PROVENANCE_LOG`). Each line reads
+  `<UTC timestamp> CI provenance (shadow): PR #<n> <repo> — would refuse '<check>': <reason>`,
+  the file is written `0600` and is rotated at 1 MB. The PR is still merged.
+- `enforce` — a refusal is a refusal.
+
+An unrecognised `MQ_CI_PROVENANCE` value is treated as `enforce`: the switch fails closed.
+An unrecognised `mode` **in the policy file** is a different thing: the file is read once
+per tick, so a typo there aborts the tick loudly rather than failing closed, and the
+traceback lands in the job's error log. A `ci_provenance` block with no `mode` means
+`shadow`, and no `ci_provenance` block at all means `off`, so an older policy file stays
+loadable.
+
+Each read has a timeout — 2 s in shadow, 5 s in enforce — and the queue reads at most one
+build per pull request per tick, with the reads and the token cached for the life of the
+process. The launchd job fires every 180 s and holds a lock, so a Woodpecker that does not
+answer must not be able to outlast the interval: that is the reason for the short timeouts.
+
+**It ships in `shadow`, and that is honest, not a setting to forget.** Woodpecker binds a
+pipeline to the commit it checked out, and the launcher pipeline today is the cron run of
+the launcher repo itself — its `commit` is the launcher's own sha, never a PR head. So the
+"same commit sha" requirement cannot pass for any PR until the CI runs **one build per PR
+head**. Until then, enforcing would refuse every PR in the org. The shadow log is how that
+is measured: if the reasons are all "the build ran another commit", the launcher is the
+next thing to change (DIG-4809).
+
+Enforce mode is a separate change, made once the shadow log is clean, and it is not only
+a matter of flipping a switch. Three things have to be true first: the CI runs one build
+per PR head, the worker image is rebuilt and pullable, and the launcher's lock-skip path
+stops reporting a skipped check as a success (below).
+
+Three more limits, stated so nobody reads more into the gate than it is:
+
+- The host runner (the launchd host run, currently disabled for `twelve-x`) has no
+  Woodpecker build, so it posts `local-ci` with **no** `target_url`. The queue refuses it
+  and names the missing build. A host run is not a build and is not treated as one.
+- The Woodpecker agent currently cannot pull the `local-ci-worker` image, so the launcher
+  pipeline fails before any check runs. That is a separate fault and is reported on the
+  issue, not fixed here. The image also bakes the worker in, so a rebuilt image is needed
+  before a status carries a build URL.
+- The launcher takes a lock so that one check runs at a time, and the step that loses the
+  lock **exits 0**, which Woodpecker records as `success`. A build in which the check never
+  ran therefore looks green to this gate. Fixing that is a launcher change in digiforge
+  and it is required before enforce mode is switched on; until then, a `success` step means
+  "the step did not fail", not "the check ran".
 
 **Required check names are per repo, and a name that matches nothing is called out
 separately.** The two repos in this org report different names for the same idea:
