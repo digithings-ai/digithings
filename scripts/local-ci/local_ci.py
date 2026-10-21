@@ -1124,14 +1124,24 @@ def not_open_verdict(pr, dry):
 
     A head that was gated while the pull request was open keeps the verdict
     it earned. Overwriting that row would make a merged commit look red, and
-    the merge queue reads the row.
+    the merge queue reads the row. A head that carries only a `pending` row
+    (a run that died mid-flight) earned nothing, so it gets a terminal
+    verdict here instead of staying pending forever.
+
+    A fork head is not a commit of this repository: no status can be posted
+    for it, so the run reports the fact and posts nothing.
     """
     n = pr.get("number"); sha = pr.get("headRefOid") or ""
     st = pr_state(pr) or "UNKNOWN"
     when = pr.get("mergedAt") or pr.get("closedAt") or "no date"
-    st0, desc0 = ci_status(sha) if sha else (None, None)
-    if st0:
+    fork = bool(pr.get("isCrossRepository"))
+    st0, desc0 = (None, None)
+    if sha and not fork:
+        st0, desc0 = ci_status(sha)
+    if st0 in ("success", "failure", "error"):
         verdict = f"PR #{n} is {st.lower()}; local-ci verdict on {sha[:12]} kept: {st0} ({desc0})"
+    elif fork:
+        verdict = f"PR #{n} is {st.lower()}; {FORK_DESC}"
     else:
         desc = f"local-ci skipped: PR #{n} is {st.lower()}; nothing to gate"
         verdict = f"PR #{n} is {st.lower()}; {desc}"
@@ -1139,7 +1149,7 @@ def not_open_verdict(pr, dry):
             status(sha, "failure", desc)
     log(f"PR #{n} {sha[:12]} {st} ({when}): {verdict}")
     print(f"local-ci: {verdict}")
-    return st0 or "failure"
+    return st0 if st0 in ("success", "failure", "error") else "failure"
 
 
 def explicit_run(only, dry):
@@ -1151,8 +1161,8 @@ def explicit_run(only, dry):
     """
     pr = get_pr(only)
     if not pr:
-        log(f"PR #{only} not found in {REPO}")
-        print(f"local-ci: PR #{only} not found in {REPO}")
+        log(f"PR #{only} not found in {REPO} (or gh could not resolve it)")
+        print(f"local-ci: PR #{only} not found in {REPO} (or gh could not resolve it)")
         return None
     n = pr.get("number", only)
     st = pr_state(pr)

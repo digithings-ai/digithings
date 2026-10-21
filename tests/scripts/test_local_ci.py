@@ -768,6 +768,52 @@ class ExplicitPrStateTest(unittest.TestCase):
         self.assertEqual(self.posts, [], "no PR, no head, nothing to post")
         self.assertTrue(any("999999" in m and "not found" in m for m in self.logs))
 
+    # --- the verdict must be terminal, and only an earned one is kept -------
+
+    def test_a_pending_row_is_not_an_earned_verdict(self):
+        """A run that died mid-flight leaves a `pending` row behind. That is not
+        a verdict, and the head must not stay pending for ever."""
+        pr = self._pr(state="CLOSED")
+        self.pr = pr
+        self.statuses[pr["headRefOid"]] = [
+            self._row("pending", "local-ci running on Chris's Mac")]
+        self._run(pr["number"])
+        self.assertEqual(len(self.posts), 1,
+                         "a pending row is not a verdict: the head needs a terminal one")
+        _sha, state, context, desc = self.posts[0]
+        self.assertEqual(state, "failure")
+        self.assertEqual(context, _mod.CTX)
+        self.assertIn(str(pr["number"]), desc)
+
+    def test_a_red_verdict_is_kept(self):
+        """A head that was gated and failed keeps that verdict: the closed
+        notice must not repaint it green or say anything else about it."""
+        pr = self._pr(state="MERGED")
+        self.pr = pr
+        self.statuses[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: gitleaks (2m)")]
+        self._run(pr["number"])
+        self.assertEqual(self.posts, [], "an earned verdict must never be overwritten")
+        self.assertTrue(any("kept: failure" in m for m in self.logs),
+                        "the run must say which verdict it kept")
+
+    def test_a_closed_fork_pr_posts_nothing(self):
+        """A fork head is not a commit of this repository: no status can be
+        posted for it, so the run must not claim it posted one."""
+        pr = self._pr(state="CLOSED", cross=True)
+        self.pr = pr
+        self._run(pr["number"])
+        self.assertEqual(self.posts, [], "a fork head has no status in this repository")
+        self.assertTrue(any(str(pr["number"]) in m for m in self.logs),
+                        "the run must still name the PR")
+
+    def test_an_open_fork_pr_posts_nothing(self):
+        pr = self._pr(state="OPEN", cross=True)
+        self.pr = pr
+        self._run(pr["number"])
+        self.assertEqual(self.posts, [], "fork code never runs on this Mac")
+        self.assertNotIn("process", self.calls)
+
     # --- the behaviour that must not change --------------------------------
 
     def test_an_open_pr_still_runs_the_gate(self):
