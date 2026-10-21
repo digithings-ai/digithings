@@ -3816,8 +3816,17 @@ def test_a_softened_commit_comparison_is_measured_and_not_refused(
     )
     assert verdict.eligible, verdict.reasons
     written = log.read_text(encoding="utf-8")
-    assert "measured" in written
-    assert "ran another commit" in written
+    # Per subject: both chains write the same words, so a loose assertion
+    # would pass with the status chain's measurement dropped - and that is
+    # the line the 48 hour window reads.
+    assert (
+        "measured 'local-ci': the build named by the status ran another commit"
+        in written
+    ), written
+    assert (
+        "measured 'local-ci/app': the build named by the receipt ran another commit"
+        in written
+    ), written
 
 
 def test_the_commit_comparison_can_be_turned_off(
@@ -5265,3 +5274,141 @@ def test_the_merge_queue_doc_names_the_reviewer_independence_gate() -> None:
     doc = MERGE_QUEUE_DOC.read_text(encoding="utf-8")
     assert "reviewer independence" in doc.lower()
     assert "digithings-review" in doc
+
+
+def test_a_seats_failing_row_beside_the_ci_receipt_does_not_hold_the_pull_request(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The receipt chain judges the row by its writer, not by its colour.
+
+    The generic scan reads every status that is neither a required check nor
+    an ignored one, so without the receipt being carved out of it, a seat's
+    own failing `local-ci/app` row would hold the pull request next to the
+    CI's own passing one - the one thing the receipt chain exists to prevent.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [_receipt_row()]
+    forged = {
+        "__typename": "StatusContext",
+        "context": RECEIPT_CONTEXT,
+        "state": "FAILURE",
+        "targetUrl": GOOD_TARGET_URL,
+        "startedAt": "2026-10-21T03:00:00Z",
+    }
+    pr = _pr(
+        1,
+        local_ci_target_url=GOOD_TARGET_URL,
+        reviews=_approved(),
+        extra_checks=[forged],
+    )
+    verdict = _receipt_verdict(pr)
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_forged_row_still_cannot_cancel_the_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The same scan, the other way round: a green seat row is not a receipt."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [_receipt_row(login="chrizefan")]
+    forged = {
+        "__typename": "StatusContext",
+        "context": RECEIPT_CONTEXT,
+        "state": "SUCCESS",
+        "targetUrl": GOOD_TARGET_URL,
+        "startedAt": "2026-10-21T03:00:00Z",
+    }
+    pr = _pr(
+        1,
+        local_ci_target_url=GOOD_TARGET_URL,
+        reviews=_approved(),
+        extra_checks=[forged],
+    )
+    verdict = _receipt_verdict(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        "was written by chrizefan, which is not a trusted CI writer" in reason
+        for reason in verdict.reasons
+    ), verdict.reasons
+
+
+def test_a_refused_receipt_does_not_claim_the_receipt_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """A receipt that is there and is refused says what is wrong with it.
+
+    The prefix used to say "has no trusted CI receipt" for every failure, so a
+    receipt the app wrote and whose build ran another commit was reported as
+    a missing receipt - the wrong thing to hand back.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    woodpecker["answer"]["payload"] = _pipeline(commit="b" * 40)
+    commit_statuses["rows"] = [_receipt_row()]
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _receipt_verdict(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        "is not accepted as a trusted CI receipt" in reason for reason in verdict.reasons
+    ), verdict.reasons
+    assert not any(
+        "has no trusted CI receipt" in reason for reason in verdict.reasons
+    ), verdict.reasons
+
+
+def test_the_policy_note_says_the_switch_moves_commit_match_with_it() -> None:
+    """The note is the file an operator reads when the switch is flipped."""
+    import json
+
+    raw = json.loads(mq.POLICY_PATH.read_text(encoding="utf-8"))
+    note = str(raw.get("ci_provenance_note") or "")
+    assert "the switch to `enforce` has to move `commit_match` in the same edit" in note
+
+
+def test_a_receipt_block_without_a_require_key_is_required(tmp_path: Path) -> None:
+    """The rule is written down, and it fails closed."""
+    import json
+
+    raw = json.loads(mq.POLICY_PATH.read_text(encoding="utf-8"))
+    raw["ci_provenance"]["trusted_receipt"] = {
+        "context": RECEIPT_CONTEXT,
+        "creators": [RECEIPT_WRITER],
+    }
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    policy = mq.load_policy(path)
+    assert policy.ci_provenance.trusted_receipt.required is True
+
+
+def test_a_build_that_reports_no_commit_is_measured_not_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    """A build with no commit is a measurement under a softened comparison.
+
+    It used to be a hard refusal. Under `commit_match: shadow` it is measured,
+    and the rule is pinned so it cannot move without a test saying so.
+    """
+    log = tmp_path / "provenance.log"
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    monkeypatch.setenv(mq.PROVENANCE_LOG_ENV, str(log))
+    woodpecker["answer"]["payload"] = _pipeline(commit="")
+    commit_statuses["rows"] = [_receipt_row()]
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = mq.evaluate(
+        pr,
+        _receipt_policy(commit_match=mq.COMMIT_MATCH_SHADOW),
+        acting_role="cto",
+        base="develop",
+        repo=DIGITHINGS_REPO,
+    )
+    assert verdict.eligible, verdict.reasons
+    written = log.read_text(encoding="utf-8")
+    assert "reports no commit" in written, written

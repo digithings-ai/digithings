@@ -81,7 +81,7 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3), and a PR whose `baseRefName` is anything else is refused too. |
 | Required check | The names in `required_checks_by_repo` for this repo must each have **reported** and concluded `SUCCESS`. Both repos currently require `local-ci`: `digithings` because its branch protection names it, and `twelve-x` since 2026-10-19 because its Actions job `test` cannot start while billing is blocked (DIG-4454). `local-ci` arrives as a commit StatusContext, never as a workflow run, so the names in `status_context_checks` are exempt from the workflow-run evidence rule (DIG-3707) — see the cost stated below. |
 | CI provenance | The newest `local-ci` status on the head must name a Woodpecker build, and the queue must read that build back from the Woodpecker API: the same repo, the same commit sha, and the repo's own check step concluded `success`. A `local-ci` status without that URL, or whose build does not verify, is not a pass. Ships in **shadow** mode — see the section below. |
-| CI receipt | The newest `local-ci/app` status on the head must be written by the CI's own GitHub App installation, and it must name the same kind of verified Woodpecker build. A `local-ci` status can be written by anybody with a token; a receipt cannot. The chain **ships switched off**: the worker posts no receipt yet, because it holds no app token, so the shipped policy does not ask for one. It is switched on by the policy change that comes with the token, in shadow mode first. |
+| CI receipt | The newest `local-ci/app` status on the head **written by a trusted writer** must be the CI's own GitHub App installation's, its state must be `success`, and it must name the same kind of verified Woodpecker build. A `local-ci` status can be written by anybody with a token; a receipt cannot. A row written by somebody else is left out of the choice: it neither cancels the app's own newest row nor is cancelled by it. The chain **ships switched off**: the worker posts no receipt yet, because it holds no app token, so the shipped policy does not ask for one. It is switched on by the policy change that comes with the token, in shadow mode first. |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
@@ -199,11 +199,15 @@ traceback lands in the job's error log. A `ci_provenance` block with no `mode` m
 `shadow`, and no `ci_provenance` block at all means `off`, so an older policy file stays
 loadable.
 
-Each read has a timeout — 2 s in shadow, 5 s in enforce — and the queue reads at most two
-builds per pull request per tick (the status's build, and the receipt's when the receipt
-chain is on), with the reads and the token cached for the life of the process. The launchd
-job fires every 180 s and holds a lock, so a Woodpecker that does not answer must not be
-able to outlast the interval: that is the reason for the short timeouts.
+Each Woodpecker read has a timeout — 2 s in shadow, 5 s in enforce — and the queue reads at
+most two builds per pull request per tick (the status's build, and the receipt's when the
+receipt chain is on), with the reads and the token cached for the life of the process. The
+commit-statuses read the receipt chain needs is a different read: it goes to the GitHub
+REST endpoint, it is not cached, it is made once per pull request per tick, and it has its
+own 10 s timeout, so with the receipt chain on the worst case for a tick grows by that
+much per pull request. The launchd job fires every 180 s and holds a lock, so a Woodpecker
+that does not answer must not be able to outlast the interval: that is the reason for the
+short timeouts.
 
 **It ships in `shadow`, and that is honest, not a setting to forget.** Woodpecker binds a
 pipeline to the commit it checked out, and the launcher pipeline today is the cron run of
@@ -237,8 +241,13 @@ which build it names, not who wrote it.
 
 A row written by somebody else does **not** cancel a receipt written by the app: the queue
 looks for a trusted receipt, so a seat cannot hold a PR by writing a failing status next to
-the CI's own passing one. `trusted_receipt.require` says whether the queue **asks** for a
-receipt at all. A receipt the policy does not ask for is not read: the queue looks at every
+the CI's own passing one. The same rule works the other way round: the app's own newest row
+is the CI's verdict, so a red row the app wrote later on the same head refuses the PR even
+though an earlier green row of the same context is still on the head. A
+`trusted_receipt` block with no `require` key at all means the receipt is **required**: a
+hand edit that drops the key must not turn the chain off, and the price is a loud refusal
+of every PR until the CI writes a receipt. `trusted_receipt.require` says whether the
+queue **asks** for a receipt at all. A receipt the policy does not ask for is not read: the queue looks at every
 open PR on every tick, and a status list it is not going to obey buys nothing while the CI
 writes none. The chain is switched on by the policy change that comes with the CI's own
 installation token, and it is switched on in **shadow** mode first, so the receipt is
@@ -275,9 +284,12 @@ can override the file. This is what makes `mode: enforce` with `commit_match: sh
 coherent pair: the build's commit is measured, and the receipt does the binding.
 
 Enforce mode is a separate change, made once the shadow log is clean, and it is not only
-a matter of flipping a switch. Three things have to be true first: the CI runs one build
-per PR head **or** the receipt binds the status to the head, the worker image is rebuilt
-and pullable, and the launcher's lock-skip path stops reporting a skipped check as a
+a matter of flipping a switch. The switch has to move `commit_match` in the same edit, or
+the queue refuses every PR: the receipt's own build is compared too, so `commit_match:
+enforce` refuses a PR with a perfect receipt while the launcher still builds one build per
+repository. Three things have to be true first: the CI runs one build per PR head **or** the
+receipt binds the status to the head, the worker image is rebuilt and pullable, and the
+launcher's lock-skip path stops reporting a skipped check as a
 success (below).
 
 Three more limits, stated so nobody reads more into the gate than it is:

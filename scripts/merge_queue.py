@@ -604,6 +604,11 @@ def _load_trusted_receipt(raw: Any, path: Path) -> TrustedReceipt:
         raise QueueError(
             f"{path}: ci_provenance.trusted_receipt.require must be true or false"
         )
+    # A block with no `require` key at all means the receipt is required. That
+    # is the fail-closed direction: a hand edit that drops the key must not
+    # turn a security gate off. The price is a loud refusal of every pull
+    # request until the CI writes a receipt, so the key is written down in the
+    # policy note and in docs/MERGE_QUEUE.md and the rule is pinned by a test.
     required = True if require is None else bool(require)
     if required and (not context or not creators):
         raise QueueError(
@@ -1655,7 +1660,7 @@ def verify_trusted_receipt(
         return Provenance(False, f"the '{receipt.context}' receipt is {state}")
 
     row = _newest_receipt_row(trusted)
-    target = str(row.get("target_url") or "").strip()
+    target = _status_target_url(row)
     if not target:
         return Provenance(
             False,
@@ -1973,8 +1978,8 @@ def _gate_ci_provenance(
         # is a refusal - in shadow mode it is the refusal the gate would make.
         if mode != PROVENANCE_SHADOW and receipt.required:
             reasons.append(
-                f"required check '{context}' has no trusted CI receipt: "
-                f"{receipt_result.reason}"
+                f"required check '{context}' is not accepted as a trusted CI "
+                f"receipt: {receipt_result.reason}"
             )
     elif receipt_result.measured:
         _log_provenance(
@@ -1987,6 +1992,33 @@ def _gate_ci_provenance(
             "measured",
         )
     return reasons
+
+
+def _governed_receipt_context(policy: Policy) -> str:
+    """The receipt context, when the chain that reads it is the one in force.
+
+    The receipt is the CI's own row, and the chain that reads it asks who
+    wrote it. The generic scan in `_gate_checks` reads every status that is
+    neither a required check nor an ignored one, so without this a seat's own
+    failing `local-ci/app` row would hold a pull request next to the CI's own
+    passing one - which is the one thing the receipt chain exists to prevent.
+
+    The context is only left to the receipt chain while that chain reads it: a
+    receipt the policy does not require, a gate that is off, and a policy with
+    no required status check all mean nobody reads the row, so the scan keeps
+    it and a red row still holds the pull request.
+    """
+    receipt = policy.ci_provenance.trusted_receipt
+    context = str(receipt.context or "").strip()
+    if not context or not receipt.required:
+        return ""
+    if provenance_mode(policy) == PROVENANCE_OFF:
+        return ""
+    if not any(
+        check in policy.status_context_checks for check in policy.required_checks
+    ):
+        return ""
+    return context
 
 
 def _gate_checks(pr: dict[str, Any], policy: Policy, repo: str | None = None) -> list[str]:
@@ -2035,8 +2067,14 @@ def _gate_checks(pr: dict[str, Any], policy: Policy, repo: str | None = None) ->
 
     # A non-required check that failed is still a red build. The base branch has a
     # CI contract whether or not GitHub enforces it.
+    receipt_context = _governed_receipt_context(policy)
     for name, entries in by_name.items():
         if name in policy.required_checks or name in policy.ignored_checks:
+            continue
+        if name == receipt_context:
+            # The receipt is the CI's own row, and the chain that reads it asks
+            # who wrote it. A seat's failing row beside the CI's own passing
+            # one is the seat's business, not a red build.
             continue
         for entry in entries:
             state = str(entry.get("conclusion") or entry.get("state") or "")
