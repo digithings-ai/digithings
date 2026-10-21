@@ -10,9 +10,9 @@ light or dark.
 
 ### Bug Fixes
 
-* **chat:** the work chain, reasoning, tool group and every tool row share one caret, the square pixel chevron of the user-message mark, which turns down when its own row opens and nowhere else ([#6132](https://github.com/digithings-ai/digithings/pull/6132))
+* **digichat:** the work chain, reasoning, tool group and every tool row share one caret, the square pixel chevron of the user-message mark, which turns down when its own row opens and nowhere else ([#6132](https://github.com/digithings-ai/digithings/pull/6132))
 * **chat:** the disclosure triggers announce their label once ([#6140](https://github.com/digithings-ai/digithings/pull/6140))
-* **chat:** the JSON view's whitespace repair runs in one linear pass ([#6135](https://github.com/digithings-ai/digithings/pull/6135))
+* **ui:** the JSON view's whitespace repair runs in one linear pass; a partial or unparsable payload over 64 KiB is shown raw instead of repaired ([#6135](https://github.com/digithings-ai/digithings/pull/6135))
 
 ## [2.6.4](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.3...digichat-v2.6.4) (2026-10-21)
 
