@@ -104,6 +104,21 @@ describe("ThemeProvider", () => {
     expect(localStorage.getItem("dt-palette")).toBe("dracula");
   });
 
+  it("leaves a pinned embed document alone", () => {
+    localStorage.setItem("dt-theme", "light");
+    localStorage.setItem("dt-palette", "dracula");
+    document.documentElement.setAttribute("data-theme-pin", "1");
+    document.documentElement.setAttribute("data-theme", "dark");
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
+    document.documentElement.removeAttribute("data-theme-pin");
+  });
+
   it("setPalette persists dt-palette and drops an unknown name", () => {
     render(
       <ThemeProvider>
