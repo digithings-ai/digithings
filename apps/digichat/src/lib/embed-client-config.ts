@@ -80,8 +80,11 @@ export type EmbedTenantClientConfig = {
   toolbar?: boolean;
   scrollbars?: "always" | "auto";
   searchEngine?: string;
+  /** OCC locks tool and MCP toggles. Omitted unless true. */
+  lockSessionControls?: boolean;
   /** Catalog entries — no MCP URLs */
   tools?: {
+    allowUserToggle?: boolean;
     catalog: Array<{
       id: string;
       default?: boolean;
@@ -100,7 +103,16 @@ export type EmbedTenantClientConfig = {
     allowUserServers?: boolean;
     allowAddForm?: boolean;
   };
-  models?: { default?: string; available?: string[]; allowPicker?: boolean };
+  models?: {
+    default?: string;
+    available?: string[];
+    allowPicker?: boolean;
+    picker?: {
+      presets: Array<{ id: string; label: string; description: string; model: string }>;
+      groups: Array<{ provider: string; models: Array<{ id: string; label: string }> }>;
+      showFullList: boolean;
+    };
+  };
   /**
    * Discriminator only — never project Foundry endpoints / digigraph URLs.
    * CliThread uses this to enable regenerate/edit when the BFF turn
@@ -181,6 +193,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     ...(cfg.toolbar === false ? { toolbar: false } : {}),
     ...(cfg.scrollbars ? { scrollbars: cfg.scrollbars } : {}),
     ...(cfg.searchEngine ? { searchEngine: cfg.searchEngine } : {}),
+    ...(cfg.lockSessionControls === true ? { lockSessionControls: true } : {}),
     tools: cfg.tools,
     mcp: cfg.mcp
       ? {

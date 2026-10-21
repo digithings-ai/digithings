@@ -41,15 +41,24 @@ hosts:
       branchPicker: true
       modelPicker: true
     models:
-      # Default product picker is Cheaper Inference cheap slugs only (#3829).
-      # OpenRouter never appears here — even if OPENROUTER_API_KEY is set.
-      # BYOK (`gate.showByok`) is the only way the list expands.
-      default: deepseek/deepseek-v4.1-flash-1017
-      available:
-        - deepseek/deepseek-v4.1-flash-1017
-        - openai/gpt-oss-120b
-        - z-ai/glm-5.3-flash
+      # Catalog picker: presets, then every tool-capable model under the
+      # output cap. The list is config/model-picker-catalog.json, not a
+      # hand-written allowlist. OpenRouter appears only as the Router
+      # preset, and only when OPENROUTER_API_KEY is set at load.
+      # BYOK (`gate.showByok`) still replaces /models with that provider.
       allowPicker: true
+      catalog: true
+      default: deepseek/deepseek-v4.1-flash-1017
+      priceCapUsdPerMillion: 2
+      # Premium sits above that cap and at or under $2.50 (GLM 5.3, Gemini
+      # 3.8 Flash). Manual picks only. costPerWindow is three typical turns
+      # of the pricier one, GLM 5.3, per rolling day ($0.0125565). OCC does
+      # not set this window.
+      costPerWindow:
+        usd: 0.0125565
+        windowSeconds: 86400
+      presets: [auto, reasoning, fast, light]
+      showFullList: true
     backend:
       type: digigraph
       # Tenant corpus for D1 FTS. Without this, digigraph overwrites path_prefix
@@ -57,6 +66,14 @@ hosts:
       # hitCount: 0 with no error (#3838).
       digisearchIndex: digithings_docs
       vaultPathPrefix: clients/digithings
+    # Proposed per-user token budget for the public chat. Commented, so it is
+    # off. 80000 tokens in a rolling minute is several ordinary questions
+    # (a couple of tool calls and a few thousand tokens of docs) — more than
+    # a person types — and pauses a bot that loops the same prompt. Anonymous
+    # traffic is keyed by the server-derived client IP, not the session header.
+    # guardrails:
+    #   tokensPerMinute:
+    #     user: 80000
     tools:
       allowUserToggle: true
       catalog:

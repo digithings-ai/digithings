@@ -43,6 +43,28 @@ def test_house_model_refused_in_free_mode_when_paid(monkeypatch) -> None:
             model_config.pop_house_model(tok)
 
 
+def test_router_models_are_intersected_with_the_session_allowlist(monkeypatch) -> None:
+    monkeypatch.setenv("DIGI_SESSION_MODEL_ALLOWLIST", "a/one, b/two")
+    tok = model_config.push_router_models("a/one, evil/model, b/two, a/one")
+    try:
+        from digillm.client import get_router_models
+
+        assert get_router_models() == ("a/one", "b/two")
+    finally:
+        model_config.pop_router_models(tok)
+
+
+def test_router_models_bind_nothing_without_an_allowlist(monkeypatch) -> None:
+    monkeypatch.delenv("DIGI_SESSION_MODEL_ALLOWLIST", raising=False)
+    tok = model_config.push_router_models("a/one")
+    try:
+        from digillm.client import get_router_models
+
+        assert get_router_models() is None
+    finally:
+        model_config.pop_router_models(tok)
+
+
 def test_house_model_ignored_without_allowlist(monkeypatch) -> None:
     monkeypatch.delenv("DIGI_SESSION_MODEL_ALLOWLIST", raising=False)
     tok = model_config.push_house_model("a/one")

@@ -24,6 +24,7 @@ import {
   VIEW_MODES,
 } from "@/lib/view-modes";
 import { HEX_COLOR } from "@/lib/hex-color";
+import { premiumIdsFromGroups, resolveModelCatalog } from "@/lib/model-picker-catalog";
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
@@ -261,6 +262,36 @@ export const FeaturesSchema = z.preprocess(
     .strict(),
 );
 
+const ModelPickerPresetSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    description: z.string(),
+    model: z.string().min(1),
+  })
+  .strict();
+
+const ModelPickerGroupSchema = z
+  .object({
+    provider: z.string().min(1),
+    models: z.array(z.object({ id: z.string().min(1), label: z.string().min(1) }).strict()),
+    /** Manual Premium group. Presets and the router never select these ids. */
+    premium: z.boolean().optional(),
+  })
+  .strict();
+
+/**
+ * Resolved picker. Deployments do not write this; `parseDigichatConfig`
+ * fills it when `catalog` is set. A hand-written copy is dropped.
+ */
+const ModelPickerSchema = z
+  .object({
+    presets: z.array(ModelPickerPresetSchema),
+    groups: z.array(ModelPickerGroupSchema),
+    showFullList: z.boolean(),
+  })
+  .strict();
+
 export const ModelsSchema = z
   .object({
     default: z.string().min(1).optional(),
@@ -270,6 +301,45 @@ export const ModelsSchema = z
      * `features.modelPicker` alias is folded into this during projection.
      */
     allowPicker: z.boolean().optional(),
+    /**
+     * When true, `available` is filled from the model catalog (price cap,
+     * tool support, context floor). A hand-written `available` list beside
+     * it is refused, so the catalog is the list.
+     */
+    catalog: z.boolean().optional(),
+    /**
+     * OCC visitor picker. Off unless true. The OCC deployment sets it true
+     * after Chris's sign-off (21 Oct 2026, 19:19 Rome): "Yes, enable the
+     * model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488
+     * lock". Other hosts ignore it. Tool and MCP locks stay closed.
+     */
+    occPicker: z.boolean().optional(),
+    /** USD per million output tokens. Omit to use the catalog default. */
+    priceCapUsdPerMillion: z.number().positive().optional(),
+    /**
+     * Manual Premium tier: above the standard cap, at or under this cap.
+     * Omit to use the catalog default. Presets do not select these models.
+     */
+    premiumCapUsdPerMillion: z.number().positive().optional(),
+    /**
+     * Per-user premium spend, USD over a rolling window. Omit to leave
+     * premium picks unmetered. Fold into guardrails beside tokensPerMinute
+     * when #6182 lands; that block is not on this branch.
+     */
+    costPerWindow: z
+      .object({
+        usd: z.number().positive(),
+        windowSeconds: z.number().int().positive().default(86400),
+      })
+      .strict()
+      .optional(),
+    /** Which preset rows the picker offers. Omit to offer every catalog preset. */
+    presets: z.array(z.enum(["auto", "reasoning", "fast", "light", "router"])).optional(),
+    /** When false, the picker shows presets only and the allowlist is those models. */
+    showFullList: z.boolean().optional(),
+    /** Minimum context window. Omit to use the catalog default. */
+    minContextTokens: z.number().int().positive().optional(),
+    picker: ModelPickerSchema.optional(),
   })
   .strict();
 
@@ -299,6 +369,11 @@ export const FoundryBackendSchema = z
       .url()
       .refine((u) => u.startsWith("https:"), "projectEndpoint must be https"),
     agentName: z.string().min(1),
+    /**
+     * Back-compat alias of `guardrails.maxToolCallsPerTurn` for Foundry
+     * deployments that already set it. The shared key wins when both are set.
+     */
+    maxToolCalls: z.number().int().positive().max(100).optional(),
   })
   .strict();
 
@@ -590,6 +665,95 @@ export const GateSchema = z
   })
   .strict();
 
+const GuardrailFraction = z.number().gt(0).max(1);
+const GuardrailTpm = z.number().int().positive().max(10_000_000);
+
+/**
+ * How far `maxToolCallsPerTurn` can actually go on a backend.
+ * Matches the tool-call column of the limits backend matrix: Foundry and the
+ * AI SDK backends stop the loop; digigraph, langgraph, and ag-ui are
+ * notice/best-effort; a2a has no tool-call hook.
+ */
+export type ToolCallCapSupport = "enforce" | "best-effort" | "unsupported";
+
+export function toolCallCapSupport(backendType: string): ToolCallCapSupport {
+  switch (backendType) {
+    case "foundry":
+    case "openai-completions":
+    case "openai-responses":
+    case "anthropic":
+    case "google-vertex":
+      return "enforce";
+    case "digigraph":
+    case "langgraph":
+    case "ag-ui":
+      return "best-effort";
+    default:
+      return "unsupported";
+  }
+}
+
+/**
+ * Refuse a cap the backend cannot apply. A notice/best-effort backend still
+ * loads, and validation warns so the limit is not silent.
+ * Returns the refusal message, or null when the config may load.
+ */
+export function toolCallCapIssue(backendType: string, cap: number | undefined): string | null {
+  if (cap == null) return null;
+  const support = toolCallCapSupport(backendType);
+  if (support === "unsupported") {
+    return "maxToolCallsPerTurn is not enforced on this backend (no tool-call hook)";
+  }
+  if (support === "best-effort") {
+    console.warn(
+      `guardrails.maxToolCallsPerTurn on ${backendType} is notice/best-effort; the adapter cannot abort the upstream tool loop`,
+    );
+  }
+  return null;
+}
+
+/**
+ * Optional turn guardrails. Omit the block, or any key, and that guard is off.
+ * Fractions default to 0.7 (`answerAt`) and 0.9 (`pauseAt`) when a TPM is set.
+ * `answerAt` must stay below `pauseAt`.
+ */
+export const GuardrailsSchema = z
+  .object({
+    /**
+     * Tool calls allowed in one user turn. Enforced on Foundry and the AI SDK
+     * backends. notice/best-effort on digigraph, langgraph, and ag-ui.
+     * Refused on a2a, which has no tool-call hook.
+     */
+    maxToolCallsPerTurn: z.number().int().positive().max(100).optional(),
+    /** Fraction of the TPM where the model is asked to answer with what it has. */
+    answerAt: GuardrailFraction.optional(),
+    /** Fraction of the TPM where the turn waits for the rolling window. */
+    pauseAt: GuardrailFraction.optional(),
+    tokensPerMinute: z
+      .object({
+        /** Shared by every turn on this deployment. Match an upstream TPM. */
+        deployment: GuardrailTpm.optional(),
+        /** Per user id, else the server-derived client IP. */
+        user: GuardrailTpm.optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const answer = value.answerAt ?? 0.7;
+    const pause = value.pauseAt ?? 0.9;
+    if (answer >= pause) {
+      ctx.addIssue({
+        code: "custom",
+        message: "answerAt must be below pauseAt",
+        path: ["answerAt"],
+      });
+    }
+  });
+
+export type GuardrailsConfig = z.infer<typeof GuardrailsSchema>;
+
 export const DeploymentSchema = z
   .object({
     slug: z.string().regex(SLUG, "slug must be lowercase alphanumeric/hyphens"),
@@ -621,6 +785,8 @@ export const DeploymentSchema = z
     models: ModelsSchema.default({ available: [] }),
     cli: CliSchema.default({ enabled: false }),
     backend: BackendSchema,
+    /** Off unless a key is set. See ARCHITECTURE.md, Guardrails. */
+    guardrails: GuardrailsSchema.optional(),
     tools: ToolsSchema.optional(),
     mcp: McpSchema.optional(),
     gate: GateSchema.default({ mode: "ungated", activityDetail: "labels" }),
@@ -630,7 +796,23 @@ export const DeploymentSchema = z
      */
     token: z.string().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((deployment, ctx) => {
+    const alias =
+      deployment.backend.type === "foundry" ? deployment.backend.maxToolCalls : undefined;
+    const issue = toolCallCapIssue(
+      deployment.backend.type,
+      deployment.guardrails?.maxToolCallsPerTurn ?? alias,
+    );
+    if (!issue) return;
+    ctx.addIssue({
+      code: "custom",
+      message: issue,
+      path: deployment.guardrails?.maxToolCallsPerTurn != null
+        ? ["guardrails", "maxToolCallsPerTurn"]
+        : ["backend", "maxToolCalls"],
+    });
+  });
 
 export const DigichatConfigSchema = z
   .object({
@@ -702,8 +884,150 @@ export function allowlistModelId(
   return available.includes(id) ? id : undefined;
 }
 
+const PRESET_PREFIX = "preset:";
+
+/**
+ * Map a picker token (`preset:reasoning`) onto its concrete catalog id, then
+ * apply the deployment allowlist. An unknown preset is not allowed.
+ */
+export function resolveHouseModelSelection(
+  models: DigichatDeployment["models"] | undefined,
+  requested: string | null | undefined,
+): string | undefined {
+  const id = requested?.trim() || undefined;
+  if (id?.startsWith(PRESET_PREFIX)) {
+    const presetId = id.slice(PRESET_PREFIX.length);
+    const hit = models?.picker?.presets.find((preset) => preset.id === presetId);
+    if (!hit) return undefined;
+    return allowlistModelId(models, hit.model);
+  }
+  return allowlistModelId(models, requested);
+}
+
+/**
+ * Comma list of concrete models for the OpenRouter router. Empty unless the
+ * visitor picked the router preset. The browser never supplies this list.
+ */
+export function routerModelsHeader(
+  models: DigichatDeployment["models"] | undefined,
+  selected: string | undefined,
+): string | undefined {
+  const router = models?.picker?.presets.find((preset) => preset.id === "router");
+  if (!router || !selected || router.model !== selected) return undefined;
+  const premium = new Set(premiumIdsFromGroups(models?.picker?.groups));
+  const ids = (models?.available ?? [])
+    .filter((id) => id !== router.model && !premium.has(id))
+    .slice(0, 64);
+  return ids.length ? ids.join(",") : undefined;
+}
+
+/** Comma list of manual Premium ids, so digillm can drop them from a router allowlist. */
+export function premiumModelsHeader(
+  models: DigichatDeployment["models"] | undefined,
+): string | undefined {
+  const ids = premiumIdsFromGroups(models?.picker?.groups);
+  return ids.length ? ids.join(",") : undefined;
+}
+
+type CatalogModels = DigichatDeployment["models"];
+
+const OCC_EMBED_HOST = "occ.digithings.ai";
+
+function isOccHost(host: string | undefined, slug: string | undefined): boolean {
+  return host === OCC_EMBED_HOST || slug === "occ";
+}
+
+/** OCC without `occPicker` keeps the operator model: no list, no picker. */
+function lockOccModels(models: CatalogModels): CatalogModels {
+  if (!models) return models;
+  const next: CatalogModels = { ...models, available: [], allowPicker: false };
+  delete next.picker;
+  delete next.default;
+  return next;
+}
+
+function applyModelCatalog(
+  models: CatalogModels,
+  ctx: string,
+  openRouterConfigured: boolean,
+): CatalogModels {
+  if (!models?.catalog) {
+    if (!models?.picker) return models;
+    const rest = { ...models };
+    delete rest.picker;
+    return rest;
+  }
+  if ((models.available?.length ?? 0) > 0) {
+    // One bad registry row must not fail the whole container's config: the
+    // catalog wins and the hand list is ignored.
+    console.warn(
+      `${ctx}: models.catalog is set together with models.available; the hand list is ignored`,
+    );
+  }
+  const resolved = resolveModelCatalog(
+    {
+      default: models.default,
+      priceCapUsdPerMillion: models.priceCapUsdPerMillion,
+      premiumCapUsdPerMillion: models.premiumCapUsdPerMillion,
+      presets: models.presets,
+      showFullList: models.showFullList,
+      minContextTokens: models.minContextTokens,
+    },
+    { openRouterConfigured },
+  );
+  return {
+    ...models,
+    available: resolved.available,
+    default: resolved.default,
+    picker: resolved.picker,
+  };
+}
+
+function applyCatalogConfig(
+  config: DigichatConfig,
+  ctx: string,
+  openRouterConfigured: boolean,
+): DigichatConfig {
+  const deployment = config.deployment
+    ? {
+        ...config.deployment,
+        models: applyModelCatalog(config.deployment.models, ctx, openRouterConfigured),
+      }
+    : config.deployment;
+  const hosts = config.hosts
+    ? Object.fromEntries(
+        Object.entries(config.hosts).map(([host, dep]) => {
+          if (isOccHost(host, dep.slug) && dep.models?.occPicker !== true) {
+            return [
+              host,
+              {
+                ...dep,
+                features: { ...dep.features, modelPicker: false },
+                models: lockOccModels(dep.models),
+              },
+            ];
+          }
+          const models = applyModelCatalog(
+            dep.models,
+            `${ctx} hosts.${host}`,
+            openRouterConfigured,
+          );
+          if (isOccHost(host, dep.slug)) {
+            return [host, { ...dep, features: { ...dep.features, modelPicker: true }, models }];
+          }
+          return [host, { ...dep, models }];
+        }),
+      )
+    : config.hosts;
+  return { ...config, deployment, hosts };
+}
+
 /** Parse + validate unknown JSON/YAML object. Throws on failure (fail closed). */
-export function parseDigichatConfig(input: unknown, ctx = "digichat config"): DigichatConfig {
+export function parseDigichatConfig(
+  input: unknown,
+  ctx = "digichat config",
+  opts?: { openRouterConfigured?: boolean },
+): DigichatConfig {
   const result = DigichatConfigSchema.safeParse(input);
   if (!result.success) {
     const detail = result.error.issues
@@ -711,5 +1035,5 @@ export function parseDigichatConfig(input: unknown, ctx = "digichat config"): Di
       .join("; ");
     throw new Error(`${ctx}: ${detail}`);
   }
-  return result.data;
+  return applyCatalogConfig(result.data, ctx, opts?.openRouterConfigured === true);
 }

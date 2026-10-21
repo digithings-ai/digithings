@@ -13,6 +13,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const ai = vi.hoisted(() => ({
   streamText: vi.fn(() => ({ stream: "MODEL_STREAM" })),
   toUIMessageStream: vi.fn(() => ({ stream: "UI_STREAM" })),
+  createUIMessageStream: vi.fn(
+    (opts: { execute: (arg: { writer: { write: () => void; merge: () => void } }) => void }) => {
+      opts.execute({ writer: { write() {}, merge() {} } });
+      return "UI_MESSAGE_STREAM";
+    },
+  ),
   createUIMessageStreamResponse: vi.fn(
     () => new Response("ok", { status: 200 }),
   ),
@@ -30,6 +36,7 @@ vi.mock("./providers", () => providers);
 
 import { createAiSdkStreamResponse } from "./stream";
 import type { AiSdkBackendConfig } from "@/lib/backend-adapters";
+import type { TurnGuard } from "@/lib/guardrails/turn";
 
 const BACKEND = {
   type: "openai-responses",
@@ -91,5 +98,43 @@ describe("createAiSdkStreamResponse", () => {
     expect(body.error).toBe("backend_unavailable");
     expect(body.message).toContain("DIGICHAT_BACKEND_EXAMPLE_KEY");
     expect(ai.streamText).not.toHaveBeenCalled();
+  });
+
+  it("keeps the plain stream when no guardrail is on", async () => {
+    await createAiSdkStreamResponse(opts);
+    expect(ai.createUIMessageStream).not.toHaveBeenCalled();
+    const call = ai.streamText.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(call).not.toHaveProperty("prepareStep");
+  });
+
+  it("stops tools from prepareStep when the guard says the cap is spent", async () => {
+    const guard: TurnGuard = {
+      active: true,
+      toolCap: 1,
+      async beforeRound() {
+        return { action: "stop-tools", instruction: "Answer now." };
+      },
+      recordUsage() {},
+      release() {},
+      capToolPayload(value) {
+        return value;
+      },
+      noteToolCap() {},
+    };
+    await createAiSdkStreamResponse({ ...opts, guard });
+    expect(ai.createUIMessageStream).toHaveBeenCalled();
+    const call = ai.streamText.mock.calls.at(-1)?.[0] as {
+      prepareStep?: (step: {
+        steps: { toolCalls?: unknown[] }[];
+        messages: { role: string; content: unknown }[];
+        instructions?: string;
+      }) => Promise<{ toolChoice?: string; instructions?: string } | undefined>;
+    };
+    const prepared = await call.prepareStep?.({
+      steps: [{ toolCalls: [{}] }],
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(prepared?.toolChoice).toBe("none");
+    expect(prepared?.instructions).toContain("Answer now.");
   });
 });

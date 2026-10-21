@@ -8,6 +8,7 @@ import {
 import { parseEmbedTenants, resetEmbedTenantRegistryForTests } from "./embed-tenants";
 import { BASELINE_EMBED_SUGGESTIONS } from "./baseline-embed";
 import { clientConfigFromEmbedTenant } from "./deploy-config/embed-bridge";
+import { DEFAULT_CLIENT_CONFIG } from "./deploy-config/client-projection";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -302,6 +303,21 @@ describe("DEFAULT_EMBED_TENANT_CONFIG", () => {
       allowUserServers: false,
       allowAddForm: false,
     });
+  });
+
+  it("keeps a base tool lock when an embed asks to toggle", () => {
+    const base = {
+      ...DEFAULT_CLIENT_CONFIG,
+      tools: { allowUserToggle: false, catalog: [] },
+    };
+    const projected = clientConfigFromEmbedTenant(
+      {
+        ...DEFAULT_EMBED_TENANT_CONFIG,
+        tools: { catalog: [], allowUserToggle: true },
+      },
+      base,
+    );
+    expect(projected.tools.allowUserToggle).toBe(false);
   });
 
   it("projects baseline mcp user-server flags through the deploy-config bridge", () => {

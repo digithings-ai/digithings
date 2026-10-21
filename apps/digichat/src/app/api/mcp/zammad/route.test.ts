@@ -4,9 +4,9 @@ import { DELETE, GET, HEAD, POST } from "./[[...path]]/route";
 /**
  * /api/mcp/zammad* must FORWARD, not render.
  *
- * The live failure this pins: production does not set DIGICHAT_TRUSTED_PROXIES,
- * so Next owns port 3000 and the Worker's zammad-MCP path reached Next itself —
- * which answered its own 404 page instead of the helpdesk MCP.
+ * The live failure this pins: a request that reaches Next for /api/mcp/zammad*
+ * used to render Next's 404 page instead of the helpdesk MCP. The production
+ * entrypoint rewrites that path before Next; this route is the direct path.
  *
  * Nothing here touches the network or 127.0.0.1:8770, so the suite is green
  * with no container running.

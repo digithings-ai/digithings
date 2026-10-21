@@ -226,7 +226,17 @@ const chainGroupBy = (() => {
     "standalone-tool-call": [],
     source: ["group-chainOfThought", "group-tool"],
   });
-  const fn = (part: { type: string }, context?: unknown) => {
+  const fn = (part: { type: string; name?: string }, context?: unknown) => {
+    const dataName =
+      part.type === "data"
+        ? part.name
+        : part.type.startsWith("data-")
+          ? part.type.slice("data-".length)
+          : undefined;
+    // A data-notice (tool-call limit, and any other status notice) stays
+    // outside the chain. The chain folds once the answer arrives, which would
+    // hide the notice inside the collapsed work block.
+    if (dataName === "notice") return base(part as never, context as never);
     if (part.type === "data" || part.type.startsWith("data-")) {
       return ["group-chainOfThought", "group-tool"] as const;
     }
@@ -234,7 +244,7 @@ const chainGroupBy = (() => {
   };
   (fn as unknown as Record<symbol, string>)[
     Symbol.for("@assistant-ui/groupBy.memoKey")
-  ] = "digichat:chain-v2";
+  ] = "digichat:chain-v3";
   return fn;
 })();
 
