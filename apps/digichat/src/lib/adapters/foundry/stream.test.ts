@@ -1615,7 +1615,7 @@ describe("mid-stream rate limit resume (DC-18)", () => {
     return drain(
       await createFoundryStreamResponse({
         projectEndpoint: "https://proj.example.com",
-        agentName: "datatap-trial",
+        agentName: "trial-agent",
         messages: [userMessage("which mailboxes were backed up in the last 3 days")],
         conversationId: null,
         responseHeaders: {},
