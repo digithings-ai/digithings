@@ -46,6 +46,7 @@ import {
   isContainerEvictedError,
   isContainerFailedError,
   isNonErrorRejection,
+  safeErrorMessage,
 } from "./container-errors";
 import { fetchWithContainerRetry } from "./container-retry";
 import { getStackStatus, runIsolated } from "./route-modules";
@@ -233,7 +234,7 @@ export class DigiStackContainer extends Container {
         },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = safeErrorMessage(err);
       // DIG-3226: a confirmed eviction is not a cold start — return the
       // non-retryable 410 so callers stop retrying a container that is gone
       // (same distinction as digiquant-runner RunLostError, runner.ts).
@@ -282,7 +283,7 @@ export class DigiStackContainer extends Container {
         );
         return containerUnavailableResponse("stack", description);
       }
-      const message = err instanceof Error ? err.message : String(err);
+      const message = safeErrorMessage(err);
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("stack", message);
       }
@@ -367,7 +368,7 @@ export class DigiQuantMcpContainer extends Container {
         },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = safeErrorMessage(err);
       // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("mcp", message);
@@ -404,7 +405,7 @@ export class DigiQuantMcpContainer extends Container {
         );
         return containerUnavailableResponse("mcp", description);
       }
-      const message = err instanceof Error ? err.message : String(err);
+      const message = safeErrorMessage(err);
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("mcp", message);
       }

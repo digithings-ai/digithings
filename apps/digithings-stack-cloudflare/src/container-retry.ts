@@ -34,6 +34,7 @@
 import {
   CONTAINER_EVSCITED_CODE,
   CONTAINER_FAILED_CODE,
+  CONTAINER_UNAVAILABLE_CODE,
   containerRestartMessage,
   containerUnavailableResponse,
   describeValue,
@@ -91,6 +92,15 @@ export async function isContainerRecycledResponse(
 ): Promise<boolean> {
   if (response.status === 410 || response.status === 503) {
     const code = await readErrorCode(response);
+    // `container_unavailable` is NOT a recycle signal (DIG-4928): it answers a
+    // hop that rejected with a value that is not an Error, and that request is
+    // never replayed — a value that came out of the hop says nothing about
+    // whether the request reached the container, so a second attempt could
+    // submit it twice. Answered before the recycle codes, so no change of a
+    // code literal can ever make this answer replayable.
+    if (code === CONTAINER_UNAVAILABLE_CODE) {
+      return false;
+    }
     return code === CONTAINER_EVSCITED_CODE || code === CONTAINER_FAILED_CODE;
   }
   if (response.status === 500) {

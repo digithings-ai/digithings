@@ -3,6 +3,8 @@ import {
   CONTAINER_UNAVAILABLE_BODY,
   DEFAULT_ATTEMPTS,
   RETRY_AFTER_SECONDS,
+  causeDetail,
+  describeValue,
   fetchContainerWithRetry,
   isContainerDeathResponse,
   isInstanceLimitResponse,
@@ -308,5 +310,79 @@ describe("a container that cannot be reached at all", () => {
     });
     await fetchContainerWithRetry(new Request("https://digithings.ai/api/chat"), fetchOnce);
     expect(fetchOnce).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a cause that cannot be described", () => {
+  // DIG-4928: the description of the cause runs INSIDE the catch, so a
+  // description that throws turns a caught failure back into an uncaught one:
+  // the helper would reject with a TypeError instead of answering the
+  // retryable 503.
+  it("describes a value with a hostile toString without throwing", () => {
+    const hostile = {
+      toString() {
+        throw new Error("no");
+      },
+    };
+    expect(causeDetail(hostile)).not.toBe("");
+  });
+
+  it("describes a revoked proxy without throwing", () => {
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    expect(causeDetail(revoked.proxy)).not.toBe("");
+  });
+
+  it("keeps the inner cause of a real Error in the log line", () => {
+    const inner = new Error("Network connection lost.");
+    const failure = new Error("there is no container instance");
+    (failure as Error & { cause?: unknown }).cause = inner;
+    expect(causeDetail(failure)).toContain("there is no container instance");
+    expect(causeDetail(failure)).toContain("Network connection lost.");
+  });
+
+  it("answers the retryable 503 for a cause with a hostile toString", async () => {
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map((arg) => describeValue(arg)).join(" "));
+    });
+    const hostile = {
+      toString() {
+        throw new Error("no");
+      },
+    };
+    const res = await fetchContainerWithRetry(
+      new Request("https://digithings.ai/api/chat"),
+      async () => {
+        throw hostile;
+      },
+    );
+    const body = await res.text();
+    spy.mockRestore();
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe(String(RETRY_AFTER_SECONDS));
+    expect(body).toBe(CONTAINER_UNAVAILABLE_BODY);
+    expect(logged.join("\n")).toContain("container could not be reached");
+  });
+
+  it("answers the retryable 503 for a revoked proxy", async () => {
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map((arg) => describeValue(arg)).join(" "));
+    });
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    const res = await fetchContainerWithRetry(
+      new Request("https://digithings.ai/api/chat"),
+      async () => {
+        throw revoked.proxy;
+      },
+    );
+    const body = await res.text();
+    spy.mockRestore();
+
+    expect(res.status).toBe(503);
+    expect(body).toBe(CONTAINER_UNAVAILABLE_BODY);
   });
 });

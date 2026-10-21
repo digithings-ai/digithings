@@ -25,6 +25,7 @@ import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
 import {
   CONTAINER_UNAVAILABLE_BODY,
+  describeValue,
   fetchContainerWithRetry,
   NO_INSTANCE_STATUS,
   RETRY_AFTER_SECONDS,
@@ -57,30 +58,6 @@ function isRealError(value: unknown): boolean {
     return value instanceof Error;
   } catch {
     return false;
-  }
-}
-
-/**
- * A description of a thrown value, for the Worker log only.
- *
- * `String(value)` is what the platform shows for a value it cannot classify,
- * but it can throw (a hostile `toString`, a revoked proxy) and a description
- * that throws inside the catch would turn a caught failure back into an
- * uncaught one. So the description falls back.
- *
- * Only the description is logged, never the value: the cause of a non-Error
- * stays inside the Worker, the same way the Worker log handles the cause of a
- * container that could not be reached (see ./container-retry).
- */
-function describeValue(value: unknown): string {
-  try {
-    return String(value);
-  } catch {
-    try {
-      return Object.prototype.toString.call(value);
-    } catch {
-      return "[unreadable value]";
-    }
   }
 }
 

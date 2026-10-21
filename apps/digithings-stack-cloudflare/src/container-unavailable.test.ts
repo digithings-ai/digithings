@@ -23,11 +23,15 @@
 import { describe, expect, it } from "vitest";
 import {
   CONTAINER_UNAVAILABLE_CODE,
+  containerFailedResponse,
   containerUnavailableResponse,
   describeValue,
+  isContainerEvictedError,
+  isContainerFailedError,
   isNonErrorRejection,
+  safeErrorMessage,
 } from "./container-errors";
-import { fetchWithContainerRetry } from "./container-retry";
+import { fetchWithContainerRetry, isContainerRecycledResponse } from "./container-retry";
 
 /** The exact value the production hop rejected with (a Date, not an Error). */
 const OPAQUE_REJECTION = new Date("2026-10-21T12:56:13Z");
@@ -136,5 +140,111 @@ describe("the retry helper answers an opaque rejection", () => {
     });
     expect(attempts).toBe(2);
     expect(response.status).toBe(200);
+  });
+});
+
+describe("the machine-readable code is pinned", () => {
+  it("is the literal container_unavailable", () => {
+    // Not the constant compared with itself: the literal is what the client
+    // and the digichat BFF read, so a change of the string is a change of the
+    // contract and has to be a deliberate one.
+    expect(CONTAINER_UNAVAILABLE_CODE).toBe("container_unavailable");
+  });
+
+  it("is what the answer carries on the wire", async () => {
+    const response = containerUnavailableResponse("stack", "the hop failed");
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe("container_unavailable");
+  });
+});
+
+describe("an unavailable answer is never a recycle signal", () => {
+  it("is not classified as a recycled response", async () => {
+    // A hop that rejected with a value that is not an Error is answered with
+    // `container_unavailable`, and that answer must never be replayed: a
+    // value that came out of the hop says nothing about whether the request
+    // reached the container, so a second attempt could submit it twice.
+    const response = containerUnavailableResponse("stack", "the hop failed");
+    expect(await isContainerRecycledResponse(response)).toBe(false);
+  });
+
+  it("makes the retry helper send the request exactly once", async () => {
+    let attempts = 0;
+    const response = await fetchWithContainerRetry(async () => {
+      attempts += 1;
+      return containerUnavailableResponse("stack", "the hop failed");
+    });
+    expect(attempts).toBe(1);
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe("container_unavailable");
+  });
+
+  it("still replays a recycled container exactly once", async () => {
+    // The counterpart of the pin above: the retry-once behaviour of a
+    // recycled container stays, so the new code does not silence it.
+    let attempts = 0;
+    const response = await fetchWithContainerRetry(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return containerFailedResponse("stack", "the container exited");
+      }
+      return new Response("served", { status: 200 });
+    });
+    expect(attempts).toBe(2);
+    expect(response.status).toBe(200);
+  });
+});
+
+describe("the answer names the service it came from", () => {
+  it("says mcp for the reserved mcp container", async () => {
+    const response = await fetchWithContainerRetry(async () => {
+      throw OPAQUE_REJECTION;
+    }, { service: "mcp" });
+    const body = (await response.json()) as { message?: string };
+    expect(body.message).toContain("mcp container unavailable");
+  });
+
+  it("says stack by default", async () => {
+    const response = await fetchWithContainerRetry(async () => {
+      throw OPAQUE_REJECTION;
+    });
+    const body = (await response.json()) as { message?: string };
+    expect(body.message).toContain("stack container unavailable");
+  });
+});
+
+describe("safeErrorMessage", () => {
+  it("gives an Error its own message and a string itself", () => {
+    expect(safeErrorMessage(new Error("boom"))).toBe("boom");
+    expect(safeErrorMessage("boom")).toBe("boom");
+  });
+
+  it("describes a value that cannot be rendered without throwing", () => {
+    const hostile = {
+      toString() {
+        throw new Error("no");
+      },
+    };
+    expect(safeErrorMessage(hostile)).not.toBe("");
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    expect(safeErrorMessage(revoked.proxy)).not.toBe("");
+  });
+
+  it("keeps the eviction and failed classifiers from throwing", () => {
+    // A classifier that throws inside a catch turns a caught failure back into
+    // an uncaught one, which is the failure this guard exists to stop.
+    const hostile = {
+      toString() {
+        throw new Error("no");
+      },
+    };
+    expect(isContainerEvictedError(hostile)).toBe(false);
+    expect(isContainerFailedError(hostile)).toBe(false);
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    expect(isContainerEvictedError(revoked.proxy)).toBe(false);
+    expect(isContainerFailedError(revoked.proxy)).toBe(false);
   });
 });

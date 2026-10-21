@@ -484,6 +484,62 @@ describe("the container hop rejects with a value that is not an Error (DIG-4928)
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "container /run HTTP 500" });
   });
+
+  it("answers 503 for a value that cannot be described", async () => {
+    // The description of the cause runs INSIDE the catch, so a description
+    // that throws would turn a caught failure back into an uncaught one: the
+    // request would end with no answer at all. The package's errorMessage is
+    // total, so the log line says what happened and the client gets the
+    // retryable 503.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const hostile = {
+      toString() {
+        throw new Error("no");
+      },
+    };
+    const { session } = harness({
+      startRun: async () => {
+        throw hostile;
+      },
+    });
+    let res: Response;
+    try {
+      res = await session.fetch(post(job()));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe("30");
+    expect(await res.json()).toEqual({
+      error: DURABLE_OBJECT_UNAVAILABLE,
+      detail: "the runner's Durable Object instance was not available; retry later",
+    });
+  });
+
+  it("answers 503 for a value that cannot be inspected", async () => {
+    // `instanceof` walks the prototype chain, and a revoked proxy throws
+    // there. The guard that asks the question is asked in a way that cannot
+    // throw, and so is the description of the cause.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    const { session } = harness({
+      startRun: async () => {
+        throw revoked.proxy;
+      },
+    });
+    let res: Response;
+    try {
+      res = await session.fetch(post(job()));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      error: DURABLE_OBJECT_UNAVAILABLE,
+      detail: "the runner's Durable Object instance was not available; retry later",
+    });
+  });
 });
 
 describe("watchdog and poll resilience", () => {

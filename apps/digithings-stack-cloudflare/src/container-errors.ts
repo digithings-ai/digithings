@@ -51,6 +51,30 @@ export function describeValue(value: unknown): string {
 }
 
 /**
+ * The message of a thrown value, or a description of it when it carries none.
+ *
+ * Total on purpose: an Error gives its own message, a string gives itself, and
+ * anything else is described by `describeValue` — which cannot throw. The
+ * question is asked in a way that cannot throw either: `instanceof` walks the
+ * prototype chain, and a value that cannot be inspected throws there. A
+ * message that throws inside a catch would turn a caught failure back into an
+ * uncaught one.
+ */
+export function safeErrorMessage(value: unknown): string {
+  try {
+    if (value instanceof Error) {
+      return value.message;
+    }
+    if (typeof value === "string") {
+      return value;
+    }
+  } catch {
+    // A value that cannot be inspected is described by describeValue below.
+  }
+  return describeValue(value);
+}
+
+/**
  * True when a thrown value is not an Error.
  *
  * A hop can reject with a value that is not an Error: the
@@ -104,8 +128,7 @@ const EVSCITED_PATTERNS = [
 export function isContainerEvictedError(
   err: unknown,
 ): boolean {
-  const message =
-    err instanceof Error ? err.message : typeof err === "string" ? err : String(err);
+  const message = safeErrorMessage(err);
   const lowered = message.toLowerCase();
   return EVSCITED_PATTERNS.some((pattern) => lowered.includes(pattern));
 }
@@ -188,8 +211,7 @@ const FAILED_PATTERNS = [
  * caller is told to wait).
  */
 export function isContainerFailedError(err: unknown): boolean {
-  const message =
-    err instanceof Error ? err.message : typeof err === "string" ? err : String(err);
+  const message = safeErrorMessage(err);
   const lowered = message.toLowerCase();
   return FAILED_PATTERNS.some((pattern) => lowered.includes(pattern));
 }
