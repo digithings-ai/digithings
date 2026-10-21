@@ -43,9 +43,9 @@ function api(): EmbedChatPrefsApi {
     allowAddMcp: true,
     catalogTools: [
       { id: "digisearch", label: "Search" },
-      { id: "datatap", label: "DataTap" },
+      { id: "records", label: "Records" },
     ],
-    mcpServers: [{ id: "zammad", label: "Zammad tickets" }],
+    mcpServers: [{ id: "desk", label: "Support desk" }],
     sessionKey: "t",
     openSettings: () => {},
     openHelp: () => {},
@@ -109,8 +109,8 @@ describe("one palette", () => {
     expect(ids).toContain("tools");
     expect(SLASH_COMMANDS.map((command) => command.id)).not.toContain("digisearch");
     expect(parseSlashInput("/digisearch").kind).toBe("unknown");
-    expect(parseSlashInput("/zammad").kind).toBe("unknown");
+    expect(parseSlashInput("/ledger").kind).toBe("unknown");
     expect(extraSlashDefs(api())).toEqual([]);
-    expect(slashSubmitAction("/datatap")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/records")).toEqual({ kind: "block" });
   });
 });

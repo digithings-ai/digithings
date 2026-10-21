@@ -519,10 +519,11 @@ export function paletteFrame(
   defs: readonly SlashDef[] = SLASH_COMMANDS,
 ): PaletteFrame {
   if (!text.startsWith("/") || text.includes("\n")) return { kind: "closed" };
-  const match = /^\/(\S*)(.*)$/.exec(text);
-  if (!match) return { kind: "closed" };
-  const token = match[1] ?? "";
-  const rest = match[2] ?? "";
+  // First whitespace only. A single `\s` search stays linear.
+  const body = text.slice(1);
+  const splitAt = body.search(/\s/);
+  const token = splitAt === -1 ? body : body.slice(0, splitAt);
+  const rest = splitAt === -1 ? "" : body.slice(splitAt);
   if (!token) return { kind: "commands", filter: "" };
   const needle = `/${token.toLowerCase()}`;
   const command = defs.find((def) => def.names.some((name) => name.toLowerCase() === needle));

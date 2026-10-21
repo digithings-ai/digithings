@@ -119,6 +119,8 @@ export function applySessionTool(
     return { ok: true, message: enabled ? "Thinking open." : "Thinking collapsed." };
   }
   if (name === "session_toggle_tool") {
+    if (api.toolControl === "agent") return { ok: false, message: "Managed by the agent." };
+    if (api.toolControl === "locked") return { ok: false, message: "Tools are locked for this host." };
     const id = str(args, "id", "tool").toLowerCase();
     const enabled = bool(args, "enabled");
     if (!id || enabled === undefined) return { ok: false, message: "Need id and enabled." };

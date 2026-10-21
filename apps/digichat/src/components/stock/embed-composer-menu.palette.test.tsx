@@ -123,11 +123,11 @@ describe("composer palette sync", () => {
       catalogTools: [
         { id: "file_search", label: "Search" },
         {
-          id: "datatap",
-          label: "DataTap",
+          id: "records",
+          label: "Records",
           tools: [
-            { id: "datatap__list_connections", label: "List connections" },
-            { id: "datatap__get_item", label: "Open item" },
+            { id: "records_list", label: "List connections" },
+            { id: "records_open", label: "Open item" },
           ],
         },
       ],
@@ -138,7 +138,7 @@ describe("composer palette sync", () => {
       </EmbedChatPrefsProvider>,
     );
     expect(screen.getByRole("menuitem", { name: /^Search/ })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: /DataTap/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Records/ })).toBeTruthy();
     expect(screen.getAllByText("Managed by the agent").length).toBeGreaterThan(0);
     await user.click(screen.getByRole("menuitem", { name: /^Search/ }));
     expect(api.setExtraTool).not.toHaveBeenCalled();
@@ -150,7 +150,7 @@ describe("composer palette sync", () => {
         <EmbedComposerMenu kind="mcp" onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    expect(screen.getByRole("menuitem", { name: /DataTap/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Records/ })).toBeTruthy();
     expect(screen.getAllByText("Managed by the agent").length).toBeGreaterThan(0);
   });
 
@@ -159,7 +159,7 @@ describe("composer palette sync", () => {
     const api = prefs({
       toolControl: "locked",
       mcpServers: [
-        { id: "zammad", label: "Zammad tickets" },
+        { id: "desk", label: "Support tickets" },
         { id: "digisearch", label: "Help search" },
         { id: "digivault", label: "Knowledge vault" },
       ],
@@ -170,10 +170,10 @@ describe("composer palette sync", () => {
         <EmbedComposerMenu kind="tools" onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    expect(screen.getByRole("menuitemcheckbox", { name: /Zammad tickets/ })).toBeTruthy();
+    expect(screen.getByRole("menuitemcheckbox", { name: /Support tickets/ })).toBeTruthy();
     expect(screen.getByRole("menuitemcheckbox", { name: /Help search/ })).toBeTruthy();
     expect(screen.getByRole("menuitemcheckbox", { name: /Knowledge vault/ })).toBeTruthy();
-    await user.click(screen.getByRole("menuitemcheckbox", { name: /Zammad tickets/ }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: /Support tickets/ }));
     expect(api.setExtraTool).not.toHaveBeenCalled();
     unmount();
 
@@ -182,7 +182,7 @@ describe("composer palette sync", () => {
         <EmbedComposerMenu kind="mcp" onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    await user.click(screen.getByRole("menuitem", { name: /Zammad tickets/ }));
+    await user.click(screen.getByRole("menuitem", { name: /Support tickets/ }));
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /mcp new/i })).toBeNull();
   });

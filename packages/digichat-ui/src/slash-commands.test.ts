@@ -28,7 +28,7 @@ describe("parseSlashInput", () => {
     expect(parseSlashInput("/digisearch")).toEqual({ kind: "unknown", name: "/digisearch" });
     expect(parseSlashInput("/digivault notes")).toEqual({ kind: "unknown", name: "/digivault" });
     expect(parseSlashInput("/websearch query")).toEqual({ kind: "unknown", name: "/websearch" });
-    expect(parseSlashInput("/zammad")).toEqual({ kind: "unknown", name: "/zammad" });
+    expect(parseSlashInput("/ledger")).toEqual({ kind: "unknown", name: "/ledger" });
   });
 
   it("drops /search /vault /docs as public names", () => {

@@ -82,6 +82,28 @@ describe("applySessionTool", () => {
     expect(a.setDigisearch).toHaveBeenCalledWith(false);
   });
 
+  it("does not toggle tools when the host locks them or the agent owns them", () => {
+    const locked = api({ toolControl: "locked" });
+    const lockedResult = applySessionTool(
+      "session_toggle_tool",
+      { id: "digisearch", enabled: false },
+      locked,
+    );
+    expect(lockedResult.ok).toBe(false);
+    expect(lockedResult.message).toBe("Tools are locked for this host.");
+    expect(locked.setDigisearch).not.toHaveBeenCalled();
+
+    const agent = api({ toolControl: "agent" });
+    const agentResult = applySessionTool(
+      "session_toggle_tool",
+      { id: "file_search", enabled: true },
+      agent,
+    );
+    expect(agentResult.ok).toBe(false);
+    expect(agentResult.message).toBe("Managed by the agent.");
+    expect(agent.setExtraTool).not.toHaveBeenCalled();
+  });
+
   it("names only the live view levels when a view is refused", () => {
     // The model-facing message must teach the levels the product ships:
     // `hidden` / `compact` / `detailed` were renamed away (#6034) and

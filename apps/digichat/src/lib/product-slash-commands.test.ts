@@ -78,8 +78,8 @@ describe("slashSubmitAction", () => {
     expect(slashSubmitAction("/digisearch RS256")).toEqual({ kind: "block" });
     expect(slashSubmitAction("/digivault")).toEqual({ kind: "block" });
     expect(slashSubmitAction("/websearch latest filings")).toEqual({ kind: "block" });
-    expect(slashSubmitAction("/zammad")).toEqual({ kind: "block" });
-    expect(slashSubmitAction("/datatap pipeline status")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/desk")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/records pipeline status")).toEqual({ kind: "block" });
   });
 
   it("keeps a pane command in the composer until the option resolves", () => {
@@ -135,7 +135,7 @@ describe("catalogForceTool", () => {
   it("maps vault locate onto the BFF catalog id", () => {
     expect(catalogForceTool("digivault_search_notes")).toBe("digivault");
     expect(catalogForceTool("digisearch")).toBe("digisearch");
-    expect(catalogForceTool("datatap")).toBe("datatap");
+    expect(catalogForceTool("records")).toBe("records");
   });
 });
 
@@ -180,9 +180,9 @@ describe("buildProductSlashCommands", () => {
 
   it("does not add a slash command per catalog tool", () => {
     const ids = buildProductSlashCommands(
-      api({ catalogTools: [{ id: "datatap", label: "DataTap" }] }),
+      api({ catalogTools: [{ id: "records", label: "Records" }] }),
     ).map((c) => c.id);
-    expect(ids).not.toContain("datatap");
+    expect(ids).not.toContain("records");
     expect(ids).toContain("tools");
   });
 });
@@ -308,7 +308,7 @@ describe("executeSlashDef", () => {
       extraSlashDefs(
         api({
           catalogTools: [{ id: "digisearch" }],
-          mcpServers: [{ id: "datatap", label: "DataTap" }],
+          mcpServers: [{ id: "records", label: "Records" }],
         }),
       ),
     ).toEqual([]);
