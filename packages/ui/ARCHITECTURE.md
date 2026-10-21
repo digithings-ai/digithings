@@ -455,6 +455,19 @@ and run `make agents-init` (CI enforces idempotence).
   a pair under AA fails the kit suite. Measure with the composited fill, not
   the flat surface — the matrix and diff washes both composite over a ground.
 
+## Platform colour theme
+
+`packages/ui/src/theme/` owns mode and palette for every web surface that
+opts in. Mode is `light`, `dark`, or `auto` (`dt-theme` stores only `light`
+or `dark`; auto removes the key). Palette is `default` or one of the 32
+DigiVoice ids in `dt-palette`. The tables are generated from
+`digivoice/hammerspoon/theme_registry.json` by
+`scripts/generate_platform_palettes.py` (`packages/design/palettes.css`,
+`palette-registry.ts`, `themeInit.ts`). `default` leaves `tokens.css` in
+charge. The dashboard keeps its own provider and never writes `dt-palette`.
+TUIs read the same ids from `@digithings/ui/theme/tui` and share
+`~/.digithings/theme.json`.
+
 ## RTL & logical properties (#4306)
 
 The kit is **direction-agnostic by construction**: every part is authored with

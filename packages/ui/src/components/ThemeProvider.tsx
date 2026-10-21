@@ -21,6 +21,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  applyDocumentTheme,
+  readThemeState,
+  type PaletteName,
+  type ResolvedTheme,
+  type ThemePreference,
+} from "../theme/apply-theme";
 import { IconButton } from "../ui/icon-button";
 
 /** Text direction. The kit defaults to `"ltr"`; RTL is always opt-in. */
@@ -71,35 +78,25 @@ export function DirectionProvider({
   );
 }
 
-type Theme = "light" | "dark";
-const KEY = "dt-theme";
-
-/** Browser-chrome colour per theme; must match --bg in tokens.css. */
-const THEME_BG: Record<Theme, string> = { light: "#FBFBF9", dark: "#0A0E0C" };
-
-/**
- * Point the single <meta name="theme-color"> at the active theme's --bg so the
- * browser toolbar/status bar matches the page. Keying theme-color off
- * prefers-color-scheme instead leaves a dark bar above a light page (and vice
- * versa) whenever the OS scheme and the chosen site theme disagree.
- */
-function applyThemeColor(t: Theme) {
-  try {
-    let m = document.querySelector('meta[name="theme-color"]');
-    if (!m) {
-      m = document.createElement("meta");
-      m.setAttribute("name", "theme-color");
-      document.head.appendChild(m);
-    }
-    m.setAttribute("content", THEME_BG[t]);
-  } catch {}
-}
+export type { PaletteName, ResolvedTheme, ThemePreference };
 
 // themeInitScript lives in ./themeInit.ts (a plain module) — see there.
 export { themeInitScript } from "./themeInit";
 
+export type ThemeContextValue = {
+  /** Resolved light/dark currently painted. Existing callers read this. */
+  theme: ResolvedTheme;
+  /** Flip between explicit light and dark (writes `dt-theme`). */
+  toggle: () => void;
+  /** Stored mode. `auto` means `dt-theme` is absent and the OS is followed. */
+  preference: ThemePreference;
+  setTheme: (preference: ThemePreference) => void;
+  /** `default` or one of the 32 DigiVoice palette ids. Stored in `dt-palette`. */
+  palette: PaletteName;
+  setPalette: (palette: string) => void;
+};
 
-const ThemeCtx = createContext<{ theme: Theme; toggle: () => void } | null>(null);
+const ThemeCtx = createContext<ThemeContextValue | null>(null);
 
 export function useTheme() {
   const ctx = useContext(ThemeCtx);
@@ -115,35 +112,52 @@ export function ThemeProvider({
   /** Text direction applied to <html>. Defaults to `"ltr"`; RTL is opt-in. */
   dir?: Direction;
 }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setResolved] = useState<ResolvedTheme>("dark");
+  const [preference, setPreference] = useState<ThemePreference>("auto");
+  const [palette, setPaletteState] = useState<PaletteName>("default");
 
   useEffect(() => {
-    const current = (document.documentElement.getAttribute("data-theme") as Theme) || "dark";
-    setTheme(current);
+    const initial = readThemeState();
+    const resolved = applyDocumentTheme(initial.preference, initial.palette);
+    setPreference(initial.preference);
+    setPaletteState(initial.palette);
+    setResolved(resolved);
     const mq = matchMedia("(prefers-color-scheme: light)");
-    const onOS = (e: MediaQueryListEvent) => {
-      try { if (localStorage.getItem(KEY)) return; } catch {}
-      const t = e.matches ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", t);
-      applyThemeColor(t);
-      setTheme(t);
+    const onOS = () => {
+      const current = readThemeState();
+      if (current.preference !== "auto") return;
+      setResolved(applyDocumentTheme("auto", current.palette));
     };
     mq.addEventListener("change", onOS);
     return () => mq.removeEventListener("change", onOS);
   }, []);
 
-  const toggle = useCallback(() => {
-    setTheme((prev) => {
-      const next: Theme = prev === "light" ? "dark" : "light";
-      document.documentElement.setAttribute("data-theme", next);
-      applyThemeColor(next);
-      try { localStorage.setItem(KEY, next); } catch {}
-      return next;
-    });
+  const setTheme = useCallback((next: ThemePreference) => {
+    const current = readThemeState();
+    setPreference(next);
+    setResolved(applyDocumentTheme(next, current.palette));
   }, []);
 
+  const setPalette = useCallback((next: string) => {
+    const current = readThemeState();
+    const resolved = applyDocumentTheme(current.preference, next);
+    setPaletteState(readThemeState().palette);
+    setResolved(resolved);
+  }, []);
+
+  const toggle = useCallback(() => {
+    const resolved =
+      document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    setTheme(resolved === "light" ? "dark" : "light");
+  }, [setTheme]);
+
+  const value = useMemo(
+    () => ({ theme, toggle, preference, setTheme, palette, setPalette }),
+    [theme, toggle, preference, setTheme, palette, setPalette],
+  );
+
   return (
-    <ThemeCtx.Provider value={{ theme, toggle }}>
+    <ThemeCtx.Provider value={value}>
       <DirectionProvider root dir={dir}>
         {children}
       </DirectionProvider>
@@ -162,12 +176,28 @@ export function ThemeToggle({ className }: { className?: string }) {
       className={className ?? "theme-toggle"}
     >
       {theme === "dark" ? (
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <svg
+          viewBox="0 0 24 24"
+          width="17"
+          height="17"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        >
           <circle cx="12" cy="12" r="4.2" />
           <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" />
         </svg>
       ) : (
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          width="17"
+          height="17"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        >
           <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
         </svg>
       )}

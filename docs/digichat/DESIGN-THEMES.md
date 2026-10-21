@@ -27,6 +27,13 @@ DIGICHAT_CONFIG_PATH=/app/config/examples/skins/digichat.yaml
 DIGICHAT_CHROME_SKIN=digichat
 ```
 
+## Platform palette
+
+Mode and palette are a platform setting (`dt-theme`, `dt-palette`), not a
+catalog skin. `/theme` paints the digichat product skin. The 11 vendored
+catalog skins stay as shipped. A pinned embed theme wins over the stored
+mode, and the pin removes `data-palette` from that document.
+
 ## Catalog templates (untouched)
 
 The 11 official assistant-ui ids (`base`, `chatgpt`, `claude`, `grok`,
