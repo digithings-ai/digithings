@@ -6,6 +6,10 @@ import {
   buildThemeMessage,
   parseThemeMessage,
   applyEmbedDocumentTheme,
+  applyEmbedPalette,
+  embedUserThemeKey,
+  readEmbedUserTheme,
+  writeEmbedUserTheme,
 } from "./embed-theme-messages";
 
 describe("embed-theme-messages", () => {
@@ -101,5 +105,55 @@ describe("embed-theme-messages", () => {
       expect(classes.has("dark")).toBe(true);
       expect(classes.has("light")).toBe(false);
     });
+  });
+});
+
+describe("embed /theme pick (2.6.6)", () => {
+  function memoryStore() {
+    const map = new Map<string, string>();
+    return {
+      map,
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => void map.set(k, v),
+      removeItem: (k: string) => void map.delete(k),
+    };
+  }
+
+  it("keys the pick by embed host so tenants on one origin never share it", () => {
+    expect(embedUserThemeKey("occ.digithings.ai")).toBe("dc-embed-theme:occ.digithings.ai");
+    expect(embedUserThemeKey(undefined)).toBe("dc-embed-theme:default");
+    const store = memoryStore();
+    writeEmbedUserTheme(embedUserThemeKey("a.example"), { mode: "light", palette: "aura" }, store);
+    expect(readEmbedUserTheme(embedUserThemeKey("a.example"), store)).toEqual({
+      mode: "light",
+      palette: "aura",
+    });
+    expect(readEmbedUserTheme(embedUserThemeKey("b.example"), store)).toBeNull();
+  });
+
+  it("clears the pick, and ignores a malformed one", () => {
+    const store = memoryStore();
+    const key = embedUserThemeKey("a.example");
+    writeEmbedUserTheme(key, { mode: "dark", palette: "default" }, store);
+    writeEmbedUserTheme(key, null, store);
+    expect(store.map.size).toBe(0);
+    store.setItem(key, "{not json");
+    expect(readEmbedUserTheme(key, store)).toBeNull();
+    store.setItem(key, JSON.stringify({ mode: "sepia", palette: "aura" }));
+    expect(readEmbedUserTheme(key, store)).toBeNull();
+    store.setItem(key, JSON.stringify({ mode: "dark", palette: "nope" }));
+    expect(readEmbedUserTheme(key, store)).toEqual({ mode: "dark", palette: "default" });
+  });
+
+  it("paints the pick's palette and removes it for the default", () => {
+    const attrs = new Map<string, string>();
+    const el = {
+      setAttribute: (k: string, v: string) => void attrs.set(k, v),
+      removeAttribute: (k: string) => void attrs.delete(k),
+    };
+    applyEmbedPalette("aura", el);
+    expect(attrs.get("data-palette")).toBe("aura");
+    applyEmbedPalette("default", el);
+    expect(attrs.has("data-palette")).toBe(false);
   });
 });

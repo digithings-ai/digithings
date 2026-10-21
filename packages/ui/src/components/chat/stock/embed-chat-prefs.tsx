@@ -7,6 +7,7 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
+import type { PaletteName, ResolvedTheme, ThemePreference } from "../../../theme/apply-theme";
 import {
   normalizeViewPref,
   type ThinkingMode,
@@ -130,12 +131,22 @@ export type EmbedChatPrefsApi = {
   openSearchEngine: () => void;
   openView: () => void;
   /**
-   * Tenant embed: the parent or tenant pins the mode. `/theme` is hidden and
-   * a typed command does nothing. The full app leaves this unset.
+   * Hide `/theme` and ignore a typed one. No host sets this today: tenant
+   * embeds offer `/theme` through `themeState` / `setTheme` (2.6.6). The full
+   * app leaves this unset.
    */
   themeLocked?: boolean;
   /** Open the mode + palette picker. No-op when the host does not provide it. */
   openTheme?: () => void;
+  /**
+   * Host-owned theme (tenant embeds). When set, `/theme` and its picker read
+   * this instead of the document-wide `dt-theme` / `dt-palette` keys, and a
+   * pick goes through `setTheme` rather than `applyDocumentTheme`, so it is
+   * not written to localStorage. `auto` drops the pick (back to the host's
+   * default). The full app leaves both unset.
+   */
+  themeState?: { preference: ThemePreference; palette: PaletteName; resolved: ResolvedTheme };
+  setTheme?: (preference: ThemePreference, palette: PaletteName) => void;
   openThinking: () => void;
   openLanguage: () => void;
   openSessions: () => void;

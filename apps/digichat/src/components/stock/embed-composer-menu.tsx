@@ -46,7 +46,12 @@ import {
   toolsMenuSummary,
   type SessionMcpConfig,
 } from "@/components/stock/embed-mcp-flow";
-import { buildProductSlashCommands, languageSelectOptions } from "@/lib/product-slash-commands";
+import {
+  applyThemePick,
+  buildProductSlashCommands,
+  currentThemeState,
+  languageSelectOptions,
+} from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
 import {
   byokRequiresModel,
@@ -68,12 +73,7 @@ import {
 } from "@/components/stock/embed-provider-flow";
 import { listenMcpOAuthResult, startMcpOAuth } from "@/components/stock/embed-mcp-oauth";
 import { THINKING_MODES, VIEW_MODES } from "@/lib/view-modes";
-import {
-  applyDocumentTheme,
-  matchThemeStep,
-  readThemeState,
-  themeCycle,
-} from "@digithings/ui/theme";
+import { matchThemeStep, themeCycle } from "@digithings/ui/theme";
 
 export type ComposerMenuKind =
   | "settings"
@@ -587,7 +587,7 @@ export function EmbedComposerMenu({
   );
 
   const themeRows = useMemo((): MenuRow[] => {
-    const state = readThemeState();
+    const state = currentThemeState(api);
     const current = matchThemeStep(state.preference, state.palette, state.resolved);
     return themeCycle().map((step) => ({
       id: step.id,
@@ -596,11 +596,11 @@ export function EmbedComposerMenu({
       checked: current.id === step.id,
       exclusive: true,
       activate: () => {
-        applyDocumentTheme(step.mode, step.palette);
+        applyThemePick(api, step.mode, step.palette);
         onClose();
       },
     }));
-  }, [onClose]);
+  }, [api, onClose]);
 
   const thinkingRows = useMemo(
     (): MenuRow[] =>

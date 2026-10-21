@@ -371,7 +371,7 @@ export type SlashVisibility = {
   tools?: boolean;
   /** Artifact list for this session. Hide where there is no artifact surface. */
   artifacts?: boolean;
-  /** Colour theme. Hidden on a tenant-pinned embed (`themeLocked`). */
+  /** Colour theme. Hidden only when a host sets `themeLocked`; tenant embeds own the pick (`setTheme`). */
   theme?: boolean;
 };
 

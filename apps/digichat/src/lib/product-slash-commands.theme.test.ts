@@ -124,6 +124,34 @@ describe("/theme", () => {
     expect(openTheme).toHaveBeenCalledTimes(2);
   });
 
+  it("is available on a tenant embed and routes picks through the host, not localStorage", () => {
+    const setTheme = vi.fn();
+    const openTheme = vi.fn();
+    const embed = api({
+      openTheme,
+      themeState: { preference: "dark", palette: "default", resolved: "dark" },
+      setTheme,
+    });
+    const row = buildProductSlashCommands(embed).find((r) => r.id === "theme");
+    expect(row).toBeTruthy();
+    expect(row?.description).toBe("default · dark");
+
+    executeSlashDef(theme!, "light", embed);
+    expect(setTheme).toHaveBeenLastCalledWith("light", "default");
+    executeSlashDef(theme!, "dracula", embed);
+    expect(setTheme).toHaveBeenLastCalledWith("dark", "dracula");
+    executeSlashDef(theme!, "aura light", embed);
+    expect(setTheme).toHaveBeenLastCalledWith("light", "aura");
+    executeSlashDef(theme!, "auto", embed);
+    expect(setTheme).toHaveBeenLastCalledWith("auto", "default");
+    executeSlashDef(theme!, "", embed);
+    expect(openTheme).toHaveBeenCalledTimes(1);
+
+    expect(localStorage.getItem("dt-theme")).toBeNull();
+    expect(localStorage.getItem("dt-palette")).toBeNull();
+    expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+  });
+
   it("hides the command and ignores it when the embed pins the theme", () => {
     const openTheme = vi.fn();
     const locked = api({ themeLocked: true, openTheme });

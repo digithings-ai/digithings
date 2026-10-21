@@ -62,6 +62,21 @@ describe("embed stock chrome wiring", () => {
     expect(embedClientSrc).toMatch(/buildReadyMessage\(pageContextMode\)/);
   });
 
+  it("offers /theme on every embed tenant, keeping the other #6122 locks (2.6.6)", () => {
+    expect(embedClientSrc).not.toMatch(/themeLocked:\s*true/);
+    expect(embedClientSrc).toMatch(/openTheme: \(\) => \{\s*setComposerMenu\("theme"\);/);
+    expect(embedClientSrc).toMatch(/themeState: \{ preference: theme\.mode/);
+    expect(embedClientSrc).toMatch(/setTheme: \(preference, palette\) =>/);
+    // A pick is per tab and per host, and the tenant theme stays the start.
+    expect(embedClientSrc).toMatch(/embedUserThemeKey\(host\)/);
+    expect(embedClientSrc).toMatch(
+      /userTheme\?\.mode \?\? parentTheme \?\? urlTheme \?\? \(tenantCfg\.theme === "light"/,
+    );
+    // Sessions and artifacts stay closed on embeds.
+    expect(embedClientSrc).toMatch(/openSessions: \(\) => \{\}/);
+    expect(embedClientSrc).toMatch(/openArtifacts: \(\) => \{\}/);
+  });
+
   it("hides the in-iframe brand header on the first-party digichat skin (#3733)", () => {
     expect(embedClientSrc).toMatch(/shouldRenderEmbedBrandHeader/);
     expect(embedClientSrc).toMatch(/EmbedChatPrefsProvider/);
