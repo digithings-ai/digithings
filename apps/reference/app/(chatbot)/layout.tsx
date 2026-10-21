@@ -5,8 +5,7 @@ import Link from "next/link";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { themeInitScript } from "@digithings/ui/theme-init";
-import { ThemePicker } from "@digithings/ui/theme-picker";
-import { ThemeProvider } from "@digithings/ui/theme-provider";
+import { ThemeToggle, ThemeProvider } from "@digithings/ui/theme-provider";
 
 export const metadata: Metadata = {
   title: "digichat gallery",
@@ -35,7 +34,7 @@ export default function ChatbotRootLayout({ children }: { children: ReactNode })
             <Link href="/" className="chatbot-bar-home">
               ← design reference
             </Link>
-            <ThemePicker className="chatbot-theme-toggle" />
+            <ThemeToggle className="chatbot-theme-toggle" />
           </header>
           {children}
         </ThemeProvider>

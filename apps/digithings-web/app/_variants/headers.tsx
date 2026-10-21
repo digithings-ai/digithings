@@ -19,7 +19,7 @@ import {
   IconLink,
   isNavGroup,
   NavShell,
-  ThemePicker,
+  ThemeToggle,
   type NavItem,
   type NavLink,
 } from "@digithings/ui";
@@ -133,7 +133,7 @@ export function MonoNav() {
           )}
         </nav>
         <div className="ml-auto flex items-center gap-[0.8rem]">
-          <ThemePicker />
+          <ThemeToggle />
         </div>
       </div>
     </header>

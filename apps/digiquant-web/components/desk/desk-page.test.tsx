@@ -83,6 +83,10 @@ describe("mounted desk pages", () => {
 
     const settings = renderToStaticMarkup(<DeskPage path="/settings" />);
     expect(settings).toContain("data-settings-page");
+    expect(settings).toContain('aria-label="Theme"');
+    expect(settings).toContain("default · dark");
+    expect(settings).toContain("aura · dark");
+    expect(settings).not.toContain("Colour theme");
     expect(settings).toContain("Default desk");
     expect(settings).toContain("deepseek/deepseek-v4-flash");
     expect(settings).not.toContain("Provider key");

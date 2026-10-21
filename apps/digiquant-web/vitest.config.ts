@@ -34,6 +34,7 @@ export default defineConfig({
         "../../packages/ui/src/components/chat/stock/index.ts",
       ),
       "@digithings/ui/cn": path.resolve(__dirname, "../../packages/ui/src/lib/utils.ts"),
+      "@digithings/ui/theme": path.resolve(__dirname, "../../packages/ui/src/theme/index.ts"),
       "@digithings/ui/ui": path.resolve(__dirname, "../../packages/ui/src/ui/index.ts"),
       "@digithings/ui/lib/stub-payload": path.resolve(
         __dirname,

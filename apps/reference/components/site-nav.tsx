@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
-import { ThemePicker } from "@digithings/ui";
+import { ThemeToggle } from "@digithings/ui";
 import {
   Button,
   Select,
@@ -148,7 +148,7 @@ export function SiteNav() {
 
       <div className="site-nav-suite">{typePicker("Type suite")}</div>
 
-      <ThemePicker className="site-nav-theme" />
+      <ThemeToggle className="site-nav-theme" />
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger

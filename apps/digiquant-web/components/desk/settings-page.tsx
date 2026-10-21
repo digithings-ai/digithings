@@ -1,9 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ThemePicker } from "@digithings/ui";
 import { SegmentedControl } from "@digithings/ui/ui";
+import {
+  applyDocumentTheme,
+  matchThemeStep,
+  readThemeState,
+  themeCycle,
+} from "@digithings/ui/theme";
 import { deskHomeHref } from "./desk-manifest";
 import { useDeskAccess } from "./desk-access";
 import {
@@ -21,6 +26,28 @@ import {
 import { useAppSettings, writeSettings } from "./app-settings-store";
 
 const LABEL = "m-0 text-[0.6875rem] tracking-[0.04em] text-ink-mute";
+
+const themeListeners = new Set<() => void>();
+
+function subscribeDocumentTheme(onStoreChange: () => void): () => void {
+  themeListeners.add(onStoreChange);
+  return () => {
+    themeListeners.delete(onStoreChange);
+  };
+}
+
+function documentThemeStepId(): string {
+  const painted = readThemeState();
+  return matchThemeStep(painted.preference, painted.palette, painted.resolved).id;
+}
+
+function serverThemeStepId(): string {
+  return "default:dark";
+}
+
+function publishDocumentTheme(): void {
+  for (const listener of themeListeners) listener();
+}
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -43,6 +70,11 @@ export function SettingsPage({ path }: { path: string }) {
   const { manifest, setDesk } = useDeskAccess();
   const router = useRouter();
   const desks = (manifest?.desks ?? []).filter((desk) => desk.access === "granted");
+  const currentId = useSyncExternalStore(
+    subscribeDocumentTheme,
+    documentThemeStepId,
+    serverThemeStepId,
+  );
 
   const patch = (partial: Partial<AppSettings>) => {
     writeSettings({ ...settings, ...partial });
@@ -96,7 +128,18 @@ export function SettingsPage({ path }: { path: string }) {
       <Section title="Appearance">
         <div className="flex flex-col gap-1">
           <p className={LABEL}>Theme</p>
-          <ThemePicker />
+          <SegmentedControl
+            aria-label="Theme"
+            className="flex-wrap"
+            value={currentId}
+            options={themeCycle().map((step) => ({ value: step.id, label: step.label }))}
+            onChange={(id) => {
+              const step = themeCycle().find((item) => item.id === id);
+              if (!step) return;
+              applyDocumentTheme(step.mode, step.palette);
+              publishDocumentTheme();
+            }}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <p className={LABEL}>Density</p>

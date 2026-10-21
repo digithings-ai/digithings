@@ -16,7 +16,6 @@
     "./theme": "./src/theme/index.ts",
     "./theme/tui": "./src/theme/tui-prefs.ts",
     "./theme-init": "./src/components/themeInit.ts",
-    "./theme-picker": "./src/components/ThemePicker.tsx",
     "./theme-provider": "./src/components/ThemeProvider.tsx",
     "./chart-scale": "./src/components/finance-charts/chart-scale.ts",
     "./cn": "./src/lib/utils.ts",
