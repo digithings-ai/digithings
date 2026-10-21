@@ -34,6 +34,8 @@ import json
 import re
 import subprocess
 import sys
+import urllib.error
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +64,18 @@ def _load() -> Any:
 
 
 mq = _load()
+
+
+@pytest.fixture(autouse=True)
+def reviewer_gate_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the reviewer-independence gate out of every other test in this file.
+
+    The shipped policy turns the gate on in shadow mode, and shadow mode reads
+    the Paperclip API. A unit test must not talk to the live control plane, so
+    the gate is off by default here and switched on explicitly by the tests
+    that are about it.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "off")
 
 #: `gh api graphql` answer for a PR with no review threads.
 NO_THREADS: dict[str, Any] = {
@@ -2140,3 +2154,504 @@ def test_the_branches_offered_for_an_update_are_the_oldest_first() -> None:
         _verdict(5, stale=True, created_at="2026-10-03T00:00:00Z"),
     ]
     assert [v.number for v in mq.stale_candidates(verdicts, 2)] == [3, 5]
+
+
+# ── reviewer independence: the review must come from another seat (DIG-4795) ───
+#
+# twelve-x #425 merged on 21 Oct 2026 with its review coverage written by its own
+# author seat ("same model, separate context"), and #369's "in-session review" came
+# from the author seat's own subagents. Every seat in this org pushes and comments
+# under ONE GitHub login, so GitHub cannot say which seat wrote a comment. The seat
+# identity has to travel inside the review artifact, and the queue has to check it
+# against the Paperclip side.
+#
+# The gate has two halves and they are one question — did a DIFFERENT seat look at
+# THIS head? — so they are exercised together:
+#
+#   * the marker must name the head the PR stands at now (a verdict against an
+#     older head says nothing about the code that is about to merge), and
+#   * the marker must not come from the author's seat, nor from a run of that
+#     seat on the PR's ticket (which is what covers the author's own subagents
+#     and same-session reviewers).
+
+#: The seat that wrote the PR, the seat that reviewed it, and a third seat.
+AUTHOR_AGENT = "11111111-1111-4111-8111-111111111111"
+REVIEWER_AGENT = "22222222-2222-4222-8222-222222222222"
+OTHER_AGENT = "33333333-3333-4333-8333-333333333333"
+
+#: The runs those seats were in when they posted.
+AUTHOR_RUN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+REVIEWER_RUN = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+
+#: The ticket the PR is about. `_pr` names it in the branch.
+TICKET = "DIG-9001"
+TICKET_ID = "issue-9001"
+
+
+class _FakePaperclip:
+    """The Paperclip side the reviewer gate reads, answered from a fixture.
+
+    The gate asks three things: which seat owns the PR's ticket, which runs
+    that seat had on the ticket, and which seat a named run belongs to. These
+    answers are a fixture, so no test reads the live control plane.
+    """
+
+    def __init__(
+        self,
+        *,
+        tickets: dict[str, dict[str, Any]] | None = None,
+        runs: dict[str, dict[str, Any]] | None = None,
+        issue_runs: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> None:
+        self._tickets = tickets or {}
+        self._runs = runs or {}
+        self._issue_runs = issue_runs or {}
+
+    def ticket(self, key: str) -> dict[str, Any] | None:
+        return self._tickets.get(key)
+
+    def run(self, run_id: str) -> dict[str, Any] | None:
+        return self._runs.get(run_id)
+
+    def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+        return list(self._issue_runs.get(issue_id, []))
+
+
+def _paperclip_run(
+    run_id: str,
+    agent: str,
+    *,
+    started: str = "2026-10-20T08:00:00Z",
+    finished: str | None = "2026-10-20T09:00:00Z",
+) -> dict[str, Any]:
+    """One run, in the shape the Paperclip API returns for an issue's runs."""
+    return {
+        "runId": run_id,
+        "agentId": agent,
+        "startedAt": started,
+        "finishedAt": finished,
+    }
+
+
+def _paperclip(
+    *,
+    author_runs: list[dict[str, Any]] | None = None,
+    runs: list[dict[str, Any]] | None = None,
+    assignee: str = AUTHOR_AGENT,
+) -> _FakePaperclip:
+    """The Paperclip facts of one PR: its ticket, the author's runs, the named runs."""
+    every = list(runs or []) + list(author_runs or [])
+    return _FakePaperclip(
+        tickets={
+            TICKET: {
+                "id": TICKET_ID,
+                "identifier": TICKET,
+                "assigneeAgentId": assignee,
+            }
+        },
+        runs={r["runId"]: r for r in every},
+        issue_runs={TICKET_ID: list(author_runs or [])},
+    )
+
+
+def _provenance_comment(
+    *,
+    agent: str = REVIEWER_AGENT,
+    run: str = REVIEWER_RUN,
+    head: str = "a" * 40,
+    created: str = "2026-10-20T10:00:00Z",
+    comment_id: str = "IC_kwDOreview_9001",
+) -> dict[str, Any]:
+    """A review comment carrying the in-session marker AND its provenance.
+
+    The provenance marker is what the gate reads: the Paperclip seat, the run
+    that seat was in, and the head the review looked at.
+    """
+    return {
+        "id": comment_id,
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": created,
+        "url": "https://github.com/digithings-ai/digithings/pull/9001#issuecomment-1",
+        "body": (
+            "<!-- in-session-review -->\n"
+            f"<!-- digithings-review agent={agent} run={run} head={head} -->\n\n"
+            "## Verdict: approve\n\n0 blockers, 2 majors filed.\n"
+        ),
+    }
+
+
+def _bare_comment() -> dict[str, Any]:
+    """A review comment with the in-session marker and no provenance at all."""
+    return {
+        "id": "IC_kwDObare_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": "<!-- in-session-review -->\n\n## Verdict: approve\n\n0 blockers.\n",
+    }
+
+
+def _reviewed_pr(
+    comments: list[dict[str, Any]],
+    *,
+    number: int = 9001,
+    head_sha: str = "a" * 40,
+    label: bool = True,
+) -> dict[str, Any]:
+    """A PR that claims an in-session review, with the label that claims it."""
+    pr = _pr(number, head_sha=head_sha, comments=comments)
+    if label:
+        pr["labels"] = [{"name": "reviewed:agent"}]
+    return pr
+
+
+def _judge(pr: dict[str, Any], prov: _FakePaperclip) -> Any:
+    """Run the whole gate on one PR, with the Paperclip side under the test's control."""
+    return mq.evaluate(
+        pr,
+        mq.load_policy(),
+        acting_role="cto",
+        base="develop",
+        prov=prov,
+    )
+
+
+def test_a_marker_from_the_author_seat_is_not_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A seat cannot review its own PR: the marker is dropped and the PR waits.
+
+    This is the loophole twelve-x #425 merged through — the review coverage came
+    from the author seat itself ("same model, separate context"), and the guard
+    found the content harmless but the door open to any seat.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
+    pr = _reviewed_pr([_provenance_comment(agent=AUTHOR_AGENT, run=AUTHOR_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "author's own seat" in reason
+    assert "a review from a different seat" in reason
+
+
+def test_the_reviewed_agent_label_does_not_carry_the_author_seats_own_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The label claims a review; the marker behind it has to be one.
+
+    `reviewed:agent` is a claim, and the claim's evidence is the findings comment.
+    When that comment is the author's own review, the label is a claim with nothing
+    behind it — the same hole #5526 was, with the author as the only reviewer.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
+    pr = _reviewed_pr([_provenance_comment(agent=AUTHOR_AGENT, run=AUTHOR_RUN)])
+    assert pr["labels"] == [{"name": "reviewed:agent"}]
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    assert not any("in-session review" in reason for reason in verdict.reasons)
+
+
+def test_a_marker_from_another_seat_on_the_current_head_is_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The gate must not add friction to a real independent review."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT, started="2026-10-20T09:30:00Z")],
+    )
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert "in-session review" in verdict.review_evidence
+    # The evidence names the seat and the head it checked, so the audit trail
+    # says which review carried the PR.
+    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+    assert "a" * 12 in verdict.review_evidence
+
+
+def test_a_marker_posted_during_the_author_seats_own_run_is_not_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A review posted inside the author's run is the author's own review.
+
+    The window covers the author's subagents and same-session reviewers: #369's
+    "in-session review" was written by the author seat's own subagents, and the
+    seat that typed it is not the seat that owns the PR.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[
+            _paperclip_run(
+                AUTHOR_RUN,
+                AUTHOR_AGENT,
+                started="2026-10-20T09:30:00Z",
+                finished="2026-10-20T10:30:00Z",
+            )
+        ],
+        runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT, started="2026-10-20T09:45:00Z")],
+    )
+    pr = _reviewed_pr(
+        [
+            _provenance_comment(
+                agent=REVIEWER_AGENT,
+                run=REVIEWER_RUN,
+                created="2026-10-20T10:00:00Z",
+            )
+        ]
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "still active" in reason
+    assert AUTHOR_RUN[:8] in reason
+
+
+def test_a_marker_that_names_an_older_head_is_not_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A verdict on an older head says nothing about the head about to merge.
+
+    Measured on #5994 on 21 Oct: the only marker on the PR was a `changes
+    requested` verdict naming head `22d4b3126`, while the PR stood at
+    `15414f011d`. A stale approve on an older head would satisfy the gate.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN, head="b" * 40)],
+        head_sha="a" * 40,
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "names head" in reason
+    assert "while this PR stands at" in reason
+
+
+def test_a_marker_without_provenance_is_not_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A comment that says "approve" but names no seat and no head proves nothing.
+
+    This is the state every review comment is in today: the marker is the only
+    thing a comment carries, and the marker names nobody.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr([_bare_comment()])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "carries neither a seat nor a run" in reason
+    assert "names no head SHA" in reason
+
+
+def test_a_marker_naming_a_run_the_api_does_not_know_is_not_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unresolvable run is a missing signal, not a clearance."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip()
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "does not know" in reason
+    assert REVIEWER_RUN[:8] in reason
+
+
+def test_a_marker_whose_seat_does_not_match_its_run_is_not_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The marker names one seat; the run says another. The run wins."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, OTHER_AGENT)])
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "belongs to seat" in reason
+    assert OTHER_AGENT[:8] in reason
+
+
+def test_a_ticket_the_api_does_not_know_is_not_a_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 404 is an answer, not a failure. The queue must not die on it.
+
+    The live API answers 404 for a ticket key nobody ever filed. That has to
+    read as "no such ticket" — the gate then says it could not identify the
+    authoring seat — and not as an exception that takes the tick down.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _FakePaperclip(tickets={})
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "authoring seat could not be identified" in reason
+
+
+def test_an_api_that_cannot_be_read_leaves_the_pr_unverifiable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The API going away is not a verdict. The PR waits, and nothing crashes.
+
+    A partial judgement is not a judgement: if the queue cannot read the
+    run record, it cannot say the reviewer was another seat, so it refuses
+    the PR — and it says why.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+
+    class _BrokenPaperclip(_FakePaperclip):
+        def run(self, run_id: str) -> dict[str, Any] | None:
+            raise mq._PaperclipUnavailable("Paperclip could not be read")
+
+    prov = _BrokenPaperclip(
+        tickets={TICKET: {"id": TICKET_ID, "assigneeAgentId": AUTHOR_AGENT}},
+    )
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "could not be checked" in reason
+
+
+def test_a_404_from_the_api_is_an_answer_and_not_a_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live API answers 404 for a record nobody has. That must not crash.
+
+    This is the difference between "there is no such ticket" and "the API is
+    down", and the gate has to tell them apart: a 404 is a fact it can judge
+    on, a refused connection is a fact it cannot.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+
+    def _urlopen(request: Any, timeout: int | None = None) -> Any:
+        raise urllib.error.HTTPError(
+            str(request.full_url), 404, "Not Found", {}, None
+        )
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    assert reader.ticket("DIG-0000") is None
+    assert reader.run("00000000-0000-4000-8000-000000000000") is None
+    assert reader.issue_runs("issue-0000") == []
+
+
+def test_a_refused_connection_is_not_read_as_a_missing_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A connection error raises, so the gate says "could not be checked"."""
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+
+    def _urlopen(request: Any, timeout: int | None = None) -> Any:
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable):
+        reader.ticket("DIG-4795")
+
+
+def test_shadow_mode_merges_and_records_what_it_would_refuse(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The rollout DIG-4809 named: measure first, refuse later.
+
+    Shadow mode is the 48-hour window. The PR merges as it would have merged
+    before, and the log says what the gate would have said — so the flip to
+    `enforce` is a switch, not a leap.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "shadow")
+    log = tmp_path / "reviewer-independence.log"
+    policy = replace(
+        mq.load_policy(),
+        review_independence=mq.ReviewIndependence(mode="shadow", log_path=str(log)),
+    )
+    prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
+    pr = _reviewed_pr([_provenance_comment(agent=AUTHOR_AGENT, run=AUTHOR_RUN)])
+    verdict = mq.evaluate(pr, policy, acting_role="cto", base="develop", prov=prov)
+    assert verdict.eligible, verdict.reasons
+    text = log.read_text(encoding="utf-8")
+    assert "would refuse" in text
+    assert "author's own seat" in text
+
+
+def test_the_gate_off_reads_no_provenance_at_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`off` is a switch, and it has to actually switch the gate off.
+
+    Without this, a broken mode string that silently fell back to the strict
+    reading would refuse every PR in the org, and the failure would look like
+    the gate working.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "off")
+    pr = _reviewed_pr([_bare_comment()])
+    verdict = _judge(pr, _paperclip())
+    assert verdict.eligible, verdict.reasons
+
+
+def test_the_shipped_policy_turns_the_reviewer_gate_on() -> None:
+    """The gate must not ship off.
+
+    DIG-4809 named a 48-hour shadow window and a later flip to `enforce`. That
+    is a rollout, not a gate that never runs: the shipped policy has to have the
+    gate on in one of its two working modes.
+    """
+    mode = mq.load_policy().review_independence.mode
+    assert mode in ("shadow", "enforce"), mode
+
+
+def test_a_policy_with_an_unreadable_reviewer_mode_is_refused(tmp_path: Path) -> None:
+    """A broken switch stops the queue rather than turning the gate off."""
+    raw = json.loads(
+        (REPO_ROOT / "scripts" / "merge_queue_policy.json").read_text(encoding="utf-8")
+    )
+    raw["review_independence"]["mode"] = "maybe"
+    bad = tmp_path / "policy.json"
+    bad.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(mq.QueueError, match="review_independence.mode"):
+        mq.load_policy(bad)
+
+
+def test_an_unreadable_env_value_fails_safe_to_enforce(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A misspelled switch must never turn a security gate off."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "yes please")
+    assert mq._effective_mode(mq.ReviewIndependence(mode="off")) == "enforce"
+
+
+def test_the_review_command_posts_the_provenance_the_gate_reads() -> None:
+    """The gate reads a marker the review command has to write.
+
+    Two files carry the command: the one the seats run and the source it is
+    generated from. Both have to carry the marker, or the gate refuses the
+    reviews the command produced.
+    """
+    for path in (
+        REPO_ROOT / ".claude" / "commands" / "review.md",
+        REPO_ROOT / "agents" / "sources" / "commands" / "review.md",
+    ):
+        body = path.read_text(encoding="utf-8")
+        assert "digithings-review" in body, path
+        assert "agent=" in body and "run=" in body and "head=" in body, path
+
+
+def test_the_merge_queue_doc_names_the_reviewer_independence_gate() -> None:
+    """The gate a reader cannot find is a gate nobody can rely on."""
+    doc = MERGE_QUEUE_DOC.read_text(encoding="utf-8")
+    assert "reviewer independence" in doc.lower()
+    assert "digithings-review" in doc

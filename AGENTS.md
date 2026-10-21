@@ -256,6 +256,17 @@ Author session must not review its own work. Verify each finding with a command,
 refute, then post survivors as a PR comment opening with
 `<!-- in-session-review -->` and apply `reviewed:agent`.
 
+**A review must come from a different seat, and it must name the head.** The
+in-session comment carries a second marker next to the first one —
+`<!-- digithings-review agent=<seat> run=<run> head=<sha> -->` — and the merge
+queue reads it. Two things follow. The marker must name the head the PR stands at
+now, so a verdict on an older head cannot pass as coverage of this one. And the
+seat that owns the PR's ticket cannot be the seat whose review counts: the queue
+drops a marker from the author's own seat, and one posted while that seat's run on
+the ticket was still active — which is what the author's own subagent review looks
+like. So the authoring seat hands the PR to another seat; the Code Reviewer
+approves, the queue merges (DIG-4795).
+
 Every line here is written by a coding agent, so an agent reviewing it is not weaker
 in kind than Bugbot — which is also an agent. What matters is that the reviewer did
 not write the code and that its output is on the record.

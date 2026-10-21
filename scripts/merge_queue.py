@@ -42,11 +42,15 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
+import os
 import re
 import subprocess
 import sys
-from collections.abc import Mapping
+import urllib.error
+import urllib.request
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -99,6 +103,41 @@ class Authority:
     note: str = ""
 
 
+#: The three ways the reviewer-independence gate can run. `shadow` measures what
+#: the gate would refuse and merges anyway; `enforce` refuses. DIG-4809 named the
+#: two-step rollout: 48 hours of shadow, then a separate small PR that flips the
+#: switch to `enforce`.
+REVIEW_INDEPENDENCE_MODES = ("off", "shadow", "enforce")
+
+
+@dataclass(frozen=True)
+class ReviewIndependence:
+    """How the queue treats a review marker that may come from the author's seat.
+
+    `mode` is the switch: `off` reads no provenance at all, `shadow` measures
+    what the gate would refuse and merges anyway, `enforce` refuses. The env
+    var `MQ_REVIEW_INDEPENDENCE` overrides the policy file, and a value that is
+    not one of the three is read as `enforce`: a misspelled switch must never
+    turn a gate off.
+    """
+
+    mode: str = "off"
+    api_url: str = "http://127.0.0.1:3100"
+    keychain_service: str = ""
+    keychain_account: str = ""
+    log_path: str = "~/.config/digithings/merge-queue/reviewer-independence.log"
+
+
+def _effective_mode(cfg: ReviewIndependence) -> str:
+    """The mode this gate runs in: the env var wins over the policy file."""
+    raw = os.environ.get("MQ_REVIEW_INDEPENDENCE")
+    if raw is None:
+        mode = str(cfg.mode or "off").strip().lower()
+        return mode if mode in REVIEW_INDEPENDENCE_MODES else "enforce"
+    mode = raw.strip().lower()
+    return mode if mode in REVIEW_INDEPENDENCE_MODES else "enforce"
+
+
 @dataclass(frozen=True)
 class Policy:
     """The merge-path policy, loaded from scripts/merge_queue_policy.json."""
@@ -111,6 +150,7 @@ class Policy:
     ignored_checks: frozenset[str] = frozenset()
     required_checks_by_repo: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     status_context_checks: frozenset[str] = frozenset()
+    review_independence: ReviewIndependence = field(default_factory=ReviewIndependence)
 
     def authority(self, role: str) -> Authority | None:
         return next((a for a in self.merge_authorities if a.role == role), None)
@@ -208,6 +248,41 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
             str(repo): tuple(str(name) for name in names)
             for repo, names in (raw.get("required_checks_by_repo") or {}).items()
         },
+        review_independence=_load_review_independence(raw, path),
+    )
+
+
+def _load_review_independence(raw: Mapping[str, Any], path: Path) -> ReviewIndependence:
+    """The reviewer-independence block of the policy file.
+
+    A mode that is not one of the three is a broken policy file, and a broken
+    policy file stops the queue rather than quietly turning a security gate
+    off: the queue refuses to start on a policy it cannot read.
+    """
+    block = raw.get("review_independence")
+    if not isinstance(block, Mapping):
+        # No block at all. The gate still measures: shadow never refuses, so a
+        # policy file that lost the block keeps the measurement instead of
+        # silently turning the gate off. `off` has to be written down to be
+        # meant.
+        block = {}
+        mode = "shadow"
+    else:
+        mode = str(block.get("mode") or "shadow").strip().lower()
+    if mode not in REVIEW_INDEPENDENCE_MODES:
+        raise QueueError(
+            f"{path}: review_independence.mode must be one of "
+            f"{', '.join(REVIEW_INDEPENDENCE_MODES)}, not {mode!r}"
+        )
+    return ReviewIndependence(
+        mode=mode,
+        api_url=str(block.get("api_url") or "http://127.0.0.1:3100"),
+        keychain_service=str(block.get("keychain_service") or ""),
+        keychain_account=str(block.get("keychain_account") or ""),
+        log_path=str(
+            block.get("log_path")
+            or "~/.config/digithings/merge-queue/reviewer-independence.log"
+        ),
     )
 
 
@@ -755,7 +830,573 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
     return _review_coverage(pr, repo)[0]
 
 
-def _review_coverage(pr: dict[str, Any], repo: str | None) -> tuple[list[str], str]:
+# --- reviewer independence: the review must come from another seat ------------
+#
+# DIG-4795. Every seat in this org pushes and comments under one GitHub login
+# (`chrizefan`), so GitHub cannot say which seat wrote a review comment, and a
+# comment that says "Review verdict: approve" carries no seat either. The seat
+# identity has to travel inside the artifact, and the queue has to check it.
+#
+# Two facts decide whether a review marker counts as coverage:
+#
+#   1. It names the head it reviewed, and that head is the PR's current head.
+#      A marker written against an older head says nothing about the code that
+#      is about to merge. The release lane measured this on #5994: the only
+#      marker on the PR named head `22d4b3126` while the PR stood at
+#      `15414f011d`.
+#
+#   2. It did not come from the PR author's own seat — not the author agent
+#      itself, and not a marker posted while the author's run on that ticket
+#      was still active. That window is what covers the author's own
+#      subagents and same-session reviewers, which is how twelve-x #369 got
+#      its "in-session review" and how #425 merged with review coverage from
+#      its author seat.
+#
+# Both halves are one question — "did a different seat look at this head?" —
+# so they live in one gate and one marker.
+#
+# The marker is `<!-- digithings-review agent=<uuid> run=<uuid> head=<sha> -->`.
+# `agent` and `run` are Paperclip identities: the queue resolves the run
+# through the Paperclip API to the agent (the seat) that ran it, so the seat a
+# marker claims is checked against the seat that actually ran. `head` is the
+# reviewed head. A marker with no provenance is a missing signal, not a
+# clearance: it cannot be shown to come from another seat, so it does not count.
+#
+# The `<!-- in-session-review -->` marker stays exactly as it is. It is what
+# `scripts/check_review_coverage.py` matches, and putting the provenance in a
+# second marker keeps every other consumer of that literal working — including
+# the other repos that share this policy.
+#
+# What this gate cannot do: prove that the comment was written by the seat it
+# names. All seats share one GitHub login, so GitHub's own record says nothing.
+# The queue checks the claim against the Paperclip side — a run id that the API
+# does not know is refused, and a run that belongs to another seat than the
+# marker claims is refused too — and the remaining gap is closed by the
+# per-seat GitHub identity DIG-4803 is for.
+
+REVIEW_PROVENANCE_MARKER = "digithings-review"
+
+_PROVENANCE_RE = re.compile(r"<!--\s*digithings-review\b(?P<fields>[^>]*?)\s*-->")
+_VERDICT_LINE_RE = re.compile(r"^[ \t]*Review verdict:", re.MULTILINE)
+_ISSUE_KEY_RE = re.compile(r"\bDIG-(?P<number>\d+)\b", re.IGNORECASE)
+_AGENT_TRAILER_RE = re.compile(
+    r"^Paperclip-Agent-Id:\s*(?P<agent>[0-9a-fA-F-]{36})\s*$", re.MULTILINE
+)
+
+
+class _PaperclipUnavailable(RuntimeError):
+    """The queue could not read the Paperclip facts the reviewer gate needs."""
+
+
+class _PaperclipMissing(_PaperclipUnavailable):
+    """The API answered, and the answer is "no such record".
+
+    This is a fact about the world, not a failure to read it: a ticket key
+    that names no issue, or a run id nobody has ever heard of, is something
+    the gate has to judge. It is kept apart from `_PaperclipUnavailable` so a
+    missing record is never read as "the API is down".
+    """
+
+
+@dataclass(frozen=True)
+class ReviewMarker:
+    """One review comment the queue reads as review evidence."""
+
+    comment_id: str
+    at: str
+    agent: str
+    run: str
+    head: str
+
+
+@dataclass(frozen=True)
+class Independence:
+    """What the reviewer gate decided about one PR's review markers."""
+
+    #: Comment ids that must not count as review coverage.
+    disqualified: frozenset[str] = frozenset()
+    #: One line per marker that does not count, and why.
+    problems: tuple[str, ...] = ()
+    #: The reviewer the gate accepted, for the audit comment.
+    note: str = ""
+    #: A failure to judge at all — the facts could not be read, or the author's
+    #: seat could not be identified. Nothing was concluded about any marker.
+    unverifiable: str = ""
+
+
+class ReviewerProvenance:
+    """The Paperclip facts the reviewer gate needs: tickets, seats and runs.
+
+    The queue runs from launchd with no Paperclip credential in its
+    environment, so the key is read from the macOS keychain — the same
+    credential `kit/bin/dt-paperclip-key` manages and the same one
+    `com.digithings.decide-poll.plist` exports. The key is a header value and
+    nothing else: it is never printed, logged or written anywhere.
+    """
+
+    def __init__(self, cfg: ReviewIndependence) -> None:
+        self._cfg = cfg
+        self._token = ""
+        self._cache: dict[str, Any] = {}
+
+    def _bearer(self) -> str:
+        if self._token:
+            return self._token
+        from_env = os.environ.get("PAPERCLIP_API_KEY", "").strip()
+        if from_env:
+            self._token = from_env
+            return from_env
+        if not self._cfg.keychain_service or not self._cfg.keychain_account:
+            raise _PaperclipUnavailable(
+                "no Paperclip credential is configured for the reviewer gate"
+            )
+        try:
+            proc = subprocess.run(
+                [
+                    "security",
+                    "find-generic-password",
+                    "-s",
+                    self._cfg.keychain_service,
+                    "-a",
+                    self._cfg.keychain_account,
+                    "-w",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise _PaperclipUnavailable(
+                f"the Paperclip credential could not be read: {exc}"
+            ) from exc
+        if proc.returncode != 0:
+            raise _PaperclipUnavailable(
+                "the Paperclip credential could not be read from the keychain"
+            )
+        token = proc.stdout.strip()
+        if not token:
+            raise _PaperclipUnavailable(
+                "the Paperclip credential in the keychain is empty"
+            )
+        self._token = token
+        return token
+
+    def _get(self, path: str) -> Any:
+        cached = self._cache.get(path)
+        if cached is not None:
+            return cached
+        url = f"{self._cfg.api_url.rstrip('/')}{path}"
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {self._bearer()}",
+                "Accept": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                # A fact, not a failure: the API answered, and the answer is
+                # "no such record". A ticket key that names no issue, or a run
+                # id nobody has ever heard of, is exactly what the gate has to
+                # judge — it must not be read as "the API is down".
+                raise _PaperclipMissing(f"Paperclip has no {path}") from exc
+            raise _PaperclipUnavailable(
+                f"Paperclip answered {exc.code} for {path}"
+            ) from exc
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            raise _PaperclipUnavailable(
+                f"Paperclip could not be read for {path}: {exc}"
+            ) from exc
+        self._cache[path] = payload
+        return payload
+
+    def ticket(self, key: str) -> dict[str, Any] | None:
+        """The Paperclip issue behind a ticket key, or None when there is none."""
+        try:
+            data = self._get(f"/api/issues/{key}")
+        except _PaperclipMissing:
+            return None
+        return data if isinstance(data, dict) else None
+
+    def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+        """Every run that happened on one issue."""
+        try:
+            data = self._get(f"/api/issues/{issue_id}/runs")
+        except _PaperclipMissing:
+            return []
+        return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
+
+    def run(self, run_id: str) -> dict[str, Any] | None:
+        """One run by id — the record that says which seat ran it.
+
+        None means the API does not know that run: a marker naming it is
+        refused, not a marker that passes because the lookup failed.
+        """
+        try:
+            data = self._get(f"/api/heartbeat-runs/{run_id}")
+        except _PaperclipMissing:
+            return None
+        return data if isinstance(data, dict) else None
+
+
+#: One provenance reader per policy, shared across the PRs of a tick: the
+#: credential is read once and every answer is cached for the tick.
+_PROVENANCE: dict[tuple[str, str, str], ReviewerProvenance] = {}
+
+
+def _provenance_for(cfg: ReviewIndependence) -> ReviewerProvenance:
+    """The shared provenance reader for this policy."""
+    key = (cfg.api_url, cfg.keychain_service, cfg.keychain_account)
+    reader = _PROVENANCE.get(key)
+    if reader is None:
+        reader = ReviewerProvenance(cfg)
+        _PROVENANCE[key] = reader
+    return reader
+
+
+def _provenance_fields(body: str) -> dict[str, str]:
+    """The `digithings-review` marker's fields, lower-cased keys."""
+    fields: dict[str, str] = {}
+    for marker in _PROVENANCE_RE.finditer(body):
+        for match in _MARKER_FIELD_RE.finditer(marker.group("fields")):
+            fields[match.group("key").lower()] = match.group("value")
+    return fields
+
+
+def _marker_fields(marker: re.Match[str]) -> dict[str, str]:
+    """One marker's `key=value` fields, lower-cased keys."""
+    return {
+        match.group("key").lower(): match.group("value")
+        for match in _MARKER_FIELD_RE.finditer(marker.group("fields"))
+    }
+
+
+def _scope_head(body: str) -> str:
+    """The head sha a posted verdict names, if it names one.
+
+    The power-pack marker carries the reviewed commit as
+    `scope=owner/repo#12@<sha>`. That is a real head binding, so it counts as
+    one when the comment carries no provenance marker of its own.
+    """
+    head = ""
+    for marker in _MARKER_RE.finditer(body):
+        found = _SCOPE_SHA_RE.search(_marker_fields(marker).get("scope", ""))
+        if found:
+            head = found.group("sha")
+    return head
+
+
+def _carries_review_evidence(body: str, marker_literal: str) -> bool:
+    """Whether a comment is review evidence the queue reads.
+
+    Three shapes count: the in-session marker, a `Review verdict:` line, and a
+    posted verdict marker. The first is the coverage hatch, the second is the
+    review rule's own format, and the third is the marker the queue reads for
+    a blocking verdict.
+    """
+    if marker_literal in body:
+        return True
+    if _VERDICT_LINE_RE.search(body):
+        return True
+    for marker in _MARKER_RE.finditer(body):
+        verdict = _normalise_verdict(_marker_fields(marker).get("verdict", ""))
+        if verdict in READABLE_VERDICTS:
+            return True
+    return False
+
+
+def _review_markers(comments: list[Any]) -> list[ReviewMarker]:
+    """Every comment on the PR that carries review evidence."""
+    crc = _coverage_module()
+    literal = str(getattr(crc, "AGENT_REVIEW_MARKER", "<!-- in-session-review -->"))
+    markers: list[ReviewMarker] = []
+    for comment in comments:
+        if not isinstance(comment, Mapping):
+            continue
+        body = str(comment.get("body") or "")
+        if not _carries_review_evidence(body, literal):
+            continue
+        fields = _provenance_fields(body)
+        markers.append(
+            ReviewMarker(
+                comment_id=str(comment.get("id") or ""),
+                at=str(comment.get("createdAt") or ""),
+                agent=str(fields.get("agent") or ""),
+                run=str(fields.get("run") or ""),
+                head=str(fields.get("head") or _scope_head(body)),
+            )
+        )
+    return markers
+
+
+def _ticket_keys(pr: dict[str, Any]) -> list[str]:
+    """The Paperclip tickets this PR names, most specific first.
+
+    The title comes first, then the branch, then the body: the ticket a PR is
+    about is named in its title or its branch, and a body that names a
+    different ticket (a "related to" line) should not decide who authored it.
+    """
+    keys: list[str] = []
+    for source in (pr.get("title"), pr.get("headRefName"), pr.get("body")):
+        for match in _ISSUE_KEY_RE.finditer(str(source or "")):
+            key = f"DIG-{match.group('number')}"
+            if key not in keys:
+                keys.append(key)
+    return keys
+
+
+def _author_context(
+    pr: dict[str, Any], prov: ReviewerProvenance
+) -> tuple[set[str], list[tuple[str, str, str]]]:
+    """The seats that wrote this PR, and their runs on this PR's ticket.
+
+    The authoring seat is the seat the PR's own ticket is assigned to: that is
+    the seat doing the work on the ticket the PR ships. The commit trailers
+    DIG-4632 adds (`Paperclip-Agent-Id:`) are the second source, and they are
+    exact once that ticket lands. Both are used, because a seat that is only
+    one of the two is still the author's seat.
+    """
+    agents: set[str] = set()
+    issues: list[str] = []
+    for key in _ticket_keys(pr):
+        ticket = prov.ticket(key)
+        if not ticket:
+            continue
+        assignee = str(ticket.get("assigneeAgentId") or "")
+        if assignee:
+            agents.add(assignee)
+        issue_id = str(ticket.get("id") or "")
+        if issue_id and issue_id not in issues:
+            issues.append(issue_id)
+    for commit in pr.get("commits") or []:
+        if not isinstance(commit, Mapping):
+            continue
+        body = str(commit.get("messageBody") or commit.get("message") or "")
+        for match in _AGENT_TRAILER_RE.finditer(body):
+            agents.add(match.group("agent"))
+    runs: list[tuple[str, str, str]] = []
+    for issue_id in issues:
+        for run in prov.issue_runs(issue_id):
+            agent = str(run.get("agentId") or "")
+            if agent and agent in agents:
+                runs.append(
+                    (
+                        str(run.get("runId") or run.get("id") or ""),
+                        str(run.get("startedAt") or ""),
+                        str(run.get("finishedAt") or ""),
+                    )
+                )
+    return agents, runs
+
+
+def _parse_ts(value: str) -> float | None:
+    """A timestamp as seconds, or None when it cannot be read."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.datetime.fromisoformat(text).timestamp()
+    except ValueError:
+        return None
+
+
+def _within_window(at: str, start: str, end: str) -> bool:
+    """Whether `at` falls inside the run window `[start, end]`.
+
+    A run with no end time is still running, so its window is open.
+    """
+    at_ts = _parse_ts(at)
+    start_ts = _parse_ts(start)
+    if at_ts is None or start_ts is None:
+        return False
+    end_ts = _parse_ts(end)
+    if end_ts is None:
+        end_ts = datetime.datetime.now(datetime.timezone.utc).timestamp()
+    return start_ts <= at_ts <= end_ts
+
+
+def _marker_problems(
+    marker: ReviewMarker,
+    *,
+    head: str,
+    authors: set[str],
+    author_runs: list[tuple[str, str, str]],
+    prov: ReviewerProvenance,
+) -> tuple[list[str], str]:
+    """What is wrong with one review marker, and the seat that made it.
+
+    An empty problem list means the marker counts: it names the head the PR
+    stands at, and it came from a seat that is not the author.
+    """
+    problems: list[str] = []
+    if not marker.head:
+        problems.append(
+            f"names no head SHA, so it says nothing about the head `{head[:12]}` "
+            "this PR stands at"
+        )
+    elif marker.head.lower() != head.lower():
+        problems.append(
+            f"names head `{marker.head[:12]}` while this PR stands at `{head[:12]}`"
+        )
+    reviewer = ""
+    if marker.run:
+        run = prov.run(marker.run)
+        if run is None:
+            problems.append(
+                f"names run `{marker.run[:8]}`, which the Paperclip API does not know"
+            )
+        else:
+            reviewer = str(run.get("agentId") or "")
+            if marker.agent and reviewer and marker.agent != reviewer:
+                problems.append(
+                    f"names seat `{marker.agent[:8]}` while run `{marker.run[:8]}` "
+                    f"belongs to seat `{reviewer[:8]}`"
+                )
+    elif marker.agent:
+        reviewer = marker.agent
+        problems.append(
+            f"names seat `{marker.agent[:8]}` but no run to check that seat against"
+        )
+    else:
+        problems.append("carries neither a seat nor a run")
+    if reviewer and reviewer in authors:
+        problems.append(f"came from the PR author's own seat (`{reviewer[:8]}`)")
+    for run_id, started, finished in author_runs:
+        if _within_window(marker.at, started, finished):
+            problems.append(
+                f"was posted while the authoring seat's run `{run_id[:8]}` on this "
+                "PR's ticket was still active"
+            )
+    return problems, reviewer
+
+
+def _reviewer_independence(
+    pr: dict[str, Any],
+    cfg: ReviewIndependence,
+    prov: ReviewerProvenance,
+    comments: list[Any],
+) -> Independence:
+    """Judge the review markers on one PR.
+
+    Every marker is judged, because a PR can carry several and the newest one
+    is not always the one that counts. A marker that passes is the review the
+    queue accepts; a marker that fails is dropped from the coverage evidence
+    and named in the refusal.
+    """
+    mode = _effective_mode(cfg)
+    if mode == "off":
+        return Independence()
+    markers = _review_markers(comments)
+    if not markers:
+        return Independence()
+    head = str(pr.get("headRefOid") or "")
+    # A marker the gate cannot judge does not count: an unjudged marker is
+    # dropped from the evidence, exactly like a judged-and-refused one.
+    unjudged = frozenset(m.comment_id for m in markers if m.comment_id)
+    try:
+        authors, author_runs = _author_context(pr, prov)
+    except _PaperclipUnavailable as exc:
+        return Independence(
+            disqualified=unjudged,
+            unverifiable=f"the review seats could not be checked: {exc}",
+        )
+    if not authors:
+        return Independence(
+            disqualified=unjudged,
+            unverifiable=(
+                "the PR's authoring seat could not be identified, so no review on "
+                "it can be shown to come from a different seat"
+            )
+        )
+    problems: list[str] = []
+    disqualified: set[str] = set()
+    accepted: list[tuple[ReviewMarker, str]] = []
+    try:
+        for marker in markers:
+            found, reviewer = _marker_problems(
+                marker,
+                head=head,
+                authors=authors,
+                author_runs=author_runs,
+                prov=prov,
+            )
+            if found:
+                problems.append(
+                    f"the review posted at {marker.at or 'an unknown time'} "
+                    + "; ".join(found)
+                )
+                if marker.comment_id:
+                    disqualified.add(marker.comment_id)
+                continue
+            accepted.append((marker, reviewer))
+    except _PaperclipUnavailable as exc:
+        # The API went away mid-judgement. Nothing is concluded about any
+        # marker: a partial judgement is not a judgement.
+        return Independence(
+            disqualified=unjudged,
+            unverifiable=f"the review seats could not be checked: {exc}",
+        )
+    note = ""
+    if accepted:
+        marker, reviewer = accepted[-1]
+        seat = reviewer or marker.agent
+        note = (
+            f"reviewer seat `{seat[:8]}`"
+            + (f" (run `{marker.run[:8]}`)" if marker.run else "")
+            + f" on head `{head[:12]}`"
+        )
+    return Independence(
+        disqualified=frozenset(disqualified),
+        problems=tuple(problems),
+        note=note,
+    )
+
+
+def _log_shadow(
+    cfg: ReviewIndependence | None,
+    pr: dict[str, Any],
+    repo: str | None,
+    lines: Sequence[str],
+) -> None:
+    """Write what the gate would have refused, to the shadow log.
+
+    A shadow log that cannot be written is a lost measurement, not a reason to
+    stop merging: the gate is measuring, so it keeps its hands off the merge.
+    """
+    if cfg is None:
+        return
+    path = Path(str(cfg.log_path)).expanduser()
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            for line in lines:
+                handle.write(
+                    f"{stamp} reviewer independence (shadow): PR #{pr.get('number')} "
+                    f"{repo or '?'} — would refuse: {line}\n"
+                )
+    except OSError:
+        pass
+
+
+def _comment_id(comment: Any) -> str:
+    """The id of a comment row, whether it is a dict or a fixture."""
+    if isinstance(comment, Mapping):
+        return str(comment.get("id") or "")
+    return ""
+
+
+def _review_coverage(
+    pr: dict[str, Any],
+    repo: str | None,
+    cfg: ReviewIndependence | None = None,
+    prov: ReviewerProvenance | None = None,
+) -> tuple[list[str], str]:
     """The promotion gate's evidence, enforced at merge time.
 
     `scripts/check_review_coverage.py` refuses an unreviewed commit at promotion;
@@ -808,24 +1449,81 @@ def _review_coverage(pr: dict[str, Any], repo: str | None) -> tuple[list[str], s
                 "comment could not be read"
             ], ""
         comments = (data or {}).get("comments") or []
-    state: dict[str, Any] = {
-        "labels": labels,
-        "approvals": [],
-        "bugbot": None,
-        "title": str(pr.get("title") or ""),
-        "owner_review": None,
-        "agent_tool": [],
-        "agent_review": None,
-    }
-    crc._apply_reviews_checks_comments(
-        state,
-        reviews=_evidence_reviews(pr),
-        checks=_rollup(pr),
-        comments=comments if isinstance(comments, list) else [],
-    )
-    reviewed, why = crc.verdict_for(state)
+    counted = list(comments) if isinstance(comments, list) else []
+
+    mode = _effective_mode(cfg) if cfg is not None else "off"
+    independence = Independence()
+    if cfg is not None and mode != "off":
+        independence = _reviewer_independence(pr, cfg, prov or _provenance_for(cfg), counted)
+    kept = [c for c in counted if _comment_id(c) not in independence.disqualified]
+
+    def state_for(entries: list[Any]) -> dict[str, Any]:
+        state: dict[str, Any] = {
+            "labels": labels,
+            "approvals": [],
+            "bugbot": None,
+            "title": str(pr.get("title") or ""),
+            "owner_review": None,
+            "agent_tool": [],
+            "agent_review": None,
+        }
+        crc._apply_reviews_checks_comments(
+            state,
+            reviews=_evidence_reviews(pr),
+            checks=_rollup(pr),
+            comments=entries,
+        )
+        return state
+
+    if mode == "enforce":
+        reviewed, why = crc.verdict_for(state_for(kept))
+    else:
+        # Shadow mode scores the row as it stands, then scores it again without the
+        # markers the gate would drop. The difference between the two answers is the
+        # measurement: "this PR would have been refused".
+        reviewed, why = crc.verdict_for(state_for(counted))
+        would_review, would_why = crc.verdict_for(state_for(kept))
+        if independence.unverifiable:
+            _log_shadow(
+                cfg,
+                pr,
+                repo,
+                [f"could not check the review seats: {independence.unverifiable}"],
+            )
+        elif independence.problems and not would_review:
+            _log_shadow(cfg, pr, repo, list(independence.problems))
+        elif independence.problems:
+            _log_shadow(
+                cfg,
+                pr,
+                repo,
+                [
+                    f"dropped {len(independence.problems)} review marker(s) that did "
+                    f"not count; the PR would still have merged on {would_why}"
+                ],
+            )
+
     if reviewed:
-        return [], why
+        evidence = why
+        if independence.note:
+            evidence = f"{evidence}; {independence.note}"
+        elif independence.problems:
+            evidence = (
+                f"{evidence}; {len(independence.problems)} review marker(s) did "
+                "not count"
+            )
+        return [], evidence
+
+    if mode == "enforce" and independence.unverifiable:
+        return [f"reviewer independence: {independence.unverifiable}"], ""
+    if mode == "enforce" and independence.problems:
+        head = str(pr.get("headRefOid") or "")[:12]
+        return [
+            "reviewer independence: "
+            + "; ".join(independence.problems[:3])
+            + " — the queue needs a review from a different seat, on the head "
+            f"this PR stands at (`{head}`)"
+        ], ""
     return [
         f"review coverage: {why} — the queue needs a review pass that left its "
         "findings on the PR, the same evidence scripts/check_review_coverage.py "
@@ -842,6 +1540,7 @@ def evaluate(
     base: str,
     acting_role: str,
     repo: str | None = None,
+    prov: ReviewerProvenance | None = None,
 ) -> Verdict:
     """Apply every gate to one PR. Returns the verdict, including why it failed."""
     reasons: list[str] = []
@@ -880,7 +1579,9 @@ def evaluate(
     if unreadable:
         reasons.append(unreadable)
     reasons.extend(_gate_review(pr))
-    coverage_reasons, review_evidence = _review_coverage(pr, repo)
+    coverage_reasons, review_evidence = _review_coverage(
+        pr, repo, policy.review_independence, prov
+    )
     reasons.extend(coverage_reasons)
     # Read last, and only for a PR every other gate passed: it is one GraphQL read
     # per PR, and a PR already refused elsewhere needs no second reason to wait.
