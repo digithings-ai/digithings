@@ -1,10 +1,15 @@
 ## [2.6.6](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.5...digichat-v2.6.6) (2026-10-21)
 
-Take the chat with you: `/export html` saves the rendered conversation as one
-self-contained HTML file, and `/theme` now works on every embedded chat.
+Take the chat with you and choose the model: `/export html` saves the rendered
+conversation as one self-contained HTML file, a config-driven model picker
+offers presets and a metered Premium group, one shared guardrail covers tokens
+and tool calls, one command palette, and `/theme` on
+every embedded chat.
 
 ### Features
 
+* **digichat:** a config-driven model picker on digithings.ai and the OCC embed: presets first, then the newest tool-capable model of each family under the standard output-price cap, and a Premium group for manual picks metered per user per rolling day ([#6193](https://github.com/digithings-ai/digithings/pull/6193))
+* **digichat:** a shared guardrail, off unless a deployment sets it: `tokensPerMinute` on every backend and `maxToolCallsPerTurn` enforced per backend as documented; rate-limit identities come from the server-derived client IP, and `DIGICHAT_TRUSTED_PROXIES` names the ingress allowed to stamp it ([#6182](https://github.com/digithings-ai/digithings/pull/6182), shipped via [#6193](https://github.com/digithings-ai/digithings/pull/6193))
 * **digichat:** `/export html` saves the open conversation as a single self-contained HTML file, built in the browser from the rendered thread, with scripts, frames and non-http links stripped and redaction applied to the page text ([#6190](https://github.com/digithings-ai/digithings/pull/6190))
 * **digichat:** `/theme` works on every embed tenant and starts from the tenant's own theme ([#6189](https://github.com/digithings-ai/digithings/pull/6189))
 * **digichat:** worked-chain density, palette defaults and a braces tool mark ([#6180](https://github.com/digithings-ai/digithings/pull/6180))
@@ -12,8 +17,22 @@ self-contained HTML file, and `/theme` now works on every embedded chat.
 
 ### Bug Fixes
 
+* **digichat:** one command palette: typing `/` inside a submenu filters that pane, and tools are switched on and off only in `/tools` ([#6211](https://github.com/digithings-ai/digithings/pull/6211))
 * **ui:** the worked chain has one spacing rhythm ([#6178](https://github.com/digithings-ai/digithings/pull/6178))
 * **digichat:** MCP call arguments streamed on `mcp_call_arguments` events are shown ([#6183](https://github.com/digithings-ai/digithings/pull/6183))
+
+### Behaviour changes
+
+* **digichat:** on Container deploys the trusted-proxy entrypoint now always sits in front of Next, even with `DIGICHAT_TRUSTED_PROXIES` unset, so it can stamp the peer socket for rate-limit identity ([#6182](https://github.com/digithings-ai/digithings/pull/6182), shipped via [#6193](https://github.com/digithings-ai/digithings/pull/6193))
+
+### Known limits
+
+* Premium spend counters are per instance. With `DIGICHAT_TRUSTED_PROXIES` unset, anonymous visitors behind a shared ingress share one premium allowance and one guardrail bucket on that instance.
+* In the redacted `/export html`, a `)` or a backtick inside a secret leaks the rest of that value.
+* The clipboard, mailto, `.txt` and minimal-HTML exports are not redacted.
+* On Container deploys, a visitor who leaves or presses stop does not abort the in-flight model call: the proxy does not yet destroy the upstream request on client disconnect. The fix is in [#6182](https://github.com/digithings-ai/digithings/pull/6182) for the next release.
+* The house chat's composer context meter ([#6213](https://github.com/digithings-ai/digithings/pull/6213)) comes in the next release.
+* Exporting one answer as HTML from the message menu ([#6218](https://github.com/digithings-ai/digithings/pull/6218)) comes in the next release.
 
 ## [2.6.5](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.4...digichat-v2.6.5) (2026-10-21)
 
