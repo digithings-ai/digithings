@@ -189,6 +189,12 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
     });
   }
 
+  rows.push({
+    id: "export-replay",
+    label: "/export replay",
+    description: "Self-contained HTML replay",
+    execute: () => {},
+  });
   rows.push(...featuredLanguageCommands(api.setLanguage));
   return rows;
 }

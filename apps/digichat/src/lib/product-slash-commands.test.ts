@@ -208,6 +208,19 @@ describe("buildProductSlashCommands", () => {
     expect(ids).toContain("datatap");
   });
 
+  it("lists /export replay next to the markdown export", () => {
+    const row = buildProductSlashCommands(api()).find((c) => c.id === "export-replay");
+    expect(row?.label).toBe("/export replay");
+    expect(slashItemPrefixMatch({ id: "export-replay", label: "/export replay" }, "export replay")).toBe(
+      true,
+    );
+    expect(slashSubmitAction("/export replay")).toMatchObject({
+      kind: "run",
+      command: { id: "export" },
+      arg: "replay",
+    });
+  });
+
   it("still parses /digisearch as a tool command", () => {
     expect(parseSlashInput("/digisearch")).toMatchObject({
       kind: "command",

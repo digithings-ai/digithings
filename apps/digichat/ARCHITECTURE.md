@@ -223,6 +223,8 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/app/api/v1/chat/route.ts` | Machine-client alias — re-exports the chat route |
 | `src/app/api/conversations/route.ts` | List + create conversations |
 | `src/app/api/conversations/[id]/route.ts` | Get + update + delete a conversation |
+| `src/app/api/conversations/[id]/replay/route.ts` | Self-contained HTML replay of a stored conversation |
+| `src/app/api/replay-assets/route.ts` | Inlined chat CSS and fonts for a browser replay export |
 | `src/app/api/conversations/[id]/quant-runs/route.ts` | List + insert quant runs |
 | `src/app/api/ecosystem/config/route.ts` | Read / write ecosystem endpoint cookie (server-side; no client caller) |
 | `src/app/api/health/route.ts` | Readiness probe for all services |
@@ -294,6 +296,12 @@ endpoint except `GET /api/health` (unauthenticated status probe) and
 **`POST /api/conversations`** — body `{ id?: string, title?: string }`. Returns `{ id }` with 201. The optional client `id` allows the UI to pre-mint a UUID so it matches the `threadId` used in `useChat`.
 
 **`GET /api/conversations/[id]`** — returns `{ id, title, messages: UIMessage[] }`.
+
+**`GET /api/conversations/[id]/replay`** — auth required. Returns one self-contained `text/html` file (`content-disposition: attachment`, filename `<deployment>-<YYYY-MM-DD>.html`). The transcript is the stored messages with the deployment's title, welcome, suggestions, placeholder, and accent. Query `theme` (`light`|`dark`), `palette`, `view` (`quiet`|`balanced`|`verbose`), and `at` (ISO instant for the filename day) override the deployment defaults. Tokens, embed keys, invite keys, and auth headers are removed before the HTML is built. CSS and Geist Mono are inlined; the file opens from `file://`.
+
+**`GET /api/replay-assets`** — auth required. Returns the same inlined stylesheet (`text/css`) the browser export uses when it cannot read the live page's style sheets.
+
+`apps/digichat/scripts/export-replay.ts` calls the replay route (`--id`) or writes the fixture conversation locally (`--fixture`). It does not call a model.
 
 **`PUT /api/conversations/[id]`** — body `{ title?: string, messages: UIMessage[] }`. Full replace of stored messages (delete + re-insert). Returns 204.
 

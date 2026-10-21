@@ -124,6 +124,11 @@ describe("parseSlashInput", () => {
       command: { id: "export", kind: "client" },
       arg: "",
     });
+    expect(parseSlashInput("/export replay")).toMatchObject({
+      kind: "command",
+      command: { id: "export", kind: "client" },
+      arg: "replay",
+    });
   });
 });
 
