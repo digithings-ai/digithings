@@ -2170,9 +2170,13 @@ def test_the_branches_offered_for_an_update_are_the_oldest_first() -> None:
 #
 #   * the marker must name the head the PR stands at now (a verdict against an
 #     older head says nothing about the code that is about to merge), and
-#   * the marker must not come from the author's seat, nor from a run of that
-#     seat on the PR's ticket (which is what covers the author's own subagents
-#     and same-session reviewers).
+#   * the marker must not come from a seat that wrote the PR.
+#
+# The author is read from the code, not from the ticket: the seat whose run on the
+# PR's own ticket was open when the PR's commits were committed, and the seats the
+# commits declare in their trailers. The seat that OWNS the ticket is not the author
+# — the QA Lead's finding on #6145 (21 Oct) was that the owner was refused as a
+# reviewer while the author's own review passed on every branch without a trailer.
 
 #: The seat that wrote the PR, the seat that reviewed it, and a third seat.
 AUTHOR_AGENT = "11111111-1111-4111-8111-111111111111"
@@ -2186,6 +2190,10 @@ REVIEWER_RUN = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 #: The ticket the PR is about. `_pr` names it in the branch.
 TICKET = "DIG-9001"
 TICKET_ID = "issue-9001"
+
+#: When the PR's commit was committed. The author's default run covers it, so
+#: the seat that ran then is the seat that wrote the code.
+COMMIT_AT = "2026-10-20T08:30:00Z"
 
 
 class _FakePaperclip:
@@ -2223,13 +2231,20 @@ def _paperclip_run(
     *,
     started: str = "2026-10-20T08:00:00Z",
     finished: str | None = "2026-10-20T09:00:00Z",
+    context_issue: str = TICKET_ID,
 ) -> dict[str, Any]:
-    """One run, in the shape the Paperclip API returns for an issue's runs."""
+    """One run, in the shape the Paperclip API returns for an issue's runs.
+
+    `contextIssueId` is the issue the run was about. A run that was about
+    another ticket — the reviewer that works from its own review ticket — is
+    not evidence about who wrote this PR.
+    """
     return {
         "runId": run_id,
         "agentId": agent,
         "startedAt": started,
         "finishedAt": finished,
+        "contextIssueId": context_issue,
     }
 
 
@@ -2239,8 +2254,19 @@ def _paperclip(
     runs: list[dict[str, Any]] | None = None,
     assignee: str = AUTHOR_AGENT,
 ) -> _FakePaperclip:
-    """The Paperclip facts of one PR: its ticket, the author's runs, the named runs."""
-    every = list(runs or []) + list(author_runs or [])
+    """The Paperclip facts of one PR: its ticket, the runs on it, the named runs.
+
+    `author_runs` are the runs that happened on the PR's ticket. The default
+    is the author seat's run, which covers the PR's commit — that is what
+    makes the seat that wrote the code the author. `runs` are the runs a
+    marker may name.
+    """
+    on_ticket = (
+        list(author_runs)
+        if author_runs is not None
+        else [_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)]
+    )
+    every = list(runs or []) + on_ticket
     return _FakePaperclip(
         tickets={
             TICKET: {
@@ -2250,7 +2276,7 @@ def _paperclip(
             }
         },
         runs={r["runId"]: r for r in every},
-        issue_runs={TICKET_ID: list(author_runs or [])},
+        issue_runs={TICKET_ID: on_ticket},
     )
 
 
@@ -2298,9 +2324,31 @@ def _reviewed_pr(
     number: int = 9001,
     head_sha: str = "a" * 40,
     label: bool = True,
+    commit_at: str = COMMIT_AT,
+    commits: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """A PR that claims an in-session review, with the label that claims it."""
-    pr = _pr(number, head_sha=head_sha, comments=comments)
+    """A PR that claims an in-session review, with the label that claims it.
+
+    The PR carries the commit the review is about, and the time it was
+    committed: the author is read from the code, so a fixture with no commit
+    has no author and the gate cannot judge independence at all.
+    """
+    pr = _pr(
+        number,
+        head_sha=head_sha,
+        comments=comments,
+        commits=(
+            list(commits)
+            if commits is not None
+            else [
+                {
+                    "oid": head_sha,
+                    "messageHeadline": "fix: the work this PR carries",
+                    "committedDate": commit_at,
+                }
+            ]
+        ),
+    )
     if label:
         pr["labels"] = [{"name": "reviewed:agent"}]
     return pr
@@ -2355,6 +2403,270 @@ def test_the_reviewed_agent_label_does_not_carry_the_author_seats_own_review(
     assert not any("in-session review" in reason for reason in verdict.reasons)
 
 
+def test_the_seat_that_wrote_the_code_is_the_author_without_a_trailer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The author's own review does not count, with or without a trailer.
+
+    The QA Lead's first blocker (21 Oct): 28 of the 30 open develop PRs carry
+    no `Paperclip-Agent-Id:` trailer, and on those the author's own review
+    was accepted. The author is read from the code — the seat whose run on
+    the PR's own ticket was open when the commit was committed — so a
+    trailer is one source among several, not the only one.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
+    pr = _reviewed_pr([_provenance_comment(agent=AUTHOR_AGENT, run=AUTHOR_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "author's own seat" in reason
+    assert AUTHOR_AGENT[:8] in reason
+
+
+def test_the_seat_that_owns_the_ticket_is_not_the_author(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Owning the ticket is not writing the code.
+
+    The QA Lead's second blocker (21 Oct): the seat that owns DIG-4795 — the
+    Code Reviewer — was treated as the author, so its review was refused. A
+    ticket owner is asked to move the ticket along; the author is the seat
+    whose commit is on the branch. Measured on #6145: the owner was the Code
+    Reviewer and the author was the Repo CI & Release Engineer.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(REVIEWER_RUN, OTHER_AGENT)],
+        assignee=OTHER_AGENT,
+    )
+    pr = _reviewed_pr([_provenance_comment(agent=OTHER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert OTHER_AGENT[:8] in verdict.review_evidence
+
+
+def test_a_reviewer_woken_on_the_ticket_while_the_author_pushes_is_not_the_author(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The author is the seat the code came from, not the seat that was awake.
+
+    A reviewer woken on the ticket while the author pushes a fix shares a
+    window with the author. The seat the most commits fall into is the
+    author, so the reviewer stays a reviewer — and its review counts.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[
+            _paperclip_run(
+                AUTHOR_RUN,
+                AUTHOR_AGENT,
+                started="2026-10-20T08:00:00Z",
+                finished="2026-10-20T11:00:00Z",
+            ),
+            _paperclip_run(
+                REVIEWER_RUN,
+                REVIEWER_AGENT,
+                started="2026-10-20T09:30:00Z",
+                finished="2026-10-20T10:30:00Z",
+            ),
+        ],
+    )
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the first change",
+                "committedDate": "2026-10-20T08:30:00Z",
+            },
+            {
+                "oid": "b" * 40,
+                "messageHeadline": "fix: the change the reviewer watched land",
+                "committedDate": "2026-10-20T10:00:00Z",
+            },
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+
+
+def test_a_seat_that_pushed_one_of_the_commits_is_an_author(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Authorship is per commit, not a ranking of the whole PR.
+
+    A PR can carry commits from two seats: the seat that wrote most of them
+    and the seat that wrote the rest. A rule that ranks the seats by how many
+    commits fall into their windows drops the second seat from the author set
+    — and then that seat's own review counts as coverage of a PR it partly
+    wrote. The commit that falls inside exactly one seat's window was written
+    by that seat.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[
+            _paperclip_run(
+                AUTHOR_RUN,
+                AUTHOR_AGENT,
+                started="2026-10-20T08:00:00Z",
+                finished="2026-10-20T09:00:00Z",
+            ),
+            _paperclip_run(
+                REVIEWER_RUN,
+                REVIEWER_AGENT,
+                started="2026-10-20T09:30:00Z",
+                finished="2026-10-20T11:00:00Z",
+            ),
+        ],
+    )
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the first change",
+                "committedDate": "2026-10-20T08:30:00Z",
+            },
+            {
+                "oid": "b" * 40,
+                "messageHeadline": "fix: the change the other seat pushed",
+                "committedDate": "2026-10-20T10:00:00Z",
+            },
+        ],
+    )
+    # The second seat wrote the second commit, so it is an author: its own
+    # review does not count.
+    own = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)],
+        commits=pr["commits"],
+    )
+    verdict = _judge(own, prov)
+    assert not verdict.eligible
+    assert "author's own seat" in " ".join(verdict.reasons)
+
+    # A seat that wrote nothing on the branch still reviews.
+    third = _paperclip(
+        author_runs=[
+            _paperclip_run(
+                AUTHOR_RUN,
+                AUTHOR_AGENT,
+                started="2026-10-20T08:00:00Z",
+                finished="2026-10-20T09:00:00Z",
+            ),
+            _paperclip_run(
+                REVIEWER_RUN,
+                REVIEWER_AGENT,
+                started="2026-10-20T09:30:00Z",
+                finished="2026-10-20T11:00:00Z",
+            ),
+        ],
+        runs=[_paperclip_run("cccccccc-cccc-4ccc-8ccc-cccccccccccc", OTHER_AGENT)],
+    )
+    outside = _reviewed_pr(
+        [_provenance_comment(agent=OTHER_AGENT, run="cccccccc-cccc-4ccc-8ccc-cccccccccccc")],
+        commits=pr["commits"],
+    )
+    verdict = _judge(outside, third)
+    assert verdict.eligible, verdict.reasons
+    assert OTHER_AGENT[:8] in verdict.review_evidence
+
+
+def test_a_merge_commit_does_not_make_the_merging_seat_the_author(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Merging `develop` into a branch is maintenance, not authorship.
+
+    Measured on #6145: the merge of `develop` landed inside the QA Lead's
+    run window, so a gate that counted merge commits made the seat that
+    rebased the branch an author of the PR it was reviewing.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[
+            _paperclip_run(AUTHOR_RUN, AUTHOR_AGENT),
+            _paperclip_run(
+                REVIEWER_RUN,
+                REVIEWER_AGENT,
+                started="2026-10-20T09:00:00Z",
+                finished="2026-10-20T10:00:00Z",
+            ),
+        ],
+    )
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the work",
+                "committedDate": COMMIT_AT,
+            },
+            {
+                "oid": "b" * 40,
+                "messageHeadline": "Merge branch 'develop' into DIG-9001-work",
+                "committedDate": "2026-10-20T09:30:00Z",
+            },
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+
+
+def test_a_run_trailer_names_the_author_exactly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The run trailer names the author even when no window covers the commit.
+
+    `Paperclip-Run-Id:` is the run that wrote the commit, and the API says
+    which seat owned that run. It is exact, so it counts on its own.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[],
+        runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+    )
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=AUTHOR_AGENT, run=AUTHOR_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the work",
+                "committedDate": COMMIT_AT,
+                "messageBody": (
+                    f"Paperclip-Agent-Id: {AUTHOR_AGENT}\n"
+                    f"Paperclip-Run-Id: {AUTHOR_RUN}\n"
+                ),
+            }
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "author's own seat" in reason
+    assert AUTHOR_AGENT[:8] in reason
+
+
+def test_a_pr_with_no_author_evidence_is_unverifiable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No author, no verdict: the PR waits and says why.
+
+    A branch with no trailer, a ticket with no run that covers the commit,
+    and a reviewer who is not the author: the gate cannot show the review
+    came from a different seat, so it refuses rather than assumes.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(author_runs=[])
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "authoring seat could not be identified" in reason
+
+
 def test_a_marker_from_another_seat_on_the_current_head_is_review_coverage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2374,14 +2686,14 @@ def test_a_marker_from_another_seat_on_the_current_head_is_review_coverage(
     assert "a" * 12 in verdict.review_evidence
 
 
-def test_a_marker_posted_during_the_author_seats_own_run_is_not_review_coverage(
+def test_a_marker_from_the_author_seat_during_its_own_run_is_not_review_coverage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A review posted inside the author's run is the author's own review.
+    """The author's own review, posted while the author's run was open.
 
-    The window covers the author's subagents and same-session reviewers: #369's
-    "in-session review" was written by the author seat's own subagents, and the
-    seat that typed it is not the seat that owns the PR.
+    The window is the author's: the seat's subagents and same-session
+    reviewers share its run id, so a marker of that seat inside that window
+    is the author's review. The log says which run spoke.
     """
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
     prov = _paperclip(
@@ -2389,11 +2701,54 @@ def test_a_marker_posted_during_the_author_seats_own_run_is_not_review_coverage(
             _paperclip_run(
                 AUTHOR_RUN,
                 AUTHOR_AGENT,
-                started="2026-10-20T09:30:00Z",
-                finished="2026-10-20T10:30:00Z",
+                started="2026-10-20T08:00:00Z",
+                finished="2026-10-20T11:00:00Z",
             )
         ],
-        runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT, started="2026-10-20T09:45:00Z")],
+    )
+    pr = _reviewed_pr(
+        [
+            _provenance_comment(
+                agent=AUTHOR_AGENT,
+                run=AUTHOR_RUN,
+                created="2026-10-20T10:00:00Z",
+            )
+        ]
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "author's own seat" in reason
+    assert "still active" in reason
+    assert AUTHOR_RUN[:8] in reason
+
+
+def test_a_review_from_another_seat_inside_the_author_run_window_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Another seat's review is that seat's review, even mid-author-run.
+
+    The QA Lead's third blocker (21 Oct): the author's run window was a veto
+    on every marker, so an independent review posted while the author was
+    still working was dropped. Refusing that refuses every honest review, and
+    the author's own review is already refused by the seat it names.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[
+            _paperclip_run(
+                AUTHOR_RUN,
+                AUTHOR_AGENT,
+                started="2026-10-20T08:00:00Z",
+                finished="2026-10-20T11:00:00Z",
+            ),
+            _paperclip_run(
+                REVIEWER_RUN,
+                REVIEWER_AGENT,
+                started="2026-10-20T09:30:00Z",
+                finished="2026-10-20T10:30:00Z",
+            ),
+        ],
     )
     pr = _reviewed_pr(
         [
@@ -2405,10 +2760,8 @@ def test_a_marker_posted_during_the_author_seats_own_run_is_not_review_coverage(
         ]
     )
     verdict = _judge(pr, prov)
-    assert not verdict.eligible
-    reason = " ".join(verdict.reasons)
-    assert "still active" in reason
-    assert AUTHOR_RUN[:8] in reason
+    assert verdict.eligible, verdict.reasons
+    assert REVIEWER_AGENT[:8] in verdict.review_evidence
 
 
 def test_a_marker_that_names_an_older_head_is_not_review_coverage(
@@ -2615,6 +2968,9 @@ def test_an_api_that_cannot_be_read_leaves_the_pr_unverifiable(
 
     class _BrokenPaperclip(_FakePaperclip):
         def run(self, run_id: str) -> dict[str, Any] | None:
+            raise mq._PaperclipUnavailable("Paperclip could not be read")
+
+        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
             raise mq._PaperclipUnavailable("Paperclip could not be read")
 
     prov = _BrokenPaperclip(

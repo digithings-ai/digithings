@@ -845,12 +845,16 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
 #      marker on the PR named head `22d4b3126` while the PR stood at
 #      `15414f011d`.
 #
-#   2. It did not come from the PR author's own seat — not the author agent
-#      itself, and not a marker posted while the author's run on that ticket
-#      was still active. That window is what covers the author's own
-#      subagents and same-session reviewers, which is how twelve-x #369 got
-#      its "in-session review" and how #425 merged with review coverage from
-#      its author seat.
+#   2. It did not come from a seat that wrote the PR — not that seat itself,
+#      and not a marker that seat posted while its own run on that ticket was
+#      still active. That window covers the author's own subagents and
+#      same-session reviewers, which is how twelve-x #369 got its "in-session
+#      review" and how #425 merged with review coverage from its author seat.
+#      It is not a veto on other seats: a review from another seat posted while
+#      the author was still working is that seat's review. The author is read
+#      from the branch — the commit trailers and the runs on the PR's own ticket
+#      that were open when the commits were committed — not from the ticket's
+#      assignee: ownership is not authorship.
 #
 # Both halves are one question — "did a different seat look at this head?" —
 # so they live in one gate and one marker.
@@ -881,6 +885,11 @@ _VERDICT_LINE_RE = re.compile(r"^[ \t]*Review verdict:", re.MULTILINE)
 _ISSUE_KEY_RE = re.compile(r"\bDIG-(?P<number>\d+)\b", re.IGNORECASE)
 _AGENT_TRAILER_RE = re.compile(
     r"^Paperclip-Agent-Id:\s*(?P<agent>[0-9a-fA-F-]{36})\s*$", re.MULTILINE
+)
+#: The run that wrote the commit. Resolved through the API to the seat that
+#: owned that run, so it names the author exactly.
+_RUN_TRAILER_RE = re.compile(
+    r"^Paperclip-Run-Id:\s*(?P<run>[0-9a-fA-F-]{36})\s*$", re.MULTILINE
 )
 
 
@@ -1132,20 +1141,44 @@ def _review_markers(comments: list[Any]) -> list[ReviewMarker]:
     return markers
 
 
-def _ticket_keys(pr: dict[str, Any]) -> list[str]:
-    """The Paperclip tickets this PR names, most specific first.
+def _ticket_key(pr: dict[str, Any]) -> str:
+    """The one Paperclip ticket this PR is about.
 
-    The title comes first, then the branch, then the body: the ticket a PR is
-    about is named in its title or its branch, and a body that names a
-    different ticket (a "related to" line) should not decide who authored it.
+    The title comes first, then the branch: the ticket a PR is about is named
+    in its title or its branch. The body is not read, because `fetch_queue`
+    does not fetch it — a key taken from the body would be a key the gate can
+    never see in production, so the body branch was dead code that read as
+    a rule. And only one ticket is taken: a PR that names two tickets does not
+    have two authors, and the ticket that decides who wrote the code is the
+    ticket the PR ships.
     """
-    keys: list[str] = []
-    for source in (pr.get("title"), pr.get("headRefName"), pr.get("body")):
-        for match in _ISSUE_KEY_RE.finditer(str(source or "")):
-            key = f"DIG-{match.group('number')}"
-            if key not in keys:
-                keys.append(key)
-    return keys
+    for source in (pr.get("title"), pr.get("headRefName")):
+        match = _ISSUE_KEY_RE.search(str(source or ""))
+        if match:
+            return f"DIG-{match.group('number')}"
+    return ""
+
+
+def _commit_times(pr: dict[str, Any]) -> list[str]:
+    """When each of this PR's own commits was committed.
+
+    A merge commit is not one of the PR's own commits: merging `develop` into
+    a branch is branch maintenance, and the seat that ran the merge did not
+    write the code the PR carries. Counting it makes the seat that merged
+    `develop` an author of every PR it rebased — measured on #6145, whose
+    merge of `develop` landed inside the QA Lead's run window.
+    """
+    stamps: list[str] = []
+    for commit in pr.get("commits") or []:
+        if not isinstance(commit, Mapping):
+            continue
+        headline = str(commit.get("messageHeadline") or "").strip().lower()
+        if headline.startswith("merge "):
+            continue
+        stamp = str(commit.get("committedDate") or "").strip()
+        if stamp:
+            stamps.append(stamp)
+    return stamps
 
 
 def _author_context(
@@ -1153,43 +1186,99 @@ def _author_context(
 ) -> tuple[set[str], list[tuple[str, str, str]]]:
     """The seats that wrote this PR, and their runs on this PR's ticket.
 
-    The authoring seat is the seat the PR's own ticket is assigned to: that is
-    the seat doing the work on the ticket the PR ships. The commit trailers
-    DIG-4632 adds (`Paperclip-Agent-Id:`) are the second source, and they are
-    exact once that ticket lands. Both are used, because a seat that is only
-    one of the two is still the author's seat.
+    Ownership is not authorship. The seat a ticket is assigned to is the seat
+    that is asked to move the ticket along; the seat that wrote the code is
+    the seat whose commits are on the branch. Reading the assignee as the
+    author refused the review of the very seat that owns the ticket (the QA
+    Lead's finding on #6145, 21 Oct) and — worse — let the author seat's own
+    review through on every branch that carried no provenance trailer, which
+    was 28 of the 30 open develop PRs.
+
+    So the author is read from the code:
+
+    * the seats the commits declare: `Paperclip-Agent-Id:`, and the
+      `Paperclip-Run-Id:` resolved through the API to the seat that owned
+      that run;
+    * the seat whose run on this PR's own ticket was open when the PR's
+      commits were committed. A run that was about a different ticket is not
+      evidence about this one — the reviewer that works from its own review
+      ticket is not the author of the PR it reviews.
+
+    When more than one seat is a candidate, the seat that the most commits
+    fall into is the author. A reviewer woken on the ticket while the author
+    pushes a fix shares a window with the author, and it is not the author.
+
+    The attribution is **per commit**. A commit that falls inside exactly one
+    seat's window was written by that seat, so that seat is an author — and a
+    seat that pushed one commit of a PR is an author even when the other seat
+    pushed more of them. Only a commit that falls inside several windows is
+    ambiguous, and there the count breaks the tie. Marking a seat as an author
+    costs that seat its own review coverage and nobody else's, so where the
+    evidence cannot separate two seats, both are treated as authors.
     """
-    agents: set[str] = set()
-    issues: list[str] = []
-    for key in _ticket_keys(pr):
-        ticket = prov.ticket(key)
-        if not ticket:
-            continue
-        assignee = str(ticket.get("assigneeAgentId") or "")
-        if assignee:
-            agents.add(assignee)
-        issue_id = str(ticket.get("id") or "")
-        if issue_id and issue_id not in issues:
-            issues.append(issue_id)
+    authors: set[str] = set()
+    windows: dict[str, list[tuple[str, str, str]]] = {}
     for commit in pr.get("commits") or []:
         if not isinstance(commit, Mapping):
             continue
         body = str(commit.get("messageBody") or commit.get("message") or "")
         for match in _AGENT_TRAILER_RE.finditer(body):
-            agents.add(match.group("agent"))
-    runs: list[tuple[str, str, str]] = []
-    for issue_id in issues:
+            authors.add(match.group("agent"))
+        for match in _RUN_TRAILER_RE.finditer(body):
+            run = prov.run(match.group("run"))
+            seat = str((run or {}).get("agentId") or "")
+            if seat:
+                authors.add(seat)
+    key = _ticket_key(pr)
+    ticket = prov.ticket(key) if key else None
+    if ticket:
+        issue_id = str(ticket.get("id") or "")
+        stamps = _commit_times(pr)
+        counts: dict[str, int] = {}
         for run in prov.issue_runs(issue_id):
-            agent = str(run.get("agentId") or "")
-            if agent and agent in agents:
-                runs.append(
-                    (
-                        str(run.get("runId") or run.get("id") or ""),
-                        str(run.get("startedAt") or ""),
-                        str(run.get("finishedAt") or ""),
-                    )
+            seat = str(run.get("agentId") or "")
+            if not seat:
+                continue
+            if str(run.get("contextIssueId") or "") != issue_id:
+                # The run was about another ticket. It says nothing about who
+                # wrote this PR.
+                continue
+            window = (
+                str(run.get("runId") or run.get("id") or ""),
+                str(run.get("startedAt") or ""),
+                str(run.get("finishedAt") or ""),
+            )
+            windows.setdefault(seat, []).append(window)
+            for stamp in stamps:
+                if _within_window(stamp, window[1], window[2]):
+                    counts[seat] = counts.get(seat, 0) + 1
+        for stamp in stamps:
+            candidates = [
+                seat
+                for seat, seat_windows in windows.items()
+                if any(
+                    _within_window(stamp, start, end)
+                    for _, start, end in seat_windows
                 )
-    return agents, runs
+            ]
+            if not candidates:
+                continue
+            if len(candidates) == 1:
+                # One seat was working on this ticket when the commit landed.
+                # It wrote it.
+                authors.add(candidates[0])
+                continue
+            # Several seats were awake. The seat the most commits fall into is
+            # the author; a tie leaves both as authors, because calling a seat
+            # an author only takes away that seat's own coverage.
+            best = max(counts.get(seat, 0) for seat in candidates)
+            for seat in candidates:
+                if counts.get(seat, 0) == best:
+                    authors.add(seat)
+    author_runs: list[tuple[str, str, str]] = []
+    for seat in sorted(authors):
+        author_runs.extend(windows.get(seat, []))
+    return authors, author_runs
 
 
 def _parse_ts(value: str) -> float | None:
@@ -1287,12 +1376,20 @@ def _marker_problems(
         problems.append("carries neither a seat nor a run")
     if reviewer and reviewer in authors:
         problems.append(f"came from the PR author's own seat (`{reviewer[:8]}`)")
-    for run_id, started, finished in author_runs:
-        if _within_window(marker.at, started, finished):
-            problems.append(
-                f"was posted while the authoring seat's run `{run_id[:8]}` on this "
-                "PR's ticket was still active"
-            )
+        # The authoring seat's own run window. A marker of the author's own
+        # seat that lands inside that window is the author's review, and the
+        # seat's subagents share its run id, so the window says which run
+        # spoke. It is not a veto on other seats: a review from another seat
+        # posted while the author was still working is that seat's review
+        # (the QA Lead's finding on #6145, 21 Oct — a gate that refuses other
+        # seats inside the author's window refuses every honest review).
+        for run_id, started, finished in author_runs:
+            if _within_window(marker.at, started, finished):
+                problems.append(
+                    f"was posted while the authoring seat's run `{run_id[:8]}` on this "
+                    "PR's ticket was still active"
+                )
+                break
     return problems, reviewer
 
 
@@ -1328,9 +1425,9 @@ def _reviewer_independence(
 
     The newest review marker governs, and it is judged on two counts: it must
     name the head the PR stands at now, and it must come from a seat that is
-    not the PR's own author. A marker that fails is dropped from the coverage
-    evidence, and every other marker goes with it, so that no older review is
-    used in its place.
+    not one of the seats that wrote the PR. A marker that fails is dropped
+    from the coverage evidence, and every other marker goes with it, so that
+    no older review is used in its place.
     """
     mode = _effective_mode(cfg)
     if mode == "off":
@@ -1397,6 +1494,64 @@ def _reviewer_independence(
     )
 
 
+#: The shadow log is a measurement, not an archive: one generation, one
+#: reader, and a line only when the measurement changes.
+SHADOW_LOG_MAX_BYTES = 1_048_576
+SHADOW_LOG_TAIL_BYTES = 65_536
+
+
+def _rotate_shadow_log(path: Path) -> None:
+    """Keep the shadow log to one generation, and to one reader.
+
+    The queue writes it every tick, so an unrotated file grows without end
+    and a world-readable one hands the queue's own record to every account
+    on the machine. The file holds no secret — it names PRs, seats and the
+    reason a review did not count — but it is still the queue's record, so it
+    is written for its owner alone.
+    """
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    if size > SHADOW_LOG_MAX_BYTES:
+        try:
+            path.replace(path.with_name(path.name + ".1"))
+        except OSError:
+            pass
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _shadow_log_says(path: Path, number: Any, payload: str) -> bool:
+    """Whether the shadow log already records this verdict for this PR.
+
+    The queue judges a PR on every tick. A log that repeats the same verdict
+    every ten minutes is a heartbeat, not a measurement: it buries the change
+    it is supposed to show. So a verdict that is already the last word on
+    that PR is not written again.
+    """
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return False
+    try:
+        with path.open("rb") as handle:
+            handle.seek(max(0, size - SHADOW_LOG_TAIL_BYTES))
+            tail = handle.read().decode("utf-8", "replace")
+    except OSError:
+        return False
+    marker = f"PR #{number} "
+    last = ""
+    for line in tail.splitlines():
+        if marker in line:
+            last = line
+    if not last:
+        return False
+    return last.split("would refuse: ", 1)[-1] == payload
+
+
 def _log_shadow(
     cfg: ReviewIndependence | None,
     pr: dict[str, Any],
@@ -1412,14 +1567,19 @@ def _log_shadow(
         return
     path = Path(str(cfg.log_path)).expanduser()
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payload = " | ".join(str(line) for line in lines)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
+        _rotate_shadow_log(path)
+        if _shadow_log_says(path, pr.get("number"), payload):
+            return
         with path.open("a", encoding="utf-8") as handle:
             for line in lines:
                 handle.write(
                     f"{stamp} reviewer independence (shadow): PR #{pr.get('number')} "
                     f"{repo or '?'} — would refuse: {line}\n"
                 )
+        os.chmod(path, 0o600)
     except OSError:
         pass
 

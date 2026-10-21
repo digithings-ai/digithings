@@ -85,7 +85,7 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
 | Review | No outstanding `CHANGES_REQUESTED` review and no posted verdict of `changes_requested`. Review *evidence* is the row below: the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. |
 | Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. |
-| Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat other than the one that owns the PR's ticket. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from the author's own seat, or one posted while that seat's run on the ticket was still active, is dropped — the PR then waits for a review from another seat. See [Reviewer independence](#reviewer-independence). |
+| Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat that did not write the PR's code. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring seat, or that seat's own marker posted while its own run was still active, is dropped — the PR then waits for a review from another seat. See [Reviewer independence](#reviewer-independence). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
 | Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested` still scoped to the branch, blocks. |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
@@ -211,10 +211,55 @@ gate (`scripts/merge_queue.py`, `_review_coverage`):
    the head as 7, 8, 12 and 40 characters, and a check that wanted exactly 12
    would read a valid 7-character marker as naming nothing at all. Fewer than
    7 characters binds no head.
-2. **The marker comes from another seat.** The seat that owns the PR's ticket
+2. **The marker comes from another seat.** The seat that *wrote the PR's code*
    cannot be the seat whose review counts: not through its own comment, and not
    through a subagent or same-session review it posted while its own run on that
-   ticket was still active.
+   ticket was still active. **Ownership is not authorship.** The seat a ticket is
+   assigned to is the seat asked to move the ticket along, not the seat that
+   wrote the code, and a reviewer that owns the ticket still reviews — reading
+   the assignee as the author refused the review of the very seat that owns the
+   ticket (the QA Lead's finding on #6145, 21 Oct 2026).
+
+**Who wrote the code.** The author is read from the branch, not from the ticket
+header:
+
+* the seat the commits declare — `Paperclip-Agent-Id: <uuid>` in a commit body,
+  and `Paperclip-Run-Id: <uuid>` resolved through the Paperclip API to the seat
+  that owned that run;
+* the seat whose run **on the PR's own ticket** was open when the PR's commits
+  were committed. A run that was about a different ticket says nothing about
+  who wrote this PR — the reviewer that works from its own review ticket is not
+  the author of the PR it reviews;
+* a merge commit is not one of the PR's own commits: merging `develop` into a
+  branch is branch maintenance, and the seat that ran the merge did not write the
+  code the PR carries.
+
+**The attribution is per commit.** A commit that falls inside exactly one seat's
+window was written by that seat, so that seat is an author — a seat that pushed
+one commit of a PR is an author even when the other seat pushed more of them.
+Only a commit that falls inside several windows is ambiguous, and there the seat
+the most commits fall into is the author; a tie leaves both as authors, because
+calling a seat an author costs that seat its own coverage and nobody else's.
+That is what keeps a reviewer woken on the ticket while the author pushes a fix
+a reviewer: it shares the window, it does not have the commit.
+
+Measured on the open develop PRs on 2026-10-21 (30 PRs, 21 of them naming a
+ticket): the rule names **exactly one** author seat for 20 of the 21, **no
+commit in the whole queue falls inside two windows**, and the seat it names
+agrees with the commit trailer wherever a trailer exists — no disagreement, no
+ambiguity. The old rule (the ticket's assignee) named the wrong seat whenever
+the assignee was not the author: on #6145 the assignee was the Code Reviewer
+while the code was written by the Repo, CI & Release Engineer.
+
+Two limits are known and measured, and both are the reason the gate ships in
+shadow: 9 of the 30 open PRs name no ticket at all, so they carry neither
+run-window evidence nor a trailer, and they would be refused as unverifiable
+once the gate enforces; and one PR (#5964) has a commit that falls outside every
+run window, so it has no author either. A PR with no author evidence at all is
+refused as **unverifiable** — the gate will not guess, and it will not fall back
+to the ticket's assignee. A seat that wrote a commit outside every window on
+the ticket is not named by that commit; it is named by the commits that fell
+inside one.
 
 **The last marker governs.** The queue has always read the last review marker
 on a PR, so the gate judges that one and no other. A stale last marker is a
@@ -232,21 +277,26 @@ The reviewer declares itself in the comment, next to the marker it already posts
 ```
 
 The queue resolves `run` through the Paperclip API (`/api/heartbeat-runs/{run}`) to
-the seat that owned the run, and resolves the author seat from the PR's ticket
-assignee plus any `Paperclip-Agent-Id:` commit trailer. A marker whose declared
-seat and run disagree, whose run the API does not know, that carries neither a
-seat nor a run, or that names a different head, is **dropped** — dropped, not
-forgiven: the PR then fails the coverage gate and waits for a review from another
-seat. The refusal names the head the queue expected, so the PR says what it is
-waiting for.
+the seat that owned the run, and resolves the author seat from the code, as above.
+A marker whose declared seat and run disagree, whose run the API does not know,
+that carries neither a seat nor a run, or that names a different head, is
+**dropped** — dropped, not forgiven: the PR then fails the coverage gate and waits
+for a review from another seat. The refusal names the head the queue expected, so
+the PR says what it is waiting for.
+
+The author seat's own run window is a **second reason attached to that seat's own
+marker**, not a veto on the queue. A review from another seat posted while the
+author was still working is that seat's review, and it counts: a window that
+refuses other seats refuses every honest review (the QA Lead's finding on #6145,
+21 Oct 2026).
 
 A marker the gate could not judge at all is dropped on the same terms. That is
 the case when the Paperclip API cannot be read, or when the PR's authoring seat
-cannot be identified at all — a PR that names no ticket, for instance. A partial
-judgement is not a judgement, so the queue concludes nothing about the marker
-and refuses the PR, naming the reason. It refuses only that: a PR covered by
-Bugbot or by a human approval still merges, because the marker was never what
-cleared it.
+cannot be identified at all — a PR with no commit trailer and no commit that
+falls inside a run on its ticket, for instance. A partial judgement is not a
+judgement, so the queue concludes nothing about the marker and refuses the PR,
+naming the reason. It refuses only that: a PR covered by Bugbot or by a human
+approval still merges, because the marker was never what cleared it.
 
 **What this cannot prove.** Every seat pushes under one GitHub login, so GitHub
 cannot tell who typed a comment. The gate checks the marker's *declared*
@@ -261,6 +311,11 @@ the queue logs what it *would* refuse to
 `~/.config/digithings/merge-queue/reviewer-independence.log` and merges anyway.
 Enforce drops the markers and refuses. The flip to enforce is a separate small
 change, once the shadow log shows the measurement is stable (DIG-4809).
+
+The log is a measurement, not an archive: it rotates at 1 MiB, it is readable by
+its owner only (`0600`), and it carries a line only when the measurement
+**changes** — one line per PR, not one per tick, so a refused PR does not write
+on every run.
 
 ## Running it
 

@@ -66,10 +66,15 @@ run, and on which head. Fill the values from the environment
 
 Two rules follow:
 
-- **The author's own seat does not count.** The seat that owns the PR's ticket
+- **The author's own seat does not count.** The seat that *wrote the PR's code*
   cannot be the seat whose review counts — neither its own comment, nor a
   subagent or same-session review it posted while its own run on that ticket was
-  still active.
+  still active. The author is read from the branch (the `Paperclip-Agent-Id:` and
+  `Paperclip-Run-Id:` commit trailers, and the runs on the PR's own ticket that
+  were open when the commits were committed), **not** from the ticket's
+  assignee: owning the ticket is not authorship, and a reviewer that owns the
+  ticket still reviews. The author's run window is not a veto on other seats — a
+  review from another seat posted while the author was still working counts.
 - **The head must be the current one.** A verdict on an older head says nothing
   about the code the PR stands at now.
 
@@ -83,8 +88,8 @@ the coverage gate and waits for a review from another seat, and the refusal name
 the head the queue expected. Every other marker on the PR is dropped with it, so
 no earlier review stands in for the failing one. A marker the queue could not
 judge at all — the Paperclip API could not be read, or the PR's authoring seat
-could not be identified — is dropped on the same terms. The gate measures in
-**shadow** mode while it rolls out (DIG-4809); see
+could not be identified from the branch — is dropped on the same terms. The gate
+measures in **shadow** mode while it rolls out (DIG-4809); see
 [MERGE_QUEUE.md § Reviewer independence](../MERGE_QUEUE.md#reviewer-independence).
 
 This is an **accountability record, not proof**: every seat pushes under one

@@ -262,12 +262,18 @@ in-session comment carries a second marker next to the first one —
 queue reads it. Two things follow. The marker must name the head the PR stands at
 now, so a verdict on an older head cannot pass as coverage of this one; the sha is
 read as a prefix of the head, so 7 characters bind it and fewer do not. And the
-seat that owns the PR's ticket cannot be the seat whose review counts: the queue
-drops a marker from the author's own seat, and one posted while that seat's run on
-the ticket was still active — which is what the author's own subagent review looks
-like. The queue reads the last review marker on the PR and judges that one, so a
-stale last marker is a refusal rather than a cue to fall back on an older review.
-So the authoring seat hands the PR to another seat; the Code Reviewer
+seat that **wrote the PR's code** cannot be the seat whose review counts: the queue
+drops a marker from the authoring seat — the seat the commits name in
+`Paperclip-Agent-Id:`, the seat the `Paperclip-Run-Id:` trailer resolves to, or the
+seat whose run on the PR's ticket was open when the commits were committed — and a
+marker that seat posted while its own run was still active, which is what the
+author's own subagent review looks like. That window is not a veto on other seats: a
+review from another seat posted while the author was still working is that seat's
+review and counts. **Owning the PR's ticket is not authorship** — the seat that owns
+the ticket is the seat asked to move it along, and a reviewer that owns the ticket
+still reviews. The queue reads the last review marker on the PR and judges that one,
+so a stale last marker is a refusal rather than a cue to fall back on an older
+review. So the authoring seat hands the PR to another seat; the Code Reviewer
 approves, the queue merges (DIG-4795).
 
 Every line here is written by a coding agent, so an agent reviewing it is not weaker
