@@ -1311,3 +1311,107 @@ class ForkRowWiringTest(unittest.TestCase):
             self.assertEqual(len(app), 1, "a fork status call must pass app=False")
             self.assertIsInstance(app[0], ast.Constant)
             self.assertIs(app[0].value, False)
+
+    def test_a_fork_description_written_as_a_literal_is_also_caught(self):
+        """A literal in place of the constant would hide the call site.
+
+        The name-based check finds `FORK_DESC`; a site that writes the text
+        out instead would not be found, and the app row would be asked for a
+        head this repository does not have.
+        """
+        literal_calls = [c for c in self._status_calls()
+                         if any(isinstance(a, ast.Constant) and a.value == _mod.FORK_DESC
+                                for a in c.args)]
+        for call in literal_calls:
+            app = [kw.value for kw in call.keywords if kw.arg == "app"]
+            self.assertEqual(len(app), 1,
+                             "a fork status call must pass app=False")
+            self.assertIsInstance(app[0], ast.Constant)
+            self.assertIs(app[0].value, False)
+
+
+class AppRowLastGapsTest(NoRealNetwork, unittest.TestCase):
+    """DIG-4809: the gaps the adversarial pass left in the suite.
+
+    The code is right in every case below; what was missing was a test that
+    would notice if it stopped being right. Each test names the behaviour it
+    pins.
+    """
+
+    TOKEN = "ghs_123456_" + "z" * 30
+
+    def setUp(self):
+        self._isolate()
+
+    def tearDown(self):
+        self._unisolate()
+
+    def _write_token(self, value, path=None):
+        with open(path or _mod.APP_TOKEN_FILE, "w") as f:
+            f.write(value + "\n")
+
+    def _app_call(self):
+        for call in self.sh_calls:
+            if call["env"] is not None:
+                return call
+        return None
+
+    def _contexts(self):
+        return [a.split("=", 1)[1] for call in self.sh_calls
+                for a in call["cmd"] if a.startswith("context=")]
+
+    def test_the_token_never_reaches_a_log_line(self):
+        """The success path never logged it; only the failure path was pinned."""
+        self._write_token(self.TOKEN)
+        _mod.status("abc123", "success", "all gates passed")
+        for line in self.log_lines:
+            self.assertNotIn(self.TOKEN, line)
+
+    def test_a_failure_reason_that_carries_the_token_is_redacted(self):
+        """The redaction is only proven if the reason really carries the token."""
+        self._write_token(self.TOKEN)
+        self.sh_result = (1, "")
+        self.sh_stderr = f"Bad credentials for token {self.TOKEN}\n"
+        self.assertFalse(_mod.app_status("abc123", _mod.status_fields("success", "d")))
+        logged = " ".join(self.log_lines)
+        self.assertIn("<redacted>", logged)
+        self.assertNotIn(self.TOKEN, logged)
+
+    def test_the_gate_environment_drops_the_token_at_import_time(self):
+        """The gate environment is built at import time.
+
+        It cannot be observed in process, so the protection is pinned by
+        reading the source instead of by calling it.
+        """
+        with open(os.path.join(_SCRIPTS, "local_ci.py")) as f:
+            source = f.read()
+        self.assertIn('pop("CI_APP_TOKEN"', source)
+
+    def test_the_app_row_carries_the_token_in_the_child_environment(self):
+        self._write_token(self.TOKEN)
+        _mod.status("abc123", "success", "all gates passed")
+        call = self._app_call()
+        self.assertIsNotNone(call, "the app row must have been posted")
+        self.assertEqual(call["env"]["GH_TOKEN"], self.TOKEN)
+        self.assertEqual(call["env"]["GITHUB_TOKEN"], self.TOKEN)
+
+    def test_the_child_state_record_carries_no_token(self):
+        """The child state file records the command that ran."""
+        self._write_token(self.TOKEN)
+        _mod.status("abc123", "success", "all gates passed")
+        for call in self.sh_calls:
+            self.assertNotIn(self.TOKEN, call["name"] or "")
+            self.assertNotIn(self.TOKEN, " ".join(call["cmd"]))
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0,
+                     "root can read a file whatever its mode")
+    def test_a_token_file_that_cannot_be_read_posts_no_row(self):
+        path = _mod.APP_TOKEN_FILE
+        with open(path, "w") as f:
+            f.write(self.TOKEN + "\n")
+        os.chmod(path, 0o000)
+        try:
+            _mod.status("abc123", "success", "all gates passed")
+        finally:
+            os.chmod(path, 0o600)
+        self.assertEqual(self._contexts(), ["local-ci"])
