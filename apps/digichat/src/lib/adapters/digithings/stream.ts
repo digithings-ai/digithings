@@ -701,7 +701,12 @@ export async function createDigigraphTraceStreamResponse(opts: {
             closeText();
           }
           for (const span of spans) {
-            if (span.operation === "execute_tool") toolCallsSoFar += 1;
+            if (span.operation === "execute_tool") {
+              toolCallsSoFar += 1;
+              // noteToolCap no-ops under the cap and after the notice is sent,
+              // including when one event carries two execute_tool spans.
+              if (opts.guard?.active) opts.guard.noteToolCap(writer, toolCallsSoFar);
+            }
             const next =
               opts.guard?.active && span.toolResult !== undefined
                 ? {
@@ -710,9 +715,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
                   }
                 : span;
             writeStandardActivity(writer, next, activityCtx);
-          }
-          if (opts.guard?.active && toolCallsSoFar === opts.guard.toolCap) {
-            opts.guard.noteToolCap(writer, toolCallsSoFar);
           }
         }
       }

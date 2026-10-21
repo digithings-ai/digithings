@@ -95,9 +95,16 @@ function isTrusted(ip: string, networks: TrustedNetwork[]): boolean {
   });
 }
 
+/** A header is a rate-limit key only when `parseIp` accepts it. */
+function acceptedIp(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed || !parseIp(trimmed)) return null;
+  return trimmed;
+}
+
 function forwardedIp(req: Request, networks: TrustedNetwork[]): string | null {
-  const cf = req.headers.get("cf-connecting-ip")?.trim();
-  if (cf && parseIp(cf)) return cf;
+  const cf = acceptedIp(req.headers.get("cf-connecting-ip"));
+  if (cf) return cf;
 
   const hops = req.headers
     .get("x-forwarded-for")
@@ -107,37 +114,36 @@ function forwardedIp(req: Request, networks: TrustedNetwork[]): string | null {
   if (!hops) return null;
   for (const hop of hops.reverse()) {
     if (isTrusted(hop, networks)) continue;
-    return parseIp(hop) ? hop : null;
+    return acceptedIp(hop);
   }
   return null;
 }
 
 /**
  * Best-effort client IP for rate-limiting only — never treat this as an
- * identity signal. `cf-connecting-ip` is set authoritatively by Cloudflare's
- * edge (digichat's deployment target per ADR-0018) and can't be spoofed by
- * the client when actually behind Cloudflare. Falls back to the first
- * `X-Forwarded-For` hop for non-Cloudflare setups (dev, other proxies) — that
- * header, and `cf-connecting-ip` itself outside Cloudflare, CAN be spoofed
- * absent a proxy that strips/overwrites them. When `DIGICHAT_TRUSTED_PROXIES`
- * is configured, only a socket peer captured by the production entrypoint in
- * `x-digichat-peer-ip` can authorize using either forwarded header. That
- * internal header is removed and re-added from `socket.remoteAddress` before
- * Next.js receives a request, so callers cannot forge it.
+ * identity signal. Every candidate goes through `parseIp`.
+ *
+ * Forwarded headers are honoured only when `DIGICHAT_TRUSTED_PROXIES` lists
+ * the socket peer that delivered the request. That is the Cloudflare path:
+ * trust the container ingress, then `cf-connecting-ip` is the visitor,
+ * because Cloudflare overwrites it before the ingress. `X-Forwarded-For` is
+ * walked from the right, past trusted hops, in that same case.
+ *
+ * With the allowlist unset, both headers are caller-controlled, so they are
+ * ignored. The key is the socket address the entrypoint copied into
+ * `x-digichat-peer-ip` (it strips a caller-supplied value first). No captured
+ * socket means one shared `"unknown"` bucket: rotating `X-Forwarded-For` does
+ * not open a new one.
  */
 export function clientIpForRateLimit(req: Request): string {
   const trustedRaw = process.env.DIGICHAT_TRUSTED_PROXIES ?? "";
   const trustedProxies = parseTrustedProxies(trustedRaw);
+  const socket = acceptedIp(req.headers.get("x-digichat-peer-ip"));
   if (trustedRaw.trim()) {
-    const peer = req.headers.get("x-digichat-peer-ip")?.trim();
-    if (!peer || !isTrusted(peer, trustedProxies)) return peer || "unknown";
-    return forwardedIp(req, trustedProxies) ?? peer;
+    if (!socket || !isTrusted(socket, trustedProxies)) return socket ?? "unknown";
+    return forwardedIp(req, trustedProxies) ?? socket;
   }
-  const cf = req.headers.get("cf-connecting-ip")?.trim();
-  if (cf) return cf;
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]?.trim() || "unknown";
-  return "unknown";
+  return socket ?? "unknown";
 }
 
 /** Per-IP check for the shared anonymous /embed chat bucket. */

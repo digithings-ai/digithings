@@ -1917,4 +1917,6 @@ it("writes a tool-call limit notice when a digigraph trace hits the cap", async 
 
   expect(body).toContain("tool-call-limit");
   expect(body).toContain("Tool-call limit reached (1 this turn)");
+  // The house loop is not aborted: the answer after the notice still arrives.
+  expect(body).toContain("Done.");
 });

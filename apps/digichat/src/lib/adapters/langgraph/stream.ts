@@ -45,6 +45,8 @@ type Consumer = {
   toolNames: Map<string, string>;
   /** Partial JSON args accumulated from `tool_call_chunks`. */
   toolArgs: Map<string, string>;
+  /** False when this new tool call is past the cap and must not be rendered. */
+  admitToolStart?: () => boolean;
 };
 
 /** Answer text from a LangChain chunk: a plain string or content blocks. */
@@ -73,7 +75,7 @@ function contentReasoning(chunk: Record<string, unknown>): string {
   return out;
 }
 
-function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
+function consumeChunk(chunk: Record<string, unknown>, c: Consumer): boolean {
   const reasoning = contentReasoning(chunk);
   if (reasoning) writeReasoningDelta(c.writer, c.ctx, reasoning, c.activityDetail);
 
@@ -95,6 +97,7 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
     if (argsDelta) c.toolArgs.set(callId, (c.toolArgs.get(callId) ?? "") + argsDelta);
     if (name) c.toolNames.set(callId, name);
     if (!name || c.ctx.rowByCallId.has(callId)) continue;
+    if (c.admitToolStart && !c.admitToolStart()) return true;
     c.text.close();
     writeGatedSpan(
       c.writer,
@@ -116,6 +119,7 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
     if (input) c.toolArgs.set(callId, JSON.stringify(input));
     c.toolNames.set(callId, name);
     if (c.ctx.rowByCallId.has(callId)) continue;
+    if (c.admitToolStart && !c.admitToolStart()) return true;
     c.text.close();
     writeGatedSpan(
       c.writer,
@@ -154,6 +158,7 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
       c.activityDetail,
     );
   }
+  return false;
 }
 
 export async function createLangGraphStreamResponse(opts: {
@@ -185,6 +190,23 @@ export async function createLangGraphStreamResponse(opts: {
       const text = createTextWriter(writer, ctx);
       const toolNames = new Map<string, string>();
       const toolArgs = new Map<string, string>();
+      const upstream = new AbortController();
+      const stopVisitor = () => upstream.abort();
+      opts.signal?.addEventListener("abort", stopVisitor);
+      let toolCallsSoFar = 0;
+      let capped = false;
+      const admitToolStart = () => {
+        const guard = opts.guard;
+        if (!guard?.active || guard.toolCap == null) return true;
+        if (toolCallsSoFar >= guard.toolCap) {
+          guard.noteToolCap(writer, toolCallsSoFar);
+          capped = true;
+          upstream.abort();
+          return false;
+        }
+        toolCallsSoFar += 1;
+        return true;
+      };
       try {
         const instruction = await guardRound(opts.guard, {
           writer,
@@ -203,7 +225,7 @@ export async function createLangGraphStreamResponse(opts: {
           method: "POST",
           headers,
           body: requestBody,
-          signal: opts.signal,
+          signal: upstream.signal,
         });
         if (!res.ok || !res.body) {
           // Never leave an abandoned body holding a socket (the digigraph
@@ -215,16 +237,38 @@ export async function createLangGraphStreamResponse(opts: {
           // still ends on an error part instead of a successful empty turn.
           throw new Error(label);
         }
-        for await (const evt of iterateSse(res.body, opts.signal)) {
-          // LangGraph `messages/*` frames carry an ARRAY of message chunks.
-          const value = parseSseValue(evt.data);
-          if (value === null) continue;
-          const frames = Array.isArray(value) ? value : [value];
-          for (const frame of frames) {
-            if (isRecord(frame)) consumeChunk(frame, { writer, ctx, text, activityDetail: opts.activityDetail, toolNames, toolArgs });
+        try {
+          for await (const evt of iterateSse(res.body, upstream.signal)) {
+            // LangGraph `messages/*` frames carry an ARRAY of message chunks.
+            const value = parseSseValue(evt.data);
+            if (value === null) continue;
+            const frames = Array.isArray(value) ? value : [value];
+            let stop = false;
+            for (const frame of frames) {
+              if (!isRecord(frame)) continue;
+              if (
+                consumeChunk(frame, {
+                  writer,
+                  ctx,
+                  text,
+                  activityDetail: opts.activityDetail,
+                  toolNames,
+                  toolArgs,
+                  admitToolStart,
+                })
+              ) {
+                stop = true;
+                break;
+              }
+            }
+            if (stop) break;
           }
+        } catch (err) {
+          // The cap abort is ours. A visitor abort still fails the turn.
+          if (!capped || opts.signal?.aborted) throw err;
         }
       } finally {
+        opts.signal?.removeEventListener("abort", stopVisitor);
         opts.guard?.release();
         text.close();
         finishStandardActivity(writer, ctx);

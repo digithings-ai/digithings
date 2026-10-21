@@ -16,6 +16,7 @@ import type { ActivityDetail } from "@/lib/chat-activity";
 import {
   GuardrailsSchema,
   SEARCH_ENGINES,
+  toolCallCapIssue,
   type GuardrailsConfig,
   type PageContextMode,
 } from "@/lib/deploy-config/schema";
@@ -870,6 +871,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     }
     guardrails = parsed.data;
   }
+  const capIssue = toolCallCapIssue(
+    backendCfg.type,
+    guardrails?.maxToolCallsPerTurn ??
+      (backendCfg.type === "foundry" ? backendCfg.maxToolCalls : undefined),
+  );
+  if (capIssue) throw new Error(`${ctx}: ${capIssue}`);
 
   return {
     mcp,

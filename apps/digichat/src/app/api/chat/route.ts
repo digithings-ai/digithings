@@ -473,14 +473,14 @@ async function handleChat(
     if (!quotaSatisfied) {
       try {
         const ip = clientIpForRateLimit(req);
-        // "unknown" is what clientIpForRateLimit returns when the ingress fails
-        // to set cf-connecting-ip/x-forwarded-for — it is not an identity (see
-        // that module's own doc comment). Treating it as one would collapse
-        // every visitor behind a broken/missing IP header into a single shared
-        // quota bucket, permanently gating everyone after the first 3 turns
-        // total. Skip the quota entirely in that case and fail open, consistent
-        // with this module's "best-effort, not an authorization boundary"
-        // philosophy (embed-turn-quota.ts).
+        // "unknown" is what clientIpForRateLimit returns when no socket address
+        // was captured and forwarded headers are not from a configured trusted
+        // proxy. It is not an identity. Treating it as one would collapse
+        // every such visitor into a single shared quota bucket, permanently
+        // gating everyone after the first few turns. Skip the quota entirely
+        // in that case and fail open, consistent with this module's
+        // "best-effort, not an authorization boundary" philosophy
+        // (embed-turn-quota.ts).
         if (ip !== "unknown") {
           if (quotaServiceUnavailable) {
             // Degraded path: the tenant's quota service could not answer, so the

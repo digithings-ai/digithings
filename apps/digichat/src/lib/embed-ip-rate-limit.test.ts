@@ -5,6 +5,8 @@ import {
   clientIpForRateLimit,
   EMBED_IP_MAX,
 } from "@/lib/embed-ip-rate-limit";
+import { MemoryGuardrailStore } from "@/lib/guardrails/store";
+import { createTurnGuard } from "@/lib/guardrails/turn";
 
 function reqWithHeaders(headers: Record<string, string>): Request {
   return new Request("http://localhost/api/chat", { headers });
@@ -15,21 +17,50 @@ describe("clientIpForRateLimit", () => {
     delete process.env.DIGICHAT_TRUSTED_PROXIES;
   });
 
-  it("prefers cf-connecting-ip", () => {
+  it("ignores forwarded headers when no trusted proxy is configured", () => {
     const req = reqWithHeaders({
       "cf-connecting-ip": "198.51.100.1",
       "x-forwarded-for": "203.0.113.9",
+      "x-digichat-peer-ip": "192.0.2.10",
     });
-    expect(clientIpForRateLimit(req)).toBe("198.51.100.1");
+    expect(clientIpForRateLimit(req)).toBe("192.0.2.10");
   });
 
-  it("falls back to the first X-Forwarded-For hop", () => {
-    const req = reqWithHeaders({ "x-forwarded-for": "203.0.113.9, 10.0.0.1" });
-    expect(clientIpForRateLimit(req)).toBe("203.0.113.9");
+  it("returns 'unknown' when no socket address was captured", () => {
+    expect(
+      clientIpForRateLimit(
+        reqWithHeaders({ "cf-connecting-ip": "198.51.100.1", "x-forwarded-for": "203.0.113.9" }),
+      ),
+    ).toBe("unknown");
   });
 
-  it("returns 'unknown' when neither header is present", () => {
-    expect(clientIpForRateLimit(reqWithHeaders({}))).toBe("unknown");
+  it("keeps rotating X-Forwarded-For values in one bucket", () => {
+    const store = new MemoryGuardrailStore();
+    const spend = (xff: string) => {
+      const ip = clientIpForRateLimit(
+        reqWithHeaders({
+          "x-forwarded-for": xff,
+          "cf-connecting-ip": xff.split(",")[0]?.trim() ?? "",
+          "x-digichat-peer-ip": "203.0.113.7",
+        }),
+      );
+      const guard = createTurnGuard({
+        slug: "public",
+        guardrails: { tokensPerMinute: { user: 1000 } },
+        userId: "embed:anonymous",
+        ip,
+        store,
+        now: () => 1_000,
+      });
+      guard.recordUsage({ totalTokens: 10 });
+      return ip;
+    };
+    expect(spend("198.51.100.1")).toBe("203.0.113.7");
+    expect(spend("198.51.100.2, 10.0.0.1")).toBe("203.0.113.7");
+    expect(store.bucketCount()).toBe(1);
+    expect(store.read("tpm:user:public:203.0.113.7", 1_000).events).toHaveLength(2);
+    expect(store.read("tpm:user:public:198.51.100.1", 1_000).events).toHaveLength(0);
+    expect(store.read("tpm:user:public:198.51.100.2", 1_000).events).toHaveLength(0);
   });
 
   it("ignores forwarded client headers from an untrusted socket peer", () => {
@@ -100,8 +131,8 @@ describe("checkEmbedIpRateLimit", () => {
     // this exercises the real default (EMBED_IP_MAX) rather than overriding it.
     const ipA = `198.51.100.${Date.now() % 200}`;
     const ipB = `198.51.100.${(Date.now() % 200) + 1}`;
-    const reqA = reqWithHeaders({ "cf-connecting-ip": ipA });
-    const reqB = reqWithHeaders({ "cf-connecting-ip": ipB });
+    const reqA = reqWithHeaders({ "x-digichat-peer-ip": ipA });
+    const reqB = reqWithHeaders({ "x-digichat-peer-ip": ipB });
 
     for (let i = 0; i < EMBED_IP_MAX; i++) {
       expect(checkEmbedIpRateLimit(reqA).allowed).toBe(true);

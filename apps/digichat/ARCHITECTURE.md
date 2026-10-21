@@ -280,7 +280,7 @@ endpoint except `GET /api/health` (unauthenticated status probe) and
 - Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus standard tool / `source-*` / reasoning / `data-status` parts (`x-vercel-ai-ui-message-stream: v1`). Mutation errors: `400 invalid_turn_mode`, `409 run_in_progress` / `run_id_replay`, Foundry `501 not_supported` when item delete/create is unavailable.
 - The route resolves upstream auth, builds a `createdigigraphClient`, then either (a) calls `createdigigraphTraceStreamResponse` for the trace path (passes `req.signal` so Stop aborts the digigraph fetch) or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
-- **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). When `DIGICHAT_TRUSTED_PROXIES` is unset, IP selection keeps the historical order: `cf-connecting-ip`, the leftmost `X-Forwarded-For` hop, then `unknown`. When configured with comma-separated IPs/CIDRs, only a TCP peer in that allowlist may supply a forwarded client-IP header; `x-digichat-peer-ip` is captured from the socket by the production entrypoint, which strips a caller-provided value before forwarding to the loopback-only Next server. Then `cf-connecting-ip` is preferred, or the XFF chain is walked from right to left past trusted proxy hops to the first valid non-trusted address. An untrusted or malformed boundary falls back to the captured peer. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
+- **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). Forwarded headers (`cf-connecting-ip`, `X-Forwarded-For`) count only when `DIGICHAT_TRUSTED_PROXIES` lists the socket peer that delivered the request, and only after `parseIp` accepts the value. That is the Cloudflare path: trust the container ingress, then `cf-connecting-ip` is the visitor because Cloudflare overwrites it. With the allowlist unset those headers are ignored, so a caller rotating `X-Forwarded-For` stays on one bucket; the key is the captured socket (`x-digichat-peer-ip`) or one shared `unknown` bucket when no socket was captured. When configured, only a TCP peer in that allowlist may supply a forwarded client-IP header; `x-digichat-peer-ip` is captured from the socket by the production entrypoint, which strips a caller-provided value before forwarding to the loopback-only Next server. Then `cf-connecting-ip` is preferred, or the XFF chain is walked from right to left past trusted proxy hops to the first valid non-trusted address. An untrusted or malformed boundary falls back to the captured peer. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
 - **Per-tenant trial gate:** a `trial_form` tenant may set `gate.consumeUrl` to an operator-controlled HTTPS endpoint. When `X-Embed-Chat-Token` is present, the BFF sends `{ "token": "..." }` to that endpoint before applying the fallback per-IP turn quota. A 2xx response consumes the turn and any 4xx response denies it (`402 trial_gate`). A 5xx, a timeout or a transport failure is reported as a third verdict, **unavailable**: the visitor is still admitted, so a quota-provider outage does not disable chat, but the entitlement is unverified and is bounded server-side to the trial cap (100 turns per known IP per 24h) instead of being granted outright — an outage used to skip the per-IP budget entirely and hand out unbounded free turns (DIG-4543). The degraded path is logged (`[trial-gate] tenant quota service unavailable…`). The bound needs a resolvable client IP: a request whose IP cannot be resolved (`unknown`) skips the quota and is admitted uncounted, as before. The token is never logged or forwarded to a chat backend.
 - **Internal monitor identity (DIG-613):** an internal monitor can be exempt from the `trial_form` free-turn cap by presenting `X-Embed-Monitor-Token`, matched against a comma-separated allowlist in `DIGICHAT_MONITOR_TOKENS` (`embed-monitor-token.ts`, constant-time, entries under 32 chars ignored). This exists because the hourly DataTap answer-integrity check had no sanctioned path past the per-IP cap: it burned the 3-turn budget in its first hour and then returned `402 trial_gate` on every run, which reads as a client-side closed trial rather than our own gate. The compared value is a server-side secret and is deliberately **not** `X-Embed-Token`, which is a Stripe-style publishable key rendered into the embedding page on purpose (DIG-619) — a bypass keyed on it would be a public bypass. **Scope:** the free-turn cap only. It does not authenticate the caller; the caller must still resolve a tenant context and pass the rate-limit layers. The `requiredPlanTier` proof check runs earlier and is unaffected. The one check it does skip is the tenant's own `gate.consumeUrl` turn accounting, and only for a caller that presents the monitor header *without* an `X-Embed-Chat-Token` (the consume call is gated on that token, `route.ts`). **Fails open:** when the allowlist is unset the gate behaves exactly as before, so a missing deploy secret never becomes a reason to stop serving visitors. The gate itself remains best-effort anti-abuse, not an authorization boundary.
 - **Server-signed trial proof (DIG-3795):** a caller can also be exempt from the `trial_form` free-turn cap by presenting `X-Embed-Trial-Proof`, an HMAC-signed token minted server-side with the shared secret `DIGICHAT_TRIAL_PROOF_SECRET` (`lib/trial-proof.ts`; format `base64url(host|exp|sig)`, 10-minute TTL, constant-time signature comparison). The route verifies the signature with the same secret and compares the **verified** host against the canonical form of `X-Embed-Host` (`normalizeEmbedHost`), because the proof binds host and expiry only — no tenant and no nonce — so a valid proof for another host buys nothing. A raw client-asserted header value is never trusted: only the server holds the secret, so only it can produce a token that verifies. **Scope:** the free-turn cap only, and it does not authenticate the caller — the caller must still resolve a tenant context and pass the rate-limit layers. The per-IP quota is skipped entirely once a proof is accepted, so a sanctioned bypass never spends the visitor's budget. **No proof, no bypass:** an absent, malformed, expired, wrongly-signed or wrong-host proof leaves the gate exactly as it was, so a missing deploy secret is never a reason to waive the cap. The `X-Embed-Trial-Unlock` header read is unchanged. **Expired-proof signal (DIG-4537):** the route tells an EXPIRED proof from an INVALID one, because only the expired one can be dropped and re-minted by the client. When — and only when — a proof was presented, authentic, expired and bound to this request's embed host, the response the route returns carries `x-embed-trial-proof-expired: 1` (`TRIAL_PROOF_EXPIRED_HEADER`), including on the 402 `trial_gate` response, and the gate's outcome does not change: an expired proof still leaves the visitor on the trial path. A malformed, wrongly-signed or wrong-host proof gets no header — those are invalid, not expired, and the client must not treat them as re-mintable. The signature is verified BEFORE the expiry, so a proof that is both expired and tampered with is invalid, never expired.
@@ -1057,8 +1057,14 @@ directly-plugged tool, no per-tool UI. `mcp_approval_request` is unmapped by
 design: trial agents auto-approve server-side.
 
 **Guardrails (`guardrails`).** Optional on a deployment. Omit the block and
-every guard is off. Two settings apply on every backend (Foundry,
-OpenAI-compatible, digigraph / Cheaper Inference, and the rest):
+every guard is off. `tokensPerMinute` applies on every backend. `maxToolCallsPerTurn`
+is enforced on Foundry and the AI SDK backends (openai-completions,
+openai-responses, anthropic, google-vertex), where the adapter can stop the
+tool loop. On digigraph, langgraph, and ag-ui it is notice/best-effort: the
+chat shows a status notice once the count is hit, and langgraph and ag-ui
+stop forwarding the next call, but the upstream agent is not given a
+`tool_choice: none` follow-up. a2a has no tool-call hook, so config load
+refuses the key. The shape:
 
 ```yaml
 guardrails:                      # omit the block and every guard is off
@@ -1073,15 +1079,21 @@ guardrails:                      # omit the block and every guard is off
 The numbers in that block are the shape. No shipped yaml sets them. The
 public digithings.ai example only comments a per-user value of 80000.
 
-`maxToolCallsPerTurn` caps tool calls in one user turn. `backend.maxToolCalls`
-on a Foundry backend is the same setting; the shared key wins when both are
-set. `tokensPerMinute.deployment` is the deployment's own limit (an Azure TPM,
+`maxToolCallsPerTurn` caps tool calls in one user turn where the backend can
+enforce it, and is notice/best-effort where it cannot (digigraph, langgraph,
+ag-ui). `backend.maxToolCalls` on a Foundry backend is the same setting; the
+shared key wins when both are set. `tokensPerMinute.deployment` is the deployment's own limit (an Azure TPM,
 for example), shared by every turn on that deployment. `tokensPerMinute.user`
 is the per-person limit for a public chat. A real user id is the key.
 Anonymous traffic (`embed:anonymous`) uses the server-derived client IP from
-`clientIpForRateLimit`, the same address the embed per-IP limiter trusts. The
-client session header is not a key: the caller can mint a new one per request
-and would otherwise get a fresh bucket. `unknown` is not an address, so
+`clientIpForRateLimit`, the same address the embed per-IP limiter trusts.
+`cf-connecting-ip` is that address only when `DIGICHAT_TRUSTED_PROXIES` lists
+the socket peer, which is how a Cloudflare ingress is configured: Cloudflare
+overwrites the header before the trusted peer, and the value still has to
+pass `parseIp`. With that allowlist unset, `X-Forwarded-For` and
+`cf-connecting-ip` are ignored, because a caller can rotate them. The key is
+then the captured socket, or one shared bucket when no socket was captured.
+The client session header is not a key. `unknown` is not an address, so
 visitors with no user id and no address share one `anonymous` bucket.
 
 The counter is a rolling 60 seconds of reported usage, plus an estimate of the
@@ -1114,10 +1126,13 @@ instruction. The chat shows a status `data-notice`, not an error, and only
 when a call was actually stopped.
 
 AI SDK backends apply the same decision in `prepareStep` (`toolChoice: "none"`
-once the cap is spent). Digigraph and the other single-request adapters gate
-before the upstream fetch and again when they observe another round.
-Digigraph's tool loop runs upstream, so a cap there is a notice plus a wrap-up
-on the next round the adapter can see; it does not abort the upstream call.
+once the cap is spent). Langgraph and ag-ui count tool-call starts and stop
+forwarding at the cap; that is notice/best-effort, because the request was
+already sent and the upstream run is not switched to a no-tool follow-up.
+Digigraph's tool loop runs upstream, so a cap there is a status notice only.
+It does not abort the upstream call, and a wrap-up instruction cannot reach a
+later round of that same request. a2a reports no tool calls, so the key is
+refused at config load.
 
 The trial yaml leaves a proposed cap of 5 (4 is the other candidate)
 and a deployment TPM commented out until the Azure number for gpt-5.6-terra in
@@ -2101,7 +2116,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_EMBED_HOSTS` | Plain comma-separated embed-tenant hostnames, no secrets. Feeds `/embed` CSP `frame-ancestors` at **runtime** via `src/proxy.ts` (preferred over deriving hosts from `DIGICHAT_EMBED_TENANTS` when both are set — #1360). Optional seed list: `embed-hosts.txt` (not baked into the GHCR image). Never emits `frame-ancestors *`; fail-closed to first-party origins when unset/invalid. | Optional |
 | `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
 | `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
-| `DIGICHAT_TRUSTED_PROXIES` | Comma-separated IP addresses/CIDRs whose socket peers may supply `cf-connecting-ip` or `X-Forwarded-For` for anonymous-embed rate limiting. Unset preserves historical header behavior. The bundled production entrypoint captures the direct socket peer and isolates Next on loopback; do not set this unless that entrypoint remains in the request path. In a Cloudflare Container, trust the container ingress/overlay peer, not Cloudflare's published edge ranges. | Optional |
+| `DIGICHAT_TRUSTED_PROXIES` | Comma-separated IP addresses/CIDRs whose socket peers may supply `cf-connecting-ip` or `X-Forwarded-For` for anonymous-embed rate limiting. Unset ignores those headers and uses the captured socket, or one shared `unknown` bucket. The bundled production entrypoint captures the direct socket peer and isolates Next on loopback; do not set this unless that entrypoint remains in the request path. In a Cloudflare Container, trust the container ingress/overlay peer, not Cloudflare's published edge ranges, so `cf-connecting-ip` is the visitor. | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
 | `DIGICHAT_VERSION` | Version string returned in health response | Optional override. Unset/blank → `package.json` version. Cloudflare Container (`infra/docker/Dockerfile.digichat-cloudflare`) and the app image (`apps/digichat/Dockerfile`) bake it from `package.json` at image build (`ARG`/`ENV` + `/etc/digichat-version`). Not a dashboard secret. |
 | `NEXTAUTH_SECRET` | Legacy Auth.js secret alias (same value as `AUTH_SECRET`) | If using legacy env |

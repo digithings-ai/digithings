@@ -599,13 +599,61 @@ const GuardrailFraction = z.number().gt(0).max(1);
 const GuardrailTpm = z.number().int().positive().max(10_000_000);
 
 /**
+ * How far `maxToolCallsPerTurn` can actually go on a backend.
+ * Matches the tool-call column of the limits backend matrix: Foundry and the
+ * AI SDK backends stop the loop; digigraph, langgraph, and ag-ui are
+ * notice/best-effort; a2a has no tool-call hook.
+ */
+export type ToolCallCapSupport = "enforce" | "best-effort" | "unsupported";
+
+export function toolCallCapSupport(backendType: string): ToolCallCapSupport {
+  switch (backendType) {
+    case "foundry":
+    case "openai-completions":
+    case "openai-responses":
+    case "anthropic":
+    case "google-vertex":
+      return "enforce";
+    case "digigraph":
+    case "langgraph":
+    case "ag-ui":
+      return "best-effort";
+    default:
+      return "unsupported";
+  }
+}
+
+/**
+ * Refuse a cap the backend cannot apply. A notice/best-effort backend still
+ * loads, and validation warns so the limit is not silent.
+ * Returns the refusal message, or null when the config may load.
+ */
+export function toolCallCapIssue(backendType: string, cap: number | undefined): string | null {
+  if (cap == null) return null;
+  const support = toolCallCapSupport(backendType);
+  if (support === "unsupported") {
+    return "maxToolCallsPerTurn is not enforced on this backend (no tool-call hook)";
+  }
+  if (support === "best-effort") {
+    console.warn(
+      `guardrails.maxToolCallsPerTurn on ${backendType} is notice/best-effort; the adapter cannot abort the upstream tool loop`,
+    );
+  }
+  return null;
+}
+
+/**
  * Optional turn guardrails. Omit the block, or any key, and that guard is off.
  * Fractions default to 0.7 (`answerAt`) and 0.9 (`pauseAt`) when a TPM is set.
  * `answerAt` must stay below `pauseAt`.
  */
 export const GuardrailsSchema = z
   .object({
-    /** Tool calls allowed in one user turn, on every backend. */
+    /**
+     * Tool calls allowed in one user turn. Enforced on Foundry and the AI SDK
+     * backends. notice/best-effort on digigraph, langgraph, and ag-ui.
+     * Refused on a2a, which has no tool-call hook.
+     */
     maxToolCallsPerTurn: z.number().int().positive().max(100).optional(),
     /** Fraction of the TPM where the model is asked to answer with what it has. */
     answerAt: GuardrailFraction.optional(),
@@ -615,7 +663,7 @@ export const GuardrailsSchema = z
       .object({
         /** Shared by every turn on this deployment. Match an upstream TPM. */
         deployment: GuardrailTpm.optional(),
-        /** Per user, else session, else client IP. */
+        /** Per user id, else the server-derived client IP. */
         user: GuardrailTpm.optional(),
       })
       .strict()
@@ -678,7 +726,23 @@ export const DeploymentSchema = z
      */
     token: z.string().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((deployment, ctx) => {
+    const alias =
+      deployment.backend.type === "foundry" ? deployment.backend.maxToolCalls : undefined;
+    const issue = toolCallCapIssue(
+      deployment.backend.type,
+      deployment.guardrails?.maxToolCallsPerTurn ?? alias,
+    );
+    if (!issue) return;
+    ctx.addIssue({
+      code: "custom",
+      message: issue,
+      path: deployment.guardrails?.maxToolCallsPerTurn != null
+        ? ["guardrails", "maxToolCallsPerTurn"]
+        : ["backend", "maxToolCalls"],
+    });
+  });
 
 export const DigichatConfigSchema = z
   .object({

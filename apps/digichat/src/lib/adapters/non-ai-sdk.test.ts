@@ -12,7 +12,7 @@ import { createAgUiStreamResponse } from "@/lib/adapters/ag-ui/stream";
 import { createA2aStreamResponse } from "@/lib/adapters/a2a/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import type { UIMessage } from "ai";
-import type { TurnGuard } from "@/lib/guardrails/turn";
+import { createTurnGuard, type TurnGuard } from "@/lib/guardrails/turn";
 
 const USER_MESSAGE: UIMessage = {
   id: "u1",
@@ -468,5 +468,51 @@ describe("non-AI-SDK guardrail instruction", () => {
     };
     expect(sent.params.message.parts.map((part) => part.text)).toContain("WRAP NOW");
     expect(released.value).toBe(true);
+  });
+
+  it("stops a langgraph stream at the tool cap and does not render the next call", async () => {
+    stubUpstream(
+      [
+        'event: messages/partial\ndata: [{"type":"AIMessageChunk","tool_call_chunks":[{"id":"call_1","name":"first","args":"{}"}]}]\n\n',
+        'event: messages/partial\ndata: [{"type":"AIMessageChunk","tool_call_chunks":[{"id":"call_2","name":"second","args":"{}"}]}]\n\n',
+        'event: messages/partial\ndata: [{"type":"AIMessageChunk","content":"after"}]\n\n',
+      ].join(""),
+    );
+    const res = await createLangGraphStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "full",
+      apiKey: null,
+      guard: createTurnGuard({ slug: "public", guardrails: { maxToolCallsPerTurn: 1 } }),
+    });
+    const body = await bodyOf(res);
+    expect(body).toContain("first");
+    expect(body).not.toContain("second");
+    expect(body).toContain("tool-call-limit");
+    expect(body).not.toContain("after");
+  });
+
+  it("stops an ag-ui stream at the tool cap and does not render the next call", async () => {
+    stubUpstream(
+      [
+        'data: {"type":"TOOL_CALL_START","toolCallId":"t1","toolCallName":"first"}\n\n',
+        'data: {"type":"TOOL_CALL_START","toolCallId":"t2","toolCallName":"second"}\n\n',
+        'data: {"type":"TEXT_MESSAGE_CONTENT","delta":"after"}\n\n',
+      ].join(""),
+    );
+    const res = await createAgUiStreamResponse({
+      backend: { type: "ag-ui", url: "https://agui.example.com/run" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "full",
+      apiKey: null,
+      guard: createTurnGuard({ slug: "public", guardrails: { maxToolCallsPerTurn: 1 } }),
+    });
+    const body = await bodyOf(res);
+    expect(body).toContain("first");
+    expect(body).not.toContain("second");
+    expect(body).toContain("tool-call-limit");
+    expect(body).not.toContain("after");
   });
 });
