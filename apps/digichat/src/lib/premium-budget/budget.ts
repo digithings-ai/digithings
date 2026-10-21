@@ -122,9 +122,10 @@ export function chargePremiumUsage(
 
 export function applyPremiumBudget(input: {
   modelId: string;
+  /** Recorded by the caller. A spent window still answers with Auto. */
   defaultModel: string | undefined;
   premium: boolean;
-  /** Premium group ids. A default in this list is not a safe fallback. */
+  /** Premium group ids. A spent window still answers with Auto. */
   premiumIds?: readonly string[];
   rate: PremiumRate | undefined;
   budget: CostPerWindow | undefined;
@@ -142,11 +143,10 @@ export function applyPremiumBudget(input: {
   const windowMs = (input.budget.windowSeconds ?? DEFAULT_PREMIUM_WINDOW_SECONDS) * 1000;
   const spent = store.spent(input.userKey, nowMs, windowMs);
   if (spent >= input.budget.usd) {
-    const configured = input.defaultModel?.trim() ?? "";
-    const defaultIsPremium = configured.length > 0 && (input.premiumIds ?? []).includes(configured);
-    const fallback = configured && !defaultIsPremium ? configured : autoPresetModelId();
+    // The notice names Auto. A configured default is not served, whether or
+    // not that default is in `premiumIds`.
     return {
-      modelId: fallback,
+      modelId: autoPresetModelId(),
       notice: PREMIUM_BUDGET_MESSAGE,
     };
   }

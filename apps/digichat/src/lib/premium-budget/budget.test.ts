@@ -120,6 +120,27 @@ describe("premium spend budget", () => {
     expect(blocked.notice).toMatch(/Answering with Auto instead/);
   });
 
+  it("drops to Auto when the configured default is a non-premium model other than 1017", () => {
+    const rate = { inputPerM: glm!.inputPerM, outputPerM: glm!.outputPerM };
+    const now = Date.now();
+    chargePremiumUsage("digithings:anon", rate, undefined, now);
+    chargePremiumUsage("digithings:anon", rate, undefined, now);
+    chargePremiumUsage("digithings:anon", rate, undefined, now);
+    const blocked = applyPremiumBudget({
+      modelId: "z-ai/glm-5.3",
+      defaultModel: "openai/gpt-oss-120b",
+      premium: true,
+      premiumIds: ["google/gemini-3.8-flash", "z-ai/glm-5.3"],
+      rate,
+      budget: { usd: 0.0125565, windowSeconds: 86_400 },
+      userKey: "digithings:anon",
+      nowMs: Date.now(),
+    });
+    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
+    expect(blocked.modelId).not.toBe("openai/gpt-oss-120b");
+    expect(blocked.notice).toBe(PREMIUM_BUDGET_MESSAGE);
+  });
+
   it("keeps rotating X-Forwarded-For values on one budget key", () => {
     delete process.env.DIGICHAT_TRUSTED_PROXIES;
     delete process.env.DIGICHAT_PEER_STAMP;
