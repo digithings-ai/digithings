@@ -29,6 +29,7 @@ here would run these cases against the real twelve-x repo.
 
 from __future__ import annotations
 
+import http.client
 import importlib.util
 import json
 import re
@@ -3137,6 +3138,7 @@ def test_a_refused_connection_is_not_read_as_a_missing_record(
 ) -> None:
     """A connection error raises, so the gate says "could not be checked"."""
     monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(mq.time, "sleep", lambda _seconds: None)
 
     def _urlopen(request: Any, timeout: int | None = None) -> Any:
         raise urllib.error.URLError("connection refused")
@@ -3147,6 +3149,171 @@ def test_a_refused_connection_is_not_read_as_a_missing_record(
     )
     with pytest.raises(mq._PaperclipUnavailable):
         reader.ticket("DIG-4795")
+
+
+class _FakeResponse:
+    """The shape `urlopen` returns: a context manager whose `read` is bytes."""
+
+    def __init__(self, payload: Any) -> None:
+        self._payload = payload
+
+    def __enter__(self) -> "_FakeResponse":
+        return self
+
+    def __exit__(self, *exc: Any) -> bool:
+        return False
+
+    def read(self) -> bytes:
+        return json.dumps(self._payload).encode("utf-8")
+
+
+def test_a_slow_read_that_times_out_once_is_asked_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slow API is not a refusal: the read waits, and it tries again.
+
+    On 2026-10-21 the Code Reviewer measured the Paperclip API answering
+    `GET /api/issues/{id}` in 31.5 s, 36.5 s and 30.7 s, and
+    `GET /api/issues/{id}/runs` not at all in 60 s. The old ten-second read
+    turned every one of those into a refusal, and in `enforce` mode a refusal
+    for a transport reason is indistinguishable from a refusal for a real one.
+    So the read waits longer than the slowest answer measured, and a read that
+    times out is asked again — the request is a GET, and a question that was
+    not answered is not an answer.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(mq.time, "sleep", lambda _seconds: None)
+    timeouts: list[float | None] = []
+    answers: list[Any] = [TimeoutError("timed out"), {"id": "issue-0000"}]
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        timeouts.append(timeout)
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return _FakeResponse(answer)
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    assert reader.ticket("DIG-4795") == {"id": "issue-0000"}
+    assert timeouts == [mq.PAPERCLIP_READ_TIMEOUT, mq.PAPERCLIP_READ_TIMEOUT]
+
+
+def test_a_read_that_never_answers_says_it_is_a_transport_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the API never answers, the refusal says so and names the attempts.
+
+    The message is what separates "the API was too slow" from "the reviewer
+    was the author": in `enforce` mode the first must never be read as the
+    second, and the shadow log has to be able to count the transport failures
+    apart from the refusals about review independence.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(mq.time, "sleep", lambda _seconds: None)
+    timeouts: list[float | None] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        timeouts.append(timeout)
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable) as excinfo:
+        reader.ticket("DIG-4795")
+    message = str(excinfo.value)
+    assert "could not be read" in message
+    assert f"{mq.PAPERCLIP_READ_ATTEMPTS} attempts" in message
+    assert "/api/issues/DIG-4795" in message
+    assert not isinstance(excinfo.value, mq._PaperclipMissing)
+    assert len(timeouts) == mq.PAPERCLIP_READ_ATTEMPTS
+
+
+def test_a_missing_record_is_not_asked_for_twice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 404 is an answer, and an answer does not get better by asking again.
+
+    The gate judges a missing ticket or a run nobody has heard of, so the
+    first answer ends the read. Trying again would only spend the budget on a
+    fact that is already known.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    timeouts: list[float | None] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        timeouts.append(timeout)
+        raise urllib.error.HTTPError(str(request.full_url), 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    assert reader.ticket("DIG-4795") is None
+    assert len(timeouts) == 1
+
+
+def test_a_truncated_answer_is_a_transport_failure_and_not_a_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A body that stops half way is not a fact, and it must not crash the gate.
+
+    A truncated response raises `http.client.IncompleteRead`, which is neither
+    an `OSError` nor a `ValueError`. Before this change it escaped the read
+    entirely and the gate crashed instead of failing closed.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(mq.time, "sleep", lambda _seconds: None)
+    answers: list[Any] = [
+        http.client.IncompleteRead(b'{"id": "issue-0'),
+        {"id": "issue-0000"},
+    ]
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return _FakeResponse(answer)
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    assert reader.ticket("DIG-4795") == {"id": "issue-0000"}
+    assert len(answers) == 0
+
+
+def test_a_server_error_is_asked_for_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 5xx is the API failing, not the API answering, so it earns one more try."""
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(mq.time, "sleep", lambda _seconds: None)
+    timeouts: list[float | None] = []
+    answers: list[Any] = [
+        urllib.error.HTTPError(
+            "http://127.0.0.1:3100/api/issues/DIG-4795", 503, "Unavailable", {}, None
+        ),
+        {"id": "issue-0000"},
+    ]
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        timeouts.append(timeout)
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return _FakeResponse(answer)
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    assert reader.ticket("DIG-4795") == {"id": "issue-0000"}
+    assert len(timeouts) == 2
 
 
 def test_shadow_mode_merges_and_records_what_it_would_refuse(
