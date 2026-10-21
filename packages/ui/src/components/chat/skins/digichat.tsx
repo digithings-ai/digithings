@@ -44,6 +44,10 @@ import {
   type EmbedChatPrefsApi,
 } from "../stock/embed-chat-prefs";
 import { DigichatComposerToolbar } from "./digichat-composer-toolbar";
+import {
+  downloadThreadSnapshot,
+  showSnapshotError,
+} from "../../../replay/browser";
 
 /**
  * Product slash-command wiring injected by the host (WS4). Structural mirror
@@ -186,11 +190,13 @@ export function DigichatSkin({
     copy?.welcome ?? "",
     copy?.placeholder ?? "",
   );
-  const { pageContext } = useSkinChrome();
+  const skinChrome = useSkinChrome();
+  const { pageContext } = skinChrome;
   const reasoningUi = useDisclosureUi("reasoning");
   const toolCallsUi = useDisclosureUi("toolCalls");
   // The raw view level is what decides how much of the work is shown.
-  const workVisibility = workVisibilityForView(useDeployUi().view);
+  const deployUi = useDeployUi();
+  const workVisibility = workVisibilityForView(deployUi.view);
   const gateSubmit = useStockComposerGateSubmit();
   const gate = useStockSendGate();
   const prefs = useEmbedChatPrefsOptional();
@@ -238,6 +244,13 @@ export function DigichatSkin({
         const md = serializeThreadMarkdown(threadTurns(aui.thread().getState().messages));
         if (md) downloadMarkdown("digichat.md", md);
       },
+      exportHtml: () => {
+        void downloadThreadSnapshot().catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : "HTML export failed.";
+          if (typeof document !== "undefined") showSnapshotError(document, message);
+          console.error("html export failed", error);
+        });
+      },
     }),
     [aui],
   );
@@ -247,6 +260,7 @@ export function DigichatSkin({
     return slashWiring.buildCommands(slashPrefs).map((c) => {
       if (c.id === "copy") return { ...c, execute: copyExport.copy };
       if (c.id === "export") return { ...c, execute: copyExport.exportThread };
+      if (c.id === "export-html") return { ...c, execute: copyExport.exportHtml };
       if (c.id === "compact") {
         return {
           ...c,
@@ -376,7 +390,9 @@ export function DigichatSkin({
         if (action.kind === "run") {
           event.preventDefault();
           if (action.command.id === "copy") copyExport.copy();
-          else if (action.command.id === "export") copyExport.exportThread();
+          else if (action.command.id === "export" && action.arg.trim().toLowerCase() === "html") {
+            copyExport.exportHtml();
+          } else if (action.command.id === "export") copyExport.exportThread();
           else if (action.command.id === "compact") {
             // Palette compact serializes the thread and queues a summary.
             // executeDef only resets prefs and opens an empty thread.

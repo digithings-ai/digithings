@@ -98,6 +98,11 @@ describe("parseSlashInput", () => {
       command: { id: "export", kind: "client" },
       arg: "",
     });
+    expect(parseSlashInput("/export html")).toMatchObject({
+      kind: "command",
+      command: { id: "export", kind: "client" },
+      arg: "html",
+    });
   });
 });
 
