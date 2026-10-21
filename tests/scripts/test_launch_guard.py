@@ -652,22 +652,6 @@ class LaunchctlParsingTests(unittest.TestCase):
         self.assertIsNone(_guard.launchctl_job("ai.digithings.local-ci-not-a-job"))
 
 
-class CommittedPathTests(unittest.TestCase):
-    """The committed file carries no developer's home path.
-
-    A personal absolute path in a committed test leaks a user and a host and
-    ties the test to one machine. The fixture paths are built from one neutral
-    fake home; this keeps them that way.
-    """
-
-    def test_the_module_carries_no_personal_home_path(self):
-        with open(os.path.abspath(__file__), "r", encoding="utf-8") as fh:
-            source = fh.read()
-        # The needle is built at run time, so this test does not put the path
-        # it forbids into the file it forbids it in.
-        self.assertNotIn(os.path.join(os.sep, "Users", ""), source)
-
-
 class LaunchctlListTests(unittest.TestCase):
     """The job table launchctl prints: this is where the label comes from.
 
@@ -706,6 +690,35 @@ class LaunchctlListTests(unittest.TestCase):
             for pid, label in jobs.items():
                 self.assertIsInstance(pid, int)
                 self.assertIsInstance(label, str)
+
+
+class CommittedPathTests(unittest.TestCase):
+    """The committed file carries no developer's home path.
+
+    A personal absolute path in a committed test leaks a user and a host and
+    ties the test to one machine. The fixture paths are built from one neutral
+    fake home; this keeps them that way.
+    """
+
+    def test_the_module_carries_no_personal_home_path(self):
+        with open(os.path.abspath(__file__), "r", encoding="utf-8") as fh:
+            source = fh.read()
+        # The needles are built at run time, so this test does not put the
+        # paths it forbids into the file it forbids them in.
+        mac_home = os.path.join(os.sep, "Users", "")
+        self.assertNotIn(mac_home, source)
+        # The one home the module may name is the neutral one it builds its
+        # fixtures from: a second home is a second developer's name.
+        linux_home = os.path.join(os.sep, "home", "")
+        neutral = linux_home + "runner"
+        start = source.find(linux_home)
+        while start != -1:
+            self.assertTrue(
+                source.startswith(neutral, start),
+                "the module names a home that is not the neutral fake home: "
+                + source[start : start + 40],
+            )
+            start = source.find(linux_home, start + 1)
 
 
 class EnvironmentIndependenceTests(unittest.TestCase):
