@@ -320,7 +320,8 @@ export async function guardrailPrepareStep<M extends { role: string; content: un
   signal?: AbortSignal;
   steps: readonly StepLike[];
   messages: readonly M[];
-  instructions?: string;
+  /** The instructions from the original streamText call, not a later step's copy. */
+  initialInstructions?: string;
 }): Promise<
   | {
       toolChoice?: "none";
@@ -348,8 +349,8 @@ export async function guardrailPrepareStep<M extends { role: string; content: un
     const clipped = messages.some((message, i) => message.content !== opts.messages[i]?.content);
     return clipped ? { messages } : undefined;
   }
-  const instructions = opts.instructions
-    ? `${opts.instructions}\n\n${clearance.instruction}`
+  const instructions = opts.initialInstructions
+    ? `${opts.initialInstructions}\n\n${clearance.instruction}`
     : clearance.instruction;
   return {
     ...(clearance.action === "stop-tools" ? { toolChoice: "none" as const } : {}),

@@ -685,6 +685,9 @@ export async function createDigigraphTraceStreamResponse(opts: {
           // resets which text part subsequent "content" deltas land in.
           if (payload.type === "round_boundary") {
             closeText();
+            // Notice only. beforeRound may ask for an answer-band follow-up;
+            // this loop has no second request to attach it to, so the result
+            // is discarded. The tool-cap notice still fires from noteToolCap.
             if (opts.guard?.active) {
               await opts.guard.beforeRound({
                 writer,
