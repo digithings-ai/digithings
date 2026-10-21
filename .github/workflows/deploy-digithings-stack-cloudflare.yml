@@ -124,6 +124,11 @@ on:
       # transitive pin changes the image and matches no filter - it would
       # deploy nothing and the image would keep the old pins.
       - "uv.lock"
+      # .dockerignore decides what the build context carries, and this image
+      # is built from the repository root, so a change to it changes the
+      # image. A merge that only edits it matches no filter and deploys
+      # nothing: the running container keeps the old contents.
+      - ".dockerignore"
   pull_request:
     paths:
       - "infra/docker/Dockerfile.digithings-stack-cloudflare"
@@ -155,6 +160,11 @@ on:
       # transitive pin changes the image and matches no filter - it would
       # deploy nothing and the image would keep the old pins.
       - "uv.lock"
+      # .dockerignore decides what the build context carries, and this image
+      # is built from the repository root, so a change to it changes the
+      # image. A merge that only edits it matches no filter and deploys
+      # nothing: the running container keeps the old contents.
+      - ".dockerignore"
   workflow_dispatch:
     inputs:
       ref:

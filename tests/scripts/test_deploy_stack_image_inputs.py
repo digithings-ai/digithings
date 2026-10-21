@@ -438,6 +438,10 @@ def test_the_path_filters_include_the_packaging_action() -> None:
     `uv export --frozen` writes out of it, so a merge that only bumps a
     transitive pin changes the image and matches no filter - it would deploy
     nothing and the image would keep the old pins.
+
+    So is .dockerignore: the image is built from the repository root, so the
+    root .dockerignore decides what the build context carries. A merge that
+    only edits it changes the image and matches no filter.
     """
     triggers = _doc()[True]
     for trigger in ("push", "pull_request"):
@@ -450,6 +454,12 @@ def test_the_path_filters_include_the_packaging_action() -> None:
             f"the {trigger} path filter does not match uv.lock, so a merge that only "
             "bumps a transitive pin changes the image and matches no filter: it would "
             "deploy nothing and the image would keep the old pins"
+        )
+        assert ".dockerignore" in paths, (
+            f"the {trigger} path filter does not match .dockerignore, so a merge that "
+            "only edits it changes what the build context carries and matches no "
+            "filter: it would deploy nothing and the container would keep the old "
+            "contents"
         )
 
 
