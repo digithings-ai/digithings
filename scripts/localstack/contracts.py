@@ -490,6 +490,10 @@ def _port_value(name: str, value: str) -> int:
     named: never templated, and never silently replaced by the default,
     because a value that is not a port does not make the URL unparseable - it
     makes the URL point somewhere else.
+
+    No surrounding whitespace either: a port is written as plain decimal
+    digits, so ``" 8000"`` is not a port (DIG-4911, ask 1) and the value is
+    refused rather than trimmed into one.
     """
     if not _PORT_RE.fullmatch(value):
         raise InvalidPort(
@@ -574,9 +578,14 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
     makes ``urlsplit(...).hostname`` read ``evil.com``. So such a value is
     refused loudly (:class:`InvalidPort`) rather than substituted.
 
-    Surrounding whitespace is noise around a number, not a different number:
-    the Supabase port knob already strips (localstack.supabase_ports), so the
-    gate agrees with it rather than refusing a value the stack accepts.
+    The port value is validated as it was written, not as a stripped copy: a
+    port is plain decimal digits, so ``" 8000"`` is refused like any other
+    value that is not a port (DIG-4911, ask 1). A reference outside the port
+    slot is an ordinary value, and its surrounding whitespace is stripped.
+
+    The Supabase pair keeps its own soft policy: ``localstack.localenv``
+    normalizes ``DT_SUPABASE_PORT`` before the contracts see it, so the
+    contracts never receive a padded value for that knob.
 
     The URL that comes out is then parsed and refused unless it is still the
     loopback probe on the validated port (:func:`_assert_loopback_port`), so
@@ -590,16 +599,21 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
 
     def sub(match: re.Match[str]) -> str:
         name, default = match.group(1), match.group(2)
-        # Surrounding whitespace is noise around a number, not a different
-        # number: the Supabase port knob already strips (localstack
-        # .supabase_ports), so the gate must agree with it.
-        value = (config.get(name) or default or "").strip()
+        raw = config.get(name) or default or ""
         if _fills_the_port_slot(url, match.start()):
             # The value has to be a port before it is templated: a value that
             # is not a port is the one thing that can move the URL off this
-            # machine, so it is refused loudly instead of substituted.
-            ports[name] = _port_value(name, value)
-        return value
+            # machine, so it is refused loudly instead of substituted. It is
+            # validated as it was written: a port is plain decimal digits, so
+            # a padded value (" 8000") is refused, not trimmed into one.
+            port = _port_value(name, raw)
+            ports[name] = port
+            # What lands in the URL is the validated integer, so the port
+            # slot carries the port and nothing else.
+            return str(port)
+        # A reference outside the port slot is an ordinary value: its
+        # surrounding whitespace is noise and is stripped.
+        return raw.strip()
 
     expanded = _ENV_REF.sub(sub, url)
     # Defence in depth: the resolved URL is the one the probe opens, so it is
