@@ -55,6 +55,7 @@ export {
   SEARCH_ENGINE_CHOICES,
   isSearchEngine,
   VIEW_CODES,
+  VIEW_LABELS,
   VIEW_CHOICES,
   isViewCode,
   THINKING_CODES,

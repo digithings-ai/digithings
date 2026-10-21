@@ -8,6 +8,7 @@ import {
   type FC,
   type PropsWithChildren,
 } from "react";
+import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix } from "../DotMatrix";
 import { cva, type VariantProps } from "class-variance-authority";
 import { useScrollLock } from "@assistant-ui/react";
@@ -121,20 +122,22 @@ function ToolGroupTrigger({
         "group-data-[variant=muted]/tool-group-root:w-full group-data-[variant=muted]/tool-group-root:px-4",
         className,
       )}
+      // The group is collapsed while the tools run, so the trigger is the only
+      // thing on screen that knows about it. The state is on the control, not
+      // in a second copy of its name.
+      aria-busy={active || undefined}
       {...props}
     >
-      {/* The slot is always filled — the loading trail while the tools run,
-          the quiet corner dots when they are done — so the label and the
-          arrow keep their place. */}
+      {/* The slot is always filled — a full grid, solid and still, the same
+          weight as the reasoning glyph — so the label and the arrow keep
+          their place. */}
       <span data-slot="tool-group-trigger-loader" className="aui-tool-group-trigger-loader inline-flex shrink-0">
         {/* A full grid, the same weight as the reasoning glyph: solid, still,
             and the same size in both states, so the label never shifts. The
-            chain header carries the running state. */}
-        <DotMatrix
-          state="tools"
-          label={active ? "Tools running" : "Tools"}
-          className="!size-3 shrink-0"
-        />
+            chain header carries the running state. The trigger is named by
+            its text, so the glyph carries no name of its own, and the running
+            state is exposed on the trigger as aria-busy. */}
+        <DotMatrix state="tools" decorative className="!size-3 shrink-0" />
       </span>
       <span
         data-slot="tool-group-trigger-label"
@@ -147,18 +150,7 @@ function ToolGroupTrigger({
       >
         {text}
       </span>
-      <span
-        data-slot="tool-group-trigger-chevron"
-        className={cn(
-          "aui-tool-group-trigger-chevron inline-flex shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          "-rotate-90",
-          "group-data-open/trigger:rotate-0",
-          "group-data-panel-open/trigger:rotate-0",
-        )}
-      >
-        <DotMatrix state="expand" label="Toggle tools" className="!size-3 shrink-0" />
-      </span>
+      <DisclosureChevron />
     </CollapsibleTrigger>
   );
 }

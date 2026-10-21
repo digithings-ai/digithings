@@ -235,6 +235,43 @@ const REASONING_MESSAGES: ThreadMessageLike[] = [
   },
 ];
 
+/**
+ * The agent only thought, then answered: a reasoning part with no tool call
+ * in the turn. The work chain is still the disclosure boundary here — the
+ * reasoning nests under it, so a quiet client folds this turn the same way
+ * it folds a tool turn or a turn with both.
+ */
+const REASONING_ONLY_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      { type: "reasoning", text: "thinking through the plan" },
+      { type: "text", text: "grounded answer" },
+    ],
+  },
+];
+
+/**
+ * The agent is still working: a tool call with no result, and the message
+ * is still running. This is the one state where the quiet level and the
+ * balanced level differ — quiet keeps the row shut while the work runs,
+ * balanced opens it.
+ */
+const RUNNING_TOOL_MESSAGES: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    status: { type: "running" },
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "run1",
+        toolName: "digisearch",
+        argsText: "{}",
+      },
+    ],
+  },
+];
+
 const TIMED_MESSAGE: ThreadMessageLike = {
   role: "assistant",
   content: [{ type: "text", text: "grounded answer" }],
@@ -502,6 +539,94 @@ describe("DigichatThread", () => {
     unmount();
   });
 
+  it("folds the work the same way in every message shape when the client is quiet", async () => {
+    // The chain is the outer disclosure boundary: every work part nests
+    // under it, so a reasoning-only, a tool-only and a combined turn all
+    // fold the same way. A quiet client sees the titles, never the work.
+    const shapes = [
+      {
+        name: "reasoning only",
+        messages: REASONING_ONLY_MESSAGES,
+        rows: ['[data-slot="reasoning-root"]'],
+        work: ["thinking through the plan"],
+      },
+      {
+        name: "tool only",
+        messages: TOOL_MESSAGES,
+        rows: ['[data-slot="tool-group-root"]'],
+        work: ["digisearch", "digivault_search_notes"],
+      },
+      {
+        name: "reasoning and tool",
+        messages: REASONING_MESSAGES,
+        rows: ['[data-slot="reasoning-root"]', '[data-slot="tool-group-root"]'],
+        work: ["thinking through the plan", "digisearch"],
+      },
+    ];
+    for (const shape of shapes) {
+      const { host, unmount } = await mount({
+        initialMessages: shape.messages,
+        workVisibility: "quiet",
+      });
+      await act(async () => {});
+      // One chain per turn, and it is folded once the answer has started.
+      const chains = host.querySelectorAll('[data-slot="aui_work-chain"]');
+      expect(chains.length, shape.name).toBe(1);
+      const chain = chains[0]!;
+      expect(chain.hasAttribute("data-closed"), shape.name).toBe(true);
+      for (const selector of shape.rows) {
+        const row = host.querySelector(selector);
+        expect(row, shape.name).toBeTruthy();
+        // The row hangs inside the chain. That is what makes the level's
+        // rule reach every shape of work.
+        expect(chain.contains(row!), shape.name).toBe(true);
+        expect(row!.hasAttribute("data-closed"), shape.name).toBe(true);
+      }
+      // And the work itself is not on the page.
+      for (const text of shape.work) {
+        expect(host.textContent, shape.name).not.toContain(text);
+      }
+      // The answer is still there: the fold takes the work, not the reply.
+      expect(host.textContent, shape.name).toContain("grounded answer");
+      unmount();
+    }
+  });
+
+  it("keeps the work shut while the agent works when the client is quiet", async () => {
+    // The one rule quiet carries alone: while the work runs, the rows stay
+    // shut. The same turn under the balanced level opens the row, so the
+    // assertion is about the level and not about the fixture.
+    const { host, unmount } = await mount({
+      initialMessages: RUNNING_TOOL_MESSAGES,
+      workVisibility: "quiet",
+    });
+    await act(async () => {});
+    const chain = host.querySelector('[data-slot="aui_work-chain"]');
+    expect(chain).toBeTruthy();
+    // The titles are the status line while the agent works, so the chain
+    // is open; the row inside it is not.
+    expect(chain?.hasAttribute("data-open")).toBe(true);
+    const row = host.querySelector('[data-slot="tool-group-root"]');
+    expect(row).toBeTruthy();
+    expect(row?.hasAttribute("data-closed")).toBe(true);
+    // The running tool is not on the page either.
+    expect(host.textContent).not.toContain("Running tool: digisearch");
+    unmount();
+
+    // The control: the same turn under the balanced level opens the row.
+    const balanced = await mount({
+      initialMessages: RUNNING_TOOL_MESSAGES,
+      workVisibility: "balanced",
+    });
+    await act(async () => {});
+    expect(
+      balanced.host
+        .querySelector('[data-slot="tool-group-root"]')
+        ?.hasAttribute("data-open"),
+    ).toBe(true);
+    balanced.unmount();
+  });
+
   it("accumulates two tool runs into one group when only a status part separates them", async () => {
     const { host, unmount } = await mount({
       initialMessages: TWO_TOOL_RUNS_MESSAGES,
@@ -524,7 +649,7 @@ describe("DigichatThread", () => {
     });
     await act(async () => {});
     const labels = Array.from(
-      host.querySelectorAll('[data-slot="aui_work-chain-label"]'),
+      host.querySelectorAll('[data-slot="aui_work-status-label"]'),
     ).map((el) => el.textContent);
     // The block before the text is done — its folded title follows the last
     // step it took; the block after it is still working.
@@ -535,7 +660,7 @@ describe("DigichatThread", () => {
   it("stops working once the answer starts, even while the turn streams", async () => {
     const { host, unmount } = await mount({ initialMessages: TOOL_MESSAGES });
     await act(async () => {});
-    const label = host.querySelector('[data-slot="aui_work-chain-label"]');
+    const label = host.querySelector('[data-slot="aui_work-status-label"]');
     // Folded, the title follows the last step: the work is done, so it says
     // what it did rather than sitting on a static "Worked".
     expect(label?.textContent).toBe("Used 2 tools");

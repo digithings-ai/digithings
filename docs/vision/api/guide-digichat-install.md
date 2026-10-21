@@ -17,13 +17,13 @@ digithings ships **self-hosted** AI infra. Clients install digichat **releases f
 
 ```bash
 docker build -f apps/digichat/Dockerfile \
-  --build-arg DIGICHAT_VERSION=2.4.0 \
+  --build-arg DIGICHAT_VERSION=2.6.5 \
   --build-arg DIGICHAT_REVISION="$(git rev-parse HEAD)" \
-  -t digichat:2.4.0 .
+  -t digichat:2.6.5 .
 ```
 
 - Git tag: `digichat-vX.Y.Z`
-- Published image: not yet. The publish workflow is back and builds an image from each `digichat-vX.Y.Z` tag, but no tag after `digichat-v2.3.2` has been cut, so there is nothing published to pull. Until the next release, digichat builds from source.
+- Published image: `ghcr.io/digithings-ai/digichat:vX.Y.Z`, from `v2.6.4` on (first published 2026-10-21; private, pull with a `ghcr.io` credential). The publish workflow builds one from each `digichat-vX.Y.Z` tag; the `v2.4.x`–`v2.6.3` tags have no image. Without registry access, build from source.
 - Changelog: `apps/digichat/CHANGELOG.md`
 - Pin by digest once you publish the image yourself — do not rely on `:latest`.
 

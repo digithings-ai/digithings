@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 
 /**
  * The parts the chain describes, and the reason this test stubs
@@ -43,7 +43,7 @@ const doneReasoning = { type: "reasoning", text: "thought", status: { type: "com
 const answer = { type: "text", text: "grounded answer" };
 
 function headerText(container: HTMLElement): string | null {
-  return container.querySelector('[data-slot="aui_work-chain-label"]')?.textContent ?? null;
+  return container.querySelector('[data-slot="aui_work-status-label"]')?.textContent ?? null;
 }
 
 describe("workStatusText", () => {
@@ -133,5 +133,18 @@ describe("WorkChain header", () => {
       </WorkChain>,
     );
     expect(headerText(container)).toBe("Worked");
+  });
+
+  it("names the chain trigger by its title only (DIG-4669)", () => {
+    aui.parts = [doneTool("digisearch"), answer];
+    render(
+      <WorkChain indices={[0, 1]} followedByText>
+        <div>chain</div>
+      </WorkChain>,
+    );
+    // The marker used to carry the same title as the label, so the trigger
+    // announced the title twice.
+    const trigger = screen.getByRole("button", { name: "Used 1 tool" });
+    expect(trigger.querySelector('[role="img"]')).toBeNull();
   });
 });

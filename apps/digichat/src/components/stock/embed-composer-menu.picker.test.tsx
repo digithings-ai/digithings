@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EmbedComposerMenu, cursorOnCurrentRow, type MenuRow } from "./embed-composer-menu";
+import { VIEW_MODES } from "@/lib/view-modes";
+import { VIEW_LABELS } from "@digithings/digichat-ui";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
@@ -213,6 +215,53 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("renders the shared wording for every view level, so no level is left blank", async () => {
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu kind="view" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    // The page offers exactly the app's levels and nothing else: a retired id
+    // on this page is a level the product renamed away (#6034 renamed
+    // compact/detailed to quiet/verbose, #6079 retired hidden).
+    const offered = (await screen.findAllByRole("menuitemradio")).map(
+      (row) => /\/view\s+([a-z]+)/.exec(row.textContent ?? "")?.[1],
+    );
+    expect(offered).toEqual([...VIEW_MODES]);
+
+    // Every level carries the shared wording in its own column on the right
+    // of the row. A level with no wording renders a blank column, which is
+    // what the quiet and verbose rows did while the menu kept its own
+    // retired label map (DIG-4665). The wording comes from the shared map,
+    // so this test walks the app's own ids: a rename cannot leave a row
+    // unlabelled. The description must land in the description column and
+    // not in the label, so the assertion reads the row's child cells
+    // instead of its whole text.
+    for (const level of VIEW_MODES) {
+      const wording = VIEW_LABELS[level];
+      expect(wording.trim()).not.toBe("");
+
+      const row = await screen.findByRole("menuitemradio", {
+        name: new RegExp(`^/view ${level}`, "i"),
+      });
+      const cells = Array.from(row.children) as HTMLElement[];
+      const label = cells.find((cell) => cell.textContent?.trim() === `/view ${level}`);
+      expect(label).toBeDefined();
+      // The description cell is the other cell that truncates. The label cell
+      // is excluded, so a label that grows a `truncate` of its own cannot
+      // make this test read the label as the description.
+      const description = cells.find(
+        (cell) => cell !== label && cell.querySelector(".truncate"),
+      );
+      expect(description).toBeDefined();
+      expect(description).not.toBe(label);
+      expect(description?.textContent).toContain(wording);
+    }
+    unmount();
+  });
+
   it("hides the search-engine row on the main menu when the tenant disallows web", async () => {
     const onClose = vi.fn();
     const { unmount } = render(
@@ -222,6 +271,47 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     );
     expect(screen.queryByText("/search-engine")).toBeNull();
     unmount();
+  });
+
+  it("lists /theme in settings and paints the chosen palette", async () => {
+    const user = userEvent.setup();
+    // happy-dom's storage is not usable under every Node (a recent Node ships
+    // its own `localStorage` global that shadows it), so stub a Map-backed one.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
+    localStorage.setItem("dt-theme", "dark");
+    localStorage.removeItem("dt-palette");
+    document.documentElement.removeAttribute("data-palette");
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("menuitem", { name: /\/theme/ }));
+
+    const current = await screen.findByRole("menuitemradio", { name: /\/theme default dark/i });
+    expect(current).toHaveAttribute("aria-checked", "true");
+    const aura = screen.getByRole("menuitemradio", { name: /\/theme aura dark/i });
+    await user.click(aura);
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
+    expect(localStorage.getItem("dt-theme")).toBe("dark");
+    expect(localStorage.getItem("dt-palette")).toBe("aura");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    vi.unstubAllGlobals();
   });
 
   it("shows the search-engine row on the main menu when the tenant allows web", async () => {
@@ -364,11 +454,14 @@ describe("EmbedComposerMenu current value", () => {
 
     const balanced = await screen.findByRole("menuitemradio", { name: /\/view balanced/ });
     expect(hasChevron(balanced)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/view hidden/ }))).toBe(false);
+    // `quiet` is a level that is not the current value, so it carries no
+    // cursor. It was `hidden` before #6079 retired that level; the assertion
+    // is the same, on a level the ladder still has.
+    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/view quiet/ }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setView).toHaveBeenCalledWith("balanced");
-    expect(api.setView).not.toHaveBeenCalledWith("hidden");
+    expect(api.setView).not.toHaveBeenCalledWith("quiet");
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

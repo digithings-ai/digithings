@@ -641,11 +641,14 @@ def grokipedia_get_page(slug: str, include_content: bool = True) -> str:
 
 
 # --- Art. 9 screen on the MCP surface (DIG-1083 leaf 10; spec DIG-912 §5.4) --
-# This server is loopback-bound and unauthenticated by default: ``DIGI_MCP_REQUIRE_AUTH``
-# is read in exactly one place repo-wide and it is not here. Screening is therefore the
-# only control standing in front of the surface, which is why the surface is declared
-# explicitly (``digisearch.client.SURFACE_MCP``) rather than left to the path-keyed floor
-# in ``digibase.art9`` — a registry keyed by path cannot see a surface that has no path.
+# This server is loopback-bound by default - the local stack overrides the bind to
+# 0.0.0.0 inside the container so its published port answers (docker-compose.yml),
+# which leaves the compose network as the reachable surface - and unauthenticated:
+# ``DIGI_MCP_REQUIRE_AUTH`` is read in exactly one place repo-wide and it is not
+# here. Screening is therefore the only control standing in front of the surface,
+# which is why the surface is declared explicitly (``digisearch.client.SURFACE_MCP``)
+# rather than left to the path-keyed floor in ``digibase.art9`` - a registry keyed
+# by path cannot see a surface that has no path.
 #
 # FastMCP 1.9.3 has no middleware hook (``mcp.server.fastmcp.middleware`` does not exist),
 # so the seam is the registered ``Tool.fn``: dispatch runs

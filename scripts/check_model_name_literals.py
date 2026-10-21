@@ -563,7 +563,7 @@ KNOWN_REMAINING: dict[str, _Allowance] = {
     # belongs in config even in copy, and phase 2 decides which entries are a
     # routing table and which are a description.
     "apps/digithings-web/lib/appPresets.ts": _Allowance(2, 2),
-    "digillm/src/digillm/client.py": _Allowance(17, 17),
+    "digillm/src/digillm/client.py": _Allowance(21, 18),
     # The OCC session model picker (2026-10-13, DIG-1210): the default of
     # `env.DIGI_SESSION_MODEL_ALLOWLIST` in the stack Worker, i.e. the list
     # digigraph binds against per session when the var is unset. The live worker

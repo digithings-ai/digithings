@@ -40,6 +40,7 @@ import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
 import { connectionStatusText } from "../connection-status";
+import { WorkStatusLead } from "../work-status-lead";
 import { Skeleton } from "../../../ui/skeleton";
 import { cn } from "./cn";
 import { SkinCredit } from "../stock/skin-credit";
@@ -176,10 +177,10 @@ export type ThreadProps = {
   /** Disclosure mode for grouped tool-call runs. Default collapsed. */
   toolCallsMode?: GroupDisclosureMode | undefined;
   /**
-   * How much of the agent's work the user sees: `quiet` (one summary line),
-   * `balanced` (open while it runs, collapsed when it finishes) or `verbose`
-   * (stays open). The client's `features.view` picks the default; the user can
-   * change it per session.
+   * How much of the agent's work the user sees: `quiet` (the titles only,
+   * with the folded header as a live status line), `balanced` (open while it
+   * runs, collapsed when it finishes) or `verbose` (stays open). The client's
+   * `features.view` picks the default; the user can change it per session.
    */
   workVisibility?: WorkVisibility | undefined;
   /**
@@ -691,7 +692,7 @@ const ThreadScrollToBottom: FC = () => {
         variant="outline"
         className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
-        <DotMatrix state="scroll" label="Scroll to bottom" className="size-3.5" />
+        <DotMatrix state="scroll" decorative className="size-3.5" />
       </TooltipIconButton>
     </ThreadPrimitive.ScrollToBottom>
   );
@@ -755,7 +756,7 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
       <span className="aui-msg-marker" aria-hidden="true">
         <DotMatrix
           state="example"
-          label="Example"
+          decorative
           className="aui-thread-welcome-suggestion-mark size-3.5"
         />
       </span>
@@ -773,7 +774,7 @@ const ThreadSuggestionItem: FC = () => {
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix
             state="example"
-            label="Example"
+            decorative
             className="aui-thread-welcome-suggestion-mark size-3.5"
           />
         </span>
@@ -1003,7 +1004,7 @@ const ComposerSendControls: FC = () => {
             >
               <DotMatrix
                 state="dictate"
-                label="Voice input"
+                decorative
                 className="aui-composer-dictate-icon size-3.5"
               />
             </TooltipIconButton>
@@ -1022,7 +1023,7 @@ const ComposerSendControls: FC = () => {
             >
               <DotMatrix
                 state="stop"
-                label="Stop dictation"
+                decorative
                 className="aui-composer-stop-dictation-icon size-3.5"
               />
             </TooltipIconButton>
@@ -1044,7 +1045,7 @@ const ComposerSendControls: FC = () => {
         >
           <DotMatrix
             state="send"
-            label="Send"
+            decorative
             className="aui-composer-send-icon size-3.5"
           />
         </Button>
@@ -1060,7 +1061,7 @@ const ComposerSendControls: FC = () => {
           >
             <DotMatrix
               state="stop"
-              label="Stop generating"
+              decorative
               className="aui-composer-cancel-icon size-3.5"
             />
           </Button>
@@ -1083,21 +1084,17 @@ const AssistantWorkingIndicator: FC = () => {
   const statusText = useAuiState((s) => connectionStatusText(s.message.parts));
   const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
+  const statusLabel = wakePhase === "waking" ? "Waking up services…" : statusText;
   return (
     <span
       data-slot="aui_assistant-message-indicator"
-      className="flex items-center gap-2"
+      className="aui-work-status"
     >
-      <DotMatrix
-        state="loading"
-        label="Assistant is working"
-        className="!size-3"
+      <WorkStatusLead
+        marker="loading"
+        markerLabel="Assistant is working"
+        label={statusLabel}
       />
-      {wakePhase === "waking" ? (
-        <span className="text-xs text-muted-foreground">Waking up services…</span>
-      ) : statusText ? (
-        <span className="text-xs text-muted-foreground">{statusText}</span>
-      ) : null}
     </span>
   );
 };
@@ -1174,8 +1171,17 @@ const AssistantMessage: FC = () => {
                 // The parts still render bare: a backend notice (DIG-4459)
                 // rides a data part and must not vanish with the header.
                 if (!holdsWork) return <>{children}</>;
-                // Quiet clients see one line for the whole chain instead of
-                // the two collapsibles.
+                // The chain is the one disclosure boundary: every work part
+                // nests under it (see `chainGroupBy`), so the level's fold
+                // rule here reaches a reasoning-only, a tool-only and a
+                // combined turn alike. The rows inside take their own rule
+                // from the same disclosure. See the decision note in
+                // packages/ui/ARCHITECTURE.md.
+                //
+                // The `hidden` level this branch served is retired: the
+                // `summaryOnly` field is always false now, and a quiet
+                // client gets the folded chain below instead of a summary
+                // line. The branch stays until the field goes.
                 if (disclosure.summaryOnly) {
                   return (
                     <div data-slot="aui_chain-of-thought">
@@ -1357,26 +1363,26 @@ const AssistantActionBar: FC = () => {
         >
           <BranchPickerPrimitive.Previous asChild>
             <TooltipIconButton tooltip="Undo">
-              <DotMatrix state="prev" label="Undo" className="size-3.5" />
+              <DotMatrix state="prev" decorative className="size-3.5" />
             </TooltipIconButton>
           </BranchPickerPrimitive.Previous>
         </AuiIf>
       ) : null}
       <ActionBarPrimitive.Reload asChild>
         <TooltipIconButton tooltip="Redo">
-          <DotMatrix state="refresh" label="Redo" className="size-3.5" />
+          <DotMatrix state="refresh" decorative className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Reload>
       {feedback ? (
         <>
           <ActionBarPrimitive.FeedbackPositive asChild>
             <TooltipIconButton tooltip="Good response">
-              <DotMatrix state="thumbsUp" label="Good response" className="size-3.5" />
+              <DotMatrix state="thumbsUp" decorative className="size-3.5" />
             </TooltipIconButton>
           </ActionBarPrimitive.FeedbackPositive>
           <ActionBarPrimitive.FeedbackNegative asChild>
             <TooltipIconButton tooltip="Bad response">
-              <DotMatrix state="thumbsDown" label="Bad response" className="size-3.5" />
+              <DotMatrix state="thumbsDown" decorative className="size-3.5" />
             </TooltipIconButton>
           </ActionBarPrimitive.FeedbackNegative>
         </>
@@ -1384,7 +1390,7 @@ const AssistantActionBar: FC = () => {
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger asChild>
           <TooltipIconButton tooltip="More">
-            <DotMatrix state="more" label="More" className="size-3.5" />
+            <DotMatrix state="more" decorative className="size-3.5" />
           </TooltipIconButton>
         </ActionBarMorePrimitive.Trigger>
         <ActionBarMorePrimitive.Content
@@ -1395,7 +1401,7 @@ const AssistantActionBar: FC = () => {
         >
           <ActionBarPrimitive.ExportMarkdown asChild>
             <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink">
-              <DotMatrix state="export" label="Export" className="size-3.5" />
+              <DotMatrix state="export" decorative className="size-3.5" />
               Export as Markdown
             </ActionBarMorePrimitive.Item>
           </ActionBarPrimitive.ExportMarkdown>
@@ -1473,7 +1479,7 @@ const UserActionBar: FC = () => {
         className="aui-user-action-edit"
         onClick={onEdit}
       >
-        <DotMatrix state="edit" label="Edit" className="size-3.5" />
+        <DotMatrix state="edit" decorative className="size-3.5" />
       </TooltipIconButton>
     </ActionBarPrimitive.Root>
   );
@@ -1494,7 +1500,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
     >
       <BranchPickerPrimitive.Previous asChild>
         <TooltipIconButton tooltip="Previous">
-          <DotMatrix state="prev" label="Previous" className="size-3.5" />
+          <DotMatrix state="prev" decorative className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Previous>
       <span className="aui-branch-picker-state font-medium">
@@ -1502,7 +1508,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
       </span>
       <BranchPickerPrimitive.Next asChild>
         <TooltipIconButton tooltip="Next">
-          <DotMatrix state="next" label="Next" className="size-3.5" />
+          <DotMatrix state="next" decorative className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Next>
     </BranchPickerPrimitive.Root>

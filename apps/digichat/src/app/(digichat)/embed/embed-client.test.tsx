@@ -46,6 +46,125 @@ const proofCodeLines = codeLinesOf(embedClientSrc).filter((line) =>
   /trialProof|getTrialProof|TRIAL_PROOF|trial:proof/.test(line),
 );
 
+/**
+ * The source with its comments removed.
+ *
+ * A pin that reads a comment reads nothing: a comment can carry the marker
+ * (the pin would read the prose while the wiring says something else) and a
+ * word in prose can stand in for the wiring (the pin would pass on code that
+ * no longer names the backend). The comments become spaces, so the code keeps
+ * its place and the line of a site does not move.
+ */
+function codeOnly(source: string): string {
+  let out = "";
+  let i = 0;
+  let quote: string | null = null;
+  while (i < source.length) {
+    const ch = source.charAt(i);
+    const next = source.charAt(i + 1);
+    if (quote !== null) {
+      out += ch;
+      if (ch === "\\" && i + 1 < source.length) {
+        out += next;
+        i += 2;
+        continue;
+      }
+      if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      while (i < source.length && source.charAt(i) !== "\n") {
+        out += " ";
+        i += 1;
+      }
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      while (
+        i < source.length &&
+        !(source.charAt(i) === "*" && source.charAt(i + 1) === "/")
+      ) {
+        out += source.charAt(i) === "\n" ? "\n" : " ";
+        i += 1;
+      }
+      out += "  ";
+      i += 2;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+/**
+ * The expression that wires the provider label.
+ *
+ * The wiring is one property, so the expression is the whole statement: it
+ * ends at the first comma or semicolon outside brackets and parentheses, so
+ * a call that spans several lines is captured whole. The marker has to
+ * appear exactly once: a second site fails loudly instead of quietly
+ * re-targeting the pin.
+ */
+function providerLabelExpression(code: string): string {
+  // The label is named once in the file. A second mention - a second
+  // property, an assignment, a computed key - is a second naming of it,
+  // wherever it is written.
+  const mentions = (code.match(/providerLabel/g) ?? []).length;
+  const sites = [...code.matchAll(/providerLabel\s*:/g)];
+  if (mentions !== 1 || sites.length !== 1) {
+    throw new Error(
+      `the source names the provider label ${mentions} time(s), expected once`,
+    );
+  }
+  const at = (sites[0].index ?? 0) + sites[0][0].length;
+  const rest = code.slice(at);
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < rest.length; i++) {
+    const ch = rest.charAt(i);
+    if (quote !== null) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "(" || ch === "[" || ch === "{") {
+      depth++;
+      continue;
+    }
+    if (ch === ")" || ch === "]" || ch === "}") {
+      depth--;
+      if (depth < 0) break;
+      continue;
+    }
+    if (depth === 0 && (ch === "," || ch === ";")) {
+      return rest.slice(0, i).trim();
+    }
+  }
+  return rest.trim();
+}
+
+/** The expression without the whitespace and the casts formatting may change. */
+function normalised(expression: string): string {
+  return expression
+    .replace(/\s+/g, " ")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(/,\)/g, ")")
+    .replace(/\s+as\s+[A-Za-z_$][\w$]*/g, "")
+    .trim();
+}
+
 // ---------------------------------------------------------------------------
 // DIG-4538: the expired-proof signal.
 //
@@ -520,5 +639,43 @@ describe("an expired trial proof is dropped and the page is asked for a new one"
     } finally {
       storage.restore();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DIG-4879: the composer provider chip on the embed surface.
+//
+// The chip names the backend that serves the chat (ARCHITECTURE.md, "The
+// composer provider chip names the backend that serves the chat"). The embed
+// surface is the only one that can name its own backend, so its label has to
+// follow the session: the own-key provider while a key is set, the backend
+// type otherwise.
+//
+// The wiring is pinned from the source, the house pattern of this file. It
+// has to be: the rendered chip reads the same label whether the wiring
+// derives it or hard-codes today's value, so a render cannot see the
+// difference - only the source can.
+// ---------------------------------------------------------------------------
+
+describe("the embed composer provider chip", () => {
+  it("derives the label from the BYOK state and the serving backend, not from a literal", () => {
+    const wiring = normalised(providerLabelExpression(codeOnly(embedClientSrc)));
+    // The whole wiring, pinned: the shared helper owns the naming, the
+    // own-key provider comes first and is not inverted, the backend that
+    // serves the chat comes second, and no literal names a backend.
+    expect(wiring).toBe(
+      "backendLabel(byokIsSet ? byokProvider : null, stockClient.backendType)",
+    );
+  });
+
+  it("reads the naming helper from its one home, not from a local copy", () => {
+    const code = codeOnly(embedClientSrc);
+    const helperImport =
+      /import\s*\{[^}]*\bbackendLabel\b[^}]*\}\s*from\s*["'](?:@\/lib\/|\.{1,2}\/)*provider-label["']/g;
+    // The helper is named twice: in the import and in the wiring. A local
+    // copy, a shadowed parameter or a destructured binding would name it a
+    // third time.
+    expect((code.match(/\bbackendLabel\b/g) ?? []).length).toBe(2);
+    expect(code.match(helperImport)).toHaveLength(1);
   });
 });

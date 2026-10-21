@@ -1,5 +1,7 @@
+@import "./palettes.css";
 /* digithings tokens. One source for colour, type, space and motion.
-   AA-checked colour values stay. History lives in git. */
+   AA-checked colour values stay. History lives in git.
+   Palette overrides (data-palette) live in palettes.css and win by specificity. */
 
 :root {
 

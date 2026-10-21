@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix } from "../DotMatrix";
 import {
   Collapsible,
@@ -184,7 +185,7 @@ function ReasoningTrigger({
     >
       <DotMatrix
         state={active ? "thinking" : "thought"}
-        label="Reasoning"
+        decorative
         className="aui-reasoning-trigger-icon size-4 shrink-0"
       />
       <span
@@ -195,12 +196,7 @@ function ReasoningTrigger({
       >
         Reasoning{durationText}
       </span>
-      <span
-        data-slot="reasoning-trigger-chevron"
-        className="aui-reasoning-trigger-chevron mt-0.5 inline-flex shrink-0"
-      >
-        <DotMatrix state="expand" label="Toggle reasoning" className="size-4" />
-      </span>
+      <DisclosureChevron />
     </CollapsibleTrigger>
   );
 }

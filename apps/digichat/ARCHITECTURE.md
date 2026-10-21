@@ -532,6 +532,74 @@ A new JWT is exchanged on **every** chat request. There is no client-side cachin
 the upstream JWT; this is safe but adds one HTTP round-trip latency to every message
 send (see Section 8).
 
+### digikey BFF session exchange: retry schedule and budget (DIG-4588)
+
+`exchangeDigikeyBffSession` (`src/lib/digikey-exchange.ts`) retries the
+`bff_session` exchange, because digikey runs in a sleep-on-idle container: the
+first call after idle can 5xx or time out for ~50s while it boots. The schedule
+is 7 attempts with backoff `[0, 2s, 4s, 8s, 12s, 15s, 15s]`, a 30s per-attempt
+abort cap, and transient = `5xx | 429 | 408`; any other status fails fast
+after one attempt. The abort cap is a cap, not a fixed window: an attempt gets
+`min(30s, budget left)`, so a late attempt in a mixed failure pattern can get
+less.
+
+The budget of one call is an **overall** budget of **100,000 ms (~1.7 min)**:
+`DIGIKEY_BFF_RETRY_BUDGET_MS` bounds the whole retry loop, not each attempt. The
+loop is abandoned once that much wall clock has passed, and no attempt starts
+after the budget is spent. A bad digikey therefore costs two different amounts,
+depending on how it fails:
+
+- **digikey answers fast with 5xx** (it is up, the request is not): the whole
+  schedule runs and the call gives up after **56,000 ms** of backoff — 7
+  attempts.
+- **digikey never answers**: every attempt burns its abort cap, so **3
+  attempts** burn 96s of the budget (30s abort, 2s backoff, 30s abort, 4s
+  backoff, 30s abort). The fourth iteration sleeps the remaining 4s and then
+  breaks before it starts a fetch, because no budget is left for it. The call
+  fails at exactly the 100,000 ms budget.
+
+Before that overall budget existed (the "~100s budget" comment, #5950) the same
+schedule could hold a request for **266,000 ms** (56s of backoff plus 7 × 30s
+of abort cap) — more than twice the budget the comment claimed. The number
+is exported and pinned by a test instead of being asserted in a comment.
+
+- **Keep the schedule, do not shorten it.** It encodes digikey's measured ~50s
+  container boot. Shortening it changes how long a down digikey holds a chat
+  request, which is a request-owner decision, not a test leaf's. This change
+  makes that cost visible and pinned instead of silently changing it.
+- **The budget is an exported constant, not prose — and it is a cap, not a
+  derivation.** `DIGIKEY_BFF_RETRY_BUDGET_MS` = 100,000 is an independent cap on
+  the loop, *not* the sum of the schedule (that sum is 266,000, and the loop
+  stops long before it). It is exported so this note and the test pin the same
+  number; the schedule is pinned separately, by
+  `DIGIKEY_BFF_RETRY_DELAYS_MS` and `DIGIKEY_BFF_ATTEMPT_TIMEOUT_MS`.
+- **The per-attempt abort timer is released on every path** (`clearTimeout` in a
+  `finally`). An attempt that rejected used to leave its abort timer pending
+  after the exchange had already given up.
+- **Only `5xx`, `429` and `408` retry.** A 4xx is digikey's decision (bad
+  token, unknown tenant); retrying it only holds the chat request longer for the
+  same answer.
+- **What a caller sees.** The chat upstream-auth path
+  (`src/lib/digigraph-upstream.ts`) calls this before digigraph, so a down
+  digikey holds the chat request for up to the whole budget (~100s) and then
+  raises `DigigraphUpstreamAuthError`.
+- **What the budget does and does not bound.** The per-attempt abort timer
+  covers the request up to the response headers: the timer is released when
+  the headers arrive, so a response that then stalls its body is **not**
+  bounded by this budget. That limit is unchanged here — whether to hold the
+  abort across the body read is a request-owner decision.
+- **How it sits against the route budget.** The exchange budget and digigraph's
+  own upstream-boot retry (a separate ~250s budget, see "Upstream 503s retry on
+  two budgets" in this section) run in sequence, so together they can hold a
+  chat request for ~350s against the chat route's own `maxDuration = 300`
+  (`src/app/api/chat/route.ts`). The exchange no longer eats the route budget
+  on its own, but the two budgets together still exceed it; tightening either
+  one is a request-owner decision.
+
+Coverage: `src/lib/digikey-exchange.test.ts` drives a transient status, each
+arm of the transient set, a 4xx, a thrown attempt and an abort, and pins the
+attempt count, the timer cleanup, the schedule and the stated budget.
+
 ### Drizzle migration approach
 
 Three SQL migration files in `drizzle/`:
@@ -1085,6 +1153,59 @@ opened: opening a sub-page from the root
 re-seeds it, so `/view` lands on the current view mode even when the menu was
 opened on another page. Coming back from a provider form lands on the provider
 row the user opened, not on the connected one.
+
+**View-level wording has one home (DIG-4665).** Decision: the view-level **wording**
+is owned by `@digithings/digichat-ui` `slash-commands.ts` (`VIEW_LABELS`, exported,
+and re-exported from the package index). The composer menu's `/view` page reads
+that shared map for the wording it prints beside each level, and the shared
+package builds the palette's `/view` choice options from the same map
+(`VIEW_CHOICES` on `SlashDef.choiceOptions`); the app keeps **no private copy**
+of it, and the lookup has no `?? ""` fallback: a missing key is a compile
+error, and an empty wording is a test failure, so neither reaches the screen
+as a blank column. Reason: the shared package already owns
+the public palette (the paragraph above), and a private copy is exactly what
+let a rename drift. #6034 renamed compact/detailed to quiet/verbose across the
+product while the composer menu's `/view` sub-page kept the retired ids, so its
+Quiet and Verbose rows rendered **blank descriptions**; #6046 then corrected the
+ids in that private copy, but the copy stayed, and #6079 retired the `hidden`
+level while that copy still carried it and its wording drifted away from the
+shared map. One copy of the map means the next rename cannot leave a surface
+of the digichat client unlabelled.
+
+The wording is the one the product prints today: `quiet` shows the titles only,
+`balanced` opens the rows while they stream, `verbose` leaves everything open
+(the app CHANGELOG uses these words; the `packages/ui` gallery-thread describes
+the same three levels in its own words). The
+shared map's terser wording from #6079 was rendered nowhere, so moving the
+shipped copy into the package is not a user-visible change; the palette's
+choice options, which nothing renders today, inherit it when they do.
+
+The view-level **ids** are a set of structural twins, and they must name the
+same three levels: the app contract `src/lib/view-modes.ts` (`VIEW_MODES`, plus
+the retired `hidden` → `quiet`, `compact` → `quiet` and `detailed` → `verbose`
+aliases folded forward on read, kept dependency-free so server config code can
+use it), the palette's own `VIEW_CODES` in the same shared package, and the
+prefs twin `ViewMode` / `normalizeViewPref` in `@digithings/ui/chat/stock`
+(`skin-types.ts`), which is what types `api.prefs.view`; the palette ids are
+exported from the `@digithings/digichat-ui` index and the prefs twin from the
+`@digithings/ui/chat/stock` index, so a host can compare the twin with its
+own contract — the normaliser and the alias map — instead of trusting that
+they agree. The label map is keyed
+by the palette's id union and the menu indexes it with the app's union, so the
+two cannot diverge in TypeScript: a level added to the app without the package
+stops the app from compiling, and a level added to the package without the app
+is caught by `view-modes.test.ts`. Two copies of the vocabulary still live
+outside this module and do not read this map — the digichat-tui client palette
+and the digigraph session-prefs tool — and each carries its own wording too,
+so the one home is the digichat client and this package, not the whole
+product. The digichat half of the second one (the client applicator's refusal
+message) now names the live levels; the digigraph server half, which owns the
+tool schema and the handler, still teaches the retired ids, so the two halves
+disagree: of the four ids the tool advertises, `balanced` is the only one the
+client applicator accepts, and the two live levels (`quiet`, `verbose`) are
+refused by the server. The model-facing `session_set_view` tool can therefore
+only ever effect `balanced`. That half is the digigraph module's own contract,
+and it is not fixed here.
 
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup?, allowedTools?, mutatingTools? }` is
 forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?,allowedTools?,mutatingTools?}`). `setup` is the
@@ -1691,7 +1812,7 @@ part-driven vs chrome-driven is indexed in digiweb
 | `chrome.defaultLanguage` | curated codes (`languages.ts`) | Seeds the stock language picker |
 | `chrome.transcript.userAlign` | `right \| left` | Stock web default `right` |
 | `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant \| digichat` | The 11 assistant-ui catalog template ids plus first-party `digichat`. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. Catalog / third-party default remains `base`. Unset `skin` on digithings.ai / OCC hosts (and slugs `digithings`, `digithings-ai`, `occ`) defaults to `digichat` so production `DIGICHAT_EMBED_TENANTS` without `skin` still mounts DigichatThread. |
-| `models.default` / `models.available` / `models.allowPicker` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`); empty `available` = no restriction. Bound BYOK skips that house allowlist. Product embed + dashboard YAML publish CI cheap slugs only (`deepseek/deepseek-v4-flash` default, plus `deepseek-v4-flash-0731`, `openai/gpt-oss-120b`, `z-ai/glm-5.3-flash`). Never OpenRouter `:free`. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
+| `models.default` / `models.available` / `models.allowPicker` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`); empty `available` = no restriction. Bound BYOK skips that house allowlist. Product embed + dashboard YAML publish CI cheap slugs only (`deepseek/deepseek-v4.1-flash-1017` default, plus `openai/gpt-oss-120b`, `z-ai/glm-5.3-flash`). Never OpenRouter `:free`. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
 | `features.attachments` | bool | Default **true** (composer attach). Product / DataTap / dashboard YAML set false. |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |

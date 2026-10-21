@@ -61,10 +61,13 @@
  * Usage: `npm run deploy [-- <extra wrangler args>]`, e.g.
  *   npm run deploy -- --containers-rollout=none
  *
- * The `CLOUDFLARE_API_TOKEN` trap in wrangler.toml still applies to whatever
+ * The `CLOUDFLARE_API_TOKEN` trap in wrangler.toml applies to the LOCAL
  * environment this is launched from: unset it for wrangler's own process (see
- * the README) — it is a Vectorize/D1 token and makes every deploy fail with
- * code 10000.
+ * the README) — the token in the developer's .env is a Vectorize/D1 token and
+ * makes every deploy fail with code 10000. CI never sees that token: the
+ * deploy lane exports the repo secret of the same name, which carries
+ * Workers Scripts:Edit and deployed this Worker (run 39490394661, main,
+ * 2026-10-20).
  */
 import { spawnSync } from "node:child_process";
 import { dirname, resolve as resolvePath } from "node:path";

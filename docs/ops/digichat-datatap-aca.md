@@ -18,7 +18,7 @@ DIG-1242 asked for three things: decide the lane, bind tag to commit, rehearse o
 | `v0.4.0` … `v2.3.3` | 15 | clean release names |
 | `-error1`…`-error3`, `-welcome1/2`, `-boot1`, `-textleak-…`, `-counter1`…`-counter9` | 15 | **hand-built, hand-debugged images** |
 
-Half the registry is ad-hoc debugging under names no workflow produced. The one tag that embeds a git SHA — `v2.0.0-main.7263272` — shows commit binding was attempted once and abandoned. ~~`ghcr.io/digithings-ai/digichat` **does not exist** (verified three ways: anonymous token `401`, `GET /v2/…/tags/list` `401`, `gh api /orgs/digithings-ai/packages?package_type=container` empty)~~ **CORRECTED 2026-10-09 — the package exists.** All three probes were non-discriminating: the two `401`s are unauthenticated and a *private* package answers `401` exactly like an absent one, and the org package **list** route omits this package under every `visibility` filter even for an org admin. Measured with the by-name route: id `13179652`, `visibility: private`, `version_count: 28`, created 2026-07-05, last published 2026-09-21 (`v2.3.2`, `latest`). Whether any ACR image is a mirror of its GHCR counterpart has **not** been checked — that needs a digest comparison, which is separate work and is not claimed here.
+Half the registry is ad-hoc debugging under names no workflow produced. The one tag that embeds a git SHA — `v2.0.0-main.7263272` — shows commit binding was attempted once and abandoned. ~~`ghcr.io/digithings-ai/digichat` **does not exist** (verified three ways: anonymous token `401`, `GET /v2/…/tags/list` `401`, `gh api /orgs/digithings-ai/packages?package_type=container` empty)~~ **CORRECTED 2026-10-09 — the package exists.** All three probes were non-discriminating: the two `401`s are unauthenticated and a *private* package answers `401` exactly like an absent one, and the org package **list** route omits this package under every `visibility` filter even for an org admin. Measured with the by-name route: id `13179652`, `visibility: private`, `version_count: 29`, created 2026-07-05, last published 2026-10-21 (`v2.6.4`, `latest`; it read `version_count: 28` with `v2.3.2` last on 2026-10-09). Whether any ACR image is a mirror of its GHCR counterpart has **not** been checked — that needs a digest comparison, which is separate work and is not claimed here.
 
 So the lane being absent is not a missing workflow to restore. It is the absence of the whole chain, and the drift is the bill for it:
 
@@ -26,7 +26,7 @@ So the lane being absent is not a missing workflow to restore. It is the absence
 |---|---|
 | prod image | `datatapchatregistry.azurecr.io/digichat:v2.3.2` (digest `sha256:c5708729fea2…`) |
 | prod revision | `digichat--0000007`, created 2026-09-21, still the only revision |
-| `develop` version | `2.6.4` |
+| `develop` version | `2.6.5` |
 | commits behind prod on `apps/digichat` | **67** |
 | last push to the ACR | **2026-09-21** — nothing since, not even a 2.4.0 image |
 
@@ -124,7 +124,7 @@ Two traps in that recipe, both hit while writing it:
 - **`docker inspect` emits a JSON array**, so `docker inspect … | checker` fails with *"facts must be a JSON object"*. Always assemble with `jq -n`, or pass `--format` so each invocation prints a bare scalar.
 - **`cmd1; cmd2 | checker` pipes only `cmd2`.** Use `&&` or collect into variables first, or the checker silently validates the wrong thing.
 
-> **The tag must exist.** `git tag -l 'digichat-v*'` currently stops at `digichat-v2.3.2` — there is **no `digichat-v2.4.0` tag**, even though `develop` already reads `2.4.0`. Binding a 2.4.0 image therefore requires cutting `digichat-v2.4.0` first (release-please does this on develop, per [`RELEASES.md`](../../RELEASES.md)); until then `git rev-list -n1` returns empty and the check fails on a missing tag commit — correctly, since there is nothing to bind against.
+> **The tag must exist.** The `digichat-v*` ladder now reaches `digichat-v2.6.4`, and there is **no `digichat-v2.4.0` tag** — the v2.4.0 line was skipped. Binding a 2.4.0 image therefore requires cutting `digichat-v2.4.0` first (release-please does this on develop, per [`RELEASES.md`](../../RELEASES.md)); until then `git rev-list -n1` returns empty and the check fails on a missing tag commit — correctly, since there is nothing to bind against.
 
 ---
 
@@ -266,7 +266,7 @@ git tag digichat-v2.4.0 <commit carrying version 2.4.0 in apps/digichat/package.
 git push origin digichat-v2.4.0
 ```
 
-**No `digichat-v2.4.0` tag exists today** (`git tag -l 'digichat-v*'` stops at `digichat-v2.3.2`) even though `develop` already reads `2.4.0`. Cutting it is the release decision, not a deploy step, and it is why the rehearsal uses `ref` instead.
+**No `digichat-v2.4.0` tag exists today** — the `digichat-v*` ladder now stops at `digichat-v2.6.4`; the v2.4.0 line was skipped. Cutting the tag is the release decision, not a deploy step, and it is why the rehearsal uses `ref` instead.
 
 **2. Import into the ACR (human, Azure write).** The Container Apps pull from `datatapchatregistry.azurecr.io`, **not** from GHCR. Nothing in this repository bridges those two registries: the old `datatap-web` lane that did the GHCR→ACR import was client-side and out of repo, and a `git grep` for `datatapchatregistry` / `azurecr.io` across `develop` returns 0 hits in any workflow. So the lane stops at GHCR, and a human runs the import:
 
@@ -366,6 +366,8 @@ The ACR is the ledger of record for what is deployed. Digests below are verified
 |---|---|---|---|
 | `v2.3.2` | `sha256:c5708729fea2` | 2026-09-21T11:47Z | **prod** (`digichat--0000007`) |
 | `v2.3.3` | `sha256:fc06e0a57902` | 2026-09-21T20:46Z | dev (`digichat--0000040`) |
+| `v2.5.0` | none published (GHCR) | — | **OCC prod** (Cloudflare container `shared-a9bf1b9117be`, deployed 2026-10-19, time unverified) |
+| `v2.5.1` | none published (GHCR) | — | **OCC prod** (Cloudflare container `shared-7a3239fc05f1`, deployed 2026-10-19, time unverified) |
 | `trial-1d0a8149-2.5.1` | `sha256:b41f25e7afe7` | 2026-10-19 | trial (`digichat-datatap-trial--0000005`) |
 | `trial-1d0a8149-2.6.0` | `sha256:c85574ba24ed` | 2026-10-20 | superseded (`digichat-datatap-trial--0000008`) |
 | `trial-1d0a8149-2.6.1` | `sha256:6b8e5c492f4f` | 2026-10-21 | superseded (revision `--0000009`) |
@@ -374,7 +376,23 @@ The ACR is the ledger of record for what is deployed. Digests below are verified
 
 `trial-1d0a8149-2.6.3` is built from the `digichat-v2.6.3` tag (`713098487531f8640f018ad9f43bf839abc18ddf`) and is bound to it: `scripts/check_digichat_image_binding.py --facts` reports `OK bound: 713098487531f8640f018ad9f43bf839abc18ddf via digichat-v2.6.3 -> sha256:91e9e709e37e2c20f58303abcda2b34fb9d1c867dd0e22e45f9cec23b0646e8a`.
 
-The GHCR publish of the same release is `ghcr.io/digithings-ai/digichat:sha-3e3c384c1ea3` (VERSION 2.6.1, COMMIT 3e3c384c1ea3).
+### GHCR: what is actually published (measured 2026-10-21)
+
+Measured with `docker manifest inspect` against `ghcr.io/digithings-ai/digichat`, with the impossible tag `v9.9.9` as the control: `v2.3.2` resolves (config digest `sha256:df9d220210b4e…`), `v2.6.4` and `:latest` resolve (manifest digest `sha256:7b522618cdf5be438604ca68fa2bdf7adf8112ecd17a32e3a0e900008f3459a0`), and `v9.9.9` answers `manifest unknown`.
+
+**`v2.6.4` is published — the first digichat image this repo has published to GHCR since `v2.3.2` (2026-09-21).** Run 94 of the lane (39578045259, a `workflow_dispatch` on the release path, started 2026-10-21T09:34:42Z) built `digichat-v2.6.4` = `800f5e89a419` in release mode, probed it, and pushed `ghcr.io/digithings-ai/digichat:v2.6.4` and `:latest` at 2026-10-21T09:37:30Z. The package now carries 29 versions, the last published being `v2.6.4` on 2026-10-21; the 28 before it are the older ladder (v0.1.0 … v2.3.2), the newest of them `v2.3.2` on 2026-09-21.
+
+**Before that run, no digichat image had ever been published to GHCR for any `v2.4.x`, `v2.5.x` or `v2.6.x` tag**: `v2.4.0`, `v2.5.0`, `v2.5.1`, `v2.6.0`, `v2.6.1`, `v2.6.2` and `v2.6.3` all answer `manifest unknown`, byte-identical to the control. Three different causes, all measured:
+
+- the `v2.5.x` tags never ran the lane at all — no run was created for either tag push (cut 2026-10-19T18:39Z and 20:46Z), and the lane's first run afterwards was the dispatch at 2026-10-19T22:24:16Z — and the image build was broken in that window anyway, because `apps/digichat/Dockerfile` did not carry the `packages/hero-banner` workspace package (DIG-4489, fixed by PR #5958);
+- the first `v2.6.0` tag push (run 88, 39478050523, 2026-10-20T18:49Z) failed in **Build and push**, on the missing `@digithings/catalog` workspace package;
+- the five later `v2.6.x` tag pushes (runs 89–93, 2026-10-20/21) failed in **Boot the image and probe it**: the lane demanded a `200` from `/api/health` on a standalone container that cannot reach the four ecosystem services, so the route answered `503` and the lane aborted.
+
+The probe now boots the image bare — no environment, no secret, the way the release runs it — reads the status code and the body instead of demanding a `200`, accepts only the two answers the health route can give (`200` and `503`), and tolerates a failing check only when it is one of those four services AND the fetch never completed (`unreachable`); the version the image was built as is still demanded, and the image is still bound to the commit of the tree that was built. Those rules live in ONE file, `scripts/digichat_probe_verdict.mjs`, which both lanes call — `.github/workflows/publish-digichat-image.yml` and `scripts/local-deploy/publish_image.sh`. They used to keep a copy each and drifted (the local lane never read the status code the CI lane read), which is how a rehearsal could pass where the release failed. `tests/scripts/test_digichat_probe_verdict.py` pins the helper's rules by behaviour, and the two lanes' own tests pin that they call it.
+
+The earlier line in this section — "The GHCR publish of the same release is `ghcr.io/digithings-ai/digichat:sha-3e3c384c1ea3` (VERSION 2.6.1, COMMIT 3e3c384c1ea3)" — is **wrong**: that name answers `manifest unknown` as well. `sha-3e3c384c1ea3` is the rehearsal name the lane built for the `digichat-v2.6.1` tag push, because a tag push carries no `inputs.tag` and the lane fell through to the rehearsal branch; the boot probe aborted that run before the push step, so the name was never pushed — and the release name `v2.6.1` was never even attempted. The lane now resolves a tag push to the release name (`vX.Y.Z` plus `:latest`).
+
+`v2.5.0` was released from tag `digichat-v2.5.0` = `a9bf1b9117be` and ran on the Cloudflare OCC container `shared-a9bf1b9117be`; it was **superseded by 2.5.1** the same evening (container `shared-7a3239fc05f1`, commit `7a3239fc05f1`) and then by the 2.6.x line. The container ids follow the repo's own derivation rule — `shared-<the first twelve characters of the deploying commit>` — so they are verifiable; the deploy **timestamps** are not: no GitHub run records those two deploys, the `21:02Z` quoted earlier cannot be right — it precedes the commit the container was built from, created at 2026-10-19T21:50:28Z — and the `21:59Z` in the table above is unverified rather than disproved. What the live lane serves today is verifiable: `GET https://digithings.ai/_digichat/meta` returns `{"containerId":"shared-800f5e89a419","rev":"800f5e89a419"}` and `GET https://digithings.ai/api/health` returns version `2.6.4`. The Cloudflare path was never blocked by the missing image: that worker builds its own container from the repo tree, which is why the OCC release is live while the GHCR lane was publishing nothing. **The ACR rows above are not re-verified in this record**: `az` cannot authenticate to the digichat ACR registry from this host (AAD refresh error, then 401), so the ACR side of "published" is unmeasured here. No 2.4.0 image exists either: 2.4.0 was never tagged.
 
 ---
 
@@ -401,7 +419,7 @@ The false claim — that `ghcr.io/digithings-ai/digichat` is published — was *
 Restoring the lane splits those claims in two, and the distinction matters:
 
 - **Claims that a lane was removed and never replaced** are now false — the lane is back. Corrected.
-- ~~**Claims that the GHCR package exists** are still false.~~ **Also corrected 2026-10-09: the package exists** — id `13179652`, `visibility: private`, `version_count: 28`, created 2026-07-05, last published 2026-09-21 with `v2.3.2` and `latest`. The 2026-10-06 check that said otherwise could not tell a *private* package from an absent one: two of its three probes were unauthenticated (`401` = "auth required", which a private package returns identically), and the third, `gh api /orgs/digithings-ai/packages?package_type=container`, returns `[]` for this package under every `visibility` filter even for an org admin. The discriminating route is the by-name one: `gh api /orgs/digithings-ai/packages/container/digichat`. What the earlier check got *right* is that nothing has published since 2026-09-21 and the tag ladder still stops at `digichat-v2.3.2`. Restoring a workflow does not create a package: nothing publishes until a `digichat-v*` tag is pushed, and the ladder stops at `digichat-v2.3.2`. So `ghcr.io/digithings-ai/digichat` does not exist today, and will not until someone cuts the next release tag.
+- ~~**Claims that the GHCR package exists** are still false.~~ **Also corrected 2026-10-09: the package exists** — id `13179652`, `visibility: private`, `version_count: 28`, created 2026-07-05, last published 2026-09-21 with `v2.3.2` and `latest`. The 2026-10-06 check that said otherwise could not tell a *private* package from an absent one: two of its three probes were unauthenticated (`401` = "auth required", which a private package returns identically), and the third, `gh api /orgs/digithings-ai/packages?package_type=container`, returns `[]` for this package under every `visibility` filter even for an org admin. The discriminating route is the by-name one: `gh api /orgs/digithings-ai/packages/container/digichat`. What the earlier check got *right* was the state on 2026-10-09: nothing had published since 2026-09-21, and the tag ladder still stopped at `digichat-v2.3.2`. Restoring a workflow does not create a package — nothing publishes until a `digichat-v*` tag is pushed — so on that day the package existed but carried no new image. **Corrected again 2026-10-21**: the lane has now published. Run 94 pushed `v2.6.4` and `latest` at 2026-10-21T09:37:30Z (see §5), the package carries 29 versions with `v2.6.4` last published on 2026-10-21, and the tag ladder now reaches `digichat-v2.6.4`. The sentence "the package does not exist today" was true on 2026-10-09 and stopped being true on 2026-10-21.
 
 Any doc corrected in this PR that tells a reader to `docker pull ghcr.io/digithings-ai/digichat` must keep saying **that this works once the tag lands**, not that it works now.
 
@@ -430,6 +448,8 @@ Any doc corrected in this PR that tells a reader to `docker pull ghcr.io/digithi
 - **Docs**: `docs/vision/api/guide-digichat-install.md`, `guide-self-host.md`, `docs/vision/api/digichat-api.md`, `infra/digichat-release/README.md`, `docs/digichat/ONBOARDING.html`, `docs/architecture/digichat-self-host-picks-fit.md`.
 - **Historical, needs judgement not correction**: `RELEASES.md:80,82` and `BRANCHING.md:189` tell you not to delete `ghcr.io/digithings-ai/digichat:v0.9.3` because clients consume it. The package is gone from GHCR, so that advice can no longer be verified from this repo — but whether DataTap still depends on it is a DataTap question, not ours.
 - **`openwiki/digichat/operations.md:246`** repeats the claim. `openwiki/` is generated; per `AGENTS.md` it regenerates from source, so fix the source and let the weekly run pick it up rather than hand-editing.
+- **New since 2026-10-21 (the `v2.6.4` publication)**: five sites still say that no digichat image has ever been published, which the run-94 push falsified — `apps/digichat/OPERATIONS.md:9` ("No published image exists yet"), `docs/vision/api/digichat-api.md:103`, `docs/vision/api/guide-digichat-install.md:26`, `docs/digichat/INSTALL.md:29-32`, `docs/digichat/RELEASE-SMOKE.md:3-8`. Each needs one dated correction sentence: an image **is** published (`v2.6.4` and `:latest`, private package, pulled with a `ghcr.io` credential), while the `v2.4.x`–`v2.6.3` tags still have no image behind them.
+  - **Update 2026-10-21 (2.6.5 release, #6172)**: corrected `docs/digichat/INSTALL.md`, `docs/digichat/RELEASE-SMOKE.md`, `apps/digichat/OPERATIONS.md:9`, and the two website sources of the generated vault pages, `apps/digithings-web/lib/sharedDocs.ts` (self-host and install guides) and `apps/digithings-web/lib/apiDocs.ts` (digichat module doc). The three generated copies, `docs/vision/api/digichat-api.md`, `docs/vision/api/guide-digichat-install.md` and `docs/vision/api/guide-self-host.md`, are corrected by hand to match: re-running `make gen-api-vault` today rewrites all 17 vault notes and reverts newer hand edits in them (it was last run 2026-10-12), so the regeneration is its own follow-up.
 
 To find the current set at any time:
 
