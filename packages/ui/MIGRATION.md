@@ -323,3 +323,36 @@ reordered imports. The rule for every app that keeps local family CSS:
 
 `apps/reference/lib/layering.test.ts` pins the wrapped set and the `.sb-hint`
 exception, and the reference documents the convention in its README.
+
+## Overlay scrollbar pointer contract (DIG-4600)
+
+An overlay scrollbar is two rules: a **track** laid over the content edge
+that must not eat clicks, and a **thumb** the user drags. `pointer-events` is
+an **inherited** property, so a track that declares `pointer-events: none`
+hands that value down to the thumb — the thumb is a DOM child of the track.
+The thumb must therefore re-enable hit-testing with its own
+`pointer-events: auto` declaration.
+
+Without it the thumb inherits `none`: it is never a pointer target, so its
+`onPointerDown` drag handler cannot fire and its `:hover` affordance never
+paints. The scrollbar is in the DOM and invisible in effect.
+
+- The **track** rule declares `pointer-events: none` so clicks reach the
+  content beneath, and the **thumb** rule declares `pointer-events: auto` so
+  the thumb is hit-testable. Both halves always travel together: a
+  pointer-transparent track without a pointer-interactive thumb is a dead
+  scrollbar.
+- The contract is owned by the **stylesheet layer**
+  (`packages/ui/src/styles/chat-digichat.css`). The component sets no
+  inline style for it.
+- The pinned test is
+  `packages/ui/src/components/chat/overlay-scrollbar.pointer.test.ts`. It
+  parses the **rule body per selector** instead of searching the file for a
+  declaration, so a `pointer-events: auto` in any other rule (the
+  composer-menu variant, a `:hover` rule) cannot satisfy it. It checks
+  **every** rule that renders the element, so a duplicated block cannot
+  carry a stale value; a rule that hides the element (`display: none`) is
+  exempt, because it is never rendered and has nothing to hit-test. It is a
+  source-text test because the `packages/ui` test environment is `node`,
+  with no CSS processing and no DOM, so the inherited effective value
+  cannot be computed in a unit test.

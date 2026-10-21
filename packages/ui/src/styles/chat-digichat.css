@@ -342,6 +342,7 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   left: 0;
   border-radius: 0;
   background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+  pointer-events: auto;
 }
 
 .aui-overlay-thumb:hover {
@@ -373,6 +374,7 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   left: 0;
   border-radius: 0;
   background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+  pointer-events: auto;
 }
 
 .aui-overlay-thumb:hover {
@@ -1121,20 +1123,59 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-indicator"] [data-slot="dot-matrix"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"] [data-slot="dot-matrix"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root [data-slot="dot-matrix"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"] [data-slot="dot-matrix"] {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip [data-slot="dot-matrix"] {
   width: 0.85rem;
   height: 0.85rem;
 }
 
+/* ── The one loading row (#4459) ───────────────────────────────────────────
+   The chain header (`aui_work-chain-trigger`) is the reference: a 12px
+   DotMatrix, mono 0.7rem, `--ink-mute`, flush to the message's left edge,
+   0.45rem from the marker to the text. The inline status row and the error
+   banner read the same numbers from here, so a row that appears or
+   disappears cannot move the text beside it. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-indicator"] {
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--ink-mute);
+}
+
+/* The label is a bare span in the thread and carries its own size utility;
+   the row's numbers win so both rows share one baseline. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-indicator"] > span:not([data-slot]) {
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root {
   align-items: flex-start;
-  gap: 0.55rem;
+  gap: 0.45rem;
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--danger);
+  color: var(--ink-mute);
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+}
+
+/* The row is muted like the rest of the trace; the red cross and the retry
+   action carry the failure. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root .aui-message-error-message {
+  color: inherit;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root [data-slot="dot-matrix"] {

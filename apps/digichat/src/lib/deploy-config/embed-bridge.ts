@@ -64,13 +64,21 @@ export function clientConfigFromEmbedTenant(
       sources: embed.sources ?? base.features.sources,
       branchPicker: embed.branchPicker ?? base.features.branchPicker,
     },
-    models: {
-      ...(embed.models?.default ? { default: embed.models.default } : base.models),
-      available: embed.models?.available ?? base.models.available,
-      allowPicker:
-        embed.models?.allowPicker === true ||
-        (embed.models?.allowPicker !== false && base.features.modelPicker),
-    },
+    // A Foundry tenant is answered by its own agent: the model is the
+    // agent's, not ours, and it cannot be enumerated. The house catalog must
+    // not be inherited into it — that is what made the footer claim "auto"
+    // and "cheaperinference" on a tenant served by Azure AI Foundry.
+    models: (embed.backendType ?? base.backendType) === "foundry"
+      ? { available: [], allowPicker: false }
+      : {
+          ...(embed.models?.default
+            ? { default: embed.models.default }
+            : base.models),
+          available: embed.models?.available ?? base.models.available,
+          allowPicker:
+            embed.models?.allowPicker === true ||
+            (embed.models?.allowPicker !== false && base.features.modelPicker),
+        },
     tools: {
       allowUserToggle: base.tools.allowUserToggle,
       catalog,

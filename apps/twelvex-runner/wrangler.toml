@@ -26,7 +26,10 @@
 #   CHEAPERINFERENCE_API_KEY  — the model key, forwarded into the container as
 #                               OPENAI_API_KEY
 #   CORE_SUPABASE_SERVICE_KEY — the shared core calendar writes
-#   OPENAI_API_BASE           — the model endpoint the house path uses
+#
+# OPENAI_API_BASE is not a secret. It is the model endpoint the house path
+# uses, and it is a plain var below with the same literal the twelve-x
+# workflow job env carries.
 #
 # Not required for the ingest and heartbeat jobs (checked against the
 # workflow env blocks and twelve_x market_context / heartbeat): TWELVEX_R2_*,
@@ -44,6 +47,9 @@ enabled = true
 
 [vars]
 DRY_RUN = "0"
+# The model endpoint the house path uses. Same literal as the twelve-x
+# workflow job env (daily_run_reusable.yml). A public URL, not a secret.
+OPENAI_API_BASE = "https://api.cheaperinference.com/v1"
 
 [[containers]]
 class_name = "TwelveXRunnerContainer"

@@ -22,6 +22,7 @@ import type { DigichatClientConfig } from "./deploy-config";
 import type { StockChatPrefsConfig } from "@digithings/ui/chat/stock";
 import { isEmbedHexColor } from "./embed-accent-style";
 import { parseEmbedThemeParam } from "./embed-theme-messages";
+import { HOUSE_BACKEND_ID } from "./provider-label";
 
 /**
  * One call per route: product projects the primary deployment, embed
@@ -130,6 +131,10 @@ export function toStockChatPrefsConfig(
     thinking: clientConfig.features.thinking,
     tenantAllowsWeb: clientConfig.gate.webSearch === true,
     showByok: clientConfig.gate.showByok === true,
+    // These surfaces have no BYOK state of their own — the provider menu
+    // they render cannot activate an own key — so the chat always runs on
+    // the house backend. The embed surface names its own backend instead.
+    providerLabel: HOUSE_BACKEND_ID,
     allowUserServers: clientConfig.mcp.allowUserServers,
     allowAddForm: clientConfig.mcp.allowAddForm,
   };

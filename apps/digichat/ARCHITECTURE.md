@@ -281,7 +281,7 @@ endpoint except `GET /api/health` (unauthenticated status probe) and
 - The route resolves upstream auth, builds a `createdigigraphClient`, then either (a) calls `createdigigraphTraceStreamResponse` for the trace path (passes `req.signal` so Stop aborts the digigraph fetch) or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
 - **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). When `DIGICHAT_TRUSTED_PROXIES` is unset, IP selection keeps the historical order: `cf-connecting-ip`, the leftmost `X-Forwarded-For` hop, then `unknown`. When configured with comma-separated IPs/CIDRs, only a TCP peer in that allowlist may supply a forwarded client-IP header; `x-digichat-peer-ip` is captured from the socket by the production entrypoint, which strips a caller-provided value before forwarding to the loopback-only Next server. Then `cf-connecting-ip` is preferred, or the XFF chain is walked from right to left past trusted proxy hops to the first valid non-trusted address. An untrusted or malformed boundary falls back to the captured peer. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
-- **Per-tenant trial gate:** a `trial_form` tenant may set `gate.consumeUrl` to an operator-controlled HTTPS endpoint. When `X-Embed-Chat-Token` is present, the BFF sends `{ "token": "..." }` to that endpoint before applying the fallback per-IP turn quota. A 2xx response consumes the turn, any 4xx response denies it, and 5xx, timeout, or transport failures allow it so a quota-provider outage does not disable chat. The token is never logged or forwarded to a chat backend.
+- **Per-tenant trial gate:** a `trial_form` tenant may set `gate.consumeUrl` to an operator-controlled HTTPS endpoint. When `X-Embed-Chat-Token` is present, the BFF sends `{ "token": "..." }` to that endpoint before applying the fallback per-IP turn quota. A 2xx response consumes the turn and any 4xx response denies it (`402 trial_gate`). A 5xx, a timeout or a transport failure is reported as a third verdict, **unavailable**: the visitor is still admitted, so a quota-provider outage does not disable chat, but the entitlement is unverified and is bounded server-side to the trial cap (100 turns per known IP per 24h) instead of being granted outright — an outage used to skip the per-IP budget entirely and hand out unbounded free turns (DIG-4543). The degraded path is logged (`[trial-gate] tenant quota service unavailable…`). The bound needs a resolvable client IP: a request whose IP cannot be resolved (`unknown`) skips the quota and is admitted uncounted, as before. The token is never logged or forwarded to a chat backend.
 - **Internal monitor identity (DIG-613):** an internal monitor can be exempt from the `trial_form` free-turn cap by presenting `X-Embed-Monitor-Token`, matched against a comma-separated allowlist in `DIGICHAT_MONITOR_TOKENS` (`embed-monitor-token.ts`, constant-time, entries under 32 chars ignored). This exists because the hourly DataTap answer-integrity check had no sanctioned path past the per-IP cap: it burned the 3-turn budget in its first hour and then returned `402 trial_gate` on every run, which reads as a client-side closed trial rather than our own gate. The compared value is a server-side secret and is deliberately **not** `X-Embed-Token`, which is a Stripe-style publishable key rendered into the embedding page on purpose (DIG-619) — a bypass keyed on it would be a public bypass. **Scope:** the free-turn cap only. It does not authenticate the caller; the caller must still resolve a tenant context and pass the rate-limit layers. The `requiredPlanTier` proof check runs earlier and is unaffected. The one check it does skip is the tenant's own `gate.consumeUrl` turn accounting, and only for a caller that presents the monitor header *without* an `X-Embed-Chat-Token` (the consume call is gated on that token, `route.ts`). **Fails open:** when the allowlist is unset the gate behaves exactly as before, so a missing deploy secret never becomes a reason to stop serving visitors. The gate itself remains best-effort anti-abuse, not an authorization boundary.
 - **Server-signed trial proof (DIG-3795):** a caller can also be exempt from the `trial_form` free-turn cap by presenting `X-Embed-Trial-Proof`, an HMAC-signed token minted server-side with the shared secret `DIGICHAT_TRIAL_PROOF_SECRET` (`lib/trial-proof.ts`; format `base64url(host|exp|sig)`, 10-minute TTL, constant-time signature comparison). The route verifies the signature with the same secret and compares the **verified** host against the canonical form of `X-Embed-Host` (`normalizeEmbedHost`), because the proof binds host and expiry only — no tenant and no nonce — so a valid proof for another host buys nothing. A raw client-asserted header value is never trusted: only the server holds the secret, so only it can produce a token that verifies. **Scope:** the free-turn cap only, and it does not authenticate the caller — the caller must still resolve a tenant context and pass the rate-limit layers. The per-IP quota is skipped entirely once a proof is accepted, so a sanctioned bypass never spends the visitor's budget. **No proof, no bypass:** an absent, malformed, expired, wrongly-signed or wrong-host proof leaves the gate exactly as it was, so a missing deploy secret is never a reason to waive the cap. The `X-Embed-Trial-Unlock` header read is unchanged.
 - **Trial proof mint route (`POST /api/embed/trial-proof-mint`):** mints a signed proof for one embed host. Two server-side credentials are accepted, and neither is `X-Embed-Token` (a Stripe-style publishable key rendered into the embedding page, so a mint route keyed on it would be an unauthenticated public endpoint). **Monitor identity:** `X-Embed-Monitor-Token`, matched against the same comma-separated allowlist in `DIGICHAT_MONITOR_TOKENS` (`embed-monitor-token.ts`); it stays host-unscoped, so the proof is minted for the host the caller sends. **Tenant identity (DIG-4526):** `X-Embed-Tenant-Mint-Token`, matched against `DIGICHAT_TENANT_MINT_CREDENTIALS` — a comma-separated list of `host=token` pairs, one pair per host, the pair split at the first `=` and both sides trimmed (`embed-tenant-mint-credential.ts`, constant-time comparison). A tenant credential is bound to the host in its pair: the requested host and the pair's host are compared in CANONICAL form — the same `normalizeEmbedHost` the chat route compares with — so a backend that names its host as an origin URL still matches its pair. A host that does not canonicalise, or a canonical host that differs from the pair's, is answered `401` and mints nothing. The proof is minted for the CANONICAL host of the pair, so it verifies for that host only. One pair binds one host and one token binds one host, so a list that breaks either rule is refused for that host. The two identities are separate: the tenant credential is never a monitor credential, the chat route never reads it, and the monitor allowlist is unchanged. When the tenant header is present the tenant rule decides the request and there is no fall-through to the monitor rule. With `DIGICHAT_TENANT_MINT_CREDENTIALS` unset no tenant can mint.
@@ -382,6 +382,42 @@ digiquant payload evolution but also silently ignores malformed results.
 `POST /v1/oauth/token` at digikey returns `{ access_token, litellm_proxy_api_key? }`.
 The `litellm_proxy_api_key` is forwarded to digigraph as `X-LiteLLM-Proxy-Key` when
 present, allowing LiteLLM to route models per-tenant.
+
+### Document identity (DIG-4591)
+
+A Sources row is a document, and the same document can reach the UI through
+more than one surface (a web URL and a vault path) and more than one tool
+(digisearch, digivault_get_note). A row is therefore identified by a SET of
+identity keys, and two rows are the same document when their key sets
+intersect. The contract lives in `src/lib/document-identity.ts`.
+
+- `doc:<handle>` — the source's own per-document handle, carried on the
+  document as `docId`. It outranks the path because it is the only key every
+  surface of one document shares.
+- `path:<path>` — a real LOCATION. A path that merely repeats the title is a
+  LABEL (a producer substitutes the title for the path when the source has no
+  usable path), so it identifies nothing.
+- `title:<title>|kind:<web|document>` — the last resort, for a document with
+  neither a handle nor a location.
+
+**Why a set, and not one key.** A path names a location, not a document: one
+document has several locations, and one location can be reported under several
+handles. A single key therefore merges too little or too much. With a set, the
+same document arriving under two paths merges on its handle, while two
+documents that merely share a title do not merge at all — the title is never a
+key while a handle or a location exists.
+
+**The handle is a token, not an id.** The activity payload is client facing, so
+the document id itself must not reach the browser. The adapter derives
+`doc-<16 hex>` from the source's per-document id (`doc_id`, or the `source_id`
+without its chunk rank) and the sanitizer only forwards a value that has the
+shape of a token. A DOI is deliberately not used: a DOI names a work, and one
+work can carry several documents.
+
+**The limit.** A document that arrives with neither a handle nor a location can
+only be identified by its title and its rendered kind, so two such documents
+with the same title remain one row. Recognising one document across two
+surfaces needs the handle; the path alone cannot do it.
 
 ---
 
@@ -646,6 +682,35 @@ live key). ChatShell / ChatPanel / PaywallCard still mount that terminal flow.
 The public embed `/provider` path uses `EmbedComposerMenu` (provider list →
 token field → model when required) and the same `validateBYOKKey` /
 `pingByokKey` / `useBYOKKey` contract.
+
+#### The composer provider chip names the backend that serves the chat
+
+The digichat composer footer carries a provider chip: a backend indicator
+sitting next to the model chip. It follows the same two rules the model chip
+already follows, one for the model chip and one for this one.
+
+- **The chip appears only where BYOK is on the table.** The gate is the
+  `showByok` preference the `/byok` slash command uses
+  (`src/lib/product-slash-commands.ts`), so a surface that does not offer
+  BYOK shows no provider chip at all.
+- **The label is derived from the backend that actually serves the chat.**
+  The host names it: `EmbedChatPrefsApi.providerLabel` carries the own-key
+  provider id while the session carries a key, else the house backend id
+  (`src/lib/provider-label.ts` — `backendLabel()` and `HOUSE_BACKEND_ID`).
+  Absent means unknown, and an unknown backend renders no chip rather than
+  a wrong one.
+
+`packages/ui` cannot import app code, so the package holds **no provider
+vocabulary**: it renders the label it is handed, and the app owns the
+names. The static surfaces (home, baseline, devkit) have no BYOK state of
+their own — the provider menu they render cannot activate an own key — so
+they name the house backend; the embed surface names its own provider while
+a key is set.
+
+The house backend id appears a second time inline in the provider menu
+(`src/components/stock/embed-composer-menu.tsx`), which lists the house
+backend as one provider choice among the own-key ones. That copy is the one
+to watch for drift.
 
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 (stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
@@ -998,6 +1063,28 @@ list when the provider requires one. PaywallCard / ChatShell still use `ByokCliF
 `/compact`, `/undo`, `/redo` stay client-only. Reload and `/new` reset session prefs
 (tools ON + English — not localStorage); catalog and auth toggles persist to
 localStorage. No sign-in is required for these session prefs.
+
+**Decision — the composer menu cursor is the current value, and it is indexed
+against the rows the page renders** (#4666, #4598). The cursor marks the row
+Enter commits, so a page with a single choice (`/models`, `/effort`,
+`/search-engine`, `/language`, `/view`, `/thinking`, `/provider`) opens on the
+value that is set, and Enter re-commits that value instead of the first row.
+The index comes from the rows the page renders — `cursorOnCurrentRow` in
+`embed-composer-menu.tsx` takes the first row that is both exclusive and
+checked — and never from a separate order constant: the list a page shows and
+the list it indexes are the same list by construction, so a rendered row can
+never sit one off from the cursor. The provider roster was exactly that
+off-by-one: it renders a `cheaperinference` row before the providers, so an
+index into the provider *order* landed on the row before the connected one. A
+page without a single current value (the root, the on/off toggles, the tool and
+MCP lists) has no row to land on and starts at the top. A page with no rows at
+all (`/help`, whose panel is prose and links) has no cursor to seed and no row to
+commit: it renders no list and borrows no other page's rows, so Enter there
+changes nothing. The seed belongs to the page, not to the moment the menu
+opened: opening a sub-page from the root
+re-seeds it, so `/view` lands on the current view mode even when the menu was
+opened on another page. Coming back from a provider form lands on the provider
+row the user opened, not on the connected one.
 
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup?, allowedTools?, mutatingTools? }` is
 forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?,allowedTools?,mutatingTools?}`). `setup` is the

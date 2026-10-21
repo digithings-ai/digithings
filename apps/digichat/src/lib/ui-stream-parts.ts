@@ -8,6 +8,7 @@
  */
 import type { UIMessage, UIMessageChunk } from "ai";
 import type { ActivityDocument, ActivitySpan } from "@/lib/chat-activity";
+import { documentIdentityKeys } from "@/lib/document-identity";
 import { expandPageContextFileParts } from "@/lib/embed-page-context-messages";
 import { toolRowTitle } from "@digithings/ui/chat/stock";
 
@@ -133,9 +134,13 @@ export type StandardActivityContext = {
    */
   rowByCallId: Map<string, string>;
   /**
-   * Source keys (url / path / title) already written this turn. Every
-   * retrieve span (digisearch, digivault_get_note, …) re-reports the same
-   * hits; writing each again stacked duplicate citation parts (OCC #185).
+   * Identity keys of the sources already written this turn (see
+   * `src/lib/document-identity.ts`). Every retrieve span (digisearch,
+   * digivault_get_note, …) re-reports the same hits; writing each again stacked
+   * duplicate citation parts (OCC #185). A document is a duplicate when any of
+   * its keys was already seen — one key per location or handle, so the same
+   * document arriving under two paths is written once, while two documents
+   * that merely share a title are both written.
    */
   seenSources?: Set<string>;
 };
@@ -390,11 +395,15 @@ export function writePendingMcpApproval(
  * the AI SDK / assistant-ui tool part to an error state; a
  * `tool-output-available` with no result would render it as a success.
  */
-function writeAbandonedTool(writer: UiStreamWriter, id: string): void {
+function writeAbandonedTool(
+  writer: UiStreamWriter,
+  id: string,
+  errorText: string = ABANDONED_TOOL_ERROR,
+): void {
   writer.write({
     type: "tool-output-error",
     toolCallId: id,
-    errorText: ABANDONED_TOOL_ERROR,
+    errorText,
   });
 }
 
@@ -403,11 +412,11 @@ function writeSource(
   ctx: StandardActivityContext,
   doc: ActivityDocument,
 ): void {
-  const key = (doc.path || doc.title || "").trim().toLowerCase();
-  if (key) {
-    ctx.seenSources ??= new Set();
-    if (ctx.seenSources.has(key)) return;
-    ctx.seenSources.add(key);
+  const keys = documentIdentityKeys(doc);
+  if (keys.length > 0) {
+    const seen = (ctx.seenSources ??= new Set<string>());
+    if (keys.some((key) => seen.has(key))) return;
+    for (const key of keys) seen.add(key);
   }
   const sourceId = nextId(ctx, "src");
   if (isHttpUrl(doc.path)) {
@@ -527,6 +536,11 @@ export function writeStandardActivity(
 export function finishStandardActivity(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
+  /**
+   * The upstream reason, when there is one. The row that failed for that
+   * reason carries it; the others keep the generic "no result" text.
+   */
+  failure?: { toolName?: string; errorText?: string },
 ): void {
   closeOpenReasoning(writer, ctx);
   const held = ctx.approvalsByToolCallId;
@@ -543,7 +557,11 @@ export function finishStandardActivity(
         ...(Object.keys(stored).length ? { toolInput: stored } : {}),
       };
       ensureToolInput(writer, ctx, id, name, span);
-      writeAbandonedTool(writer, id);
+      const specific =
+        failure?.errorText && failure.toolName === name
+          ? failure.errorText
+          : undefined;
+      writeAbandonedTool(writer, id, specific);
     }
   }
 }
