@@ -28,7 +28,7 @@ afterEach(() => {
 describe("theme cycle", () => {
   it("is default dark, default light, then each palette dark and light", () => {
     const steps = themeCycle();
-    expect(steps).toHaveLength(2 + PALETTE_IDS.length * 2);
+    expect(steps).toHaveLength(66);
     expect(steps.slice(0, 4).map((s) => s.id)).toEqual([
       "default:dark",
       "default:light",

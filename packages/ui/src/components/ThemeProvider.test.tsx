@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { applyDocumentTheme } from "../theme/apply-theme";
 import { ThemeProvider, useTheme } from "./ThemeProvider";
 
 type MediaStub = {
@@ -175,6 +176,23 @@ describe("ThemeProvider", () => {
     );
     expect(screen.getByTestId("theme").textContent).toBe("light");
     document.documentElement.removeAttribute("data-theme-pin");
+  });
+
+  it("follows a theme painted outside the provider (the /theme command)", () => {
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    act(() => {
+      applyDocumentTheme("light", "aura");
+    });
+    expect(screen.getByTestId("theme").textContent).toBe("light");
+    expect(screen.getByTestId("pref").textContent).toBe("light");
+    expect(screen.getByTestId("pal").textContent).toBe("aura");
+    // An explicit choice is not undone by the OS changing.
+    act(() => media.dispatch(false));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 
   it("an OS change repaints auto without writing storage", () => {

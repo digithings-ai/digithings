@@ -14,10 +14,7 @@
  */
 
 import { resolveEmbedHostParamOrReferer } from "@/lib/embed-client-config";
-import {
-  embedOriginHostOf,
-  resolveEmbedClientConfigForPaint,
-} from "@/lib/embed-chat-tenant";
+import { embedOriginHostOf, resolveEmbedClientConfigForPaint } from "@/lib/embed-chat-tenant";
 import { resolveEmbedRenderToken } from "@/lib/embed-token-transport";
 import { resolveEmbedSeededTenant } from "@/lib/route-client-config";
 import { headers } from "next/headers";
@@ -33,8 +30,8 @@ import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
    document. */
 const THEME_PIN_SCRIPTS = {
   light:
-    "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('light');e.classList.remove('dark')}catch(t){}",
-  dark: "try{var e=document.documentElement;e.setAttribute('data-theme','dark');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('dark');e.classList.remove('light')}catch(t){}",
+    "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('light');e.classList.remove('dark');var m=document.querySelector('meta[name=theme-color]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content','#f1f0eb')}catch(t){}", // canon-allow: the theme-color meta matches the embed canvas pair below and is read by the browser chrome, not the cascade
+  dark: "try{var e=document.documentElement;e.setAttribute('data-theme','dark');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('dark');e.classList.remove('light');var m=document.querySelector('meta[name=theme-color]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content','#121417')}catch(t){}", // canon-allow: the theme-color meta matches the embed canvas pair below and is read by the browser chrome, not the cascade
 } as const;
 
 function themePinScript(theme: "dark" | "light"): string {
@@ -70,10 +67,7 @@ export default async function EmbedRouteShell({
   if (inviteRequiredButMissing(requestedHost, initialTenantCfg.slug)) {
     notFound();
   }
-  const { seeded: seededCfg, urlTheme } = resolveEmbedSeededTenant(
-    initialTenantCfg,
-    params,
-  );
+  const { seeded: seededCfg, urlTheme } = resolveEmbedSeededTenant(initialTenantCfg, params);
   const paintTheme = urlTheme ?? initialTenantCfg.theme;
   // The host's URL overrides (welcome / placeholder / suggestions / accent)
   // seed the first paint too: the client hook applies them post-mount, which
