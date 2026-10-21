@@ -706,7 +706,6 @@ function EmbedChat({
     byokKey: byokIsSet ? byokKey : undefined,
     byokProvider,
     byokModel,
-    trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
     getEnableWebSearch,

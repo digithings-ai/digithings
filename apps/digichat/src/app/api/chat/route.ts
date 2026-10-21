@@ -367,7 +367,18 @@ async function handleChat(
   // error in the per-IP quota check so an infra hiccup never blocks a legitimate
   // visitor; the monitor-allowlist check below is the exception and fails closed.
   // When the tenant configures gate.consumeUrl and the client presents a chat
-  // token, server-side quota supersedes the unlock header and the IP quota.
+  // token, the server-side quota replaces the IP quota entirely.
+  //
+  // WHAT THIS QUOTA IS: a per-client-IP counter of free turns (3 by default),
+  // held in memory for 24h. It is best-effort anti-abuse, not a boundary — a
+  // cleared localStorage, a fresh incognito window or a shared egress IP
+  // defeats it, and it resets on deploy.
+  // WHAT THIS QUOTA IS NOT: an authorization decision, and never a client-
+  // asserted one. A value the browser can set is not an entitlement, so no
+  // header the caller sends raises this cap. The only ways past it are the
+  // server's own verdicts — the tenant's quota service (consumeUrl), a
+  // server-signed trial proof, an allowlisted internal monitor, and the
+  // degraded server-side bound — each decided by the server (DIG-4525).
   let quotaSatisfied = false;
   // Set when the tenant's quota service could not answer (5xx, timeout, transport
   // error). The visitor is still admitted — a tenant outage must not 402 someone who
@@ -378,8 +389,9 @@ async function handleChat(
   if (embedConfig?.gateMode === "trial_form") {
     const chatToken = req.headers.get("x-embed-chat-token");
     if (embedConfig.gate && chatToken) {
-      // Server-side quota supersedes the client-asserted unlock header for this request, and
-      // replaces the IP quota entirely — a token-bearing visitor must not be gated twice.
+      // The server-side quota is the only verdict for this request, and it
+      // replaces the IP quota entirely — a token-bearing visitor must not be
+      // gated twice.
       const verdict = await consumeChatAccess(embedConfig.gate.consumeUrl, chatToken);
       if (verdict === "deny") {
         return new Response(
@@ -438,8 +450,7 @@ async function handleChat(
       // A trial proof is a server-signed token (lib/trial-proof.ts) that this
       // server mints for an embed host, so a visitor who has completed the
       // trial form can be let through the free-turn cap without a client-
-      // asserted header. Unlike x-embed-trial-unlock below — which the client
-      // asserts and anyone can send — a proof cannot be forged: the signature
+      // asserted header. A proof cannot be forged: the signature
       // covers host|exp and only this server holds DIGICHAT_TRIAL_PROOF_SECRET,
       // so only it can produce a token that verifies. A raw client-asserted
       // X-Embed-Trial-Proof value is NEVER trusted.
@@ -476,12 +487,11 @@ async function handleChat(
             // entitlement is unverified. Bound it server-side at the trial cap (100
             // turns per IP per 24h) instead of skipping the budget, which is what an
             // outage used to do — that granted unbounded free turns to anyone
-            // presenting a chat token. Same counter and same cap as the
-            // client-asserted unlock below, so a forged header buys nothing the server
+            // presenting a chat token. The raise is the server's own decision on
+            // the server's own counter: it happens on this degraded path and
+            // nowhere else. A client-asserted header can no longer raise it
+            // (DIG-4525 deleted that header), so a forger buys nothing the server
             // did not grant.
-            unlockEmbedTrial(ip);
-          }
-          if (req.headers.get("x-embed-trial-unlock") === "1") {
             unlockEmbedTrial(ip);
           }
           if (isOverEmbedTrialLimit(ip)) {
