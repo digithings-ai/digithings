@@ -131,7 +131,9 @@ def test_the_occ_only_overlay_carries_one_tenant_and_no_credential():
     assert "token" not in entry
     assert "tokenEnv" not in entry
     assert "mcp" not in entry
-    assert "models" not in entry
+    assert entry["models"]["catalog"] is True
+    assert "available" not in entry["models"]
+    assert entry["models"]["presets"] == ["auto", "reasoning", "fast", "light"]
     backend = entry.get("backend") or {}
     assert "digisearchIndex" not in backend
     assert "vaultPathPrefix" not in backend
@@ -155,7 +157,9 @@ def test_the_occ_only_overlay_carries_the_overlay_note():
 
     composed, report = registry.compose_registry(LIVE, overlay)
     assert sorted(composed) == sorted(LIVE)
-    assert report["changed_paths"] == []
+    assert composed["occ.digithings.ai"]["models"]["catalog"] is True
+    assert "available" not in composed["occ.digithings.ai"]["models"]
+    assert any(path.startswith("occ.digithings.ai.models") for path in report["changed_paths"])
 
 
 def test_the_occ_only_overlay_leaves_the_digithings_tenant_alone():
@@ -167,11 +171,13 @@ def test_the_occ_only_overlay_leaves_the_digithings_tenant_alone():
     assert not [p for p in report["changed_paths"] if p.startswith("digithings.ai")]
 
 
-def test_the_occ_only_overlay_removes_the_models_section_from_the_kv_copy():
+def test_the_occ_only_overlay_replaces_a_raw_model_list_with_the_catalog_policy():
     overlay = registry.load_registry(_occ_only_overlay(), str(OCC_ONLY))
     composed, report = registry.compose_kv_registry(KV_LIVE, overlay)
-    assert "models" not in composed["occ.digithings.ai"]
-    assert "occ.digithings.ai.models" in report["removed_paths"]
+    models = composed["occ.digithings.ai"]["models"]
+    assert models["catalog"] is True
+    assert "available" not in models
+    assert "occ.digithings.ai.models.available" in report["changed_paths"]
     assert composed["occ.digithings.ai"]["tokenEnv"] == "OCC_INVITE_KEY"
 
 
@@ -401,8 +407,8 @@ KV_LIVE = {
         },
         "mcp": {"servers": [{"id": "operator", "tokenEnv": "MCP_EDGE_KEY"}]},
         "tools": {"catalog": [{"id": "digisearch"}]},
-        # The defect: a models section opens the model picker for a client
-        # tenant. DIG-4486 refused the picker and DIG-4750 confirmed it.
+        # A raw available list is the defect DIG-4750 refused. Compose strips
+        # that list and keeps the other model keys.
         "models": {
             "default": "house/model",
             "available": ["house/model", "other/model"],
@@ -412,13 +418,14 @@ KV_LIVE = {
 }
 
 
-def test_the_kv_compose_removes_the_occ_models_section():
-    """The KV copy is the copy that is served, so it must carry no models."""
+def test_the_kv_compose_strips_a_raw_occ_model_list_and_keeps_the_policy():
+    """The KV copy is the copy that is served. A raw id list does not survive."""
     composed, report = registry.compose_kv_registry(KV_LIVE, {})
     occ = composed["occ.digithings.ai"]
-    assert "models" not in occ
-    assert "occ.digithings.ai.models" in report["removed_paths"]
-    assert "occ.digithings.ai.models" in report["changed_paths"]
+    assert occ["models"] == {"default": "house/model", "allowPicker": True}
+    assert "occ.digithings.ai.models.available" in report["removed_paths"]
+    assert "occ.digithings.ai.models.available" in report["changed_paths"]
+    assert "occ.digithings.ai.models" not in report["removed_paths"]
 
 
 def test_the_kv_compose_keeps_the_credential_reference_and_never_a_value():
@@ -447,27 +454,49 @@ def test_the_kv_compose_never_adds_a_tenant_the_kv_copy_does_not_have():
     assert report["hosts_only_in_overlay"] == ["digithings.ai"]
 
 
-def test_the_kv_compose_refuses_an_overlay_that_sets_models_for_the_occ_tenant():
-    overlay = {"occ.digithings.ai": {"models": {"allowPicker": True}}}
+def test_the_kv_compose_refuses_an_overlay_that_sets_a_raw_model_list():
+    overlay = {"occ.digithings.ai": {"models": {"available": ["house/model"], "allowPicker": True}}}
     with pytest.raises(registry.RegistryRefusal) as refusal:
         registry.compose_kv_registry(KV_LIVE, overlay)
-    assert "models" in str(refusal.value)
+    assert "available" in str(refusal.value)
 
 
-def test_the_legacy_compose_refuses_an_overlay_that_sets_models_for_the_occ_tenant():
-    overlay = {"occ.digithings.ai": {"models": {"allowPicker": True}}}
+def test_the_kv_compose_accepts_a_catalog_policy_for_the_occ_tenant():
+    overlay = {
+        "occ.digithings.ai": {
+            "models": {"catalog": True, "allowPicker": True, "presets": ["auto", "light"]}
+        }
+    }
+    composed, _report = registry.compose_kv_registry(KV_LIVE, overlay)
+    models = composed["occ.digithings.ai"]["models"]
+    assert models["catalog"] is True
+    assert models["presets"] == ["auto", "light"]
+    assert "available" not in models
+
+
+def test_the_legacy_compose_refuses_an_overlay_that_sets_a_raw_model_list():
+    overlay = {"occ.digithings.ai": {"models": {"available": ["house/model"]}}}
     with pytest.raises(registry.RegistryRefusal) as refusal:
         registry.compose_registry(LIVE, overlay)
-    assert "models" in str(refusal.value)
+    assert "available" in str(refusal.value)
 
 
-def test_the_legacy_compose_removes_a_models_section_the_live_copy_carries():
-    """A live copy that carries one is a defect, so it is removed."""
+def test_the_legacy_compose_strips_a_raw_model_list_and_drops_an_empty_section():
+    """A live copy that carries only a raw id list loses the section."""
     broken = json.loads(json.dumps(LIVE))
-    broken["occ.digithings.ai"]["models"] = {"allowPicker": True}
+    broken["occ.digithings.ai"]["models"] = {"available": ["house/model"]}
     composed, report = registry.compose_registry(broken, {})
     assert "models" not in composed["occ.digithings.ai"]
+    assert "occ.digithings.ai.models.available" in report["removed_paths"]
     assert "occ.digithings.ai.models" in report["removed_paths"]
+
+
+def test_the_legacy_compose_keeps_an_occ_catalog_policy():
+    broken = json.loads(json.dumps(LIVE))
+    broken["occ.digithings.ai"]["models"] = {"allowPicker": True, "catalog": True}
+    composed, report = registry.compose_registry(broken, {})
+    assert composed["occ.digithings.ai"]["models"]["catalog"] is True
+    assert "occ.digithings.ai.models" not in report["removed_paths"]
 
 
 def test_the_kv_compose_refuses_a_kv_copy_that_carries_a_token_value():
@@ -606,11 +635,14 @@ def test_the_apply_writes_the_kv_copy_before_the_legacy_secret(tmp_path, monkeyp
         elif "kv" in argv:
             kinds.append("kv")
     assert kinds == ["kv", "secret", "recycle"]
-    # The KV document that was written carries no models section and no
-    # credential value.
+    # The KV document that was written keeps the catalog policy keys and
+    # drops the raw id list. It never carries a credential value.
     assert len(documents) == 1
     document = json.loads(documents[0])
-    assert "models" not in document["occ.digithings.ai"]
+    models = document["occ.digithings.ai"]["models"]
+    assert "available" not in models
+    assert models["allowPicker"] is True
+    assert models["default"] == "house/model"
     assert "token" not in document["occ.digithings.ai"]
 
 
