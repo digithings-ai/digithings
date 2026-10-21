@@ -525,6 +525,42 @@ describe("parseEmbedTenants", () => {
     });
   });
 
+  it("parses a foundry maxToolCalls cap and rejects a non-integer", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "digichat",
+            maxToolCalls: 4,
+          },
+          gateMode: "ungated",
+          token: "shh",
+        },
+      }),
+    );
+    expect(reg.get("example.com")?.backend).toMatchObject({ maxToolCalls: 4 });
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: {
+              type: "foundry",
+              projectEndpoint: "https://example.services.ai.azure.com",
+              agentName: "digichat",
+              maxToolCalls: 0,
+            },
+            gateMode: "ungated",
+            token: "shh",
+          },
+        }),
+      ),
+    ).toThrow(/maxToolCalls/);
+  });
+
   it("throws on a non-https foundry projectEndpoint", () => {
     expect(() =>
       parseEmbedTenants(

@@ -269,6 +269,7 @@ reasoning              -> ["group-chainOfThought", "group-reasoning"]
 "tool-call"            -> ["group-chainOfThought", "group-tool"]
 source                 -> ["group-chainOfThought", "group-tool"]
 data / data-*          -> ["group-chainOfThought", "group-tool"]
+data-notice            -> outside the chain (stays visible after the fold)
 "standalone-tool-call" -> []  (renders outside the chain)
 ```
 

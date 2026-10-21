@@ -67,6 +67,32 @@ const ERRORED_TURN: ThreadMessageLike[] = [
   },
 ];
 
+const TOOL_CAP_TURN: ThreadMessageLike[] = [
+  { role: "user", content: [{ type: "text", text: "how many tables?" }] },
+  {
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "t1",
+        toolName: "datatap__list_tables",
+        args: { schema: "public" },
+        argsText: '{"schema":"public"}',
+        result: { tables: ["orders"] },
+      },
+      {
+        type: "data",
+        name: "notice",
+        data: {
+          tone: "status",
+          message: "Tool-call limit reached (2 this turn). Answering from the results gathered so far.",
+        },
+      },
+      { type: "text", text: "The orders table is the one that holds them." },
+    ],
+  },
+];
+
 const STATUS_TURN: ThreadMessageLike[] = [
   { role: "user", content: [{ type: "text", text: "hi" }] },
   {
@@ -167,6 +193,26 @@ describe.each([
     const notice = host.querySelector<HTMLElement>('[data-slot="chat-notice"][data-tone="status"]');
     expect(notice?.textContent).toContain("Waiting for model capacity — retrying in 8s");
     expect(notice?.getAttribute("role")).toBe("status");
+    unmount();
+  });
+
+  it("keeps a tool-call limit notice visible beside a folded tool chain", async () => {
+    const { host, unmount } = await mount(Skin, TOOL_CAP_TURN);
+    const notice = host.querySelector<HTMLElement>('[data-slot="chat-notice"][data-tone="status"]');
+    expect(notice?.textContent).toContain("Tool-call limit reached (2 this turn)");
+    expect(notice?.getAttribute("role")).toBe("status");
+    // The answer is on the page without opening the work chain. The notice
+    // sits with it, not inside the collapsed tool group.
+    expect(host.textContent).toContain("The orders table is the one that holds them.");
+    const chain = host.querySelector('[data-slot="aui_chain-of-thought"]');
+    // The gallery skin folds tool calls into the work chain. The notice has
+    // to stay outside that chain or it disappears with the fold.
+    if (_name === "gallery skin") {
+      expect(chain).toBeTruthy();
+      expect(chain!.contains(notice)).toBe(false);
+    } else if (chain && notice) {
+      expect(chain.contains(notice)).toBe(false);
+    }
     unmount();
   });
 });

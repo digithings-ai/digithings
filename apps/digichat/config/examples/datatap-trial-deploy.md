@@ -56,6 +56,13 @@ and the agent carries the search index + MCP tool server-side.
   dev MCP server (MCP tool, custom-keys connection, tenant key).
 - Reasoning summary **enabled** on the agent definition, otherwise thinking
   rows stay dropped by design.
+- `backend.maxToolCalls` (optional, integer 1–100) caps tool calls per turn.
+  Unset means unlimited. The trial yaml leaves a proposed `5` (alternative
+  `4`) commented out until that number is confirmed — uncomment one line to
+  apply it. The adapter sends Responses `max_tool_calls` beside
+  `agent_reference` and also enforces the cap for MCP calls, then asks for a
+  final answer and shows a status notice instead of an error. See
+  `apps/digichat/ARCHITECTURE.md`.
 - The agent's search tool needs a project connection that can **read the index
   definition**, not just query it. A query key returns `403` on
   `GET /indexes/<name>`, and the tool is refused with "Access denied. Check

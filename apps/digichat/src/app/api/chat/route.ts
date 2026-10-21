@@ -619,6 +619,7 @@ async function handleChat(
         signal: req.signal,
         responseLanguage: languageCode,
         turnMode,
+        maxToolCalls: foundryBackend.maxToolCalls,
       });
     } catch (err) {
       runLock.release();

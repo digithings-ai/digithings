@@ -12,8 +12,11 @@ import {
   rateLimitHintMs,
   rateLimitResumeDelayMs,
   RATE_LIMIT_EXHAUSTED_TEXT,
+  FoundryToolCallCounter,
+  toolCallLimitNotice,
   type FoundryStreamEvent,
   type FoundryConversationItem,
+  type FoundryResponsesCreateBody,
 } from "./stream";
 import { toDigiChatActivity, MAX_DOCUMENTS, type ActivitySpan } from "@/lib/chat-activity";
 
@@ -1749,5 +1752,284 @@ describe("mid-stream rate limit resume (DC-18)", () => {
       expect(rateLimitResumeDelayMs(new Error(RATE_LIMIT_MESSAGE), 2, [30_000, 60_000])).toBeNull();
       expect(rateLimitResumeDelayMs(new Error("nope"), 0, [1])).toBeNull();
     });
+  });
+});
+
+function mcpEvent(
+  phase: "added" | "done",
+  id: string,
+  name: string,
+): FoundryStreamEvent {
+  return {
+    type: phase === "added" ? "response.output_item.added" : "response.output_item.done",
+    item: {
+      type: "mcp_call",
+      name,
+      call_id: id,
+      status: "completed",
+      output: phase === "done" ? '{"ok":true}' : undefined,
+    },
+  } as FoundryStreamEvent;
+}
+
+describe("FoundryToolCallCounter", () => {
+  it("counts a start and its done once, and ignores search output", () => {
+    const counter = new FoundryToolCallCounter();
+    expect(counter.observe(mcpEvent("added", "c1", "datatap__list"))).toBe("new");
+    expect(counter.observe(mcpEvent("done", "c1", "datatap__list"))).toBe("known");
+    expect(
+      counter.observe({
+        type: "response.output_item.done",
+        item: { type: "azure_ai_search_call_output", call_id: "s1" },
+      } as FoundryStreamEvent),
+    ).toBe("ignore");
+    expect(
+      counter.observe({
+        type: "response.output_item.done",
+        item: { type: "reasoning" },
+      } as FoundryStreamEvent),
+    ).toBe("ignore");
+    expect(counter.observe({ type: "response.file_search_call.in_progress" })).toBe("new");
+    expect(
+      counter.observe({
+        type: "response.output_item.done",
+        item: { type: "file_search_call", call_id: "fs1" },
+      } as FoundryStreamEvent),
+    ).toBe("known");
+    expect(counter.observe({ type: "response.file_search_call.searching" })).toBe("ignore");
+    expect(counter.count).toBe(2);
+  });
+
+  it("counts a done-only call and pairs an id-less start with a later id", () => {
+    const counter = new FoundryToolCallCounter();
+    expect(
+      counter.observe({
+        type: "response.output_item.added",
+        item: { type: "mcp_call", name: "datatap__get" },
+      } as FoundryStreamEvent),
+    ).toBe("new");
+    expect(counter.observe(mcpEvent("done", "late", "datatap__get"))).toBe("known");
+    expect(counter.observe(mcpEvent("done", "only", "datatap__other"))).toBe("new");
+    expect(counter.count).toBe(2);
+  });
+});
+
+describe("createFoundryStreamResponse tool-call cap", () => {
+  function scriptedClient(streams: FoundryStreamEvent[][]) {
+    const calls: unknown[][] = [];
+    const client: OpenAIResponsesClientLike = {
+      conversations: {
+        async create() {
+          return { id: "conv_cap" };
+        },
+      },
+      responses: {
+        async create(params, options) {
+          calls.push([params, options]);
+          const events = streams[calls.length - 1] ?? [];
+          const signal = options?.signal;
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) {
+                if (signal?.aborted) {
+                  const err = new Error("aborted");
+                  err.name = "AbortError";
+                  throw err;
+                }
+                yield event;
+              }
+            },
+          };
+        },
+      },
+    };
+    return { client, calls };
+  }
+
+  function bodyOf(call: unknown): FoundryResponsesCreateBody {
+    return (call as [unknown, { body: FoundryResponsesCreateBody }])[1].body;
+  }
+
+  it("leaves the request uncapped when maxToolCalls is unset", async () => {
+    const events = [
+      mcpEvent("added", "c1", "tool_a"),
+      mcpEvent("done", "c1", "tool_a"),
+      mcpEvent("added", "c2", "tool_b"),
+      mcpEvent("done", "c2", "tool_b"),
+      { type: "response.output_text.delta", delta: "Done" },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "datatap-trial",
+        messages: [userMessage("how many tables?")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "full",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(bodyOf(calls[0])).toEqual({
+      agent_reference: { name: "datatap-trial", type: "agent_reference" },
+    });
+    expect(out).toContain("tool_a");
+    expect(out).toContain("tool_b");
+    expect(out).toContain('"delta":"Done"');
+    expect(out).not.toContain("data-notice");
+    expect(out).not.toContain("Tool-call limit reached");
+  });
+
+  it("stops at the cap, asks for a final answer, and shows a status notice", async () => {
+    const first = [
+      mcpEvent("added", "c1", "tool_a"),
+      mcpEvent("done", "c1", "tool_a"),
+      mcpEvent("added", "c2", "tool_b"),
+      mcpEvent("done", "c2", "tool_b"),
+      mcpEvent("added", "c3", "tool_c"),
+      mcpEvent("done", "c3", "tool_c"),
+      { type: "response.output_text.delta", delta: "should not stream" },
+    ];
+    const second = [
+      { type: "response.output_text.delta", delta: "From the two results, " },
+      { type: "response.output_text.delta", delta: "the answer is 4." },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([first, second]);
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "datatap-trial",
+        messages: [userMessage("how many tables?")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "full",
+        maxToolCalls: 2,
+        openAIClientFactory: () => client,
+      }),
+    );
+
+    expect(calls).toHaveLength(2);
+    expect(bodyOf(calls[0])).toEqual({
+      agent_reference: { name: "datatap-trial", type: "agent_reference" },
+      max_tool_calls: 2,
+    });
+    expect(bodyOf(calls[1])).toEqual({
+      agent_reference: { name: "datatap-trial", type: "agent_reference" },
+      max_tool_calls: 2,
+      tool_choice: "none",
+    });
+    const secondParams = (calls[1] as [{ input?: string }])[0];
+    expect(secondParams.input).toBeUndefined();
+
+    expect(out).toContain("tool_a");
+    expect(out).toContain("tool_b");
+    expect(out).not.toContain("tool_c");
+    expect(out).toContain('"type":"data-notice"');
+    expect(out).toContain(toolCallLimitNotice(2));
+    expect(out).toContain('"tone":"status"');
+    expect(out).toContain("From the two results, ");
+    expect(out).toContain("the answer is 4.");
+    expect(out).not.toContain("should not stream");
+    expect(out).not.toContain('"type":"error"');
+    expect(out).not.toContain("The assistant is unavailable");
+  });
+
+  it("does not notice a turn that finishes under the cap", async () => {
+    const events = [
+      mcpEvent("added", "c1", "tool_a"),
+      mcpEvent("done", "c1", "tool_a"),
+      { type: "response.output_text.delta", delta: "Just one lookup." },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "datatap-trial",
+        messages: [userMessage("hi")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 5,
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(bodyOf(calls[0]).max_tool_calls).toBe(5);
+    expect(out).toContain("Just one lookup.");
+    expect(out).not.toContain("data-notice");
+  });
+
+  it("retries without the override when the agent reference rejects it", async () => {
+    const calls: unknown[][] = [];
+    let creates = 0;
+    const client: OpenAIResponsesClientLike = {
+      conversations: {
+        async create() {
+          return { id: "conv_cap" };
+        },
+      },
+      responses: {
+        async create(params, options) {
+          creates += 1;
+          calls.push([params, options]);
+          if (creates === 1) {
+            const err = new Error("Not allowed when agent is specified") as Error & { status?: number };
+            err.status = 400;
+            throw err;
+          }
+          const events: FoundryStreamEvent[] =
+            creates === 2
+              ? [
+                  mcpEvent("added", "c1", "tool_a"),
+                  mcpEvent("done", "c1", "tool_a"),
+                  mcpEvent("added", "c2", "tool_b"),
+                  { type: "response.output_text.delta", delta: "partial" },
+                ]
+              : [
+                  { type: "response.output_text.delta", delta: "Final from the instruction." },
+                  { type: "response.completed" },
+                ];
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+            },
+          };
+        },
+      },
+    };
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "datatap-trial",
+        messages: [userMessage("hi")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 1,
+        openAIClientFactory: () => client,
+      }),
+    );
+
+    // First create sends max_tool_calls and is refused. The retry omits it.
+    expect(bodyOf(calls[0])).toMatchObject({ max_tool_calls: 1 });
+    expect(bodyOf(calls[1])).toEqual({
+      agent_reference: { name: "datatap-trial", type: "agent_reference" },
+    });
+    // The follow-up tries tool_choice, is not sent because the override was
+    // already refused, and carries the bracketed instruction instead.
+    expect(bodyOf(calls[2])).toEqual({
+      agent_reference: { name: "datatap-trial", type: "agent_reference" },
+    });
+    expect((calls[2] as [{ input?: string }])[0].input).toContain("Do not call any tools");
+    expect(out).toContain("tool_a");
+    expect(out).not.toContain("tool_b");
+    expect(out).toContain(toolCallLimitNotice(1));
+    expect(out).toContain("Final from the instruction.");
+    expect(out).not.toContain('"type":"error"');
   });
 });

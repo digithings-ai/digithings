@@ -1177,6 +1177,45 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.responseLanguage).toBe("fr");
   });
 
+  it("passes maxToolCalls from the foundry backend to the adapter", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "foundry-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "foundry-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://x/",
+          agentName: "datatap-trial",
+          maxToolCalls: 5,
+        },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://foundry-tenant.digithings.ai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+      maxToolCalls?: number;
+    };
+    expect(call?.maxToolCalls).toBe(5);
+  });
+
   it("returns 400 when OpenRouter BYOK missing model", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {

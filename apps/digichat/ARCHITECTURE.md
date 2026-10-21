@@ -1054,8 +1054,37 @@ tool / `source-*` / `data-status` parts. Generic MCP tools map the same way
 completed item carries the output as `toolResult`, rendered as JSON in the
 standard tool Result pane with mid-stream completion — display parity with a
 directly-plugged tool, no per-tool UI. `mcp_approval_request` is unmapped by
-design: trial agents auto-approve server-side. A reasoning disclosure appears
-only when the Foundry event includes summary text. Operators enable that
+design: trial agents auto-approve server-side.
+
+**Per-turn tool-call cap (`backend.maxToolCalls`).** Optional positive integer
+on a Foundry backend (1–100). Omit it and the turn is unlimited — that is the
+default for every deployment other than one that sets the key. The DataTap
+trial yaml (`config/datatap-trial-foundry.yaml`) documents a proposed value of
+5 (4 is the other candidate) as a comment until that value is confirmed; a
+comment is not applied.
+
+Microsoft Foundry's Create Response body lists `max_tool_calls` and
+`agent_reference` on the same request, so the adapter sends
+`max_tool_calls` beside the agent reference when the key is set. OpenAI's
+description of that parameter, which Foundry's Responses surface follows, caps
+**built-in** tools only ("The maximum number of total calls to built-in tools
+that can be processed in a response… Any further attempts to call a tool by
+the model will be ignored"). MCP is a separate tool category in that reference,
+and the trial's long chains are `mcp_call`. The adapter therefore also counts
+tool-call items (`mcp_call`, `file_search_call`, `azure_ai_search_call`, and
+other `*_call` items — not their `_output` twins). The call that would exceed
+the cap is not shown. The in-flight response is aborted, then one follow-up
+`responses.create` runs with `tool_choice: "none"` (same request body:
+`none` means the model generates a message and does not call a tool) so the
+turn still ends in an answer. If Foundry rejects that override with
+`400 Not allowed when agent is specified` — the refusal already observed for
+per-call reasoning summaries — the follow-up is retried without `tool_choice`
+and with a bracketed instruction to answer from the results already gathered.
+The chat shows a status `data-notice` (neutral, not an error) that the
+tool-call limit was reached. A turn that finishes at or under the cap does
+not show the notice.
+
+A reasoning disclosure appears only when the Foundry event includes summary text. Operators enable that
 summary on the agent definition: the Responses API refuses a per-call
 `reasoning.summary` request when using `agent_reference`. Empty reasoning
 items are intentionally omitted rather than rendered as empty “Thinking”

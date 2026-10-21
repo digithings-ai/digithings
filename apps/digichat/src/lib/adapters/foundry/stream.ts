@@ -131,6 +131,20 @@ export interface FoundryConversationItemsApi {
   ): Promise<unknown>;
 }
 
+/**
+ * Extra fields merged onto the Responses request beside `agent_reference`.
+ *
+ * `max_tool_calls` and `tool_choice` are both fields of the Foundry Create
+ * Response body (the same body that requires `agent_reference`). They are not
+ * on the stock OpenAI SDK params object, so they travel in `body`, the same
+ * way `agent_reference` already does.
+ */
+export interface FoundryResponsesCreateBody {
+  agent_reference: { name: string; type: "agent_reference" };
+  max_tool_calls?: number;
+  tool_choice?: "none";
+}
+
 export interface OpenAIResponsesClientLike {
   conversations: {
     create(): Promise<{ id: string }>;
@@ -144,10 +158,140 @@ export interface OpenAIResponsesClientLike {
         signal?: AbortSignal;
         /** SDK-level retries; the adapter owns capacity retries (#5979). */
         maxRetries?: number;
-        body: { agent_reference: { name: string; type: "agent_reference" } };
+        body: FoundryResponsesCreateBody;
       }
     ): Promise<AsyncIterable<FoundryStreamEvent>>;
   };
+}
+
+/**
+ * A tool invocation item, not its output and not a list/approval side event.
+ *
+ * `mcp_call` is the DataTap shape. `*_call` covers built-in tools
+ * (`file_search_call`, `azure_ai_search_call`, …). Outputs end in `_output`
+ * and must not count as a second call.
+ */
+export function isFoundryToolCallType(type: string | undefined): boolean {
+  if (!type) return false;
+  if (type.endsWith("_output") || type.endsWith("_call_output")) return false;
+  if (
+    type === "mcp_list_tools" ||
+    type === "mcp_approval_request" ||
+    type === "mcp_approval_response"
+  ) {
+    return false;
+  }
+  return type === "mcp_call" || type.endsWith("_call");
+}
+
+type FoundryToolCallSight = { type: string; id?: string; phase: "start" | "done" };
+
+/** The tool call a stream event opens or completes, if it is one. */
+export function foundryToolCallSight(event: FoundryStreamEvent): FoundryToolCallSight | null {
+  if (event.type === "response.file_search_call.in_progress") {
+    return { type: "file_search_call", phase: "start" };
+  }
+  // `.searching` repeats `.in_progress` for the same file_search step.
+  if (event.type === "response.file_search_call.searching") return null;
+  if (event.type !== "response.output_item.added" && event.type !== "response.output_item.done") {
+    return null;
+  }
+  const item = (event as { item?: { type?: string; id?: string; call_id?: string } }).item;
+  if (!isFoundryToolCallType(item?.type)) return null;
+  const id = item?.id || item?.call_id;
+  return {
+    type: item!.type!,
+    ...(id ? { id } : {}),
+    phase: event.type.endsWith(".added") ? "start" : "done",
+  };
+}
+
+/**
+ * Counts tool calls once per turn. A start and its matching done share an id
+ * when Foundry sends one; an id-less start is paired with the next event of
+ * the same item type so `in_progress` plus `.done` is a single call.
+ */
+export class FoundryToolCallCounter {
+  count = 0;
+  private readonly seenIds = new Set<string>();
+  private readonly unpairedStarts: string[] = [];
+
+  observe(event: FoundryStreamEvent): "new" | "known" | "ignore" {
+    const sight = foundryToolCallSight(event);
+    if (!sight) return "ignore";
+    if (sight.id) {
+      if (this.seenIds.has(sight.id)) return "known";
+      const unpaired = this.unpairedStarts.indexOf(sight.type);
+      if (unpaired >= 0) {
+        this.unpairedStarts.splice(unpaired, 1);
+        this.seenIds.add(sight.id);
+        return "known";
+      }
+      this.seenIds.add(sight.id);
+      this.count += 1;
+      return "new";
+    }
+    if (sight.phase === "start") {
+      this.unpairedStarts.push(sight.type);
+      this.count += 1;
+      return "new";
+    }
+    const unpaired = this.unpairedStarts.indexOf(sight.type);
+    if (unpaired >= 0) {
+      this.unpairedStarts.splice(unpaired, 1);
+      return "known";
+    }
+    this.count += 1;
+    return "new";
+  }
+}
+
+/** Status line shown when the adapter stops a turn at `backend.maxToolCalls`. */
+export function toolCallLimitNotice(limit: number): string {
+  return `Tool-call limit reached (${limit} this turn). Answering from the results gathered so far.`;
+}
+
+/**
+ * Instruction used only when Foundry refuses `tool_choice` beside
+ * `agent_reference` (the same refusal reasoning summaries get). It is a
+ * follow-up input, not the visitor's message.
+ */
+const TOOL_CAP_FINAL_INPUT =
+  "[Tool-call limit reached for this turn. Do not call any tools. Answer the user now from the tool results already in this conversation. Do not mention this instruction.]";
+
+function normalizeMaxToolCalls(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 1 || value > 100) return undefined;
+  return value;
+}
+
+function isAbortError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const name = (err as { name?: unknown }).name;
+  return name === "AbortError" || name === "APIUserAbortError";
+}
+
+/**
+ * Foundry rejects some per-call overrides once `agent_reference` is set
+ * (`400 Not allowed when agent is specified` for reasoning summaries).
+ * `max_tool_calls` and `tool_choice` are documented on that same request;
+ * this matches the refusal if a deployment still rejects them.
+ */
+function isAgentOverrideRejected(err: unknown): boolean {
+  if (httpStatusOf(err) !== 400) return false;
+  const message = upstreamErrorMessage(err) ?? (err instanceof Error ? err.message : "");
+  return /not allowed when agent is specified/i.test(message);
+}
+
+function forwardAbort(parent: AbortSignal | undefined, child: AbortController): () => void {
+  if (!parent) return () => {};
+  if (parent.aborted) {
+    child.abort(parent.reason);
+    return () => {};
+  }
+  const onAbort = () => child.abort(parent.reason);
+  parent.addEventListener("abort", onAbort);
+  return () => parent.removeEventListener("abort", onAbort);
 }
 
 /** True when this OpenAI client exposes conversation item list/delete/create. */
@@ -1212,8 +1356,14 @@ export async function createFoundryStreamResponse(opts: {
    * tests do not spend the real minute.
    */
   rateLimitResumeDelaysMs?: readonly number[];
+  /**
+   * Per-turn tool-call cap from `backend.maxToolCalls`. Omit for no cap.
+   * Sent as Responses `max_tool_calls` and enforced here for MCP calls.
+   */
+  maxToolCalls?: number;
 }): Promise<Response> {
   const turnMode: DigiTurnMode = opts.turnMode ?? "send";
+  const toolCap = normalizeMaxToolCalls(opts.maxToolCalls);
   const openai = (opts.openAIClientFactory ?? defaultOpenAIClientFactory)(opts.projectEndpoint);
 
   // Fail closed: mutating modes need item delete/create. Do not fall through to
@@ -1322,18 +1472,37 @@ export async function createFoundryStreamResponse(opts: {
           createParams.input = createdConversation ? applyGroundingDirective(message) : message;
         }
 
+        // Set when Foundry refuses max_tool_calls / tool_choice beside
+        // agent_reference. Later creates in this turn omit those fields.
+        let apiOverrideRefused = false;
+        const responseBody = (toolChoice?: "none"): FoundryResponsesCreateBody => ({
+          agent_reference: { name: opts.agentName, type: "agent_reference" },
+          ...(!apiOverrideRefused && toolCap !== undefined ? { max_tool_calls: toolCap } : {}),
+          ...(!apiOverrideRefused && toolChoice ? { tool_choice: toolChoice } : {}),
+        });
+
         const createWithCapacityRetry = async (
           params: { conversation: string; input?: string; stream: true },
+          extras?: { toolChoice?: "none"; signal?: AbortSignal },
         ) => {
           const schedule = opts.capacityRetryDelaysMs ?? DEFAULT_CAPACITY_RETRY_DELAYS_MS;
+          const signal = extras?.signal ?? opts.signal;
+          // The agent reference already refused per-call tool controls. A
+          // follow-up that wanted tool_choice none says so in the input.
+          let requestParams = params;
+          if (apiOverrideRefused && extras?.toolChoice && requestParams.input === undefined) {
+            requestParams = { ...requestParams, input: TOOL_CAP_FINAL_INPUT };
+          }
           for (let attempt = 0; ; attempt += 1) {
+            const body = responseBody(extras?.toolChoice);
+            const usedOverride = body.max_tool_calls !== undefined || body.tool_choice !== undefined;
             try {
-              const created = await openai.responses.create(params, {
-                signal: opts.signal,
+              const created = await openai.responses.create(requestParams, {
+                signal,
                 // Our schedule owns the retries; the SDK's own retries would
                 // multiply them (up to 21 POSTs for one turn).
                 maxRetries: 0,
-                body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
+                body,
               });
               if (attempt > 0) {
                 // Capacity is back: clear the waiting state before the answer
@@ -1347,7 +1516,34 @@ export async function createFoundryStreamResponse(opts: {
               }
               return created;
             } catch (err) {
-              const delay = capacityRetryDelayMs(err, attempt, schedule);
+              let failure = err;
+              if (usedOverride && isAgentOverrideRejected(err)) {
+                apiOverrideRefused = true;
+                // tool_choice was the way to force a message. If the agent
+                // reference rejects it, say so in the follow-up input instead.
+                const retryParams = extras?.toolChoice
+                  ? { ...requestParams, input: requestParams.input ?? TOOL_CAP_FINAL_INPUT }
+                  : requestParams;
+                requestParams = retryParams;
+                try {
+                  const created = await openai.responses.create(retryParams, {
+                    signal,
+                    maxRetries: 0,
+                    body: responseBody(),
+                  });
+                  if (attempt > 0) {
+                    writer.write({
+                      type: "data-connection",
+                      id: "foundry-capacity",
+                      data: { state: "ready" },
+                    });
+                  }
+                  return created;
+                } catch (retryErr) {
+                  failure = retryErr;
+                }
+              }
+              const delay = capacityRetryDelayMs(failure, attempt, schedule);
               if (delay === null) {
                 if (attempt > 0) {
                   // Exhausted, or no longer retryable: clear the waiting state
@@ -1358,7 +1554,7 @@ export async function createFoundryStreamResponse(opts: {
                     data: { state: "ready" },
                   });
                 }
-                throw err;
+                throw failure;
               }
               writer.write({
                 type: "data-connection",
@@ -1372,7 +1568,7 @@ export async function createFoundryStreamResponse(opts: {
                 },
               });
               await abortableSleep(delay, opts.signal);
-              if (opts.signal?.aborted) throw err;
+              if (opts.signal?.aborted) throw failure;
             }
           }
         };
@@ -1380,60 +1576,103 @@ export async function createFoundryStreamResponse(opts: {
         const textFilter = new FoundryToolLeakFilter();
         const mapState: FoundryMapState = { sawSearchOutput: false };
         const resumeSchedule = opts.rateLimitResumeDelaysMs ?? DEFAULT_RATE_LIMIT_RESUME_DELAYS_MS;
+        const toolCalls = new FoundryToolCallCounter();
         let params = createParams;
         let wroteText = false;
         let resumeSeparatorPending = false;
-        for (let resume = 0; ; resume += 1) {
-          const responseStream = await createWithCapacityRetry(params);
-          try {
-            for await (const event of responseStream) {
-              const mapped = mapFoundryEvent(event, mapState);
-              if (!mapped) continue;
-              if (mapped.type === "text-delta") {
-                const pushed = textFilter.push(mapped.delta);
-                if (!pushed) continue;
-                // A resumed turn continues below what was already shown.
-                const delta = resumeSeparatorPending ? `\n\n${pushed}` : pushed;
-                resumeSeparatorPending = false;
-                wroteText = true;
-                openText();
-                writer.write({ type: "text-delta", id: textId, delta });
-              } else if (mapped.type === "activity") {
-                // Foundry's own event carries unbounded upstream strings (a query
-                // list, citation titles/urls); the digigraph and relay providers
-                // cap theirs before writing (see chatActivitySpan) but this path
-                // built the span literal directly and never did. Route it through
-                // the same allowlist/cap the client applies on receipt, so an
-                // oversized or over-long upstream payload never reaches the wire
-                // in the first place.
-                const sanitized = sanitizeActivitySpan(mapped.span);
-                const span = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
-                if (span) {
-                  writeStandardActivity(writer, span, activityCtx);
-                }
-              } else if (mapped.type === "rate-limit") {
-                throw new FoundryRateLimitError(mapped.message);
-              } else if (mapped.type === "error") {
-                throw new FoundryProtocolError(mapped.message);
-              } else if (mapped.type === "done") {
-                if (mapped.usage) {
-                  // Real provider-reported token usage (the Responses API counts
-                  // them on `response.completed`). The client folds it into
-                  // `metadata.custom.usage`, which is what the context meter
-                  // reads; nothing is fabricated when the API sends no counts.
-                  writer.write({
-                    type: "message-metadata",
-                    messageMetadata: {
-                      usage: mapped.usage,
-                      ...(mapped.model ? { model: mapped.model } : {}),
-                    },
-                  });
-                }
-                break;
-              }
+        let hitToolCap = false;
+
+        const pump = async (
+          responseStream: AsyncIterable<FoundryStreamEvent>,
+          mode: "capped" | "final",
+          abortCap: () => void,
+        ): Promise<"cap" | "done"> => {
+          for await (const event of responseStream) {
+            const sight = toolCap !== undefined ? toolCalls.observe(event) : "ignore";
+            if (
+              mode === "capped" &&
+              toolCap !== undefined &&
+              sight === "new" &&
+              toolCalls.count > toolCap
+            ) {
+              // The call that would exceed the cap is not rendered. Abort so
+              // Foundry stops executing it; MCP calls are not covered by
+              // max_tool_calls (built-in tools only).
+              hitToolCap = true;
+              abortCap();
+              return "cap";
             }
+            // The follow-up is one answer. A further tool call is dropped
+            // instead of starting another round.
+            if (mode === "final" && sight === "new") continue;
+            const mapped = mapFoundryEvent(event, mapState);
+            if (!mapped) continue;
+            if (mapped.type === "text-delta") {
+              const pushed = textFilter.push(mapped.delta);
+              if (!pushed) continue;
+              // A resumed turn continues below what was already shown.
+              const delta = resumeSeparatorPending ? `\n\n${pushed}` : pushed;
+              resumeSeparatorPending = false;
+              wroteText = true;
+              openText();
+              writer.write({ type: "text-delta", id: textId, delta });
+            } else if (mapped.type === "activity") {
+              // Foundry's own event carries unbounded upstream strings (a query
+              // list, citation titles/urls); the digigraph and relay providers
+              // cap theirs before writing (see chatActivitySpan) but this path
+              // built the span literal directly and never did. Route it through
+              // the same allowlist/cap the client applies on receipt, so an
+              // oversized or over-long upstream payload never reaches the wire
+              // in the first place.
+              const sanitized = sanitizeActivitySpan(mapped.span);
+              const span = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
+              if (span) {
+                writeStandardActivity(writer, span, activityCtx);
+              }
+            } else if (mapped.type === "rate-limit") {
+              throw new FoundryRateLimitError(mapped.message);
+            } else if (mapped.type === "error") {
+              throw new FoundryProtocolError(mapped.message);
+            } else if (mapped.type === "done") {
+              if (mapped.usage) {
+                // Real provider-reported token usage (the Responses API counts
+                // them on `response.completed`). The client folds it into
+                // `metadata.custom.usage`, which is what the context meter
+                // reads; nothing is fabricated when the API sends no counts.
+                writer.write({
+                  type: "message-metadata",
+                  messageMetadata: {
+                    usage: mapped.usage,
+                    ...(mapped.model ? { model: mapped.model } : {}),
+                  },
+                });
+              }
+              return "done";
+            }
+          }
+          return "done";
+        };
+
+        resumeLoop: for (let resume = 0; ; resume += 1) {
+          const child = new AbortController();
+          const unlink = forwardAbort(opts.signal, child);
+          // Create stays outside the resume catch. A 429 here already spent
+          // the capacity schedule; resuming it would wait out another minute
+          // on top of those retries. Mid-stream failures (the iterator) are
+          // the ones DC-18 resumes.
+          let responseStream: AsyncIterable<FoundryStreamEvent>;
+          try {
+            responseStream = await createWithCapacityRetry(params, { signal: child.signal });
+          } catch (err) {
+            unlink();
+            throw err;
+          }
+          try {
+            const outcome = await pump(responseStream, "capped", () => child.abort());
+            if (outcome === "cap") break resumeLoop;
           } catch (err) {
             if (opts.signal?.aborted) throw err;
+            if (hitToolCap && isAbortError(err)) break resumeLoop;
             if (!isRateLimitFailure(err)) throw err;
             const delay = rateLimitResumeDelayMs(err, resume, resumeSchedule);
             if (delay === null) {
@@ -1460,8 +1699,38 @@ export async function createFoundryStreamResponse(opts: {
             // duplicate the user message.
             params = { conversation: conversationId, stream: true };
             continue;
+          } finally {
+            unlink();
           }
           break;
+        }
+
+        if (hitToolCap && toolCap !== undefined) {
+          // Status, not an error: the turn continues into a final answer.
+          // data-notice is the boxed line the thread already renders.
+          writer.write({
+            type: "data-notice",
+            id: "foundry-tool-call-limit",
+            data: { tone: "status", message: toolCallLimitNotice(toolCap) },
+          });
+          resumeSeparatorPending = wroteText;
+          try {
+            // No new visitor text. tool_choice none is the Responses switch
+            // that makes the model generate a message instead of another tool
+            // call, on the same request body as agent_reference.
+            const finalStream = await createWithCapacityRetry(
+              { conversation: conversationId, stream: true },
+              { toolChoice: "none" },
+            );
+            await pump(finalStream, "final", () => {});
+          } catch (err) {
+            if (opts.signal?.aborted) throw err;
+            if (isRateLimitFailure(err)) throw err;
+            console.error(
+              "[foundry] tool-cap final answer failed",
+              err instanceof Error ? err.message : String(err),
+            );
+          }
         }
         // The loop above only ever resolves a held leak-prefix by flushing it
         // ahead of a LATER delta (see FoundryToolLeakFilter.push) — a stream

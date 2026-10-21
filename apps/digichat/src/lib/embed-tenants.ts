@@ -52,7 +52,16 @@ export type EmbedBackendConfig =
       /** digivault path prefix forwarded as X-Digi-Vault-Prefix */
       vaultPathPrefix?: string;
     }
-  | { type: "foundry"; projectEndpoint: string; agentName: string }
+  | {
+      type: "foundry";
+      projectEndpoint: string;
+      agentName: string;
+      /**
+       * Per-turn tool-call cap. Same key as the deployment YAML
+       * (`backend.maxToolCalls`). Omit for no cap.
+       */
+      maxToolCalls?: number;
+    }
   | {
       type: "openai-completions" | "openai-responses";
       /** https OpenAI-compatible base URL. */
@@ -411,7 +420,24 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     if (typeof backend.agentName !== "string" || !backend.agentName.trim()) {
       throw new Error(`${ctx}: foundry backend requires an "agentName"`);
     }
-    backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
+    let maxToolCalls: number | undefined;
+    if (backend.maxToolCalls !== undefined) {
+      if (
+        typeof backend.maxToolCalls !== "number" ||
+        !Number.isInteger(backend.maxToolCalls) ||
+        backend.maxToolCalls < 1 ||
+        backend.maxToolCalls > 100
+      ) {
+        throw new Error(`${ctx}: foundry backend.maxToolCalls must be an integer from 1 to 100`);
+      }
+      maxToolCalls = backend.maxToolCalls;
+    }
+    backendCfg = {
+      type: "foundry",
+      projectEndpoint: backend.projectEndpoint,
+      agentName: backend.agentName,
+      ...(maxToolCalls !== undefined ? { maxToolCalls } : {}),
+    };
   } else if (backend?.type === "openai-completions" || backend?.type === "openai-responses") {
     // OpenAI-compatible AI-SDK backends (#4535). Same field shape for both; the
     // wire format is the only difference. `apiKeyEnv` must name a

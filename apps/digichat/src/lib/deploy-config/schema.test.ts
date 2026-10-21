@@ -248,6 +248,52 @@ describe("DigichatConfigSchema", () => {
     ).toThrow(/skin/);
   });
 
+  it("accepts a foundry per-turn tool-call cap and rejects a non-cap", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "x",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://example.services.ai.azure.com",
+          agentName: "agent",
+          maxToolCalls: 5,
+        },
+      },
+    });
+    expect(cfg.deployment?.backend).toMatchObject({ type: "foundry", maxToolCalls: 5 });
+
+    const unlimited = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "x",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://example.services.ai.azure.com",
+          agentName: "agent",
+        },
+      },
+    });
+    expect(unlimited.deployment?.backend).not.toHaveProperty("maxToolCalls");
+
+    for (const maxToolCalls of [0, -1, 1.5, 101]) {
+      expect(() =>
+        parseDigichatConfig({
+          version: 1,
+          deployment: {
+            slug: "x",
+            backend: {
+              type: "foundry",
+              projectEndpoint: "https://example.services.ai.azure.com",
+              agentName: "agent",
+              maxToolCalls,
+            },
+          },
+        }),
+      ).toThrow(/maxToolCalls/);
+    }
+  });
+
   it("fails closed on foundry http endpoint", () => {
     expect(() =>
       parseDigichatConfig({

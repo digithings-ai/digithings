@@ -299,6 +299,17 @@ export const FoundryBackendSchema = z
       .url()
       .refine((u) => u.startsWith("https:"), "projectEndpoint must be https"),
     agentName: z.string().min(1),
+    /**
+     * Per-turn tool-call cap for this Foundry agent. Omit for no cap.
+     *
+     * Sent as the Responses API `max_tool_calls` on the same request as
+     * `agent_reference`. That parameter is documented for built-in tools
+     * (file search, web search, and the like). MCP calls are a separate tool
+     * category, so the Foundry adapter also stops the turn at this count,
+     * asks for a final answer, and shows a status notice. See
+     * `apps/digichat/ARCHITECTURE.md` (Foundry tenants).
+     */
+    maxToolCalls: z.number().int().positive().max(100).optional(),
   })
   .strict();
 
