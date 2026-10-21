@@ -281,4 +281,55 @@ describe("exchangeDigikeyBffSession", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(timing.elapsedMs).toBe(DIGIKEY_BFF_RETRY_BUDGET_MS);
   });
+
+  it("shortens the abort window of a late attempt so the budget is not overshot", async () => {
+    // The mixed failure pattern: digikey boots slowly (two attempts hang) and
+    // then answers with a transient 5xx, so the last attempt starts late. The
+    // abort cap is a cap: that late attempt gets min(cap, budget left), not
+    // the full cap, so the exchange still fails exactly at the budget instead
+    // of running past it.
+    vi.useFakeTimers();
+    const attempts: { startedAt: number; abortedAt: number | null }[] = [];
+    const fetchMock = vi.fn((_url: string, init: { signal?: AbortSignal }) => {
+      const attempt = { startedAt: Date.now(), abortedAt: null as number | null };
+      attempts.push(attempt);
+      if (attempts.length === 3) {
+        // The third attempt answers at once with a transient status.
+        return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => {
+          attempt.abortedAt = Date.now();
+          reject(new Error("aborted"));
+        });
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const timing: { elapsedMs: number | null } = { elapsedMs: null };
+    const startedAt = Date.now();
+    const p = exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1").then(
+      (value) => {
+        timing.elapsedMs = Date.now() - startedAt;
+        return value;
+      }
+    );
+    await vi.advanceTimersByTimeAsync(DIGIKEY_BFF_RETRY_BUDGET_MS + 10_000);
+    await vi.runAllTimersAsync();
+
+    await expect(p).resolves.toBeNull();
+    // Two hung attempts (30s + 2s + 30s), one fast 5xx, then a fourth attempt
+    // that starts with 26_000 ms of budget left.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(attempts).toHaveLength(4);
+    const last = attempts[3];
+    // The fake clock starts at the current wall clock, so the attempt times
+    // are relative to the moment the exchange was called.
+    expect(last.startedAt - startedAt).toBe(74_000);
+    const abortedAt = last.abortedAt ?? -1;
+    // The late attempt is cut short, and the call fails on the budget itself.
+    expect(abortedAt - last.startedAt).toBeLessThan(DIGIKEY_BFF_ATTEMPT_TIMEOUT_MS);
+    expect(abortedAt - startedAt).toBe(DIGIKEY_BFF_RETRY_BUDGET_MS);
+    expect(timing.elapsedMs).toBe(DIGIKEY_BFF_RETRY_BUDGET_MS);
+  });
 });
