@@ -39,6 +39,12 @@ describe("sessionModelSeed", () => {
     );
   });
 
+  it("keeps the session model when the report has no known window", () => {
+    expect(contextMeterModel({ sessionModel: FLASH, reportedModel: "digigraph-rag" })).toBe(FLASH);
+    expect(contextMeterModel({ sessionModel: "", reportedModel: "digigraph-rag" })).toBe("");
+    expect(contextMeterModel({ sessionModel: FLASH, reportedModel: "constructor" })).toBe(FLASH);
+  });
+
   it("leaves other hosts on an empty model", () => {
     expect(sessionModelSeed({ available: [] })).toBe("");
     expect(contextMeterModel({ sessionModel: "" })).toBe("");

@@ -1,13 +1,17 @@
+import { contextWindowFor } from "@digithings/ui/chat/context-meter";
+
 /**
  * Product hosts for digithings.ai. Their live tenant publishes
  * `models.available: []`, so the session model stays empty and a turn
- * sends no X-Digi-Model. The context meter then uses the model id the
- * turn reports, not the deploy catalog default. OCC omits `models` and
- * inherits the deploy catalog, so its session model is that default.
- * A true flag on any other slug does nothing.
+ * sends no X-Digi-Model. The house bar shows only once digigraph reports
+ * the model it served. That report is a 2.6.8 follow-up. OCC omits
+ * `models` and inherits the deploy catalog, so its session model keeps
+ * the bar when a report has no known window. `showContextMeter` and
+ * `contextMeterEnabled` do not gate the bar.
  */
 const HOUSE_CONTEXT_METER_SLUGS = new Set(["digithings", "digithings-ai"]);
 
+/** Slug check kept for callers. It does not show or hide the bar. */
 export function contextMeterEnabled(
   showContextMeter: boolean | undefined,
   slug: string | undefined,
@@ -38,18 +42,19 @@ export function sessionModelSeed(input: {
 /**
  * Model id whose context window the bar draws.
  *
- * The id the turn reported is the one that served it. With no report yet,
- * the session model is the id the next turn will send. An empty session
- * and no report resolve to "" — the catalog default is not a stand-in,
- * and this id is never written into the session.
+ * A reported id with its own window is the model that served the turn.
+ * A reported id with no window falls back to the session model, so OCC
+ * keeps its bar. An empty session and no known report resolve to "".
+ * This id is never written into the session.
  */
 export function contextMeterModel(input: {
   sessionModel?: string;
   reportedModel?: string;
 }): string {
   const reported = input.reportedModel?.trim() || "";
-  if (reported) return reported;
-  return input.sessionModel?.trim() || "";
+  const session = input.sessionModel?.trim() || "";
+  if (reported && contextWindowFor(reported) !== undefined) return reported;
+  return session;
 }
 
 /**

@@ -561,7 +561,8 @@ function EmbedChat({
     // the picker shows as selected (v4.1-flash on OCC) instead of falling
     // through to the digigraph operator default. An empty list leaves the
     // session model unset, so the turn sends no X-Digi-Model until the
-    // user picks one. The meter uses the model the turn reports.
+    // user picks one. The house bar shows only once digigraph reports
+    // the model it served.
     model: sessionModelSeed({
       available: stockClient.models.available,
       defaultModel: stockClient.models.default,

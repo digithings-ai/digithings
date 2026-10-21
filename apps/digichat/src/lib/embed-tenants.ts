@@ -167,11 +167,9 @@ export type EmbedTenantConfig = {
    */
   showLanguageSelector?: boolean;
   /**
-   * When true, the composer seeds a known context window even if
-   * `models.available` is empty, so the existing context meter renders.
-   * Does not open the model picker. Only slugs `digithings` and
-   * `digithings-ai` may set it; any other slug is refused. Explicit false
-   * turns it off for those house slugs, which otherwise seed that window.
+   * Accepted on slugs `digithings` and `digithings-ai`. It does not gate
+   * the context meter. The house bar shows only once digigraph reports
+   * the model it served (a 2.6.8 follow-up). Any other slug is refused.
    */
   showContextMeter?: boolean;
   /**

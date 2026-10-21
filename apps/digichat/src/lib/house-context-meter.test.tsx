@@ -101,8 +101,22 @@ describe("house host context meter", () => {
         },
       },
     ];
-    const { container } = paint(FLASH);
+    paint(FLASH);
+    expect(screen.getByRole("img", { name: "Context 12 / 1.0m tokens" })).toBeTruthy();
+  });
+
+  it("does not treat a built-in object key as a context window", () => {
+    const { container } = paint("constructor");
     expect(container.querySelector(".aui-context-meter")).toBeNull();
+    thread.messages = [
+      {
+        metadata: {
+          custom: { model: "constructor", usage: { inputTokens: 0 } },
+        },
+      },
+    ];
+    paint(FLASH);
+    expect(screen.getByRole("img", { name: "Context 0 / 1.0m tokens" })).toBeTruthy();
   });
 
   it("keeps the meter off for the foundry trial and for an OCC host with an empty list", () => {

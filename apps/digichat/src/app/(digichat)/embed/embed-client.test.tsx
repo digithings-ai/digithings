@@ -729,6 +729,7 @@ describe("a default house turn sends no X-Digi-Model", () => {
     try {
       const headers = await preparedHeaders();
       expect(headers.get("X-Digi-Model")).toBeNull();
+      expect(headers.get("X-BYOK-Model")).toBeNull();
     } finally {
       await act(async () => {
         root.unmount();

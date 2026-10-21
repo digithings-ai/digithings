@@ -70,9 +70,9 @@ export type EmbedTenantClientConfig = {
   llmAccess?: EmbedLlmAccess;
   showLanguageSelector?: boolean;
   /**
-   * Seed the context meter when the published model list is empty.
-   * Explicit false opts a house slug out. Omit leaves the seed rule to
-   * the slug (house on, every other host off).
+   * Carried for house slugs. It does not gate the context meter. The
+   * house bar shows only once digigraph reports the model it served
+   * (a 2.6.8 follow-up).
    */
   showContextMeter?: boolean;
   /** Tenant allows opt-in web search UI (#3420). Default false. */

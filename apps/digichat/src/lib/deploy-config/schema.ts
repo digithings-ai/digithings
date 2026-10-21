@@ -576,9 +576,9 @@ export const GateSchema = z
     showByok: z.boolean().optional(),
     showLanguageSelector: z.boolean().optional(),
     /**
-     * Seed a known context window so the existing composer meter renders
-     * when this host publishes no model list. Does not open the picker.
-     * Omitted stays off, except the house slugs (see session-model-seed).
+     * Does not gate the context meter. The house bar shows only once
+     * digigraph reports the model it served (a 2.6.8 follow-up). Only
+     * the house slugs may set the field.
      */
     showContextMeter: z.boolean().optional(),
     lockSessionControls: z.boolean().optional(),
