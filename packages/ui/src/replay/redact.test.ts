@@ -38,7 +38,69 @@ describe("redactString", () => {
   });
 });
 
+describe("redactString: header schemes and provider shapes", () => {
+  it("replaces Authorization values for every scheme, including Zammad tokens", () => {
+    const raw = [
+      "Authorization: Token token=zammad-plain-9f3c2a",
+      'curl -H "Authorization: Basic dXNlcjpwYXNzd29yZA=="',
+      '{"headers":{"Authorization":"Token token=zammad-json-9f3c2a"}}',
+      "see Token token=zammad-prose-9f3c2a in the log",
+    ].join("\n");
+    const out = redactString(raw);
+    for (const secret of [
+      "zammad-plain-9f3c2a",
+      "dXNlcjpwYXNzd29yZA==",
+      "zammad-json-9f3c2a",
+      "zammad-prose-9f3c2a",
+    ]) {
+      expect(out).not.toContain(secret);
+    }
+    expect(out).toContain("in the log");
+  });
+
+  it("replaces labeled passwords and client secrets in prose", () => {
+    const out = redactString(
+      "password=plain-pass-9f3c2a client_secret: plain-cs-9f3c2a token=plain-tok-9f3c2a",
+    );
+    expect(out).not.toContain("plain-pass-9f3c2a");
+    expect(out).not.toContain("plain-cs-9f3c2a");
+    expect(out).not.toContain("plain-tok-9f3c2a");
+  });
+
+  it("replaces common provider token shapes", () => {
+    // Built at runtime so the fixtures are not real-looking secrets in source.
+    const shapes = [
+      "gh" + "p_" + "A1b2C3d4".repeat(5),
+      "github" + "_pat_" + "A1b2C3d4".repeat(4),
+      "xo" + "xb-" + "1234567890-abcdefghij",
+      "AK" + "IA" + "ABCDEFGHIJKLMNOP",
+      "AI" + "za" + "A1b2C3d4E5".repeat(3) + "A1b2C",
+      "gl" + "pat-" + "A1b2C3d4".repeat(3),
+    ];
+    const out = redactString(shapes.join(" "));
+    for (const shape of shapes) expect(out).not.toContain(shape);
+  });
+
+  it("keeps token counts", () => {
+    expect(redactString("max_tokens: 4000, input_tokens=1200")).toBe(
+      "max_tokens: 4000, input_tokens=1200",
+    );
+  });
+});
+
 describe("redactValue", () => {
+  it("replaces keys that end in token, secret, password or key names", () => {
+    const out = redactValue({
+      token: "t-plain-9f3c2a",
+      authToken: "a-plain-9f3c2a",
+      client_secret: "c-plain-9f3c2a",
+      privateKey: "p-plain-9f3c2a",
+      max_tokens: 4000,
+    });
+    expect(JSON.stringify(out)).not.toMatch(/plain-9f3c2a/);
+    expect(out.max_tokens).toBe(4000);
+  });
+
   it("replaces sensitive object keys entirely", () => {
     const out = redactValue({
       authorization: `Bearer ${JWT}`,
