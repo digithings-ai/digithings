@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseSlashInput, slashHelpText } from "@digithings/digichat-ui";
+import { slashHelpText } from "@digithings/digichat-ui";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
@@ -74,48 +74,28 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
 }
 
 describe("slashSubmitAction", () => {
-  it("forces /digisearch and /digivault with the remainder as the user message", () => {
-    expect(slashSubmitAction("/digisearch RS256")).toEqual({
-      kind: "force",
-      forceTool: "digisearch",
-      text: "RS256",
-    });
-    expect(slashSubmitAction("/digivault notes")).toEqual({
-      kind: "force",
-      forceTool: "digivault",
-      text: "notes",
-    });
+  it("blocks direct tool commands", () => {
+    expect(slashSubmitAction("/digisearch RS256")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/digivault")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/websearch latest filings")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/desk")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/records pipeline status")).toEqual({ kind: "block" });
   });
 
-  it("runs empty /digisearch as a session toggle", () => {
-    expect(slashSubmitAction("/digisearch")).toMatchObject({
+  it("keeps a pane command in the composer until the option resolves", () => {
+    expect(slashSubmitAction("/language ")).toMatchObject({ kind: "pane", command: { id: "lang" } });
+    expect(slashSubmitAction("/language English")).toMatchObject({
       kind: "run",
-      command: { id: "digisearch" },
-      arg: "",
+      command: { id: "lang" },
+      arg: "English",
     });
-  });
-
-  it("forces /websearch query as this-send web search", () => {
-    expect(slashSubmitAction("/websearch latest filings")).toEqual({
-      kind: "force-web",
-      text: "latest filings",
-    });
-  });
-
-  it("forces extra MCP catalog ids", () => {
-    const extra = extraSlashDefs(
-      api({ catalogTools: [{ id: "widget", label: "Widget" }] }),
-    );
-    expect(slashSubmitAction("/widget pipeline status", extra)).toEqual({
-      kind: "force",
-      forceTool: "widget",
-      text: "pipeline status",
-    });
-    expect(slashSubmitAction("/widget", extra)).toMatchObject({
+    expect(slashSubmitAction("/theme ")).toMatchObject({ kind: "pane", command: { id: "theme" } });
+    expect(slashSubmitAction("/theme dark")).toMatchObject({
       kind: "run",
-      command: { id: "widget" },
-      arg: "",
+      command: { id: "theme" },
+      arg: "dark",
     });
+    expect(slashSubmitAction("/tools Search")).toMatchObject({ kind: "pane" });
   });
 
   it("runs /language dutch as a client command", () => {
@@ -144,14 +124,9 @@ describe("slashSubmitAction", () => {
     expect(slashSubmitAction("/not-a-command")).toEqual({ kind: "block" });
   });
 
-  it("does not treat a slashHelpText dump as /digisearch", () => {
-    const help = slashHelpText({
-      webSearch: true,
-      byok: true,
-      digisearch: true,
-      digivault: true,
-    });
-    expect(help.startsWith("/digisearch")).toBe(true);
+  it("does not treat a slashHelpText dump as a command", () => {
+    const help = slashHelpText({ webSearch: true, byok: true });
+    expect(help).not.toContain("/digisearch");
     expect(slashSubmitAction(help)).toEqual({ kind: "block" });
   });
 });
@@ -160,7 +135,7 @@ describe("catalogForceTool", () => {
   it("maps vault locate onto the BFF catalog id", () => {
     expect(catalogForceTool("digivault_search_notes")).toBe("digivault");
     expect(catalogForceTool("digisearch")).toBe("digisearch");
-    expect(catalogForceTool("widget")).toBe("widget");
+    expect(catalogForceTool("records")).toBe("records");
   });
 });
 
@@ -168,9 +143,9 @@ describe("buildProductSlashCommands", () => {
   it("includes catalog tools, mcp, models, and featured languages without per-row icons", () => {
     const cmds = buildProductSlashCommands(api({ allowUserMcp: true }));
     const ids = cmds.map((c) => c.id);
-    expect(ids).toContain("websearch");
-    expect(ids).toContain("digisearch");
-    expect(ids).toContain("digivault");
+    expect(ids).not.toContain("websearch");
+    expect(ids).not.toContain("digisearch");
+    expect(ids).not.toContain("digivault");
     expect(ids).toContain("mcp");
     expect(ids).toContain("models");
     expect(ids).toContain("dutch");
@@ -203,18 +178,12 @@ describe("buildProductSlashCommands", () => {
     expect(ids).toContain("thinking");
   });
 
-  it("adds extra MCP catalog commands", () => {
+  it("does not add a slash command per catalog tool", () => {
     const ids = buildProductSlashCommands(
-      api({ catalogTools: [{ id: "widget", label: "Widget" }] }),
+      api({ catalogTools: [{ id: "records", label: "Records" }] }),
     ).map((c) => c.id);
-    expect(ids).toContain("widget");
-  });
-
-  it("still parses /digisearch as a tool command", () => {
-    expect(parseSlashInput("/digisearch")).toMatchObject({
-      kind: "command",
-      command: { id: "digisearch", kind: "tool" },
-    });
+    expect(ids).not.toContain("records");
+    expect(ids).toContain("tools");
   });
 });
 
@@ -334,46 +303,27 @@ describe("executeSlashDef", () => {
     expect(a.openDensity).toHaveBeenCalledOnce();
   });
 
-  it("exposes extra MCP servers as slash tools", () => {
-    const extra = extraSlashDefs(
-      api({
-        catalogTools: [{ id: "digisearch" }],
-        mcpServers: [{ id: "widget", label: "Widget" }],
-      }),
-    );
-    expect(extra.map((d) => d.names[0])).toEqual(["/widget"]);
-    expect(slashSubmitAction("/widget pipeline", extra)).toEqual({
-      kind: "force",
-      forceTool: "widget",
-      text: "pipeline",
-    });
-  });
-
-  it("exposes session MCP configs as slash tools", () => {
-    const extra = extraSlashDefs(
-      api({
-        catalogTools: [],
-        mcpServers: [],
-        prefs: {
-          ...DEFAULT_EMBED_CHAT_PREFS,
-          mcpCustom: [{ ...emptyMcpConfig(), id: "linear", label: "Linear" }],
-        },
-      }),
-    );
-    expect(extra.map((d) => d.names[0])).toEqual(["/linear"]);
-  });
-
-  it("toggles extra MCP tools", () => {
-    const a = api({
-      extraToolOn: () => true,
-      catalogTools: [{ id: "widget" }],
-    });
-    executeSlashDef(
-      { id: "widget", names: ["/widget"], needsArg: false, hint: "", kind: "tool" },
-      "",
-      a,
-    );
-    expect(a.setExtraTool).toHaveBeenCalledWith("widget", false);
+  it("does not expose catalog or session MCP ids as slash commands", () => {
+    expect(
+      extraSlashDefs(
+        api({
+          catalogTools: [{ id: "digisearch" }],
+          mcpServers: [{ id: "records", label: "Records" }],
+        }),
+      ),
+    ).toEqual([]);
+    expect(
+      extraSlashDefs(
+        api({
+          catalogTools: [],
+          mcpServers: [],
+          prefs: {
+            ...DEFAULT_EMBED_CHAT_PREFS,
+            mcpCustom: [{ ...emptyMcpConfig(), id: "linear", label: "Linear" }],
+          },
+        }),
+      ),
+    ).toEqual([]);
   });
 });
 

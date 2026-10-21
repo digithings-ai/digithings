@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
-  catalogToolSlashDef,
+  applyPaletteFrame,
   formatCliSettingLine,
   isLangCode,
   LANG_LABELS,
   matchingSlashCommands,
   nextPaletteIndex,
+  optionDraft,
+  paletteFrame,
+  paletteSurfaces,
+  paneDraftForId,
   parseSlashInput,
   SLASH_COMMANDS,
   slashHelpText,
+  submenuRows,
   VIEW_CHOICES,
   VIEW_CODES,
   VIEW_LABELS,
@@ -19,31 +24,17 @@ describe("parseSlashInput", () => {
     expect(parseSlashInput("how does auth work")).toEqual({ kind: "none" });
   });
 
-  it("treats empty /digisearch as a toggle, not incomplete", () => {
-    expect(parseSlashInput("/digisearch")).toMatchObject({
-      kind: "command",
-      command: { id: "digisearch", kind: "tool" },
-      arg: "",
-    });
+  it("does not treat /digisearch as a palette command", () => {
+    expect(parseSlashInput("/digisearch")).toEqual({ kind: "unknown", name: "/digisearch" });
+    expect(parseSlashInput("/digivault notes")).toEqual({ kind: "unknown", name: "/digivault" });
+    expect(parseSlashInput("/websearch query")).toEqual({ kind: "unknown", name: "/websearch" });
+    expect(parseSlashInput("/ledger")).toEqual({ kind: "unknown", name: "/ledger" });
   });
 
   it("drops /search /vault /docs as public names", () => {
     expect(parseSlashInput("/search RS256")).toEqual({ kind: "unknown", name: "/search" });
     expect(parseSlashInput("/vault notes")).toEqual({ kind: "unknown", name: "/vault" });
     expect(parseSlashInput("/docs notes")).toEqual({ kind: "unknown", name: "/docs" });
-  });
-
-  it("uses the remainder after /digisearch as the force query", () => {
-    const parsed = parseSlashInput("/digisearch RS256 token exchange");
-    expect(parsed).toEqual({
-      kind: "command",
-      command: expect.objectContaining({
-        id: "digisearch",
-        forceTool: "digisearch",
-        kind: "tool",
-      }),
-      arg: "RS256 token exchange",
-    });
   });
 
   it("aliases /clear onto a new-conversation command", () => {
@@ -53,13 +44,9 @@ describe("parseSlashInput", () => {
     });
   });
 
-  it("parses client-only /help /new /lang /websearch /settings /provider /mcp", () => {
+  it("parses client-only /help /new /lang /settings /provider /mcp", () => {
     expect(parseSlashInput("/help")).toMatchObject({ kind: "command", command: { id: "help" } });
     expect(parseSlashInput("/new")).toMatchObject({ kind: "command", command: { id: "new" } });
-    expect(parseSlashInput("/websearch")).toMatchObject({
-      kind: "command",
-      command: { id: "websearch", kind: "tool" },
-    });
     expect(parseSlashInput("/settings")).toMatchObject({
       kind: "command",
       command: { id: "settings" },
@@ -96,19 +83,6 @@ describe("parseSlashInput", () => {
     });
   });
 
-  it("parses extra catalog MCP tools", () => {
-    const extra = [catalogToolSlashDef({ id: "widget", label: "Widget" })];
-    expect(parseSlashInput("/widget", extra)).toMatchObject({
-      kind: "command",
-      command: { id: "widget", kind: "tool" },
-      arg: "",
-    });
-    expect(parseSlashInput("/widget pipeline status", extra)).toMatchObject({
-      kind: "command",
-      arg: "pipeline status",
-    });
-  });
-
   it("flags unknown commands", () => {
     expect(parseSlashInput("/web")).toEqual({ kind: "unknown", name: "/web" });
   });
@@ -131,23 +105,14 @@ describe("matchingSlashCommands", () => {
   it("lists public copy for a bare slash including tools and settings", () => {
     const matches = matchingSlashCommands("/", { webSearch: true, byok: true });
     const ids = matches.map((c) => c.id);
-    expect(ids).toContain("digisearch");
-    expect(ids).toContain("digivault");
-    expect(ids).toContain("websearch");
+    expect(ids).not.toContain("digisearch");
+    expect(ids).not.toContain("digivault");
+    expect(ids).not.toContain("websearch");
     expect(ids).toContain("byok");
     expect(ids).toContain("settings");
     expect(ids).toContain("mcp");
     expect(ids).toContain("tools");
     expect(ids).not.toContain("sessions");
-  });
-
-  it("hides websearch unless the tenant allows it", () => {
-    expect(matchingSlashCommands("/", { webSearch: false }).map((c) => c.id)).not.toContain(
-      "websearch",
-    );
-    expect(matchingSlashCommands("/", { webSearch: true }).map((c) => c.id)).toContain(
-      "websearch",
-    );
   });
 
   it("hides search-engine unless the tenant allows web search", () => {
@@ -163,7 +128,8 @@ describe("matchingSlashCommands", () => {
   it("narrows as the user types a prefix", () => {
     expect(matchingSlashCommands("/se").map((c) => c.id)).toEqual(["settings"]);
     expect(matchingSlashCommands("/sett").map((c) => c.id)).toEqual(["settings"]);
-    expect(matchingSlashCommands("/digis").map((c) => c.id)).toEqual(["digisearch"]);
+    expect(matchingSlashCommands("/digis").map((c) => c.id)).toEqual([]);
+    expect(matchingSlashCommands("/tools").map((c) => c.id)).toEqual(["tools"]);
   });
 
   it("hides /theme when the embed pins the theme", () => {
@@ -180,9 +146,9 @@ describe("matchingSlashCommands", () => {
 describe("slashHelpText", () => {
   it("uses public tool names, not /search or /docs", () => {
     const help = slashHelpText({ webSearch: true, byok: true });
-    expect(help).toContain("/digisearch —");
-    expect(help).toContain("/digivault —");
-    expect(help).toContain("/websearch —");
+    expect(help).not.toContain("/digisearch —");
+    expect(help).not.toContain("/digivault —");
+    expect(help).not.toContain("/websearch —");
     expect(help).toContain("/provider — API provider");
     expect(help).toContain("/settings — Settings");
     expect(help).toContain("/mcp — MCP JSON / auth / new");
@@ -297,6 +263,57 @@ describe("view-level wording", () => {
       balanced: "Balanced \u00b7 open while it runs",
       verbose: "Verbose \u00b7 everything open",
     });
+  });
+});
+
+describe("palette frame", () => {
+  it("never opens a slash palette and a pane together", () => {
+    for (const text of ["/", "/lang", "/language", "/language ", "/language English", "/language /", "/theme dark"]) {
+      const surfaces = paletteSurfaces(text);
+      expect(Number(surfaces.slash) + Number(surfaces.menu != null)).toBe(1);
+    }
+    expect(paletteSurfaces("hello")).toEqual({ slash: false, menu: null });
+  });
+
+  it("keeps a second slash inside the open pane", () => {
+    expect(paletteSurfaces("/language ")).toEqual({ slash: false, menu: "language" });
+    expect(paletteSurfaces("/language /")).toEqual({ slash: false, menu: "language" });
+    expect(paletteFrame("/language /")).toMatchObject({ kind: "pane", filter: "/" });
+  });
+
+  it("syncs /language and /theme both ways", () => {
+    expect(paneDraftForId("language")).toBe("/language ");
+    expect(paneDraftForId("theme")).toBe("/theme ");
+    expect(optionDraft("/language", "English")).toBe("/language English");
+    expect(paletteFrame("/language")).toMatchObject({ kind: "commands", filter: "language" });
+    expect(paletteFrame("/language English")).toMatchObject({
+      kind: "pane",
+      menu: "language",
+      filter: "English",
+    });
+    expect(paletteFrame("/theme default dark")).toMatchObject({
+      kind: "pane",
+      menu: "theme",
+      filter: "default dark",
+    });
+    const back = applyPaletteFrame("pane", paletteFrame("/language"));
+    expect(back).toEqual({ kind: "commands", menu: "close", filter: "" });
+    expect(applyPaletteFrame("closed", { kind: "closed" })).toEqual({
+      kind: "closed",
+      menu: "keep",
+      filter: "",
+    });
+  });
+
+  it("filters a pane without collapsing an exact option", () => {
+    const rows = [
+      { id: "en", token: "English", label: "en  English" },
+      { id: "nl", token: "Dutch", label: "nl  Dutch" },
+      { id: "sl", token: "Slovenian", label: "sl  Slovenian" },
+    ];
+    expect(submenuRows(rows, "eng").rows.map((row) => row.id)).toEqual(["en"]);
+    expect(submenuRows(rows, "English")).toEqual({ rows, cursor: 0 });
+    expect(submenuRows(rows, "en").rows.map((row) => row.id)).toEqual(["en"]);
   });
 });
 

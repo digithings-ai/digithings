@@ -80,8 +80,11 @@ export type EmbedTenantClientConfig = {
   toolbar?: boolean;
   scrollbars?: "always" | "auto";
   searchEngine?: string;
+  /** OCC locks tool and MCP toggles. Omitted unless true. */
+  lockSessionControls?: boolean;
   /** Catalog entries — no MCP URLs */
   tools?: {
+    allowUserToggle?: boolean;
     catalog: Array<{
       id: string;
       default?: boolean;
@@ -181,6 +184,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     ...(cfg.toolbar === false ? { toolbar: false } : {}),
     ...(cfg.scrollbars ? { scrollbars: cfg.scrollbars } : {}),
     ...(cfg.searchEngine ? { searchEngine: cfg.searchEngine } : {}),
+    ...(cfg.lockSessionControls === true ? { lockSessionControls: true } : {}),
     tools: cfg.tools,
     mcp: cfg.mcp
       ? {
