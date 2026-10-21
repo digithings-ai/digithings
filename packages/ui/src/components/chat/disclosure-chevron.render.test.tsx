@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ChatModelAdapter, ThreadMessageLike } from "@assistant-ui/react";
 import { AssistantRuntimeProvider, useLocalRuntime } from "@assistant-ui/react";
 import { act, type FC } from "react";
@@ -129,5 +132,96 @@ describe("trace disclosure chevrons", () => {
     await openAll(host, "tool-fallback-trigger");
 
     unmount();
+  });
+
+  it("turns only the icon, including a closed row inside an open chain", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const styles = join(here, "..", "..", "styles");
+    const style = document.createElement("style");
+    style.textContent = [
+      readFileSync(join(styles, "chat-aui.css"), "utf8"),
+      readFileSync(join(styles, "chat-digichat.css"), "utf8"),
+    ].join("\n");
+    document.head.append(style);
+
+    const host = document.createElement("div");
+    host.className = "digichat-thread";
+    host.setAttribute("data-thread-skin", "digichat");
+    host.innerHTML = `
+      <div data-state="open" data-open>
+        <button type="button" data-slot="aui_work-chain-trigger" aria-expanded="true" data-panel-open data-state="open">
+          <span data-slot="aui_work-status-label">Worked</span>
+          <span data-slot="disclosure-chevron">
+            <span data-slot="dot-matrix">
+              <span class="sr-only">Toggle the work</span>
+              <svg data-slot="dot-matrix-grid"></svg>
+            </span>
+          </span>
+        </button>
+        <button type="button" data-slot="tool-group-trigger" aria-expanded="true" data-panel-open data-state="open">
+          <span data-slot="tool-group-trigger-label">2 tool calls</span>
+          <span data-slot="disclosure-chevron">
+            <span data-slot="dot-matrix">
+              <span class="sr-only">Toggle tools</span>
+              <svg data-slot="dot-matrix-grid"></svg>
+            </span>
+          </span>
+        </button>
+        <button type="button" data-slot="tool-fallback-trigger" aria-expanded="false">
+          <span data-slot="tool-fallback-trigger-label">digisearch</span>
+          <span data-slot="disclosure-chevron">
+            <span data-slot="dot-matrix">
+              <span class="sr-only">Toggle tool</span>
+              <svg data-slot="dot-matrix-grid"></svg>
+            </span>
+          </span>
+        </button>
+      </div>
+      <button type="button" data-slot="reasoning-trigger" aria-expanded="false">
+        <span data-slot="reasoning-trigger-label">Reasoning</span>
+        <span data-slot="disclosure-chevron">
+          <span data-slot="dot-matrix">
+            <span class="sr-only">Toggle reasoning</span>
+            <svg data-slot="dot-matrix-grid"></svg>
+          </span>
+        </span>
+      </button>
+    `;
+    document.body.append(host);
+
+    const flat = (value: string) =>
+      value === "" || value === "none" || value === "matrix(1, 0, 0, 1, 0, 0)" ? "flat" : value;
+
+    for (const slot of [
+      "aui_work-chain-trigger",
+      "tool-group-trigger",
+      "tool-fallback-trigger",
+      "reasoning-trigger",
+    ]) {
+      const trigger = host.querySelector(`[data-slot="${slot}"]`)!;
+      const label = trigger.querySelector("span:not([data-slot='disclosure-chevron'])")!;
+      const chevron = trigger.querySelector('[data-slot="disclosure-chevron"]')!;
+      const matrix = chevron.querySelector('[data-slot="dot-matrix"]')!;
+      const name = chevron.querySelector(".sr-only")!;
+      const icon = chevron.querySelector('[data-slot="dot-matrix-grid"]')!;
+      expect(flat(getComputedStyle(trigger).transform), slot).toBe("flat");
+      expect(flat(getComputedStyle(label).transform), slot).toBe("flat");
+      expect(flat(getComputedStyle(chevron).transform), slot).toBe("flat");
+      expect(flat(getComputedStyle(matrix).transform), slot).toBe("flat");
+      expect(flat(getComputedStyle(name).transform), slot).toBe("flat");
+      expect(getComputedStyle(name).width, slot).toBe("1px");
+      const open = trigger.getAttribute("aria-expanded") === "true";
+      const iconTransform = getComputedStyle(icon).transform;
+      if (open) {
+        expect(["rotate(90deg)", "matrix(0, 1, -1, 0, 0, 0)"], slot).toContain(iconTransform);
+      } else {
+        expect(["rotate(0deg)", "none", "matrix(1, 0, 0, 1, 0, 0)", ""], slot).toContain(
+          iconTransform,
+        );
+      }
+    }
+
+    style.remove();
+    host.remove();
   });
 });

@@ -1492,36 +1492,59 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 }
 
 /* Same caret on every trace disclosure. Closed points right. Open rotates
-   down only when this row's trigger is open (`aria-expanded` / `data-panel-open`
-   on the Base UI trigger, `data-state="open"` on a Radix trigger). A child
-   combinator, so an open chain root does not rotate the closed rows inside it. */
+   the icon svg only (`dot-matrix-grid`), and only when this row's trigger is
+   open. The wrapper and its screen-reader name stay put: a transform on
+   either turns the words. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] {
   display: inline-flex;
+  position: relative;
   width: 0.55rem;
   height: 0.55rem;
   flex: 0 0 0.55rem;
   align-items: center;
   justify-content: center;
   color: inherit;
+  transform: none;
+  animation: none;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  transform: none;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="dot-matrix"] {
+  width: 0.55rem;
+  height: 0.55rem;
+  transform: none;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+  display: block;
+  width: 100%;
+  height: 100%;
   transform: rotate(0deg);
   transform-origin: 50% 50%;
   transition: transform 150ms ease;
   animation: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="dot-matrix"] {
-  width: 0.55rem;
-  height: 0.55rem;
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [aria-expanded="true"] > [data-slot="disclosure-chevron"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-panel-open] > [data-slot="disclosure-chevron"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-state="open"] > [data-slot="disclosure-chevron"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
   transform: rotate(90deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] {
+  :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
     transition: none;
   }
 }

@@ -685,43 +685,71 @@
 }
 
 /* One disclosure caret for every trace row. Right when closed; a quarter
-   turn down when THAT row is open. The caret is a direct child of its
-   trigger, so the open rule is a child combinator: an open chain
-   (`data-open` on the Base UI root) must not spin the closed rows inside it.
-   Base UI sets `aria-expanded` and `data-panel-open` on the trigger; Radix
-   sets `data-state="open"` on the trigger. */
+   turn down when THAT row is open. The rotate is on the icon svg
+   (`dot-matrix-grid`) only. The wrapper also holds the screen-reader name,
+   and a transform there turns those words with the glyph. The caret is a
+   direct child of its trigger, so the open rule starts at that trigger:
+   an open chain (`data-open` on the Base UI root) must not spin the closed
+   rows inside it. */
 .digichat-thread [data-slot="disclosure-chevron"],
 .digichat-launcher [data-slot="disclosure-chevron"] {
   display: inline-flex;
+  position: relative;
   width: 0.55rem;
   height: 0.55rem;
   flex: 0 0 0.55rem;
   align-items: center;
   justify-content: center;
-  transform: rotate(0deg);
-  transform-origin: 50% 50%;
-  transition: transform 150ms ease;
+  transform: none;
   animation: none;
+}
+
+/* The name is for assistive tech. It ships with the caret, not via Tailwind's
+   `.sr-only`, which is absent unless the consuming app happens to emit it. */
+.digichat-thread [data-slot="disclosure-chevron"] .sr-only,
+.digichat-launcher [data-slot="disclosure-chevron"] .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  transform: none;
 }
 
 .digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix"],
 .digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix"] {
   width: 0.55rem;
   height: 0.55rem;
+  transform: none;
 }
 
-.digichat-thread [aria-expanded="true"] > [data-slot="disclosure-chevron"],
-.digichat-thread [data-panel-open] > [data-slot="disclosure-chevron"],
-.digichat-thread [data-state="open"] > [data-slot="disclosure-chevron"],
-.digichat-launcher [aria-expanded="true"] > [data-slot="disclosure-chevron"],
-.digichat-launcher [data-panel-open] > [data-slot="disclosure-chevron"],
-.digichat-launcher [data-state="open"] > [data-slot="disclosure-chevron"] {
+.digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(0deg);
+  transform-origin: 50% 50%;
+  transition: transform 150ms ease;
+  animation: none;
+}
+
+.digichat-thread [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-thread [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-thread [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
   transform: rotate(90deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .digichat-thread [data-slot="disclosure-chevron"],
-  .digichat-launcher [data-slot="disclosure-chevron"] {
+  .digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+  .digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
     transition: none;
   }
 }
