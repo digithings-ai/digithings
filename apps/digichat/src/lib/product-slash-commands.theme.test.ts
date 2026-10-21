@@ -119,6 +119,14 @@ describe("/theme", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
+  it("keeps a deployment palette when only the mode is typed", () => {
+    // Painted by the deployment (no stored dt-palette), as the picker shows it.
+    document.documentElement.setAttribute("data-palette", "dracula");
+    executeSlashDef(theme!, "light", api());
+    expect(document.documentElement.getAttribute("data-palette")).toBe("dracula");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+  });
+
   it("opens the picker for an empty or unknown argument", () => {
     const openTheme = vi.fn();
     executeSlashDef(theme!, "", api({ openTheme }));

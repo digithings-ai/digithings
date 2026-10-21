@@ -9,6 +9,7 @@
 
 import {
   PALETTE_STORAGE_KEY,
+  THEME_CHANGE_EVENT,
   isPaletteId,
   readPaintedTheme,
   readThemeState,
@@ -42,4 +43,10 @@ export function applyDeployedPalette(palette: string | null | undefined): void {
   const resolved = root.getAttribute("data-theme") === "light" ? "light" : "dark";
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", themeColorFor(id, resolved));
+  // Let ThemeProvider re-read the painted palette (it syncs only on this event).
+  try {
+    window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
+  } catch {
+    /* ignore */
+  }
 }

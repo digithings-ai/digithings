@@ -1,0 +1,54 @@
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { THEME_CHANGE_EVENT } from "@digithings/ui/theme";
+
+import { applyDeployedPalette, readEffectiveThemeState } from "./palette-prefs";
+
+describe("deployment palette default", () => {
+  let store: Map<string, string>;
+  beforeEach(() => {
+    store = new Map();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
+    document.documentElement.setAttribute("data-theme", "dark");
+    document.documentElement.removeAttribute("data-palette");
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("paints the deployment palette without writing storage, and tells the provider", () => {
+    const changed = vi.fn();
+    window.addEventListener(THEME_CHANGE_EVENT, changed);
+    applyDeployedPalette(" Dracula ");
+    window.removeEventListener(THEME_CHANGE_EVENT, changed);
+    expect(document.documentElement.getAttribute("data-palette")).toBe("dracula");
+    expect(store.size).toBe(0);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(readEffectiveThemeState().palette).toBe("dracula");
+  });
+
+  it("leaves a stored palette choice alone", () => {
+    store.set("dt-palette", "aura");
+    document.documentElement.setAttribute("data-palette", "aura");
+    applyDeployedPalette("dracula");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
+    expect(store.get("dt-palette")).toBe("aura");
+    expect(readEffectiveThemeState().palette).toBe("aura");
+  });
+
+  it("ignores an unknown or default deployment palette", () => {
+    applyDeployedPalette("not-a-palette");
+    applyDeployedPalette("default");
+    applyDeployedPalette(null);
+    expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
+  });
+});

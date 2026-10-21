@@ -659,8 +659,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: scrollbars must be "always" or "auto"`);
   }
   let palette: "default" | PaletteId | undefined;
-  if (typeof v.palette === "string" && (v.palette === "default" || isPaletteId(v.palette))) {
-    palette = v.palette;
+  const paletteId = typeof v.palette === "string" ? v.palette.trim().toLowerCase() : undefined;
+  if (paletteId !== undefined && (paletteId === "default" || isPaletteId(paletteId))) {
+    palette = paletteId;
   } else if (v.palette !== undefined) {
     throw new Error(`${ctx}: palette must be "default" or a known palette id`);
   }

@@ -43,6 +43,15 @@ describe("normalizeEmbedHost", () => {
 });
 
 describe("parseEmbedTenants", () => {
+  it("accepts a palette id in any case, as the yaml schema does", () => {
+    const base = JSON.parse(VALID) as Record<string, Record<string, unknown>>;
+    const [host] = Object.keys(base);
+    base[host].palette = " Dracula ";
+    expect(parseEmbedTenants(JSON.stringify(base)).get(host)?.palette).toBe("dracula");
+    base[host].palette = "nope";
+    expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/palette/);
+  });
+
   it("returns an empty registry for unset or blank env", () => {
     expect(parseEmbedTenants(undefined).size).toBe(0);
     expect(parseEmbedTenants("  ").size).toBe(0);

@@ -319,6 +319,7 @@ type HarnessProps = {
   reasoningMode?: GroupDisclosureMode;
   toolCallsMode?: GroupDisclosureMode;
   workVisibility?: WorkVisibility;
+  density?: "compact" | "default" | "airy";
 };
 
 function Harness({
@@ -329,6 +330,7 @@ function Harness({
   reasoningMode,
   toolCallsMode,
   workVisibility,
+  density,
 }: HarnessProps) {
   const runtime = useLocalRuntime(
     adapter,
@@ -344,6 +346,7 @@ function Harness({
         reasoningMode={reasoningMode}
         toolCallsMode={toolCallsMode}
         workVisibility={workVisibility}
+        density={density}
       />
       {attachmentName ? <AddComposerAttachment name={attachmentName} /> : null}
     </AssistantRuntimeProvider>
@@ -368,6 +371,16 @@ afterEach(() => {
 });
 
 describe("DigichatThread", () => {
+  it("puts the density on the thread root, default when unset", async () => {
+    for (const density of ["compact", "airy", undefined] as const) {
+      const { host, unmount } = await mount({ density });
+      const thread = host.querySelector(".digichat-thread");
+      expect(thread?.getAttribute("data-density"), String(density)).toBe(density ?? "default");
+      unmount();
+      document.body.replaceChildren();
+    }
+  });
+
   it("left-aligns the gallery Thread pane", async () => {
     const { host, unmount } = await mount();
     const thread = host.querySelector(".digichat-thread");

@@ -28,7 +28,6 @@ import {
   isPaletteId,
   isThemePreference,
   matchThemeStep,
-  readThemeState,
 } from "@digithings/ui/theme";
 import {
   isLegacyViewMode,
@@ -237,7 +236,9 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
         api.openTheme?.();
         return;
       }
-      const state = readThemeState();
+      // The painted palette, so `/theme light` keeps a deployment palette the
+      // picker and the row description already show (not storage alone).
+      const state = readEffectiveThemeState();
       if (isThemePreference(raw)) {
         applyDocumentTheme(raw, state.palette);
         return;
