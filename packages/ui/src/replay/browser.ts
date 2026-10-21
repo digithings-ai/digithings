@@ -5,14 +5,12 @@
 
 import { downloadTextFile } from "../components/chat/transcript";
 import { snapshotFilename } from "./filename";
-import {
-  deploymentText,
-  questionText,
-  serializeSnapshot,
-  transformSnapshotDom,
-} from "./snapshot";
+import { deploymentText, questionText, serializeSnapshot, transformSnapshotDom } from "./snapshot";
 
-const URL_RE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+// Bounded runs keep this linear on page CSS (CodeQL js/polynomial-redos). The
+// value cannot start or end with whitespace, so the \s runs never compete with it.
+const URL_RE =
+  /url\([ \t\n]{0,16}(['"]?)([^'"()\s](?:[^'"()]{0,4094}[^'"()\s])?)\1[ \t\n]{0,16}\)/g;
 
 /** One slow asset must not hang the export; it is dropped instead. */
 const ASSET_TIMEOUT_MS = 8000;
@@ -95,9 +93,7 @@ export async function inlineDomAssets(
   const origin = options.origin ?? (typeof location === "undefined" ? "" : location.origin);
   const href = options.href ?? (typeof location === "undefined" ? "" : location.href);
   const fetchImpl = options.fetchImpl ?? fetch;
-  const nodes = [
-    ...root.querySelectorAll<HTMLElement>("img, image, use, source, video"),
-  ];
+  const nodes = [...root.querySelectorAll<HTMLElement>("img, image, use, source, video")];
   for (const node of nodes) {
     node.removeAttribute("srcset");
     for (const attr of ["src", "href", "poster"] as const) {

@@ -4,11 +4,7 @@ import { redactString } from "./redact";
  * `<deployment>-<YYYY-MM-DD-HHMM>-<question>.html`. The time is UTC, so files
  * from different machines sort together. The question is the latest one asked.
  */
-export function snapshotFilename(
-  deployment: string,
-  exportedAt: string,
-  question: string,
-): string {
+export function snapshotFilename(deployment: string, exportedAt: string, question: string): string {
   const slug = slugPart(deployment) || "digichat";
   const when = new Date(exportedAt);
   const iso = Number.isNaN(when.getTime()) ? new Date() : when;
@@ -42,6 +38,7 @@ function slugPart(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .split(/[^a-z0-9]/)
+    .filter(Boolean)
+    .join("-");
 }

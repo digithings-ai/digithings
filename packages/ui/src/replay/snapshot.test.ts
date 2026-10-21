@@ -124,3 +124,22 @@ describe("transformSnapshotDom", () => {
     expect(root.querySelector("#remote")?.hasAttribute("src")).toBe(false);
   });
 });
+
+describe("link schemes", () => {
+  it("drops javascript:, vbscript: and data: hrefs in chat content and keeps https", () => {
+    const doc = document.implementation.createHTMLDocument("chat");
+    doc.body.innerHTML = [
+      '<div class="aui-md">',
+      '<a id="js" href="JavaScript:alert(1)">a</a>',
+      '<a id="vb" href="vbscript:msgbox">b</a>',
+      '<a id="data" href="data:text/html,x">c</a>',
+      '<a id="ok" href="https://digithings.ai/docs">d</a>',
+      "</div>",
+    ].join("");
+    transformSnapshotDom(doc.documentElement);
+    for (const id of ["js", "vb", "data"]) {
+      expect(doc.getElementById(id)?.hasAttribute("href")).toBe(false);
+    }
+    expect(doc.getElementById("ok")?.getAttribute("href")).toBe("https://digithings.ai/docs");
+  });
+});

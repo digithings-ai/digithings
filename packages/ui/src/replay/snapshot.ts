@@ -233,11 +233,21 @@ function freezeControl(el: Element): void {
 
 function freezeLink(link: Element): void {
   const href = link.getAttribute("href") ?? "";
-  if (href.toLowerCase().startsWith("javascript:")) link.removeAttribute("href");
+  // Only http(s), mailto and in-page links survive; javascript:, vbscript:,
+  // data: and any other scheme are dropped.
+  if (!safeHref(href)) link.removeAttribute("href");
   if (link.closest(CONTENT_LINK)) return;
   link.removeAttribute("href");
   link.removeAttribute("target");
   link.setAttribute("data-snapshot-static", "");
+}
+
+function safeHref(href: string): boolean {
+  const value = href.trim().toLowerCase();
+  if (!value || value.startsWith("#")) return true;
+  const scheme = /^([a-z][a-z0-9+.-]{0,31}):/.exec(value)?.[1];
+  if (!scheme) return true; // relative
+  return scheme === "http" || scheme === "https" || scheme === "mailto";
 }
 
 function stripHandlers(root: HTMLElement): void {
