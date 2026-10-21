@@ -385,7 +385,12 @@ export async function createDigigraphTraceStreamResponse(opts: {
   signal?: AbortSignal;
   /** Shown before the answer when a premium pick falls back to Auto. */
   preface?: string;
-  /** Reported token usage for the premium spend window. Omitted usage charges a typical turn. */
+  /**
+   * Reported token usage for the premium spend window. Called from the
+   * stream `finally`, including when the visitor aborts after an answer.
+   * Omitted usage charges a typical turn. Absent when the deployment does
+   * not meter (OCC).
+   */
   onUsage?: (usage?: { inputTokens: number; outputTokens: number }) => void;
   /** Shared TPM / tool-cap guard. Inactive when the deployment sets neither. */
   guard?: TurnGuard;
@@ -409,6 +414,9 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let textOpen = false;
       /** Any answer text was written — the normal success signal. */
       let textEmitted = false;
+      let usageMetadata:
+        | { inputTokens: number; outputTokens: number; totalTokens: number }
+        | undefined;
       let toolCallsSoFar = 0;
       const activityCtx = createActivityWriteContext();
       const openText = () => {
@@ -620,9 +628,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
         closeText();
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
-      let usageMetadata:
-        | { inputTokens: number; outputTokens: number; totalTokens: number }
-        | undefined;
       for await (const delta of iterateOpenAiSse(res.body, (usage) => {
         const inputTokens = usage.prompt_tokens;
         const outputTokens = usage.completion_tokens;
@@ -749,9 +754,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
       // failure. `activityCtx.seq` counts every non-text part written (reasoning,
       // tool, source, data-status), so a tool-only or reasoning-only reply is
       // not misclassified as empty.
-      if (opts.onUsage && (textEmitted || usageMetadata)) {
-        opts.onUsage(usageMetadata);
-      }
       if (!textEmitted && activityCtx.seq === 0) {
         console.error(
           `[digigraph] upstream ${res.status} streamed no text or activity (content-type=${res.headers.get("content-type") ?? "none"}; reason=empty_stream)`
@@ -760,6 +762,12 @@ export async function createDigigraphTraceStreamResponse(opts: {
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       } finally {
+        // An abort used to skip the charge that sat after the SSE loop, so a
+        // visitor who disconnected at the end of each answer was not billed.
+        // House passes onUsage; OCC does not, and stays unmetered.
+        if (opts.onUsage && (textEmitted || usageMetadata)) {
+          opts.onUsage(usageMetadata);
+        }
         opts.guard?.release();
         // Idempotent when the turn already settled on the success path.
         finishStandardActivity(writer, activityCtx);

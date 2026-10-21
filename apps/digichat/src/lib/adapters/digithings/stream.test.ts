@@ -1920,3 +1920,141 @@ it("writes a tool-call limit notice when a digigraph trace hits the cap", async 
   // The house loop is not aborted: the answer after the notice still arrives.
   expect(body).toContain("Done.");
 });
+
+const answerThenHang = (opts?: { withUsage?: boolean }) => {
+  const encoder = new TextEncoder();
+  let failBody: ((err: Error) => void) | undefined;
+  const payload: Record<string, unknown> = {
+    choices: [{ delta: { content: "Premium answer." } }],
+  };
+  if (opts?.withUsage) {
+    payload.usage = { prompt_tokens: 11, completion_tokens: 5, total_tokens: 16 };
+  }
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      failBody = (err) => controller.error(err);
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+    },
+  });
+  return {
+    body,
+    fail: () => failBody?.(new DOMException("The operation was aborted.", "AbortError")),
+  };
+};
+
+async function readUntil(res: Response, needle: string): Promise<ReadableStreamDefaultReader<Uint8Array>> {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let seen = "";
+  while (!seen.includes(needle)) {
+    const next = await reader.read();
+    if (next.done) break;
+    seen += decoder.decode(next.value);
+  }
+  return reader;
+}
+
+it("charges a premium turn when the visitor disconnects after the answer", async () => {
+  const hung = answerThenHang({ withUsage: true });
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(hung.body, { status: 200, headers: { "content-type": "text/event-stream" } }),
+  );
+  const onUsage = vi.fn();
+  const controller = new AbortController();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    signal: controller.signal,
+    onUsage,
+  });
+
+  const reader = await readUntil(res, "Premium answer.");
+  controller.abort();
+  hung.fail();
+
+  await vi.waitFor(() => expect(onUsage).toHaveBeenCalledTimes(1));
+  expect(onUsage).toHaveBeenCalledWith({
+    inputTokens: 11,
+    outputTokens: 5,
+    totalTokens: 16,
+  });
+  await reader.cancel().catch(() => {});
+});
+
+it("charges a typical turn when the disconnect lands before the usage chunk", async () => {
+  const hung = answerThenHang();
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(hung.body, { status: 200, headers: { "content-type": "text/event-stream" } }),
+  );
+  const onUsage = vi.fn();
+  const controller = new AbortController();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    signal: controller.signal,
+    onUsage,
+  });
+
+  const reader = await readUntil(res, "Premium answer.");
+  controller.abort();
+  hung.fail();
+
+  await vi.waitFor(() => expect(onUsage).toHaveBeenCalledTimes(1));
+  expect(onUsage).toHaveBeenCalledWith(undefined);
+  await reader.cancel().catch(() => {});
+});
+
+it("does not charge when upstream fails before an answer", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("nope", { status: 500, statusText: "Internal Server Error" }),
+  );
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const onUsage = vi.fn();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    onUsage,
+  });
+  await new Response(res.body).text();
+  expect(onUsage).not.toHaveBeenCalled();
+});
+
+it("charges reported usage once when the trace stream finishes", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "Hello." } }],
+          usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+  const onUsage = vi.fn();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    onUsage,
+  });
+  await new Response(res.body).text();
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({
+    inputTokens: 3,
+    outputTokens: 1,
+    totalTokens: 4,
+  });
+});
