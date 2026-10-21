@@ -243,6 +243,9 @@ export function useStockChatPrefs({
       openView: () => {
         setComposerMenu("view");
       },
+      openTheme: () => {
+        setComposerMenu("theme");
+      },
       openThinking: () => {
         setComposerMenu("thinking");
       },
