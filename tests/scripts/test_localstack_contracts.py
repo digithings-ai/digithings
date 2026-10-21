@@ -568,6 +568,92 @@ def test_a_knob_outside_the_port_slot_keeps_the_plain_expansion():
     )
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("00800", "http://127.0.0.1:800/healthz"),
+        ("08000", "http://127.0.0.1:8000/healthz"),
+        ("00001", "http://127.0.0.1:1/healthz"),
+        ("18000", "http://127.0.0.1:18000/healthz"),
+    ],
+)
+def test_the_validated_integer_and_not_the_raw_text_lands_in_the_url(value, expected):
+    """What lands in the port slot is ``str(port)``, not the value as written.
+
+    A leading-zero value is a port (same integer), but the URL carries the
+    canonical integer, so the probe opens exactly the port that was validated.
+    Substituting the raw text instead (``:00800``) turns this red.
+    """
+    url, reason = contracts.resolve(_digigraph_check(), {"DT_DIGIGRAPH_PORT": value})
+    assert reason is None
+    assert url == expected
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "http://${DT_PROBE_HOST:-127.0.0.1}:8000/x",
+        "http://${DT_PROBE_HOST:-127.0.0.1}:${DT_PROBE_PORT:-8000}/x",
+        "http://${DT_PROBE_USER:-u}@127.0.0.1:${DT_PROBE_PORT:-8000}/x",
+        "http://127.0.0.1${DT_PROBE_SUFFIX:-}:8000/x",
+    ],
+)
+def test_a_reference_outside_the_port_slot_of_the_authority_is_refused(template):
+    """Only the port of a probe URL may be templated.
+
+    A reference in the host or userinfo is refused before any value lands,
+    even when its value (or default) is the loopback: the template itself is
+    the shape that could move the probe off the machine.
+    """
+    check = contracts.Check(
+        name="probe", kind="http", url=template, profiles=("core",), source="test"
+    )
+    with pytest.raises(contracts.InvalidPort) as excinfo:
+        contracts.resolve(check, {})
+    assert "outside the port slot" in str(excinfo.value)
+
+
+def test_a_url_with_only_a_path_reference_is_still_held_to_the_loopback():
+    """The loopback check runs even when no reference filled the port slot."""
+    off_machine = contracts.Check(
+        name="probe",
+        kind="http",
+        url="http://example.com:8000/${DT_OTHER_PATH:-api}/x",
+        profiles=("core",),
+        source="test",
+    )
+    with pytest.raises(contracts.InvalidPort) as excinfo:
+        contracts.resolve(off_machine, {})
+    assert "127.0.0.1" in str(excinfo.value)
+    assert "DT_OTHER_PATH" in str(excinfo.value)
+
+
+def test_the_loopback_assertion_refuses_userinfo_and_a_url_that_does_not_parse():
+    """Every failure of the post-expansion check is an InvalidPort."""
+    # A host-only check (no port reference) accepts the loopback ...
+    contracts._assert_loopback_port("http://127.0.0.1:8000/x", "DT_X", None)
+    # ... and refuses userinfo on it, with or without a validated port.
+    with pytest.raises(contracts.InvalidPort):
+        contracts._assert_loopback_port("http://u@127.0.0.1:8000/x", "DT_X", None)
+    with pytest.raises(contracts.InvalidPort):
+        contracts._assert_loopback_port("http://u:p@127.0.0.1:8000/x", "DT_X", 8000)
+    # A URL urlsplit cannot parse is a refusal, never a bare ValueError.
+    with pytest.raises(contracts.InvalidPort):
+        contracts._assert_loopback_port("http://[127.0.0.1/x", "DT_X", 8000)
+    with pytest.raises(contracts.InvalidPort):
+        contracts._assert_loopback_port("http://127.0.0.1:notaport/x", "DT_X", None)
+
+
+def test_every_builtin_template_still_resolves_on_its_defaults():
+    """The stricter guard keeps every shipped template passing."""
+    templated = [c for c in contracts.BUILTIN_CHECKS if c.url and "${" in c.url]
+    assert templated
+    for check in templated:
+        url, reason = contracts.resolve(check, {})
+        assert reason is None
+        assert urlsplit(url).hostname == "127.0.0.1"
+
+
 def test_env_expansion_falls_back_to_the_declared_default():
     check = contracts.Check(
         name="probe",

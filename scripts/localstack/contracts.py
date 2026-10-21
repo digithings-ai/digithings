@@ -508,7 +508,7 @@ def _port_value(name: str, value: str) -> int:
     return port
 
 
-def _assert_loopback_port(url: str, name: str, port: int) -> None:
+def _assert_loopback_port(url: str, name: str, port: int | None) -> None:
     """Refuse a resolved URL that is not the loopback probe on ``port``.
 
     Defence in depth. The value is validated before it is templated, so this
@@ -516,18 +516,34 @@ def _assert_loopback_port(url: str, name: str, port: int) -> None:
     template (a second host, another expansion, a different default) cannot
     quietly move the probe off the machine. It also catches the shape the
     digit check cannot see on its own: a URL that parses into a host other
-    than 127.0.0.1, or into a port other than the validated one.
+    than 127.0.0.1, into a port other than the validated one, or that carries
+    userinfo.
+
+    ``port`` is ``None`` when the template expanded a reference but none of
+    them filled the port slot: the host (and the absence of userinfo) is
+    still checked, so a reference anywhere in a template cannot move the
+    probe off the loopback just because it was not the port.
+
+    A URL that does not parse at all is refused as well (:class:`InvalidPort`,
+    never a bare ``ValueError``), so every caller sees one exception type.
     """
-    split = urllib.parse.urlsplit(url)
     try:
+        split = urllib.parse.urlsplit(url)
         host = split.hostname
         resolved_port = split.port
-    except ValueError:  # a netloc that does not carry a numeric port
-        host, resolved_port = None, None
-    if host != LOOPBACK_HOST or resolved_port != port:
+        userinfo = split.username is not None or split.password is not None
+    except ValueError:  # a URL or netloc that does not parse
+        host, resolved_port, userinfo = None, None, True
+    if (
+        host != LOOPBACK_HOST
+        or userinfo
+        or (port is not None and resolved_port != port)
+    ):
+        target = f"http://{LOOPBACK_HOST}"
+        if port is not None:
+            target = f"{target}:{port}"
         raise InvalidPort(
-            f"{name} resolved to {url!r}: the probe must stay on "
-            f"http://{LOOPBACK_HOST}:{port}"
+            f"{name} resolved to {url!r}: the probe must stay on {target}"
         )
 
 
@@ -583,9 +599,18 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
     value that is not a port (DIG-4911, ask 1). A reference outside the port
     slot is an ordinary value, and its surrounding whitespace is stripped.
 
-    The Supabase pair keeps its own soft policy: ``localstack.localenv``
-    normalizes ``DT_SUPABASE_PORT`` before the contracts see it, so the
-    contracts never receive a padded value for that knob.
+    The Supabase pair keeps its own soft policy: ``supabase_ports.api_port``
+    strips and validates ``DT_SUPABASE_PORT``, and ``localenv.apply_defaults``
+    (``env[PORT_ENV] = str(api_port(env))``, localenv.py) writes that
+    canonical integer back into the environment before ``scripts/dt``
+    dispatches, so on that path the contracts never receive a padded value
+    for that knob. A direct call with a padded value is refused (fail-closed).
+
+    A reference inside the authority that is not the port slot (the host, or
+    userinfo) is refused outright: only the port of a probe URL may be
+    templated. And whenever a URL template expanded any reference, the
+    resolved URL must still be on ``127.0.0.1`` with no userinfo, whether or
+    not one of the references was the port.
 
     The URL that comes out is then parsed and refused unless it is still the
     loopback probe on the validated port (:func:`_assert_loopback_port`), so
@@ -596,10 +621,22 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
         return url
 
     ports: dict[str, int] = {}
+    expanded_refs: list[str] = []
+    auth_start, auth_end = _authority_span(url)
 
     def sub(match: re.Match[str]) -> str:
         name, default = match.group(1), match.group(2)
+        expanded_refs.append(name)
         raw = config.get(name) or default or ""
+        in_authority = auth_start <= match.start() < auth_end
+        if in_authority and not _fills_the_port_slot(url, match.start()):
+            # Only the port of a probe URL may be templated. A reference in
+            # the host or userinfo is the shape that moves a probe off the
+            # machine, so the template is refused before any value lands.
+            raise InvalidPort(
+                f"{name} is templated outside the port slot of {url!r}: "
+                "only the port of a probe URL may be templated"
+            )
         if _fills_the_port_slot(url, match.start()):
             # The value has to be a port before it is templated: a value that
             # is not a port is the one thing that can move the URL off this
@@ -621,6 +658,10 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
     # knob was validated to carry.
     for name, port in ports.items():
         _assert_loopback_port(expanded, name, port)
+    if not ports and expanded_refs and auth_end > auth_start:
+        # A URL template whose references are all outside the port slot (a
+        # path or query ref) is still a probe URL: the host is checked too.
+        _assert_loopback_port(expanded, expanded_refs[0], None)
     return expanded
 
 
