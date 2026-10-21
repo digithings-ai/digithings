@@ -71,6 +71,20 @@ describe("embed-theme-messages", () => {
       } as MessageEvent;
       expect(parseThemeMessage(stale, allowed)).toBeNull();
     });
+
+    it("carries a palette and drops an unknown one", () => {
+      const event = {
+        origin: "https://digithings.ai",
+        data: buildThemeMessage("dark", Date.now(), "dracula"),
+      } as MessageEvent;
+      expect(parseThemeMessage(event, allowed)?.palette).toBe("dracula");
+
+      const unknown = {
+        origin: "https://digithings.ai",
+        data: { ...buildThemeMessage("dark"), palette: "nope" },
+      } as MessageEvent;
+      expect(parseThemeMessage(unknown, allowed)?.palette).toBeUndefined();
+    });
   });
 
   describe("applyEmbedDocumentTheme", () => {

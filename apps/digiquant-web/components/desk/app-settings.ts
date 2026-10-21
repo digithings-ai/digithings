@@ -17,8 +17,9 @@ if (!models.available.includes(models.default)) {
 export const CHAT_MODELS: readonly string[] = models.available;
 
 /**
- * The desk has one scheme: dark. A stored "light" theme is dropped here, so the
- * desk never asks the document for a scheme it does not have.
+ * Stored desk documents still carry a theme field. The document theme itself
+ * is the platform picker (`dt-theme` / `dt-palette`), so this field is not
+ * painted onto `<html>`.
  */
 export const THEMES = ["dark"] as const;
 export const DENSITIES = ["regular", "compact"] as const;
@@ -129,15 +130,13 @@ export function applyDocumentPrefs(
   settings: AppSettings,
   root: { setAttribute(name: string, value: string): void },
 ): void {
-  root.setAttribute("data-theme", settings.theme);
   root.setAttribute("data-density", settings.density);
 }
 
-/** The rest of the site is pinned dark: put the document back when the desk unmounts. */
+/** Density belongs to the desk. Mode and palette stay on the document. */
 export function clearDocumentPrefs(root: {
   setAttribute(name: string, value: string): void;
   removeAttribute(name: string): void;
 }): void {
-  root.setAttribute("data-theme", "dark");
   root.removeAttribute("data-density");
 }

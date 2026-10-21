@@ -101,6 +101,7 @@ import {
   parseParentErrorMessage,
 } from "@/lib/embed-parent-error-messages";
 import {
+  applyEmbedDocumentPalette,
   applyEmbedDocumentTheme,
   parseEmbedThemeParam,
   parseThemeMessage,
@@ -378,6 +379,7 @@ function EmbedPageInner({
       const parsed = parseThemeMessage(event, themeParentOrigins);
       if (!parsed) return;
       setParentTheme(parsed.theme);
+      applyEmbedDocumentPalette(parsed.palette);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);

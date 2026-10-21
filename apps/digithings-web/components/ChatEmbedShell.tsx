@@ -114,11 +114,22 @@ export function readParentDocumentTheme(
   return el.getAttribute("data-theme") === "light" ? "light" : "dark";
 }
 
+/** Parent `[data-palette]`. Absent means the default look. */
+export function readParentDocumentPalette(
+  el: { getAttribute(name: string): string | null } = document.documentElement,
+): string | undefined {
+  const value = el.getAttribute("data-palette");
+  if (!value || value === "default") return undefined;
+  return value;
+}
+
 export function buildEmbedThemeMessage(
   theme: EmbedShellTheme,
   ts = Date.now(),
-): { type: typeof THEME; theme: EmbedShellTheme; ts: number } {
-  return { type: THEME, theme, ts };
+  palette?: string,
+): { type: typeof THEME; theme: EmbedShellTheme; ts: number; palette?: string } {
+  const message = { type: THEME, theme, ts, ...(palette ? { palette } : {}) };
+  return message;
 }
 
 /** Parent → embed: surface handshake/load failures inside CliThread. */
@@ -220,6 +231,7 @@ export function ChatEmbedShell({
   const iframeLoadedRef = useRef(false);
   const embedReadyRef = useRef(false);
   const themeRef = useRef<EmbedShellTheme>("dark");
+  const paletteRef = useRef<string | undefined>(undefined);
   /** Only when iframe never loads — cannot deliver parent-error postMessage. */
   const [shellLoadError, setShellLoadError] = useState<string | null>(null);
   const [embedReady, setEmbedReady] = useState(false);
@@ -264,6 +276,7 @@ export function ChatEmbedShell({
     if (!targetOrigin) return;
     const theme = readParentDocumentTheme();
     themeRef.current = theme;
+    paletteRef.current = readParentDocumentPalette();
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
       setShellTheme(theme);
@@ -294,8 +307,10 @@ export function ChatEmbedShell({
 
     const onThemeAttr = () => {
       const next = readParentDocumentTheme();
-      if (next === themeRef.current) return;
+      const palette = readParentDocumentPalette();
+      if (next === themeRef.current && palette === paletteRef.current) return;
       themeRef.current = next;
+      paletteRef.current = palette;
       setShellTheme(next);
       // Live toggles post digichat:theme. Rebuilding `src` reloads the iframe
       // and drops the session. The ready handler posts themeRef if the frame
@@ -303,12 +318,12 @@ export function ChatEmbedShell({
       if (!embedReadyRef.current) return;
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
-      win.postMessage(buildEmbedThemeMessage(next), targetOrigin);
+      win.postMessage(buildEmbedThemeMessage(next, Date.now(), palette), targetOrigin);
     };
     const observer = new MutationObserver(onThemeAttr);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["data-theme"],
+      attributeFilter: ["data-theme", "data-palette"],
     });
     return () => observer.disconnect();
   }, [acceptsInviteToken, embedOrigin, embedHost, targetOrigin]);
@@ -336,7 +351,10 @@ export function ChatEmbedShell({
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
       // Always sync theme on ready (covers cold load + late handshake).
-      win.postMessage(buildEmbedThemeMessage(themeRef.current), targetOrigin);
+      win.postMessage(
+        buildEmbedThemeMessage(themeRef.current, Date.now(), readParentDocumentPalette()),
+        targetOrigin,
+      );
       const handoff = readAndClearHandoff();
       if (!handoff || (!handoff.messages.length && !handoff.pending)) return;
       win.postMessage(

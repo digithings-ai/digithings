@@ -30,7 +30,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "../ui";
-import { ThemeToggle } from "./ThemeProvider";
+import { ThemePicker } from "./ThemePicker";
 import {
   hrefIsCurrent,
   isNavGroup,
@@ -60,7 +60,7 @@ export interface NavShellProps {
    *  size: "icon-sm" })` from §ui) — kept a slot so the primitive carries no
    *  hardcoded external URLs. */
   actions?: ReactNode;
-  /** Render the shared ThemeToggle in the tail cluster. Default true. */
+  /** Render the shared theme picker in the tail cluster. Default true. */
   showThemeToggle?: boolean;
   /** Home link target for the brand. Default "/". */
   homeHref?: string;
@@ -745,7 +745,7 @@ export function NavShell({
             currentPath={currentPath}
           />
           <div className="nav-shell-tail flex items-center gap-[0.9rem] max-[560px]:shrink-0 max-[560px]:gap-[0.5rem]">
-            {showThemeToggle && <ThemeToggle />}
+            {showThemeToggle && <ThemePicker />}
             {actions}
             <Button
               type="button"

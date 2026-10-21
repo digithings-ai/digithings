@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { ThemePicker } from "@digithings/ui";
 import { SegmentedControl } from "@digithings/ui/ui";
 import { deskHomeHref } from "./desk-manifest";
 import { useDeskAccess } from "./desk-access";
@@ -11,13 +12,11 @@ import {
   NOTIFY_MODES,
   REFRESH_SECONDS,
   STALE_SESSIONS,
-  THEMES,
   type AppSettings,
   type DensityName,
   type NotifyMode,
   type RefreshSec,
   type StaleSessions,
-  type ThemeName,
 } from "./app-settings";
 import { useAppSettings, writeSettings } from "./app-settings-store";
 
@@ -60,7 +59,6 @@ export function SettingsPage({ path }: { path: string }) {
   return (
     <form
       data-settings-page=""
-      data-theme-choice={settings.theme}
       data-density-choice={settings.density}
       data-refresh={settings.refreshSec}
       data-stale={settings.staleSessions}
@@ -98,12 +96,7 @@ export function SettingsPage({ path }: { path: string }) {
       <Section title="Appearance">
         <div className="flex flex-col gap-1">
           <p className={LABEL}>Theme</p>
-          <SegmentedControl
-            aria-label="Theme"
-            value={settings.theme}
-            options={THEMES.map((theme) => ({ value: theme, label: theme }))}
-            onChange={(theme: ThemeName) => patch({ theme })}
-          />
+          <ThemePicker />
         </div>
         <div className="flex flex-col gap-1">
           <p className={LABEL}>Density</p>
