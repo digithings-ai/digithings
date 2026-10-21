@@ -199,8 +199,31 @@ def mem_available_mb():
     rc, o = sh(["vm_stat"])
     return parse_vm_stat_available_mb(o or "")
 
+def build_target_url():
+    """The build that made this status green, as a URL, or "".
+
+    `LOCAL_CI_TARGET_URL` is the explicit name; `CI_PIPELINE_URL` is what
+    Woodpecker injects into every step, so the worker running inside the
+    pipeline needs no configuration. A run on the host has neither and posts a
+    status that names no build - the merge queue reads that back and refuses it,
+    naming the missing build as the reason (DIG-4794).
+    """
+    return (os.environ.get("LOCAL_CI_TARGET_URL") or os.environ.get("CI_PIPELINE_URL") or "").strip()
+
+
 def status(sha, state, desc):
-    gh("api", "-X", "POST", f"repos/{REPO}/statuses/{sha}", "-f", f"state={state}", "-f", f"context={CTX}", "-f", f"description={desc[:139]}")
+    """Post the `local-ci` status, naming the build when there is one.
+
+    The name is what makes the status evidence: a commit status is worth what
+    its writer is worth, and the queue reads the build back from Woodpecker
+    before it trusts the green (DIG-4794).
+    """
+    args = ["api", "-X", "POST", f"repos/{REPO}/statuses/{sha}", "-f", f"state={state}",
+            "-f", f"context={CTX}", "-f", f"description={desc[:139]}"]
+    target = build_target_url()
+    if target:
+        args += ["-f", f"target_url={target}"]
+    gh(*args)
 
 
 def review_status(sha, state, desc):
