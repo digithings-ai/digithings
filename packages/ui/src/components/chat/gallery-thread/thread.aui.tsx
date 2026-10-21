@@ -1179,7 +1179,19 @@ const AssistantMessage: FC = () => {
         >
           {({ part, children }) => {
             switch (part.type) {
-              case "group-chainOfThought":
+              case "group-chainOfThought": {
+                // A status part is not work. The grouping puts the
+                // connection state into the chain, so without this guard the
+                // chain header appears before the model has said anything —
+                // right next to the loading row, which is the double
+                // animation we do not want. No reasoning and no tool call in
+                // the group means no work block: the loading row covers that
+                // phase on its own.
+                const holdsWork = part.indices.some((index) => {
+                  const kind = messageParts[index]?.type;
+                  return kind === "reasoning" || kind === "tool-call";
+                });
+                if (!holdsWork) return null;
                 // Quiet clients see one line for the whole chain instead of
                 // the two collapsibles.
                 if (disclosure.summaryOnly) {
@@ -1204,6 +1216,7 @@ const AssistantMessage: FC = () => {
                     </WorkChain>
                   </div>
                 );
+              }
               case "group-tool": {
                 if (toolCallsMode === "off") return null;
                 if (ToolGroup) {

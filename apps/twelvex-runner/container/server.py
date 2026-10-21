@@ -2,7 +2,8 @@
 
 POST /run/ingest    body {"bucket": "intraday"|"daily"|"weekly"|"quarterly", "dry_run": bool}
 POST /run/heartbeat body {"dry_run": bool}
-POST /run/session   body {"session": "asia"|"london"|"new_york", "dry_run": bool}
+POST /run/session   body {"session": "asia"|"london"|"new_york",
+                           "run_date": "YYYY-MM-DD" (optional), "dry_run": bool}
 
 Runs the same argv as the GitHub Actions steps. DRY_RUN=1 or "dry_run": true
 returns exit 0 and does not start the command, so nothing is written.
@@ -18,6 +19,7 @@ import re
 import subprocess
 import threading
 import time
+from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = "0.0.0.0"
@@ -27,6 +29,15 @@ _LOCK = threading.Lock()
 # The FX research sessions the workflow runs. A request string never becomes
 # an argument, so the set of sessions is a literal list here.
 SESSIONS = ("asia", "london", "new_york")
+# The workflow's run_date input: a calendar date, never a timestamp.
+RUN_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# The characters the Worker's String.trim() removes. Python's str.strip()
+# removes more (the file separators U+001C to U+001F), so the two layers would
+# disagree on a value such as "\u001c2026-10-01".
+JS_WHITESPACE = (
+    " \t\n\r\v\f\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007"
+    "\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
 
 _SECRET = re.compile(
     r"(?i)(bearer\s+)[A-Za-z0-9._\-+/=]+"
@@ -70,8 +81,44 @@ def command_for(route: str, bucket: str | None, session: str | None = None) -> l
     raise ValueError("unknown route")
 
 
+def validate_run_date(value: object) -> str | None:
+    """Accept a calendar date (YYYY-MM-DD) or nothing. Reject anything else.
+
+    The workflow passes its run_date input straight into the graph's RUN_DATE
+    env, and an empty input means the forward path. So does an empty string
+    here: it is absent, not malformed.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("invalid_run_date")
+    trimmed = value.strip(JS_WHITESPACE)
+    if trimmed == "":
+        return None
+    if not RUN_DATE.match(trimmed):
+        raise ValueError("invalid_run_date")
+    try:
+        date.fromisoformat(trimmed)
+    except ValueError:
+        raise ValueError("invalid_run_date") from None
+    return trimmed
+
+
+def validate_request(route: str, bucket: str | None, session: str | None) -> None:
+    """Reject an unknown route, an unknown bucket or an unknown session.
+
+    The order is the Worker's order: route, then bucket, then session. The
+    run_date is checked after them, so both layers answer the same error for
+    the same body.
+    """
+    command_for(route, bucket, session)
+
+
 def steps_for(
-    route: str, bucket: str | None, session: str | None
+    route: str,
+    bucket: str | None,
+    session: str | None,
+    run_date: str | None = None,
 ) -> list[tuple[list[str], dict[str, str], bool]]:
     """(argv, extra_env, fatal) per step, in order.
 
@@ -82,15 +129,32 @@ def steps_for(
     if route == "session":
         graph = command_for(route, bucket, session)
         assert session is not None  # command_for accepted only a known literal
+        # The workflow always sets RUN_DATE on the graph step, and an empty
+        # value is the forward path. The step always carries it, so an ambient
+        # RUN_DATE in the container env can never decide the date.
+        graph_env = {
+            "FX_SESSION": session,
+            "TRADE_INTELLIGENCE_MODE": "alongside",
+            "RUN_DATE": run_date or "",
+        }
         return [
             (["python", "-m", "twelve_x.scripts.ingest_calendar"], {}, False),
-            (
-                graph,
-                {"FX_SESSION": session, "TRADE_INTELLIGENCE_MODE": "alongside"},
-                True,
-            ),
+            (graph, graph_env, True),
         ]
     return [(command_for(route, bucket, session), {}, True)]
+
+
+def step_env(extra_env: dict[str, str]) -> dict[str, str]:
+    """The environment one step runs in.
+
+    RUN_DATE is never inherited: the container process env must not decide
+    the date. A step that sets it (the graph) carries it, empty for the
+    forward path, exactly as the workflow does.
+    """
+    env = {**os.environ, **extra_env}
+    if "RUN_DATE" not in extra_env:
+        env.pop("RUN_DATE", None)
+    return env
 
 
 def dry_run_requested(body: dict, environ: dict[str, str] | None = None) -> bool:
@@ -137,7 +201,7 @@ def run_steps(
                 text=True,
                 timeout=remaining,
                 check=False,
-                env={**os.environ, **extra_env} if extra_env else None,
+                env=step_env(extra_env),
             )
             output = (completed.stdout or "") + (completed.stderr or "")
             step_code = completed.returncode
@@ -195,7 +259,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": "invalid_json"})
             return
         try:
-            steps = steps_for(route, body.get("bucket"), body.get("session"))
+            validate_request(route, body.get("bucket"), body.get("session"))
+            run_date = validate_run_date(body.get("run_date"))
+            steps = steps_for(route, body.get("bucket"), body.get("session"), run_date)
         except ValueError as exc:
             self._json(400, {"error": str(exc)})
             return
