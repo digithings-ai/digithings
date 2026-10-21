@@ -1,3 +1,15 @@
+## [2.6.4](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.3...digichat-v2.6.4) (2026-10-21)
+
+The chat shows the backend's own words: what the server says while it works,
+every tool argument in full, and the tool's real error under it. A turn that
+runs into the model's per-minute token limit now waits and carries on.
+
+### Bug Fixes
+
+* **chat:** the loading row shows text only when the server sent a status ("Waking up services…", a capacity countdown); a plain wait for the response is the animation alone ([#6114](https://github.com/digithings-ai/digithings/pull/6114))
+* **chat:** tool arguments and results show as full JSON in a scroll area, a tool's error sits under its arguments with the whole traceback, and server notices and errors are boxed, the errors in a faded red ([#6117](https://github.com/digithings-ai/digithings/pull/6117))
+* **digichat:** a Foundry turn that hits the model's per-minute token limit mid-stream shows a countdown, waits for the window (Retry-After, capped at 90 s) and resumes the same conversation, up to three times, then explains what happened instead of a generic outage line ([#6110](https://github.com/digithings-ai/digithings/pull/6110))
+
 ## [2.6.3](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.2...digichat-v2.6.3) (2026-10-21)
 
 A turn shows one thing moving: the work block no longer appears before the
