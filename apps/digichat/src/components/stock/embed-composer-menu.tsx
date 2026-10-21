@@ -118,11 +118,23 @@ export type MenuRow = {
   checked?: boolean;
   /** Single-choice list: radio disc, not On/Off. */
   exclusive?: boolean;
+  /** Provider label. Not a control, so arrows and Home/End skip it. */
+  heading?: boolean;
   /** Composer text while this row is selected (`/language English`). */
   insert?: string;
   /** Option text the pane filter matches (`English`, `default dark`). */
   token?: string;
   aliases?: readonly string[];
+};
+
+export type ComposerModelPicker = {
+  presets: readonly { id: string; label: string; description: string; model: string }[];
+  groups: readonly {
+    provider: string;
+    models: readonly { id: string; label: string }[];
+    premium?: boolean;
+  }[];
+  showFullList: boolean;
 };
 
 /**
@@ -135,9 +147,36 @@ export type MenuRow = {
  * server lists) has no row to land on and starts at the top.
  */
 export function cursorOnCurrentRow(rows: readonly MenuRow[]): number {
-  const index = rows.findIndex((row) => row.exclusive === true && row.checked === true);
-  return index >= 0 ? index : 0;
+  const index = rows.findIndex(
+    (row) => row.exclusive === true && row.checked === true && row.heading !== true,
+  );
+  if (index >= 0) return index;
+  const first = rows.findIndex((row) => row.heading !== true);
+  return first >= 0 ? first : 0;
 }
+
+function selectableIndexes(rows: readonly MenuRow[]): number[] {
+  const indexes: number[] = [];
+  rows.forEach((row, index) => {
+    if (row.heading !== true) indexes.push(index);
+  });
+  return indexes;
+}
+
+function stepSelectable(current: number, delta: number, rows: readonly MenuRow[]): number {
+  const selectable = selectableIndexes(rows);
+  if (!selectable.length) return 0;
+  const pos = selectable.indexOf(current);
+  if (pos < 0) {
+    // On a heading (or past the end): one step lands on the nearest selectable
+    // row in that direction, without applying the delta a second time.
+    if (delta > 0) return selectable.find((index) => index > current) ?? selectable[0] ?? 0;
+    return [...selectable].reverse().find((index) => index < current) ?? selectable[selectable.length - 1] ?? 0;
+  }
+  return selectable[nextPaletteIndex(pos, delta, selectable.length)] ?? selectable[0] ?? 0;
+}
+
+export const stepSelectableForTests = stepSelectable;
 
 /**
  * The menu is a tree, not a set of modes: every page has exactly one parent.
@@ -315,6 +354,7 @@ export function EmbedComposerMenu({
   kind,
   models,
   defaultModel,
+  picker,
   onClose,
   onActivateProvider,
   onClearProvider,
@@ -328,6 +368,8 @@ export function EmbedComposerMenu({
   models?: readonly string[];
   /** Deployment default: `auto` (or empty) makes Auto the checked first row. */
   defaultModel?: string;
+  /** Catalog presets and provider groups. Absent keeps the id list. */
+  picker?: ComposerModelPicker;
   onClose: () => void;
   onActivateProvider?: (key: string, provider: BYOKProvider, model: string) => void;
   onClearProvider?: () => void;
@@ -529,6 +571,61 @@ export function EmbedComposerMenu({
   );
 
   const modelRows = useMemo((): MenuRow[] => {
+    // A connected BYOK provider replaces the house catalog with that
+    // provider's own models. The catalog picker is the house list.
+    if (picker && !providerActive) {
+      const selected = api.prefs.model;
+      const presetRows: MenuRow[] = picker.presets.map((preset) => {
+        const token = `preset:${preset.id}`;
+        const checked =
+          preset.id === "auto"
+            ? !selected || selected === "auto" || selected === token
+            : selected === token;
+        return {
+          id: token,
+          label: preset.label,
+          value: preset.description,
+          checked,
+          exclusive: true,
+          insert: optionDraft("/models", preset.label),
+          token: preset.label,
+          activate: () => {
+            const next = preset.id === "auto" ? "" : token;
+            commitExclusive(() => {
+              api.setModel(next);
+              onPickSessionModel?.(next);
+            });
+          },
+        };
+      });
+      const groupRows: MenuRow[] = picker.showFullList
+        ? picker.groups.flatMap((group) => [
+            {
+              id: `heading:${group.provider}`,
+              label: group.provider,
+              value: group.premium ? "Manual selection" : "",
+              heading: true,
+              activate: () => {},
+            },
+            ...group.models.map((model) => ({
+              id: model.id,
+              label: model.label,
+              value: "",
+              checked: selected === model.id,
+              exclusive: true,
+              insert: optionDraft("/models", model.label),
+              token: model.label,
+              activate: () => {
+                commitExclusive(() => {
+                  api.setModel(model.id);
+                  onPickSessionModel?.(model.id);
+                });
+              },
+            })),
+          ])
+        : [];
+      if (presetRows.length || groupRows.length) return [...presetRows, ...groupRows];
+    }
     // Auto is only a real option when the deployment default is Auto (no
     // pinned model); a tenant that pins a default should not offer a way to
     // silently leave it.
@@ -583,7 +680,7 @@ export function EmbedComposerMenu({
         },
       })),
     ];
-    }, [available, api, commitExclusive, defaultModel, onPickSessionModel, providerActive]);
+  }, [available, api, commitExclusive, defaultModel, onPickSessionModel, picker, providerActive]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
@@ -1121,9 +1218,9 @@ export function EmbedComposerMenu({
     (delta: number) => {
       if (!shown.length) return;
       echoArmed.current = true;
-      setCursor((c) => nextPaletteIndex(c, delta, shown.length));
+      setCursor((c) => stepSelectable(c, delta, shown));
     },
-    [shown.length],
+    [shown],
   );
 
   const goBack = useCallback(() => {
@@ -1205,14 +1302,15 @@ export function EmbedComposerMenu({
         event.preventDefault();
         event.stopPropagation();
         echoArmed.current = true;
-        setCursor(0);
+        setCursor(selectableIndexes(shown)[0] ?? 0);
         return;
       }
       if (event.key === "End") {
         event.preventDefault();
         event.stopPropagation();
         echoArmed.current = true;
-        setCursor(Math.max(0, shown.length - 1));
+        const selectable = selectableIndexes(shown);
+        setCursor(selectable[selectable.length - 1] ?? Math.max(0, shown.length - 1));
         return;
       }
       if (event.key === "Enter") {
@@ -1710,6 +1808,20 @@ export function EmbedComposerMenu({
           view !== "mcp-edit" &&
           view !== "help"
             ? shown.map((row, index) => {
+                if (row.heading) {
+                  return (
+                    <div
+                      key={row.id}
+                      role="presentation"
+                      className="text-muted-foreground flex items-baseline gap-2 px-2 pt-2 pb-0.5 text-[11px] uppercase tracking-wide"
+                    >
+                      <span>{row.label}</span>
+                      {row.value ? (
+                        <span className="normal-case tracking-normal">{row.value}</span>
+                      ) : null}
+                    </div>
+                  );
+                }
                 const toggle =
                   typeof row.checked === "boolean" && (view === "main" || view === "tools");
                 const exclusive = Boolean(row.exclusive);

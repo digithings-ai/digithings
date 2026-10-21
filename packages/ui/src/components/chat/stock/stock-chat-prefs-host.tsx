@@ -41,6 +41,12 @@ export type StockChatPrefsConfig = {
   defaultLanguage?: string;
   defaultModel?: string;
   availableModels: readonly string[];
+  /** Catalog presets and groups. The menu falls back to raw ids when absent. */
+  modelPicker?: {
+    presets: readonly { id: string; label: string; description: string; model: string }[];
+    groups: readonly { provider: string; models: readonly { id: string; label: string }[] }[];
+    showFullList: boolean;
+  };
   /** Host pre-computes models.allowPicker || features.modelPicker. */
   allowModelPicker?: boolean;
   view: ViewMode;
@@ -89,6 +95,8 @@ export type StockChatPrefsDeps = {
   renderMenuPanes?: (args: {
     kind: ComposerMenuKind;
     models: readonly string[];
+    defaultModel?: string;
+    modelPicker?: StockChatPrefsConfig["modelPicker"];
     providerSeed?: string;
     mcpSeed?: string;
     onClose: () => void;
@@ -400,6 +408,8 @@ export function useStockChatPrefs({
     deps.renderMenuPanes?.({
       kind: composerMenu,
       models: config.availableModels,
+      defaultModel: config.defaultModel,
+      modelPicker: config.modelPicker,
       providerSeed,
       mcpSeed,
       onClose: () => {

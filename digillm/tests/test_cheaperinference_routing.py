@@ -8,6 +8,7 @@ from typing import Any  # score:allow untyped any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from openai.types.chat import ChatCompletion
 
 import digillm
 import digillm.client as client_mod
@@ -23,7 +24,9 @@ def _clear(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_ci_base_rewrites_mapped_house_slug(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_BASE", "https://api.cheaperinference.com/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "ci_live_test")
-    assert client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4.1-flash-1017"
+    assert (
+        client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4.1-flash-1017"
+    )
     made: dict[str, Any] = {}
 
     def fake_openai(**kwargs: Any) -> MagicMock:
@@ -89,7 +92,9 @@ def test_ci_key_beats_openrouter_base_for_mapped_house_slug(
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-or-v1-test")
     monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
-    assert client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4.1-flash-1017"
+    assert (
+        client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4.1-flash-1017"
+    )
     made: dict[str, Any] = {}
 
     def fake_openai(**kwargs: Any) -> MagicMock:
@@ -178,3 +183,120 @@ def test_api_base_host_is_not_a_substring(
     monkeypatch.setenv("OPENAI_API_BASE", base)
     assert client_mod._api_base_is_openrouter() is openrouter
     assert client_mod._api_base_is_cheaperinference() is cheaper
+
+
+def test_flash_slugs_including_release_alias_to_1017() -> None:
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4.1-flash")
+        == "deepseek-v4.1-flash-1017"
+    )
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-flash")
+        == "deepseek-v4.1-flash-1017"
+    )
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-flash-0731")
+        == "deepseek-v4.1-flash-1017"
+    )
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4.1-flash-release")
+        == "deepseek-v4.1-flash-1017"
+    )
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-flash-release")
+        == "deepseek-v4.1-flash-1017"
+    )
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug(
+            "deepseek/deepseek-v4-flash-0731-release"
+        )
+        == "deepseek-v4.1-flash-1017"
+    )
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4.1-flash-1017")
+        == "deepseek-v4.1-flash-1017"
+    )
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-pro-0813")
+        == "deepseek-v4-pro-0813"
+    )
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-flash-0731-fast")
+        == "deepseek-v4-flash-0731-fast"
+    )
+
+
+def test_openrouter_auto_without_allowlist_stays_a_catalog_miss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_BASE", "https://api.cheaperinference.com/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "ci_live_test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    with pytest.raises(RuntimeError, match="not on the Cheaper Inference catalog"):
+        digillm.get_client_for_model("openrouter/auto")
+
+
+def test_openrouter_auto_sends_the_allowlist_to_openrouter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mocked client only. No Cheaper Inference chat call."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    token = client_mod.push_router_models("openai/gpt-oss-120b,deepseek/deepseek-v4-pro")
+    made: dict[str, Any] = {}
+    captured: dict[str, Any] = {}
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.update(kwargs)
+        return MagicMock()
+
+    def fake_create(*_args: Any, **kwargs: Any) -> ChatCompletion:
+        captured.update(kwargs)
+        return ChatCompletion.model_validate(
+            {
+                "id": "cmpl",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "openrouter/auto",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "ok"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        )
+
+    try:
+        with (
+            patch.object(client_mod, "OpenAI", side_effect=fake_openai),
+            patch.object(client_mod, "_create_with_retry", side_effect=fake_create),
+        ):
+            digillm.completion("openrouter/auto", [{"role": "user", "content": "hi"}])
+    finally:
+        client_mod.pop_router_models(token)
+    assert made["base_url"] == "https://openrouter.ai/api/v1"
+    assert made["api_key"] == "sk-or-test"
+    assert captured["model"] == "openrouter/auto"
+    assert captured["extra_body"]["models"] == [
+        "openai/gpt-oss-120b",
+        "deepseek/deepseek-v4-pro",
+    ]
+
+
+def test_router_allowlist_drops_premium_ids() -> None:
+    """Premium ids are manual picks. The router must not spend them."""
+    router = client_mod.push_router_models(
+        "openai/gpt-oss-120b,z-ai/glm-5.3,deepseek/deepseek-v4-pro"
+    )
+    premium = client_mod.push_premium_models("z-ai/glm-5.3,google/gemini-3.8-flash")
+    try:
+        assert client_mod.get_router_models() == (
+            "openai/gpt-oss-120b",
+            "deepseek/deepseek-v4-pro",
+        )
+    finally:
+        client_mod.pop_premium_models(premium)
+        client_mod.pop_router_models(router)

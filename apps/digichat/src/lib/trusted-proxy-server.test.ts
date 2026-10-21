@@ -20,6 +20,21 @@ describe("trusted-proxy server", () => {
     expect(headers["cf-connecting-ip"]).toBe("198.51.100.1");
   });
 
+  it("strips a caller-supplied peer and stamp, then writes the socket and our stamp", () => {
+    const headers = forwardHeaders(
+      {
+        "x-digichat-peer-ip": "198.51.100.1",
+        "x-digichat-peer-stamp": "caller-chose-this",
+        "cf-connecting-ip": "203.0.113.5",
+      },
+      "10.0.0.7",
+      "server-stamp",
+    );
+    expect(headers["x-digichat-peer-ip"]).toBe("10.0.0.7");
+    expect(headers["x-digichat-peer-stamp"]).toBe("server-stamp");
+    expect(headers["cf-connecting-ip"]).toBe("203.0.113.5");
+  });
+
   it("does not forward hop-by-hop headers to the loopback server", () => {
     const headers = forwardHeaders(
       {
