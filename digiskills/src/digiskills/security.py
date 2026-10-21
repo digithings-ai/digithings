@@ -81,6 +81,11 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ),
     ("aws-access-key-id", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("github-token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b")),
+    # The App token of the digithings App plan (DIG-4803): the prefix, the
+    # numeric app id, an underscore, then a JWT body. The body holds `_` and
+    # `.`, so the token rule above cannot match it, and the JWT rule below
+    # would catch only the body and leave the prefix standing.
+    ("github-app-token", re.compile(r"\bghs_[0-9]+_[A-Za-z0-9_\-\.]{20,}")),
     ("slack-token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
     ("openai-style-key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b")),
