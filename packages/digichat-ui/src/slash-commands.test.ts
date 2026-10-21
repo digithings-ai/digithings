@@ -9,6 +9,9 @@ import {
   parseSlashInput,
   SLASH_COMMANDS,
   slashHelpText,
+  VIEW_CHOICES,
+  VIEW_CODES,
+  VIEW_LABELS,
 } from "./slash-commands";
 
 describe("parseSlashInput", () => {
@@ -238,6 +241,45 @@ describe("SLASH_COMMANDS", () => {
     expect(SLASH_COMMANDS.find((c) => c.id === "byok")).toMatchObject({
       names: ["/provider", "/byok", "/key"],
       hint: "API provider",
+    });
+  });
+});
+
+describe("view-level wording", () => {
+  it("gives every live level a wording and no retired level a label", () => {
+    // The shared map is the one home of the wording (DIG-4665): the composer
+    // menu's /view page and the palette's /view choice options both read it.
+    // A level with no wording renders a blank description column; a retired
+    // level with one keeps a dead id alive.
+    expect(Object.keys(VIEW_LABELS).sort()).toEqual([...VIEW_CODES].sort());
+    for (const code of VIEW_CODES) {
+      expect(VIEW_LABELS[code].trim()).not.toBe("");
+    }
+    // `hidden` was retired in #6079, `compact` / `detailed` in #6034.
+    for (const retired of ["hidden", "compact", "detailed"]) {
+      expect(Object.keys(VIEW_LABELS)).not.toContain(retired);
+    }
+  });
+
+  it("builds the /view choice options from the same map", () => {
+    expect(VIEW_CHOICES).toEqual(
+      VIEW_CODES.map((code) => ({ value: code, label: VIEW_LABELS[code] })),
+    );
+    // The palette's /view command must read that list, not a list of its own.
+    // A hand-written list in the command def is a second copy of the wording
+    // inside the package that owns the wording, and nothing else would see
+    // it: the choice options are rendered by no surface today.
+    expect(SLASH_COMMANDS.find((c) => c.id === "view")?.choiceOptions).toBe(VIEW_CHOICES);
+  });
+
+  it("prints the wording the product prints today", () => {
+    // The golden words. The map is the one home of the wording, so the words
+    // themselves are pinned here: a reworded level is a user-visible change
+    // and must be a deliberate edit, not a side effect of a rename.
+    expect(VIEW_LABELS).toEqual({
+      quiet: "Quiet \u00b7 titles only",
+      balanced: "Balanced \u00b7 open while it runs",
+      verbose: "Verbose \u00b7 everything open",
     });
   });
 });

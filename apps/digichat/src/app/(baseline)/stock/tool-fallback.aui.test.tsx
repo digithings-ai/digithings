@@ -110,10 +110,12 @@ describe("stock ToolFallback", () => {
         respondToApproval={async () => undefined}
       />,
     );
-    // The status icon (span[data-state] role="img") carries its own name.
+    // The status glyph is decorative (DIG-4669): the visible label below names
+    // the row, so the glyph carries no name of its own.
     const icon = document.querySelector('[data-slot="dot-matrix"]');
-    expect(icon?.getAttribute("role")).toBe("img");
-    expect(icon?.textContent).toContain("Failed tool");
+    expect(icon?.getAttribute("aria-hidden")).toBe("true");
+    expect(icon?.getAttribute("role")).toBeNull();
+    expect(icon?.getAttribute("aria-label")).toBeNull();
     const label = document.querySelector(
       '[data-slot="tool-fallback-trigger-label"]',
     );

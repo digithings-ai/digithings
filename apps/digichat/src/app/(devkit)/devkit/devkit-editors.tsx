@@ -25,6 +25,7 @@ import {
   Textarea,
 } from "@digithings/ui/ui";
 import { FEATURED_LANGUAGE_CODES } from "@/lib/languages";
+import { VIEW_MODES } from "@/lib/view-modes";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { CONTRAST_MINIMUM, contrast } from "./devkit-contrast";
 import {
@@ -943,7 +944,7 @@ export function DevkitEditors({
         <SelectRow
           label="chain-of-thought view"
           value={features?.view ?? "balanced"}
-          options={["quiet", "balanced", "verbose"]}
+          options={VIEW_MODES}
           onCommit={(v) => scalar(["features", "view"], v)}
         />
         <SegRow

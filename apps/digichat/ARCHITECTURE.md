@@ -1086,6 +1086,59 @@ re-seeds it, so `/view` lands on the current view mode even when the menu was
 opened on another page. Coming back from a provider form lands on the provider
 row the user opened, not on the connected one.
 
+**View-level wording has one home (DIG-4665).** Decision: the view-level **wording**
+is owned by `@digithings/digichat-ui` `slash-commands.ts` (`VIEW_LABELS`, exported,
+and re-exported from the package index). The composer menu's `/view` page reads
+that shared map for the wording it prints beside each level, and the shared
+package builds the palette's `/view` choice options from the same map
+(`VIEW_CHOICES` on `SlashDef.choiceOptions`); the app keeps **no private copy**
+of it, and the lookup has no `?? ""` fallback: a missing key is a compile
+error, and an empty wording is a test failure, so neither reaches the screen
+as a blank column. Reason: the shared package already owns
+the public palette (the paragraph above), and a private copy is exactly what
+let a rename drift. #6034 renamed compact/detailed to quiet/verbose across the
+product while the composer menu's `/view` sub-page kept the retired ids, so its
+Quiet and Verbose rows rendered **blank descriptions**; #6046 then corrected the
+ids in that private copy, but the copy stayed, and #6079 retired the `hidden`
+level while that copy still carried it and its wording drifted away from the
+shared map. One copy of the map means the next rename cannot leave a surface
+of the digichat client unlabelled.
+
+The wording is the one the product prints today: `quiet` shows the titles only,
+`balanced` opens the rows while they stream, `verbose` leaves everything open
+(the app CHANGELOG uses these words; the `packages/ui` gallery-thread describes
+the same three levels in its own words). The
+shared map's terser wording from #6079 was rendered nowhere, so moving the
+shipped copy into the package is not a user-visible change; the palette's
+choice options, which nothing renders today, inherit it when they do.
+
+The view-level **ids** are a set of structural twins, and they must name the
+same three levels: the app contract `src/lib/view-modes.ts` (`VIEW_MODES`, plus
+the retired `hidden` → `quiet`, `compact` → `quiet` and `detailed` → `verbose`
+aliases folded forward on read, kept dependency-free so server config code can
+use it), the palette's own `VIEW_CODES` in the same shared package, and the
+prefs twin `ViewMode` / `normalizeViewPref` in `@digithings/ui/chat/stock`
+(`skin-types.ts`), which is what types `api.prefs.view`; the palette ids are
+exported from the `@digithings/digichat-ui` index and the prefs twin from the
+`@digithings/ui/chat/stock` index, so a host can compare the twin with its
+own contract — the normaliser and the alias map — instead of trusting that
+they agree. The label map is keyed
+by the palette's id union and the menu indexes it with the app's union, so the
+two cannot diverge in TypeScript: a level added to the app without the package
+stops the app from compiling, and a level added to the package without the app
+is caught by `view-modes.test.ts`. Two copies of the vocabulary still live
+outside this module and do not read this map — the digichat-tui client palette
+and the digigraph session-prefs tool — and each carries its own wording too,
+so the one home is the digichat client and this package, not the whole
+product. The digichat half of the second one (the client applicator's refusal
+message) now names the live levels; the digigraph server half, which owns the
+tool schema and the handler, still teaches the retired ids, so the two halves
+disagree: of the four ids the tool advertises, `balanced` is the only one the
+client applicator accepts, and the two live levels (`quiet`, `verbose`) are
+refused by the server. The model-facing `session_set_view` tool can therefore
+only ever effect `balanced`. That half is the digigraph module's own contract,
+and it is not fixed here.
+
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup?, allowedTools?, mutatingTools? }` is
 forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?,allowedTools?,mutatingTools?}`). `setup` is the
 operator's tool-registration values (digisearch `index_name`, digivault `path_prefix`); digigraph merges it over the

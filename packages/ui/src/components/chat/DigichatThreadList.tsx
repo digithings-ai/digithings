@@ -35,7 +35,7 @@ export function DigichatThreadList({ className, landmark = "aside" }: DigichatTh
           <DigichatWordmark />
         </span>
         <ThreadListPrimitive.New className={digichatSurfaces.action} aria-label="New chat">
-          <DotMatrix state="newChat" label="New chat" className="size-3.5" />
+          <DotMatrix state="newChat" decorative className="size-3.5" />
         </ThreadListPrimitive.New>
       </div>
       <ThreadListPrimitive.Root className="flex min-h-0 flex-1 flex-col overflow-y-auto py-[0.25rem]">
