@@ -17,8 +17,8 @@ if (!models.available.includes(models.default)) {
 export const CHAT_MODELS: readonly string[] = models.available;
 
 /**
- * Stored desk documents still carry a theme field. The document theme itself
- * is the platform picker (`dt-theme` / `dt-palette`), so this field is not
+ * Stored desk documents still carry a theme field. The top-bar cycle owns
+ * the document theme (`dt-theme` / `dt-palette`), so this field is not
  * painted onto `<html>`.
  */
 export const THEMES = ["dark"] as const;
