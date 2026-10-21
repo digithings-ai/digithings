@@ -292,8 +292,11 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
     expected = {
         "deepseek/deepseek-v4.1-flash-1017",
         "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4.1-flash-release",
         "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-flash-release",
         "deepseek/deepseek-v4-flash-0731",
+        "deepseek/deepseek-v4-flash-0731-release",
         "deepseek/deepseek-v4-pro",
         "google/gemini-3.7-flash",
         "google/gemini-3.1-flash-lite",
@@ -419,8 +422,10 @@ def test_merge_litellm_cheaperinference_replaces_mapped_drops_retired() -> None:
     by_name = {e["model_name"]: e for e in merged["model_list"] if isinstance(e, dict)}
     flash = by_name["deepseek/deepseek-v4-flash"]["litellm_params"]
     assert flash["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
-    # Flash checkpoints are distinct products. v4-flash does not alias to 1017.
-    assert flash["model"] == "openai/deepseek-v4-flash"
+    # Legacy v4-flash aliases to 1017. The release slug is the distinct bare id.
+    assert flash["model"] == "openai/deepseek-v4.1-flash-1017"
+    release = by_name["deepseek/deepseek-v4-flash-release"]["litellm_params"]
+    assert release["model"] == "openai/deepseek-v4-flash"
     checkpoint = by_name["deepseek/deepseek-v4.1-flash-1017"]["litellm_params"]
     assert checkpoint["model"] == "openai/deepseek-v4.1-flash-1017"
     resurrected = sorted(_RETIRED_OPENROUTER_ROUTES & by_name.keys())

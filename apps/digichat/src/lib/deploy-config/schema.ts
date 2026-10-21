@@ -307,6 +307,13 @@ export const ModelsSchema = z
      * it is refused, so the catalog is the list.
      */
     catalog: z.boolean().optional(),
+    /**
+     * OCC visitor picker. Off unless true. The OCC deployment sets it true
+     * after Chris's sign-off (21 Oct 2026, 19:19 Rome): "Yes, enable the
+     * model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488
+     * lock". Other hosts ignore it. Tool and MCP locks stay closed.
+     */
+    occPicker: z.boolean().optional(),
     /** USD per million output tokens. Omit to use the catalog default. */
     priceCapUsdPerMillion: z.number().positive().optional(),
     /**
@@ -812,6 +819,21 @@ export function premiumModelsHeader(
 
 type CatalogModels = DigichatDeployment["models"];
 
+const OCC_EMBED_HOST = "occ.digithings.ai";
+
+function isOccHost(host: string | undefined, slug: string | undefined): boolean {
+  return host === OCC_EMBED_HOST || slug === "occ";
+}
+
+/** OCC without `occPicker` keeps the operator model: no list, no picker. */
+function lockOccModels(models: CatalogModels): CatalogModels {
+  if (!models) return models;
+  const next: CatalogModels = { ...models, available: [], allowPicker: false };
+  delete next.picker;
+  delete next.default;
+  return next;
+}
+
 function applyModelCatalog(
   models: CatalogModels,
   ctx: string,
@@ -862,10 +884,27 @@ function applyCatalogConfig(
     : config.deployment;
   const hosts = config.hosts
     ? Object.fromEntries(
-        Object.entries(config.hosts).map(([host, dep]) => [
-          host,
-          { ...dep, models: applyModelCatalog(dep.models, `${ctx} hosts.${host}`, openRouterConfigured) },
-        ]),
+        Object.entries(config.hosts).map(([host, dep]) => {
+          if (isOccHost(host, dep.slug) && dep.models?.occPicker !== true) {
+            return [
+              host,
+              {
+                ...dep,
+                features: { ...dep.features, modelPicker: false },
+                models: lockOccModels(dep.models),
+              },
+            ];
+          }
+          const models = applyModelCatalog(
+            dep.models,
+            `${ctx} hosts.${host}`,
+            openRouterConfigured,
+          );
+          if (isOccHost(host, dep.slug)) {
+            return [host, { ...dep, features: { ...dep.features, modelPicker: true }, models }];
+          }
+          return [host, { ...dep, models }];
+        }),
       )
     : config.hosts;
   return { ...config, deployment, hosts };

@@ -17,8 +17,8 @@
 
 model_list:
   # DeepSeek V4.1 Flash 1017 checkpoint — the house default (Chris, 2026-10-21).
-  # Older flash checkpoints are distinct products on the Cheaper Inference
-  # markets page and route to themselves so the picker can offer each one.
+  # Older flash slugs stay aliases of 1017 so pins outside the repo keep
+  # working. Distinct checkpoints are the ``*-release`` model names below.
   - model_name: deepseek/deepseek-v4.1-flash-1017
     litellm_params: &ci_ds_v41_flash_1017
       model: openai/deepseek-v4.1-flash-1017
@@ -30,9 +30,10 @@ model_list:
   - model_name: openrouter/deepseek/deepseek-v4.1-flash-1017
     litellm_params: *ci_ds_v41_flash_1017
 
+  # legacy alias → 1017 (2026-10-21)
   - model_name: deepseek/deepseek-v4.1-flash
     litellm_params: &ci_ds_v41_flash
-      model: openai/deepseek-v4.1-flash
+      model: openai/deepseek-v4.1-flash-1017
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:
@@ -40,6 +41,17 @@ model_list:
         - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
   - model_name: openrouter/deepseek/deepseek-v4.1-flash
     litellm_params: *ci_ds_v41_flash
+
+  - model_name: deepseek/deepseek-v4.1-flash-release
+    litellm_params: &ci_ds_v41_flash_release
+      model: openai/deepseek-v4.1-flash
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/deepseek/deepseek-v4.1-flash-release
+    litellm_params: *ci_ds_v41_flash_release
 
   - model_name: openai/gpt-6-luna
     litellm_params: &ci_gpt6_luna
@@ -96,9 +108,10 @@ model_list:
   - model_name: openrouter/minimax/minimax-m3
     litellm_params: *ci_minimax_m3
 
+  # legacy alias → 1017 (2026-10-21)
   - model_name: deepseek/deepseek-v4-flash
     litellm_params: &ci_ds_v4_flash
-      model: openai/deepseek-v4-flash
+      model: openai/deepseek-v4.1-flash-1017
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:
@@ -106,6 +119,17 @@ model_list:
         - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
   - model_name: openrouter/deepseek/deepseek-v4-flash
     litellm_params: *ci_ds_v4_flash
+
+  - model_name: deepseek/deepseek-v4-flash-release
+    litellm_params: &ci_ds_v4_flash_release
+      model: openai/deepseek-v4-flash
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/deepseek/deepseek-v4-flash-release
+    litellm_params: *ci_ds_v4_flash_release
 
   - model_name: deepseek/deepseek-v4-pro
     litellm_params: &ci_ds_v4_pro
@@ -162,9 +186,10 @@ model_list:
   - model_name: openrouter/openai/gpt-5.6-sol
     litellm_params: *ci_gpt56_sol
 
+  # legacy alias → 1017 (2026-10-21)
   - model_name: deepseek/deepseek-v4-flash-0731
     litellm_params: &ci_ds_v4_flash_0731
-      model: openai/deepseek-v4-flash-0731
+      model: openai/deepseek-v4.1-flash-1017
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:
@@ -172,6 +197,17 @@ model_list:
         - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
   - model_name: openrouter/deepseek/deepseek-v4-flash-0731
     litellm_params: *ci_ds_v4_flash_0731
+
+  - model_name: deepseek/deepseek-v4-flash-0731-release
+    litellm_params: &ci_ds_v4_flash_0731_release
+      model: openai/deepseek-v4-flash-0731
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/deepseek/deepseek-v4-flash-0731-release
+    litellm_params: *ci_ds_v4_flash_0731_release
 
   - model_name: openai/gpt-oss-120b
     litellm_params: &ci_gpt_oss_120b

@@ -212,11 +212,12 @@ function fill(template: string, label: string): string {
 }
 
 /**
- * digigraph's session allowlist: the published list at the catalog's own price
- * cap, nothing over it and no router. digigraph is the last hop before a bill,
- * so it must not bind an id the cap excludes even if a hand-written
- * `available` list on some host offers one. A deployment that raises its cap
- * needs this list (and DIGI_SESSION_MODEL_ALLOWLIST) raised with it.
+ * digigraph's session allowlist: the published picker. That is the standard
+ * models at the $2 cap plus the manual Premium tier at or under the $2.50
+ * premium cap. No router, and nothing above the premium cap. digigraph is
+ * the last hop before a bill, so it must not bind an id the premium cap
+ * excludes even if a hand-written `available` list on some host offers one.
+ * Raising a cap means raising this list and DIGI_SESSION_MODEL_ALLOWLIST.
  */
 export function sessionAllowlistIds(): string[] {
   return resolveModelCatalog({}, { openRouterConfigured: false }).available;

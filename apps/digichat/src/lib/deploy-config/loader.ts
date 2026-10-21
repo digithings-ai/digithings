@@ -125,6 +125,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
         ? { allowPicker: cfg.models.allowPicker }
         : {}),
       ...(cfg.models?.catalog === true ? { catalog: true as const } : {}),
+      ...(typeof cfg.models?.occPicker === "boolean" ? { occPicker: cfg.models.occPicker } : {}),
       ...(typeof cfg.models?.priceCapUsdPerMillion === "number"
         ? { priceCapUsdPerMillion: cfg.models.priceCapUsdPerMillion }
         : {}),
@@ -354,19 +355,31 @@ function mergeEmbedTenantsOverlay(
   };
 
   // Registry is host → config. New hosts hydrate fully. Existing YAML hosts
-  // keep chrome, but copy `requiredPlanTier` when YAML omitted it so a baked
-  // example file cannot drop the live DIGICHAT_EMBED_TENANTS Desk+ gate (#3662).
+  // keep chrome and token. `requiredPlanTier` is copied when YAML omitted it
+  // so a baked example cannot drop the live DIGICHAT_EMBED_TENANTS Desk+ gate
+  // (#3662). The registry `models` block is spread on top so a host that
+  // already exists in YAML still receives the picker and the premium meter.
+  // Registry model keys win.
   for (const [host, cfg] of registry) {
     if (!hosts[host]) {
       hosts[host] = embedTenantToDeployment(cfg);
       continue;
     }
-    if (cfg.requiredPlanTier && !hosts[host].gate.requiredPlanTier) {
-      hosts[host] = {
-        ...hosts[host],
-        gate: { ...hosts[host].gate, requiredPlanTier: cfg.requiredPlanTier },
+    let next = hosts[host];
+    if (cfg.requiredPlanTier && !next.gate.requiredPlanTier) {
+      next = {
+        ...next,
+        gate: { ...next.gate, requiredPlanTier: cfg.requiredPlanTier },
       };
     }
+    if (cfg.models) {
+      const fromRegistry = embedTenantToDeployment(cfg).models;
+      next = {
+        ...next,
+        models: { ...(next.models ?? { available: [] }), ...(fromRegistry ?? {}) },
+      };
+    }
+    hosts[host] = next;
   }
 
   return parseDigichatConfig(

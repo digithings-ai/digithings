@@ -276,6 +276,8 @@ export type EmbedTenantConfig = {
     available?: string[];
     allowPicker?: boolean;
     catalog?: boolean;
+    /** OCC visitor picker. Off unless true. Other hosts ignore it. */
+    occPicker?: boolean;
     priceCapUsdPerMillion?: number;
     premiumCapUsdPerMillion?: number;
     costPerWindow?: { usd: number; windowSeconds?: number };
@@ -989,6 +991,9 @@ function parseTenantModels(
   if (r.catalog !== undefined && typeof r.catalog !== "boolean") {
     throw new Error(`embed tenant "${hostKey}": models.catalog must be a boolean`);
   }
+  if (r.occPicker !== undefined && typeof r.occPicker !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.occPicker must be a boolean`);
+  }
   if (
     r.priceCapUsdPerMillion !== undefined &&
     (typeof r.priceCapUsdPerMillion !== "number" ||
@@ -1046,6 +1051,7 @@ function parseTenantModels(
       available,
       ...(typeof r.allowPicker === "boolean" ? { allowPicker: r.allowPicker } : {}),
       ...(r.catalog === true ? { catalog: true } : {}),
+      ...(typeof r.occPicker === "boolean" ? { occPicker: r.occPicker } : {}),
       ...(typeof r.priceCapUsdPerMillion === "number"
         ? { priceCapUsdPerMillion: r.priceCapUsdPerMillion }
         : {}),

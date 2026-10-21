@@ -6,6 +6,7 @@ import {
   TYPICAL_PREMIUM_INPUT_TOKENS,
   TYPICAL_PREMIUM_OUTPUT_TOKENS,
   applyPremiumBudget,
+  premiumSpendIdentity,
   premiumTurnUsd,
   resetPremiumSpendForTests,
 } from "./budget";
@@ -31,6 +32,15 @@ describe("premium spend budget", () => {
     expect(PREMIUM_BUDGET_TURNS * glmTurn).toBeCloseTo(0.0125565, 8);
     expect(TYPICAL_PREMIUM_INPUT_TOKENS).toBe(3550);
     expect(TYPICAL_PREMIUM_OUTPUT_TOKENS).toBe(600);
+  });
+
+  it("keys spend on the user, then the client IP, then a shared anonymous bucket", () => {
+    expect(premiumSpendIdentity({ userId: "user-1", ip: "203.0.113.4" })).toBe("user-1");
+    expect(premiumSpendIdentity({ userId: "embed:anonymous", ip: "203.0.113.4" })).toBe(
+      "203.0.113.4",
+    );
+    expect(premiumSpendIdentity({ userId: "embed:anonymous", ip: "unknown" })).toBe("anonymous");
+    expect(premiumSpendIdentity({})).toBe("anonymous");
   });
 
   it("allows premium until the rolling window is spent, then falls back to Auto", () => {

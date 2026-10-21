@@ -189,7 +189,7 @@ describe("model picker catalog", () => {
     for (const id of deployModels.available) {
       expect(deployModels.sessionAllowlist).toContain(id);
     }
-    // digigraph's list is the capped list: no over-cap id, no router.
+    // Standard ids are at or under $2. Premium ids are above $2 and at or under $2.50. No router.
     expect(deployModels.sessionAllowlist).toEqual(deployModels.available);
     expect(deployModels.sessionAllowlist).not.toContain("openrouter/auto");
     const premiumIds =

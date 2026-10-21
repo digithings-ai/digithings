@@ -34,16 +34,20 @@ hosts:
       modelPicker: true
       speech: false
     models:
-      # Same catalog as digithings.ai. Presets are the friendly rows;
-      # the full list sits under them. lockSessionControls below still
-      # hides MCP and tool session controls. The visitor may pick a model
-      # from this list only (DIG-4750 refused an open id list; the catalog
-      # policy is the 2.6.6 narrowing of that refusal).
+      # Chris, 21 Oct 2026 19:19 Rome: "Yes, enable the model picker on OCC
+      # for 2.6.6, I sign off on overriding the DIG-4488 lock". occPicker is
+      # the switch (off keeps the operator model). The catalog is the same
+      # policy as digithings.ai. lockSessionControls below still hides MCP
+      # and tool session controls. DIG-4750 still refuses a raw id list.
+      occPicker: true
       allowPicker: true
       catalog: true
       default: deepseek/deepseek-v4.1-flash-1017
       priceCapUsdPerMillion: 2
-      # No costPerWindow: premium picks stay unmetered unless a deploy sets one.
+      # Same premium meter as digithings.ai, active because occPicker is on.
+      costPerWindow:
+        usd: 0.0125565
+        windowSeconds: 86400
       presets: [auto, reasoning, fast, light]
       showFullList: true
     backend:

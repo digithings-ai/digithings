@@ -396,7 +396,8 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.models.catalog).toBe(true);
     expect(occHost?.models.allowPicker).toBe(true);
     expect(occHost?.models.picker?.presets[0]?.id).toBe("auto");
-    expect(occHost?.models.costPerWindow).toBeUndefined();
+    expect(occHost?.models.occPicker).toBe(true);
+    expect(occHost?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
     expect(occHost?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
       "z-ai/glm-5.3-flash",
     );
@@ -410,6 +411,51 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.mcp?.servers[0]?.tokenEnv).toBe("ZAMMAD_API_TOKEN");
     expect(occHost?.mcp?.servers[0]?.authHeader).toBe("Authorization");
     expect(allowedForceTools(occHost)).toEqual(["zammad", "digisearch", "digivault"]);
+  });
+
+  it("keeps the OCC picker locked unless occPicker is true", () => {
+    const locked = parseDigichatConfig({
+      version: 1,
+      hosts: {
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          features: { modelPicker: true },
+          gate: { lockSessionControls: true },
+          models: {
+            catalog: true,
+            occPicker: false,
+            costPerWindow: { usd: 0.0125565 },
+          },
+        },
+      },
+    });
+    const host = locked.hosts?.["occ.digithings.ai"];
+    expect(host?.models.available).toEqual([]);
+    expect(host?.models.allowPicker).toBe(false);
+    expect(host?.models.picker).toBeUndefined();
+    expect(host?.models.default).toBeUndefined();
+    expect(host?.features.modelPicker).toBe(false);
+    expect(host?.gate.lockSessionControls).toBe(true);
+    expect(host?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
+
+    const open = parseDigichatConfig({
+      version: 1,
+      hosts: {
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          models: { catalog: true, occPicker: true, costPerWindow: { usd: 0.0125565 } },
+        },
+      },
+    });
+    const opened = open.hosts?.["occ.digithings.ai"];
+    expect(opened?.features.modelPicker).toBe(true);
+    expect(opened?.models.available).toContain("z-ai/glm-5.3");
+    expect(
+      opened?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model,
+    ).toBe("z-ai/glm-5.3-flash");
+    expect(opened?.models.costPerWindow?.windowSeconds).toBe(86400);
   });
 
   it("parses operator MCP servers on the DataTap example without leaking URLs", () => {

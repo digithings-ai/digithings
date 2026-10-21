@@ -74,7 +74,7 @@ stay in the catalog file; the resolver drops them. Models above that cap and
 at or under the premium cap ($2.50) are a separate Premium group: manual
 picks only, never Auto, the other presets, or the router. digithings.ai meters
 those picks at $0.0125565 per user per rolling day (three typical turns of
-GLM 5.3). OCC leaves that budget unset. The default
+GLM 5.3). OCC meters the same amount because its picker is on. The default
 preset is `deepseek/deepseek-v4.1-flash-1017` (DeepSeek V4.1 Flash 1017 on
 Cheaper Inference). Cheaper Inference has no router model. OpenRouter is not a
 free model list on that picker; `openrouter/auto` appears only as the Router
@@ -93,6 +93,14 @@ catalog; some older ids are not in that map. The BFF rejects any other house
 `X-Digi-Model`, and digigraph binds only ids on the capped
 `DIGI_SESSION_MODEL_ALLOWLIST`. The OpenRouter router preset is off in the
 shipped configs.
+
+The 2026-10-21 snapshot was left as fetched. A later markets HTML differed
+on six non-premium rows (mimo-v2.6-flash 0.2013 vs 0.2380, qwen3.8-flash
+0.3055 vs 0.3289, qwen3.8-max 4.1251 vs 3.9, gpt-6-luna 0.3734 vs 0.3763,
+gpt-5.6-luna 0.4935 vs 0.48, deepseek-v4-pro-0813 1.6830 vs 0.99).
+`deepseek-v4-flash-0731-fast` is not on that listing. The Premium rows
+match, and the preset winners at the $2 cap are unchanged. Re-pulling the
+catalog is deferred.
 
 **BYOK** (`gate.showByok`): connecting a visitor provider replaces `/models`
 with that provider’s presets (existing BYOK catalog). The house allowlist does

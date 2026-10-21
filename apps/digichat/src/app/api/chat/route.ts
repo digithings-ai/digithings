@@ -33,7 +33,11 @@ import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { resolveLanguageCode } from "@/lib/languages";
 import { premiumModelsHeader } from "@/lib/deploy-config/schema";
 import { catalogModelRate, premiumIdsFromGroups } from "@/lib/model-picker-catalog";
-import { applyPremiumBudget, premiumUserKey } from "@/lib/premium-budget/budget";
+import {
+  applyPremiumBudget,
+  premiumSpendIdentity,
+  premiumUserKey,
+} from "@/lib/premium-budget/budget";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getHeartbeatContext, licenseRefusal } from "@/lib/license/state";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
@@ -612,6 +616,12 @@ async function handleChat(
     }
   }
 
+  // Pin the curated default on the house header. digigraph ignores the body
+  // model, and the header was set only when the client sent X-Digi-Model.
+  if (!byokKey && !houseSessionModel && dep?.models?.available?.includes(modelId)) {
+    houseSessionModel = modelId;
+  }
+
   let premiumNotice: string | undefined;
   let chargePremium: ((usage?: { inputTokens: number; outputTokens: number }) => void) | undefined;
   if (!byokKey && dep?.models) {
@@ -622,7 +632,13 @@ async function handleChat(
       premium: premiumIds.includes(modelId),
       rate: catalogModelRate(modelId),
       budget: dep.models.costPerWindow,
-      userKey: premiumUserKey(tenantSlug, sessionId),
+      userKey: premiumUserKey(
+        tenantSlug,
+        premiumSpendIdentity({
+          userId: ownerUserSub,
+          ip: clientIpForRateLimit(req),
+        }),
+      ),
     });
     if (applied.notice) {
       modelId = applied.modelId;

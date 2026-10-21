@@ -774,14 +774,18 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
 # meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
 # CI catalog and fail closed when CI is the selected house upstream (#3660).
-# DeepSeek flash checkpoints are distinct products (2026-10-21 markets page).
-# The 1017 checkpoint stays the house default; the older flash ids route to
-# themselves so the picker can offer each version that meets the price cap.
+# DeepSeek flash: every house flash slug routes to the V4.1 Flash 1017
+# checkpoint (2026-10-21). The older slugs stay as aliases so pins outside
+# the repo keep working. Distinct checkpoints are new ``*-release`` slugs,
+# not a remap of the aliases.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash",
-    "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
-    "deepseek/deepseek-v4-flash-0731": "deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-release": "deepseek-v4.1-flash",
+    "deepseek/deepseek-v4-flash-release": "deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-0731-release": "deepseek-v4-flash-0731",
     "deepseek/deepseek-v4-flash-0731-fast": "deepseek-v4-flash-0731-fast",
     "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro-0813",

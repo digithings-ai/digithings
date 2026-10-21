@@ -228,6 +228,42 @@ hosts:
     expect(cfg.hosts?.["digiquant.io"]?.token).toBe("yaml-tok");
   });
 
+  it("merges registry model policy onto a YAML host that already exists", () => {
+    const tenants = JSON.stringify({
+      "digithings.ai": {
+        slug: "digithings",
+        token: "reg-tok",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+        models: {
+          catalog: true,
+          costPerWindow: { usd: 0.0125565, windowSeconds: 86400 },
+        },
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+hosts:
+  digithings.ai:
+    slug: digithings
+    token: yaml-tok
+    backend:
+      type: digigraph
+    chrome:
+      theme: light
+`,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    const host = cfg.hosts?.["digithings.ai"];
+    expect(host?.token).toBe("yaml-tok");
+    expect(host?.chrome.theme).toBe("light");
+    expect(host?.models.catalog).toBe(true);
+    expect((host?.models.available ?? []).length).toBeGreaterThan(0);
+    expect(host?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
+    expect(host?.models.picker?.presets[0]?.id).toBe("auto");
+  });
+
   it("overlays DIGICHAT_EMBED_TOKEN onto deployment", () => {
     const cfg = loadDigichatConfig({
       fileContents: `

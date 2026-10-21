@@ -83,8 +83,24 @@ export function resetPremiumSpendForTests(): void {
   memory.clear();
 }
 
-export function premiumUserKey(slug: string, sessionId: string): string {
-  return `${slug}:${sessionId}`;
+/**
+ * Same order as #6182's `guardrailIdentity`. A client session header is not
+ * a budget key. `embed:anonymous` is not a person, and `unknown` is not an
+ * address (`clientIpForRateLimit`). Callers with neither share `anonymous`.
+ * Replace this with `guardrailIdentity` when that PR lands.
+ */
+export function premiumSpendIdentity(opts: {
+  userId?: string | null;
+  ip?: string | null;
+}): string {
+  const user = opts.userId && opts.userId !== "embed:anonymous" ? opts.userId.trim() : "";
+  if (user) return user;
+  const ip = opts.ip && opts.ip !== "unknown" ? opts.ip.trim() : "";
+  return ip || "anonymous";
+}
+
+export function premiumUserKey(slug: string, identity: string): string {
+  return `${slug}:${identity}`;
 }
 
 export function chargePremiumUsage(
