@@ -30,7 +30,7 @@ DIGICHAT_CHROME_SKIN=digichat
 ## Platform palette
 
 Mode and palette are a platform setting (`dt-theme`, `dt-palette`), not a
-catalog skin. `/theme` paints the digichat product skin. The 11 vendored
+catalog skin. `/theme` is one entry in the existing slash list. The 11 vendored
 catalog skins stay as shipped. A pinned embed theme wins over the stored
 mode, and the pin removes `data-palette` from that document.
 

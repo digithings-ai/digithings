@@ -209,7 +209,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "theme",
     names: ["/theme"],
     needsArg: false,
-    hint: "dark / light / auto, or a colour palette",
+    hint: "default dark, default light, then each palette",
     kind: "client",
     category: "setup",
   },

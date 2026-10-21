@@ -143,4 +143,47 @@ export function applyDocumentTheme(
   return resolved;
 }
 
+/** One stop on the shared cycle: default dark, default light, then each palette in dark and light. */
+export type ThemeStep = {
+  id: string;
+  label: string;
+  mode: "dark" | "light";
+  palette: PaletteName;
+};
+
+export function themeCycle(): readonly ThemeStep[] {
+  const steps: ThemeStep[] = [
+    { id: "default:dark", label: "default · dark", mode: "dark", palette: "default" },
+    { id: "default:light", label: "default · light", mode: "light", palette: "default" },
+  ];
+  for (const id of PALETTE_IDS) {
+    steps.push({ id: `${id}:dark`, label: `${id} · dark`, mode: "dark", palette: id });
+    steps.push({ id: `${id}:light`, label: `${id} · light`, mode: "light", palette: id });
+  }
+  return steps;
+}
+
+/** The cycle stop that matches the painted mode and palette. Auto uses the resolved mode. */
+export function matchThemeStep(
+  preference: ThemePreference,
+  palette: PaletteName,
+  resolved: ResolvedTheme,
+): ThemeStep {
+  const mode = preference === "auto" ? resolved : preference;
+  const steps = themeCycle();
+  return steps.find((step) => step.mode === mode && step.palette === palette) ?? steps[0];
+}
+
+/** The next stop after the painted one. Wraps to default dark. */
+export function nextThemeStep(
+  preference: ThemePreference,
+  palette: PaletteName,
+  resolved: ResolvedTheme,
+): ThemeStep {
+  const steps = themeCycle();
+  const current = matchThemeStep(preference, palette, resolved);
+  const index = steps.findIndex((step) => step.id === current.id);
+  return steps[(index + 1) % steps.length];
+}
+
 export { PALETTE_IDS, PALETTES, type PaletteId };

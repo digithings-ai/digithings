@@ -404,7 +404,10 @@ and run `make agents-init` (CI enforces idempotence).
 `packages/ui/src/theme/` owns mode and palette for every web surface that
 opts in. Mode is `light`, `dark`, or `auto` (`dt-theme` stores only `light`
 or `dark`; auto removes the key). Palette is `default` or one of the 32
-DigiVoice ids in `dt-palette`. The tables are generated from
+DigiVoice ids in `dt-palette`. The existing light/dark toggle advances one
+stop: default dark, default light, then each palette in dark and then light.
+`/theme` is one entry in the existing slash list and uses that same list.
+The tables are generated from
 `digivoice/hammerspoon/theme_registry.json` by
 `scripts/generate_platform_palettes.py` (`packages/design/palettes.css`,
 `palette-registry.ts`, `themeInit.ts`). `default` leaves `tokens.css` in

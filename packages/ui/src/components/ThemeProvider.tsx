@@ -23,10 +23,13 @@ import {
 } from "react";
 import {
   applyDocumentTheme,
+  matchThemeStep,
+  nextThemeStep,
   readThemeState,
   type PaletteName,
   type ResolvedTheme,
   type ThemePreference,
+  type ThemeStep,
 } from "../theme/apply-theme";
 import { IconButton } from "../ui/icon-button";
 
@@ -86,7 +89,7 @@ export { themeInitScript } from "./themeInit";
 export type ThemeContextValue = {
   /** Resolved light/dark currently painted. Existing callers read this. */
   theme: ResolvedTheme;
-  /** Flip between explicit light and dark (writes `dt-theme`). */
+  /** Advance one stop: default dark, default light, then each palette. */
   toggle: () => void;
   /** Stored mode. `auto` means `dt-theme` is absent and the OS is followed. */
   preference: ThemePreference;
@@ -94,6 +97,8 @@ export type ThemeContextValue = {
   /** `default` or one of the 32 DigiVoice palette ids. Stored in `dt-palette`. */
   palette: PaletteName;
   setPalette: (palette: string) => void;
+  /** Paint one cycle stop (mode and palette together). */
+  applyStep: (step: ThemeStep) => void;
 };
 
 const ThemeCtx = createContext<ThemeContextValue | null>(null);
@@ -148,15 +153,21 @@ export function ThemeProvider({
     setResolved(resolved);
   }, []);
 
+  const applyStep = useCallback((step: ThemeStep) => {
+    const resolved = applyDocumentTheme(step.mode, step.palette);
+    setPreference(step.mode);
+    setPaletteState(step.palette);
+    setResolved(resolved);
+  }, []);
+
   const toggle = useCallback(() => {
-    const resolved =
-      document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-    setTheme(resolved === "light" ? "dark" : "light");
-  }, [setTheme]);
+    const current = readThemeState();
+    applyStep(nextThemeStep(current.preference, current.palette, current.resolved));
+  }, [applyStep]);
 
   const value = useMemo(
-    () => ({ theme, toggle, preference, setTheme, palette, setPalette }),
-    [theme, toggle, preference, setTheme, palette, setPalette],
+    () => ({ theme, toggle, preference, setTheme, palette, setPalette, applyStep }),
+    [theme, toggle, preference, setTheme, palette, setPalette, applyStep],
   );
 
   return (
@@ -169,13 +180,14 @@ export function ThemeProvider({
 }
 
 export function ThemeToggle({ className }: { className?: string }) {
-  const { theme, toggle } = useTheme();
+  const { theme, preference, palette, toggle } = useTheme();
+  const step = matchThemeStep(preference, palette, theme);
   return (
     <IconButton
       type="button"
       onClick={toggle}
       aria-label="Toggle colour theme"
-      title="Toggle theme"
+      title={step.label}
       className={className ?? "theme-toggle"}
     >
       {theme === "dark" ? (
