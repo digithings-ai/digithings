@@ -19,46 +19,70 @@ Why not the other open routers:
 
 Rules catch the obvious shapes (a greeting, a code block, a short lookup) so
 the demo does not depend on a near-tie in the hash space. Anything else is
-the centroid score. Nothing here opens a socket or reads a provider key.
+the centroid score. The phrases, the rule patterns, and the hash width live
+in ``router_data.json``, which the digichat TypeScript port reads too.
+Nothing here opens a socket or reads a provider key.
 """
 
 from __future__ import annotations
 
 import math
 import re
+from dataclasses import dataclass
 
+from digillm.router.data import RouterRule, router_table
 from digillm.router.types import RouterRoute
 
-_DIM = 256
-_WEAK = 0.12
+_TABLE = router_table()
+_DIM = _TABLE.dim
+_WEAK = _TABLE.weak
+_STOP = frozenset(_TABLE.stopwords)
+_TOKEN = re.compile(_TABLE.token_pattern, re.IGNORECASE)
 
-_GREETING = re.compile(
-    r"^(?:hi|hello|hey|yo|sup|thanks|thank you|thx|ok|okay|cool|"
-    r"good morning|good evening|good night)[!.?\s]*$",
-    re.IGNORECASE,
-)
-_CODE = re.compile(
-    r"```|^[ \t]*(?:def |class |function |import |from |const |let |fn )"
-    r"|\btraceback\b|\bstack trace\b"
-    r"|\b(?:write|implement|debug|refactor)\b.{0,48}\b(?:function|class|script|code|component)\b",
-    re.IGNORECASE | re.MULTILINE,
-)
-_REASONING = re.compile(
-    r"\b(?:prove|proof|derive|theorem|step by step|chain of thought|"
-    r"compare and contrast)\b|∫|∑|\\sqrt",
-    re.IGNORECASE,
-)
-_LOOKUP = re.compile(
-    r"^(?:what|who|when|where|which|define|convert|translate|how many|how much)\b",
-    re.IGNORECASE,
-)
-_QUICK_MATH = re.compile(r"\d+\s*[-+*/^=]\s*\d+")
-_NUMBERED = re.compile(r"(?m)^\s*1[.)].+\n\s*2[.)]")
-_TOKEN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 
-_STOP = frozenset(
-    "a an the of to and or for in on at is are was be it this that with from as".split()
-)
+def _flags(spec: str) -> int:
+    flags = 0
+    if "i" in spec:
+        flags |= re.IGNORECASE
+    if "m" in spec:
+        flags |= re.MULTILINE
+    return flags
+
+
+@dataclass(frozen=True)
+class _CompiledRule:
+    route: str
+    op: str
+    regex: re.Pattern[str]
+    reason: str
+    confidence: float
+    max_chars: int | None
+    unless: re.Pattern[str] | None
+    numbered: re.Pattern[str] | None
+    long_chars: int | None
+
+
+def _compile_rule(rule: RouterRule) -> _CompiledRule:
+    unless = None
+    if rule.unless_pattern:
+        unless = re.compile(rule.unless_pattern, _flags(rule.unless_flags))
+    numbered = None
+    if rule.numbered_pattern:
+        numbered = re.compile(rule.numbered_pattern, _flags(rule.numbered_flags))
+    return _CompiledRule(
+        route=rule.route,
+        op=rule.op,
+        regex=re.compile(rule.pattern, _flags(rule.flags)),
+        reason=rule.reason,
+        confidence=rule.confidence,
+        max_chars=rule.max_chars,
+        unless=unless,
+        numbered=numbered,
+        long_chars=rule.long_chars,
+    )
+
+
+_RULES = tuple(_compile_rule(rule) for rule in _TABLE.rules)
 
 
 def _tokens(text: str) -> list[str]:
@@ -111,6 +135,10 @@ def _has(routes: list[RouterRoute], route_id: str) -> bool:
     return any(route.id == route_id for route in routes)
 
 
+def _over_max(rule: _CompiledRule, stripped: str) -> bool:
+    return rule.max_chars is not None and len(stripped) >= rule.max_chars
+
+
 def rule_route(text: str, routes: list[RouterRoute]) -> tuple[str, str, float] | None:
     """A structural hit, or None when the centroid should decide.
 
@@ -121,22 +149,24 @@ def rule_route(text: str, routes: list[RouterRoute]) -> tuple[str, str, float] |
     stripped = text.strip()
     if not stripped:
         return None
-    if _GREETING.match(stripped) and _has(routes, "light"):
-        return ("light", "Short greeting or acknowledgment.", 0.92)
-    if _CODE.search(stripped) and _has(routes, "reasoning"):
-        return ("reasoning", "Code or an error trace.", 0.9)
-    long = len(stripped) > 600 or _NUMBERED.search(stripped) is not None
-    if (_REASONING.search(stripped) or long) and _has(routes, "reasoning"):
-        return ("reasoning", "Multi-step reasoning, math, or a long question.", 0.88)
-    if (
-        _QUICK_MATH.search(stripped)
-        and len(stripped) < 120
-        and _REASONING.search(stripped) is None
-        and _has(routes, "fast")
-    ):
-        return ("fast", "Short calculation.", 0.84)
-    if _LOOKUP.match(stripped) and len(stripped) < 200 and _has(routes, "fast"):
-        return ("fast", "Short factual lookup.", 0.86)
+    for rule in _RULES:
+        if not _has(routes, rule.route) or _over_max(rule, stripped):
+            continue
+        if rule.op == "match":
+            if rule.regex.match(stripped):
+                return (rule.route, rule.reason, rule.confidence)
+            continue
+        if rule.op == "search":
+            if rule.unless is not None and rule.unless.search(stripped):
+                continue
+            if rule.regex.search(stripped):
+                return (rule.route, rule.reason, rule.confidence)
+            continue
+        long = len(stripped) > (rule.long_chars or 0) or (
+            rule.numbered is not None and rule.numbered.search(stripped) is not None
+        )
+        if rule.regex.search(stripped) or long:
+            return (rule.route, rule.reason, rule.confidence)
     return None
 
 

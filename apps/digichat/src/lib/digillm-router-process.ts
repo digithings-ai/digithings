@@ -1,16 +1,19 @@
 /**
- * Run digillm's router as a library process.
+ * Ask digillm's router which allowlisted model fits the question.
  *
- * `python -m digillm.router` reads one JSON request and writes one decision.
- * It does not call a provider. Tests inject `run` so this file's default
- * spawn is never required on the chat-route suite, and nothing here knows a
- * paid inference URL.
+ * The default is the in-process TypeScript port (`digillm-router-engine`),
+ * which the stock image and the Cloudflare Worker can run. Set
+ * `DIGILLM_ROUTER_PYTHON=1` to spawn `python -m digillm.router` instead.
+ * `DIGILLM_PYTHON` is only the interpreter for that opt-in. Neither path
+ * calls a provider. Tests inject `run` so the chat-route suite never scores
+ * and never spawns.
  */
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+import { decideDigillmRoute } from "@/lib/digillm-router-engine";
 import {
   type DigillmRouterDecision,
   type DigillmRouterRouteInput,
@@ -144,10 +147,27 @@ export const spawnDigillmRouter: DigillmRouterRunner = (input) =>
     child.stdin.end();
   });
 
-let runner: DigillmRouterRunner = spawnDigillmRouter;
+function pythonRouterConfigured(): boolean {
+  const flag = process.env.DIGILLM_ROUTER_PYTHON?.trim().toLowerCase();
+  return flag === "1" || flag === "true" || flag === "yes";
+}
+
+function runInProcess(input: DigillmRouterRunInput): Promise<DigillmRouterDecision> {
+  try {
+    return Promise.resolve(decideDigillmRoute(input));
+  } catch {
+    return Promise.reject(new DigillmRouterUnavailable());
+  }
+}
+
+function defaultRunner(input: DigillmRouterRunInput): Promise<DigillmRouterDecision> {
+  return pythonRouterConfigured() ? spawnDigillmRouter(input) : runInProcess(input);
+}
+
+let runner: DigillmRouterRunner = defaultRunner;
 
 export function setDigillmRouterRunnerForTests(next: DigillmRouterRunner | null): void {
-  runner = next ?? spawnDigillmRouter;
+  runner = next ?? defaultRunner;
 }
 
 export function routeWithDigillm(input: DigillmRouterRunInput): Promise<DigillmRouterDecision> {

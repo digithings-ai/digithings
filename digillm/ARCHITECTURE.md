@@ -60,11 +60,22 @@ call a provider, download weights, or open a socket. The decision is a
 Pydantic `RouterDecision` (`route_id`, `label`, `model`, `reason`,
 `confidence`). `reason` names the category and never quotes the question.
 
-A process that cannot import Python (digichat's BFF) runs the same function
-with `python -m digillm.router`: one JSON object on stdin, one decision on
-stdout. That is a library entry point, not a service and not a new package.
-The deployment turns it on with `digillm.router.enabled` (default off).
-digichat shows it in the model picker as "Router".
+Phrases, structural rules, preference lists, and the catalog prices used to
+bind a category live in `router_data.json`. digichat's server imports that
+same file and runs a TypeScript port of this scorer, so the stock image and
+the Cloudflare Worker do not need Python. `python -m digillm.router` (one
+JSON object on stdin, one decision on stdout) stays the library entry point
+and is what digichat spawns only when `DIGILLM_ROUTER_PYTHON=1`. That is not
+a service and not a new package. The deployment turns the picker row on with
+`digillm.router.enabled` (default off). digichat shows it as "Router".
+
+Reasoning and Fast walk `routes[].prefer` until an id is on the deployment
+allowlist. Light does not. Unless the operator pins `routes[].model`, Light
+is the cheapest tool-capable non-Gemini id on that allowlist (prompt price
+from the openrouter rows copied into `router_data.json`). A null price cannot
+win. An empty allowlist keeps the deployment default when that id is not
+Gemini. Gemini is used only when it is pinned or it is the only allowlisted
+model.
 
 Arch-Router-1.5B was rejected: the Katanemo Community License needs a
 separate commercial license, and a CPU call is seconds. RouteLLM was

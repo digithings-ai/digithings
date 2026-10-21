@@ -2513,6 +2513,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       "deepseek/deepseek-v4.1-flash-1017",
       "deepseek/deepseek-v4-pro",
       "google/gemini-3.1-flash-lite",
+      "openai/gpt-oss-120b",
     ];
 
     function routerConfig(over: Record<string, unknown> = {}) {
@@ -2578,7 +2579,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       vi.mocked(routeWithDigillm).mockResolvedValue({
         routeId: "light",
         label: "Light",
-        model: "google/gemini-3.1-flash-lite",
+        model: "openai/gpt-oss-120b",
         reason: "Short greeting or acknowledgment.",
         confidence: 0.92,
       });
@@ -2588,11 +2589,11 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         model?: string;
         upstreamHeaders: Record<string, string>;
       };
-      expect(call.model).toBe("google/gemini-3.1-flash-lite");
+      expect(call.model).toBe("openai/gpt-oss-120b");
       expect(call.model).not.toBe("digillm/router");
-      expect(call.upstreamHeaders["X-Digi-House-Model"]).toBe("google/gemini-3.1-flash-lite");
+      expect(call.upstreamHeaders["X-Digi-House-Model"]).toBe("openai/gpt-oss-120b");
       expect(res.headers.get("x-digillm-router-route")).toBe("light");
-      expect(res.headers.get("x-digillm-router-model")).toBe("google/gemini-3.1-flash-lite");
+      expect(res.headers.get("x-digillm-router-model")).toBe("openai/gpt-oss-120b");
       expect(routeWithDigillm).toHaveBeenCalledWith(
         expect.objectContaining({ text: "thanks", allowed, fallback: allowed[0] }),
       );

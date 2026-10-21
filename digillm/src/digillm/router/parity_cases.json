@@ -1,0 +1,125 @@
+{
+  "cases": [
+    {
+      "name": "demo-light-thanks",
+      "text": "thanks",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "openai/gpt-oss-120b",
+        "z-ai/glm-5.3-flash"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "demo-fast-france",
+      "text": "What is the capital of France?",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "openai/gpt-oss-120b",
+        "z-ai/glm-5.3-flash"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "demo-reasoning-proof",
+      "text": "Prove that the square root of 2 is irrational, step by step",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "openai/gpt-oss-120b",
+        "z-ai/glm-5.3-flash"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "greeting-with-gemini-on-the-list",
+      "text": "thanks!",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4-pro",
+        "google/gemini-3.1-flash-lite",
+        "openai/gpt-oss-120b"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "code-fence",
+      "text": "```python\ndef parse(data):\n    return data\n```",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4-pro",
+        "openai/gpt-oss-120b"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "quick-math",
+      "text": "2 + 2",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "openai/gpt-oss-120b",
+        "z-ai/glm-5.3-flash"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "centroid-rewrite",
+      "text": "Rewrite this sentence to sound friendlier",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "openai/gpt-oss-120b",
+        "z-ai/glm-5.3-flash"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "empty-question",
+      "text": "   ",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "openai/gpt-oss-120b"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "single-model",
+      "text": "Prove this theorem step by step",
+      "allowed": ["openai/gpt-5-mini"],
+      "fallback": "openai/gpt-5-mini"
+    },
+    {
+      "name": "operator-pin",
+      "text": "hi",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "openai/gpt-oss-120b"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017",
+      "routes": [
+        {
+          "id": "light",
+          "label": "Light",
+          "description": "Simple chat.",
+          "model": "deepseek/deepseek-v4.1-flash-1017"
+        }
+      ]
+    },
+    {
+      "name": "gemini-not-chosen-when-dearer-tool-model-exists",
+      "text": "thanks",
+      "allowed": ["google/gemini-3.1-flash-lite", "minimax/minimax-m3"],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "empty-allowlist-stays-on-the-default",
+      "text": "thanks",
+      "allowed": [],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "same-price-follows-allowlist-order",
+      "text": "ok",
+      "allowed": ["qwen/qwen3.8-flash", "z-ai/glm-5.3-flash"],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    }
+  ]
+}

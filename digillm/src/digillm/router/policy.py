@@ -2,87 +2,45 @@
 
 Auto on an unconfigured digichat install is ``deepseek/deepseek-v4.1-flash-1017``.
 The router does not replace that default. It picks among Reasoning, Fast, and
-Light, and each category walks a preference list until it finds an id the
-deployment actually allows. An id that is not allowed is never returned.
+Light. Reasoning and Fast walk a preference list until an id the deployment
+allows. Light, unless an operator pins ``routes[].model``, is the cheapest
+tool-capable non-Gemini model on that allowlist. An id that is not allowed is
+never returned.
 """
 
 from __future__ import annotations
 
+from digillm.router.data import RouterCatalogModel, router_table
 from digillm.router.types import RouterError, RouterRoute
 
-# Preference order is the demo catalog in
-# apps/digichat/config/digichat-deploy-models.json. First allowlisted id wins.
-# Operators pin a different id with ``routes[].model``.
-ROUTE_MODEL_PREFERENCES: dict[str, tuple[str, ...]] = {
-    "reasoning": (
-        "deepseek/deepseek-v4-pro",
-        "openai/gpt-6-luna",
-        "openai/gpt-5.6-luna",
-        "minimax/minimax-m3",
-        "google/gemini-3.7-flash",
-    ),
-    "fast": (
-        "deepseek/deepseek-v4.1-flash-1017",
-        "z-ai/glm-5.3-flash",
-        "qwen/qwen3.8-flash",
-        "xiaomi/mimo-v2.6-flash",
-        "openai/gpt-5-mini",
-    ),
-    "light": (
-        "google/gemini-3.1-flash-lite",
-        "qwen/qwen3.8-flash",
-        "openai/gpt-5-mini",
-        "openai/gpt-oss-120b",
-        "deepseek/deepseek-v4.1-flash-1017",
-    ),
-}
 
-# Exemplars are the utterance bags the scorer compares against. They stay in
-# the library: a deployment config can add phrases, it does not have to
-# restate these.
-_BUILTIN_EXEMPLARS: dict[str, tuple[str, ...]] = {
-    "reasoning": (
-        "Prove that the square root of 2 is irrational, step by step",
-        "Compare these two designs and recommend one",
-        "Refactor this function and explain its complexity",
-        "Derive the gradient of the loss",
-        "Plan the migration across the three services",
-    ),
-    "fast": (
-        "What is the capital of France?",
-        "Who wrote Hamlet?",
-        "Convert 10 km to miles",
-        "Define idempotent",
-        "When did the Berlin wall fall?",
-    ),
-    "light": (
-        "Hi",
-        "Thanks",
-        "Good morning",
-        "Rewrite this sentence to sound friendlier",
-        "Say that more briefly",
-    ),
-}
+def _preferences() -> dict[str, tuple[str, ...]]:
+    return {route.id: tuple(route.prefer) for route in router_table().routes}
 
-BUILTIN_ROUTES: tuple[RouterRoute, ...] = (
+
+def _catalog() -> dict[str, RouterCatalogModel]:
+    return {row.id: row for row in router_table().models}
+
+
+def is_gemini(model_id: str) -> bool:
+    """True when the last path segment starts with ``gemini``.
+
+    ``google/gemini-3.1-flash-lite`` and a bare ``gemini-3.1-flash-lite`` are
+    Gemini. ``google/gemma-4-31b-it`` is not.
+    """
+
+    segment = model_id.strip().rsplit("/", 1)[-1].lower()
+    return segment.startswith("gemini")
+
+
+BUILTIN_ROUTES: tuple[RouterRoute, ...] = tuple(
     RouterRoute(
-        id="reasoning",
-        label="Reasoning",
-        description="Hard multi-step reasoning, math, code, and planning.",
-        exemplars=list(_BUILTIN_EXEMPLARS["reasoning"]),
-    ),
-    RouterRoute(
-        id="fast",
-        label="Fast",
-        description="A short factual lookup or a quick answer.",
-        exemplars=list(_BUILTIN_EXEMPLARS["fast"]),
-    ),
-    RouterRoute(
-        id="light",
-        label="Light",
-        description="Simple chat, greetings, and light rewrites.",
-        exemplars=list(_BUILTIN_EXEMPLARS["light"]),
-    ),
+        id=route.id,
+        label=route.label,
+        description=route.description,
+        exemplars=list(route.exemplars),
+    )
+    for route in router_table().routes
 )
 
 
@@ -122,6 +80,52 @@ def resolve_routes(overrides: list[RouterRoute] | None) -> list[RouterRoute]:
     return [by_id[route_id] for route_id in order] + extras
 
 
+def _priced(model_id: str) -> float | None:
+    row = _catalog().get(model_id)
+    if row is None or row.tool_call is not True:
+        return None
+    price = row.prompt_usd_per_million
+    if isinstance(price, bool) or not isinstance(price, int | float):
+        return None
+    return float(price)
+
+
+def _cheapest_light(allow: list[str], fallback: str) -> str | None:
+    """Cheapest tool-capable non-Gemini id on ``allow``.
+
+    A non-empty allowlist walks priced rows first (lower prompt price, then
+    earlier in the allowlist). Unpriced ids, including the deployment default
+    when the catalog has no row, cannot win that walk. With no priced
+    candidate, the first non-Gemini id wins. An allowlist that is only Gemini
+    uses the fallback when it is on the list, otherwise the first id.
+
+    An empty allowlist is "no restriction". Light stays on the deployment
+    fallback when that id is not Gemini, so an unconfigured container does not
+    jump to the globally cheapest catalog row.
+    """
+
+    if allow:
+        priced = [
+            (price, index, model_id)
+            for index, model_id in enumerate(allow)
+            if not is_gemini(model_id) and (price := _priced(model_id)) is not None
+        ]
+        if priced:
+            priced.sort()
+            return priced[0][2]
+        for model_id in allow:
+            if not is_gemini(model_id):
+                return model_id
+        fallback_id = fallback.strip()
+        if fallback_id and fallback_id in set(allow):
+            return fallback_id
+        return allow[0]
+    fallback_id = fallback.strip()
+    if fallback_id and not is_gemini(fallback_id):
+        return fallback_id
+    return None
+
+
 def bind_model(
     route: RouterRoute,
     allowed: list[str],
@@ -139,7 +143,11 @@ def bind_model(
                 f"router route {route.id} pins {pinned}, which is not on the allowlist"
             )
         return pinned
-    for candidate in ROUTE_MODEL_PREFERENCES.get(route.id, ()):
+    if route.id == "light" and router_table().light_select == "cheapest_tool_capable_non_gemini":
+        chosen = _cheapest_light(allow, fallback)
+        if chosen is not None:
+            return chosen
+    for candidate in _preferences().get(route.id, ()):
         if not allow_set or candidate in allow_set:
             return candidate
     fallback_id = fallback.strip()

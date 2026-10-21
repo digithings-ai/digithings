@@ -24,8 +24,15 @@ ALLOWED = [
     "deepseek/deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-pro",
     "google/gemini-3.1-flash-lite",
+    "openai/gpt-oss-120b",
 ]
 FALLBACK = "deepseek/deepseek-v4.1-flash-1017"
+# digithings.ai embed allowlist. Flash is the deployment default (Auto).
+EMBED = [
+    "deepseek/deepseek-v4.1-flash-1017",
+    "openai/gpt-oss-120b",
+    "z-ai/glm-5.3-flash",
+]
 
 
 def test_categories_on_the_demo_allowlist() -> None:
@@ -46,7 +53,7 @@ def test_categories_on_the_demo_allowlist() -> None:
         fallback=FALLBACK,
     )
     assert light.route_id == "light"
-    assert light.model == "google/gemini-3.1-flash-lite"
+    assert light.model == "openai/gpt-oss-120b"
     assert fast.route_id == "fast"
     assert fast.model == "deepseek/deepseek-v4.1-flash-1017"
     assert reasoning.route_id == "reasoning"
@@ -105,6 +112,62 @@ def test_pin_outside_the_allowlist_is_refused() -> None:
                 )
             ],
         )
+
+
+def test_light_skips_a_cheaper_gemini_model() -> None:
+    decision = route_query(
+        text="thanks",
+        allowed=["google/gemini-3.1-flash-lite", "minimax/minimax-m3"],
+        fallback=FALLBACK,
+    )
+    assert decision.route_id == "light"
+    assert decision.model == "minimax/minimax-m3"
+
+
+def test_gemma_is_eligible_for_light() -> None:
+    decision = route_query(
+        text="hi",
+        allowed=["google/gemma-4-31b-it", "minimax/minimax-m3"],
+        fallback=FALLBACK,
+    )
+    assert decision.model == "google/gemma-4-31b-it"
+
+
+def test_light_tie_breaks_on_allowlist_order() -> None:
+    first = route_query(
+        text="thanks",
+        allowed=["z-ai/glm-5.3-flash", "qwen/qwen3.8-flash"],
+        fallback=FALLBACK,
+    )
+    second = route_query(
+        text="thanks",
+        allowed=["qwen/qwen3.8-flash", "z-ai/glm-5.3-flash"],
+        fallback=FALLBACK,
+    )
+    assert first.model == "z-ai/glm-5.3-flash"
+    assert second.model == "qwen/qwen3.8-flash"
+
+
+def test_empty_allowlist_keeps_a_non_gemini_default() -> None:
+    decision = route_query(text="thanks", allowed=[], fallback=FALLBACK)
+    assert decision.route_id == "light"
+    assert decision.model == FALLBACK
+
+
+def test_embed_allowlist_splits_the_three_demo_prompts() -> None:
+    light = route_query(text="thanks", allowed=EMBED, fallback=FALLBACK)
+    fast = route_query(text="What is the capital of France?", allowed=EMBED, fallback=FALLBACK)
+    reasoning = route_query(
+        text="Prove that the square root of 2 is irrational, step by step",
+        allowed=EMBED,
+        fallback=FALLBACK,
+    )
+    assert (light.route_id, light.model) == ("light", "openai/gpt-oss-120b")
+    assert light.reason == "Short greeting or acknowledgment."
+    assert (fast.route_id, fast.model) == ("fast", "deepseek/deepseek-v4.1-flash-1017")
+    assert fast.reason == "Short factual lookup."
+    assert (reasoning.route_id, reasoning.model) == ("reasoning", "z-ai/glm-5.3-flash")
+    assert reasoning.reason == "Multi-step reasoning, math, or a long question."
 
 
 def test_route_query_does_not_open_a_socket(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -170,7 +233,7 @@ def test_cli_returns_a_decision_and_hides_a_bad_question() -> None:
     assert good.returncode == 0, good.stderr
     body = json.loads(good.stdout)
     assert body["route_id"] == "light"
-    assert body["model"] == "google/gemini-3.1-flash-lite"
+    assert body["model"] == "openai/gpt-oss-120b"
     assert "thanks" not in body["reason"].lower()
 
     secret = "z" * 9000

@@ -34,6 +34,9 @@ dev = ["pytest>=8,<10", "ruff>=0.16,<0.17", "pyyaml>=6"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+digillm = ["router/*.json"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

@@ -1,10 +1,10 @@
 /**
  * Client-safe names for digillm's router.
  *
- * The decision itself is `digillm.router` (Python). This module only knows the
- * picker id and which backends can actually apply a per-turn model. It does
- * not spawn a process — the chat route does that, and this file is imported
- * by client components.
+ * The decision itself is `digillm.router`. The chat route runs the TypeScript
+ * port by default. This module only knows the picker id and which backends
+ * can apply a per-turn model. It does not score and it does not spawn — this
+ * file is imported by client components.
  */
 
 export const DIGILLM_ROUTER_MODEL_ID = "digillm/router";

@@ -1,0 +1,108 @@
+{
+  "cases": [
+    {
+      "name": "demo-light-thanks",
+      "route_id": "light",
+      "label": "Light",
+      "model": "openai/gpt-oss-120b",
+      "reason": "Short greeting or acknowledgment.",
+      "confidence": 0.92
+    },
+    {
+      "name": "demo-fast-france",
+      "route_id": "fast",
+      "label": "Fast",
+      "model": "deepseek/deepseek-v4.1-flash-1017",
+      "reason": "Short factual lookup.",
+      "confidence": 0.86
+    },
+    {
+      "name": "demo-reasoning-proof",
+      "route_id": "reasoning",
+      "label": "Reasoning",
+      "model": "z-ai/glm-5.3-flash",
+      "reason": "Multi-step reasoning, math, or a long question.",
+      "confidence": 0.88
+    },
+    {
+      "name": "greeting-with-gemini-on-the-list",
+      "route_id": "light",
+      "label": "Light",
+      "model": "openai/gpt-oss-120b",
+      "reason": "Short greeting or acknowledgment.",
+      "confidence": 0.92
+    },
+    {
+      "name": "code-fence",
+      "route_id": "reasoning",
+      "label": "Reasoning",
+      "model": "deepseek/deepseek-v4-pro",
+      "reason": "Code or an error trace.",
+      "confidence": 0.9
+    },
+    {
+      "name": "quick-math",
+      "route_id": "fast",
+      "label": "Fast",
+      "model": "deepseek/deepseek-v4.1-flash-1017",
+      "reason": "Short calculation.",
+      "confidence": 0.84
+    },
+    {
+      "name": "centroid-rewrite",
+      "route_id": "light",
+      "label": "Light",
+      "model": "openai/gpt-oss-120b",
+      "reason": "Closest to the Light examples.",
+      "confidence": 0.7158152744102599
+    },
+    {
+      "name": "empty-question",
+      "route_id": "fast",
+      "label": "Fast",
+      "model": "deepseek/deepseek-v4.1-flash-1017",
+      "reason": "Empty question \u2014 using the deployment default.",
+      "confidence": 0.4
+    },
+    {
+      "name": "single-model",
+      "route_id": "reasoning",
+      "label": "Reasoning",
+      "model": "openai/gpt-5-mini",
+      "reason": "Only one model is on the allowlist.",
+      "confidence": 1.0
+    },
+    {
+      "name": "operator-pin",
+      "route_id": "light",
+      "label": "Light",
+      "model": "deepseek/deepseek-v4.1-flash-1017",
+      "reason": "Short greeting or acknowledgment.",
+      "confidence": 0.92
+    },
+    {
+      "name": "gemini-not-chosen-when-dearer-tool-model-exists",
+      "route_id": "light",
+      "label": "Light",
+      "model": "minimax/minimax-m3",
+      "reason": "Short greeting or acknowledgment.",
+      "confidence": 0.92
+    },
+    {
+      "name": "empty-allowlist-stays-on-the-default",
+      "route_id": "light",
+      "label": "Light",
+      "model": "deepseek/deepseek-v4.1-flash-1017",
+      "reason": "Short greeting or acknowledgment.",
+      "confidence": 0.92
+    },
+    {
+      "name": "same-price-follows-allowlist-order",
+      "route_id": "light",
+      "label": "Light",
+      "model": "qwen/qwen3.8-flash",
+      "reason": "Short greeting or acknowledgment.",
+      "confidence": 0.92
+    }
+  ]
+}

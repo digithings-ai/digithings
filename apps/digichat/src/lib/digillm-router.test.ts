@@ -79,16 +79,46 @@ describe("router process", () => {
     ).resolves.toEqual(decision);
   });
 
-  it("fails closed when the interpreter cannot be started", async () => {
-    const previous = process.env.DIGILLM_PYTHON;
+  it("scores in process when python is not configured", async () => {
+    const previousPython = process.env.DIGILLM_PYTHON;
+    const previousFlag = process.env.DIGILLM_ROUTER_PYTHON;
     process.env.DIGILLM_PYTHON = "/no/such/digillm-python";
+    delete process.env.DIGILLM_ROUTER_PYTHON;
+    try {
+      const decided = await routeWithDigillm({
+        text: "thanks",
+        allowed: [
+          "deepseek/deepseek-v4.1-flash-1017",
+          "openai/gpt-oss-120b",
+          "z-ai/glm-5.3-flash",
+        ],
+        fallback: "deepseek/deepseek-v4.1-flash-1017",
+      });
+      expect(decided.routeId).toBe("light");
+      expect(decided.model).toBe("openai/gpt-oss-120b");
+      expect(decided.reason).toBe("Short greeting or acknowledgment.");
+    } finally {
+      if (previousPython === undefined) delete process.env.DIGILLM_PYTHON;
+      else process.env.DIGILLM_PYTHON = previousPython;
+      if (previousFlag === undefined) delete process.env.DIGILLM_ROUTER_PYTHON;
+      else process.env.DIGILLM_ROUTER_PYTHON = previousFlag;
+    }
+  });
+
+  it("fails closed when the configured interpreter cannot be started", async () => {
+    const previousPython = process.env.DIGILLM_PYTHON;
+    const previousFlag = process.env.DIGILLM_ROUTER_PYTHON;
+    process.env.DIGILLM_PYTHON = "/no/such/digillm-python";
+    process.env.DIGILLM_ROUTER_PYTHON = "1";
     try {
       await expect(
         routeWithDigillm({ text: "hi", allowed: [], fallback: "m" }),
       ).rejects.toBeInstanceOf(DigillmRouterUnavailable);
     } finally {
-      if (previous === undefined) delete process.env.DIGILLM_PYTHON;
-      else process.env.DIGILLM_PYTHON = previous;
+      if (previousPython === undefined) delete process.env.DIGILLM_PYTHON;
+      else process.env.DIGILLM_PYTHON = previousPython;
+      if (previousFlag === undefined) delete process.env.DIGILLM_ROUTER_PYTHON;
+      else process.env.DIGILLM_ROUTER_PYTHON = previousFlag;
     }
   });
 });
