@@ -48,6 +48,7 @@ import {
   downloadThreadSnapshot,
   showSnapshotError,
 } from "../../../replay/browser";
+import { applyExportSlash } from "../../../replay/export-format";
 
 /**
  * Product slash-command wiring injected by the host (WS4). Structural mirror
@@ -390,9 +391,12 @@ export function DigichatSkin({
         if (action.kind === "run") {
           event.preventDefault();
           if (action.command.id === "copy") copyExport.copy();
-          else if (action.command.id === "export" && action.arg.trim().toLowerCase() === "html") {
-            copyExport.exportHtml();
-          } else if (action.command.id === "export") copyExport.exportThread();
+          else if (action.command.id === "export") {
+            applyExportSlash(action.arg, document, {
+              html: () => copyExport.exportHtml(),
+              markdown: () => copyExport.exportThread(),
+            });
+          }
           else if (action.command.id === "compact") {
             // Palette compact serializes the thread and queues a summary.
             // executeDef only resets prefs and opens an empty thread.

@@ -144,4 +144,30 @@ describe("downloadThreadSnapshot (end to end)", () => {
     expect(doc.body.textContent).toContain("Nothing open");
     vi.doUnmock("../components/chat/transcript");
   });
+
+  it("shows an error and does not download when the message id is not in the thread", async () => {
+    vi.resetModules();
+    const saved: Array<{ name: string; body: string }> = [];
+    vi.doMock("../components/chat/transcript", () => ({
+      downloadTextFile: (name: string, body: string) => void saved.push({ name, body }),
+    }));
+    const { downloadMessageSnapshot } = await import("./browser");
+    const doc = document.implementation.createHTMLDocument("chat");
+    doc.body.innerHTML = [
+      '<div class="aui-thread-root">',
+      '<div data-role="user" data-message-id="user-1">Other question</div>',
+      '<div data-role="assistant" data-message-id="asst-1">Other answer</div>',
+      "</div>",
+    ].join("");
+    await expect(
+      downloadMessageSnapshot(doc, "2026-10-21T15:04:00.000Z", "missing"),
+    ).rejects.toThrow(/couldn't find that message/i);
+    await expect(
+      downloadMessageSnapshot(doc, "2026-10-21T15:04:00.000Z", "user-1"),
+    ).rejects.toThrow(/couldn't find that message/i);
+    expect(saved).toHaveLength(0);
+    expect(doc.querySelector("[role='alert']")?.textContent).toMatch(/couldn't find that message/i);
+    expect(doc.body.textContent).toContain("Other question");
+    vi.doUnmock("../components/chat/transcript");
+  });
 });
