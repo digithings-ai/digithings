@@ -34,6 +34,16 @@
  * been evicted may need a moment to start, and a tight loop would turn one
  * eviction into a burst.
  *
+ * A hop can also reject with a value that is not an Error. The
+ * @cloudflare/containers package rethrows such a value verbatim from its
+ * proxy catch, so it leaves the Durable Object as an uncaught exception: the
+ * platform records it with `String(value)`, so a thrown Date leaves a bare
+ * date in the log, and the value itself carries no type, no stack and no
+ * message to classify. It is treated as a retryable failure of the instance —
+ * reconnect once, then raise the typed retryable error — so the Worker
+ * answers 503 + Retry-After instead of the value escaping (run-watch
+ * DIG-4928).
+ *
  * It is dependency-free (no `cloudflare:workers`, no `@cloudflare/containers`)
  * so plain vitest can import it and a Worker can bundle it.
  */
@@ -60,11 +70,51 @@ export class DurableObjectUnavailableError extends Error {
   }
 }
 
-/** The message of a thrown value, or an empty string when there is none. */
+/** The text used when a value cannot be read as text at all. */
+const UNREADABLE_VALUE = "[unreadable value]";
+
+/**
+ * A description of a value that is neither an Error nor a string.
+ *
+ * `String(value)` is what the platform itself shows when it records an
+ * uncaught exception, so this is what an operator reads in the log. It can
+ * throw (a hostile `toString`, a revoked proxy) and a description that throws
+ * would turn a caught failure back into an uncaught one, so it falls back.
+ */
+function describeValue(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    try {
+      return Object.prototype.toString.call(value);
+    } catch {
+      return UNREADABLE_VALUE;
+    }
+  }
+}
+
+/**
+ * The message of a thrown value.
+ *
+ * A value that is not an Error and not a string gets a description instead of
+ * an empty string: the platform records such a rejection with `String(value)`,
+ * so a thrown Date leaves a bare date in the log, and an empty string would
+ * leave nothing at all (run-watch DIG-4928).
+ *
+ * Only an Error is read for its `message`. A plain object that happens to
+ * carry a `message` property is described, not believed, so an object can
+ * never talk its way into being a Durable Object eviction.
+ */
 export function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message ?? "";
-  if (typeof error === "string") return error;
-  return "";
+  try {
+    if (error instanceof Error) return error.message ?? "";
+    if (typeof error === "string") return error;
+  } catch {
+    // A value that cannot be inspected, or that cannot hand over its message,
+    // has no message to read: it is described below instead. A guard that
+    // throws would turn a caught failure back into an uncaught one.
+  }
+  return describeValue(error);
 }
 
 /**
@@ -90,6 +140,24 @@ export function isDurableObjectGone(error: unknown): boolean {
 }
 
 /**
+ * True when the hop rejected with a value that is not an Error.
+ *
+ * Such a value carries no failure contract: no type, no stack, and a message
+ * that is only `String(value)`. It cannot be classified by its text, so it is
+ * not read as an eviction — but it is also not a failure the caller can act
+ * on, and passing it on unchanged is exactly what let it escape as an
+ * uncaught exception (run-watch DIG-4928).
+ */
+export function isNonErrorRejection(error: unknown): boolean {
+  try {
+    return !(error instanceof Error);
+  } catch {
+    // A value that cannot be inspected is not an Error anybody can read.
+    return true;
+  }
+}
+
+/**
  * Fetch through a Durable Object, reconnecting once when the instance is gone.
  *
  * `connect` resolves the stub (so the retry addresses a fresh stub) and
@@ -108,8 +176,27 @@ export async function fetchDurableObject(
     try {
       return await connect().fetch(makeRequest());
     } catch (error) {
-      if (!isDurableObjectGone(error)) throw error;
-      lastError = error;
+      if (isDurableObjectGone(error)) {
+        // The instance is gone: address a fresh stub once.
+        lastError = error;
+        continue;
+      }
+      if (isNonErrorRejection(error)) {
+        // The hop rejected with a value nobody can read. It is logged with its
+        // description, so the failure is triageable instead of a bare value in
+        // the log, and it is treated as a retryable failure of the instance:
+        // the Worker answers 503 + Retry-After instead of the value escaping.
+        console.error(
+          "[durable-object-reconnect] the Durable Object hop rejected with a value that is not an Error:",
+          errorMessage(error),
+        );
+        lastError = error;
+        continue;
+      }
+      // A real error that does not name a Durable Object keeps its own error:
+      // retrying it and then reporting it as an unavailable instance would
+      // hide the failure the caller has to see.
+      throw error;
     }
   }
   throw new DurableObjectUnavailableError(lastError);

@@ -23,7 +23,12 @@ import { resolveEmbedTenants } from "./tenants-kv";
 import { isOccShellPath, occEmbedGate, occGate } from "./occ-gate";
 import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
-import { fetchContainerWithRetry } from "./container-retry";
+import {
+  CONTAINER_UNAVAILABLE_BODY,
+  fetchContainerWithRetry,
+  NO_INSTANCE_STATUS,
+  RETRY_AFTER_SECONDS,
+} from "./container-retry";
 
 /**
  * `env` from `cloudflare:workers` is untyped until `wrangler types` generates
@@ -39,6 +44,21 @@ const workerVars = env as unknown as Env;
  * every cold start on its own).
  */
 const DIGICHAT_ADMIN_RESET_PATH = "/_digichat-admin/container/reset";
+
+/**
+ * True when a thrown value is an Error, asked in a way that cannot throw.
+ *
+ * `instanceof` walks the prototype chain, and a value that cannot be
+ * inspected throws there. A guard that throws would turn a caught failure back
+ * into an uncaught one, which is the failure this Worker exists to stop.
+ */
+function isRealError(value: unknown): boolean {
+  try {
+    return value instanceof Error;
+  } catch {
+    return false;
+  }
+}
 
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
@@ -105,7 +125,29 @@ export class DigiChatContainer extends Container {
       }
       this.tenantsResolved = true;
     }
-    return super.fetch(request);
+    try {
+      return await super.fetch(request);
+    } catch (cause) {
+      // The hop to the container rejected with a value that is not an Error.
+      // The @cloudflare/containers package rethrows such a value verbatim, so
+      // it would leave this Durable Object as an uncaught exception and the
+      // Worker's own guard would never see it (run-watch DIG-4928). The client
+      // is told to come back instead.
+      //
+      // A real error is rethrown unchanged: it carries a message, a stack and
+      // a type, and the caller has to see it. The cause of a non-Error stays
+      // in the log — the platform records it with String(value), so a thrown
+      // Date would otherwise leave a bare date and nothing else.
+      if (isRealError(cause)) throw cause;
+      console.error(
+        "[digichat] the container hop rejected with a value that is not an Error:",
+        cause,
+      );
+      return new Response(CONTAINER_UNAVAILABLE_BODY, {
+        status: NO_INSTANCE_STATUS,
+        headers: { "Retry-After": String(RETRY_AFTER_SECONDS) },
+      });
+    }
   }
 
   /** Re-read KV tenant config on the next boot (the DO outlives container sleeps). */

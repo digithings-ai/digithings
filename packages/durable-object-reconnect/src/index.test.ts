@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DURABLE_OBJECT_UNAVAILABLE,
   durableObjectUnavailableResponse,
@@ -6,6 +6,7 @@ import {
   errorMessage,
   fetchDurableObject,
   isDurableObjectGone,
+  isNonErrorRejection,
   RECONNECT_RETRY_AFTER_SECONDS,
 } from "./index";
 
@@ -58,7 +59,44 @@ describe("isDurableObjectGone", () => {
   it("reads the message of a thrown value", () => {
     expect(errorMessage("plain text")).toBe("plain text");
     expect(errorMessage(goneError())).toBe(PLATFORM_GONE);
-    expect(errorMessage({ message: "x" })).toBe("");
+    // A plain object is described, not believed: only an Error is read for its
+    // message, so an object cannot talk its way into being an eviction.
+    expect(errorMessage({ message: "x" })).toBe("[object Object]");
+  });
+});
+
+describe("errorMessage", () => {
+  it("describes a value that is not an Error and not a string", () => {
+    // The platform records such a rejection with String(value), so this is
+    // what an operator reads in the log. An empty string would leave nothing
+    // at all (run-watch DIG-4928).
+    expect(errorMessage(new Date("2026-10-21T11:51:44.000Z"))).toBe(
+      String(new Date("2026-10-21T11:51:44.000Z")),
+    );
+    expect(errorMessage(undefined)).toBe("undefined");
+    expect(errorMessage(null)).toBe("null");
+    expect(errorMessage({})).toBe("[object Object]");
+  });
+
+  it("describes a value that refuses to be read as text", () => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    // A description that throws would turn a caught failure back into an
+    // uncaught one, so the description itself must never throw.
+    expect(errorMessage(proxy)).toBe("[unreadable value]");
+  });
+});
+
+describe("isNonErrorRejection", () => {
+  it("recognises a rejection that is not an Error", () => {
+    expect(isNonErrorRejection(new Date())).toBe(true);
+    expect(isNonErrorRejection({})).toBe(true);
+    expect(isNonErrorRejection("plain text")).toBe(true);
+    expect(isNonErrorRejection(undefined)).toBe(true);
+  });
+
+  it("does not claim a real error", () => {
+    expect(isNonErrorRejection(new Error("boom"))).toBe(false);
   });
 });
 
@@ -252,6 +290,126 @@ describe("fetchDurableObject", () => {
     );
     expect(attempts).toBe(2);
     expect(seen).toEqual(["payload", "payload"]);
+  });
+});
+
+describe("fetchDurableObject when the hop rejects with a value that is not an Error", () => {
+  it("raises a retryable error instead of rethrowing the value unchanged", async () => {
+    // The @cloudflare/containers package rethrows a non-Error rejection
+    // verbatim, so a thrown Date used to reach the Worker unchanged and the
+    // Worker's own guard never saw it (run-watch DIG-4928).
+    const date = new Date("2026-10-21T11:51:44.000Z");
+    let caught: unknown;
+    try {
+      await fetchDurableObject(
+        () => ({
+          fetch: async () => {
+            throw date;
+          },
+        }),
+        () => jobRequest(),
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DurableObjectUnavailableError);
+    const typed = caught as DurableObjectUnavailableError;
+    expect(typed.retryable).toBe(true);
+    expect(typed.lastError).toBe(date);
+    expect(typed.message).toBe(DURABLE_OBJECT_UNAVAILABLE);
+  });
+
+  it("raises a retryable error for a plain object too", async () => {
+    const value = { code: "container_hop_failed" };
+    let caught: unknown;
+    try {
+      await fetchDurableObject(
+        () => ({
+          fetch: async () => {
+            throw value;
+          },
+        }),
+        () => jobRequest(),
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DurableObjectUnavailableError);
+    expect((caught as DurableObjectUnavailableError).lastError).toBe(value);
+  });
+
+  it("reconnects once before it gives up", async () => {
+    let attempts = 0;
+    await expect(
+      fetchDurableObject(
+        () => ({
+          fetch: async () => {
+            attempts += 1;
+            throw new Date("2026-10-21T11:51:44.000Z");
+          },
+        }),
+        () => jobRequest(),
+      ),
+    ).rejects.toBeInstanceOf(DurableObjectUnavailableError);
+    expect(attempts).toBe(2);
+  });
+
+  it("serves the request when the reconnect recovers", async () => {
+    let attempts = 0;
+    const res = await fetchDurableObject(
+      () => ({
+        fetch: async () => {
+          attempts += 1;
+          if (attempts === 1) throw new Date("2026-10-21T11:51:44.000Z");
+          return new Response("ok");
+        },
+      }),
+      () => jobRequest(),
+    );
+    expect(res.status).toBe(200);
+    expect(attempts).toBe(2);
+  });
+
+  it("logs the failure with a description, so the log is not a bare date", async () => {
+    const logged: unknown[][] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args);
+    });
+    const date = new Date("2026-10-21T11:51:44.000Z");
+    try {
+      await expect(
+        fetchDurableObject(
+          () => ({
+            fetch: async () => {
+              throw date;
+            },
+          }),
+          () => jobRequest(),
+        ),
+      ).rejects.toBeInstanceOf(DurableObjectUnavailableError);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(logged.length).toBeGreaterThan(0);
+    expect(logged.map((args) => args.join(" ")).join("\n")).toContain(String(date));
+  });
+
+  it("does not mask a real error that happens on the reconnect", async () => {
+    const boom = new Error("boom on the reconnect");
+    let attempts = 0;
+    await expect(
+      fetchDurableObject(
+        () => ({
+          fetch: async () => {
+            attempts += 1;
+            if (attempts === 1) throw new Date("2026-10-21T11:51:44.000Z");
+            throw boom;
+          },
+        }),
+        () => jobRequest(),
+      ),
+    ).rejects.toBe(boom);
+    expect(attempts).toBe(2);
   });
 });
 
