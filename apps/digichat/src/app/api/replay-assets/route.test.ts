@@ -7,6 +7,7 @@ vi.mock("@/lib/request-auth", () => ({
 }));
 
 import { requireDigiChatAuth } from "@/lib/request-auth";
+import * as assets from "@digithings/ui/replay/assets";
 
 describe("GET /api/replay-assets", () => {
   beforeEach(() => {
@@ -28,5 +29,14 @@ describe("GET /api/replay-assets", () => {
     expect(css).toContain("@font-face");
     expect(css).toContain(".aui-user-message-content");
     expect(css).not.toMatch(/https?:\/\/[^"'\s]+woff2/);
+  });
+
+  it("answers 503 when the stylesheets are not on disk", async () => {
+    const spy = vi.spyOn(assets, "loadReplayStyles").mockImplementation(() => {
+      throw new Error("replay stylesheets not found");
+    });
+    const res = await GET(new Request("http://localhost/api/replay-assets"));
+    expect(res.status).toBe(503);
+    spy.mockRestore();
   });
 });

@@ -3,21 +3,51 @@
  * The browser palette path must not import this file (it reads the disk).
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { REPLAY_SHELL_CSS, stripStylesheet } from "./styles";
 
-const here = dirname(fileURLToPath(import.meta.url));
-
 let cached: string | null = null;
+
+const MARKER = join("ui", "src", "styles", "chat-aui.css");
+
+/**
+ * Where `packages/` sits. From source (tests, the export script) that is next
+ * to this file. In the Next standalone server this module is bundled into
+ * `.next/`, so fall back to the working directory: the server runs from
+ * `apps/digichat` and next.config traces these files into the image.
+ */
+export function replayPackageCandidates(
+  moduleUrl: string | null = import.meta.url,
+  cwd: string = process.cwd(),
+): string[] {
+  const out: string[] = [];
+  try {
+    if (moduleUrl) out.push(join(dirname(fileURLToPath(moduleUrl)), "../../.."));
+  } catch {
+    /* not a file URL once bundled */
+  }
+  out.push(join(cwd, "../../packages"), join(cwd, "packages"));
+  return out;
+}
+
+export function findReplayPackagesDir(
+  candidates: readonly string[] = replayPackageCandidates(),
+  exists: (path: string) => boolean = existsSync,
+): string {
+  const found = candidates.find((dir) => exists(join(dir, MARKER)));
+  if (!found) throw new Error("replay stylesheets not found");
+  return found;
+}
 
 /** Chat sheets, palette tokens, and Geist Mono, inlined for a file:// document. */
 export function loadReplayStyles(): string {
   if (cached) return cached;
-  const uiStyles = join(here, "../styles");
-  const design = join(here, "../../../design");
-  const fonts = join(here, "fonts");
+  const packages = findReplayPackagesDir();
+  const uiStyles = join(packages, "ui/src/styles");
+  const design = join(packages, "design");
+  const fonts = join(packages, "ui/src/replay/fonts");
   const sheets = [
     stripStylesheet(readFileSync(join(design, "palettes.css"), "utf8")),
     stripStylesheet(readFileSync(join(design, "tokens.css"), "utf8")),

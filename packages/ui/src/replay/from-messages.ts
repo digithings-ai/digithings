@@ -7,7 +7,6 @@
 import { redactValue } from "./redact";
 import type {
   ReplayAccent,
-  ReplayBlock,
   ReplayChainItem,
   ReplayDocument,
   ReplayNotice,

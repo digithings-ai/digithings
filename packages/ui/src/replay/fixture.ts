@@ -16,7 +16,7 @@ export function fixtureChrome(): ReplayChromeInput {
     welcomeBody: ["A finished conversation, saved for the demo."],
     suggestions: ["What moved in the book?", "Walk through the copper hedge"],
     placeholder: "Message Northwind",
-    accent: { color: "#c4f24a", foreground: "#10140c" },
+    accent: { color: "#c4f24a", foreground: "#10140c" }, // canon-allow: sample tenant accent for the offline fixture, not a UI style
     theme: {
       preference: "dark",
       resolved: "dark",

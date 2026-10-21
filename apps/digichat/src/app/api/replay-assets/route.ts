@@ -5,7 +5,13 @@ import { loadReplayStyles } from "@digithings/ui/replay/assets";
 export async function GET(req: Request) {
   const authCtx = await requireDigiChatAuth(req);
   if (authCtx instanceof Response) return authCtx;
-  return new Response(loadReplayStyles(), {
+  let css: string;
+  try {
+    css = loadReplayStyles();
+  } catch {
+    return Response.json({ error: "replay_assets_unavailable" }, { status: 503 });
+  }
+  return new Response(css, {
     status: 200,
     headers: {
       "content-type": "text/css; charset=utf-8",

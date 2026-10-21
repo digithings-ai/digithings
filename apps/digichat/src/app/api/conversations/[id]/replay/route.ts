@@ -35,7 +35,13 @@ export async function GET(req: Request, ctx: RouteContext) {
     replayChromeForDeployment(readDeployment(), authCtx.tenantSlug, url),
     replayExportedAt(url),
   );
-  const html = buildReplayHtml(doc, loadReplayStyles());
+  let css: string;
+  try {
+    css = loadReplayStyles();
+  } catch {
+    return Response.json({ error: "replay_assets_unavailable" }, { status: 503 });
+  }
+  const html = buildReplayHtml(doc, css);
   const filename = replayDownloadName(doc);
   return new Response(html, {
     status: 200,
