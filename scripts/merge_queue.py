@@ -52,7 +52,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -157,10 +157,31 @@ PROVENANCE_READ_TIMEOUT_SHADOW = 2.0
 #: capped: the oldest file is dropped when the log passes this size.
 PROVENANCE_LOG_MAX_BYTES = 1_000_000
 
+#: Where the shadow log's index goes. The index is what keeps the log readable.
+#: The queue looks at every open pull request on every tick, so a log with one
+#: line per refusal per tick grows by tens of thousands of lines a day and the
+#: 48 hour window stops being a file a human can read. The index remembers which
+#: refusals the log already holds, so a refusal that repeats says so in the
+#: index instead of writing the same line again.
+PROVENANCE_INDEX_ENV = "MQ_CI_PROVENANCE_INDEX"
+PROVENANCE_INDEX_PATH = (
+    Path.home() / ".config" / "digithings" / "merge-queue" / "ci-provenance.index.json"
+)
+
+#: The index is a memory of the log, not a log of its own: it is capped, and an
+#: entry that has not been seen for this long is dropped, so a window that ends
+#: does not leave the index growing forever.
+PROVENANCE_INDEX_MAX_ENTRIES = 2000
+PROVENANCE_INDEX_MAX_AGE_DAYS = 14
+
 #: The token and the build reads are read once per queue run, not once per pull
 #: request.
 _TOKEN_CACHE: dict[tuple[str, str], str] = {}
 _READ_CACHE: dict[str, tuple[int, Any]] = {}
+#: The allowed hosts, read once per queue run from the deployment's own files.
+_HOST_CACHE: dict[tuple[Any, ...], tuple[tuple[str, ...], str]] = {}
+#: The log index, by the path it is written to.
+_INDEX_CACHE: dict[str, dict[str, Any]] = {}
 
 EXIT_OK = 0
 EXIT_OPERATIONAL = 1
@@ -193,13 +214,34 @@ class CiProvenance:
     binds a build to a repository: the launcher pipeline runs the digithings check
     and the twelve-x check side by side, so the pipeline on its own says nothing
     about which repository it answered for.
+
+    Two of these settings are deployment facts rather than choices, so they are
+    read rather than written down: the hosts a build link may name come from the
+    deployment's own configuration (`host_files`, `host_url_keys`), and the
+    numeric repository id comes from the repository's name (`woodpecker_repo_names`)
+    resolved against the Woodpecker API. A file that carries an address that has
+    moved, or an id that a recreated repository has changed, is how a gate ends
+    up refusing every pull request or reading the wrong repository's build.
     """
 
     mode: str = PROVENANCE_OFF
     #: Hosts a build URL may name. Empty means "any host", which is not a setting
     #: worth shipping: the point of the check is that the URL points at our
-    #: Woodpecker and nowhere else.
+    #: Woodpecker and nowhere else. This list is the part that never changes -
+    #: the addresses the deployment actually uses are read from the deployment's
+    #: own configuration, so a change of local IP is not a change of this file.
     hosts: tuple[str, ...] = ()
+    #: Files the deployment's own addresses are read from, as `KEY=value` lines.
+    #: The queue reads only the keys named in `host_url_keys`, so pointing this
+    #: at a file that holds other secrets is safe.
+    host_files: tuple[str, ...] = ()
+    #: The keys in `host_files` whose values are the deployment's URLs. The
+    #: host and port of each URL are hosts a build link may name.
+    host_url_keys: tuple[str, ...] = ()
+    #: Whether the deployment configuration must be readable for the gate to
+    #: have an answer. Without it a stale allow-list is trusted silently, and a
+    #: stale allow-list under `enforce` refuses every pull request.
+    require_config: bool = False
     #: The environment variable that carries the Woodpecker API token.
     token_env: str = "WOODPECKER_TOKEN"
     #: A file to read the token from when the environment does not carry it. The
@@ -209,6 +251,11 @@ class CiProvenance:
     context: str = "local-ci"
     woodpecker_repos: Mapping[str, str] = field(default_factory=dict)
     woodpecker_names: Mapping[str, str] = field(default_factory=dict)
+    #: The Woodpecker repository that runs a repository's check, named as
+    #: `owner/name`. The numeric id is resolved from this name at check time, so
+    #: a repository that is recreated under a new id does not make the gate read
+    #: the wrong repository.
+    woodpecker_repo_names: Mapping[str, str] = field(default_factory=dict)
     steps: Mapping[str, str] = field(default_factory=dict)
 
 
@@ -356,9 +403,23 @@ def _load_ci_provenance(raw: Mapping[str, Any] | None, path: Path) -> CiProvenan
         raise QueueError(
             f"{path}: ci_provenance.hosts must be a list of host names, not a string"
         )
+    for key in ("host_files", "host_url_keys"):
+        value = raw.get(key)
+        if isinstance(value, str) or (value is not None and not isinstance(value, list)):
+            raise QueueError(
+                f"{path}: ci_provenance.{key} must be a list, not a string"
+            )
+    require_config = raw.get("require_config")
+    if require_config is not None and not isinstance(require_config, bool):
+        raise QueueError(
+            f"{path}: ci_provenance.require_config must be true or false"
+        )
     return CiProvenance(
         mode=mode,
         hosts=tuple(str(host) for host in (hosts_raw or [])),
+        host_files=tuple(str(item) for item in (raw.get("host_files") or [])),
+        host_url_keys=tuple(str(item) for item in (raw.get("host_url_keys") or [])),
+        require_config=bool(require_config),
         token_env=str(raw.get("token_env") or "WOODPECKER_TOKEN"),
         token_file=str(raw.get("token_file") or ""),
         context=str(raw.get("context") or "local-ci"),
@@ -369,6 +430,10 @@ def _load_ci_provenance(raw: Mapping[str, Any] | None, path: Path) -> CiProvenan
         woodpecker_names={
             str(repo_id): str(name)
             for repo_id, name in (raw.get("woodpecker_names") or {}).items()
+        },
+        woodpecker_repo_names={
+            str(repo): str(name)
+            for repo, name in (raw.get("woodpecker_repo_names") or {}).items()
         },
         steps={str(repo): str(step) for repo, step in (raw.get("steps") or {}).items()},
     )
@@ -614,6 +679,24 @@ def _parse_pipeline_url(path: str) -> tuple[str, str, str] | None:
     return ("", "", number)
 
 
+def _value_from_text(text: str, key: str) -> str:
+    """The value of one key in a `KEY=value` file's text.
+
+    The text is read as a list of `KEY=value` lines and only the key asked for
+    is taken, so a file that holds other secrets is safe to point at. The value
+    goes back to the caller and to nobody else: it is never logged, never
+    written to disk, and never part of a refusal message.
+    """
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        if name.strip() == key:
+            return value.strip().strip("'\"")
+    return ""
+
+
 def _token_from_file(path: str, key: str) -> str:
     """The value of one key in a `KEY=value` file, or an empty string.
 
@@ -626,14 +709,87 @@ def _token_from_file(path: str, key: str) -> str:
         text = Path(path).expanduser().read_text(encoding="utf-8")
     except OSError:
         return ""
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    return _value_from_text(text, key)
+
+
+def _deployment_config_files(prov: CiProvenance) -> tuple[str, ...]:
+    """The files the deployment's own addresses are read from.
+
+    The deployment's address is a fact about the machine the queue runs on, so
+    it is read from the machine rather than written down here. This is the one
+    place that knows where the files are, so the test suite can point it at a
+    fixture without the gate reading the real deployment.
+    """
+    return prov.host_files
+
+
+def _host_of_url(value: str) -> str:
+    """The `host:port` an URL names, or an empty string.
+
+    The host and the port are read apart, so an URL that carries a user name
+    (`http://user:pass@host:8000`) names the host and not the credentials, and
+    the credentials never reach the allow-list.
+    """
+    parsed = urllib.parse.urlparse(value.strip())
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return ""
+    try:
+        port = parsed.port
+    except ValueError:
+        return ""
+    if ":" in host:
+        host = f"[{host}]"
+    return f"{host}:{port}" if port else host
+
+
+def _allowed_hosts(prov: CiProvenance) -> tuple[tuple[str, ...], str]:
+    """The hosts a build link may name, and why the deployment is unknown.
+
+    The static list in the policy is the part that never changes. The
+    deployment's own addresses are read from the files the policy names, so a
+    change of local IP is a change of the deployment and not a change of this
+    repository: an allow-list that carries a DHCP address goes stale, and under
+    `enforce` a stale allow-list refuses every pull request.
+
+    The second value is why the configuration could not be read, or an empty
+    string when it could.
+    """
+    cache_key = (prov.hosts, _deployment_config_files(prov), prov.host_url_keys)
+    cached = _HOST_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    hosts = {host.lower() for host in prov.hosts}
+    found = False
+    problems: list[str] = []
+    for path_str in _deployment_config_files(prov):
+        path = Path(path_str).expanduser()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            problems.append(
+                f"{path_str} could not be read ({exc.strerror or type(exc).__name__})"
+            )
             continue
-        name, _, value = line.partition("=")
-        if name.strip() == key:
-            return value.strip().strip("'\"")
-    return ""
+        for key in prov.host_url_keys:
+            value = _value_from_text(text, key)
+            if not value:
+                continue
+            host = _host_of_url(value)
+            if host:
+                hosts.add(host)
+                found = True
+    if found:
+        result = (tuple(sorted(hosts)), "")
+    elif problems:
+        result = (tuple(sorted(hosts)), "; ".join(problems))
+    else:
+        result = (
+            tuple(sorted(hosts)),
+            "the deployment configuration names no Woodpecker address",
+        )
+    _HOST_CACHE[cache_key] = result
+    return result
 
 
 def _woodpecker_token(prov: CiProvenance) -> str:
@@ -740,6 +896,34 @@ def _build_steps(pipeline: Mapping[str, Any]) -> dict[str, frozenset[str]]:
     return {name: frozenset(states) for name, states in steps.items()}
 
 
+def _resolve_woodpecker_repo_id(
+    name: str,
+    static_id: str,
+    base_url: str,
+    token: str,
+    timeout: float,
+) -> tuple[str, str]:
+    """The numeric id of a Woodpecker repository, and why it is not known.
+
+    The name is resolved against the Woodpecker API, because a repository that
+    was recreated carries a new id: a number written down in the policy then
+    points at a different repository, or at nothing, and the gate reads the
+    wrong build. The number in the policy is the fallback for an API that
+    cannot be read, which is the safe direction - a stale number refuses a
+    pull request, it does not merge one.
+    """
+    if name:
+        url = f"{base_url}/api/repos/lookup/{name}"
+        status, payload = _woodpecker_read(url, token, timeout=timeout)
+        if status == 200 and isinstance(payload, Mapping):
+            resolved = str(payload.get("id") or "").strip()
+            if resolved:
+                return resolved, ""
+    if static_id:
+        return static_id, ""
+    return "", f"the Woodpecker repository {name or 'named by the policy'} could not be resolved"
+
+
 def verify_ci_provenance(
     pr: Mapping[str, Any],
     policy: Policy,
@@ -771,7 +955,7 @@ def verify_ci_provenance(
         )
 
     parsed = urllib.parse.urlparse(target)
-    host = parsed.netloc.lower()
+    host = _host_of_url(target)
     if not parsed.scheme or not host:
         return Provenance(
             False, "the target_url is not an absolute URL", target_url=target
@@ -784,7 +968,14 @@ def verify_ci_provenance(
             target_url=target,
         )
 
-    allowed = {allowed_host.lower() for allowed_host in prov.hosts}
+    allowed, config_problem = _allowed_hosts(prov)
+    if prov.require_config and config_problem:
+        return Provenance(
+            False,
+            "the deployment configuration could not be read, so the Woodpecker "
+            f"hosts cannot be confirmed ({config_problem})",
+            target_url=target,
+        )
     if not allowed:
         return Provenance(
             False,
@@ -803,28 +994,23 @@ def verify_ci_provenance(
         )
     kind, named_repo, number = shape
 
-    expected_id = prov.woodpecker_repos.get(repo or "")
-    if not expected_id:
+    repo_key = repo or ""
+    static_id = prov.woodpecker_repos.get(repo_key, "")
+    expected_name = prov.woodpecker_repo_names.get(repo_key, "")
+    if not expected_name and static_id:
+        expected_name = prov.woodpecker_names.get(static_id, "")
+    if not expected_name and not static_id:
         return Provenance(
             False,
             f"no Woodpecker repository is configured for {repo or 'this repository'}",
             target_url=target,
         )
-    expected_name = prov.woodpecker_names.get(expected_id, "")
-    if kind == "id":
-        if named_repo != expected_id:
-            return Provenance(
-                False,
-                f"the target_url names the Woodpecker repository {named_repo!r}, "
-                f"not {expected_id!r}",
-                target_url=target,
-            )
-    elif kind == "name":
+    if kind == "name":
         if not expected_name:
             return Provenance(
                 False,
-                f"the policy names no Woodpecker repository for {expected_id!r}, "
-                "so the URL cannot be checked",
+                "the policy names no Woodpecker repository for "
+                f"{repo or 'this repository'}, so the URL cannot be checked",
                 target_url=target,
             )
         if named_repo != expected_name:
@@ -834,7 +1020,7 @@ def verify_ci_provenance(
                 f"not {expected_name!r}",
                 target_url=target,
             )
-    else:
+    elif kind != "id":
         return Provenance(
             False,
             "the target_url names no Woodpecker repository, so it cannot be checked "
@@ -851,16 +1037,37 @@ def verify_ci_provenance(
             target_url=target,
         )
 
-    api_url = f"{scheme}://{parsed.netloc}/api/repos/{expected_id}/pipelines/{number}"
-    status, payload = _woodpecker_read(
-        api_url,
-        token,
-        timeout=(
-            PROVENANCE_READ_TIMEOUT_SHADOW
-            if active == PROVENANCE_SHADOW
-            else PROVENANCE_READ_TIMEOUT
-        ),
+    timeout = (
+        PROVENANCE_READ_TIMEOUT_SHADOW
+        if active == PROVENANCE_SHADOW
+        else PROVENANCE_READ_TIMEOUT
     )
+    expected_id = ""
+    if kind == "id":
+        expected_id, resolve_problem = _resolve_woodpecker_repo_id(
+            expected_name,
+            static_id,
+            f"{scheme}://{parsed.netloc}",
+            token,
+            timeout,
+        )
+        if not expected_id:
+            return Provenance(
+                False,
+                "the Woodpecker repository for "
+                f"{repo or 'this repository'} could not be resolved: {resolve_problem}",
+                target_url=target,
+            )
+        if named_repo != expected_id:
+            return Provenance(
+                False,
+                f"the target_url names the Woodpecker repository {named_repo!r}, "
+                f"not {expected_id!r}",
+                target_url=target,
+            )
+
+    api_url = f"{scheme}://{parsed.netloc}/api/repos/{expected_id}/pipelines/{number}"
+    status, payload = _woodpecker_read(api_url, token, timeout=timeout)
     build = f"{expected_id}#{number}"
     detail = f"build {build} at {target}"
     if status == 0:
@@ -969,6 +1176,103 @@ def verify_ci_provenance(
     )
 
 
+def _provenance_index_path() -> Path:
+    return Path(os.environ.get(PROVENANCE_INDEX_ENV) or PROVENANCE_INDEX_PATH)
+
+
+def _provenance_index() -> dict[str, dict[str, Any]]:
+    """What the log already holds, by the path it is written to.
+
+    The index is a memory of the log, not a second log: it says which refusals
+    the log already carries, so a refusal that repeats is counted instead of
+    written again.
+    """
+    path = _provenance_index_path()
+    key = str(path)
+    cached = _INDEX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    index: dict[str, dict[str, Any]] = {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raw = None
+    if isinstance(raw, Mapping) and isinstance(raw.get("entries"), Mapping):
+        for entry_key, entry in raw["entries"].items():
+            if isinstance(entry, Mapping):
+                index[str(entry_key)] = dict(entry)
+    _INDEX_CACHE[key] = index
+    return index
+
+
+def _prune_index(index: dict[str, dict[str, Any]]) -> None:
+    """Drop the entries the log no longer needs to remember.
+
+    An entry that has not been seen for a fortnight is a window that ended, and
+    the index is not a history. The cap is the same idea for a busy day: the
+    index holds the recent refusals, not every refusal the queue ever made.
+    """
+    oldest_allowed = datetime.now(timezone.utc) - timedelta(
+        days=PROVENANCE_INDEX_MAX_AGE_DAYS
+    )
+    stale: list[str] = []
+    for entry_key, entry in index.items():
+        stamp = str(entry.get("last_seen") or entry.get("first_seen") or "")
+        try:
+            seen = datetime.fromisoformat(stamp)
+        except ValueError:
+            stale.append(entry_key)
+            continue
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=timezone.utc)
+        if seen < oldest_allowed:
+            stale.append(entry_key)
+    for entry_key in stale:
+        index.pop(entry_key, None)
+    if len(index) > PROVENANCE_INDEX_MAX_ENTRIES:
+        ordered = sorted(
+            index.items(), key=lambda item: str(item[1].get("last_seen") or "")
+        )
+        for entry_key, _ in ordered[: len(index) - PROVENANCE_INDEX_MAX_ENTRIES]:
+            index.pop(entry_key, None)
+
+
+def _flush_provenance_index() -> None:
+    """Write the index out, so the next tick knows what the log already holds."""
+    for path_str, index in list(_INDEX_CACHE.items()):
+        path = Path(path_str)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(path.name + ".tmp")
+            handle = os.fdopen(
+                os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600),
+                "w",
+                encoding="utf-8",
+            )
+            with handle:
+                json.dump({"entries": index}, handle, indent=2, sort_keys=True)
+                handle.write("\n")
+            tmp.replace(path)
+            os.chmod(path, 0o600)
+        except OSError:
+            # The index is a convenience, never a gate: a queue that cannot
+            # write it must still merge and still say why on stderr.
+            pass
+
+
+def _log_has_lines(path: Path) -> bool:
+    """Whether the log still holds lines.
+
+    A log that was rotated away, or emptied, makes the index a memory of
+    nothing: the refusals it remembers are not in the file any more, so they
+    are written again.
+    """
+    try:
+        return path.stat().st_size > 0
+    except OSError:
+        return False
+
+
 def _log_provenance(
     pr: Mapping[str, Any],
     repo: str | None,
@@ -985,6 +1289,12 @@ def _log_provenance(
     is one file to read. The file is written for the owner of the queue alone
     and is capped, because a file nobody rotates is a file that eventually
     fills the disk the queue lives on.
+
+    The file holds one line per refusal, not one per refusal per tick. The
+    queue looks at every open pull request on every tick, so writing the line
+    again each time is how the 48 hour window turns into tens of thousands of
+    lines nobody reads. A refusal that repeats is counted in the index instead,
+    and the count says how often the gate saw it.
     """
     verb = "would refuse" if mode == PROVENANCE_SHADOW else "refuses"
     line = (
@@ -995,6 +1305,14 @@ def _log_provenance(
         line += f" — {detail}"
     print(line, file=sys.stderr)
     path = Path(os.environ.get(PROVENANCE_LOG_ENV) or PROVENANCE_LOG_PATH)
+    key = f"{repo or '?'}|{pr.get('number', 0)}|{required}|{reason}"
+    index = _provenance_index()
+    stamp = datetime.now(timezone.utc).isoformat()
+    entry = index.get(key)
+    if entry is not None and _log_has_lines(path):
+        entry["count"] = int(entry.get("count") or 1) + 1
+        entry["last_seen"] = stamp
+        return
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         _rotate_provenance_log(path)
@@ -1003,12 +1321,15 @@ def _log_provenance(
             encoding="utf-8",
         )
         with handle:
-            handle.write(f"{datetime.now(timezone.utc).isoformat()} {line}\n")
+            handle.write(f"{stamp} {line}\n")
         os.chmod(path, 0o600)
     except OSError:
         # The log is a convenience, never a gate. A queue that cannot write it
         # must still refuse, and must still say why on stderr.
         pass
+    index[key] = {"count": 1, "first_seen": stamp, "last_seen": stamp, "reason": reason}
+    _prune_index(index)
+    _flush_provenance_index()
 
 
 def _rotate_provenance_log(path: Path) -> None:
@@ -1983,6 +2304,10 @@ def main(argv: list[str] | None = None) -> int:
     except QueueError as exc:
         print(f"merge_queue: {exc}", file=sys.stderr)
         return EXIT_OPERATIONAL
+    finally:
+        # The tick is over: the counts the index holds are written out, so the
+        # next tick knows what the log already says.
+        _flush_provenance_index()
 
 
 if __name__ == "__main__":

@@ -2180,6 +2180,10 @@ GOOD_TARGET_URL = "http://localhost:8000/repos/6/pipeline/259"
 #: outside.
 _REAL_WOODPECKER_READ = mq._woodpecker_read
 
+#: The real reader of the deployment's configuration, kept for the same reason:
+#: the tests that check how an address is derived need the real one.
+_REAL_DEPLOYMENT_CONFIG_FILES = mq._deployment_config_files
+
 
 @pytest.fixture(autouse=True)
 def _provenance_off_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -2193,16 +2197,35 @@ def _provenance_off_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     The log path is pinned under `tmp_path` for every test, not deleted: a test
     that turns the gate on then writes its line to a temporary file instead of
     the deployment's operator log, which is the queue's own record of what it
-    refused and would read a fixture's text as a real refusal.
+    refused and would read a fixture's text as a real refusal. The index beside
+    the log is pinned the same way, for the same reason.
+
+    The deployment's configuration is read from a fixture file, not from the
+    deployment: the addresses are read from the machine the queue runs on, so
+    a test that read the real ones would pass on this machine and fail on the
+    next one.
     """
     monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_OFF)
     monkeypatch.setenv(mq.PROVENANCE_LOG_ENV, str(tmp_path / "ci-provenance.log"))
+    monkeypatch.setenv(mq.PROVENANCE_INDEX_ENV, str(tmp_path / "ci-provenance.index.json"))
     monkeypatch.delenv("WOODPECKER_TOKEN", raising=False)
-    # The token and the build reads are cached on the module, so they are
-    # cleared for every test: a token read by one test must not answer for the
-    # next one, and a read cached by one test must not answer for the next one.
+    # The token, the build reads, the allowed hosts and the log index are
+    # cached on the module, so they are cleared for every test: a token read by
+    # one test must not answer for the next one, a read cached by one test
+    # must not answer for the next one, and a refusal counted by one test must
+    # not silence the log of the next one.
     mq._TOKEN_CACHE.clear()
     mq._READ_CACHE.clear()
+    mq._HOST_CACHE.clear()
+    mq._INDEX_CACHE.clear()
+
+    config = tmp_path / "local-forge.env"
+    config.write_text(
+        "WOODPECKER_PUBLIC_URL=http://ci-host.test:8000\n"
+        "WOODPECKER_URL=http://localhost:8000\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(mq, "_deployment_config_files", lambda prov: (str(config),))
 
     def no_network(url: str, token: str, timeout: float = 10.0) -> tuple[int, Any]:
         raise AssertionError(f"a test reached the Woodpecker API: {url}")
@@ -2435,7 +2458,8 @@ def test_a_verified_build_is_evidence(
     verdict = _evaluate(pr)
     assert verdict.eligible, verdict.reasons
     assert woodpecker["calls"] == [
-        "http://localhost:8000/api/repos/6/pipelines/259"
+        "http://localhost:8000/api/repos/lookup/digithings-local/ci",
+        "http://localhost:8000/api/repos/6/pipelines/259",
     ], "the build must be read from the API form of the URL the status named"
 
 
@@ -2723,7 +2747,7 @@ def test_the_token_is_sent_to_the_woodpecker_api(
     pr = _pr(1, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
     verdict = _evaluate(pr)
     assert verdict.eligible, verdict.reasons
-    assert woodpecker["tokens"] == ["test-token"]
+    assert woodpecker["tokens"] and set(woodpecker["tokens"]) == {"test-token"}
 
 
 def test_the_token_is_read_from_the_file_the_policy_names(
@@ -2757,7 +2781,7 @@ def test_the_token_is_read_from_the_file_the_policy_names(
         repo=DIGITHINGS_REPO,
     )
     assert verdict.eligible, verdict.reasons
-    assert woodpecker["tokens"] == ["file-token"]
+    assert woodpecker["tokens"] and set(woodpecker["tokens"]) == {"file-token"}
 
 
 def test_a_url_that_names_the_repository_by_name_is_evidence(
@@ -2790,18 +2814,104 @@ def test_a_url_that_names_another_repository_by_name_is_not_evidence(
     assert woodpecker["calls"] == []
 
 
-def test_the_allowed_hosts_are_the_deployment_addresses() -> None:
-    """The allow-list is a deployment address, so it is pinned.
+def test_the_shipped_policy_does_not_write_the_deployment_address_down() -> None:
+    """No address that moves is written in the policy file.
 
-    A typo here refuses every build on the LAN address, and the shadow log is
-    the only place that says so.
+    The deployment's address is a DHCP address. A list that carries it goes
+    stale, and under `enforce` a stale list refuses every pull request,
+    because every build link then names a host that is not ours.
     """
-    policy = mq.load_policy()
-    assert policy.ci_provenance.hosts == (
-        "localhost:8000",
-        "127.0.0.1:8000",
-        "192.168.1.35:8000",
+    prov = mq.load_policy().ci_provenance
+    assert prov.hosts == ("localhost:8000", "127.0.0.1:8000")
+    assert prov.host_files, "the policy must name the files the addresses come from"
+    assert prov.host_url_keys, "the policy must name the keys the addresses come from"
+    assert prov.require_config, (
+        "the switch to enforce must be gated on the configuration being readable"
     )
+
+
+def test_the_allowed_hosts_are_read_from_the_deployment_configuration(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The deployment's address is read, not written down.
+
+    A change of local IP is then a change of the deployment and not a change of
+    this repository, which is the whole point: a list that has to be edited
+    when the machine moves is a list that is out of date the day after the
+    edit is forgotten.
+    """
+    import dataclasses
+
+    monkeypatch.setattr(mq, "_deployment_config_files", _REAL_DEPLOYMENT_CONFIG_FILES)
+    config = tmp_path / "local-forge.env"
+    config.write_text(
+        "WOODPECKER_PUBLIC_URL=http://192.168.1.35:8000\n", encoding="utf-8"
+    )
+    policy = mq.load_policy()
+    prov = dataclasses.replace(
+        policy.ci_provenance,
+        host_files=(str(config),),
+        host_url_keys=("WOODPECKER_PUBLIC_URL",),
+    )
+    hosts, problem = mq._allowed_hosts(prov)
+    assert problem == ""
+    assert "192.168.1.35:8000" in hosts
+    assert "localhost:8000" in hosts
+
+
+def test_a_deployment_configuration_that_cannot_be_read_is_not_evidence(
+    monkeypatch: pytest.MonkeyPatch, woodpecker: dict[str, Any], tmp_path: Path
+) -> None:
+    """The switch to enforce is gated on the deployment being where it was.
+
+    A list of allowed hosts that was written down before the deployment moved
+    refuses every pull request once the deployment has moved, and the refusal
+    says nothing about the cause. So the gate refuses when it cannot read the
+    configuration, and it says that it could not read it.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    monkeypatch.setattr(
+        mq, "_deployment_config_files", lambda prov: (str(tmp_path / "absent.env"),)
+    )
+    pr = _pr(1, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _evaluate(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        "deployment configuration could not be read" in reason for reason in verdict.reasons
+    )
+
+
+def test_the_woodpecker_repository_id_is_resolved_from_its_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A repository that was recreated carries a new id.
+
+    The number written in the policy is the fallback for an API that cannot be
+    read; the name is the authority, so a build link that names the repository
+    that is really there is evidence even when the number in the policy is
+    stale. A number that is written down and never checked is how the gate
+    ends up reading a different repository's build.
+    """
+    calls: list[str] = []
+
+    def fake_read(url: str, token: str, timeout: float = 10.0) -> tuple[int, Any]:
+        calls.append(url)
+        if "/api/repos/lookup/" in url:
+            return 200, {"id": 42}
+        return 200, _pipeline(commit="a" * 40)
+
+    monkeypatch.setattr(mq, "_woodpecker_read", fake_read)
+    monkeypatch.setenv("WOODPECKER_TOKEN", "test-token")
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    pr = _pr(
+        1,
+        local_ci_target_url="http://localhost:8000/repos/42/pipeline/259",
+        reviews=_approved(),
+    )
+    verdict = _evaluate(pr)
+    assert verdict.eligible, verdict.reasons
+    assert "http://localhost:8000/api/repos/lookup/digithings-local/ci" in calls
+    assert "http://localhost:8000/api/repos/42/pipelines/259" in calls
 
 
 def test_a_target_url_that_is_not_absolute_is_not_evidence(
@@ -2865,7 +2975,10 @@ def test_shadow_mode_reads_the_build_and_still_merges(
     pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
     verdict = _evaluate(pr)
     assert verdict.eligible, verdict.reasons
-    assert woodpecker["calls"] == ["http://localhost:8000/api/repos/6/pipelines/259"]
+    assert woodpecker["calls"] == [
+        "http://localhost:8000/api/repos/lookup/digithings-local/ci",
+        "http://localhost:8000/api/repos/6/pipelines/259",
+    ]
     written = log.read_text(encoding="utf-8")
     assert "would refuse 'local-ci'" in written
     assert "ran another commit" in written
@@ -2923,6 +3036,90 @@ def test_the_suite_never_writes_to_the_deployment_provenance_log(
     )
     assert not deployment_log.exists()
     assert (tmp_path / "ci-provenance.log").exists()
+
+
+def test_the_provenance_log_holds_one_line_per_refusal(
+    monkeypatch: pytest.MonkeyPatch, woodpecker: dict[str, Any], tmp_path: Path
+) -> None:
+    """The queue reads every open pull request on every tick.
+
+    A line written again on every tick is how a 48 hour window turns into tens
+    of thousands of lines nobody reads, so a refusal that repeats is counted
+    instead of written again.
+    """
+    log = tmp_path / "provenance.log"
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_SHADOW)
+    monkeypatch.setenv(mq.PROVENANCE_LOG_ENV, str(log))
+    woodpecker["answer"]["payload"] = _pipeline(commit="b" * 40)
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    _evaluate(pr)
+    _evaluate(pr)
+    lines = [line for line in log.read_text(encoding="utf-8").splitlines() if line]
+    assert len(lines) == 1, lines
+    # The counts are written out at the end of a tick, which is when the queue
+    # knows that the tick is over.
+    mq._flush_provenance_index()
+    index = json.loads(
+        (tmp_path / "ci-provenance.index.json").read_text(encoding="utf-8")
+    )
+    assert [entry["count"] for entry in index["entries"].values()] == [2], index
+
+
+def test_a_refusal_is_written_again_when_the_log_no_longer_holds_it(
+    monkeypatch: pytest.MonkeyPatch, woodpecker: dict[str, Any], tmp_path: Path
+) -> None:
+    """The index is a memory of the log, not a log of its own.
+
+    A log that was rotated away or emptied does not hold the refusal the index
+    remembers, so the refusal is written again: the window is the file, and the
+    file has to say it.
+    """
+    log = tmp_path / "provenance.log"
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_SHADOW)
+    monkeypatch.setenv(mq.PROVENANCE_LOG_ENV, str(log))
+    woodpecker["answer"]["payload"] = _pipeline(commit="b" * 40)
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    _evaluate(pr)
+    log.write_text("", encoding="utf-8")
+    _evaluate(pr)
+    lines = [line for line in log.read_text(encoding="utf-8").splitlines() if line]
+    assert len(lines) == 1, lines
+
+
+def test_the_provenance_index_is_written_for_its_owner_only(
+    monkeypatch: pytest.MonkeyPatch, woodpecker: dict[str, Any], tmp_path: Path
+) -> None:
+    """The index says which pull requests the queue refused, so it is private."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    woodpecker["answer"]["payload"] = _pipeline(commit="b" * 40)
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    _evaluate(pr)
+    index = tmp_path / "ci-provenance.index.json"
+    assert index.exists()
+    assert oct(index.stat().st_mode)[-3:] == "600"
+
+
+def test_the_suite_never_writes_to_the_deployment_provenance_index(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The deployment's index is written by the queue, not by this suite.
+
+    The index beside the operator's log is the queue's own record of what it
+    refused. Fixture text in it reads as a real refusal, and a count in it
+    silences the real log, so the suite writes its own index under `tmp_path`.
+    """
+    deployment_index = tmp_path / "deployment" / "ci-provenance.index.json"
+    monkeypatch.setattr(mq, "PROVENANCE_INDEX_PATH", deployment_index)
+    mq._log_provenance(
+        {"number": 1},
+        DIGITHINGS_REPO,
+        "local-ci",
+        "no target_url",
+        "",
+        mq.PROVENANCE_SHADOW,
+    )
+    assert not deployment_index.exists()
+    assert (tmp_path / "ci-provenance.index.json").exists()
 
 
 def test_a_redirect_is_refused_and_the_token_stays_home() -> None:
