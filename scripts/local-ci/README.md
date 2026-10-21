@@ -3,6 +3,11 @@
 The script that posts the `local-ci` commit status for this repository, and the
 `Every commit reaching main was reviewed` status for develop-to-main promotions.
 
+It posts the same verdict twice: once as `local-ci`, with the repository token,
+and once as `local-ci/app`, with the GitHub App's own installation token, so the
+app row's creator is `digithings-ci[bot]`. With no app token there is no app
+row at all: a row under another identity would be worse than no row.
+
 It runs on the host (launchd), not in GitHub Actions. Since the free Actions
 minutes are not a CI budget, this is the required check on `develop`: a PR that
 this script has not passed does not merge.

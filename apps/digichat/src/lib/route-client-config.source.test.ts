@@ -83,7 +83,18 @@ const staticSurfaces = [
   "app/(devkit)/devkit/devkit-preview.tsx",
 ];
 
-/** Every app source file under a directory, test files excluded. */
+/**
+ * The two places in the app that may name a provider label: the embed
+ * surface, which names the backend that serves its own chat, and the shared
+ * helper, which names the house backend for the surfaces that have no
+ * session of their own.
+ */
+const labelHomes = [
+  "app/(digichat)/embed/embed-client.tsx",
+  "lib/route-client-config.ts",
+];
+
+/** Every app source file, test files excluded. */
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = join(dir, entry.name);
@@ -117,19 +128,21 @@ describe("the static composer provider chip", () => {
       // assignment, a spread that carries one.
       expect((code.match(/providerLabel/g) ?? []).length).toBe(0);
       // And it still reads the label from the one home.
-      expect(code).toMatch(/toStockChatPrefsConfig\(/);
+      expect(code).toMatch(/from\s*["'][^"']*route-client-config["']/);
     }
   });
 
-  it("holds every static surface that renders the chip", () => {
-    // A surface that renders the chip and is not held by the case above
-    // would name a backend of its own with the suite green, so the list of
-    // surfaces is checked against the tree.
-    const rendering = sourceFiles(join(appSrc, "app"))
-      .filter((file) => readFileSync(file, "utf8").includes("toStockChatPrefsConfig("))
+  it("keeps the provider label in its two homes", () => {
+    // The label is named in exactly two places in the app: the embed
+    // surface, which names the backend that serves its own chat, and the
+    // shared helper, which names the house backend for the surfaces that
+    // have no session of their own. A third place is a copy of the naming,
+    // wherever it is written - a property, an assignment, a computed key.
+    const naming = sourceFiles(appSrc)
+      .filter((file) => codeOnly(readFileSync(file, "utf8")).includes("providerLabel"))
       .map((file) => relative(appSrc, file))
       .sort();
-    expect(rendering).toEqual([...staticSurfaces].sort());
+    expect(naming).toEqual([...labelHomes].sort());
   });
 
   it("names the house backend on the static surfaces", () => {

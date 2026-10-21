@@ -69,6 +69,14 @@ LOGD = f"{HOME}/.config/digithings/logs/local-ci"
 LOCK = f"{HOME}/.config/digithings/state/local-ci.lock"
 PAUSE = f"{HOME}/.config/digithings/state/worktree-pause"
 CTX = "local-ci"; MAX_PER_TICK = 2; MIN_AVAIL_MB = 2048; MIN_FREE_PCT = 20.0
+# The app's own status row, posted with the app's installation token (DIG-4809).
+# The pipeline mints the token before the worker starts and writes it to this
+# file; the worker then posts the same verdict twice, once per identity, so
+# the two rows can be compared for 48 hours. The app token is the only
+# identity allowed to post this row: with no token there is no row at all,
+# because a row under another identity would be worse than no row.
+APP_CTX = "local-ci/app"
+APP_TOKEN_FILE = f"{HOME}/.config/digithings/secrets/app-token"
 # Primary memory gate (DIG-3783): skip below this system-wide free percentage,
 # the same signal the board driver uses. vm_stat reclaimable MB is the fallback.
 # Exact context name required by main's branch protection (ci-review-coverage.yml
@@ -143,16 +151,20 @@ ENV = build_env()
 def log(m):
     with open(f"{LOGD}/local-ci.log", "a") as f: f.write(time.strftime("%F %T ") + m + "\n")
 
-def sh(cmd, cwd=None, timeout=1800, out=None, name=None):
+def sh(cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
     """Run a command under a wall-clock timeout that takes the WHOLE tree down.
 
     `subprocess.run(timeout=)` kills only the direct child: the wrangler and
     esbuild grandchildren survive, are re-parented to pid 1 and leak (8 leaked
     trees measured 2026-10-19). The child gets its own process group so the
     timeout can break the tree, and its identity is recorded for the watchdog.
+
+    `env` replaces the gate's environment for this one call. The app status
+    posts with the app's own token, and that token belongs in the child's
+    environment and not in the gate's (DIG-4809).
     """
     try:
-        p = subprocess.Popen(cmd, cwd=cwd, env=ENV, stdout=subprocess.PIPE,
+        p = subprocess.Popen(cmd, cwd=cwd, env=ENV if env is None else env, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, text=True,
                              start_new_session=True, shell=isinstance(cmd, str))
     except OSError as e:
@@ -223,8 +235,107 @@ def mem_available_mb():
     rc, o = sh(["vm_stat"])
     return parse_vm_stat_available_mb(o or "")
 
+def build_target_url():
+    """The build that made this status green, as a URL, or "".
+
+    `LOCAL_CI_TARGET_URL` is the explicit name; `CI_PIPELINE_URL` is what
+    Woodpecker injects into every step, so the worker running inside the
+    pipeline needs no configuration. A run on the host has neither and posts a
+    status that names no build - the merge queue reads that back and refuses it,
+    naming the missing build as the reason (DIG-4794).
+    """
+    return (os.environ.get("LOCAL_CI_TARGET_URL") or os.environ.get("CI_PIPELINE_URL") or "").strip()
+
+
+def log_soft(msg):
+    """A log line that never breaks the caller.
+
+    The app row goes out after the `local-ci` row. A log directory that cannot
+    be written must not cost the row, and must not stop the tick.
+    """
+    try:
+        log(msg)
+    except OSError:
+        pass
+
+
+def app_token():
+    """The app installation token the pipeline minted, or "" when there is none.
+
+    Read from the file the pipeline wrote for the worker alone, never printed
+    and never taken from the command line. Only the first line of the file is
+    the token: a file with more content must not put two lines into it. The
+    environment is the fallback for a run that hands the token over directly.
+    """
+    path = os.environ.get("LOCAL_CI_APP_TOKEN_FILE") or APP_TOKEN_FILE
+    try:
+        with open(path) as f:
+            tok = f.readline().strip()
+    except OSError:
+        tok = ""
+    return tok or (os.environ.get("CI_APP_TOKEN") or "").strip()
+
+
+def status_fields(state, desc):
+    """The fields of one status row: the verdict, the description and the build.
+
+    Both rows are built from this one call, so the `local-ci` row and the
+    `local-ci/app` row cannot disagree about anything but the context.
+    """
+    fields = {"state": state, "description": desc[:139]}
+    target = build_target_url()
+    if target:
+        fields["target_url"] = target
+    return fields
+
+
+def status_args(sha, ctx, fields):
+    """The `gh api` arguments for one status row."""
+    args = ["api", "-X", "POST", f"repos/{REPO}/statuses/{sha}",
+            "-f", f"state={fields['state']}", "-f", f"context={ctx}",
+            "-f", f"description={fields['description']}"]
+    if "target_url" in fields:
+        args += ["-f", f"target_url={fields['target_url']}"]
+    return args
+
+
+def app_status(sha, fields):
+    """Post the same verdict under `local-ci/app`, with the app's own token.
+
+    The token goes into the child's environment, never into its arguments, so
+    it cannot land in a process listing or in the log line the runner writes
+    for every command it starts. With no token there is no row: the app is the
+    only identity allowed to post this one.
+    """
+    tok = app_token()
+    if not tok:
+        log_soft("app status: skipped, no app token")
+        return False
+    env = dict(ENV)
+    env["GH_TOKEN"] = tok
+    env["GITHUB_TOKEN"] = tok
+    rc, _ = sh(["gh", *status_args(sha, APP_CTX, fields)], timeout=120, env=env)
+    if rc != 0:
+        log_soft(f"app status: failed (rc={rc})")
+        return False
+    log_soft(f"app status: {fields['state']} {APP_CTX}")
+    return True
+
+
 def status(sha, state, desc):
-    gh("api", "-X", "POST", f"repos/{REPO}/statuses/{sha}", "-f", f"state={state}", "-f", f"context={CTX}", "-f", f"description={desc[:139]}")
+    """Post the `local-ci` status, naming the build when there is one.
+
+    The name is what makes the status evidence: a commit status is worth what
+    its writer is worth, and the queue reads the build back from Woodpecker
+    before it trusts the green (DIG-4794).
+
+    The same verdict goes out under `local-ci/app`, posted with the app's own
+    token. Both rows are built from one set of fields, so they are always the
+    same verdict (DIG-4809).
+    """
+    fields = status_fields(state, desc)
+    gh(*status_args(sha, CTX, fields))
+    app_status(sha, fields)
 
 
 def review_status(sha, state, desc):
