@@ -1,6 +1,28 @@
 import { readFileSync } from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
-import { forwardHeaders, resolveDigichatVersion } from "../../scripts/trusted-proxy-server.mjs";
+import {
+  forwardHeaders,
+  proxyToUpstream,
+  resolveDigichatVersion,
+} from "../../scripts/trusted-proxy-server.mjs";
+
+function listen(server: http.Server): Promise<number> {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address() as AddressInfo;
+      resolve(address.port);
+    });
+  });
+}
+
+function closeServer(server: http.Server): Promise<void> {
+  return new Promise((resolve) => {
+    server.close(() => resolve());
+  });
+}
 
 const packageVersion = JSON.parse(
   readFileSync(new URL("../../package.json", import.meta.url), "utf8")
@@ -52,6 +74,90 @@ describe("trusted-proxy server", () => {
     expect(headers).not.toHaveProperty("transfer-encoding");
     expect(headers).not.toHaveProperty("upgrade");
     expect(headers["x-forwarded-for"]).toBe("198.51.100.1");
+  });
+
+  it("returns a finished upstream body", async () => {
+    const upstream = http.createServer((_req, res) => {
+      res.end("ok");
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = http.createServer((req, res) => {
+      proxyToUpstream(req, res, {
+        headers: forwardHeaders(req.headers, "127.0.0.1", "stamp"),
+        host: "127.0.0.1",
+        path: req.url ?? "/",
+        port: upstreamPort,
+      });
+    });
+    const proxyPort = await listen(proxy);
+    try {
+      const body = await new Promise<string>((resolve, reject) => {
+        http
+          .get({ host: "127.0.0.1", port: proxyPort, path: "/" }, (res) => {
+            const chunks: Buffer[] = [];
+            res.on("data", (chunk: Buffer) => chunks.push(chunk));
+            res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+          })
+          .on("error", reject);
+      });
+      expect(body).toBe("ok");
+    } finally {
+      await closeServer(proxy);
+      await closeServer(upstream);
+    }
+  });
+
+  it("destroys the upstream request when the client aborts", async () => {
+    let upstreamClosedEarly = false;
+    let markOpen: () => void = () => {};
+    let markClosed: () => void = () => {};
+    const opened = new Promise<void>((resolve) => {
+      markOpen = resolve;
+    });
+    const closed = new Promise<void>((resolve) => {
+      markClosed = resolve;
+    });
+    const upstream = http.createServer((req, upRes) => {
+      markOpen();
+      req.on("close", () => {
+        if (!upRes.writableFinished) {
+          upstreamClosedEarly = true;
+          markClosed();
+        }
+      });
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = http.createServer((req, res) => {
+      proxyToUpstream(req, res, {
+        headers: forwardHeaders(req.headers, "127.0.0.1", "stamp"),
+        host: "127.0.0.1",
+        path: req.url ?? "/",
+        port: upstreamPort,
+      });
+    });
+    const proxyPort = await listen(proxy);
+    try {
+      const client = http.request({
+        host: "127.0.0.1",
+        method: "POST",
+        path: "/api/chat",
+        port: proxyPort,
+      });
+      client.on("error", () => {});
+      client.end("{}");
+      await opened;
+      client.destroy();
+      await Promise.race([
+        closed,
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("upstream request stayed open after client abort")), 1000);
+        }),
+      ]);
+      expect(upstreamClosedEarly).toBe(true);
+    } finally {
+      await closeServer(proxy);
+      await closeServer(upstream);
+    }
   });
 });
 

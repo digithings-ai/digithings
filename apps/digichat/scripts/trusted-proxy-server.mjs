@@ -61,6 +61,48 @@ export function forwardHeaders(headers, peerIp, stamp = process.env.DIGICHAT_PEE
   return forwarded;
 }
 
+/**
+ * Forward one public request to a loopback listener. The entrypoint always
+ * does this, including when DIGICHAT_TRUSTED_PROXIES is unset. A client
+ * disconnect destroys the upstream request so Next's abort signal fires and
+ * the model call stops.
+ */
+export function proxyToUpstream(req, res, target) {
+  const upstream = http.request(
+    {
+      headers: target.headers,
+      host: target.host,
+      method: req.method,
+      path: target.path,
+      port: target.port,
+    },
+    (upstreamResponse) => {
+      if (res.writableEnded || res.destroyed) {
+        upstreamResponse.destroy();
+        return;
+      }
+      res.writeHead(
+        upstreamResponse.statusCode ?? 502,
+        withoutHopByHopHeaders(upstreamResponse.headers),
+      );
+      upstreamResponse.pipe(res);
+    },
+  );
+  const stopIfClientLeft = () => {
+    if (res.writableEnded || res.writableFinished || upstream.destroyed) return;
+    upstream.destroy();
+  };
+  res.on("close", stopIfClientLeft);
+  req.on("aborted", stopIfClientLeft);
+  upstream.on("error", () => {
+    if (res.writableEnded || res.destroyed) return;
+    if (!res.headersSent) res.writeHead(502);
+    res.destroy();
+  });
+  req.pipe(upstream);
+  return upstream;
+}
+
 function ensurePeerStamp() {
   if (!process.env.DIGICHAT_PEER_STAMP?.trim()) {
     process.env.DIGICHAT_PEER_STAMP = randomBytes(16).toString("hex");
@@ -195,24 +237,12 @@ function start() {
     // /api/mcp/zammad* is served by the in-image zammad-mcp, not Next: keep the
     // method/headers/body and rewrite the path to the MCP endpoint.
     const isZammadMcp = (req.url ?? "").startsWith(zammadPrefix);
-    const upstream = http.request(
-      {
-        headers: forwardHeaders(req.headers, peerIp),
-        host: upstreamHost,
-        method: req.method,
-        path: isZammadMcp ? "/mcp" : req.url,
-        port: isZammadMcp ? zammadPort : upstreamPort,
-      },
-      (upstreamResponse) => {
-        res.writeHead(upstreamResponse.statusCode ?? 502, withoutHopByHopHeaders(upstreamResponse.headers));
-        upstreamResponse.pipe(res);
-      }
-    );
-    upstream.on("error", () => {
-      if (!res.headersSent) res.writeHead(502);
-      res.destroy();
+    proxyToUpstream(req, res, {
+      headers: forwardHeaders(req.headers, peerIp),
+      host: upstreamHost,
+      path: isZammadMcp ? "/mcp" : req.url,
+      port: isZammadMcp ? zammadPort : upstreamPort,
     });
-    req.pipe(upstream);
   });
 
   waitForNext()

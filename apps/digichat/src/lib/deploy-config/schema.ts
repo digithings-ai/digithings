@@ -614,7 +614,7 @@ export function toolCallCapSupport(backendType: string): ToolCallCapSupport {
     case "anthropic":
     case "google-vertex":
       return "enforce";
-    case "digigraph":
+    case "digigraph": // notice only: records the cap and does not abort the loop
     case "langgraph":
     case "ag-ui":
       return "best-effort";
