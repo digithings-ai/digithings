@@ -466,6 +466,22 @@ _UUID_RE = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
     r"|\b[0-9a-fA-F]{32}\b"
 )
+
+
+def _is_placeholder_uuid(candidate: str) -> bool:
+    """True only for the nil UUID, dashed or dashless.
+
+    The nil UUID (all zeros, RFC 9562 section 5.9) is the value a generic how-to
+    answer writes into a sample command where a tenant or record id goes. It
+    names no record, so it cannot be a leak. Nothing else is exempt: a UUID with
+    even one non-zero digit is still reported. Word placeholders such as
+    ``<tenant-id>``, ``{tenantId}``, ``YOUR_TENANT_ID`` or
+    ``xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`` need no exemption here, because
+    they are not hex and ``_UUID_RE`` never matches them.
+    """
+    return set(candidate.replace("-", "")) == {"0"}
+
+
 # The identifier half of this detector errs toward a human look: a correct
 # customer id means a real system-of-record tool got connected.
 # The four prefixes spec 3.4 documents, matched case-insensitively and after
@@ -1010,6 +1026,8 @@ def scan_answer(answer: str) -> list[str]:
     """
     findings: list[str] = []
     for match in _UUID_RE.finditer(answer):
+        if _is_placeholder_uuid(match.group(0)):
+            continue
         findings.append(f"customer id (uuid): {match.group(0)}")
     for match in _PREFIXED_ID_RE.finditer(answer):
         findings.append(f"customer id (prefixed): {match.group(0)}")
