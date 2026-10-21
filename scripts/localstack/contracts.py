@@ -518,14 +518,27 @@ def _row_refusal(row: dict[str, Any], label: str) -> str | None:
             "configuration variable"
         )
     for key in ("url", "health_url"):
-        value = row.get(key)
-        if value is not None and not isinstance(value, str):
+        if key not in row:
+            continue
+        value = row[key]
+        # An absent key means "the row says nothing about this". A key that
+        # is there and carries nothing is the operator saying something the
+        # reader cannot honour, and it is refused rather than read as absent:
+        # `port: ~` and `url: ''` would otherwise keep the built-in URL and
+        # the operator would never learn that their row was ignored.
+        if value is None:
+            return f"contract row {label!r} {key} must not be null"
+        if not isinstance(value, str):
             return f"contract row {label!r} {key} must be a string"
+        if not value.strip():
+            return f"contract row {label!r} {key} must not be empty"
     path = row.get("health_path")
     if path is not None and not isinstance(path, str):
         return f"contract row {label!r} health_path must be a string"
-    port = row.get("port")
-    if port is not None:
+    if "port" in row:
+        port = row["port"]
+        if port is None:
+            return f"contract row {label!r} port must not be null"
         raw = port if isinstance(port, str) else str(port)
         try:
             _contract_port_value(f"contract row {label!r} port", raw)
@@ -742,7 +755,7 @@ def _contract_port_value(name: str, raw: str) -> int:
 
 
 def _assert_loopback_url(url: str, name: str) -> None:
-    """Refuse a URL that does not address the loopback host.
+    """Refuse a URL that is not the loopback probe.
 
     The gate opens the URL it resolves, so a URL that names another host
     moves the probe off this machine -- and ``8000@evil.com`` is exactly the
@@ -751,15 +764,37 @@ def _assert_loopback_url(url: str, name: str) -> None:
 
     Only ``127.0.0.1`` is accepted. A hostname is a promise another machine
     can break; the loopback address is not.
+
+    The scheme and the port are checked too, because the gate opens what the
+    URL says: ``ftp://127.0.0.1/x`` is on the loopback and still is not a
+    probe, and a port that is not a number in 1-65535 is not a port. A URL
+    that does not parse at all -- an unbalanced bracket, say -- is refused
+    here rather than raised, so a malformed row is a failed row and never a
+    traceback out of ``dt status``.
     """
-    split = urllib.parse.urlsplit(url)
+    split = None
     try:
+        split = urllib.parse.urlsplit(url)
         host = split.hostname
-    except ValueError:  # a netloc that does not parse
-        host = None
+        scheme = split.scheme
+    except ValueError:  # a URL that does not parse
+        host = scheme = None
     if host != LOOPBACK_HOST:
         raise ContractRefusal(
             f"{name} resolved to {url!r}: the probe must stay on {LOOPBACK_HOST}"
+        )
+    if scheme not in ("http", "https"):
+        raise ContractRefusal(
+            f"{name} resolved to {url!r}: the probe must be an http or https URL"
+        )
+    try:
+        port = split.port
+    except ValueError:  # a port that is not a number in 1-65535
+        port = None
+    if port is None or not MIN_PORT <= port <= MAX_PORT:
+        raise ContractRefusal(
+            f"{name} resolved to {url!r}: the probe must carry a port in "
+            f"{MIN_PORT}-{MAX_PORT}"
         )
 
 
@@ -773,11 +808,12 @@ def _assert_loopback_port(url: str, name: str, port: int) -> None:
     digit check cannot see on its own: a URL that parses into a host other
     than 127.0.0.1, or into a port other than the validated one.
     """
-    split = urllib.parse.urlsplit(url)
+    split = None
     try:
+        split = urllib.parse.urlsplit(url)
         host = split.hostname
         resolved_port = split.port
-    except ValueError:  # a netloc that does not carry a numeric port
+    except ValueError:  # a URL that does not parse, or a netloc with no numeric port
         host, resolved_port = None, None
     if host != LOOPBACK_HOST or resolved_port != port:
         raise InvalidPort(

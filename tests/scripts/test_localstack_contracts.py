@@ -1333,3 +1333,98 @@ def test_a_contract_that_is_neither_yaml_nor_json_is_a_named_error(tmp_path):
     with pytest.raises(contracts.ContractParseError) as caught:
         contracts.load_checks(tmp_path)
     assert "services.yaml" in str(caught.value)
+
+
+def test_a_contract_url_that_does_not_parse_is_refused_and_not_raised(tmp_path):
+    """A URL that does not parse is a failed row, never a traceback.
+
+    `urlsplit` raises ValueError on an authority with an unbalanced bracket
+    ("Invalid IPv6 URL"). The parse happened outside the guard's try, so the
+    error was not a refusal: it left the catalogue reader, the loader and
+    the CLI, and `dt status` died with a stack trace before a single row was
+    probed. The base did not crash there -- the row failed cleanly at probe
+    time -- so this was a regression, and it broke this PR's own promise
+    that a malformed row never reaches the terminal as a traceback.
+    """
+    _contract(
+        tmp_path,
+        "services:\n  - name: digigraph\n    url: 'http://[::1'\n",
+    )
+    row = _digigraph_row(tmp_path)
+    assert row.refusal is not None
+    assert "http://[::1" in row.refusal
+    assert "127.0.0.1" in row.refusal
+    with pytest.raises(contracts.ContractRefusal):
+        contracts.resolve(row, {})
+
+
+def test_the_loopback_url_check_refuses_a_url_that_does_not_parse():
+    """The guard holds the parse, so a broken URL is a refusal."""
+    with pytest.raises(contracts.ContractRefusal):
+        contracts._assert_loopback_url("http://[::1", "the URL of 'digigraph'")
+
+
+def test_the_loopback_port_check_refuses_a_url_that_does_not_parse():
+    """The port guard has the same shape and holds the parse as well."""
+    with pytest.raises(contracts.InvalidPort):
+        contracts._assert_loopback_port("http://[::1", "DT_DIGIGRAPH_PORT", 8000)
+
+
+@pytest.mark.parametrize(
+    ("url", "why"),
+    [
+        ("ftp://127.0.0.1:8000/x", "the scheme is not http"),
+        ("http://127.0.0.1:99999/healthz", "the port is out of range"),
+        ("http://127.0.0.1/healthz", "the URL carries no port"),
+    ],
+)
+def test_a_contract_url_that_is_not_an_http_probe_is_refused(tmp_path, url, why):
+    """On the loopback is not the same as a probe.
+
+    `ftp://127.0.0.1/x` is on the loopback and still is not a probe: the
+    gate opened a connection to the FTP default port. A port that is not a
+    number in 1-65535 is not a port either. The host check alone let both
+    through, and the PR body claimed more than the code did.
+    """
+    _contract(
+        tmp_path,
+        "services:\n  - name: digigraph\n    url: {!r}\n".format(url),
+    )
+    row = _digigraph_row(tmp_path)
+    assert row.refusal is not None, why
+    assert row.url is None
+    with pytest.raises(contracts.ContractRefusal):
+        contracts.resolve(row, {})
+
+
+@pytest.mark.parametrize(
+    ("body", "why"),
+    [
+        ("services:\n  - name: digigraph\n    port: ~\n", "a null port"),
+        ("services:\n  - name: digigraph\n    url: ~\n", "a null url"),
+        ("services:\n  - name: digigraph\n    url: ''\n", "an empty url"),
+    ],
+)
+def test_a_contract_row_that_says_nothing_is_refused_and_not_read_as_absent(
+    tmp_path, body, why
+):
+    """A key that is there and carries nothing is not an absent key.
+
+    `port: ~` and `url: ''` used to be read as "this row says nothing", so
+    the built-in URL was kept and the operator never learned that their row
+    was ignored -- the silent fallback this PR set out to remove.
+    """
+    _contract(tmp_path, body)
+    row = _digigraph_row(tmp_path)
+    assert row.refusal is not None, why
+    assert row.url is None
+    with pytest.raises(contracts.ContractRefusal):
+        contracts.resolve(row, {})
+
+
+def test_a_contract_row_without_a_url_or_a_port_still_keeps_the_built_in_url(tmp_path):
+    """The control: an absent key still means "the row says nothing"."""
+    _contract(tmp_path, "services:\n  - name: digigraph\n    profile: core\n")
+    row = _digigraph_row(tmp_path)
+    assert row.refusal is None
+    assert row.url == "http://127.0.0.1:${DT_DIGIGRAPH_PORT:-8000}/healthz"
