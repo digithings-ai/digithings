@@ -656,10 +656,10 @@ Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-diges
 phase_models:
   # deliberation emits strict JSON; llama-4-maverick returned empty completions under
   # STRICT json_schema, so the per-ticker slugs are pinned to the json/tool-reliable model.
-  portfolio/deliberation-: deepseek/deepseek-v4-flash   # trailing '-' = prefix match
+  portfolio/deliberation-: deepseek/deepseek-v4.1-flash-1017   # trailing '-' = prefix match
   # Pinned (not pool-hashed) so digest routing stays deterministic; v4-flash's 1M context
   # removes the #1559 64k synthesis ceiling (#1622).
-  master-digest: deepseek/deepseek-v4-flash
+  master-digest: deepseek/deepseek-v4.1-flash-1017
 ```
 
 House traffic is caller → digillm → LiteLLM. Unprefixed OpenRouter slugs (`deepseek/…`, `anthropic/…`) are `config/litellm.yaml` `model_name` keys. Leftover `openrouter/` / `gemini/` / `xai/` prefixes are vendor-client diagnostics when no LiteLLM proxy is configured (`digillm/src/digillm/client.py`).
@@ -700,7 +700,7 @@ Pin a phase via the `phase_models` block in `config/model_modes.yaml` (exact slu
 
 ```yaml
 phase_models:
-  master-digest: "deepseek/deepseek-v4-flash"   # pin synthesis to one pool model
+  master-digest: "deepseek/deepseek-v4.1-flash-1017"   # pin synthesis to one pool model
   "sector-":     "openrouter/mistralai/mistral-large"  # prefix match: sector-tech, sector-energy, …
 ```
 

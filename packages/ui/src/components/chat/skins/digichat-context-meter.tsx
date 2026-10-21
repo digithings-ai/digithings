@@ -25,6 +25,7 @@ import {
  */
 
 const CONTEXT_WINDOWS: Record<string, number> = {
+  "deepseek/deepseek-v4.1-flash-1017": 1_048_576,
   "deepseek/deepseek-v4.1-flash": 1_048_576,
   "z-ai/glm-5.3-flash": 1_048_576,
   "qwen/qwen3.8-flash": 1_000_000,

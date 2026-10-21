@@ -26,7 +26,7 @@ agents:
   llm_mode: test
   llm:
     provider: litellm
-    model: deepseek/deepseek-v4-flash
+    model: deepseek/deepseek-v4.1-flash-1017
     api_key_env: OPENAI_API_KEY
   # Skip ResearchBrief post-pass so the SSE stream ends when answer text completes.
   research_brief: false
