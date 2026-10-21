@@ -67,11 +67,11 @@ describe("embed stock chrome wiring", () => {
     expect(embedClientSrc).toMatch(/openTheme: \(\) => \{\s*setComposerMenu\("theme"\);/);
     expect(embedClientSrc).toMatch(/themeState: \{ preference: theme\.mode/);
     expect(embedClientSrc).toMatch(/setTheme: \(preference, palette\) =>/);
-    // A pick is per tab and per host, and the tenant theme stays the start.
-    expect(embedClientSrc).toMatch(/embedUserThemeKey\(host\)/);
-    expect(embedClientSrc).toMatch(
-      /userTheme\?\.mode \?\? parentTheme \?\? urlTheme \?\? \(tenantCfg\.theme === "light"/,
-    );
+    // A pick is per tab and per tenant; precedence and auto are pinned in
+    // embed-theme-messages.test.ts (resolveEmbedTheme / embedThemePick).
+    expect(embedClientSrc).toMatch(/embedUserThemeKey\(tenantCfg\.slug\)/);
+    expect(embedClientSrc).toMatch(/resolveEmbedTheme\(\{\s*pick: userTheme,/);
+    expect(embedClientSrc).toMatch(/onThemePick\(embedThemePick\(preference, palette\)\)/);
     // Sessions and artifacts stay closed on embeds.
     expect(embedClientSrc).toMatch(/openSessions: \(\) => \{\}/);
     expect(embedClientSrc).toMatch(/openArtifacts: \(\) => \{\}/);

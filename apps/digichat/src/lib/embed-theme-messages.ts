@@ -11,7 +11,7 @@
  * use postMessage so the iframe does not reload.
  */
 
-import { normalizePalette, type PaletteName } from "@digithings/ui/theme";
+import { normalizePalette, themeColorFor, type PaletteName } from "@digithings/ui/theme";
 
 export const THEME_MESSAGE_TYPE = "digichat:theme" as const;
 
@@ -69,27 +69,64 @@ export function applyEmbedDocumentTheme(
 /**
  * A visitor's own `/theme` pick on a tenant embed (2.6.6). The chat starts on
  * the tenant's configured theme; a pick lasts for this tab only
- * (sessionStorage, keyed by embed host so two tenants on one origin never
- * share it) and is never written to the platform `dt-theme` / `dt-palette`
- * localStorage keys.
+ * (sessionStorage, keyed by the resolved tenant slug so two tenants on one
+ * origin never share it) and is never written to the platform `dt-theme` /
+ * `dt-palette` localStorage keys.
  */
 export type EmbedUserTheme = { mode: EmbedTheme; palette: PaletteName };
 
 /** Fired on window after a pick is written, so the embed re-reads it. */
 export const EMBED_USER_THEME_EVENT = "dc-embed-theme-change";
 
-export function embedUserThemeKey(host: string | null | undefined): string {
-  return `dc-embed-theme:${host?.trim() || "default"}`;
+/** Storage key for one tenant's pick: the resolved tenant slug, not the raw `?host=`. */
+export function embedUserThemeKey(tenantSlug: string): string {
+  return `dc-embed-theme:${tenantSlug}`;
 }
 
 type SessionStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
+/** Used when sessionStorage is blocked, so a pick still lasts for this page. */
+const memoryStore: SessionStore = (() => {
+  const map = new Map<string, string>();
+  return {
+    getItem: (key: string) => map.get(key) ?? null,
+    setItem: (key: string, value: string) => void map.set(key, value),
+    removeItem: (key: string) => void map.delete(key),
+  };
+})();
+
 function sessionStore(): SessionStore | null {
   try {
-    return typeof sessionStorage === "undefined" ? null : sessionStorage;
+    if (typeof sessionStorage === "undefined") return typeof window === "undefined" ? null : memoryStore;
+    // Touch it: Safari and some privacy modes expose it but throw on use.
+    sessionStorage.getItem("dc-embed-theme:probe");
+    return sessionStorage;
   } catch {
-    return null;
+    return memoryStore;
   }
+}
+
+/**
+ * What a `/theme` pick means on an embed. `auto` drops the pick, so the chat
+ * goes back to the parent / `?theme=` / tenant theme; a mode keeps the palette.
+ */
+export function embedThemePick(
+  preference: "light" | "dark" | "auto",
+  palette: PaletteName,
+): EmbedUserTheme | null {
+  return preference === "auto" ? null : { mode: preference, palette };
+}
+
+/** The mode an embed paints: pick > parent postMessage > `?theme=` > tenant (default dark). */
+export function resolveEmbedTheme(sources: {
+  pick: EmbedUserTheme | null;
+  parent: EmbedTheme | null;
+  url: EmbedTheme | null;
+  tenant: string | null | undefined;
+}): EmbedTheme {
+  return (
+    sources.pick?.mode ?? sources.parent ?? sources.url ?? (sources.tenant === "light" ? "light" : "dark")
+  );
 }
 
 /** The stored pick as written (a stable string, for useSyncExternalStore). */
@@ -152,14 +189,29 @@ export function subscribeEmbedUserTheme(onChange: () => void): () => void {
   return () => window.removeEventListener(EMBED_USER_THEME_EVENT, onChange);
 }
 
-/** Paint the pick's palette (the tenant default paints none). */
+/** Embed canvas per mode; matches the pin script in embed-route-shell.tsx. */
+const EMBED_CANVAS: Record<EmbedTheme, string> = {
+  light: "#f1f0eb", // canon-allow: browser theme-color meta for the embed canvas, same pair as embed-route-shell.tsx
+  dark: "#121417", // canon-allow: browser theme-color meta for the embed canvas, same pair as embed-route-shell.tsx
+};
+
+/** The browser `theme-color` for an embed mode and palette. */
+export function embedThemeColor(mode: EmbedTheme, palette: PaletteName): string {
+  return palette === "default" ? EMBED_CANVAS[mode] : themeColorFor(palette, mode);
+}
+
+/** Paint the pick's palette (the tenant default paints none) and keep `theme-color` in step. */
 export function applyEmbedPalette(
   palette: PaletteName,
-  el: {
-    setAttribute(name: string, value: string): void;
-    removeAttribute(name: string): void;
-  } = document.documentElement,
+  mode: EmbedTheme,
+  doc: Document = document,
 ): void {
+  const el = doc.documentElement;
   if (palette === "default") el.removeAttribute("data-palette");
   else el.setAttribute("data-palette", palette);
+  try {
+    doc.querySelector('meta[name="theme-color"]')?.setAttribute("content", embedThemeColor(mode, palette));
+  } catch {
+    /* ignore */
+  }
 }

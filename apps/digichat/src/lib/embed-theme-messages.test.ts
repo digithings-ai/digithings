@@ -7,7 +7,10 @@ import {
   parseThemeMessage,
   applyEmbedDocumentTheme,
   applyEmbedPalette,
+  embedThemeColor,
+  embedThemePick,
   embedUserThemeKey,
+  resolveEmbedTheme,
   readEmbedUserTheme,
   writeEmbedUserTheme,
 } from "./embed-theme-messages";
@@ -119,21 +122,55 @@ describe("embed /theme pick (2.6.6)", () => {
     };
   }
 
-  it("keys the pick by embed host so tenants on one origin never share it", () => {
-    expect(embedUserThemeKey("occ.digithings.ai")).toBe("dc-embed-theme:occ.digithings.ai");
-    expect(embedUserThemeKey(undefined)).toBe("dc-embed-theme:default");
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keys the pick by tenant slug so tenants on one origin never share it", () => {
+    expect(embedUserThemeKey("occ")).toBe("dc-embed-theme:occ");
     const store = memoryStore();
-    writeEmbedUserTheme(embedUserThemeKey("a.example"), { mode: "light", palette: "aura" }, store);
-    expect(readEmbedUserTheme(embedUserThemeKey("a.example"), store)).toEqual({
+    writeEmbedUserTheme(embedUserThemeKey("a"), { mode: "light", palette: "aura" }, store);
+    expect(readEmbedUserTheme(embedUserThemeKey("a"), store)).toEqual({
       mode: "light",
       palette: "aura",
     });
-    expect(readEmbedUserTheme(embedUserThemeKey("b.example"), store)).toBeNull();
+    expect(readEmbedUserTheme(embedUserThemeKey("b"), store)).toBeNull();
+  });
+
+  it("writes the pick to sessionStorage, never to localStorage", () => {
+    const session = memoryStore();
+    const local = memoryStore();
+    vi.stubGlobal("sessionStorage", session);
+    vi.stubGlobal("localStorage", local);
+    const key = embedUserThemeKey("a");
+    writeEmbedUserTheme(key, { mode: "light", palette: "aura" });
+    expect(session.map.get(key)).toBe(JSON.stringify({ mode: "light", palette: "aura" }));
+    expect(local.map.size).toBe(0);
+    expect(readEmbedUserTheme(key)).toEqual({ mode: "light", palette: "aura" });
+  });
+
+  it("keeps the pick in memory when sessionStorage is blocked", () => {
+    vi.stubGlobal("sessionStorage", {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    });
+    const key = embedUserThemeKey("blocked");
+    writeEmbedUserTheme(key, { mode: "dark", palette: "dracula" });
+    expect(readEmbedUserTheme(key)).toEqual({ mode: "dark", palette: "dracula" });
+    writeEmbedUserTheme(key, null);
+    expect(readEmbedUserTheme(key)).toBeNull();
   });
 
   it("clears the pick, and ignores a malformed one", () => {
     const store = memoryStore();
-    const key = embedUserThemeKey("a.example");
+    const key = embedUserThemeKey("a");
     writeEmbedUserTheme(key, { mode: "dark", palette: "default" }, store);
     writeEmbedUserTheme(key, null, store);
     expect(store.map.size).toBe(0);
@@ -145,15 +182,56 @@ describe("embed /theme pick (2.6.6)", () => {
     expect(readEmbedUserTheme(key, store)).toEqual({ mode: "dark", palette: "default" });
   });
 
-  it("paints the pick's palette and removes it for the default", () => {
+  it("maps /theme auto to no pick, and a mode to a pick that keeps the palette", () => {
+    expect(embedThemePick("auto", "aura")).toBeNull();
+    expect(embedThemePick("light", "aura")).toEqual({ mode: "light", palette: "aura" });
+  });
+
+  it("paints pick > parent > ?theme= > tenant, default dark", () => {
+    const pick = { mode: "light" as const, palette: "default" as const };
+    expect(resolveEmbedTheme({ pick, parent: "dark", url: "dark", tenant: "dark" })).toBe("light");
+    expect(resolveEmbedTheme({ pick: null, parent: "light", url: "dark", tenant: "dark" })).toBe(
+      "light",
+    );
+    expect(resolveEmbedTheme({ pick: null, parent: null, url: "light", tenant: "dark" })).toBe(
+      "light",
+    );
+    expect(resolveEmbedTheme({ pick: null, parent: null, url: null, tenant: "light" })).toBe(
+      "light",
+    );
+    expect(resolveEmbedTheme({ pick: null, parent: null, url: null, tenant: undefined })).toBe(
+      "dark",
+    );
+    // Dropping the pick (/theme auto) returns to the tenant theme.
+    expect(
+      resolveEmbedTheme({
+        pick: embedThemePick("auto", "aura"),
+        parent: null,
+        url: null,
+        tenant: "light",
+      }),
+    ).toBe("light");
+  });
+
+  it("paints the palette and keeps theme-color in step", () => {
     const attrs = new Map<string, string>();
-    const el = {
-      setAttribute: (k: string, v: string) => void attrs.set(k, v),
-      removeAttribute: (k: string) => void attrs.delete(k),
-    };
-    applyEmbedPalette("aura", el);
+    const meta = new Map<string, string>();
+    const doc = {
+      documentElement: {
+        setAttribute: (k: string, v: string) => void attrs.set(k, v),
+        removeAttribute: (k: string) => void attrs.delete(k),
+      },
+      querySelector: (sel: string) =>
+        sel === 'meta[name="theme-color"]'
+          ? { setAttribute: (k: string, v: string) => void meta.set(k, v) }
+          : null,
+    } as unknown as Document;
+    applyEmbedPalette("aura", "light", doc);
     expect(attrs.get("data-palette")).toBe("aura");
-    applyEmbedPalette("default", el);
+    expect(meta.get("content")).toBe(embedThemeColor("light", "aura"));
+    expect(meta.get("content")).not.toBe("#f1f0eb");
+    applyEmbedPalette("default", "dark", doc);
     expect(attrs.has("data-palette")).toBe(false);
+    expect(meta.get("content")).toBe("#121417");
   });
 });

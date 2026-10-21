@@ -111,11 +111,13 @@ import {
 import {
   applyEmbedDocumentTheme,
   applyEmbedPalette,
+  embedThemePick,
   embedUserThemeKey,
   parseEmbedThemeParam,
   parseEmbedUserTheme,
   parseThemeMessage,
   readEmbedUserThemeRaw,
+  resolveEmbedTheme,
   subscribeEmbedUserTheme,
   writeEmbedUserTheme,
   type EmbedTheme,
@@ -311,7 +313,7 @@ function EmbedPageInner({
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
   // The visitor's own /theme pick: this tab only, per embed host (2.6.6).
-  const userThemeKey = embedUserThemeKey(host);
+  const userThemeKey = embedUserThemeKey(tenantCfg.slug);
   const userThemeRaw = useSyncExternalStore(
     subscribeEmbedUserTheme,
     () => readEmbedUserThemeRaw(userThemeKey),
@@ -325,8 +327,12 @@ function EmbedPageInner({
     [userThemeKey],
   );
   // /theme pick > parent postMessage > ?theme= URL pin > tenant registry (default dark).
-  const effectiveTheme: EmbedTheme =
-    userTheme?.mode ?? parentTheme ?? urlTheme ?? (tenantCfg.theme === "light" ? "light" : "dark");
+  const effectiveTheme: EmbedTheme = resolveEmbedTheme({
+    pick: userTheme,
+    parent: parentTheme,
+    url: urlTheme,
+    tenant: tenantCfg.theme,
+  });
   const effectivePalette = userTheme?.palette ?? "default";
 
   // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
@@ -430,11 +436,12 @@ function EmbedPageInner({
     const desired = effectiveTheme;
     const palette = effectivePalette === "default" ? null : effectivePalette;
     const apply = () => {
-      if (el.getAttribute("data-theme") !== desired) {
+      const modeChanged = el.getAttribute("data-theme") !== desired;
+      if (modeChanged) {
         applyEmbedDocumentTheme(desired);
       }
-      if (el.getAttribute("data-palette") !== palette) {
-        applyEmbedPalette(effectivePalette);
+      if (modeChanged || el.getAttribute("data-palette") !== palette) {
+        applyEmbedPalette(effectivePalette, desired);
       }
     };
     apply();
@@ -1267,7 +1274,7 @@ function EmbedChat({
       },
       themeState: { preference: theme.mode, palette: theme.palette, resolved: theme.mode },
       setTheme: (preference, palette) => {
-        onThemePick(preference === "auto" ? null : { mode: preference, palette });
+        onThemePick(embedThemePick(preference, palette));
       },
       openThinking: () => {
         setComposerMenu("thinking");
