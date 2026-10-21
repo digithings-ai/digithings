@@ -155,6 +155,19 @@ jobs:
           tag="${INPUT_TAG:-}"
           ref="${INPUT_REF:-}"
 
+          # A TAG PUSH IS THE RELEASE TRIGGER, and inputs.tag is only ever set by
+          # workflow_dispatch. On the push event this lane therefore fell through to
+          # the rehearsal branch and published sha-<commit> instead of the release
+          # name: run 39541165954, the digichat-v2.6.4 tag push, probed
+          # ghcr.io/digithings-ai/digichat:sha-800f5e89a419 and never v2.6.4, so
+          # the release name was never even attempted. On a push, the tag is the
+          # ref the event carries.
+          if [ -z "$tag" ] && [ -z "$ref" ] && [ "$EVENT_NAME" = "push" ] && [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME:-}"
+            tag="${tag#refs/tags/}"
+            echo "Tag push: releasing ${tag}."
+          fi
+
           if [ -n "$tag" ] && [ -n "$ref" ]; then
             echo "::error::set 'tag' or 'ref', not both: a release tag names one version and one commit, a ref names neither."
             exit 1
@@ -212,7 +225,15 @@ jobs:
             echo "version=$version"
             echo "commit=$commit"
             echo "image=$image"
-            echo "tags=$tags"
+            # The release path publishes two names (the version tag and
+            # :latest), so `tags` is a two-line value and has to be written in
+            # the heredoc form. A plain `echo "tags=$tags"` writes the second
+            # name as its own line; the runner reads that line as an output
+            # key, finds no `=` in it, and fails the step with "Invalid
+            # format" before anything is built.
+            echo "tags<<EOF"
+            echo "$tags"
+            echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
       - name: Check if this version is already published
@@ -296,8 +317,8 @@ jobs:
             DIGICHAT_REVISION=${{ steps.version.outputs.commit }}
             DIGICHAT_SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
           # The names are decided once, in the resolve step, and handed over
-          # whole. A step output is a single line, so no consumer can tear a
-          # `${{ … }}` apart the way an inline multi-line list can.
+          # whole as one output value, so no consumer can tear a `${{ … }}`
+          # apart the way an inline multi-line list can.
           tags: ${{ steps.version.outputs.tags }}
 
       - name: Boot the image and probe it
@@ -322,6 +343,15 @@ jobs:
 
           # An ephemeral host port, so the probe never collides with a runner
           # service and never hardcodes a port the image does not listen on.
+          #
+          # The boot is BARE: no -e, no --env, no secret. Production supplies two
+          # secretRefs this runner cannot have, so the image has to serve with no
+          # environment at all - that is what makes the probe's answer
+          # transferable to a Container App that has both. It also means the four
+          # ecosystem services are enabled by default
+          # (apps/digichat/src/lib/capabilities.ts), so /api/health answers 503
+          # in here; the version check below reads that status instead of
+          # demanding a 200.
           container="$(docker run --detach --rm --publish 127.0.0.1::3000 "$IMAGE")"
           trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
           port="$(docker port "$container" 3000/tcp | head -n1 | sed 's/.*://')"
@@ -360,10 +390,47 @@ jobs:
           # from. This is the assertion that catches a stale layer, a wrong tag
           # on the tree, or a build that silently published the previous release
           # — none of which any other step in this lane would notice.
-          reported="$(curl --silent --show-error --fail "$base/api/health" | jq -r '.version')"
+          #
+          # The status code is READ, not demanded. A standalone container has no
+          # digigraph/digisearch/digiquant/digitrace to reach, and /api/health
+          # answers 503 when one of those checks fails: that is the route
+          # telling the truth about a degraded environment, not a broken image.
+          # `curl --fail` on this URL is what killed run 39541165954 (the
+          # digichat-v2.6.4 tag push, 2026-10-21T03:57Z, "curl: (22) The
+          # requested URL returned error: 503"). So the body has to report the
+          # version it was built as, and a failing check is tolerated only when
+          # it is one of those four ecosystem services and the database is
+          # skipped.
+          api_response="$(curl --silent --show-error --max-time 30 --write-out '\n%{http_code}' "$base/api/health" || true)"
+          api_status="$(printf '%s\n' "$api_response" | tail -n1)"
+          api_body="$(printf '%s\n' "$api_response" | sed '$d')"
+          reported="$(jq -r '.version // ""' <<< "$api_body" 2>/dev/null || true)"
           if [ "$reported" != "$VERSION" ]; then
             echo "::error::/api/health reports version '$reported', but this image was built as '$VERSION'."
             exit 1
+          fi
+          # Every check that is neither ok nor skipped has to be one of the four
+          # ecosystem services this container cannot reach. Anything else - a
+          # broken service, a failed database - is a real fault and stops here.
+          failing="$(jq -r '[(.checks // {}) | to_entries[] | select(.value != "ok" and .value != "skipped") | .key] | join(",")' <<< "$api_body" 2>/dev/null || true)"
+          unexpected=""
+          if [ -n "$failing" ]; then
+            IFS=',' read -r -a failing_keys <<< "$failing"
+            for key in "${failing_keys[@]}"; do
+              case "$key" in
+                digraph|digiquant|digitrace|digisearch) ;;
+                *) unexpected="${unexpected:+$unexpected,}$key" ;;
+              esac
+            done
+          fi
+          service="$(jq -r '.checks.service // "missing"' <<< "$api_body" 2>/dev/null || true)"
+          database="$(jq -r '.checks.database // "missing"' <<< "$api_body" 2>/dev/null || true)"
+          if [ -n "$unexpected" ] || [ "$service" != "ok" ] || { [ "$database" != "ok" ] && [ "$database" != "skipped" ]; }; then
+            echo "::error::/api/health answered $api_status with checks that are not only the unreachable ecosystem services (service: $service, database: $database, unexpected: ${unexpected:-none})."
+            exit 1
+          fi
+          if [ "$api_status" != "200" ]; then
+            echo "::warning::/api/health answered $api_status: the image serves version $reported, and only the ecosystem services it cannot reach failed (${failing:-none})."
           fi
 
           echo "Probed ok: /healthz ok=true, /api/health version=$reported, revision bound to $COMMIT."
