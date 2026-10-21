@@ -137,4 +137,37 @@ describe("EmbedComposerMenu /mcp id dropdown", () => {
     await user.click(screen.getByPlaceholderText("https://…"));
     expect(document.querySelector("[data-mcp-id-dropdown]")).toBeNull();
   });
+
+  it("keeps the mcp id suggestions out of the menu body's scroll box", async () => {
+    const user = userEvent.setup();
+    render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu kind="mcp" mcpSeed="new" onClose={() => {}} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("combobox"));
+    const list = document.querySelector("[data-mcp-id-dropdown]");
+    expect(list).toBeTruthy();
+
+    // The mcp edit form still scrolls inside the menu body, and the menu
+    // still clips itself, so the suggestion list cannot live inside either.
+    const clipping = /overflow-(?:[xy]-)?(?:hidden|auto|scroll|clip)/;
+    const menu = document.querySelector("[data-embed-composer-menu]");
+    const body = document.querySelector(".dc-composer-menu-body");
+    expect(menu?.className).toMatch(clipping);
+    expect(body?.className).toMatch(clipping);
+    expect(list?.closest(".dc-composer-menu-body")).toBeNull();
+    expect(list?.closest("[data-embed-composer-menu]")).toBeNull();
+
+    // It hangs off a portalled anchor, so no ancestor of the list clips it.
+    const anchor = list?.parentElement ?? null;
+    expect(anchor?.hasAttribute("data-mcp-id-anchor")).toBe(true);
+    expect(anchor?.parentElement).toBe(document.body);
+    let node: HTMLElement | null = anchor;
+    while (node && node !== document.body) {
+      expect(node.className).not.toMatch(clipping);
+      node = node.parentElement;
+    }
+  });
 });

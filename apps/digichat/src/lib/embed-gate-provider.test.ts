@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { consumeChatAccess } from "./embed-gate-provider";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("consumeChatAccess", () => {
   it("allows on 200", async () => {
@@ -24,17 +27,34 @@ describe("consumeChatAccess", () => {
     expect(await consumeChatAccess("https://api.test/consume", "garbage")).toBe("deny");
   });
 
-  // Availability over strictness: an outage in the quota service must not break chat on every
-  // embedding site. The documented consequence is that the cap is soft by construction.
-  it("allows on a 500", async () => {
+  // Availability over strictness: an outage in the quota service must not break chat
+  // on every embedding site. The outage is REPORTED as a third verdict rather than
+  // allowed, so the caller can admit the visitor and bound the entitlement
+  // server-side instead of granting it outright. The provider only reports the
+  // verdict; the caller is the one that logs the degraded path.
+  it("reports unavailable on a 500", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
-    expect(await consumeChatAccess("https://api.test/consume", "id.secret")).toBe("allow");
+    expect(await consumeChatAccess("https://api.test/consume", "id.secret")).toBe("unavailable");
   });
 
-  it("allows when the request throws", async () => {
+  it("reports unavailable on a 503", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+    expect(await consumeChatAccess("https://api.test/consume", "id.secret")).toBe("unavailable");
+  });
+
+  it("reports unavailable when the request throws", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => {
       throw new Error("network down");
     }));
-    expect(await consumeChatAccess("https://api.test/consume", "id.secret")).toBe("allow");
+    expect(await consumeChatAccess("https://api.test/consume", "id.secret")).toBe("unavailable");
+  });
+
+  it("reports unavailable when the request times out", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      const err = new Error("The operation was aborted due to timeout");
+      err.name = "TimeoutError";
+      throw err;
+    }));
+    expect(await consumeChatAccess("https://api.test/consume", "id.secret")).toBe("unavailable");
   });
 });

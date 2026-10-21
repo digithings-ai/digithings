@@ -87,6 +87,7 @@ describe("mapDigisearchRagSources", () => {
           title: "ADR 0001: digithings Project Spec",
           path: "docs/adr/0001-project-spec.md",
           snippet: "# ADR 0001: digithings Project Spec",
+          docId: expect.stringMatching(/^doc-[0-9a-f]{16}$/),
         },
       ],
       query: "SHOWCASE",

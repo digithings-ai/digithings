@@ -928,6 +928,26 @@ describe("Phase 2 document fields + brief allowlist", () => {
     expect(JSON.stringify(out!.documents)).not.toContain("source_id");
   });
 
+  it("keeps an opaque document handle and drops a raw document id", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [
+          { title: "Auth", path: "https://x/auth", docId: "doc-0123456789abcdef" },
+          {
+            title: "Other",
+            path: "https://x/other",
+            docId: "609e63ae-2671-47ad-bf5a-779ff7d8b757",
+          },
+        ],
+      }),
+    );
+    expect(out!.documents?.[0]?.docId).toBe("doc-0123456789abcdef");
+    // A raw source id must never travel in the client facing payload.
+    expect(out!.documents?.[1]?.docId).toBeUndefined();
+  });
+
   it("caps snippet length", () => {
     const out = sanitizeActivitySpan(
       span({

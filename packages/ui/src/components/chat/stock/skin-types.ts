@@ -48,8 +48,6 @@ export type WorkDisclosure = {
    * @deprecated the chain folds to its titles instead (`quiet`).
    */
   summaryOnly: boolean;
-  /** The chain stays open, so the row titles are visible. */
-  chainOpen: boolean;
   /** The rows expand while their work streams. */
   openWhileRunning: boolean;
   /** The rows stay open once the work has finished. */
@@ -94,7 +92,6 @@ export function resolveWorkDisclosure(
     case "quiet":
       return {
         summaryOnly: false,
-        chainOpen: true,
         openWhileRunning: false,
         openAtRest: false,
         showDetails: false,
@@ -104,7 +101,6 @@ export function resolveWorkDisclosure(
     case "balanced":
       return {
         summaryOnly: false,
-        chainOpen: true,
         openWhileRunning: true,
         openAtRest: false,
         showDetails: true,
@@ -114,7 +110,6 @@ export function resolveWorkDisclosure(
     case "verbose":
       return {
         summaryOnly: false,
-        chainOpen: true,
         openWhileRunning: true,
         openAtRest: true,
         showDetails: true,
@@ -123,7 +118,6 @@ export function resolveWorkDisclosure(
     default:
       return {
         summaryOnly: false,
-        chainOpen: true,
         openWhileRunning: true,
         openAtRest: false,
         showDetails: true,

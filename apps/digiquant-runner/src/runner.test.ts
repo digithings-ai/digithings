@@ -311,8 +311,37 @@ describe("heartbeat", () => {
 
 describe("data plane env", () => {
   it("does not forward the runner auth token", () => {
+    // Every forwarded name is set here: an unset name is omitted, not
+    // forwarded as an empty string (see src/env.test.ts).
+    const values: Record<string, string> = {};
+    for (const name of [
+      "CHEAPERINFERENCE_API_BASE",
+      "CHEAPERINFERENCE_API_KEY",
+      "CLOUDFLARE_ACCOUNT_ID",
+      "CLOUDFLARE_EMAIL_API_TOKEN",
+      "CORE_POSTGRES_URI",
+      "CORE_SUPABASE_SERVICE_KEY",
+      "CORE_SUPABASE_URL",
+      "DIGIQUANT_DIGIKEY_API_KEY",
+      "DIGIQUANT_RUNNER_GIT_SHA",
+      "DIGI_OTEL_HEADERS",
+      "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
+      "LANGFUSE_BASE_URL",
+      "LANGFUSE_PUBLIC_KEY",
+      "LANGFUSE_SECRET_KEY",
+      "LANGSMITH_API_KEY",
+      "NOTIFY_FROM",
+      "OPENROUTER_API_KEY",
+      "R2_ACCESS_KEY_ID",
+      "R2_ACCOUNT_ID",
+      "R2_BUCKET",
+      "R2_SECRET_ACCESS_KEY",
+    ]) {
+      values[name] = `value-${name}`;
+    }
     const keys = Object.keys(
       dataPlaneEnv({
+        ...values,
         RUNNER_AUTH_TOKEN: "nope",
         RUNNER_CONTAINER: {} as DurableObjectNamespace,
       }),
