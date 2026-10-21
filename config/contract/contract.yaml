@@ -1188,7 +1188,7 @@ env:
     env_example_files: []
     compose_literal: []
   wrangler_values:
-    digithings-stack: deepseek/deepseek-v4.1-flash,z-ai/glm-5.3-flash,qwen/qwen3.8-flash,google/gemma-4-31b-it,xiaomi/mimo-v2.6-flash,z-ai/glm-4.7-flash
+    digithings-stack: deepseek/deepseek-v4.1-flash-1017,z-ai/glm-5.3-flash,qwen/qwen3.8-flash,google/gemma-4-31b-it,xiaomi/mimo-v2.6-flash,z-ai/glm-4.7-flash
 - name: DIGI_TENANT_CORPUS_MAP
   description: Per-tenant digisearch index and digivault prefix. Value copied verbatim from the stack
     Worker.

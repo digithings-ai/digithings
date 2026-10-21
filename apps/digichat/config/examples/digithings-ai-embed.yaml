@@ -44,10 +44,9 @@ hosts:
       # Default product picker is Cheaper Inference cheap slugs only (#3829).
       # OpenRouter never appears here — even if OPENROUTER_API_KEY is set.
       # BYOK (`gate.showByok`) is the only way the list expands.
-      default: deepseek/deepseek-v4-flash
+      default: deepseek/deepseek-v4.1-flash-1017
       available:
-        - deepseek/deepseek-v4-flash
-        - deepseek/deepseek-v4-flash-0731
+        - deepseek/deepseek-v4.1-flash-1017
         - openai/gpt-oss-120b
         - z-ai/glm-5.3-flash
       allowPicker: true

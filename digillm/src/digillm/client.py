@@ -774,14 +774,18 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
 # meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
 # CI catalog and fail closed when CI is the selected house upstream (#3660).
+# DeepSeek flash: every house flash slug routes to the V4.1 Flash 1017 checkpoint
+# (2026-10-21). The older slugs stay as aliases so pins outside the repo keep working.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
-    "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
+    "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
     "google/gemini-3.7-flash": "gemini-3.7-flash",
     "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
-    "deepseek/deepseek-v4-flash-0731": "deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",
     "openai/gpt-oss-120b": "gpt-oss-120b",
     "z-ai/glm-5.3-flash": "glm-5.3-flash",
 }

@@ -30,7 +30,7 @@ def _clear_env(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
 # so no pool carries ``:online`` / perplexity pins.
 _CHEAP_PHASE_MODELS = frozenset(
     {
-        "deepseek/deepseek-v4-flash",  # #1622: 1M ctx, tools + strict json_schema
+        "deepseek/deepseek-v4.1-flash-1017",  # #1622 (v4-flash) → 1017 checkpoint 2026-10-21
         # deepseek-r1 removed from every phase pool (#1622): CoT output is not reliably
         # strict JSON (#1617 master-digest JSONDecodeError). Re-adding it here must be a
         # deliberate decision, not a drive-by.
@@ -128,7 +128,7 @@ def test_deliberation_pinned_to_json_reliable_deepseek_v4_flash(
     ).split()
     for ticker in watchlist:
         model = model_config.get_model_for_phase(f"portfolio/deliberation-{ticker}")
-        assert model == "deepseek/deepseek-v4-flash", (
+        assert model == "deepseek/deepseek-v4.1-flash-1017", (
             f"deliberation-{ticker} -> {model!r}, expected the pinned json-reliable "
             "deepseek-v4-flash"
         )
@@ -148,7 +148,7 @@ def test_master_digest_pinned_to_v4_flash(monkeypatch: pytest.MonkeyPatch) -> No
     """
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     model = model_config.get_model_for_phase("master-digest")
-    assert model == "deepseek/deepseek-v4-flash"
+    assert model == "deepseek/deepseek-v4.1-flash-1017"
     assert model_config.is_tool_use_capable_model(model)
 
 
