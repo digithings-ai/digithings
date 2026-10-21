@@ -39,6 +39,15 @@ _spec.loader.exec_module(_guard)
 _RUNNER = os.path.join(_SCRIPTS, "local_ci.py")
 _GUARD_CLI = os.path.join(_SCRIPTS, "launch_guard.py")
 
+# The launchctl text in the tests below is a shape, not a machine: every path in
+# it is built from this one neutral home, so the committed test carries no
+# personal path and no path that only exists on one laptop. Nothing here is
+# read from disk - the parser only ever sees the text.
+_FAKE_HOME = "/home/runner"
+_FAKE_PLIST_PATH = f"{_FAKE_HOME}/Library/LaunchAgents/ai.digithings.local-ci-postmerge.plist"
+_FAKE_RUNNER_PATH = f"{_FAKE_HOME}/Code/local-ci/postmerge_ci.py"
+_FAKE_LOG_PATH = f"{_FAKE_HOME}/.config/digithings/logs/local-ci-postmerge/launchd.out"
+
 
 def _seat_facts(**overrides):
     """The facts of a run started by a seat's shell: nothing trusted in sight."""
@@ -602,33 +611,32 @@ class RefusalWordingTests(unittest.TestCase):
 class LaunchctlParsingTests(unittest.TestCase):
     """The parser against the shape launchctl actually prints."""
 
-    REAL = """gui/501/ai.digithings.local-ci-postmerge = {
+    REAL = f"""gui/501/ai.digithings.local-ci-postmerge = {{
 \tactive count = 1
-\tpath = /Users/chrisstefan/Library/LaunchAgents/ai.digithings.local-ci-postmerge.plist
+\tpath = {_FAKE_PLIST_PATH}
 \ttype = LaunchAgent
 \tstate = running
 
 \tprogram = /usr/bin/python3
-\targuments = {
+\targuments = {{
 \t\t/usr/bin/python3
-\t\t/Users/chrisstefan/Code/local-ci/postmerge_ci.py
-\t}
+\t\t{_FAKE_RUNNER_PATH}
+\t}}
 
-\tstdout path = /Users/chrisstefan/.config/digithings/logs/local-ci-postmerge/launchd.out
-\tenvironment = {
+\tstdout path = {_FAKE_LOG_PATH}
+\tenvironment = {{
 \t\tOSLogRateLimit => 64
 \t\tXPC_SERVICE_NAME => ai.digithings.local-ci-postmerge
-\t}
+\t}}
 \tpid = 47393
 \tlast exit code = 0
-}
+}}
 """
 
     def test_the_program_the_arguments_and_the_plist_are_read(self):
         job = _guard.parse_launchctl_print(self.REAL)
         self.assertEqual(job["program"], "/usr/bin/python3")
-        self.assertEqual(job["arguments"],
-                         ["/usr/bin/python3", "/Users/chrisstefan/Code/local-ci/postmerge_ci.py"])
+        self.assertEqual(job["arguments"], ["/usr/bin/python3", _FAKE_RUNNER_PATH])
         self.assertTrue(job["path"].endswith("ai.digithings.local-ci-postmerge.plist"))
 
     def test_the_pid_of_the_running_job_is_read(self):
@@ -642,6 +650,22 @@ class LaunchctlParsingTests(unittest.TestCase):
 
     def test_a_missing_job_is_not_a_job(self):
         self.assertIsNone(_guard.launchctl_job("ai.digithings.local-ci-not-a-job"))
+
+
+class CommittedPathTests(unittest.TestCase):
+    """The committed file carries no developer's home path.
+
+    A personal absolute path in a committed test leaks a user and a host and
+    ties the test to one machine. The fixture paths are built from one neutral
+    fake home; this keeps them that way.
+    """
+
+    def test_the_module_carries_no_personal_home_path(self):
+        with open(os.path.abspath(__file__), "r", encoding="utf-8") as fh:
+            source = fh.read()
+        # The needle is built at run time, so this test does not put the path
+        # it forbids into the file it forbids it in.
+        self.assertNotIn(os.path.join(os.sep, "Users", ""), source)
 
 
 class LaunchctlListTests(unittest.TestCase):
