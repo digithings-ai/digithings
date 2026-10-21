@@ -12,47 +12,106 @@ import { cn } from "@/lib/utils";
  * max-height scroll area (18rem), no expand button (Chris, 21 Oct).
  */
 
-// The closing quote is optional so an unterminated string still matches to
-// the end in one pass instead of rescanning from every later quote (CodeQL
-// js/polynomial-redos). formatJsonDump output is always well formed anyway.
-const TOKEN =
-  /("(?:\\.|[^"\\])*"?)(\s*:)?|\b(true|false)\b|\b(null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+type JsonToken = {
+  kind: "key" | "string" | "number" | "boolean" | "null";
+  text: string;
+  /** Text after a key: its whitespace and colon. */
+  colon?: string;
+};
+
+/** Literals and numbers, tried only at the current position (sticky). */
+const SCALAR = /(true|false|null)(?![\w$])|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+const WORD_CHAR = /[\w$]/;
+const SPACE = /\s/;
+
+/**
+ * One left-to-right pass over the text, no backtracking regex over strings
+ * (CodeQL js/polynomial-redos): a string runs to its closing quote, or to the
+ * end when it has none, so every character is read once.
+ */
+export function tokenizeJson(text: string): Array<string | JsonToken> {
+  const out: Array<string | JsonToken> = [];
+  let plain = "";
+  let i = 0;
+  const n = text.length;
+  const flush = () => {
+    if (plain) out.push(plain);
+    plain = "";
+  };
+  while (i < n) {
+    const ch = text[i];
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < n) {
+        const c = text[j];
+        if (c === "\\") j += 2;
+        else if (c === '"') {
+          j += 1;
+          break;
+        } else j += 1;
+      }
+      j = Math.min(j, n);
+      const str = text.slice(i, j);
+      let k = j;
+      while (k < n && SPACE.test(text[k])) k += 1;
+      flush();
+      if (text[k] === ":") {
+        out.push({ kind: "key", text: str, colon: text.slice(j, k + 1) });
+        i = k + 1;
+      } else {
+        out.push({ kind: "string", text: str });
+        i = j;
+      }
+      continue;
+    }
+    if (i === 0 || !WORD_CHAR.test(text[i - 1])) {
+      SCALAR.lastIndex = i;
+      const m = SCALAR.exec(text);
+      if (m) {
+        flush();
+        const kind = m[1] === "null" ? "null" : m[1] ? "boolean" : "number";
+        out.push({ kind, text: m[0] });
+        i += m[0].length;
+        continue;
+      }
+    }
+    plain += ch;
+    i += 1;
+  }
+  flush();
+  return out;
+}
 
 export function highlightJson(text: string): ReactNode[] {
-  const out: ReactNode[] = [];
-  let last = 0;
   let key = 0;
-  for (const match of text.matchAll(TOKEN)) {
-    const index = match.index ?? 0;
-    if (index > last) out.push(text.slice(last, index));
-    const [whole, str, colon, bool, nul, num] = match;
-    const kind = str ? (colon ? "key" : "string") : bool ? "boolean" : nul ? "null" : num ? "number" : "";
-    if (str && colon) {
+  const out: ReactNode[] = [];
+  for (const token of tokenizeJson(text)) {
+    if (typeof token === "string") {
+      out.push(token);
+    } else if (token.kind === "key") {
       out.push(
         <span key={key++} className="aui-json-key text-chart-1" data-json="key">
-          {str}
+          {token.text}
         </span>,
-        colon,
+        token.colon ?? "",
       );
     } else {
       out.push(
         <span
           key={key++}
-          data-json={kind}
+          data-json={token.kind}
           className={cn(
-            kind === "string" && "aui-json-string text-up",
-            kind === "number" && "aui-json-number text-warn",
-            (kind === "boolean" || kind === "null") &&
+            token.kind === "string" && "aui-json-string text-up",
+            token.kind === "number" && "aui-json-number text-warn",
+            (token.kind === "boolean" || token.kind === "null") &&
               "aui-json-literal text-chart-4",
           )}
         >
-          {whole}
+          {token.text}
         </span>,
       );
     }
-    last = index + whole.length;
   }
-  if (last < text.length) out.push(text.slice(last));
   return out;
 }
 
