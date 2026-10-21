@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { inlineDomAssets } from "./browser";
 import { snapshotFilename } from "./filename";
-import { serializeSnapshot, transformSnapshotDom } from "./snapshot";
+import { serializeSnapshot, snapshotSource, transformSnapshotDom } from "./snapshot";
 
 const HEX48 = "cd".repeat(24);
 const SECRET = "dgk_live_TESTSECRET99";
@@ -122,6 +122,63 @@ describe("transformSnapshotDom", () => {
     expect(root.querySelector("#new-chat")?.hasAttribute("data-snapshot-static")).toBe(true);
     expect(root.querySelector("#settings")?.hasAttribute("href")).toBe(false);
     expect(root.querySelector("#remote")?.hasAttribute("src")).toBe(false);
+  });
+});
+
+describe("active thread only", () => {
+  it("leaves the other thread and the memory sidebar out of the file", () => {
+    document.body.innerHTML = [
+      '<aside class="dc-thread-list" data-memory-thread-list>',
+      "<span>Other client positions</span>",
+      "</aside>",
+      '<div class="aui-thread-root">',
+      '<div class="aui-user-message-content">Visible other thread</div>',
+      "</div>",
+      '<div class="aui-thread-root" data-active="true">',
+      '<div class="aui-user-message-content">What is the overnight book?</div>',
+      "</div>",
+    ].join("");
+    const shell = snapshotSource(document);
+    expect(shell).not.toBeNull();
+    transformSnapshotDom(shell!);
+    const html = serializeSnapshot(shell!, "");
+    expect(html).toContain("What is the overnight book?");
+    expect(html).not.toContain("Other client positions");
+    expect(html).not.toContain("Visible other thread");
+    expect(html).not.toContain("data-memory-thread-list");
+  });
+});
+
+describe("snapshot stylesheet", () => {
+  it("escapes style breakout and puts a strict csp first", () => {
+    document.body.innerHTML = [
+      '<div class="aui-thread-root" data-active="true">',
+      '<button type="button" onclick="alert(1)">New</button>',
+      '<div class="aui-user-message-content">book</div>',
+      "</div>",
+    ].join("");
+    const shell = snapshotSource(document);
+    expect(shell).not.toBeNull();
+    transformSnapshotDom(shell!);
+    const css = 'p{content:"</style><img src=x onerror=alert(1)>" }';
+    const html = serializeSnapshot(shell!, css);
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    expect(parsed.querySelector("script")).toBeNull();
+    expect(parsed.querySelector("img")).toBeNull();
+    for (const el of parsed.querySelectorAll("*")) {
+      for (const attr of el.attributes) {
+        expect(attr.name.toLowerCase().startsWith("on")).toBe(false);
+      }
+    }
+    const style = parsed.querySelector("style");
+    expect(style?.textContent ?? "").not.toContain("<");
+    expect(html).toContain("\\3c ");
+    const first = parsed.querySelector("head")?.firstElementChild;
+    expect(first?.getAttribute("http-equiv")?.toLowerCase()).toBe("content-security-policy");
+    expect(first?.getAttribute("content")).toContain("default-src 'none'");
+    expect(first?.getAttribute("content")).toContain("style-src 'unsafe-inline'");
+    expect(first?.getAttribute("content")).toContain("img-src data:");
+    expect(first?.getAttribute("content")).toContain("form-action 'none'");
   });
 });
 

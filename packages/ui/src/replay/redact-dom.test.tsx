@@ -76,6 +76,35 @@ describe("redactSnapshotDom", () => {
     expect(body.querySelector("span")?.getAttribute("title")).toBe(REDACTED);
   });
 
+  it("redacts a secret split by strikethrough", () => {
+    const body = root("<p>password=hun<del>ter</del>22</p>");
+    redactSnapshotDom(body);
+    expect(body.textContent).not.toContain("hunter22");
+    expect(body.textContent).toContain(REDACTED);
+  });
+
+  it("redacts a data: alt and signed urls inside svg and template", () => {
+    const body = root(
+      [
+        '<img src="data:image/png;base64,aaaa" alt="data: sk-ant-TESTSECRET99">',
+        "<svg><text>dgk_live_TESTSECRET99</text>",
+        '<image href="https://bucket.s3.amazonaws.com/o?X-Amz-Signature=abcdef0123456789"></image></svg>',
+        "<template><p>dgk_live_TESTSECRET99</p>",
+        '<a href="https://storage.googleapis.com/b/o?X-Goog-Signature=abcdef0123456789">g</a>',
+        '<a href="https://acct.blob.core.windows.net/c/b?sig=fakesigvalue99">a</a>',
+        "</template>",
+      ].join(""),
+    );
+    redactSnapshotDom(body);
+    const html = body.innerHTML;
+    expect(body.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,aaaa");
+    expect(html).not.toContain("TESTSECRET99");
+    expect(html).not.toContain("abcdef0123456789");
+    expect(html).not.toContain("fakesigvalue99");
+    expect(html).toContain("bucket.s3.amazonaws.com");
+    expect(html).toContain(REDACTED);
+  });
+
   it("leaves CSS text alone", () => {
     const body = root(
       `<style>.a{background:url("data:font/woff2;base64,${"cd".repeat(24)}")}</style>`,

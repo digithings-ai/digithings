@@ -1,11 +1,18 @@
 /**
- * Download the open thread as one HTML file. Styles and same-origin images
- * come from the live page, so the file matches the tab it was saved from.
+ * Download the active thread as one HTML file. Styles and same-origin images
+ * come from the live page. The rest of the page (other threads, the memory
+ * sidebar) is not included.
  */
 
 import { downloadTextFile } from "../components/chat/transcript";
 import { snapshotFilename } from "./filename";
-import { deploymentText, questionText, serializeSnapshot, transformSnapshotDom } from "./snapshot";
+import {
+  deploymentText,
+  questionText,
+  serializeSnapshot,
+  snapshotSource,
+  transformSnapshotDom,
+} from "./snapshot";
 
 // Bounded runs keep this linear on page CSS (CodeQL js/polynomial-redos). The
 // value cannot start or end with whitespace, so the \s runs never compete with it.
@@ -69,6 +76,10 @@ export async function inlineAssetUrls(
       }
       const bytes = new Uint8Array(await res.arrayBuffer());
       const mime = (res.headers.get("content-type") || mimeOf(absolute)).split(";")[0].trim();
+      if (!isSavableAsset(mime)) {
+        replacements.set(raw, "");
+        continue;
+      }
       const encoded = bytesToBase64(bytes);
       replacements.set(raw, `data:${mime || "application/octet-stream"};base64,${encoded}`);
     } catch {
@@ -112,6 +123,10 @@ export async function inlineDomAssets(
         }
         const bytes = new Uint8Array(await res.arrayBuffer());
         const mime = (res.headers.get("content-type") || mimeOf(absolute)).split(";")[0].trim();
+        if (!isSavableAsset(mime)) {
+          node.removeAttribute(attr);
+          continue;
+        }
         node.setAttribute(
           attr,
           `data:${mime || "application/octet-stream"};base64,${bytesToBase64(bytes)}`,
@@ -134,12 +149,14 @@ export async function downloadThreadSnapshot(
   exportedAt = new Date().toISOString(),
 ): Promise<void> {
   if (!doc?.documentElement) return;
+  const shell = snapshotSource(doc);
+  if (!shell) return;
+  const question = questionText(shell);
   const css = await inlineAssetUrls(liveSheetText(doc));
-  const clone = doc.documentElement.cloneNode(true) as HTMLElement;
-  transformSnapshotDom(clone);
-  await inlineDomAssets(clone);
-  const html = serializeSnapshot(clone, css);
-  const name = snapshotFilename(deploymentText(doc), exportedAt, questionText(doc));
+  transformSnapshotDom(shell);
+  await inlineDomAssets(shell);
+  const html = serializeSnapshot(shell, css);
+  const name = snapshotFilename(deploymentText(doc), exportedAt, question);
   downloadTextFile(name, html, "text/html;charset=utf-8");
 }
 
@@ -151,6 +168,18 @@ function sameOriginUrl(raw: string, origin: string, href: string): string | null
   } catch {
     return null;
   }
+}
+
+/** JSON and HTML bodies are not assets. Only images and fonts are inlined. */
+function isSavableAsset(mime: string): boolean {
+  const type = mime.toLowerCase();
+  return (
+    type.startsWith("image/") ||
+    type.startsWith("font/") ||
+    type === "application/font-woff" ||
+    type === "application/font-woff2" ||
+    type === "application/x-font-woff"
+  );
 }
 
 function mimeOf(url: string): string {

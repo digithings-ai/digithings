@@ -705,8 +705,9 @@ control that keeps its name from its glyph),
 
 ## Chat HTML export
 
-`/export` downloads the thread as markdown. `/export html` downloads the open
-page as one file (`packages/ui/src/replay/`). The file is the rendered DOM:
+`/export` downloads the thread as markdown. `/export html` downloads the
+active thread as one file (`packages/ui/src/replay/`), not the memory
+sidebar or any other thread. The file is that thread's rendered DOM:
 styles and same-origin images are inlined, the composer is removed, and
 work-chain, reasoning, tool, and source disclosures become `<details>` so
 they still open offline. Closed panels stay mounted (`keepMounted`) so a

@@ -26,6 +26,23 @@ describe("inlineAssetUrls", () => {
     expect(out).not.toContain("/_next/static/media/geist.woff2");
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
+
+  it("drops a same-origin response that is not an image or a font", async () => {
+    const fetchImpl = vi.fn(async () => {
+      return new Response('{"password":"css-secret-99","token":"css-token-99"}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const out = await inlineAssetUrls('src: url("/api/settings")', {
+      origin: "https://desk.example",
+      href: "https://desk.example/chat",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(out).not.toContain("css-secret-99");
+    expect(out).not.toContain("css-token-99");
+    expect(out).not.toContain("data:");
+  });
 });
 
 describe("inlineDomAssets", () => {
@@ -50,6 +67,26 @@ describe("inlineDomAssets", () => {
     expect(doc.getElementById("remote")?.getAttribute("src")).toBeNull();
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
+
+  it("does not inline a same-origin json body", async () => {
+    const doc = document.implementation.createHTMLDocument("chat");
+    doc.body.innerHTML = '<img id="api" src="/api/conversations" alt="">';
+    const fetchImpl = vi.fn(async () => {
+      return new Response('{"password":"json-secret-99","token":"json-token-99"}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    await inlineDomAssets(doc, {
+      origin: "https://desk.example",
+      href: "https://desk.example/chat",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const src = doc.getElementById("api")?.getAttribute("src") ?? "";
+    expect(src).not.toContain("json-secret-99");
+    expect(src).not.toContain("json-token-99");
+    expect(src.startsWith("data:")).toBe(false);
+  });
 });
 
 describe("downloadThreadSnapshot (end to end)", () => {
@@ -66,7 +103,7 @@ describe("downloadThreadSnapshot (end to end)", () => {
     const { downloadThreadSnapshot } = await import("./browser");
     const doc = document.implementation.createHTMLDocument("chat");
     doc.body.innerHTML = [
-      '<div data-deployment="Northwind">',
+      '<div class="aui-thread-root" data-deployment="Northwind">',
       '<div class="aui-user-message-content">How do I set the Cookie header?</div>',
       '<div class="aui-md"><pre><code>Cookie: session=abc123456</code></pre><p>Then reload.</p></div>',
       '<pre data-slot="tool-fallback-json"><span>{</span>\n  <span>"password"</span>: <span>"hunter2"</span>\n<span>}</span></pre>',

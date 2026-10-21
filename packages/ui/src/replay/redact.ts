@@ -34,7 +34,7 @@ const TOKEN_SHAPES: readonly RegExp[] = [
 ];
 
 const QUERY_SECRET =
-  /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key)=)[^&#\s"']*/gi;
+  /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key|x-amz-signature|x-amz-credential|x-amz-security-token|awsaccesskeyid|x-goog-signature|x-goog-credential|sig)=)[^&#\s"']*/gi;
 
 /**
  * Header-style labels whose value is replaced but whose label stays, so the

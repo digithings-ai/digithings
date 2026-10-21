@@ -1,7 +1,7 @@
 /**
- * Turn a rendered chat page into one offline HTML file.
+ * Turn the active thread into one offline HTML file.
  *
- * The file is the live DOM: same classes, same open and closed disclosures.
+ * The file is that thread's DOM: same classes, same open and closed disclosures.
  * Disclosures become `<details>` so they still open offline. The composer
  * and anything that sends a message are removed. No script is added.
  */
@@ -21,6 +21,17 @@ details:not([open]) > summary .tc-caret.open { transform: none; }
 [data-snapshot-static] { cursor: default; pointer-events: none; }
 `.trim();
 
+/** Anything else (scripts, remote images, event handlers) stays blocked. */
+const SNAPSHOT_CSP = [
+  "default-src 'none'",
+  "style-src 'unsafe-inline'",
+  "img-src data:",
+  "font-src data:",
+  "media-src data:",
+  "form-action 'none'",
+  "base-uri 'none'",
+].join("; ");
+
 const REMOVE = [
   ".aui-composer-root",
   "[data-slot='aui_composer-shell']",
@@ -31,6 +42,8 @@ const REMOVE = [
   "[data-slot='aui_user-branch-picker']",
   "[data-slot='aui_assistant-branch-picker']",
   ".aui-thread-scroll-to-bottom",
+  "[data-memory-thread-list]",
+  ".dc-thread-list",
   "script",
   "noscript",
   "iframe",
@@ -79,6 +92,52 @@ export function deploymentText(root: ParentNode): string {
   return root.querySelector("[data-deployment]")?.getAttribute("data-deployment")?.trim() ?? "";
 }
 
+/**
+ * The open conversation. A memory sidebar lists every other thread's title;
+ * those titles are not part of this subtree. When several thread roots are
+ * mounted, the one marked `data-active="true"` wins, otherwise the last
+ * visible root.
+ */
+export function activeThreadRoot(root: ParentNode): HTMLElement | null {
+  const threads = [...root.querySelectorAll<HTMLElement>(".aui-thread-root")].filter(isOpenThread);
+  if (threads.length === 0) return null;
+  const marked = threads.filter((el) => el.getAttribute("data-active") === "true");
+  const pool = marked.length > 0 ? marked : threads;
+  return pool[pool.length - 1] ?? null;
+}
+
+/** A document that holds only the active thread, with the live page's theme. */
+export function snapshotSource(doc: Document): HTMLElement | null {
+  const thread = activeThreadRoot(doc);
+  if (!thread) return null;
+  const html = doc.createElement("html");
+  const live = doc.documentElement;
+  const lang = live.getAttribute("lang");
+  if (lang) html.setAttribute("lang", lang);
+  const theme = live.getAttribute("data-theme");
+  if (theme) html.setAttribute("data-theme", theme);
+  if (live.className) html.className = live.className;
+  const deployment = deploymentText(doc);
+  if (deployment) html.setAttribute("data-deployment", deployment);
+  const body = doc.createElement("body");
+  body.append(thread.cloneNode(true));
+  html.append(body);
+  return html;
+}
+
+function isOpenThread(el: HTMLElement): boolean {
+  if (el.closest("[data-memory-thread-list]")) return false;
+  for (let cursor: HTMLElement | null = el; cursor; cursor = cursor.parentElement) {
+    if (cursor.hidden || cursor.getAttribute("aria-hidden") === "true") return false;
+  }
+  return true;
+}
+
+/** `<` would close the style element. CSS `\3c ` is that character. */
+export function escapeStyleText(css: string): string {
+  return css.replaceAll("<", "\\3c ");
+}
+
 /** Mutates `root` into a read-only snapshot of itself. */
 export function transformSnapshotDom(root: HTMLElement): void {
   root.querySelectorAll(REMOVE).forEach((node) => node.remove());
@@ -104,10 +163,19 @@ export function serializeSnapshot(root: HTMLElement, css: string): string {
     meta.setAttribute("charset", "utf-8");
     head.prepend(meta);
   }
+  const csp = doc.createElement("meta");
+  csp.setAttribute("http-equiv", "Content-Security-Policy");
+  csp.setAttribute("content", SNAPSHOT_CSP);
+  // First, so it is in effect before the stylesheet is parsed.
+  head.prepend(csp);
   const style = doc.createElement("style");
   style.setAttribute("data-snapshot-css", "");
-  style.textContent = `${css}\n${SNAPSHOT_CSS}`;
+  style.textContent = escapeStyleText(`${css}\n${SNAPSHOT_CSS}`);
   head.append(style);
+  for (const el of root.querySelectorAll<HTMLElement>("[style]")) {
+    const inline = el.getAttribute("style");
+    if (inline?.includes("<")) el.setAttribute("style", escapeStyleText(inline));
+  }
   const html = root.tagName === "HTML" ? root.outerHTML : `<html>${root.outerHTML}</html>`;
   return `<!DOCTYPE html>\n${html}`;
 }
