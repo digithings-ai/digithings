@@ -31,6 +31,11 @@ export type {
   PageContextMode,
   UserAlign,
 } from "./skin-types";
+// The prefs twin of the view ids. Hosts keep their own id contract
+// (`apps/digichat/src/lib/view-modes.ts`) and this normaliser is the other
+// half of it, so a host can check that both name the same levels instead of
+// trusting that they do.
+export { normalizeViewPref, type ViewMode } from "./skin-types";
 export {
   SkinRuntime,
   SkinRuntimeProvider,

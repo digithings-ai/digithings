@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { VIEW_CODES, VIEW_LABELS } from "@digithings/digichat-ui";
+import { normalizeViewPref } from "@digithings/ui/chat/stock";
 
 import {
   DEFAULT_THINKING_MODE,
   DEFAULT_VIEW_MODE,
+  LEGACY_VIEW_MODE_ALIASES,
   THINKING_MODES,
   VIEW_MODES,
   effectiveReasoningMode,
@@ -29,6 +31,19 @@ describe("view-modes", () => {
     expect(VIEW_MODES).toEqual([...VIEW_CODES]);
     for (const mode of VIEW_MODES) {
       expect(VIEW_LABELS[mode].trim()).not.toBe("");
+    }
+  });
+
+  it("keeps the prefs twin on the same levels", () => {
+    // The third id twin: the prefs host in `@digithings/ui/chat/stock` types
+    // `api.prefs.view` and normalises what it is given. It must name the
+    // app's levels and fold the retired ids to the same targets, or a pref
+    // the app cannot read lands on the default.
+    for (const mode of VIEW_MODES) {
+      expect(normalizeViewPref(mode)).toBe(mode);
+    }
+    for (const [retired, current] of Object.entries(LEGACY_VIEW_MODE_ALIASES)) {
+      expect(normalizeViewPref(retired)).toBe(current);
     }
   });
 

@@ -1116,14 +1116,20 @@ the retired `hidden` → `quiet`, `compact` → `quiet` and `detailed` → `verb
 aliases folded forward on read, kept dependency-free so server config code can
 use it), the palette's own `VIEW_CODES` in the same shared package, and the
 prefs twin `ViewMode` / `normalizeViewPref` in `@digithings/ui/chat/stock`
-(`skin-types.ts`), which is what types `api.prefs.view`. The label map is keyed
+(`skin-types.ts`), which is what types `api.prefs.view`; both are exported from
+the package index, so a host can compare the twin with its own contract instead
+of trusting that they agree. The label map is keyed
 by the palette's id union and the menu indexes it with the app's union, so the
 two cannot diverge in TypeScript: a level added to the app without the package
 stops the app from compiling, and a level added to the package without the app
 is caught by `view-modes.test.ts`. Two copies of the vocabulary still live
 outside this module and do not read this map — the digichat-tui client palette
-and the digigraph session-prefs tool, both of which still teach the retired
-ids.
+and the digigraph session-prefs tool. The digichat half of the second one (the
+client applicator's refusal message) now names the live levels; the digigraph
+server half, which owns the tool schema and the handler, still teaches the
+retired ids, so the model-facing `session_set_view` tool can only be called with
+ids the client applicator rejects. That half is the digigraph module's own
+contract, and it is not fixed here.
 
 **Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup?, allowedTools?, mutatingTools? }` is
 forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?,allowedTools?,mutatingTools?}`). `setup` is the

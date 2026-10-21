@@ -266,6 +266,17 @@ describe("view-level wording", () => {
       VIEW_CODES.map((code) => ({ value: code, label: VIEW_LABELS[code] })),
     );
   });
+
+  it("prints the wording the product prints today", () => {
+    // The golden words. The map is the one home of the wording, so the words
+    // themselves are pinned here: a reworded level is a user-visible change
+    // and must be a deliberate edit, not a side effect of a rename.
+    expect(VIEW_LABELS).toEqual({
+      quiet: "Quiet \u00b7 titles only",
+      balanced: "Balanced \u00b7 open while it runs",
+      verbose: "Verbose \u00b7 everything open",
+    });
+  });
 });
 
 describe("/artifacts visibility", () => {

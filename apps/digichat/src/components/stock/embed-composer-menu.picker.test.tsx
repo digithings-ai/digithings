@@ -215,7 +215,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("labels every view level, so no level renders a blank description", async () => {
+  it("renders the shared wording for every view level, so no level is left blank", async () => {
     const onClose = vi.fn();
     const { unmount } = render(
       <EmbedChatPrefsProvider value={prefs()}>
@@ -223,13 +223,22 @@ describe("EmbedComposerMenu exclusive pickers", () => {
       </EmbedChatPrefsProvider>,
     );
 
-    // Every level carries a description in its own column on the right of the
-    // row. A level with no wording renders a blank column, which is what the
-    // quiet and verbose rows did while the menu kept its own retired label
-    // map (DIG-4665). The wording comes from the shared map, so this test
-    // walks the app's own ids: a rename cannot leave a row unlabelled. The
-    // wording must land in the description column and not in the label, so the
-    // assertion reads the row's child cells instead of its whole text.
+    // The page offers exactly the app's levels and nothing else: a retired id
+    // on this page is a level the product renamed away (#6034 renamed
+    // compact/detailed to quiet/verbose, #6079 retired hidden).
+    const offered = (await screen.findAllByRole("menuitemradio")).map(
+      (row) => /\/view\s+([a-z]+)/.exec(row.textContent ?? "")?.[1],
+    );
+    expect(offered).toEqual([...VIEW_MODES]);
+
+    // Every level carries the shared wording in its own column on the right
+    // of the row. A level with no wording renders a blank column, which is
+    // what the quiet and verbose rows did while the menu kept its own
+    // retired label map (DIG-4665). The wording comes from the shared map,
+    // so this test walks the app's own ids: a rename cannot leave a row
+    // unlabelled. The description must land in the description column and
+    // not in the label, so the assertion reads the row's child cells
+    // instead of its whole text.
     for (const level of VIEW_MODES) {
       const wording = VIEW_LABELS[level];
       expect(wording.trim()).not.toBe("");
@@ -240,10 +249,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
       const cells = Array.from(row.children) as HTMLElement[];
       const label = cells.find((cell) => cell.textContent?.trim() === `/view ${level}`);
       expect(label).toBeDefined();
-      const descriptionCell = cells.find(
-        (cell) => cell !== label && cell.textContent?.includes(wording),
-      );
-      expect(descriptionCell).toBeDefined();
+      const description = cells.find((cell) => cell.querySelector(".truncate"));
+      expect(description?.textContent).toContain(wording);
     }
     unmount();
   });
