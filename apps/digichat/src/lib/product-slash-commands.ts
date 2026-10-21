@@ -226,10 +226,12 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = prefs.effort || "medium";
     } else if (def.id === "search-engine") {
       description = prefs.searchEngine || "auto";
+    } else if (def.id === "export") {
+      description = "Markdown file of this thread";
     }
 
     const id = def.id === "lang" ? "language" : def.id;
-    const insertName = def.names[0];
+    const insertName = def.id === "export" ? "/export md" : def.names[0];
     rows.push({
       id,
       label: insertName,
@@ -238,14 +240,16 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
         executeSlashDef(def, "", api);
       },
     });
+    if (def.id === "export") {
+      rows.push({
+        id: "export-html",
+        label: "/export html",
+        description: "Rendered HTML of this chat",
+        execute: () => {},
+      });
+    }
   }
 
-  rows.push({
-    id: "export-html",
-    label: "/export html",
-    description: "Rendered HTML of this chat",
-    execute: () => {},
-  });
   rows.push(...featuredLanguageCommands(api.setLanguage));
   return rows;
 }

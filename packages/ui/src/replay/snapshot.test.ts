@@ -2,9 +2,9 @@
  * @vitest-environment happy-dom
  */
 import { describe, expect, it } from "vitest";
-import { inlineDomAssets } from "./browser";
+import { inlineDomAssets, liveSheetText } from "./browser";
 import { snapshotFilename } from "./filename";
-import { serializeSnapshot, snapshotSource, transformSnapshotDom } from "./snapshot";
+import { messageAnchor, serializeSnapshot, snapshotSource, transformSnapshotDom } from "./snapshot";
 
 const HEX48 = "cd".repeat(24);
 const SECRET = "dgk_live_TESTSECRET99";
@@ -262,6 +262,159 @@ describe("deployment hide rules", () => {
     expect(html).not.toContain("Panel source body");
     expect(html).not.toContain("hidden reasoning text");
     expect(html).not.toContain("picker-model-name");
+  });
+});
+
+describe("one interaction", () => {
+  it("keeps the question and that answer, and leaves the rest of the thread", () => {
+    document.body.innerHTML = [
+      '<div class="aui-thread-root" data-deployment="Northwind">',
+      '<div data-role="user"><div class="aui-user-message-content">First question</div></div>',
+      '<div data-role="assistant"><div class="aui-assistant-message-content">First answer</div></div>',
+      '<div data-role="user"><div class="aui-user-message-content">Second question</div></div>',
+      '<div data-role="assistant">',
+      '<div class="aui-assistant-message-content">Second answer</div>',
+      '<button id="export-html">Export as HTML</button>',
+      "</div>",
+      "</div>",
+    ].join("");
+    const anchor = document.getElementById("export-html");
+    expect(anchor).not.toBeNull();
+    const shell = snapshotSource(document, anchor);
+    expect(shell).not.toBeNull();
+    const html = serializeSnapshot(shell!, "");
+    expect(html).toContain("Second question");
+    expect(html).toContain("Second answer");
+    expect(html).not.toContain("First question");
+    expect(html).not.toContain("First answer");
+    expect(document.body.textContent).toContain("First question");
+  });
+
+  it("does not fall back to the thread when the anchor sits outside it", () => {
+    document.body.innerHTML = [
+      '<div class="aui-thread-root">',
+      '<div data-role="user"><div class="aui-user-message-content">Only question</div></div>',
+      '<div data-role="assistant"><div class="aui-assistant-message-content">Only answer</div></div>',
+      "</div>",
+      '<button id="ported">Export as HTML</button>',
+    ].join("");
+    const anchor = document.getElementById("ported");
+    expect(anchor).not.toBeNull();
+    expect(snapshotSource(document, anchor)).toBeNull();
+  });
+
+  it("scopes by message id while an open menu hides the thread from the page", () => {
+    document.body.innerHTML = [
+      '<div aria-hidden="true">',
+      '<div class="aui-thread-root">',
+      '<div data-role="user"><div class="aui-user-message-content">First question</div></div>',
+      '<div data-role="assistant" data-message-id="a1">',
+      '<div class="aui-assistant-message-content">First answer</div>',
+      "</div>",
+      '<div data-role="user"><div class="aui-user-message-content">Second question</div></div>',
+      '<div data-role="assistant" data-message-id="a2">',
+      '<div class="aui-assistant-message-content">Second answer</div>',
+      '<button id="more">More</button>',
+      "</div>",
+      "</div>",
+      "</div>",
+      '<div role="menu"><button>Export as HTML</button></div>',
+    ].join("");
+    expect(snapshotSource(document)).toBeNull();
+    const trigger = document.getElementById("more");
+    expect(trigger).not.toBeNull();
+    expect(messageAnchor(trigger, "a1")).toBeNull();
+    const anchor = messageAnchor(trigger, "a2");
+    expect(anchor).not.toBeNull();
+    const shell = snapshotSource(document, anchor);
+    expect(shell).not.toBeNull();
+    const html = serializeSnapshot(shell!, "");
+    expect(html).toContain("Second question");
+    expect(html).toContain("Second answer");
+    expect(html).not.toContain("First question");
+    expect(html).not.toContain("First answer");
+  });
+
+  it("resolves the trigger's message when an earlier copy has the same id", () => {
+    document.body.innerHTML = [
+      "<div hidden>",
+      '<div class="aui-thread-root">',
+      '<div data-role="user"><div class="aui-user-message-content">Embed question</div></div>',
+      '<div data-role="assistant" data-message-id="dup">',
+      '<div class="aui-assistant-message-content">embed-duplicate-token</div>',
+      "</div>",
+      "</div>",
+      "</div>",
+      '<div class="aui-thread-root">',
+      '<div data-role="user"><div class="aui-user-message-content">Real question</div></div>',
+      '<div data-role="assistant" data-message-id="dup">',
+      '<div class="aui-assistant-message-content">Real answer</div>',
+      '<button id="more">More</button>',
+      "</div>",
+      "</div>",
+    ].join("");
+    const trigger = document.getElementById("more");
+    expect(trigger).not.toBeNull();
+    const anchor = messageAnchor(trigger, "dup");
+    expect(anchor?.textContent).toContain("Real answer");
+    expect(anchor?.textContent).not.toContain("embed-duplicate-token");
+    const shell = snapshotSource(document, anchor);
+    expect(shell).not.toBeNull();
+    const html = serializeSnapshot(shell!, "");
+    expect(html).toContain("Real question");
+    expect(html).toContain("Real answer");
+    expect(html).not.toContain("embed-duplicate-token");
+    expect(html).not.toContain("Embed question");
+  });
+
+  it("drops the open menu's page lock and keeps the question", () => {
+    document.head.innerHTML =
+      "<style>body[data-scroll-locked]{overflow:hidden}.ok{color:CanvasText}</style>";
+    document.body.setAttribute("data-scroll-locked", "1");
+    document.body.setAttribute("style", "pointer-events: none; color: CanvasText");
+    document.body.innerHTML = [
+      '<div aria-hidden="true" data-aria-hidden="true" inert>',
+      '<div class="aui-thread-root">',
+      '<div data-role="user"><div class="aui-user-message-content">Locked question</div></div>',
+      '<div data-role="assistant" data-message-id="a2">',
+      '<span aria-hidden="true">decorative marker</span>',
+      '<div id="kept-inert" inert>kept inert note</div>',
+      '<div class="aui-assistant-message-content">Locked answer</div>',
+      '<button id="more">More</button>',
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+    const trigger = document.getElementById("more");
+    const anchor = messageAnchor(trigger, "a2");
+    expect(anchor).not.toBeNull();
+    const shell = snapshotSource(document, anchor);
+    expect(shell).not.toBeNull();
+    const css = liveSheetText(document);
+    expect(css).not.toContain("data-scroll-locked");
+    expect(css).toContain(".ok");
+    const html = serializeSnapshot(shell!, `${css}\nbody[data-scroll-locked]{overflow:hidden}`);
+    expect(html).toContain("Locked question");
+    expect(html).toContain("Locked answer");
+    expect(html).not.toContain("data-aria-hidden");
+    expect(html).not.toContain("data-scroll-locked");
+    expect(html).toContain(".ok");
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const thread = parsed.querySelector(".aui-thread-root");
+    expect(thread?.parentElement?.hasAttribute("aria-hidden")).toBe(false);
+    expect(thread?.parentElement?.hasAttribute("inert")).toBe(false);
+    expect(parsed.body.hasAttribute("inert")).toBe(false);
+    expect(parsed.documentElement.hasAttribute("inert")).toBe(false);
+    expect(parsed.querySelector("[aria-hidden='true']")?.textContent).toContain(
+      "decorative marker",
+    );
+    expect(parsed.getElementById("kept-inert")?.hasAttribute("inert")).toBe(true);
+    expect(parsed.body.getAttribute("style") ?? "").not.toMatch(/pointer-events/i);
+    expect(parsed.body.getAttribute("style") ?? "").toMatch(/color/i);
+    expect(document.body.hasAttribute("data-scroll-locked")).toBe(true);
+    expect(document.body.getAttribute("style") ?? "").toMatch(/pointer-events/i);
+    document.body.removeAttribute("data-scroll-locked");
+    document.body.removeAttribute("style");
   });
 });
 

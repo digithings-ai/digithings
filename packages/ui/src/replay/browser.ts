@@ -9,6 +9,8 @@ import { setExportKeepMounted } from "./export-mount";
 import { snapshotFilename } from "./filename";
 import {
   deploymentText,
+  messageAnchor,
+  omitScrollLockCss,
   questionText,
   serializeSnapshot,
   snapshotSource,
@@ -38,7 +40,10 @@ export function liveSheetText(
   const chunks: string[] = [];
   for (const sheet of Array.from(doc.styleSheets)) {
     try {
-      for (const rule of Array.from(sheet.cssRules)) chunks.push(rule.cssText);
+      for (const rule of Array.from(sheet.cssRules)) {
+        const text = omitScrollLockCss(rule.cssText);
+        if (text.trim()) chunks.push(text);
+      }
     } catch {
       /* A cross-origin sheet cannot be read. Those rules are dropped. */
     }
@@ -146,6 +151,7 @@ export async function inlineDomAssets(
 }
 
 export const MISSING_THREAD_MESSAGE = "No open thread to export.";
+export const MISSING_MESSAGE_MESSAGE = "Couldn't find that message to export.";
 
 /** A failure the open page can show. The same slot is updated, not stacked. */
 export function showSnapshotError(doc: Document, message: string): void {
@@ -161,27 +167,62 @@ export function showSnapshotError(doc: Document, message: string): void {
   banner.textContent = message;
 }
 
+async function saveSnapshot(doc: Document, shell: HTMLElement, exportedAt: string): Promise<void> {
+  const question = questionText(shell);
+  const css = await inlineAssetUrls(liveSheetText(doc));
+  transformSnapshotDom(shell);
+  await inlineDomAssets(shell);
+  const html = serializeSnapshot(shell, css);
+  const name = snapshotFilename(deploymentText(doc), exportedAt, question);
+  downloadTextFile(name, html, "text/html;charset=utf-8");
+}
+
 export async function downloadThreadSnapshot(
   doc: Document | null = typeof document === "undefined" ? null : document,
   exportedAt = new Date().toISOString(),
+  anchor?: HTMLElement | null,
 ): Promise<void> {
   if (!doc?.documentElement) throw new Error(MISSING_THREAD_MESSAGE);
   // Closed reasoning and tool panels unmount on the live page. Mount them
   // only for this read, then put the page back.
   setExportKeepMounted(true);
   try {
-    const shell = snapshotSource(doc);
+    const shell = snapshotSource(doc, anchor);
     if (!shell) {
-      showSnapshotError(doc, MISSING_THREAD_MESSAGE);
-      throw new Error(MISSING_THREAD_MESSAGE);
+      const message = anchor ? MISSING_MESSAGE_MESSAGE : MISSING_THREAD_MESSAGE;
+      showSnapshotError(doc, message);
+      throw new Error(message);
     }
-    const question = questionText(shell);
-    const css = await inlineAssetUrls(liveSheetText(doc));
-    transformSnapshotDom(shell);
-    await inlineDomAssets(shell);
-    const html = serializeSnapshot(shell, css);
-    const name = snapshotFilename(deploymentText(doc), exportedAt, question);
-    downloadTextFile(name, html, "text/html;charset=utf-8");
+    await saveSnapshot(doc, shell, exportedAt);
+  } finally {
+    setExportKeepMounted(false);
+  }
+}
+
+/**
+ * The message-menu export. `trigger` is the menu button inside that
+ * assistant message. A miss shows an error and does not save the thread.
+ */
+export async function downloadMessageSnapshot(
+  doc: Document | null = typeof document === "undefined" ? null : document,
+  exportedAt = new Date().toISOString(),
+  messageId = "",
+  trigger: HTMLElement | null = null,
+): Promise<void> {
+  if (!doc?.documentElement) throw new Error(MISSING_THREAD_MESSAGE);
+  setExportKeepMounted(true);
+  try {
+    const anchor = messageAnchor(trigger, messageId);
+    if (!anchor?.isConnected) {
+      showSnapshotError(doc, MISSING_MESSAGE_MESSAGE);
+      throw new Error(MISSING_MESSAGE_MESSAGE);
+    }
+    const shell = snapshotSource(doc, anchor);
+    if (!shell) {
+      showSnapshotError(doc, MISSING_MESSAGE_MESSAGE);
+      throw new Error(MISSING_MESSAGE_MESSAGE);
+    }
+    await saveSnapshot(doc, shell, exportedAt);
   } finally {
     setExportKeepMounted(false);
   }
