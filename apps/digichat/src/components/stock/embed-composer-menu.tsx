@@ -359,6 +359,14 @@ export function EmbedComposerMenu({
   const [mcpOAuthBusy, setMcpOAuthBusy] = useState(false);
   const [mcpSuggestIndex, setMcpSuggestIndex] = useState(-1);
   const [mcpIdDropdownOpen, setMcpIdDropdownOpen] = useState(false);
+  // The suggestion list overlays the menu, so it is portalled out of the menu
+  // body's scroll box. This box is the anchor the list follows.
+  const [mcpIdAnchor, setMcpIdAnchor] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  const mcpIdFieldRef = useRef<HTMLDivElement | null>(null);
   const keyInputRef = useRef<HTMLInputElement>(null);
   const customModelRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
@@ -1070,6 +1078,33 @@ export function EmbedComposerMenu({
     }
   }, [cursor, view]);
 
+  // The suggestion list is absolutely positioned against its own anchor, so
+  // it has to follow the id field: the field scrolls inside the menu body
+  // and the page scrolls under the menu.
+  const placeMcpIdDropdown = useCallback(() => {
+    const field = mcpIdFieldRef.current;
+    if (!field) return;
+    const rect = field.getBoundingClientRect();
+    setMcpIdAnchor((prev) => {
+      const top = Math.round(rect.bottom);
+      const left = Math.round(rect.left);
+      const width = Math.round(rect.width);
+      if (prev && prev.top === top && prev.left === left && prev.width === width) return prev;
+      return { top, left, width };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!mcpIdListOpen) return;
+    placeMcpIdDropdown();
+    window.addEventListener("scroll", placeMcpIdDropdown, true);
+    window.addEventListener("resize", placeMcpIdDropdown);
+    return () => {
+      window.removeEventListener("scroll", placeMcpIdDropdown, true);
+      window.removeEventListener("resize", placeMcpIdDropdown);
+    };
+  }, [mcpIdListOpen, placeMcpIdDropdown]);
+
   const onRowKey = (event: ReactKeyboardEvent, index: number) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -1079,6 +1114,77 @@ export function EmbedComposerMenu({
 
   const formView =
     view === "provider-key" || (view === "provider-model" && customModel) || view === "mcp-edit";
+
+  // The suggestion list lives in a zero-height anchor that follows the id
+  // field, so it overlays the menu instead of being clipped by the menu
+  // body's scroll box. The anchor is a direct child of the document body, so
+  // no ancestor of the menu can clip the list.
+  const mcpIdSuggestions =
+    mcpIdListOpen && mcpIdAnchor && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            data-mcp-id-anchor
+            className="fixed z-[60]"
+            style={{
+              top: mcpIdAnchor.top,
+              left: mcpIdAnchor.left,
+              width: mcpIdAnchor.width,
+              height: 0,
+            }}
+          >
+            <div
+              id="mcp-id-suggestions"
+              role="listbox"
+              aria-labelledby="mcp-id-label"
+              data-mcp-id-dropdown
+              className="border-border bg-background absolute inset-x-0 top-full z-20 mt-px max-h-40 overflow-y-auto overscroll-contain rounded-none border"
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {mcpSuggestionGroups.map((g) => (
+                <div key={g.group}>
+                  <div className="text-muted-foreground px-3 py-1 text-xs">{g.group}</div>
+                  {g.servers.map((row) => {
+                    const index = mcpSuggestions.findIndex((s) => s.id === row.id);
+                    const highlighted = index === mcpSuggestIndex;
+                    return (
+                      <button
+                        key={row.id}
+                        id={`mcp-suggest-${row.id}`}
+                        type="button"
+                        role="option"
+                        tabIndex={-1}
+                        aria-label={row.id}
+                        aria-selected={highlighted}
+                        data-cursor={highlighted ? "true" : undefined}
+                        className={`${MCP_SUGGEST_ROW_CLASS} ${
+                          highlighted ? "bg-muted/50" : ""
+                        }`}
+                        ref={(node) => {
+                          if (!highlighted || !node) return;
+                          const root = node.closest("[data-mcp-id-dropdown]");
+                          if (!(root instanceof HTMLElement)) return;
+                          const n = node.getBoundingClientRect();
+                          const r = root.getBoundingClientRect();
+                          if (n.bottom > r.bottom) root.scrollTop += n.bottom - r.bottom;
+                          else if (n.top < r.top) root.scrollTop -= r.top - n.top;
+                        }}
+                        onMouseEnter={() => setMcpSuggestIndex(index)}
+                        onClick={() => applyMcpSuggestion(row.id)}
+                      >
+                        <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.id}</span>
+                        <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
+                          {wellKnownMcpHost(row.url) || row.auth}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   const body = (
     <div
@@ -1153,7 +1259,7 @@ export function EmbedComposerMenu({
                 <span className="text-muted-foreground text-xs" id="mcp-id-label">
                   id
                 </span>
-                <div className="relative z-10" data-mcp-id-field>
+                <div className="relative z-10" data-mcp-id-field ref={mcpIdFieldRef}>
                   <Input
                     type="text"
                     value={mcpDraft.id}
@@ -1173,7 +1279,9 @@ export function EmbedComposerMenu({
                     }
                     className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none disabled:opacity-60 h-auto"
                     onFocus={() => {
-                      if (mcpDraft.source === "session") setMcpIdDropdownOpen(true);
+                      if (mcpDraft.source !== "session") return;
+                      placeMcpIdDropdown();
+                      setMcpIdDropdownOpen(true);
                     }}
                     onBlur={(e) => {
                       const root = e.currentTarget.closest("[data-mcp-id-field]");
@@ -1183,7 +1291,10 @@ export function EmbedComposerMenu({
                     }}
                     onChange={(e) => {
                       setMcpSuggestIndex(-1);
-                      if (mcpDraft.source === "session") setMcpIdDropdownOpen(true);
+                      if (mcpDraft.source === "session") {
+                        placeMcpIdDropdown();
+                        setMcpIdDropdownOpen(true);
+                      }
                       commitMcpDraft(applyWellKnownMcp(mcpDraft, e.target.value));
                     }}
                     onKeyDown={(e) => {
@@ -1193,6 +1304,7 @@ export function EmbedComposerMenu({
                         e.preventDefault();
                         e.stopPropagation();
                         if (!mcpIdDropdownOpen) {
+                          placeMcpIdDropdown();
                           setMcpIdDropdownOpen(true);
                           setMcpSuggestIndex(e.key === "ArrowDown" ? 0 : mcpSuggestions.length - 1);
                           return;
@@ -1215,57 +1327,7 @@ export function EmbedComposerMenu({
                       }
                     }}
                   />
-                  {mcpIdListOpen ? (
-                    <div
-                      id="mcp-id-suggestions"
-                      role="listbox"
-                      aria-labelledby="mcp-id-label"
-                      data-mcp-id-dropdown
-                      className="border-border bg-background absolute inset-x-0 top-full z-20 mt-px max-h-40 overflow-y-auto overscroll-contain rounded-none border"
-                      onMouseDown={(e) => e.preventDefault()}
-                    >
-                      {mcpSuggestionGroups.map((g) => (
-                        <div key={g.group}>
-                          <div className="text-muted-foreground px-3 py-1 text-xs">{g.group}</div>
-                          {g.servers.map((row) => {
-                            const index = mcpSuggestions.findIndex((s) => s.id === row.id);
-                            const highlighted = index === mcpSuggestIndex;
-                            return (
-                              <button
-                                key={row.id}
-                                id={`mcp-suggest-${row.id}`}
-                                type="button"
-                                role="option"
-                                tabIndex={-1}
-                                aria-label={row.id}
-                                aria-selected={highlighted}
-                                data-cursor={highlighted ? "true" : undefined}
-                                className={`${MCP_SUGGEST_ROW_CLASS} ${
-                                  highlighted ? "bg-muted/50" : ""
-                                }`}
-                                ref={(node) => {
-                                  if (!highlighted || !node) return;
-                                  const root = node.closest("[data-mcp-id-dropdown]");
-                                  if (!(root instanceof HTMLElement)) return;
-                                  const n = node.getBoundingClientRect();
-                                  const r = root.getBoundingClientRect();
-                                  if (n.bottom > r.bottom) root.scrollTop += n.bottom - r.bottom;
-                                  else if (n.top < r.top) root.scrollTop -= r.top - n.top;
-                                }}
-                                onMouseEnter={() => setMcpSuggestIndex(index)}
-                                onClick={() => applyMcpSuggestion(row.id)}
-                              >
-                                <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.id}</span>
-                                <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
-                                  {wellKnownMcpHost(row.url) || row.auth}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
+                  {mcpIdSuggestions}
                 </div>
               </div>
               <Label className="flex flex-col items-stretch gap-1">

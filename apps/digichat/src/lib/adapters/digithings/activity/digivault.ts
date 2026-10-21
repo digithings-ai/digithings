@@ -1,4 +1,5 @@
 import type { ActivitySpan } from "@/lib/chat-activity";
+import { documentIdentityKeys } from "@/lib/document-identity";
 import { mapRawSourceToDocument } from "./source-document";
 import { queryFromToolArgs, toolInputFromPayload } from "./tool-args";
 
@@ -60,8 +61,12 @@ function mapVaultRowsToDocuments(rows: unknown[]): ActivitySpan["documents"] {
         vault_path: h.vault_path ?? h.path ?? h.doc_id,
       },
     });
-    if (!doc || seen.has(doc.path)) continue;
-    seen.add(doc.path);
+    if (!doc) continue;
+    const keys = documentIdentityKeys(doc);
+    if (keys.length > 0) {
+      if (keys.some((key) => seen.has(key))) continue;
+      for (const key of keys) seen.add(key);
+    }
     documents.push(doc);
   }
   return documents.length ? documents : undefined;
