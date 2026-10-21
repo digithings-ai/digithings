@@ -686,11 +686,31 @@
 
 /* One disclosure caret for every trace row. Right when closed; a quarter
    turn down when THAT row is open. The rotate is on the cube svg
-   (`dot-matrix-grid`) only. The wrapper holds the pixel chevron, and a
-   transform there turns the screen-reader name with the glyph. The caret
+   (`dot-matrix-grid`) only, never the wrapper, the trigger, or the label.
+   The caret
    is a direct child of its trigger, so the open rule starts at that trigger:
    an open chain (`data-open` on the Base UI root) must not spin the closed
-   rows inside it. */
+   rows inside it.
+   The low-specificity base turns the caret in every skin (stock and
+   gallery threads outside the DigiChat scopes too); the scoped rules below
+   and in chat-digichat.css win wherever they apply. */
+:where([data-slot="disclosure-chevron"]) [data-slot="dot-matrix-grid"] {
+  transform-origin: 50% 50%;
+  transition: transform 150ms ease;
+}
+
+:where([aria-expanded="true"]) > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+:where([data-panel-open]) > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+:where([data-state="open"]) > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where([data-slot="disclosure-chevron"]) [data-slot="dot-matrix-grid"] {
+    transition: none;
+  }
+}
+
 .digichat-thread [data-slot="disclosure-chevron"],
 .digichat-launcher [data-slot="disclosure-chevron"] {
   display: inline-flex;

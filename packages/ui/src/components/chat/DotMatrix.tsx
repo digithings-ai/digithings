@@ -586,7 +586,7 @@ function DotMatrix({
         ? { "aria-hidden": true }
         : { role: "img", "aria-label": name })}
       className={cx("inline-block size-4 shrink-0", className)}
-      style={{ ...style, position: "relative" }}
+      style={{ position: "relative", ...style }}
     >
       <svg
         data-slot="dot-matrix-grid"
