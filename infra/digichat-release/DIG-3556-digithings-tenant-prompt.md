@@ -1,11 +1,13 @@
 # DIG-3556 — digithings tenant prompt (STAGED, not applied)
 
 Status: STAGED for Chris's approval. NOT applied to production.
-No KV binding named `DIGICHAT_TENANTS_KV` / `embed-tenants` exists in this tree
-(verified: `apps/digichat-cloudflare` uses the `DIGICHAT_EMBED_TENANTS` Worker
-secret; digigraph uses the `DIGI_TENANT_CORPUS_MAP` env). The staged values below
-are applied via those two secrets, not via KV. Ticket brief saying "KV" is
-recorded as superseded by this measurement.
+The digichat Worker binds a Workers KV namespace as `DIGICHAT_TENANTS_KV`
+(`apps/digichat-cloudflare/wrangler.toml`) and keeps the tenant registry copy
+under the KV key `embed-tenants`, next to the `DIGICHAT_EMBED_TENANTS` Worker
+secret; digigraph uses the `DIGI_TENANT_CORPUS_MAP` env. The staged values
+below are applied by the compose, which writes the KV key, then the Worker
+secret, then recycles the container. Ticket brief saying "KV" is recorded as
+superseded by this measurement.
 
 ## Prompt (mirrored into `researchSystemPrompt` for slug `digithings`)
 

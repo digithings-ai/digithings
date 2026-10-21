@@ -281,9 +281,16 @@ rotation runbook.
 
 ### The OCC-only overlay
 
-`DIG-4488-occ-tenant-overlay.json` carries the OCC tenant alone. It names no
-`models` section, so the OCC embed shows no model choice and the house default
-model answers every OCC turn. It does not touch the `digithings.ai` tenant.
+`DIG-4488-occ-tenant-overlay.json` carries the OCC tenant alone. The composer
+removes the `models` section from the OCC entry in both copies, so the OCC embed
+shows no model choice and the house default model answers every OCC turn. The
+overlay does not touch the `digithings.ai` tenant.
+
+The overlay pins four OCC fields: `slug`, `gateMode`, `webSearch` and the
+`backend` type. The live OCC entry held these four values on 21 Oct 2026, so
+the composed registry then differs from the live one in the `models` section
+alone. If a live entry differs in one of the four, the compose plan reports
+that path as changed before anything is written.
 
 The staged overlay `DIG-3556-staged-prod-tenant-config.json` carries both
 tenants. It also sends the `digithings.ai` tenant to the `digithings_docs`
@@ -305,7 +312,8 @@ python3 scripts/digichat_tenant_registry.py apply \
   --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
   --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json
 
-# scope B: the OCC tenant and the staged digithings.ai corpus switch
+# scope B: the OCC tenant and the staged digithings.ai corpus switch.
+# Run it only after the DIG-3556 prompt merge and the corpus backfill.
 python3 scripts/digichat_tenant_registry.py apply \
   --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
   --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
