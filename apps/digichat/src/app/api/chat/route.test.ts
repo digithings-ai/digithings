@@ -480,6 +480,58 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     }
   });
 
+  it("shows the Auto fallback notice on the non-trace path when no default is set", async () => {
+    const budget = { usd: 0.0125565, windowSeconds: 86400 };
+    const cfg = catalogDeployment(budget);
+    if (cfg.deployment?.models) delete cfg.deployment.models.default;
+    setDigichatConfigForTests(cfg);
+    const rate = catalogModelRate("z-ai/glm-5.3");
+    expect(rate).toBeTruthy();
+    const key = premiumUserKey(
+      mockAuthCtx.tenantSlug,
+      premiumSpendIdentity({ userId: mockAuthCtx.ownerUserSub, ip: "127.0.0.1" }),
+    );
+    const now = Date.now();
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    try {
+      process.env.DIGICHAT_TRACE_UI = "0";
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "0",
+            "x-digi-model": "z-ai/glm-5.3",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("X-Digi-Premium-Fallback")).toBe("auto");
+      const sent = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(sent?.headers?.["X-Digi-House-Model"]).toBe("deepseek/deepseek-v4.1-flash-1017");
+      const streamArg = vi.mocked(createUIMessageStreamResponse).mock.calls.at(-1)?.[0] as {
+        stream: ReadableStream<unknown>;
+      };
+      const reader = streamArg.stream.getReader();
+      const chunks: unknown[] = [];
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) break;
+        chunks.push(next.value);
+      }
+      expect(JSON.stringify(chunks)).toMatch(/premium budget/);
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("keeps a premium pick while the budget still has room", async () => {
     setDigichatConfigForTests(
       catalogDeployment({ usd: 0.0125565, windowSeconds: 86400 }),

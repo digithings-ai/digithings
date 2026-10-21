@@ -776,16 +776,16 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # CI catalog and fail closed when CI is the selected house upstream (#3660).
 # DeepSeek flash: every house flash slug routes to the V4.1 Flash 1017
 # checkpoint (2026-10-21). The older slugs stay as aliases so pins outside
-# the repo keep working. Distinct checkpoints are new ``*-release`` slugs,
-# not a remap of the aliases.
+# the repo keep working. The ``*-release`` names do the same: Chris decided
+# 1017 replaces the older flash checkpoints everywhere.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4.1-flash-release": "deepseek-v4.1-flash",
-    "deepseek/deepseek-v4-flash-release": "deepseek-v4-flash",
-    "deepseek/deepseek-v4-flash-0731-release": "deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4.1-flash-release": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-release": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-0731-release": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731-fast": "deepseek-v4-flash-0731-fast",
     "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro-0813",

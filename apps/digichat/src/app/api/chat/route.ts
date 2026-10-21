@@ -3,6 +3,7 @@ import {
   streamText,
   smoothStream,
   toUIMessageStream,
+  createUIMessageStream,
   createUIMessageStreamResponse,
   type UIMessage,
 } from "ai";
@@ -469,14 +470,14 @@ async function handleChat(
     if (!quotaSatisfied) {
       try {
         const ip = clientIpForRateLimit(req);
-        // "unknown" is what clientIpForRateLimit returns when the ingress fails
-        // to set cf-connecting-ip/x-forwarded-for — it is not an identity (see
-        // that module's own doc comment). Treating it as one would collapse
-        // every visitor behind a broken/missing IP header into a single shared
-        // quota bucket, permanently gating everyone after the first 3 turns
-        // total. Skip the quota entirely in that case and fail open, consistent
-        // with this module's "best-effort, not an authorization boundary"
-        // philosophy (embed-turn-quota.ts).
+        // "unknown" is what clientIpForRateLimit returns when no socket
+        // address was captured. Forwarded headers are not an identity (see
+        // that module). Treating "unknown" as one would collapse every
+        // visitor with no captured socket into a single shared quota bucket,
+        // permanently gating everyone after the first 3 turns total. Skip the
+        // quota entirely in that case and fail open, consistent with this
+        // module's "best-effort, not an authorization boundary" philosophy
+        // (embed-turn-quota.ts).
         if (ip !== "unknown") {
           if (quotaServiceUnavailable) {
             // Degraded path: the tenant's quota service could not answer, so the
@@ -960,13 +961,30 @@ async function handleChat(
     experimental_transform: smoothStream({ chunking: "word" }),
   });
 
+  const modelStream = toUIMessageStream({
+    stream: result.stream,
+    sendSources: true,
+    sendReasoning: true,
+  });
+  const stream = premiumNotice
+    ? createUIMessageStream({
+        execute({ writer }) {
+          const textId = "premium-fallback";
+          writer.write({ type: "text-start", id: textId });
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta: `${premiumNotice}\n\n`,
+          });
+          writer.write({ type: "text-end", id: textId });
+          writer.merge(modelStream);
+        },
+      })
+    : modelStream;
+
   return finish(
     createUIMessageStreamResponse({
-      stream: toUIMessageStream({
-        stream: result.stream,
-        sendSources: true,
-        sendReasoning: true,
-      }),
+      stream,
       headers: responseHeaders,
     }),
   );

@@ -1,13 +1,16 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import catalogJson from "../../../config/model-picker-catalog.json";
+import { clientIpForRateLimit } from "@/lib/embed-ip-rate-limit";
 import {
   PREMIUM_BUDGET_MESSAGE,
   PREMIUM_BUDGET_TURNS,
   TYPICAL_PREMIUM_INPUT_TOKENS,
   TYPICAL_PREMIUM_OUTPUT_TOKENS,
   applyPremiumBudget,
+  chargePremiumUsage,
   premiumSpendIdentity,
   premiumTurnUsd,
+  premiumUserKey,
   resetPremiumSpendForTests,
 } from "./budget";
 
@@ -69,6 +72,70 @@ describe("premium spend budget", () => {
     const later = applyPremiumBudget({ ...base, nowMs: Date.now() + 86_400_000 + 1_000 });
     expect(later.notice).toBeUndefined();
     expect(later.modelId).toBe("z-ai/glm-5.3");
+  });
+
+  it("drops to Auto when the budget is spent and no default is configured", () => {
+    const rate = { inputPerM: glm!.inputPerM, outputPerM: glm!.outputPerM };
+    const now = Date.now();
+    chargePremiumUsage("digithings:anon", rate, undefined, now);
+    chargePremiumUsage("digithings:anon", rate, undefined, now);
+    chargePremiumUsage("digithings:anon", rate, undefined, now);
+    const blocked = applyPremiumBudget({
+      modelId: "z-ai/glm-5.3",
+      defaultModel: undefined,
+      premium: true,
+      rate,
+      budget: { usd: 0.0125565, windowSeconds: 86_400 },
+      userKey: "digithings:anon",
+      nowMs: Date.now(),
+    });
+    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
+    expect(blocked.modelId).not.toBe("z-ai/glm-5.3");
+    expect(blocked.notice).toBe(PREMIUM_BUDGET_MESSAGE);
+  });
+
+  it("keeps rotating X-Forwarded-For values on one budget key", () => {
+    delete process.env.DIGICHAT_TRUSTED_PROXIES;
+    const keyFor = (xff: string, peer?: string) => {
+      const headers: Record<string, string> = {
+        "x-forwarded-for": xff,
+        "cf-connecting-ip": xff.split(",")[0]?.trim() ?? "",
+      };
+      if (peer) headers["x-digichat-peer-ip"] = peer;
+      const ip = clientIpForRateLimit(new Request("http://localhost/api/chat", { headers }));
+      return premiumUserKey("public", premiumSpendIdentity({ userId: "embed:anonymous", ip }));
+    };
+    const forwarded = ["198.51.100.1", "198.51.100.2, 10.0.0.1", "203.0.113.50"];
+    const unsigned = forwarded.map((xff) => keyFor(xff));
+    expect(new Set(unsigned).size).toBe(1);
+    expect(unsigned[0]).toBe("public:anonymous");
+
+    const peered = forwarded.map((xff) => keyFor(xff, "203.0.113.7"));
+    expect(new Set(peered).size).toBe(1);
+    expect(peered[0]).toBe("public:203.0.113.7");
+
+    const rate = { inputPerM: glm!.inputPerM, outputPerM: glm!.outputPerM };
+    const now = Date.now();
+    for (const key of peered) chargePremiumUsage(key, rate, undefined, now);
+    const shared = applyPremiumBudget({
+      modelId: "z-ai/glm-5.3",
+      premium: true,
+      rate,
+      budget: { usd: 0.0125565, windowSeconds: 86_400 },
+      userKey: peered[0]!,
+      nowMs: Date.now(),
+    });
+    expect(shared.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
+    const spoofed = applyPremiumBudget({
+      modelId: "z-ai/glm-5.3",
+      premium: true,
+      rate,
+      budget: { usd: 0.0125565, windowSeconds: 86_400 },
+      userKey: "public:198.51.100.1",
+      nowMs: Date.now(),
+    });
+    expect(spoofed.notice).toBeUndefined();
+    expect(spoofed.modelId).toBe("z-ai/glm-5.3");
   });
 
   it("does not meter a preset or a deployment with no budget", () => {

@@ -18,7 +18,8 @@
 model_list:
   # DeepSeek V4.1 Flash 1017 checkpoint — the house default (Chris, 2026-10-21).
   # Older flash slugs stay aliases of 1017 so pins outside the repo keep
-  # working. Distinct checkpoints are the ``*-release`` model names below.
+  # working. The ``*-release`` names do the same: 1017 replaces those
+  # checkpoints everywhere.
   - model_name: deepseek/deepseek-v4.1-flash-1017
     litellm_params: &ci_ds_v41_flash_1017
       model: openai/deepseek-v4.1-flash-1017
@@ -44,7 +45,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4.1-flash-release
     litellm_params: &ci_ds_v41_flash_release
-      model: openai/deepseek-v4.1-flash
+      model: openai/deepseek-v4.1-flash-1017
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:
@@ -122,7 +123,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4-flash-release
     litellm_params: &ci_ds_v4_flash_release
-      model: openai/deepseek-v4-flash
+      model: openai/deepseek-v4.1-flash-1017
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:
@@ -200,7 +201,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4-flash-0731-release
     litellm_params: &ci_ds_v4_flash_0731_release
-      model: openai/deepseek-v4-flash-0731
+      model: openai/deepseek-v4.1-flash-1017
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:

@@ -207,6 +207,11 @@ function autoModelId(): string {
   return model;
 }
 
+/** Auto preset model. The over-budget fallback uses this when a deployment has no default. */
+export function autoPresetModelId(): string {
+  return autoModelId();
+}
+
 function fill(template: string, label: string): string {
   return template.split("{label}").join(label);
 }

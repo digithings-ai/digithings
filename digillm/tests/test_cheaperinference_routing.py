@@ -185,7 +185,7 @@ def test_api_base_host_is_not_a_substring(
     assert client_mod._api_base_is_cheaperinference() is cheaper
 
 
-def test_legacy_flash_slugs_alias_to_1017_and_release_slugs_stay_distinct() -> None:
+def test_flash_slugs_including_release_alias_to_1017() -> None:
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4.1-flash")
         == "deepseek-v4.1-flash-1017"
@@ -200,17 +200,17 @@ def test_legacy_flash_slugs_alias_to_1017_and_release_slugs_stay_distinct() -> N
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4.1-flash-release")
-        == "deepseek-v4.1-flash"
+        == "deepseek-v4.1-flash-1017"
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-flash-release")
-        == "deepseek-v4-flash"
+        == "deepseek-v4.1-flash-1017"
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug(
             "deepseek/deepseek-v4-flash-0731-release"
         )
-        == "deepseek-v4-flash-0731"
+        == "deepseek-v4.1-flash-1017"
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4.1-flash-1017")

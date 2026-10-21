@@ -8,6 +8,8 @@
  * store. This module does not call a provider.
  */
 
+import { autoPresetModelId } from "@/lib/model-picker-catalog";
+
 export const TYPICAL_PREMIUM_INPUT_TOKENS = 3550;
 export const TYPICAL_PREMIUM_OUTPUT_TOKENS = 600;
 export const PREMIUM_BUDGET_TURNS = 3;
@@ -138,8 +140,9 @@ export function applyPremiumBudget(input: {
   const windowMs = (input.budget.windowSeconds ?? DEFAULT_PREMIUM_WINDOW_SECONDS) * 1000;
   const spent = store.spent(input.userKey, nowMs, windowMs);
   if (spent >= input.budget.usd) {
+    const fallback = input.defaultModel?.trim() || autoPresetModelId();
     return {
-      modelId: input.defaultModel?.trim() || input.modelId,
+      modelId: fallback,
       notice: PREMIUM_BUDGET_MESSAGE,
     };
   }
