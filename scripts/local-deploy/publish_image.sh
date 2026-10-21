@@ -107,7 +107,7 @@ else
   # hands the container an environment proves a configuration the release
   # never runs. A bare container has no digigraph/digisearch/digiquant/
   # digitrace to reach, so /api/health answers 503; the version check below
-  # reads that status instead of demanding a 200.
+  # reads the response body instead of demanding a 200.
   probe_container="$(docker run --detach --rm --publish 127.0.0.1::3000 "$NAME")"
   probe_cleanup() { docker rm --force "$probe_container" >/dev/null 2>&1 || true; }
 fi
@@ -128,11 +128,14 @@ if [ "$IMAGE" = "digichat" ]; then
   [ "$code" = "200" ] || { echo "ERROR: /healthz never 200 (last '$code')." >&2; docker logs "$probe_container" 2>&1 || true; exit 1; }
   [ "$(curl --silent --show-error --fail "$base/healthz" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).ok")" = "true" ] \
     || { echo "ERROR: /healthz did not report ok=true." >&2; exit 1; }
-  # The status code is READ, not demanded: a bare container has no ecosystem
+  # The status code is NOT demanded: a bare container has no ecosystem
   # services to reach, so /api/health answers 503, and that is the truth about
-  # a degraded environment rather than a broken image. The version has to be
+  # a degraded environment rather than a broken image. This lane reads the
+  # RESPONSE BODY of /api/health, not the status code: the version has to be
   # right either way, and a failing check is tolerated only when it is one of
-  # the four ecosystem services and the database is skipped.
+  # the four ecosystem services and the database is skipped. The CI lane reads
+  # the status code as well (api_status) and warns when it is not 200; the
+  # checks below are the same contract in both lanes.
   api_body="$(curl --silent --show-error --max-time 30 "$base/api/health" || true)"
   reported="$(printf '%s' "$api_body" | node -e "const b=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(b.version === undefined ? '' : b.version));" 2>/dev/null || true)"
   [ "$reported" = "$VERSION" ] || { echo "ERROR: serves version '$reported', built '$VERSION'." >&2; exit 1; }
