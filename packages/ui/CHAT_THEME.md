@@ -13,11 +13,11 @@ pages in the same session.
 
 ## Colour palette
 
-`/theme` on the digichat product app sets mode (`dark` / `light` / `auto`)
-and a palette from the shared DigiVoice registry. Catalog skins are not
-restyled. A tenant-pinned embed hides `/theme`; the pin script clears
-`data-palette` so a stored palette cannot recolour that document. The
-palette sheet is `packages/design/palettes.css`.
+`/theme` on the digichat product app is one entry in the existing slash
+list. Its options are the shared cycle (default dark, default light, then
+each palette). Catalog skins are not restyled. A tenant-pinned embed hides
+`/theme`; the pin script clears `data-palette` so a stored palette cannot
+recolour that document. The palette sheet is `packages/design/palettes.css`.
 
 ## How it is themed
 

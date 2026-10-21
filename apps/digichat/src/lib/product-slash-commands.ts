@@ -31,6 +31,7 @@ import {
   applyDocumentTheme,
   isPaletteId,
   isThemePreference,
+  matchThemeStep,
   readThemeState,
 } from "@digithings/ui/theme";
 import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
@@ -155,7 +156,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = `View: ${prefs.view}`;
     } else if (def.id === "theme") {
       const state = readThemeState();
-      description = `Theme: ${state.preference} · ${state.palette}`;
+      description = matchThemeStep(state.preference, state.palette, state.resolved).label;
     } else if (def.id === "thinking") {
       description = `Thinking: ${prefs.thinking}`;
     } else if (def.id === "lang") {

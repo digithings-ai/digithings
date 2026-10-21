@@ -9,7 +9,6 @@ export {
   type ResolvedTheme,
   type ThemePreference,
 } from "./components/ThemeProvider";
-export { ThemePicker } from "./components/ThemePicker";
 export { themeInitScript } from "./components/themeInit";
 export { MotionProvider, Reveal, Stagger, HeroEntrance, useMotionSafe, m, EASE } from "./motion/primitives";
 export {

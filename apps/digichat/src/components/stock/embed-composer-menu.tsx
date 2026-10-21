@@ -70,9 +70,9 @@ import { listenMcpOAuthResult, startMcpOAuth } from "@/components/stock/embed-mc
 import { THINKING_MODES, VIEW_MODES } from "@/lib/view-modes";
 import {
   applyDocumentTheme,
-  PALETTE_IDS,
+  matchThemeStep,
   readThemeState,
-  type ThemePreference,
+  themeCycle,
 } from "@digithings/ui/theme";
 
 export type ComposerMenuKind =
@@ -97,7 +97,6 @@ type MenuView =
   | "search-engine"
   | "view"
   | "theme"
-  | "theme-palette"
   | "thinking"
   | "tools"
   | "mcp"
@@ -144,7 +143,6 @@ const MENU_PARENT: Record<MenuView, MenuView | null> = {
   "search-engine": "main",
   view: "main",
   theme: "main",
-  "theme-palette": "theme",
   thinking: "main",
   tools: "main",
   mcp: "main",
@@ -439,6 +437,7 @@ export function EmbedComposerMenu({
       tools: "tools",
       language: "language",
       view: "view",
+      theme: "theme",
       thinking: "thinking",
       effort: "effort",
       "search-engine": "search-engine",
@@ -587,56 +586,21 @@ export function EmbedComposerMenu({
     [api, onClose],
   );
 
-  const [themeRev, setThemeRev] = useState(0);
-  const themeState = useMemo(() => {
-    // themeRev is the cache key: applyDocumentTheme writes storage, not React state.
-    void themeRev;
-    return readThemeState();
-  }, [themeRev]);
-
   const themeRows = useMemo((): MenuRow[] => {
-    const modes: readonly { id: ThemePreference; label: string }[] = [
-      { id: "dark", label: "Dark" },
-      { id: "light", label: "Light" },
-      { id: "auto", label: "Auto · follow the system" },
-    ];
-    return [
-      ...modes.map((mode) => ({
-        id: mode.id,
-        label: slashName(`theme ${mode.id}`),
-        value: mode.label,
-        checked: themeState.preference === mode.id,
-        exclusive: true,
-        activate: () => {
-          applyDocumentTheme(mode.id, themeState.palette);
-          setThemeRev((n) => n + 1);
-          onClose();
-        },
-      })),
-      {
-        id: "palette",
-        label: "/theme",
-        value: themeState.palette,
-        activate: () => setView("theme-palette"),
-      },
-    ];
-  }, [onClose, themeState]);
-
-  const themePaletteRows = useMemo((): MenuRow[] => {
-    const ids = ["default", ...PALETTE_IDS];
-    return ids.map((id) => ({
-      id,
-      label: slashName(id === "default" ? "theme default" : `theme ${id}`),
-      value: "",
-      checked: themeState.palette === id,
+    const state = readThemeState();
+    const current = matchThemeStep(state.preference, state.palette, state.resolved);
+    return themeCycle().map((step) => ({
+      id: step.id,
+      label: slashName(`theme ${step.palette} ${step.mode}`),
+      value: step.label,
+      checked: current.id === step.id,
       exclusive: true,
       activate: () => {
-        applyDocumentTheme(themeState.preference, id);
-        setThemeRev((n) => n + 1);
+        applyDocumentTheme(step.mode, step.palette);
         onClose();
       },
     }));
-  }, [onClose, themeState]);
+  }, [onClose]);
 
   const thinkingRows = useMemo(
     (): MenuRow[] =>
@@ -938,9 +902,7 @@ export function EmbedComposerMenu({
               ? thinkingRows
               : view === "theme"
                 ? themeRows
-                : view === "theme-palette"
-                  ? themePaletteRows
-                  : view === "tools"
+                : view === "tools"
                     ? toolsRows
                     : view === "mcp"
                       ? mcpRows
@@ -966,7 +928,7 @@ export function EmbedComposerMenu({
           ? "/effort"
           : view === "view"
             ? "/view"
-            : view === "theme" || view === "theme-palette"
+            : view === "theme"
               ? "/theme"
               : view === "thinking"
                 ? "/thinking"

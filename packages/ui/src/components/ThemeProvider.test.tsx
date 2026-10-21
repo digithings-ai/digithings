@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ThemePicker } from "./ThemePicker";
 import { ThemeProvider, useTheme } from "./ThemeProvider";
 
 type MediaStub = {
@@ -73,7 +72,7 @@ describe("ThemeProvider", () => {
     localStorage.clear();
   });
 
-  it("toggle writes an explicit dt-theme", () => {
+  it("toggle walks default dark, default light, then the first palette", () => {
     render(
       <ThemeProvider>
         <Probe />
@@ -82,6 +81,12 @@ describe("ThemeProvider", () => {
     fireEvent.click(screen.getByRole("button", { name: "toggle" }));
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
     expect(localStorage.getItem("dt-theme")).toBe("light");
+    expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "toggle" }));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(localStorage.getItem("dt-theme")).toBe("dark");
+    expect(localStorage.getItem("dt-palette")).toBe("aura");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
   });
 
   it("auto clears dt-theme and follows the OS, keeping the palette", () => {
@@ -134,27 +139,5 @@ describe("ThemeProvider", () => {
     fireEvent.click(screen.getByRole("button", { name: "nope" }));
     expect(screen.getByTestId("pal").textContent).toBe("default");
     expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
-  });
-});
-
-describe("ThemePicker", () => {
-  beforeEach(() => {
-    localStorage.clear();
-    installMedia(false);
-  });
-
-  afterEach(cleanup);
-
-  it("opens on the current mode and palette", () => {
-    localStorage.setItem("dt-theme", "dark");
-    localStorage.setItem("dt-palette", "github");
-    render(
-      <ThemeProvider>
-        <ThemePicker />
-      </ThemeProvider>,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Colour theme" }));
-    expect(screen.getByRole("button", { name: "Dark" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText("github")).toBeTruthy();
   });
 });
