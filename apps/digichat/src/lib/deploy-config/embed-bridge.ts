@@ -49,6 +49,8 @@ export function clientConfigFromEmbedTenant(
       accent: embed.accent,
       attribution: embed.attribution,
       defaultLanguage: embed.defaultLanguage ?? base.chrome.defaultLanguage,
+      toolbar: embed.toolbar ?? base.chrome.toolbar,
+      scrollbars: embed.scrollbars ?? base.chrome.scrollbars,
     },
     persistence: "none",
     auth: "anonymous",
@@ -58,6 +60,8 @@ export function clientConfigFromEmbedTenant(
       pageContext: embed.pageContext ?? base.features.pageContext,
       view: embed.view ?? base.features.view,
       thinking: embed.thinking ?? base.features.thinking,
+      density: embed.density ?? base.features.density,
+      effort: embed.effort ?? base.features.effort,
       // Feature parity (#4532): omitted keys keep the app defaults.
       dictation: embed.dictation ?? base.features.dictation,
       speech: embed.speech ?? base.features.speech,
@@ -78,9 +82,16 @@ export function clientConfigFromEmbedTenant(
           allowPicker:
             embed.models?.allowPicker === true ||
             (embed.models?.allowPicker !== false && base.features.modelPicker),
+          // A Foundry tenant is blanked above. A catalog picker travels only
+          // with the tenant that resolved it, not from the house fallback,
+          // so a hand-listed tenant does not inherit another tenant's groups.
+          ...(embed.models?.picker ? { picker: embed.models.picker } : {}),
         },
     tools: {
-      allowUserToggle: base.tools.allowUserToggle,
+      // An embed cannot turn toggling on over a base that locked it. Omitted
+      // embed means "don't tighten", which is why the second term defaults true.
+      allowUserToggle:
+        base.tools.allowUserToggle && (embed.tools?.allowUserToggle ?? true),
       catalog,
     },
     mcp: {
@@ -101,6 +112,10 @@ export function clientConfigFromEmbedTenant(
       showByok: embed.showByok,
       showLanguageSelector: embed.showLanguageSelector,
       webSearch,
+      ...(embed.searchEngine ? { searchEngine: embed.searchEngine } : {}),
+      ...(embed.lockSessionControls === true || base.gate.lockSessionControls === true
+        ? { lockSessionControls: true }
+        : {}),
     },
     backendType: embed.backendType ?? base.backendType,
   };

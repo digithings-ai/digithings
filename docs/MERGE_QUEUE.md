@@ -81,6 +81,7 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3), and a PR whose `baseRefName` is anything else is refused too. |
 | Required check | The names in `required_checks_by_repo` for this repo must each have **reported** and concluded `SUCCESS`. Both repos currently require `local-ci`: `digithings` because its branch protection names it, and `twelve-x` since 2026-10-19 because its Actions job `test` cannot start while billing is blocked (DIG-4454). `local-ci` arrives as a commit StatusContext, never as a workflow run, so the names in `status_context_checks` are exempt from the workflow-run evidence rule (DIG-3707) — see the cost stated below. |
 | CI provenance | The newest `local-ci` status on the head must name a Woodpecker build, and the queue must read that build back from the Woodpecker API: the same repo, the same commit sha, and the repo's own check step concluded `success`. A `local-ci` status without that URL, or whose build does not verify, is not a pass. Ships in **shadow** mode — see the section below. |
+| CI receipt | The newest `local-ci/app` status on the head **written by a trusted writer** must be the CI's own GitHub App installation's, its state must be `success`, and it must name the same kind of verified Woodpecker build. A `local-ci` status can be written by anybody with a token; a receipt cannot. A row written by somebody else is left out of the choice: it neither cancels the app's own newest row nor is cancelled by it. The chain **ships switched off**: the worker posts no receipt yet, because it holds no app token, so the shipped policy does not ask for one. It is switched on by the policy change that comes with the token, in shadow mode first. |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
@@ -144,7 +145,7 @@ and requires all of the following:
 
 | Requirement | What it proves |
 |---|---|
-| A `local-ci` status on the head, and it is the newest one | the receipt belongs to this commit, not to an older one |
+| A `local-ci` status on the head, and it is the newest one | the status belongs to this commit, not to an older one |
 | A `target_url` is present and absolute | the status names a build at all |
 | The host is in `ci_provenance.hosts` | the build lives on the Woodpecker we run, not on a page anybody controls |
 | The path is a pipeline link (`/repos/<id>/pipeline/<n>`, `/api/repos/<id>/pipelines/<n>`, `/repo/<owner>/<name>/pipelines/<n>`) | the URL points at one build, not at an arbitrary page |
@@ -152,7 +153,7 @@ and requires all of the following:
 | The API answers `200` for that pipeline | the build exists |
 | The build has finished (its status is not `created`, `pending`, `running`, `started`, `waiting`, `blocked` or `skipped`) | the verdict is a verdict |
 | The step the policy maps this repo to (`digithings-check`, `twelve-x-check`) is `success`, and it appears exactly once in the build | the build ran *this* repo's checks |
-| The build reports a `commit`, the PR head has a sha, and the two are equal | the build is about this code |
+| The build reports a `commit`, the PR head has a sha, and the two are equal — governed by `commit_match`, below | the build is about this code |
 
 Any one of them missing is a refusal with a named reason: the queue logs which one.
 
@@ -198,10 +199,15 @@ traceback lands in the job's error log. A `ci_provenance` block with no `mode` m
 `shadow`, and no `ci_provenance` block at all means `off`, so an older policy file stays
 loadable.
 
-Each read has a timeout — 2 s in shadow, 5 s in enforce — and the queue reads at most one
-build per pull request per tick, with the reads and the token cached for the life of the
-process. The launchd job fires every 180 s and holds a lock, so a Woodpecker that does not
-answer must not be able to outlast the interval: that is the reason for the short timeouts.
+Each Woodpecker read has a timeout — 2 s in shadow, 5 s in enforce — and the queue reads at
+most two builds per pull request per tick (the status's build, and the receipt's when the
+receipt chain is on), with the reads and the token cached for the life of the process. The
+commit-statuses read the receipt chain needs is a different read: it goes to the GitHub
+REST endpoint, it is not cached, it is made once per pull request per tick, and it has its
+own 10 s timeout, so with the receipt chain on the worst case for a tick grows by that
+much per pull request. The launchd job fires every 180 s and holds a lock, so a Woodpecker
+that does not answer must not be able to outlast the interval: that is the reason for the
+short timeouts.
 
 **It ships in `shadow`, and that is honest, not a setting to forget.** Woodpecker binds a
 pipeline to the commit it checked out, and the launcher pipeline today is the cron run of
@@ -211,10 +217,80 @@ head**. Until then, enforcing would refuse every PR in the org. The shadow log i
 is measured: if the reasons are all "the build ran another commit", the launcher is the
 next thing to change (DIG-4809).
 
+#### The second chain: who wrote the status
+
+The table above is about *which build* a status names. It cannot say *who wrote the
+status*, and that is the other half of the hole: `local-ci` is posted with a user token, so
+any seat that can run the check can post the same green row, and the build URL it names can
+be copied from any recent build. A green `local-ci` row proves that somebody said so, not
+that the CI ran.
+
+The receipt is the same status posted under `local-ci/app` by the CI's own GitHub App
+installation (`digithings-ci[bot]`). The app's token is the CI's own and nobody else's, so
+a row it wrote on a commit says the CI ran on that commit — and it sits on the head commit,
+which is what binds a check to a PR. The writer is read from the REST commit-statuses
+endpoint (`GET /repos/{owner}/{repo}/commits/{sha}/statuses`), because the GraphQL rollup
+the queue already reads carries no creator: a status context says what the status was and
+which build it names, not who wrote it.
+
+| Requirement | What it proves |
+|---|---|
+| A `local-ci/app` status on the head, written by a login in `trusted_receipt.creators` | the CI wrote it, not a seat |
+| Its state is `success` | the CI's own check passed |
+| Its `target_url` names a Woodpecker build, read back exactly as above | the receipt and the build agree |
+
+A row written by somebody else does **not** cancel a receipt written by the app: the queue
+looks for a trusted receipt, so a seat cannot hold a PR by writing a failing status next to
+the CI's own passing one. The same rule works the other way round: the app's own newest row
+is the CI's verdict, so a red row the app wrote later on the same head refuses the PR even
+though an earlier green row of the same context is still on the head. A
+`trusted_receipt` block with no `require` key at all means the receipt is **required**: a
+hand edit that drops the key must not turn the chain off, and the price is a loud refusal
+of every PR until the CI writes a receipt. `trusted_receipt.require` says whether the
+queue **asks** for a receipt at all. A receipt the policy does not ask for is not read: the queue looks at every
+open PR on every tick, and a status list it is not going to obey buys nothing while the CI
+writes none. The chain is switched on by the policy change that comes with the CI's own
+installation token, and it is switched on in **shadow** mode first, so the receipt is
+measured on live PRs for 48 hours before anything is refused for it.
+
+**The receipt is not being written yet, so the shipped policy does not ask for one.** The CI
+worker has the code that posts it (`scripts/local-ci/local_ci.py`) and the running image has
+it, but the worker holds no GitHub App installation token, so it logs `app status: skipped, no
+app token` and posts no app row. A policy that asked for a receipt today would refuse every
+PR in the org the moment the mode was switched to `enforce` — the same freeze the whole
+switch is staged to avoid. So the chain ships switched off, and it is switched on by the
+policy change that comes with the token: `trusted_receipt.require` becomes true, the mode
+stays `shadow`, and the shadow log then carries one line per PR per reason, `no
+'local-ci/app' receipt is reported on the head commit` until the app writes them. DIG-4803
+owns the token and DIG-4809 owns the flip to enforce; neither is a change in this file.
+
+#### `commit_match`: how hard the commit comparison bites
+
+`ci_provenance.commit_match` is the switch on the last row of the table above:
+
+- `enforce` (the default) — a build that ran another commit is a refusal.
+- `shadow` — it is measured and logged, and the PR merges.
+- `off` — the comparison is not made at all.
+
+`MQ_CI_COMMIT_MATCH` in the environment overrides the file, and an unrecognised value is
+read as `enforce`: a misspelled switch must not silence a gate.
+
+The comparison is the only thing that ties a build to a head, and it cannot pass while the
+launcher runs one build per whole repository — the build's `commit` is the launcher's own
+sha. So a policy that softens the comparison **must** require the trusted receipt, and a
+policy file that softens it without requiring one is refused when it is loaded rather than
+trusted when it runs. The same check is made again on every tick, because the environment
+can override the file. This is what makes `mode: enforce` with `commit_match: shadow` a
+coherent pair: the build's commit is measured, and the receipt does the binding.
+
 Enforce mode is a separate change, made once the shadow log is clean, and it is not only
-a matter of flipping a switch. Three things have to be true first: the CI runs one build
-per PR head, the worker image is rebuilt and pullable, and the launcher's lock-skip path
-stops reporting a skipped check as a success (below).
+a matter of flipping a switch. The switch has to move `commit_match` in the same edit, or
+the queue refuses every PR: the receipt's own build is compared too, so `commit_match:
+enforce` refuses a PR with a perfect receipt while the launcher still builds one build per
+repository. Three things have to be true first: the CI runs one build per PR head **or** the
+receipt binds the status to the head, the worker image is rebuilt and pullable, and the
+launcher's lock-skip path stops reporting a skipped check as a
+success (below).
 
 Three more limits, stated so nobody reads more into the gate than it is:
 
@@ -397,6 +473,31 @@ that carries neither a seat nor a run, or that names a different head, is
 **dropped** — dropped, not forgiven: the PR then fails the coverage gate and waits
 for a review from another seat. The refusal names the head the queue expected, so
 the PR says what it is waiting for.
+
+**The marker stands alone, and its values are records.** The provenance marker is
+read only when it stands alone on its line: a list bullet may carry it and the
+`<!-- in-session-review -->` marker may sit beside it, but no other text may share
+the line — so a comment that quotes the marker to explain it is prose, not a claim.
+And a value that cannot be a record (a placeholder, a typo, an example) is refused
+by name and never sent to the API: the API answers questions about runs and seats,
+and a value that is not a run id has no answer to give. Asking anyway used to turn a
+fact the gate held into a failed read, and a failed read is a transport failure —
+the queue then reports a broken API and stops merging every PR (DIG-4809, 21 Oct
+2026).
+
+What the API answers is a fact, not a failure. A run id it does not know (404) and a
+run id it refuses outright (400) are both answers — no such record — and neither is
+a broken API; only a read that fails (a timeout, a 401, a 5xx) is a failed read. A
+run the API knows but that carries no seat is refused by name as well: the marker
+claims a seat and a run, and neither of them can be checked, so the queue cannot say
+who reviewed. A seat id is the same id whatever case it is written in, so the gate
+compares one spelling of it.
+
+The author's side follows the same rule. A commit trailer that names something the
+API would refuse — `Paperclip-Agent-Id:` or `Paperclip-Run-Id:` with a value that is
+not an id — leaves the seat that wrote that commit unknown, and an unknown seat may
+be the seat that posted the review. The gate refuses the PR there rather than drop
+the seat silently, because an author it cannot name is not an author it can clear.
 
 The author seat's own run window is a **second reason attached to that seat's own
 marker**, not a veto on the queue. A review from another seat posted while the

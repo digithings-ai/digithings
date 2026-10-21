@@ -65,6 +65,18 @@ run, and on which head. Fill the values from the environment
 | `run=` | The Paperclip run the review came from. The queue reads `/api/heartbeat-runs/{run}`; a run the API does not know is refused. |
 | `head=` | The head the review covered. It must be the PR's current head; a marker naming an older head is refused. The sha may be written at any length of 7 characters or more and is read as a prefix of the head — post the full sha, but a short one still binds. |
 
+The marker is read only when it **stands alone on its own line** — a list bullet may
+carry it and the `<!-- in-session-review -->` marker may sit beside it, but no other
+text may share the line — so a comment that quotes the marker to explain it is prose
+about the marker, not the claim. Its values are records: a placeholder, a typo or
+an example is refused by name and never sent to the API, because a value that is
+not a run id has no answer to give and a failed read stops every merge in the queue
+(DIG-4809, 21 Oct 2026). A run the API does not know, and a run id the API refuses
+outright (a bad address is an answer, not a broken API), are both refusals of the
+marker; a run the API knows but that carries no seat is refused too, because the
+queue cannot then say who reviewed. A seat id is the same id in any case, so the
+queue compares one spelling of it.
+
 Two rules follow:
 
 - **The author's own seat does not count.** The seat that *wrote the PR's code*

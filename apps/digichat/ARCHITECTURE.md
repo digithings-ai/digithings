@@ -280,7 +280,7 @@ endpoint except `GET /api/health` (unauthenticated status probe) and
 - Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus standard tool / `source-*` / reasoning / `data-status` parts (`x-vercel-ai-ui-message-stream: v1`). Mutation errors: `400 invalid_turn_mode`, `409 run_in_progress` / `run_id_replay`, Foundry `501 not_supported` when item delete/create is unavailable.
 - The route resolves upstream auth, builds a `createdigigraphClient`, then either (a) calls `createdigigraphTraceStreamResponse` for the trace path (passes `req.signal` so Stop aborts the digigraph fetch) or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
-- **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). When `DIGICHAT_TRUSTED_PROXIES` is unset, IP selection keeps the historical order: `cf-connecting-ip`, the leftmost `X-Forwarded-For` hop, then `unknown`. When configured with comma-separated IPs/CIDRs, only a TCP peer in that allowlist may supply a forwarded client-IP header; `x-digichat-peer-ip` is captured from the socket by the production entrypoint, which strips a caller-provided value before forwarding to the loopback-only Next server. Then `cf-connecting-ip` is preferred, or the XFF chain is walked from right to left past trusted proxy hops to the first valid non-trusted address. An untrusted or malformed boundary falls back to the captured peer. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
+- **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). The production entrypoint always strips an inbound `x-digichat-peer-ip` and stamps the real socket peer, plus a process stamp, before Next sees the request. Guardrail and premium keys (`clientIpForRateLimit`) read that header only when the stamp matches. An unstamped copy is `unknown`, including when `DIGICHAT_TRUSTED_PROXIES` is set, so a caller rotating the header does not open buckets. When the allowlist is set, a stamped trusted peer may supply `cf-connecting-ip` (preferred; Cloudflare overwrites it) or an XFF chain walked from the right past trusted hops, and every value goes through `parseIp`. A stamped peer outside the allowlist is the key and the visitor headers are ignored. When the allowlist is unset, a stamped socket that is the client is the guardrail key, and a stamped shared ingress (`cf-connecting-ip` names a different address) is `unknown` for guardrails. The embed limiter and the trial quota do not use the socket while the allowlist is unset. They follow develop: the raw trimmed `cf-connecting-ip`, then the raw trimmed first `X-Forwarded-For` hop, else `unknown`. A value that is not an IP stays that key. A header-less request is `unknown` on develop too: the embed limiter collapses those visitors onto `embed_ip:unknown`, and the trial quota skips `unknown` so it does not count them together. Those visitor headers never decide a guardrail or premium budget. Startup logs a warning until `DIGICHAT_TRUSTED_PROXIES` is set to the ingress peer the entrypoint logs on the first request. This repo does not contain that address. Do not use Cloudflare's published edge ranges. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
 - **Per-tenant trial gate:** a `trial_form` tenant may set `gate.consumeUrl` to an operator-controlled HTTPS endpoint. When `X-Embed-Chat-Token` is present, the BFF sends `{ "token": "..." }` to that endpoint before applying the fallback per-IP turn quota. A 2xx response consumes the turn and any 4xx response denies it (`402 trial_gate`). A 5xx, a timeout or a transport failure is reported as a third verdict, **unavailable**: the visitor is still admitted, so a quota-provider outage does not disable chat, but the entitlement is unverified and is bounded server-side to the trial cap (100 turns per known IP per 24h) instead of being granted outright — an outage used to skip the per-IP budget entirely and hand out unbounded free turns (DIG-4543). The degraded path is logged (`[trial-gate] tenant quota service unavailable…`). The bound needs a resolvable client IP: a request whose IP cannot be resolved (`unknown`) skips the quota and is admitted uncounted, as before. The token is never logged or forwarded to a chat backend.
 - **Internal monitor identity (DIG-613):** an internal monitor can be exempt from the `trial_form` free-turn cap by presenting `X-Embed-Monitor-Token`, matched against a comma-separated allowlist in `DIGICHAT_MONITOR_TOKENS` (`embed-monitor-token.ts`, constant-time, entries under 32 chars ignored). This exists because the hourly DataTap answer-integrity check had no sanctioned path past the per-IP cap: it burned the 3-turn budget in its first hour and then returned `402 trial_gate` on every run, which reads as a client-side closed trial rather than our own gate. The compared value is a server-side secret and is deliberately **not** `X-Embed-Token`, which is a Stripe-style publishable key rendered into the embedding page on purpose (DIG-619) — a bypass keyed on it would be a public bypass. **Scope:** the free-turn cap only. It does not authenticate the caller; the caller must still resolve a tenant context and pass the rate-limit layers. The `requiredPlanTier` proof check runs earlier and is unaffected. The one check it does skip is the tenant's own `gate.consumeUrl` turn accounting, and only for a caller that presents the monitor header *without* an `X-Embed-Chat-Token` (the consume call is gated on that token, `route.ts`). **Fails open:** when the allowlist is unset the gate behaves exactly as before, so a missing deploy secret never becomes a reason to stop serving visitors. The gate itself remains best-effort anti-abuse, not an authorization boundary.
 - **Server-signed trial proof (DIG-3795):** a caller can also be exempt from the `trial_form` free-turn cap by presenting `X-Embed-Trial-Proof`, an HMAC-signed token minted server-side with the shared secret `DIGICHAT_TRIAL_PROOF_SECRET` (`lib/trial-proof.ts`; format `base64url(host|exp|sig)`, 10-minute TTL, constant-time signature comparison). The route verifies the signature with the same secret and compares the **verified** host against the canonical form of `X-Embed-Host` (`normalizeEmbedHost`), because the proof binds host and expiry only — no tenant and no nonce — so a valid proof for another host buys nothing. A raw client-asserted header value is never trusted: only the server holds the secret, so only it can produce a token that verifies. **Scope:** the free-turn cap only, and it does not authenticate the caller — the caller must still resolve a tenant context and pass the rate-limit layers. The per-IP quota is skipped entirely once a proof is accepted, so a sanctioned bypass never spends the visitor's budget. **No proof, no bypass:** an absent, malformed, expired, wrongly-signed or wrong-host proof leaves the gate exactly as it was, so a missing deploy secret is never a reason to waive the cap. The `X-Embed-Trial-Unlock` header read is unchanged. **Expired-proof signal (DIG-4537):** the route tells an EXPIRED proof from an INVALID one, because only the expired one can be dropped and re-minted by the client. When — and only when — a proof was presented, authentic, expired and bound to this request's embed host, the response the route returns carries `x-embed-trial-proof-expired: 1` (`TRIAL_PROOF_EXPIRED_HEADER`), including on the 402 `trial_gate` response, and the gate's outcome does not change: an expired proof still leaves the visitor on the trial path. A malformed, wrongly-signed or wrong-host proof gets no header — those are invalid, not expired, and the client must not treat them as re-mintable. The signature is verified BEFORE the expiry, so a proof that is both expired and tampered with is invalid, never expired.
@@ -294,6 +294,8 @@ endpoint except `GET /api/health` (unauthenticated status probe) and
 **`POST /api/conversations`** — body `{ id?: string, title?: string }`. Returns `{ id }` with 201. The optional client `id` allows the UI to pre-mint a UUID so it matches the `threadId` used in `useChat`.
 
 **`GET /api/conversations/[id]`** — returns `{ id, title, messages: UIMessage[] }`.
+
+**HTML export** — `/export html` in the open thread downloads one file, `<deployment>-<YYYY-MM-DD-HHMM>-<slug>.html`. It is the active thread only (theme copied from the page, work chain, tool calls, sources), not the memory sidebar or any other thread. Ancestors are attribute-only wrappers so `[data-stock-product]` hide rules still match, and nodes the live page has computed as `display: none` or `visibility: hidden` are left out (a closed disclosure panel stays). A missing thread root shows an error instead of saving a file. A `<meta http-equiv=refresh>` is removed wherever it sits. CSS, fonts, and same-origin images are inlined. A `<` in the CSS is escaped, and the file's first head element is a strict CSP. The composer and send controls are removed. Disclosures stay collapsible via `<details>`. Redaction runs on the DOM's text and attribute values (never on serialized HTML, so it cannot break the markup): token shapes, embed and invite keys, auth headers, cookies and sessions, DSN passwords, a `session` JSON key, `Signature` query values, and bare 48-hex invite keys, including values in URLs. Tool JSON is parsed and redacted by key (`password`, `*_secret`, `*token`, `api_key`, `session`, …). A block whose secret spans several inline elements is flattened to plain text; other blocks keep their formatting. Redaction is pattern-based: a secret with no known shape or label can still get through. The time in the file name is UTC and the slug is the latest question. The filename reads the deployment slug from the open page. The file does not keep `data-deployment` or any other deployment or tenant attribute. The file opens from `file://`. Markdown `/export` is unchanged. There is no server route: the file is the live DOM, not a transcript rebuilt from stored messages.
 
 **`PUT /api/conversations/[id]`** — body `{ title?: string, messages: UIMessage[] }`. Full replace of stored messages (delete + re-insert). Returns 204.
 
@@ -775,10 +777,27 @@ their own — the provider menu they render cannot activate an own key — so
 they name the house backend; the embed surface names its own provider while
 a key is set.
 
-The house backend id appears a second time inline in the provider menu
-(`src/components/stock/embed-composer-menu.tsx`), which lists the house
-backend as one provider choice among the own-key ones. That copy is the one
-to watch for drift.
+**The house backend id has one home (DIG-4887).** Decision: the provider menu
+(`src/components/stock/embed-composer-menu.tsx`) reads the house backend id
+from the same `HOUSE_BACKEND_ID` constant as the chip and the static
+surfaces, and keeps no copy of its own. The menu lists the house backend as
+one provider choice among the own-key ones, and both the row's id and its
+label come from that constant. Reason: the id used to be written inline in
+the menu, so the provider menu and the composer chip each named the house
+backend from a place of their own and could drift apart — the chip would
+name one backend while the menu offered another. DIG-4597 introduced the
+constant and made the surfaces read it, and it left that copy as "the one
+to watch for drift"; DIG-4887 closed it. The value did not change, so the
+menu still lists the house backend under the same name.
+
+The picker test pins the label the menu renders, so a change of the value
+fails loudly. What no test could see was the drift itself: the chip read
+the constant while the menu read a copy of the value as it stood that day.
+The invariant is now pinned from the source: the menu's own pins in
+`src/components/stock/embed-composer-menu.source.test.ts`, and the app-wide
+rule in `src/lib/route-client-config.source.test.ts` — the menu names
+`HOUSE_BACKEND_ID`, and among the app modules under `src` the id is written
+in one place only.
 
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 (stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
@@ -1037,8 +1056,103 @@ tool / `source-*` / `data-status` parts. Generic MCP tools map the same way
 completed item carries the output as `toolResult`, rendered as JSON in the
 standard tool Result pane with mid-stream completion — display parity with a
 directly-plugged tool, no per-tool UI. `mcp_approval_request` is unmapped by
-design: trial agents auto-approve server-side. A reasoning disclosure appears
-only when the Foundry event includes summary text. Operators enable that
+design: trial agents auto-approve server-side.
+
+**Guardrails (`guardrails`).** Optional on a deployment. Omit the block and
+every guard is off. `tokensPerMinute` applies on every backend. `maxToolCallsPerTurn`
+is enforced on Foundry and the AI SDK backends (openai-completions,
+openai-responses, anthropic, google-vertex), where the adapter can stop the
+tool loop. On digigraph, langgraph, and ag-ui it is notice/best-effort: the
+chat shows a status notice once the count is hit, and langgraph and ag-ui
+stop forwarding the next call, but the upstream agent is not given a
+`tool_choice: none` follow-up. digigraph's `round_boundary` trace calls
+`beforeRound` and discards the result, so the answer band does not reach
+that backend mid-trace; the notice is the whole effect. a2a has no tool-call
+hook, so config load refuses the key. The shape:
+
+```yaml
+guardrails:                      # omit the block and every guard is off
+  maxToolCallsPerTurn: 5         # optional, 1–100
+  answerAt: 0.7                  # optional; default 0.7 when a TPM is set
+  pauseAt: 0.9                   # optional; default 0.9; must be above answerAt
+  tokensPerMinute:
+    deployment: 100000           # optional; match an upstream TPM
+    user: 80000                  # optional; per user id, else server-derived IP
+```
+
+The numbers in that block are the shape. No shipped yaml sets them. The
+public digithings.ai example only comments a per-user value of 80000.
+
+`maxToolCallsPerTurn` caps tool calls in one user turn where the backend can
+enforce it, and is notice/best-effort where it cannot (digigraph, langgraph,
+ag-ui). `backend.maxToolCalls` on a Foundry backend is the same setting; the
+shared key wins when both are set. `tokensPerMinute.deployment` is the deployment's own limit (an Azure TPM,
+for example), shared by every turn on that deployment. `tokensPerMinute.user`
+is the per-person limit for a public chat. A real user id is the key.
+Anonymous traffic (`embed:anonymous`) uses the server-derived client IP from
+`clientIpForRateLimit`, the same address the embed per-IP limiter trusts.
+`cf-connecting-ip` is a guardrail key only when `DIGICHAT_TRUSTED_PROXIES`
+lists the stamped socket peer. That is the Cloudflare path: trust the
+container ingress, never Cloudflare's edge ranges, then the header is the
+visitor and still has to pass `parseIp`. An unstamped peer header is
+`unknown`, including when the allowlist is set. With the allowlist unset, a
+stamped socket that is the client is the key. A stamped shared ingress is
+`unknown` for this budget, so a spoofable visitor header cannot open a
+guardrail bucket. The embed limiter and the trial quota are separate while
+the allowlist is unset: they follow develop (the raw trimmed
+`cf-connecting-ip`, then the raw trimmed first `X-Forwarded-For` hop, else
+`unknown`) and ignore the stamp. A value that is not an IP stays the key. A
+header-less request is `unknown` on develop too. The embed limiter then
+collapses those visitors onto `embed_ip:unknown`. The trial quota skips
+`unknown` and does not count them together.
+The client session header is not a key. `unknown` is not an address, so
+visitors with no user id and no address share one `anonymous` bucket.
+
+The counter is a rolling 60 seconds of reported usage, plus an estimate of the
+next round (about 4 characters per token) held as a reservation so concurrent
+turns on one instance share the window. A reservation that is never settled
+expires after 120 seconds, and a bucket with no spend and no hold is dropped,
+so an abandoned turn does not keep a key for the life of the process. Under
+`answerAt` the turn proceeds.
+Between the thresholds the model is asked to answer with what it already has.
+At `pauseAt`, or when the next round would exceed the limit, the turn waits on
+the same connection-status waiter as a mid-stream rate limit (#6110), shows
+"Pausing for the token limit, resuming shortly", keeps the loading animation,
+then continues the same turn. The wait stops at 90 seconds. A round larger
+than the whole limit is nudged instead of failed. Crossing a limit pauses with
+that notice. It does not error the turn. Tool results are clipped to the room
+left in the tighter scope.
+
+The window is per Node instance. `installGuardrailStore` is the seam for a
+host that has shared storage (a Durable Object or KV on the Cloudflare
+Worker). The digichat container does not hold that binding — the worker only
+forwards tenant JSON — and nothing here creates one. Without a shared store,
+two instances do not see each other's spend.
+
+Foundry still does the parts only that API needs. It sends Responses
+`max_tool_calls` beside `agent_reference` (that parameter covers built-in
+tools; MCP calls are counted in the adapter), drops the call that would pass
+the cap, aborts the in-flight response, and follows up with `tool_choice:
+"none"`. A `400 Not allowed when agent is specified` falls back to a bracketed
+instruction. The chat shows a status `data-notice`, not an error, and only
+when a call was actually stopped.
+
+AI SDK backends apply the same decision in `prepareStep` (`toolChoice: "none"`
+once the cap is spent). Langgraph and ag-ui count tool-call starts and stop
+forwarding at the cap; that is notice/best-effort, because the request was
+already sent and the upstream run is not switched to a no-tool follow-up.
+Digigraph's tool loop runs upstream, so a cap there is a status notice only.
+It does not abort the upstream call, and a wrap-up instruction cannot reach a
+later round of that same request. a2a reports no tool calls, so the key is
+refused at config load.
+
+The trial yaml leaves a proposed cap of 5 (4 is the other candidate)
+and a deployment TPM commented out until the Azure number for gpt-5.6-terra in
+westeurope is confirmed. The public digithings.ai example comments a per-user
+limit of 80000 and does not enable it. OCC and the trial do not carry that
+per-user value.
+
+A reasoning disclosure appears only when the Foundry event includes summary text. Operators enable that
 summary on the agent definition: the Responses API refuses a per-call
 `reasoning.summary` request when using `agent_reference`. Empty reasoning
 items are intentionally omitted rather than rendered as empty “Thinking”
@@ -1073,31 +1187,47 @@ enforces the directive its own way:
 **Embed slash commands (#3418 / #3511 / #3556 / #3733 / #3736).** `@digithings/digichat-ui` `slash-commands.ts`
 owns the public palette. The first-party `digichat` Thread mounts assistant-ui
 `ComposerTriggerPopover` + `unstable_useSlashCommandAdapter` whenever session prefs
-are present (embed, modal popup, and full-app). Full-app `/` also keeps
-`ToolCatalogBar`. The palette is a **flat** composer-width list (command left,
+are present (embed, modal popup, and full-app). The product host does not
+mount tool chips. The palette is a **flat** composer-width list (command left,
 description right). No Tools / Session / Actions / Setup folders and no per-row
 Lucide icons. `/help` is a no-op placeholder — the list itself is the help; it
 must not dump into the composer.
 
-Each catalog tool has **one public name and two gestures**: empty Enter toggles the
-session pref (same as `/settings`); a remainder forces that tool for this send.
-`/digisearch RS256 JWT` and `/digivault notes` set `X-Digi-Force-Tool`. `/websearch query`
-sets a send-only web-search header. `/search`, `/vault`, and `/docs` are not public names.
+The composer holds one palette. A pane command (`/language `, `/theme `, `/tools `,
+`/models `, `/mcp `, and the other submenu commands) opens that pane and only that
+pane; typing, including a second `/`, filters the open pane. Backspacing out of the
+trailing space returns to the command list. Choosing an option writes the full
+sequence (`/language English`) and then runs it. The slash popover and the menu
+are never both open.
+
+Tools are not slash commands. `/digisearch`, `/digivault`, `/zammad`,
+and other catalog or MCP ids are not in the palette. Enabling or disabling a tool
+happens in `/tools`, which lists every tool and MCP server for the host.
+`session_toggle_tool` does not flip a tool: on an unlocked host it answers
+"Tools are changed in /tools." A Foundry
+host (`backend.type: foundry`) shows that list read-only, labelled "Managed by the
+agent", from the config catalog — the page does not call the agent to discover
+tools. A host with `gate.lockSessionControls` (OCC) or `tools.allowUserToggle: false`
+lists the same rows but does not toggle them. `/search`, `/vault`, and `/docs` are
+not public names. The BFF `X-Digi-Force-Tool` allowlist is unchanged; the palette
+no longer sends it.
 
 Web-search defaults (#3859, tool-only grounding — no synthesis-model pins):
 
 | surface | session pref | BFF forward |
 |---|---|---|
-| first-party chat (authenticated, null `embedConfig`) | on | when the browser asks AND `DIGICHAT_WEB_SEARCH=1` (deploy sets it) |
+| first-party chat (authenticated, null `embedConfig`) | deployment allow; stored opt-out is cleared on load | when the browser asks AND `DIGICHAT_WEB_SEARCH=1` (deploy sets it) |
 | tenant embeds with `webSearch: true` (digithings.ai, occ, local app/cli/modal) | on | when the browser asks AND the tenant allows |
 | datatap (`webSearch: false`) | off | never |
 
-Pref semantics: `readWebSearchPref` defaults on; the user opts out per surface via
-`/websearch` empty-Enter, `/settings`, or the composer menu (persisted as `"0"` in
-localStorage). Either side false — tenant gate or user pref — means the BFF does not
-send `X-Digi-Enable-Web-Search`, so the turn stays corpus-only.
-Menu pick inserts `/digisearch ` (trailing space) and does not fire immediately.
-Extra YAML/MCP catalog ids (`/datatap`) use the same pattern. Disabled catalog ids travel
+Pref semantics: `readWebSearchPref` defaults on; embed surfaces opt out via
+`/tools` or `/settings` (persisted as `"0"` in localStorage). Signed-in ChatShell
+has no `/tools` pane, so it does not read that key: on load it clears
+`digichat-web-search:auth` and follows the deployment allow (house:
+`NEXT_PUBLIC_DIGICHAT_WEB_SEARCH=1`). Either side false — tenant gate or, on an
+embed, the user pref — means the BFF does not send `X-Digi-Enable-Web-Search`,
+so the turn stays corpus-only.
+Disabled catalog ids travel
 as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp`, `/models`, `/effort`,
 `/search-engine`, `/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
 `/mcp` starts on the operator/session MCP list (status: Active / Disabled / Needs auth).
@@ -1244,9 +1374,11 @@ digichat-side semantics below as a live gate today.
 The `DIGICHAT_EMBED_TENANTS` env registry accepts the same operator-only fields on a tenant's
 `mcp.servers` entry (`token`/`tokenEnv`/`authHeader`), merged through the same loader and stripped
 by the same browser projections. `/tools` lists every
-connected catalog + MCP tool as On/Off (each is also a slash command). `/mcp` lists MCP
-tools with status Active / Disabled / Needs auth; Enter opens the session JSON and field
-editors (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**
+connected catalog + MCP tool. Where the host allows it, each row is On/Off.
+A Foundry host shows the same rows read-only ("Managed by the agent"). A locked
+host (`lockSessionControls`) lists them and does not toggle. `/mcp` lists MCP
+servers with status Active / Disabled / Needs auth; Enter opens the session JSON and field
+editors when the host allows editing (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**
 opens a popup → `POST /api/mcp/oauth/start` (PKCE, SSRF via `isAllowedMcpServerUrl`) → AS →
 `GET /api/mcp/oauth/callback` which `postMessage`s the token into `mcpCustom`. Start uses
 the operator YAML URL when the id matches; a client `url` is accepted only when
@@ -1259,7 +1391,8 @@ only when `mcp.allowUserServers` is true (`https://` + SSRF + count/size caps; o
 may still use `http` for docker DNS). Session URLs never echo
 back in the client config projection. `@assistant-ui/react-mcp` is not installed — visitor MCP
 is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trust as slash) to
-mutate language/model/effort/search-engine/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
+mutate language/model/effort/search-engine/MCP. `session_toggle_tool` does not flip a tool;
+it answers "Tools are changed in /tools." `session_upsert_mcp` cannot plant a new session URL
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
 `X-Digi-Effort` (low/medium/high) is forwarded to digigraph. `X-Digi-Search-Engine`
 (auto/internal/exa/tavily/parallel/firecrawl/tinyfish) is forwarded with it: effective
@@ -1275,7 +1408,7 @@ tenant-rollout reference.
 
 In-iframe “ask digichat” chrome is omitted on the first-party skin; outer launcher title /
 new chat / close and marketing footer attribution stay. Signed-in ChatShell keeps `/clear`
-`/history` `/scope` plus the same `/provider` / `/websearch` / `/settings` surface.
+`/history` `/scope` plus the same `/provider` / `/settings` surface.
 
 **Sources on the transcript (#3419 / 2.0).** assistant-ui `Source` parts and tool
 output document lists render inline in `ThreadSkinView` (`ThreadSource` for
@@ -1364,8 +1497,21 @@ whenever the parent theme toggles — no iframe reload. The embed accepts theme
 messages from the same first-party allowlist as seed (`parseThemeMessage` in
 `src/lib/embed-theme-messages.ts`) and applies them via the existing
 `[data-theme]` + `.dark`/`.light` path (MutationObserver still defends against
-OS/`ThemeProvider` overrides). Priority: parent postMessage > URL `?theme=` >
-tenant registry theme.
+OS/`ThemeProvider` overrides). Priority: visitor `/theme` pick > parent
+postMessage > URL `?theme=` > tenant registry theme (`resolveEmbedTheme`).
+
+**`/theme` on embeds (2.6.6).** Every tenant embed lists `/theme` in the command
+palette; the #6122 model/tool/session locks are unchanged. A pick is cosmetic and
+lasts for the tab: it is stored in sessionStorage under
+`dc-embed-theme:<tenant slug>` (`embedUserThemeKey`; in memory when
+sessionStorage cannot be written) and never in the platform `dt-theme` /
+`dt-palette` keys. It sets `data-theme`, `data-palette`, and `theme-color` on the
+embed document. `/theme auto` drops the pick, so the embed returns to the
+parent / `?theme=` / tenant theme; in the picker, choosing the checked row does
+the same (in the full app the checked row still pins that mode). The api part is
+`embedThemePrefs`. Without a pick, an embed hosted by
+digithings.ai follows the parent site's theme; a standalone embed starts on the
+tenant theme.
 
 **postMessage parent-error.** After `READY_TIMEOUT_MS` (30s) without
 `digichat:ready`, `ChatEmbedShell` posts
@@ -1812,10 +1958,22 @@ part-driven vs chrome-driven is indexed in digiweb
 | `chrome.defaultLanguage` | curated codes (`languages.ts`) | Seeds the stock language picker |
 | `chrome.transcript.userAlign` | `right \| left` | Stock web default `right` |
 | `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant \| digichat` | The 11 assistant-ui catalog template ids plus first-party `digichat`. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. Catalog / third-party default remains `base`. Unset `skin` on digithings.ai / OCC hosts (and slugs `digithings`, `digithings-ai`, `occ`) defaults to `digichat` so production `DIGICHAT_EMBED_TENANTS` without `skin` still mounts DigichatThread. |
-| `models.default` / `models.available` / `models.allowPicker` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`); empty `available` = no restriction. Bound BYOK skips that house allowlist. Product embed + dashboard YAML publish CI cheap slugs only (`deepseek/deepseek-v4.1-flash-1017` default, plus `openai/gpt-oss-120b`, `z-ai/glm-5.3-flash`). Never OpenRouter `:free`. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
+| `models.default` / `models.available` / `models.allowPicker` / `models.catalog` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`). A `preset:<id>` token resolves to the catalog model before that check. Empty `available` = no restriction. `catalog: true` fills `available`, `default`, and `picker` from `config/model-picker-catalog.json` using the newest generation of each family, then the deployment's price cap, presets, and `showFullList`. A Premium group holds models above the standard cap and at or under `premiumCapUsdPerMillion` (catalog default $2.50). Presets and the router skip that group. `models.costPerWindow` meters premium picks in USD per rolling window. The trace path records that charge in a `finally` block, including when the visitor disconnects after the answer. digithings.ai sets $0.0125565 per day. A model outside the premium picker group is not metered (known limit). A spent window answers with the Auto preset (1017); the notice names Auto, including when `models.default` is a different id. OCC sets no `costPerWindow` and no token budget (Chris, 21 Oct 2026, 22:51 Rome: the invite link is the gate). The #6182 tool-call cap and answer guard stay on OCC; they are stability guardrails, not token limits. OCC `models.occPicker` is on for 2.6.6 after Chris's sign-off (21 Oct 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488 lock". The flag stays the off switch. Tool and MCP locks (`lockSessionControls`) are unchanged. digithings.ai and the OCC embed set the catalog policy (default DeepSeek V4.1 Flash 1017, Reasoning GLM 5.3 Flash). The dashboard keeps an explicit three-slug list. Foundry backends publish no house catalog. OpenRouter appears only as the Router preset when `OPENROUTER_API_KEY` is set at load, never as `:free` rows. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
 | `features.attachments` | bool | Default **true** (composer attach). Product / DataTap / dashboard YAML set false. |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |
+| `features.density` | `compact \| default \| airy` | Worked-chain rhythm. Default `default` (the fixed spacing). A browser `dt-density` choice wins over this for that user. Unlike the other embed prefs (session-only), `/density` persists in localStorage, so a choice can carry between same-origin surfaces (browsers that partition third-party iframe storage keep an embedded chat separate). |
+| `features.effort` | `low \| medium \| high` | Seeds `/effort`. Default `medium`. A palette choice overrides it for the session; `/new` returns to this value. |
+| `features.view` | `quiet \| balanced \| verbose` | Already the chain disclosure. Seeds `/view`. Session choice wins until `/new`. |
+| `features.thinking` | `auto \| collapsed \| open` | Seeds `/thinking`. Session choice wins until `/new`. |
+| `chrome.palette` | `default` or a palette id | Deployment palette for `mode: app`. Omitted means the digichat skin palette. A stored `dt-palette` choice wins and is not overwritten; picking the "default" palette removes `dt-palette`, so the deployment palette paints again on the next load (an explicit "no palette" choice is a follow-up). Not available on embeds: the embed pins its own theme, and the tenant registry refuses `palette`. Does not change `data-theme`. |
+| `chrome.toolbar` | bool, default `true` | Seeds `/toolbar`. |
+| `chrome.scrollbars` | `always \| auto`, default `always` | Seeds `/scrollbar`. |
+| `gate.searchEngine` | `auto \| internal \| exa \| tavily \| parallel \| firecrawl \| tinyfish` | Seeds `/search-engine`. Omitted means auto. Engine name only. |
+
+`/models` reads `models.default`. `/language` reads `chrome.defaultLanguage`. `/theme` mode reads `chrome.theme` for the no-JS paint; a stored `dt-theme` still follows the OS when absent, which is unchanged. Web search, digisearch, and digivault stay capability flags (`gate` / catalog), not new defaults.
+
+The trial, OCC and digithings.ai configs omit the new keys, so they stay on these defaults.
 
 `chrome.skin` selects one of the 11 official assistant-ui catalog templates
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`
@@ -1847,8 +2005,7 @@ embed stays grounded without a client-controlled prompt surface. YAML that omits
 `occ-embed.yaml`) keep `chrome.skin: digichat` with the digisearch / digivault
 catalog (web_search is not on the digithings.ai catalog: the license has
 no hosted-web-search scope; embed/popup session defaults the remaining tools ON). YAML `hosts` resolve for `/embed` first paint
-(first-party / token rules unchanged). `ProductStockShell` mounts
-`ToolCatalogBar` only for `chrome.mode: app`. Embed / modal / sidebar use
+(first-party / token rules unchanged). `ProductStockShell` does not mount a tool-catalog bar. Embed / modal / sidebar use
 assistant-ui `ComposerTriggerPopover` (`unstable_useSlashCommandAdapter`)
 instead; `/search` and `/vault` still arm `X-Digi-Force-Tool` when those ids
 are in the catalog, and session toggles send `X-Digi-Disabled-Tools`
@@ -1923,8 +2080,8 @@ tokens, Foundry endpoints, MCP URLs, and consume URLs. Widget.js and the
 dashboard popup merge chrome (labels/hotkeys) from that API.
 
 **Default UI:** `ThreadSkinView` inside `ProductStockShell` against
-`POST /api/chat`. `ToolCatalogBar` (tools.catalog) arms force-tool headers;
-force-tool values and model ids are catalog/allowlist-gated on the BFF
+`POST /api/chat`. Tool on/off is `/tools` only. `session_toggle_tool` refuses
+and points at `/tools`. Force-tool values and model ids are catalog/allowlist-gated on the BFF
 (fail closed).
 
 **Product CSS isolation:** `(digichat)/globals.css` mirrors the `(baseline)` stock sheet (Inter / IBM Plex Mono) plus thin `product-chrome.css` for paywall/BYOK/attribution. `assistant-ui-cli.css`, digichat-ui `session.css`/`cursor.css`, and terminal-loader sheets load only via `chat-shell-cli.css` on `ChatShell` (`persistence: server`).
@@ -1989,7 +2146,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_EMBED_HOSTS` | Plain comma-separated embed-tenant hostnames, no secrets. Feeds `/embed` CSP `frame-ancestors` at **runtime** via `src/proxy.ts` (preferred over deriving hosts from `DIGICHAT_EMBED_TENANTS` when both are set — #1360). Optional seed list: `embed-hosts.txt` (not baked into the GHCR image). Never emits `frame-ancestors *`; fail-closed to first-party origins when unset/invalid. | Optional |
 | `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
 | `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
-| `DIGICHAT_TRUSTED_PROXIES` | Comma-separated IP addresses/CIDRs whose socket peers may supply `cf-connecting-ip` or `X-Forwarded-For` for anonymous-embed rate limiting. Unset preserves historical header behavior. The bundled production entrypoint captures the direct socket peer and isolates Next on loopback; do not set this unless that entrypoint remains in the request path. In a Cloudflare Container, trust the container ingress/overlay peer, not Cloudflare's published edge ranges. | Optional |
+| `DIGICHAT_TRUSTED_PROXIES` | Comma-separated IP addresses/CIDRs whose stamped socket peers may supply `cf-connecting-ip` or `X-Forwarded-For`. Required for a Cloudflare Container release: set it to the container ingress or overlay peer the entrypoint logs on the first request (`x-digichat-peer-ip`), never Cloudflare's published edge ranges. The address is not in this repo. Unset, the entrypoint still stamps the socket and logs a startup warning. Guardrail and premium keys use that socket when it is the client. The embed limiter and trial quota follow develop (the raw trimmed `cf-connecting-ip`, then the raw trimmed first `X-Forwarded-For` hop, else `unknown`, including a value that is not an IP); a header-less request collapses the embed limiter onto `embed_ip:unknown` and the trial quota skips it. An unstamped peer header is never a key. The entrypoint always isolates Next on loopback and strips a caller-supplied peer header. | Required on the Cloudflare Container release |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
 | `DIGICHAT_VERSION` | Version string returned in health response | Optional override. Unset/blank → `package.json` version. Cloudflare Container (`infra/docker/Dockerfile.digichat-cloudflare`) and the app image (`apps/digichat/Dockerfile`) bake it from `package.json` at image build (`ARG`/`ENV` + `/etc/digichat-version`). Not a dashboard secret. |
 | `NEXTAUTH_SECRET` | Legacy Auth.js secret alias (same value as `AUTH_SECRET`) | If using legacy env |

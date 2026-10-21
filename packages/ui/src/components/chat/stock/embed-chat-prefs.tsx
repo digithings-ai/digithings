@@ -6,7 +6,14 @@
  * balanced, thinking auto. Not localStorage.
  */
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
+import {
+  readStoredDensity,
+  resolveTraceDensity,
+  writeStoredDensity,
+  type TraceDensity,
+} from "../trace-spacing";
+import type { PaletteName, ResolvedTheme, ThemePreference } from "../../../theme/apply-theme";
 import {
   normalizeViewPref,
   type ThinkingMode,
@@ -35,6 +42,8 @@ export type EmbedChatPrefs = {
   toolbar: boolean;
   /** `always` keeps scrollbars in their reserved gutter; `auto` shows them on scroll. */
   scrollbars: "always" | "auto";
+  /** Worked-chain rhythm. A stored user choice wins over the deployment default. */
+  density: TraceDensity;
 };
 
 export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
@@ -54,7 +63,55 @@ export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
   searchEngine: "",
   toolbar: true,
   scrollbars: "always",
+  density: "default",
 };
+
+/**
+ * Session chrome seeded from a deployment. Density re-reads storage so a
+ * user's palette choice survives `/new`; the rest return to the deployment.
+ */
+export function chromePrefsFromDeploy(
+  input: {
+    density?: string | null;
+    effort?: string | null;
+    searchEngine?: string | null;
+    toolbar?: boolean | null;
+    scrollbars?: "always" | "auto" | null;
+  } = {},
+  storage?: { getItem(key: string): string | null } | null,
+): Pick<EmbedChatPrefs, "density" | "effort" | "searchEngine" | "toolbar" | "scrollbars"> {
+  const effort = input.effort?.trim().toLowerCase();
+  return {
+    density: resolveTraceDensity(
+      storage === undefined ? readStoredDensity() : readStoredDensity(storage),
+      input.density,
+    ),
+    effort: effort === "low" || effort === "medium" || effort === "high" ? effort : "medium",
+    searchEngine: input.searchEngine?.trim() ?? "",
+    toolbar: input.toolbar !== false,
+    scrollbars: input.scrollbars === "auto" ? "auto" : "always",
+  };
+}
+
+/**
+ * Apply a stored `dt-density` after hydration. The first render uses the
+ * deployment density on both server and client, so `data-density` matches
+ * and only a user with a stored choice re-renders once.
+ */
+export function useStoredDensityAfterMount(
+  setPrefs: (update: (prev: EmbedChatPrefs) => EmbedChatPrefs) => void,
+): void {
+  useEffect(() => {
+    const stored = readStoredDensity();
+    if (!stored) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is client-only; reading it during render would mismatch the server HTML
+    setPrefs((prev) => (prev.density === stored ? prev : { ...prev, density: stored }));
+  }, [setPrefs]);
+}
+
+export function persistDensity(density: TraceDensity): void {
+  writeStoredDensity(density);
+}
 
 /**
  * The package cannot import `@/lib/languages` / `@/lib/view-modes`, so hosts
@@ -97,6 +154,7 @@ export type EmbedChatPrefsApi = {
   setSearchEngine: (engine: string) => void;
   setToolbar: (visible: boolean) => void;
   setScrollbars: (mode: "always" | "auto") => void;
+  setDensity: (density: TraceDensity) => void;
   reset: () => void;
   tenantAllowsWeb: boolean;
   showByok: boolean;
@@ -129,13 +187,24 @@ export type EmbedChatPrefsApi = {
   openEffort: () => void;
   openSearchEngine: () => void;
   openView: () => void;
+  openDensity: () => void;
   /**
-   * Tenant embed: the parent or tenant pins the mode. `/theme` is hidden and
-   * a typed command does nothing. The full app leaves this unset.
+   * Hide `/theme` and ignore a typed one. No host sets this today: tenant
+   * embeds offer `/theme` through `themeState` / `setTheme` (2.6.6). The full
+   * app leaves this unset.
    */
   themeLocked?: boolean;
   /** Open the mode + palette picker. No-op when the host does not provide it. */
   openTheme?: () => void;
+  /**
+   * Host-owned theme (tenant embeds). When set, `/theme` and its picker read
+   * this instead of the document-wide `dt-theme` / `dt-palette` keys, and a
+   * pick goes through `setTheme` rather than `applyDocumentTheme`, so it is
+   * not written to localStorage. `auto` drops the pick (back to the host's
+   * default). The full app leaves both unset.
+   */
+  themeState?: { preference: ThemePreference; palette: PaletteName; resolved: ResolvedTheme };
+  setTheme?: (preference: ThemePreference, palette: PaletteName) => void;
   openThinking: () => void;
   openLanguage: () => void;
   openSessions: () => void;
@@ -144,6 +213,29 @@ export type EmbedChatPrefsApi = {
   compactThread: () => void | Promise<void>;
   undo: () => void;
   redo: () => void;
+  /**
+   * Who may flip a tool. `agent` (Foundry) and `locked` (OCC session lock,
+   * or allowUserToggle false) list every tool and MCP server with no toggle.
+   * Omit means the host still toggles.
+   */
+  toolControl?: "toggle" | "locked" | "agent";
+  /** Text after the pane command. The open pane filters on it. */
+  paletteQuery?: string;
+  /** Composer writer used by menu rows. The skin binds it to `setText`. */
+  setComposerDraft?: (text: string) => void;
+  /**
+   * True only after a skin called `bindComposerDraft`. The writer exists on
+   * every host, and until a skin binds it the sink is a no-op, so the menu
+   * must close and change pages itself.
+   */
+  composerDraftBound?: boolean;
+  bindComposerDraft?: (setText: (text: string) => void) => void;
+  /** One palette frame. `keep` leaves a button-opened menu alone. */
+  syncPalette?: (next: {
+    kind: "closed" | "commands" | "pane";
+    menu: "close" | "keep" | string;
+    filter: string;
+  }) => void;
 };
 
 const EmbedChatPrefsContext = createContext<EmbedChatPrefsApi | null>(null);

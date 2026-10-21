@@ -43,6 +43,49 @@ describe("normalizeEmbedHost", () => {
 });
 
 describe("parseEmbedTenants", () => {
+  it("refuses a palette: an embed owns its theme, so the key could never paint", () => {
+    const base = JSON.parse(VALID) as Record<string, Record<string, unknown>>;
+    const [host] = Object.keys(base);
+    base[host].palette = "dracula";
+    expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/palette is not supported on embeds/);
+  });
+
+  it("refuses bad values for the chrome seed keys", () => {
+    const cases: Array<[string, unknown, RegExp]> = [
+      ["density", "dense", /density must be/],
+      ["effort", "max", /effort must be/],
+      ["toolbar", "no", /toolbar must be a boolean/],
+      ["scrollbars", "never", /scrollbars must be/],
+      ["searchEngine", "bing", /searchEngine is not a known engine/],
+    ];
+    for (const [key, value, message] of cases) {
+      const base = JSON.parse(VALID) as Record<string, Record<string, unknown>>;
+      const [host] = Object.keys(base);
+      base[host][key] = value;
+      expect(() => parseEmbedTenants(JSON.stringify(base)), key).toThrow(message);
+    }
+  });
+
+  it("keeps valid chrome seed keys", () => {
+    const base = JSON.parse(VALID) as Record<string, Record<string, unknown>>;
+    const [host] = Object.keys(base);
+    Object.assign(base[host], {
+      density: "airy",
+      effort: "high",
+      toolbar: false,
+      scrollbars: "auto",
+      searchEngine: " Exa ",
+    });
+    const t = parseEmbedTenants(JSON.stringify(base)).get(host);
+    expect(t).toMatchObject({
+      density: "airy",
+      effort: "high",
+      toolbar: false,
+      scrollbars: "auto",
+      searchEngine: "exa",
+    });
+  });
+
   it("returns an empty registry for unset or blank env", () => {
     expect(parseEmbedTenants(undefined).size).toBe(0);
     expect(parseEmbedTenants("  ").size).toBe(0);
@@ -480,6 +523,73 @@ describe("parseEmbedTenants", () => {
       projectEndpoint: "https://dg-agentic-ai.ai.azure.com/api/projects/dg-agentic-search",
       agentName: "digichat",
     });
+  });
+
+  it("parses a foundry maxToolCalls cap and rejects a non-integer", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "digichat",
+            maxToolCalls: 4,
+          },
+          gateMode: "ungated",
+          token: "shh",
+        },
+      }),
+    );
+    expect(reg.get("example.com")?.backend).toMatchObject({ maxToolCalls: 4 });
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: {
+              type: "foundry",
+              projectEndpoint: "https://example.services.ai.azure.com",
+              agentName: "digichat",
+              maxToolCalls: 0,
+            },
+            gateMode: "ungated",
+            token: "shh",
+          },
+        }),
+      ),
+    ).toThrow(/maxToolCalls/);
+  });
+
+  it("parses shared guardrails and rejects answerAt above pauseAt", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          guardrails: { tokensPerMinute: { user: 80000 }, maxToolCallsPerTurn: 4 },
+          gateMode: "ungated",
+          token: "shh",
+        },
+      }),
+    );
+    expect(reg.get("example.com")?.guardrails).toEqual({
+      maxToolCallsPerTurn: 4,
+      tokensPerMinute: { user: 80000 },
+    });
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "digigraph" },
+            guardrails: { answerAt: 0.9, pauseAt: 0.9 },
+            gateMode: "ungated",
+            token: "shh",
+          },
+        }),
+      ),
+    ).toThrow(/answerAt must be below pauseAt/);
   });
 
   it("throws on a non-https foundry projectEndpoint", () => {

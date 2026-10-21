@@ -317,11 +317,32 @@ const PATTERNS = {
     unionRows(1, 3),
   ],
   /**
-   * A full grid — the mark on the tool row. Solid and still, the same weight
-   * as the reasoning glyph, and it never changes size, so the label beside it
-   * cannot shift.
+   * Pixel braces `{ }` — the mark on a tool-call group. One static frame on
+   * the same 5×5 cube grid as the reasoning bulb (`thought`). The middle row
+   * is the outward point of each brace; the rows around it tuck in, so the
+   * pair still reads at the 12px row. Not a filled grid, and not the corner
+   * brackets used for system asides.
+   *
+   *   · ■ · ■ ·
+   *   · ■ · ■ ·
+   *   ■ · · · ■
+   *   · ■ · ■ ·
+   *   · ■ · ■ ·
    */
-  tools: [Array.from({ length: 25 }, (_, i) => i)],
+  tools: [
+    glyph([
+      [0, 1],
+      [0, 3],
+      [1, 1],
+      [1, 3],
+      [2, 0],
+      [2, 4],
+      [3, 1],
+      [3, 3],
+      [4, 1],
+      [4, 3],
+    ]),
+  ],
   /** Scanline down the rows. */
   executing: [0, 1, 2, 3, 4].map(rowCells),
   /** Scanline across the columns (web search). */

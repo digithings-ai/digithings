@@ -269,6 +269,7 @@ reasoning              -> ["group-chainOfThought", "group-reasoning"]
 "tool-call"            -> ["group-chainOfThought", "group-tool"]
 source                 -> ["group-chainOfThought", "group-tool"]
 data / data-*          -> ["group-chainOfThought", "group-tool"]
+data-notice            -> outside the chain (stays visible after the fold)
 "standalone-tool-call" -> []  (renders outside the chain)
 ```
 
@@ -290,6 +291,20 @@ a tool-only and a combined turn alike: one chain — open while the work runs,
 folded once the answer starts — with closed rows inside it, and the work
 content not mounted while the rows stay closed. (`showDetails` is set by every
 level and read by no renderer yet; it is not part of the contract.)
+
+**Spacing.** The chain's vertical rhythm is the `--trace-space-1` … `--trace-space-7` scale
+and the `--trace-*` tokens, declared once on `.digichat-thread, .digichat-launcher` in
+`src/styles/chat-aui.css` (the skin, `chat-digichat.css`, only reads them). The scale is
+separate from the design tokens' `--space-*` names; `trace-spacing.source.test.ts` keeps it so. The Worked
+title, the gap between sibling groups, the gap inside a group, and the
+reasoning header-to-body step all read those tokens. Sibling groups share
+`--trace-group-gap`; a tool group and a reasoning group do not carry their
+own margins. The chain header's marker-to-label gap stays `0.45rem` so it
+still matches the pre-response loader. `data-density` (`compact`, `default`,
+`airy`) reassigns the tokens. The palette stores the user's choice in
+`dt-density`; a deployment `features.density` applies when that key is absent.
+The tool-call group mark is a pixel `{ }` on that same 5×5 cube grid as the
+reasoning bulb; the bulb itself is unchanged.
 
 **Reason.** The quiet contract was once a single `summaryOnly` branch inside
 the `group-chainOfThought` case, which read as if it covered only the
@@ -688,3 +703,30 @@ control that keeps its name from its glyph),
 `packages/ui/src/components/chat/dot-matrix-aria.test.tsx` (the two modes) and
 `packages/ui/src/components/chat/gallery-thread/work-chain-status.test.tsx`
 (the chain trigger's name).
+
+## Chat HTML export
+
+`/export` downloads the thread as markdown. `/export html` downloads the
+active thread as one file (`packages/ui/src/replay/`), not the memory
+sidebar or any other thread. Ancestors of that thread are attribute-only
+wrappers, so deployment rules scoped to `[data-stock-product]` still match,
+and a node the live page has computed as `display: none` or `visibility:
+hidden` is left out. Only the closed panel element is exempt, so a
+deployment-hidden source inside it is still omitted. The live page unmounts
+closed reasoning and tool panels; the export mounts them for the read and
+then unmounts them again. A page with no thread
+root shows an error instead of saving a file, and a refresh meta is removed
+wherever it sits. The file is that thread's rendered DOM:
+styles and same-origin images are inlined, the composer is removed, and
+work-chain, reasoning, tool, and source disclosures become `<details>` so
+they still open offline. `redact-dom.ts` redacts text and
+attribute values on the cloned DOM before serialization (tool JSON by key,
+everything else with the `redact.ts` patterns, including a standalone 48-hex
+invite key, a `session` JSON key, and `Signature` and `Key-Pair-Id` query
+values). It is
+pattern-based, so an unlabeled secret of unknown shape can
+still get through. The filename is
+`<deployment>-<YYYY-MM-DD-HHMM>-<question-slug>.html` (UTC, latest question,
+id-like words dropped). The filename reads the slug from the open page.
+The file itself does not keep `data-deployment` or any other deployment
+or tenant attribute.

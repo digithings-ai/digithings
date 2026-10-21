@@ -191,6 +191,8 @@ export type ThreadProps = {
   composerToolbar?: ReactNode;
   /** `always` reserves a scrollbar gutter; `auto` shows bars only on scroll. */
   scrollbars?: "always" | "auto";
+  /** Worked-chain rhythm. `default` is the fixed spacing. */
+  density?: "compact" | "default" | "airy";
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -224,7 +226,17 @@ const chainGroupBy = (() => {
     "standalone-tool-call": [],
     source: ["group-chainOfThought", "group-tool"],
   });
-  const fn = (part: { type: string }, context?: unknown) => {
+  const fn = (part: { type: string; name?: string }, context?: unknown) => {
+    const dataName =
+      part.type === "data"
+        ? part.name
+        : part.type.startsWith("data-")
+          ? part.type.slice("data-".length)
+          : undefined;
+    // A data-notice (tool-call limit, and any other status notice) stays
+    // outside the chain. The chain folds once the answer arrives, which would
+    // hide the notice inside the collapsed work block.
+    if (dataName === "notice") return base(part as never, context as never);
     if (part.type === "data" || part.type.startsWith("data-")) {
       return ["group-chainOfThought", "group-tool"] as const;
     }
@@ -232,7 +244,7 @@ const chainGroupBy = (() => {
   };
   (fn as unknown as Record<symbol, string>)[
     Symbol.for("@assistant-ui/groupBy.memoKey")
-  ] = "digichat:chain-v2";
+  ] = "digichat:chain-v3";
   return fn;
 })();
 
@@ -437,6 +449,7 @@ export const Thread: FC<ThreadProps> = ({
   workVisibility = "balanced",
   composerToolbar,
   scrollbars = "always",
+  density = "default",
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -470,6 +483,7 @@ export const Thread: FC<ThreadProps> = ({
                   composerLayout={composerLayout}
                   composerToolbar={composerToolbar}
                   scrollbars={scrollbars}
+                  density={density}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -496,7 +510,8 @@ const ThreadRoot: FC<{
   composerLayout: ComposerLayout;
   composerToolbar?: ReactNode;
   scrollbars: "always" | "auto";
-}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars }) => {
+  density: "compact" | "default" | "airy";
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -522,6 +537,7 @@ const ThreadRoot: FC<{
       // of each surface having to remember to wrap the Thread.
       data-thread-skin="digichat"
       data-scrollbars={scrollbars}
+      data-density={density}
       style={{
         ["--thread-max-width" as string]: "44rem",
         // `--card` (not `--color-card`) so a scoped palette wins: the

@@ -151,3 +151,36 @@ describe("the static composer provider chip", () => {
     );
   });
 });
+
+/**
+ * The house backend id has one home: `src/lib/provider-label.ts`.
+ *
+ * Every app module that needs the id reads it from there: the composer chip,
+ * the static surfaces, and the provider menu, which used to write the id
+ * inline, twice, while the chip read the constant (DIG-4887). A copy of the
+ * value cannot drift away from the constant if it is not written anywhere
+ * else.
+ *
+ * The behaviour test cannot see a copy come back: a copy that carries
+ * today's id renders today's id. The picker test pins the rendered text, so
+ * a change of the value fails loudly - but it cannot tell a copy from the
+ * constant, because both render the same thing. So the source is pinned
+ * here, the way the provider label is pinned above.
+ */
+describe("the house backend id has one home", () => {
+  it("keeps the house backend id in its one home", () => {
+    // The id is written in one place: the module that declares it. The rule
+    // keys on the quoted value, so a longer string such as a base URL is not
+    // a copy of it, and a comment cannot write a value, so comments do not
+    // count.
+    const quoted = new RegExp(`["']${HOUSE_BACKEND_ID}["']`);
+    const copies = sourceFiles(appSrc)
+      .filter((file) => codeOnly(readFileSync(file, "utf8")).match(quoted))
+      .map((file) => relative(appSrc, file))
+      .sort();
+    expect(
+      copies,
+      "the house backend id is written only where it is declared: read it from HOUSE_BACKEND_ID, or move the constant and update this pin and the architecture note",
+    ).toEqual(["lib/provider-label.ts"]);
+  });
+});
