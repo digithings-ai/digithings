@@ -17,12 +17,12 @@ const upstreamPort = Number(process.env.DIGICHAT_NEXT_INTERNAL_PORT ?? "3001");
  * from `request.url` (the embed `?token=` strip) then names a different origin
  * than the router's, so Next treats it as an external rewrite and fetches
  * `https://localhost:3001` itself: a 500 with no content-type for every
- * token-bearing tenant request (OCC, 2.6.6). With `localhost` both sides
+ * token-bearing tenant request (2.6.6). With `localhost` both sides
  * agree and the rewrite stays internal. Still loopback-only.
  */
 export const nextUpstreamHost = "localhost";
-// The in-image zammad-mcp listens on IPv4 loopback.
-const zammadHost = "127.0.0.1";
+// The in-image helpdesk MCP listens on IPv4 loopback.
+const helpdeskMcpHost = "127.0.0.1";
 // Read-only OCC helpdesk MCP (scripts/zammad_mcp): a second loopback listener
 // inside this image, reached only through the public listener below.
 const zammadPort = Number(process.env.ZAMMAD_MCP_PORT ?? "8770");
@@ -254,9 +254,9 @@ function start() {
     const isZammadMcp = (req.url ?? "").startsWith(zammadPrefix);
     proxyToUpstream(req, res, {
       headers: forwardHeaders(req.headers, peerIp),
-      host: isZammadMcp ? zammadHost : nextUpstreamHost,
-      path: isZammadMcp ? "/mcp" : req.url,
-      port: isZammadMcp ? zammadPort : upstreamPort,
+      ...(isZammadMcp
+        ? { host: helpdeskMcpHost, path: "/mcp", port: zammadPort }
+        : { host: nextUpstreamHost, path: req.url, port: upstreamPort }),
     });
   });
 
