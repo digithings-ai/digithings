@@ -227,12 +227,23 @@ header:
   and `Paperclip-Run-Id: <uuid>` resolved through the Paperclip API to the seat
   that owned that run;
 * the seat whose run **on the PR's own ticket** was open when the PR's commits
-  were committed. A run that was about a different ticket says nothing about
-  who wrote this PR — the reviewer that works from its own review ticket is not
-  the author of the PR it reviews;
+  were **written** — the commit's **author date**, which a rebase preserves. A
+  run that was about a different ticket says nothing about who wrote this PR —
+  the reviewer that works from its own review ticket is not the author of the PR
+  it reviews;
 * a merge commit is not one of the PR's own commits: merging `develop` into a
   branch is branch maintenance, and the seat that ran the merge did not write the
   code the PR carries.
+
+**The stamp is the author date, never the committer date.** A rebase rewrites
+every commit it replays: the author date and the message stay, the committer date
+becomes the rebasing seat's. Read from the committer date, the seat that rebased
+a branch became the PR's author, the real author's own review counted as coverage
+of the PR it wrote, and a rebase that landed outside every run window left the PR
+with no author and no way to merge (the QA Lead's finding on #6145, 21 Oct 2026).
+So the gate reads `authoredDate`, and a commit that carries no author date is
+left out — nothing is guessed from the committer date, which is exactly the date
+a rewrite moves.
 
 **The attribution is per commit.** A commit that falls inside exactly one seat's
 window was written by that seat, so that seat is an author — a seat that pushed
@@ -252,14 +263,16 @@ the assignee was not the author: on #6145 the assignee was the Code Reviewer
 while the code was written by the Repo, CI & Release Engineer.
 
 Two limits are known and measured, and both are the reason the gate ships in
-shadow: 9 of the 30 open PRs name no ticket at all, so they carry neither
-run-window evidence nor a trailer, and they would be refused as unverifiable
-once the gate enforces; and one PR (#5964) has a commit that falls outside every
-run window, so it has no author either. A PR with no author evidence at all is
-refused as **unverifiable** — the gate will not guess, and it will not fall back
-to the ticket's assignee. A seat that wrote a commit outside every window on
-the ticket is not named by that commit; it is named by the commits that fell
-inside one.
+shadow: 9 of the 31 open develop PRs name no DIG ticket in their title or their
+branch (the QA Lead's census on 2026-10-21), so they carry neither run-window
+evidence nor a trailer — 6 of the 9 are drafts, and of the 3 that are not,
+#6105 carries a trailer while #6096 and #5441 do not, so those two would be
+refused as unverifiable once the gate enforces; and one PR (#5964) has a commit
+that falls outside every run window, so it has no author either. A PR with no
+author evidence at all is refused as **unverifiable** — the gate will not guess,
+and it will not fall back to the ticket's assignee. A seat that wrote a commit
+outside every window on the ticket is not named by that commit; it is named by
+the commits that fell inside one.
 
 **The last marker governs.** The queue has always read the last review marker
 on a PR, so the gate judges that one and no other. A stale last marker is a

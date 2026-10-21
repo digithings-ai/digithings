@@ -39,6 +39,7 @@ Post that marker in a comment of its own. Do not paste this block into a comment
 - **Spelling.** `_normalise_verdict()` lowercases and turns `-` into `_`, so `changes-requested` is the same as `changes_requested`. It does not collapse spaces, so `verdict=changes requested` is not readable. Any other spelling is ignored.
 - **A missing or misspelled `verdict=` neither blocks nor clears.** The comment is skipped, so an earlier blocking verdict still stands.
 - **`scope=` must carry a full 40-character lowercase sha.** `_on_pr_history()` applies a blocking verdict only while that sha is the PR head or still in the PR's commits, and it compares the whole string, so a 7-character prefix is read and then never matches. A blocking verdict with no sha, with an uppercase sha, or with a sha that a force-push or rebase removed silently stops applying. Post a new verdict after the fix.
+- **A rebase drops the verdict that was posted against the old commits.** A rebase rewrites the commits, so the sha the verdict named is no longer among the PR's commits and the verdict stops applying — the same rebase sensitivity the reviewer-independence gate has on the author side, on the verdict side. "Post a new verdict after the fix" means after a rebase too: the verdict that counted was a verdict on code that no longer exists.
 - **The newest readable verdict wins.** A later `verdict=approved` clears an earlier block. The parser filters on no author and no association, so anyone who can comment on the PR can clear it — an approved marker is not evidence that a review happened. Check the comment thread before you merge.
 
 `verdict=` is not emitted by the marker producer yet (DIG-2281). Until it is, the gate only fires on a marker posted by hand — post it in a comment of its own.
@@ -71,10 +72,11 @@ Two rules follow:
   subagent or same-session review it posted while its own run on that ticket was
   still active. The author is read from the branch (the `Paperclip-Agent-Id:` and
   `Paperclip-Run-Id:` commit trailers, and the runs on the PR's own ticket that
-  were open when the commits were committed), **not** from the ticket's
-  assignee: owning the ticket is not authorship, and a reviewer that owns the
-  ticket still reviews. The author's run window is not a veto on other seats — a
-  review from another seat posted while the author was still working counts.
+  were open when the commits were written — the commit's author date, which a
+  rebase preserves), **not** from the ticket's assignee: owning the ticket is not
+  authorship, and a reviewer that owns the ticket still reviews. The author's run
+  window is not a veto on other seats — a review from another seat posted while the
+  author was still working counts.
 - **The head must be the current one.** A verdict on an older head says nothing
   about the code the PR stands at now.
 

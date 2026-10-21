@@ -2182,10 +2182,14 @@ def test_the_branches_offered_for_an_update_are_the_oldest_first() -> None:
 AUTHOR_AGENT = "11111111-1111-4111-8111-111111111111"
 REVIEWER_AGENT = "22222222-2222-4222-8222-222222222222"
 OTHER_AGENT = "33333333-3333-4333-8333-333333333333"
+#: A fourth seat: the one that rebased the branch and so carries the newest
+#: committer date on every commit the rebase rewrote.
+REBASER_AGENT = "44444444-4444-4444-8444-444444444444"
 
 #: The runs those seats were in when they posted.
 AUTHOR_RUN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 REVIEWER_RUN = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+REBASE_RUN = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 
 #: The ticket the PR is about. `_pr` names it in the branch.
 TICKET = "DIG-9001"
@@ -2344,6 +2348,7 @@ def _reviewed_pr(
                 {
                     "oid": head_sha,
                     "messageHeadline": "fix: the work this PR carries",
+                    "authoredDate": commit_at,
                     "committedDate": commit_at,
                 }
             ]
@@ -2479,11 +2484,13 @@ def test_a_reviewer_woken_on_the_ticket_while_the_author_pushes_is_not_the_autho
             {
                 "oid": "a" * 40,
                 "messageHeadline": "fix: the first change",
+                "authoredDate": "2026-10-20T08:30:00Z",
                 "committedDate": "2026-10-20T08:30:00Z",
             },
             {
                 "oid": "b" * 40,
                 "messageHeadline": "fix: the change the reviewer watched land",
+                "authoredDate": "2026-10-20T10:00:00Z",
                 "committedDate": "2026-10-20T10:00:00Z",
             },
         ],
@@ -2528,11 +2535,13 @@ def test_a_seat_that_pushed_one_of_the_commits_is_an_author(
             {
                 "oid": "a" * 40,
                 "messageHeadline": "fix: the first change",
+                "authoredDate": "2026-10-20T08:30:00Z",
                 "committedDate": "2026-10-20T08:30:00Z",
             },
             {
                 "oid": "b" * 40,
                 "messageHeadline": "fix: the change the other seat pushed",
+                "authoredDate": "2026-10-20T10:00:00Z",
                 "committedDate": "2026-10-20T10:00:00Z",
             },
         ],
@@ -2601,11 +2610,13 @@ def test_a_merge_commit_does_not_make_the_merging_seat_the_author(
             {
                 "oid": "a" * 40,
                 "messageHeadline": "fix: the work",
+                "authoredDate": COMMIT_AT,
                 "committedDate": COMMIT_AT,
             },
             {
                 "oid": "b" * 40,
                 "messageHeadline": "Merge branch 'develop' into DIG-9001-work",
+                "authoredDate": "2026-10-20T09:30:00Z",
                 "committedDate": "2026-10-20T09:30:00Z",
             },
         ],
@@ -2613,6 +2624,117 @@ def test_a_merge_commit_does_not_make_the_merging_seat_the_author(
     verdict = _judge(pr, prov)
     assert verdict.eligible, verdict.reasons
     assert REVIEWER_AGENT[:8] in verdict.review_evidence
+
+
+def test_a_rebased_commit_is_attributed_to_its_author_not_to_the_rebasing_seat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rebase does not hand the branch to the seat that rebased it.
+
+    A rebase rewrites every commit it replays: the author date and the
+    message stay, the committer date becomes the rebasing seat's. Measured
+    on #6145 (the QA Lead's finding, 21 Oct): read from the committer date,
+    the seat that rebased the branch became the PR's author, and the real
+    author's own review then counted as coverage of the PR it wrote.
+
+    So the commit below carries the signature of a rewrite — a committer date
+    inside the rebasing seat's run window, an author date inside the
+    author's — and the author is still the seat that wrote the code.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[
+            _paperclip_run(AUTHOR_RUN, AUTHOR_AGENT),
+            _paperclip_run(
+                REBASE_RUN,
+                REBASER_AGENT,
+                started="2026-10-20T11:00:00Z",
+                finished="2026-10-20T13:00:00Z",
+            ),
+        ],
+    )
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=AUTHOR_AGENT, run=AUTHOR_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the work",
+                "authoredDate": COMMIT_AT,
+                "committedDate": "2026-10-20T12:00:00Z",
+            }
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "author's own seat" in reason
+    assert AUTHOR_AGENT[:8] in reason
+
+
+def test_a_rebase_outside_every_run_window_leaves_the_pr_reviewable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The rebase's own timestamp must not decide whether the PR has an author.
+
+    A seat that rebases a branch usually works it from another ticket, so
+    the rebase lands outside every run window on this PR's own ticket. Read
+    from the committer date, that leaves the PR with no author at all: the
+    gate cannot show the review came from a different seat, so it refuses
+    every marker and the PR can never merge (the QA Lead's finding on #6145,
+    21 Oct). The author date is still inside the author's window, so the
+    author is found and another seat's review counts.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)],
+    )
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the work",
+                "authoredDate": COMMIT_AT,
+                "committedDate": "2026-10-20T23:30:00Z",
+            }
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+
+
+def test_a_commit_with_no_author_date_is_not_attributed_to_anyone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A commit with no author date is no evidence about who wrote it.
+
+    The gate does not fall back to the committer date, because that is the
+    date a rewrite moves: a fallback would reopen the hole the author date
+    closes. So a commit without an author date is left out, and a PR whose
+    commits all lack one has no author — which the gate refuses, rather than
+    guesses at.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)],
+    )
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the work",
+                "committedDate": COMMIT_AT,
+            }
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "authoring seat could not be identified" in reason
 
 
 def test_a_run_trailer_names_the_author_exactly(
@@ -2634,6 +2756,7 @@ def test_a_run_trailer_names_the_author_exactly(
             {
                 "oid": "a" * 40,
                 "messageHeadline": "fix: the work",
+                "authoredDate": COMMIT_AT,
                 "committedDate": COMMIT_AT,
                 "messageBody": (
                     f"Paperclip-Agent-Id: {AUTHOR_AGENT}\n"

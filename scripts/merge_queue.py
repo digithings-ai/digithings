@@ -1159,14 +1159,28 @@ def _ticket_key(pr: dict[str, Any]) -> str:
     return ""
 
 
-def _commit_times(pr: dict[str, Any]) -> list[str]:
-    """When each of this PR's own commits was committed.
+def _author_dates(pr: dict[str, Any]) -> list[str]:
+    """When each of this PR's own commits was written.
 
     A merge commit is not one of the PR's own commits: merging `develop` into
     a branch is branch maintenance, and the seat that ran the merge did not
     write the code the PR carries. Counting it makes the seat that merged
     `develop` an author of every PR it rebased — measured on #6145, whose
     merge of `develop` landed inside the QA Lead's run window.
+
+    The stamp is the commit's **author date**, never its committer date. A
+    rebase rewrites the commits it replays: the author date and the message
+    stay, the committer date becomes the rebasing seat's. So the committer
+    date names whoever rebased the branch last, and the author date names
+    whoever wrote the code — which is the question this gate asks. Read from
+    the committer date, the seat that rebased a branch became the PR's
+    author, the real author's own review counted as coverage, and a rebase
+    that landed outside every run window left the PR with no author at all
+    and no way to merge (the QA Lead's finding on #6145, 21 Oct).
+
+    A commit that carries no author date says nothing about who wrote it, so
+    it is left out. Nothing is guessed from the committer date: that is
+    exactly the date a rewrite moves.
     """
     stamps: list[str] = []
     for commit in pr.get("commits") or []:
@@ -1175,7 +1189,7 @@ def _commit_times(pr: dict[str, Any]) -> list[str]:
         headline = str(commit.get("messageHeadline") or "").strip().lower()
         if headline.startswith("merge "):
             continue
-        stamp = str(commit.get("committedDate") or "").strip()
+        stamp = str(commit.get("authoredDate") or "").strip()
         if stamp:
             stamps.append(stamp)
     return stamps
@@ -1200,9 +1214,10 @@ def _author_context(
       `Paperclip-Run-Id:` resolved through the API to the seat that owned
       that run;
     * the seat whose run on this PR's own ticket was open when the PR's
-      commits were committed. A run that was about a different ticket is not
-      evidence about this one — the reviewer that works from its own review
-      ticket is not the author of the PR it reviews.
+      commits were written — the author date of each commit, which a rebase
+      preserves. A run that was about a different ticket is not evidence about
+      this one — the reviewer that works from its own review ticket is not the
+      author of the PR it reviews.
 
     When more than one seat is a candidate, the seat that the most commits
     fall into is the author. A reviewer woken on the ticket while the author
@@ -1233,7 +1248,7 @@ def _author_context(
     ticket = prov.ticket(key) if key else None
     if ticket:
         issue_id = str(ticket.get("id") or "")
-        stamps = _commit_times(pr)
+        stamps = _author_dates(pr)
         counts: dict[str, int] = {}
         for run in prov.issue_runs(issue_id):
             seat = str(run.get("agentId") or "")
@@ -1264,8 +1279,8 @@ def _author_context(
             if not candidates:
                 continue
             if len(candidates) == 1:
-                # One seat was working on this ticket when the commit landed.
-                # It wrote it.
+                # One seat was working on this ticket when the commit was
+                # written. It wrote it.
                 authors.add(candidates[0])
                 continue
             # Several seats were awake. The seat the most commits fall into is
