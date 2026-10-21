@@ -32,6 +32,14 @@ describe("one loading affordance per turn", () => {
     );
   });
 
+  it("no work block before the model has produced anything", () => {
+    const thread = read("gallery-thread/thread.aui.tsx");
+    // A status part is not work: the chain header must not appear while the
+    // only thing in the group is the connection state.
+    expect(thread).toMatch(/const holdsWork = part\.indices\.some/);
+    expect(thread).toMatch(/if \(!holdsWork\) return null;/);
+  });
+
   it("keeps the phase copy for the pre-response phase", () => {
     const thread = read("gallery-thread/thread.aui.tsx");
     expect(thread).toMatch(/Waking up services…/);
