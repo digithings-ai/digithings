@@ -258,6 +258,62 @@ give 99 or 101. The arithmetic sits in its own module beside the component
 (`digichat-context-meter-shares.ts`), so it can be tested without a React
 tree.
 
+### Decision note: the work chain is the outer disclosure boundary
+
+The chain group (`group-chainOfThought`) is the **outer** disclosure boundary
+for the agent's work. The grouping paths in `gallery-thread/thread.aui.tsx`
+(`chainGroupBy`) are hierarchical:
+
+```
+reasoning              -> ["group-chainOfThought", "group-reasoning"]
+"tool-call"            -> ["group-chainOfThought", "group-tool"]
+source                 -> ["group-chainOfThought", "group-tool"]
+data / data-*          -> ["group-chainOfThought", "group-tool"]
+"standalone-tool-call" -> []  (renders outside the chain)
+```
+
+assistant-ui's `buildGroupTree` turns those paths into a **nested** tree
+(`@assistant-ui/core`, `src/react/utils/groupParts.ts`): the
+`group-chainOfThought` node exists for every message that carries a reasoning
+or a non-standalone tool-call part, and the row groups (`group-reasoning`,
+`group-tool`) are its children. A chain group is therefore not "the combined
+case" — a reasoning-only turn and a tool-only turn have one too.
+
+**Decision.** A visibility level becomes behaviour in two shape-independent
+places: the chain takes the level's fold rule (`openAtRest`, `foldOnAnswer`),
+and every row inside takes the level's row rule (`openWhileRunning`,
+`openAtRest`). `resolveWorkDisclosure` (`stock/skin-types.ts`) is the only
+place the **work-visibility** level becomes a disclosure policy in the gallery
+thread, and the renderer applies that policy to every shape of work instead of
+deciding the fold per shape. A quiet client therefore folds a reasoning-only,
+a tool-only and a combined turn alike: one chain — open while the work runs,
+folded once the answer starts — with closed rows inside it, and the work
+content not mounted while the rows stay closed. (`showDetails` is set by every
+level and read by no renderer yet; it is not part of the contract.)
+
+**Reason.** The quiet contract was once a single `summaryOnly` branch inside
+the `group-chainOfThought` case, which read as if it covered only the
+combined case. It did not: because the tree nests, that branch was the
+branch every work shape took, and a quiet client got one summary line for all
+of them. The level `summaryOnly` belonged to is retired now (the field is
+`@deprecated` and always false), and the contract lives in the level defaults
+instead. Deciding it there — rather than in a branch that reads as "the
+combined case" — is what makes it hold for every shape, and it keeps the
+invariant provable: the render test drives a reasoning-only, a tool-only and
+a combined turn through the quiet level and pins the same folded outcome for
+all three. A second test pins the one rule quiet carries alone: while the
+agent works, quiet keeps the rows shut where the balanced level opens them.
+The chain's own fold flag (`foldOnAnswer`) cannot be pinned that way: it
+resolves to `working`, while the balanced rule resolves to `!settled && working`,
+and the effect resets `settled` whenever the chain is working, so the two
+rules coincide in every state a flushed DOM can show.
+
+**Rule.** A new work part type joins the chain by joining the
+`group-chainOfThought` path, never by rendering outside it — the
+`standalone-tool-call` path is the one deliberate exception. A level that must
+not expand work closes the rows from the level defaults, so the contract never
+depends on the shape of the group tree.
+
 ### The move touched deploy config
 
 Relocating `design/` and `web/` under `digiweb/` was pure directory bookkeeping
