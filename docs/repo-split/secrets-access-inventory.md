@@ -173,11 +173,12 @@ per DIG-1612/#5308). Rotation is a human/Keymaster action, not part of the
 file move.
 
 `digithings.occ-invite-key` (account `DIG-1474`) **had no copy between 2026-10-18
-and 2026-10-21**. The item was destroyed on 2026-10-18 (DIG-3524, when the key
-gated nothing, because the OCC tenant had dropped out of the registry on that day), while the
-production copies stayed live in the Cloudflare Worker secret, the Pages secret
-and the OCC tenant `token`. All of those surfaces are write-only, so the live
-value could not be read back from them. The value survived in the local host
+and 2026-10-21**. The item was destroyed on 2026-10-18 (DIG-3524), on the
+reasoning that the key gated nothing at the time — the 2026-10-14 measurement found the OCC
+tenant resolving at no credential (DIG-1381) — and that the token was being echoed into served
+HTML (DIG-3523). The production copies were not revoked: the Worker secret, the Pages secret and
+the OCC tenant `token` still held the value, and all of those surfaces are write-only, so the
+live value could not be read back from them. The value survived in the local host
 secret store (`~/.config/digithings/secrets/`), and on 2026-10-21 the sanctioned
 copy was restored to the Keychain and proved against production (DIG-4810:
 `EXPECT_B2=1 bash scripts/verify_occ_invite_key.sh` → 7/7 PASS). **No rotation

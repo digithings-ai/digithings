@@ -22,7 +22,8 @@ Ticket and Zammad text is stored and shown as written. Do not add a masker.
   `EXPECT_B2=1 bash scripts/verify_occ_invite_key.sh` → 7/7 PASS. **No rotation was performed**:
   the value that is live is the value that was installed on 2026-10-11. See [Custody](#custody).
 - **The live value is 48 hex characters, not 64.** The `openssl rand -hex 32` recipe in this file
-  produces 64. Measure the fingerprint; do not assume the recipe.
+  produces 64, and how the 48-character value was minted on 2026-10-11 is not recorded anywhere.
+  Measure the fingerprint; do not assume the recipe, and record the mint method with the next key.
 - **Run the verification with `EXPECT_B2=1`.** The script's default expectations are the pre-B2
   ones, so checks 3 and 4 report `FAIL` against a correctly gated deployment.
 
@@ -32,7 +33,8 @@ A **bearer capability, not authentication** — the same model as a Stripe publi
 iframe `src`. It says "this embed was provisioned by us", not "this caller is staff". It is not
 issued per user, has no expiry of its own, and cannot be attributed to a person.
 
-- **Lives in three copies, and two of them are gates:**
+- **Lives in three production copies, and two of them are gates** (the Keychain custody copy and
+  the local host secret store hold it too — see [Custody](#custody)):
   1. the `token` field of the `occ.digithings.ai` entry inside the digichat Worker secret
      `DIGICHAT_EMBED_TENANTS` (`apps/digichat-cloudflare/src/index.ts:144`) — the registry copy the
      Container reads;
@@ -45,8 +47,10 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
 
   The registry field is **required** by the registry validator
   (`apps/digichat/src/lib/embed-tenants.ts:570`), so it cannot simply be omitted. **All three
-  copies must hold the same value**: a one-sided change opens the shell and refuses the tenant, or
-  the tenant admits the caller and the shell answers 404.
+  production copies must hold the same value**: a one-sided change opens the shell and refuses the
+  tenant, or the tenant admits the caller and the shell answers 404. A rotation must also refresh
+  the Keychain custody copy and the local host secret store, or the next
+  [restore](#custody) reinstalls a dead key as the sanctioned copy.
 - **Entered by the browser as** `?token=<key>` on `https://digithings.ai/chat/occ`, read once
   in a mount effect (`apps/digithings-web/lib/inviteToken.ts`, only because
   `app/chat/occ/page.tsx` sets `acceptsInviteToken`), and forwarded to digichat as the
@@ -68,6 +72,12 @@ risk `R19`) and the paragraph in `docs/repo-split/secrets-access-inventory.md`.
 | local host secret store | `~/.config/digithings/secrets/consolidated.env` and `~/.config/digithings/secrets/digichat-embed-tenants.deploy.json` (mode 600) | the seat that composes the registry, on Chris's Mac |
 | production copies | Worker secret `OCC_INVITE_KEY`, Pages secret `OCC_INVITE_KEY`, the OCC `token` in `DIGICHAT_EMBED_TENANTS` | write-only; nobody can read them back |
 
+The host store path `digichat-embed-tenants.deploy.json` is the one the repo knows:
+`scripts/digichat_tenant_registry.py:222-224` reads it as the default `--live-from`, and
+`embed-tenants.kv.json` is the KV copy it reads next. `consolidated.env` was found by measurement
+on 2026-10-21 and no script in the repo names it; treat it as a host-store file, not a
+repo-sanctioned one.
+
 **The end state is Bitwarden Secrets Manager** — one project, one item named `OCC_INVITE_KEY`.
 That is blocked on a project grant for the `keymaster` machine account (DIG-95): the plan cap of
 3 projects is exhausted, and granting is an owner action in Bitwarden. Until that grant exists,
@@ -77,10 +87,15 @@ the Keychain is the sanctioned copy.
 local copy can be destroyed (DIG-3524, 2026-10-18) while the credential stays live. When the
 custody copy is gone, the only way to get the value back is to rotate.
 
+**Five places hold the value**: the three production copies above, the Keychain custody copy, and
+the local host secret store. A rotation must replace it in all five, or the next restore
+reinstalls a dead key as the sanctioned copy.
+
 Restore a custody copy without printing the value:
 
 ```bash
-# the value stays inside the shell; it never reaches the terminal
+set -e
+# 1) read the value into a shell variable; it never reaches the terminal
 OCC_INVITE_KEY="$(python3 - <<'PY'
 import pathlib
 p = pathlib.Path.home() / ".config/digithings/secrets/consolidated.env"
@@ -89,12 +104,22 @@ for line in p.read_text().splitlines():
         print(line.split("=", 1)[1].strip())
 PY
 )"
-# `-U` overwrites, so an empty value would destroy the custody copy. Stop first.
-: "${OCC_INVITE_KEY:?no OCC_INVITE_KEY in the host secret store - stop, do not write an empty copy}"
+# 2) fail closed: `-U` overwrites, so a failed read would destroy the custody copy
+[ "${#OCC_INVITE_KEY}" -ge 16 ] \
+  || { echo "FATAL: no OCC_INVITE_KEY in the host store - nothing was written" >&2; exit 1; }
+# 3) write it with the value on an echo-off prompt, so it never reaches argv
 security add-generic-password -U -s digithings.occ-invite-key -a DIG-1474 \
-  -w "$OCC_INVITE_KEY" -l "digithings occ-invite-key"
+  -l "digithings occ-invite-key" -w
+# 4) read it back and compare, without printing either value
+[ "$(security find-generic-password -s digithings.occ-invite-key -a DIG-1474 -w)" = "$OCC_INVITE_KEY" ] \
+  && echo "custody copy written and matches the host store" \
+  || { echo "FATAL: the custody copy does not match - stop" >&2; exit 1; }
 unset OCC_INVITE_KEY
 ```
+
+Step 3 prompts for the value with the terminal echo off; paste it there. The scripted form
+`-w "$OCC_INVITE_KEY"` puts the value in the process list for the length of one command, which is
+why the prompt form is the one to use.
 
 Then prove that the copy is the live value and not a guess: run the verification with the key in
 the environment. Check 2 (right key, no origin) is the discriminating probe; a wrong value reads
@@ -170,7 +195,7 @@ does not happen. Read the live id from the Worker's own meta route
 (`curl -s https://digithings.ai/_digichat/meta | jq -r .containerId`). See
 [SECRETS_ROTATION.md § The container boot-env trap](SECRETS_ROTATION.md#the-container-boot-env-trap).
 
-Steps 2-4 write to production. Steps 1 and 5 are safe to rehearse.
+Steps 3 and 4 write to production. Steps 1, 2 and 5 are safe to rehearse.
 
 1. **Load the key into your shell without echoing or persisting it:**
 
@@ -242,9 +267,12 @@ is **not** discoverable from the client projection, i.e. the browser is not give
 
    ```bash
    # c) the Pages gate secret (project digithings-ai)
-   cd apps/digithings-web
-   printf '%s' "$OCC_INVITE_KEY" | npx wrangler pages secret put OCC_INVITE_KEY --project-name digithings-ai
+   (cd apps/digithings-web && printf '%s' "$OCC_INVITE_KEY" \
+     | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 pages secret put OCC_INVITE_KEY --project-name digithings-ai)
    ```
+
+   `scripts/build-digithings.sh:157` puts the same secret at build time; a manual rotation uses
+   the command above.
 
    The **KV copy carries no value to change**: the OCC entry in `embed-tenants` holds the
    credential *reference* `tokenEnv: "OCC_INVITE_KEY"`, which the Worker resolves from the Worker
@@ -351,9 +379,9 @@ loads it in their own browser and never pastes it into a chat.
 ## Revocation — this is the Act B2 rollback
 
 **There is no deny-list and no per-recipient revoke.** The key is a single shared value held in
-three copies (see [Custody](#custody)), so *revoking is rotating*: mint a new value, put it in
+five places (see [Custody](#custody)), so *revoking is rotating*: mint a new value, put it in
 every copy, recycle the container. The procedure is Act B1 steps 1-5 above, with the two gate
-secrets included:
+secrets, the Keychain custody copy and the local host store included:
 
 ```bash
 read -rs OCC_INVITE_KEY && printf '\n'   # the NEW value
@@ -364,7 +392,12 @@ printf '%s' "$OCC_INVITE_KEY" \
   | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put OCC_INVITE_KEY
 # and the Pages gate secret
 (cd apps/digithings-web && printf '%s' "$OCC_INVITE_KEY" \
-  | npx wrangler pages secret put OCC_INVITE_KEY --project-name digithings-ai)
+  | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 pages secret put OCC_INVITE_KEY --project-name digithings-ai)
+# the two local copies: the custody copy and the host store the next restore reads
+security add-generic-password -U -s digithings.occ-invite-key -a DIG-1474 \
+  -l "digithings occ-invite-key" -w          # paste the new value at the echo-off prompt
+# then replace the value in ~/.config/digithings/secrets/consolidated.env and in
+# digichat-embed-tenants.deploy.json (the OCC tenant `token`) - a script edit, no echo
 # the recycle is the deploy: the container id follows the deploying commit (paths.ts:110)
 (cd apps/digichat-cloudflare && npm run deploy)
 EXPECT_B2=1 bash scripts/verify_occ_invite_key.sh
@@ -417,7 +450,7 @@ and live customer PII anyway.
   first 8 hex of the SHA-256 — non-reversible, and enough to prove which value was installed:
 
   ```bash
-  printf '%s' "$OCC_INVITE_KEY" | wc -c          # 64 for a 64-hex key: printf '%s' adds no newline
+  printf '%s' "$OCC_INVITE_KEY" | wc -c          # the exact length: printf '%s' adds no newline
   printf '%s' "$OCC_INVITE_KEY" | shasum -a 256 | cut -c1-8
   ```
 
@@ -430,6 +463,7 @@ and live customer PII anyway.
 - Owner: Platform (Cloudflare operator) for the value, Security for custody.
 - Inventory: `docs/ops/SECRETS_INVENTORY.md` — row `OCC_INVITE_KEY`, and risk `R19` (the custody
   gap of 2026-10-18 → 2026-10-21). `R10` covers `DIGICHAT_EMBED_TENANTS`.
+
 ## Cloudflare-side rotation (decision 2026-10-10)
 
 The invite key is rotated on Cloudflare only. Do **not** store the current
@@ -442,7 +476,7 @@ terminal logged in with `wrangler login`. Values come from the local
 secrets manager and are never echoed. **The entry script is disarmed** (see the banner
 above), so the example below shows the inputs it expects, not a working command:
 
-```sh
+```bash
 OCC_ROLLOUT_AUTH=login \
 OCC_EMBED_TENANTS_CURRENT="$(< ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json)" \
 OCC_INVITE_KEY="$(security find-generic-password -s digithings.occ-invite-key -a DIG-1474 -w)" \
@@ -455,7 +489,9 @@ host secret store, which is where `scripts/digichat_tenant_registry.py` composes
 from.
 
 Mint the key once with `openssl rand -hex 32` straight into the keychain
-(`security add-generic-password -U -s digithings.occ-invite-key -a DIG-1474 -w "$(openssl rand -hex 32)"`).
+(`security add-generic-password -U -s digithings.occ-invite-key -a DIG-1474 -w`), pasting the
+minted value at the echo-off prompt. (`-w "$(openssl rand -hex 32)"` also works, but it puts the
+value in the process list for the length of one command.)
 The rotation **changes production behaviour** (it puts the key in the live OCC tenant
 and redeploys the digichat Worker), so it is never a background secret update.
 
