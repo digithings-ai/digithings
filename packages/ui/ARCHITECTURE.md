@@ -730,11 +730,13 @@ id-like words dropped). The filename reads the slug from the open page.
 The file itself does not keep `data-deployment` or any other deployment
 or tenant attribute. The assistant message menu's Export as HTML uses
 that same path for the question and answer of that one interaction. It
-resolves the message from the menu trigger, so a duplicate id earlier
-in the page is not the one that is saved, and it waits until the menu
-has closed. The file drops the menu's page lock (`aria-hidden`,
-`data-aria-hidden`, `inert`, `data-scroll-locked`, the body's
-`pointer-events`, and `[data-scroll-locked]` CSS). If that message
+resolves the message while its action bar is still mounted, so an
+older answer still exports after that bar unmounts, and a duplicate id
+earlier in the page is not the one that is saved. It waits until the
+menu has closed. The file drops the menu's page lock (`aria-hidden`
+only where `data-aria-hidden` is set, `inert` on the page shell,
+`data-scroll-locked`, the body's `pointer-events`, and
+`[data-scroll-locked]` CSS). If that message
 cannot be resolved, it shows an error and does not save the thread.
 Markdown `/export`, a bare `/export`, and Export as Markdown run the
 same string redactor before the file is saved.

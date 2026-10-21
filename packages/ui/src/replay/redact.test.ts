@@ -191,6 +191,16 @@ describe("redactValue", () => {
     expect(url).toContain("ok=1");
   });
 
+  it("leaves a link's closing parenthesis outside a query secret", () => {
+    const out = redactString("(https://files.example/o?token=tok-plain-9f3c2a)");
+    expect(out).toBe("(https://files.example/o?token=[redacted])");
+  });
+
+  it("leaves a closing backtick outside a session value", () => {
+    const out = redactString("`session=sess-plain-9f3c2a`");
+    expect(out).toBe("`session=[redacted]`");
+  });
+
   it("replaces sensitive object keys entirely", () => {
     const out = redactValue({
       authorization: `Bearer ${JWT}`,

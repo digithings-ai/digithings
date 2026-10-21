@@ -376,6 +376,8 @@ describe("one interaction", () => {
       '<div class="aui-thread-root">',
       '<div data-role="user"><div class="aui-user-message-content">Locked question</div></div>',
       '<div data-role="assistant" data-message-id="a2">',
+      '<span aria-hidden="true">decorative marker</span>',
+      '<div id="kept-inert" inert>kept inert note</div>',
       '<div class="aui-assistant-message-content">Locked answer</div>',
       '<button id="more">More</button>',
       "</div>",
@@ -393,12 +395,19 @@ describe("one interaction", () => {
     const html = serializeSnapshot(shell!, `${css}\nbody[data-scroll-locked]{overflow:hidden}`);
     expect(html).toContain("Locked question");
     expect(html).toContain("Locked answer");
-    expect(html).not.toContain("aria-hidden");
     expect(html).not.toContain("data-aria-hidden");
     expect(html).not.toContain("data-scroll-locked");
-    expect(html).not.toContain("inert");
     expect(html).toContain(".ok");
     const parsed = new DOMParser().parseFromString(html, "text/html");
+    const thread = parsed.querySelector(".aui-thread-root");
+    expect(thread?.parentElement?.hasAttribute("aria-hidden")).toBe(false);
+    expect(thread?.parentElement?.hasAttribute("inert")).toBe(false);
+    expect(parsed.body.hasAttribute("inert")).toBe(false);
+    expect(parsed.documentElement.hasAttribute("inert")).toBe(false);
+    expect(parsed.querySelector("[aria-hidden='true']")?.textContent).toContain(
+      "decorative marker",
+    );
+    expect(parsed.getElementById("kept-inert")?.hasAttribute("inert")).toBe(true);
     expect(parsed.body.getAttribute("style") ?? "").not.toMatch(/pointer-events/i);
     expect(parsed.body.getAttribute("style") ?? "").toMatch(/color/i);
     expect(document.body.hasAttribute("data-scroll-locked")).toBe(true);

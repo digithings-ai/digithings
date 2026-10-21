@@ -34,7 +34,7 @@ const TOKEN_SHAPES: readonly RegExp[] = [
 ];
 
 const QUERY_SECRET =
-  /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key|x-amz-signature|x-amz-credential|x-amz-security-token|awsaccesskeyid|x-goog-signature|x-goog-credential|signature|sig|key-pair-id)=)[^&#\s"']*/gi;
+  /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key|x-amz-signature|x-amz-credential|x-amz-security-token|awsaccesskeyid|x-goog-signature|x-goog-credential|signature|sig|key-pair-id)=)[^&#\s"')]*/gi;
 
 /**
  * Header-style labels whose value is replaced but whose label stays, so the
@@ -45,7 +45,7 @@ const QUERY_SECRET =
 const LABELED: readonly RegExp[] = [
   /(\b(?:proxy-)?authorization["']?[ \t]{0,8}[:=][ \t]{0,8}["']?)(?:(?:bearer|basic|token|digest|apikey|negotiate)[ \t]{1,4}(?:token=)?[^\s"',}]{3,2048}|(?=[^\s"',}]{0,2048}\d)[A-Za-z0-9\-._~+/=:]{8,2048})/gi,
   /(\b(?:set-cookie|cookie|x-digichat-session)["']?[ \t]{0,8}:[ \t]{0,8}["']?)[^"'\n\r]{1,4096}/gi,
-  /((?<![A-Za-z0-9_-])(?:session(?:[_-]?id)?|sid|csrftoken|connect\.sid)=)[^;\s"',&]{4,512}/gi,
+  /((?<![A-Za-z0-9_-])(?:session(?:[_-]?id)?|sid|csrftoken|connect\.sid)=)[^;\s"',&`]{4,512}/gi,
   // scheme://user:password@host (DSNs, URLs with userinfo).
   /(\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s:/@"']{1,256}:)[^\s@/"']{1,256}(?=@)/gi,
 ];

@@ -113,10 +113,66 @@ describe("message menu Export as HTML", () => {
     expect(body).not.toContain("alpha-question-token");
     expect(body).not.toContain("alpha-answer-token");
     expect(body).not.toContain("embed-duplicate-token");
-    expect(body).not.toContain("aria-hidden");
     expect(body).not.toContain("data-scroll-locked");
     expect(body).not.toContain("data-aria-hidden");
     expect(document.body.textContent).toContain("alpha-question-token");
+
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  });
+
+  it("exports an older answer after its action bar unmounts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const alpha = [...document.querySelectorAll("[data-role='assistant']")].find((el) =>
+      el.textContent?.includes("alpha-answer-token"),
+    );
+    expect(alpha).toBeTruthy();
+    await act(async () => {
+      alpha!.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }));
+    });
+    const more = await vi.waitFor(() => {
+      const button = [...alpha!.querySelectorAll("button")].find((el) =>
+        el.textContent?.includes("More"),
+      );
+      expect(button).toBeTruthy();
+      return button!;
+    });
+    const user = userEvent.setup();
+    await user.click(more);
+    await act(async () => {
+      alpha!.dispatchEvent(new MouseEvent("mouseleave", { bubbles: false }));
+    });
+    const item = [...document.body.querySelectorAll("[role='menuitem']")].find((el) =>
+      el.textContent?.includes("Export as HTML"),
+    );
+    expect(item).toBeTruthy();
+    await user.click(item!);
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+    await vi.waitFor(() => expect(saved).toHaveLength(1));
+
+    const body = saved[0]!.body;
+    expect(body).toContain("alpha-question-token");
+    expect(body).toContain("alpha-answer-token");
+    expect(body).not.toContain("beta-question-token");
+    expect(body).not.toContain("beta-answer-token");
+    const stillThere = [...alpha!.querySelectorAll("button")].some((button) =>
+      button.textContent?.includes("More"),
+    );
+    expect(stillThere).toBe(false);
 
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

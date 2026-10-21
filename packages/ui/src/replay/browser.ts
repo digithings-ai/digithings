@@ -213,7 +213,7 @@ export async function downloadMessageSnapshot(
   setExportKeepMounted(true);
   try {
     const anchor = messageAnchor(trigger, messageId);
-    if (!anchor) {
+    if (!anchor?.isConnected) {
       showSnapshotError(doc, MISSING_MESSAGE_MESSAGE);
       throw new Error(MISSING_MESSAGE_MESSAGE);
     }

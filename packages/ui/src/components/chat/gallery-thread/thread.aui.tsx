@@ -40,6 +40,7 @@ import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
 import { downloadMessageSnapshot, showSnapshotError } from "../../../replay/browser";
+import { messageAnchor } from "../../../replay/snapshot";
 import { downloadMarkdown } from "../transcript";
 import { connectionStatusText } from "../connection-status";
 import { WorkStatusLead } from "../work-status-lead";
@@ -1349,6 +1350,7 @@ const AssistantActionBar: FC = () => {
   const { undo, feedback } = useContext(ThreadActionsContext);
   const messageId = useAuiState((s) => s.message.id);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const exportMessage = useRef<HTMLElement | null>(null);
   const exportHtmlAfterClose = useRef(false);
   return (
     <ActionBarPrimitive.Root
@@ -1403,10 +1405,11 @@ const AssistantActionBar: FC = () => {
           if (open || !exportHtmlAfterClose.current) return;
           exportHtmlAfterClose.current = false;
           const doc = document;
-          const trigger = triggerRef.current;
+          const message = exportMessage.current;
+          exportMessage.current = null;
           const id = messageId;
           requestAnimationFrame(() => {
-            void downloadMessageSnapshot(doc, new Date().toISOString(), id, trigger).catch(
+            void downloadMessageSnapshot(doc, new Date().toISOString(), id, message).catch(
               (error: unknown) => {
                 const message = error instanceof Error ? error.message : "HTML export failed.";
                 showSnapshotError(doc, message);
@@ -1440,6 +1443,7 @@ const AssistantActionBar: FC = () => {
           <ActionBarMorePrimitive.Item
             className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink"
             onClick={() => {
+              exportMessage.current = messageAnchor(triggerRef.current, messageId);
               exportHtmlAfterClose.current = true;
             }}
           >

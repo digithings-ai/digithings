@@ -279,17 +279,21 @@ function stripDeploymentAttributes(root: Element): void {
   }
 }
 
-const PAGE_LOCK_ATTRS = ["aria-hidden", "data-aria-hidden", "inert", "data-scroll-locked"];
-
 /**
- * An open menu locks the page: aria-hidden on the app, and react-remove-scroll's
- * `data-scroll-locked` plus `pointer-events: none` on the body. Those are not
- * part of the chat. The open page is left as it is.
+ * An open menu locks the page: aria-hidden where Radix also sets
+ * data-aria-hidden, inert on the shell, and react-remove-scroll's
+ * `data-scroll-locked` plus `pointer-events: none` on the body. A
+ * decorative aria-hidden inside the thread stays. The open page is
+ * left as it is.
  */
 function stripPageLock(root: Element): void {
   const nodes = [root, ...root.querySelectorAll("*")];
   for (const node of nodes) {
-    for (const name of PAGE_LOCK_ATTRS) node.removeAttribute(name);
+    node.removeAttribute("data-scroll-locked");
+    if (node.hasAttribute("data-aria-hidden")) {
+      node.removeAttribute("aria-hidden");
+      node.removeAttribute("data-aria-hidden");
+    }
     if (node.tagName !== "BODY") continue;
     const style = node.getAttribute("style");
     if (!style) continue;
@@ -299,6 +303,10 @@ function stripPageLock(root: Element): void {
       .filter((part) => part && !/^pointer-events\s*:/i.test(part));
     if (kept.length === 0) node.removeAttribute("style");
     else node.setAttribute("style", kept.join("; "));
+  }
+  const thread = root.querySelector(".aui-thread-root");
+  for (let cursor = thread?.parentElement ?? null; cursor; cursor = cursor.parentElement) {
+    cursor.removeAttribute("inert");
   }
 }
 
