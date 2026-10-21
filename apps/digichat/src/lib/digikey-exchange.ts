@@ -38,6 +38,28 @@ export async function exchangeDigikeyApiKey(
   return parseTokenPayload(data);
 }
 
+/** Per-attempt abort window for a single digikey token request. */
+export const DIGIKEY_BFF_ATTEMPT_TIMEOUT_MS = 30_000;
+
+/** Backoff waited before each attempt, in ms. The first attempt has no delay. */
+export const DIGIKEY_BFF_RETRY_DELAYS_MS = [
+  0, 2_000, 4_000, 8_000, 12_000, 15_000, 15_000,
+] as const;
+
+/**
+ * Overall budget of one `exchangeDigikeyBffSession` call: the whole retry loop
+ * is abandoned once this much wall clock has passed. It bounds the loop, not
+ * each attempt.
+ *
+ * It bounds the exchange up to the response headers: the per-attempt abort
+ * timer is released when the headers arrive, so a response that then stalls
+ * its body is not bounded by this budget.
+ *
+ * Exported, and pinned by a test, so the number the code enforces and the
+ * number the doc claims cannot drift apart.
+ */
+export const DIGIKEY_BFF_RETRY_BUDGET_MS = 100_000;
+
 /**
  * OIDC-backed session exchange (digichat BFF → digikey). Requires DIGIKEY_BFF_TOKEN on digikey.
  */
@@ -53,10 +75,14 @@ export async function exchangeDigikeyBffSession(
   // backoff inside a 100s overall budget instead of surfacing "assistant not
   // available". The budget bounds the whole loop, not each attempt: without it
   // 7 attempts x 30s plus 56s of backoff held the visitor's first request for
-  // ~266s, four times the budget this comment used to claim.
-  const ATTEMPT_TIMEOUT_MS = 30_000;
-  const BUDGET_MS = 100_000;
-  const delays = [0, 2_000, 4_000, 8_000, 12_000, 15_000, 15_000];
+  // ~266s, more than twice the ~100s this comment used to claim.
+  //
+  // The budget bounds the exchange up to the response headers, not the body:
+  // the per-attempt abort timer is released when the headers arrive, so a
+  // response that then stalls its body is not bounded by it.
+  const ATTEMPT_TIMEOUT_MS = DIGIKEY_BFF_ATTEMPT_TIMEOUT_MS;
+  const BUDGET_MS = DIGIKEY_BFF_RETRY_BUDGET_MS;
+  const delays = DIGIKEY_BFF_RETRY_DELAYS_MS;
   const startedAt = Date.now();
   for (let i = 0; i < delays.length; i++) {
     const beforeWait = BUDGET_MS - (Date.now() - startedAt);
