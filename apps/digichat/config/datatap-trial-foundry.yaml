@@ -18,12 +18,15 @@ deployment:
       body:
         - This is a DataTap trial. The agent reaches your enterprise database
           through the DataTap MCP, so it can answer with your own data.
+    # Starters are tested live against the trial agent (Enron sample data):
+    # each must finish with no tool error on two runs and show a different
+    # tool path. Re-test them when the trial data or agent changes.
     suggestions:
-      - Which tables hold our customer data?
-      - What feeds the revenue mart?
-      - Who owns the orders table, and how fresh is it?
-      - Which pipelines failed in the last 24 hours?
-      - How do I add a new column to the marketing model?
+      - How did email volume change through 2001 as Enron collapsed?
+      - What did Enron's traders say about the California energy crisis?
+      - Which emails mention Arthur Andersen, and what was the concern?
+      - Who sends the most email in this archive, and what about?
+      - Find an email about the Dabhol power plant and open it.
     placeholder: Ask about your data, your pipelines or the platform
   persistence: none
   auth: anonymous

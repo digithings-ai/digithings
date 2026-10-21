@@ -435,13 +435,25 @@ def test_the_probe_fails_closed() -> None:
     assert "set -euo pipefail" in probe
     assert "/healthz" in probe and '!= "200"' in probe
     assert "jq -r '.ok'" in probe and '!= "true"' in probe, "the body must say ok=true, not just 200"
-    assert "/api/health" in probe and '!= "$VERSION"' in probe
+    assert "/api/health" in probe
+    # The rules live in one place: scripts/digichat_probe_verdict.mjs, which the
+    # local rehearsal calls too. The two lanes used to keep their own copy and
+    # drifted, and a drift that only the local lane has is a rehearsal that
+    # passes where the release fails. The helper's own rules are pinned by
+    # behaviour in tests/scripts/test_digichat_probe_verdict.py.
+    assert "scripts/digichat_probe_verdict.mjs" in probe, (
+        "the lane must judge the image with the shared probe verdict helper"
+    )
+    assert '--status "$api_status"' in probe and '--version "$VERSION"' in probe, (
+        "the helper has to be given the status the probe read and the version "
+        "the image was built as"
+    )
 
     for marker in (
         "the container exited before it served one probe",
         "never returned 200",
         "did not report ok=true",
-        "but this image was built as",
+        "sed -e 's/^REFUSE //'",
     ):
         assert _refuses(probe, marker), (
             f"the probe reports {marker!r} but no exit 1 follows it — a diagnostic "
@@ -592,25 +604,23 @@ def test_the_probe_reads_the_health_status_instead_of_demanding_a_200() -> None:
         "turns that expected degradation into a red lane"
     )
     assert "api_status" in probe, "the probe must read the status code, not demand one"
-    assert "200|503)" in probe, (
-        "the probe must accept only the two answers the health route can give: "
-        "200 (everything reachable) and 503 (the ecosystem is unreachable). Any "
-        "other status - a 500 that still serialises the version - is a fault, "
-        "not a degraded environment"
+    # The rules live in one helper, which the local rehearsal calls too: the
+    # two lanes used to keep their own copy and drifted, and a drift only the
+    # local lane has is a rehearsal that passes where the release fails. The
+    # helper's own rules - the two honest statuses, the four services a
+    # standalone container cannot reach, the version the image serves - are
+    # pinned by behaviour in tests/scripts/test_digichat_probe_verdict.py.
+    assert "scripts/digichat_probe_verdict.mjs" in probe, (
+        "the lane must judge the image with the shared probe verdict helper"
     )
-    assert "unreachable" in probe, (
-        "the tolerated failure is the one the route records when the fetch never "
-        "completed; an upstream that answered http_<status> is a real fault"
+    assert '--status "$api_status"' in probe, (
+        "the status the probe read has to be handed to the helper that judges it"
     )
-    for service in ("digraph", "digiquant", "digitrace", "digisearch"):
-        assert service in probe, (
-            f"the probe must name {service} as a service a standalone container "
-            "cannot reach, so its failure reads as a degradation and not a fault"
-        )
-    # The version is still the contract: it is what catches a stale layer.
-    assert '!= "$VERSION"' in probe
+    assert '--version "$VERSION"' in probe, (
+        "the version the image was built as has to be handed to the helper"
+    )
     # And the refusal has to actually exit.
-    assert _refuses(probe, "not only the unreachable ecosystem services")
+    assert _refuses(probe, "sed -e 's/^REFUSE //'")
 
 
 def test_a_tag_push_resolves_the_release_name() -> None:
@@ -710,4 +720,30 @@ def test_a_multi_line_tags_value_is_written_with_the_heredoc_form() -> None:
     assert 'echo "tags=$tags"' not in resolve, (
         "a plain echo splits a multi-line value at the newline, and the runner "
         "then reads the second name as an output key and rejects it"
+    )
+
+
+def test_the_probe_decides_on_the_verdict_text_and_not_on_the_exit_status() -> None:
+    """The helper's OUTPUT is the decision.
+
+    If the exit status were the decision, a wrapper that swallowed it would
+    turn a refusal into a pass, the step would report success, and the push
+    step (gated on that success) would publish the refused image.
+    """
+    guards = _guards(_doc())
+    assert 'case "$verdict" in' in guards
+    assert '"OK "*)' in guards
+    assert "sed -e 's/^REFUSE //'" in guards
+    assert '--version "$VERSION" || true)' in guards
+    assert '"$VERSION")" || {' not in guards
+
+
+def test_the_probe_helper_falls_back_to_the_workflow_commit_for_an_older_tag() -> None:
+    """A repair dispatch for a tag cut before the helper existed still works."""
+    guards = _guards(_doc())
+    assert 'helper="scripts/digichat_probe_verdict.mjs"' in guards
+    assert 'helper="/tmp/digichat_probe_verdict.mjs"' in guards
+    assert (
+        "raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}"
+        "/scripts/digichat_probe_verdict.mjs" in guards
     )

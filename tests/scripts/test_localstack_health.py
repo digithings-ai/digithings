@@ -116,11 +116,12 @@ def test_a_dead_port_fails_rather_than_erroring():
 # --- a refused knob fails the gate and sends no request (DIG-4911) -----------
 
 
-def test_a_refused_port_fails_the_gate_and_names_the_knob(monkeypatch):
-    """A misconfigured port must be a failure, not a skip.
+def test_a_refused_port_never_opens_a_connection(monkeypatch):
+    """A refused knob sends no request at all.
 
-    A skip would let the gate report a check it never ran as a pass, so the
-    refusal is a FAILED result that names the variable the operator exported.
+    The failure above is about the knob, not about a check that never runs:
+    the transport itself is replaced by one that fails the test if it is
+    ever used, so the proof is that no request leaves the machine.
     """
 
     def _no_network(*args, **kwargs):
@@ -364,3 +365,41 @@ def test_roundtrip_probe_fails_on_a_successful_but_empty_read():
 
     assert not report.ok, "a 204 read-back carries no written value"
     assert "204" in report.results[0].detail
+
+
+# --- DIG-4905: a port knob that is not a port fails the check, loudly -------
+
+
+def test_a_port_knob_that_is_not_a_port_fails_the_check():
+    """The gate refuses the URL and says which knob is wrong.
+
+    The failure has to be a FAILED check and not a crash: a traceback would
+    take the whole gate down, and a SKIP would let the gate read as healthy
+    while one surface went unverified. The detail names the knob, so the
+    operator knows what to fix.
+    """
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
+    report = health.run_gate(
+        (check,), config={"DT_DIGIGRAPH_PORT": "8000@evil.com"}, timeout=1.0
+    )
+
+    assert not report.ok, "a knob that would point the probe off the machine must fail"
+    assert _names(report.failed) == ("digigraph",)
+    assert _names(report.skipped) == ()
+    assert "DT_DIGIGRAPH_PORT" in report.results[0].detail
+
+
+def test_a_port_knob_that_is_not_a_port_opens_no_connection():
+    """No URL is built, so no request can leave the machine.
+
+    Control: the same check with a real port does build a URL, so the
+    refusal above is about the knob and not about a check that never runs.
+    """
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
+    refused = health.run_gate(
+        (check,), config={"DT_DIGIGRAPH_PORT": "8000@evil.com"}, timeout=1.0
+    )
+    accepted = health.run_gate((check,), config={"DT_DIGIGRAPH_PORT": "18000"}, timeout=1.0)
+
+    assert refused.results[0].url is None
+    assert accepted.results[0].url == "http://127.0.0.1:18000/healthz"

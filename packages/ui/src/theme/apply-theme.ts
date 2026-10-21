@@ -8,6 +8,8 @@
 import { PALETTE_IDS, PALETTES, type PaletteId } from "./palette-registry";
 
 export const THEME_STORAGE_KEY = "dt-theme";
+/** Fired on the document's window after every applyDocumentTheme, so a provider can re-read it. */
+export const THEME_CHANGE_EVENT = "dt-theme-change";
 export const PALETTE_STORAGE_KEY = "dt-palette";
 
 export type ThemePreference = "light" | "dark" | "auto";
@@ -155,6 +157,13 @@ export function applyDocumentTheme(
     const writable = store as Storage;
     writeKey(writable, THEME_STORAGE_KEY, preference === "auto" ? null : preference);
     writeKey(writable, PALETTE_STORAGE_KEY, pal === "default" ? null : pal);
+  }
+  if (doc) {
+    try {
+      doc.defaultView?.dispatchEvent(new Event(THEME_CHANGE_EVENT));
+    } catch {
+      /* ignore */
+    }
   }
   return resolved;
 }

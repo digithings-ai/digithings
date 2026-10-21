@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping, Sequence
 
-from .contracts import Check, ConfigRefusal, resolve
+from .contracts import Check, InvalidPort, resolve
 from .health import GateReport
 from .orchestrate import StepReport, step_rows
 from .preflight import PreflightReport
@@ -80,25 +80,27 @@ def render_url_table(checks: Sequence[Check], config: Mapping[str, str], profile
     for check in checks:
         if not check.in_profile(profile):
             continue
-        refused = False
         try:
             url, reason = resolve(check, config)
-        except ConfigRefusal as exc:
-            # A refused knob has no URL to print: printing the default one
-            # would show a URL nobody can reach (DIG-4911).
-            url, reason = None, str(exc)
-            refused = True
-        if url:
-            shown = url
-        elif refused:
-            shown = f"(refused: {reason})"
-        else:
-            shown = f"(not configured: {reason})"
+        except InvalidPort as exc:
+            # A knob that is not a port is not a row that is unconfigured: it
+            # is a row whose URL was refused, and the reason says so. No URL
+            # is printed for it: the default one would show a reachable
+            # address for a probe that never runs (DIG-4911).
+            rows.append(
+                (
+                    check.name,
+                    "http" if check.kind == "http" else check.kind,
+                    f"(invalid: {exc})",
+                    check.source,
+                )
+            )
+            continue
         rows.append(
             (
                 check.name,
                 "http" if check.kind == "http" else check.kind,
-                shown,
+                url or f"(not configured: {reason})",
                 check.source,
             )
         )
