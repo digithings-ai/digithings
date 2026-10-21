@@ -622,12 +622,19 @@ class NoRealNetwork:
         self._saved_log = _mod.log
         self._saved_token_file = _mod.APP_TOKEN_FILE
         self._saved_env = dict(os.environ)
+        self._saved_gate_env = _mod.ENV
         self._tmp = tempfile.mkdtemp()
         self.sh_calls = []
         self.log_lines = []
+        self.sh_result = (0, "")
+        self.sh_stderr = ""
         _mod.sh = self._fake_sh
         _mod.log = self.log_lines.append
         _mod.APP_TOKEN_FILE = os.path.join(self._tmp, "app-token")
+        # The gate's own environment is the copy it takes at import time. A test
+        # that changes it has to give it back, or the next test inherits it and
+        # the order of the suite decides the result (DIG-4809).
+        _mod.ENV = dict(_mod.ENV)
         for key in ("LOCAL_CI_APP_TOKEN_FILE", "CI_APP_TOKEN"):
             os.environ.pop(key, None)
 
@@ -635,6 +642,7 @@ class NoRealNetwork:
         _mod.sh = self._saved_sh
         _mod.log = self._saved_log
         _mod.APP_TOKEN_FILE = self._saved_token_file
+        _mod.ENV = self._saved_gate_env
         os.environ.clear()
         os.environ.update(self._saved_env)
         shutil.rmtree(self._tmp, ignore_errors=True)
@@ -642,8 +650,11 @@ class NoRealNetwork:
     def _fake_sh(self, cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
         """Stand in for the command runner: the `gh` calls are recorded, never
         executed."""
-        self.sh_calls.append({"cmd": list(cmd), "env": env})
-        return 0, ""
+        self.sh_calls.append({"cmd": list(cmd), "env": env, "name": name})
+        rc, stdout = self.sh_result
+        if out is not None:
+            out.write(f"$ {' '.join(cmd)}\n{stdout}{self.sh_stderr}\n[rc={rc}]\n")
+        return rc, stdout
 
 
 class ExplicitPrStateTest(NoRealNetwork, unittest.TestCase):
@@ -1081,3 +1092,110 @@ class AppStatusRowTest(NoRealNetwork, unittest.TestCase):
         _mod.sh = lambda *a, **kw: (1, "")
         self.assertFalse(_mod.app_status("abc123", self._fields()))
         self.assertIn("app status: failed (rc=1)", self.log_lines)
+
+
+class AppRowFailsClosedTest(NoRealNetwork, unittest.TestCase):
+    """DIG-4809: the app row must not cost the repo row, and must not lie.
+
+    The app row is the one that will be compared with the repo row for 48
+    hours. A broken token file, a token that is not an app installation token,
+    a repo row that was refused - in every one of those cases the app row is
+    skipped, and the `local-ci` row still goes out. The tick must not die on
+    the way to a verdict (DIG-4809).
+    """
+
+    TOKEN = "ghs_123456_" + "z" * 30
+    NOT_A_TOKEN = "ghp_" + "y" * 36
+
+    def setUp(self):
+        self._isolate()
+
+    def tearDown(self):
+        self._unisolate()
+
+    def _write_token(self, value, path=None):
+        with open(path or _mod.APP_TOKEN_FILE, "w") as f:
+            f.write(value + "\n")
+
+    def _arg(self, prefix):
+        return [a.split("=", 1)[1] for call in self.sh_calls
+                for a in call["cmd"] if a.startswith(prefix + "=")]
+
+    def _app_call(self):
+        for call in self.sh_calls:
+            if call["env"] is not None:
+                return call
+        return None
+
+    # D1: a token file that is not text must not stop the tick.
+    def test_a_token_file_that_is_not_text_posts_no_row_and_keeps_the_repo_row(self):
+        with open(_mod.APP_TOKEN_FILE, "wb") as f:
+            f.write(b"\xff\xfe\x00binary")
+        _mod.status("abc123", "success", "all gates passed")
+        self.assertEqual(self._arg("context"), ["local-ci"])
+        self.assertIn("app status: skipped", " ".join(self.log_lines))
+
+    # D2: the token must not ride along into every child the gate starts.
+    def test_the_environment_token_is_not_in_the_gate_environment(self):
+        os.environ["CI_APP_TOKEN"] = self.TOKEN
+        env = _mod.build_env()
+        self.assertNotIn("CI_APP_TOKEN", env)
+        self.assertNotIn("CI_APP_TOKEN", _mod.ENV)
+
+    # D3: a named file that does not exist must not end the search.
+    def test_a_named_token_file_that_is_missing_falls_through_to_the_default(self):
+        self._write_token(self.TOKEN)
+        os.environ["LOCAL_CI_APP_TOKEN_FILE"] = os.path.join(self._tmp, "not-there")
+        self.assertTrue(_mod.app_status("abc123", _mod.status_fields("success", "ok")))
+        self.assertEqual(self._app_call()["env"]["GH_TOKEN"], self.TOKEN)
+
+    # D4: a failed row has to be diagnosable, and the token must not be in it.
+    def test_a_failed_row_names_the_reason_and_never_the_token(self):
+        self._write_token(self.TOKEN)
+        self.sh_result = (1, "")
+        self.sh_stderr = "HTTP 403: Resource not accessible by integration\n"
+        self.assertFalse(_mod.app_status("abc123", _mod.status_fields("success", "ok")))
+        line = [ln for ln in self.log_lines if ln.startswith("app status: failed")][0]
+        self.assertIn("403", line)
+        self.assertNotIn(self.TOKEN, line)
+        self.assertNotIn(self.TOKEN, " ".join(self.log_lines))
+
+    # D5: a refused repo row leaves no app row behind.
+    def test_a_refused_repo_row_posts_no_app_row(self):
+        self._write_token(self.TOKEN)
+        self.sh_result = (1, "")
+        self.assertFalse(_mod.status("abc123", "success", "all gates passed"))
+        self.assertEqual(self._arg("context"), ["local-ci"])
+        self.assertIsNone(self._app_call())
+        self.assertIn("local-ci/app not posted", " ".join(self.log_lines))
+
+    # D6: a head that is not a commit of this repository gets the repo row only.
+    def test_the_app_row_can_be_skipped_for_a_head_this_repository_does_not_have(self):
+        self._write_token(self.TOKEN)
+        _mod.status("abc123", "failure", "fork code never runs here", app=False)
+        self.assertEqual(self._arg("context"), ["local-ci"])
+
+    # D8: a token that is not an app installation token is refused.
+    def test_a_token_that_is_not_an_installation_token_posts_no_row(self):
+        self._write_token(self.NOT_A_TOKEN)
+        self.assertFalse(_mod.app_status("abc123", _mod.status_fields("success", "ok")))
+        self.assertEqual(self.sh_calls, [])
+        self.assertIn("not an app installation token", " ".join(self.log_lines))
+
+    # The token belongs in the child's environment and nowhere else.
+    def test_the_token_is_never_in_the_command_name(self):
+        self._write_token(self.TOKEN)
+        _mod.app_status("abc123", _mod.status_fields("success", "ok"))
+        for call in self.sh_calls:
+            self.assertNotIn(self.TOKEN, call["name"] or "")
+            self.assertNotIn(self.TOKEN, " ".join(call["cmd"]))
+
+    # Both rows name the same commit of the same repository.
+    def test_both_rows_name_the_same_commit_of_the_same_repository(self):
+        self._write_token(self.TOKEN)
+        _mod.status("abc123", "success", "all gates passed")
+        paths = [a for call in self.sh_calls for a in call["cmd"]
+                 if a.startswith("repos/") and "/statuses/" in a]
+        self.assertEqual(len(paths), 2)
+        self.assertEqual(paths[0], paths[1])
+        self.assertTrue(paths[0].endswith("/statuses/abc123"))
