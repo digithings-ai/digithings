@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   EMBED_LOAD_ERROR_RETRY,
   EMBED_LOAD_ERROR_TITLE,
+  EMBED_SHELL_CLASS,
   EmbedLoadErrorCard,
   embedDocumentFailed,
 } from "@/components/ChatEmbedShell";
@@ -60,6 +61,18 @@ describe("ChatEmbedShell load failure", () => {
     expect(embedDocumentFailed({ contentDocument: doc(false, "about:blank") })).toBe(false);
     expect(embedDocumentFailed({ contentDocument: null })).toBe(false);
     expect(embedDocumentFailed(null)).toBe(false);
+  });
+
+  it("probes for the class the digichat embed really renders", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const embedShell = readFileSync(
+      fileURLToPath(
+        new URL("../../digichat/src/app/(digichat)/embed-route-shell.tsx", import.meta.url),
+      ),
+      "utf8",
+    );
+    expect(embedShell).toMatch(new RegExp(`className="${EMBED_SHELL_CLASS}[ "]`));
   });
 
   it("wires Retry to reload the embed in place", async () => {

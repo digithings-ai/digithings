@@ -138,6 +138,8 @@ export function buildEmbedParentErrorMessage(
  * page, never painted, or the build has no embed origin). User-facing only:
  * no env var names, origins or container internals ever reach the page.
  */
+// Same words as the embed's own `embed_unloadable` line
+// (apps/digichat/src/lib/embed-parent-error-messages.ts); keep the two in step.
 export const EMBED_LOAD_ERROR_TITLE = "The chat could not load. Please try again in a moment.";
 export const EMBED_LOAD_ERROR_RETRY = "Retry";
 
@@ -164,16 +166,38 @@ function logEmbedLoadFailure(reason: string): void {
  * own origin); a cross-origin frame (local dev) reads as "unknown" and the
  * ready timeout decides instead.
  */
-export function embedDocumentFailed(
-  frame: { contentDocument: Document | null } | null | undefined,
-): boolean {
+/**
+ * The class the digichat embed puts on its root (apps/digichat
+ * `embed-route-shell.tsx`). A contract test reads that source, so a rename
+ * there fails CI instead of turning every /chat load into the error card.
+ */
+export const EMBED_SHELL_CLASS = "dc-embed-shell";
+
+type FrameLike = { contentDocument: Document | null } | null | undefined;
+
+function readableDocument(frame: FrameLike): Document | null {
   try {
     const doc = frame?.contentDocument;
-    if (!doc || doc.URL === "about:blank") return false;
-    return doc.querySelector(".dc-embed-shell") === null;
+    if (!doc || doc.URL === "about:blank") return null;
+    return doc;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function embedDocumentFailed(frame: FrameLike): boolean {
+  const doc = readableDocument(frame);
+  return doc ? doc.querySelector(`.${EMBED_SHELL_CLASS}`) === null : false;
+}
+
+/**
+ * True only when the frame is readable and really holds the chat. A frame we
+ * cannot read (cross-origin) is not assumed to be the chat: on the ready
+ * timeout it gets the error card, never a force-reveal of an unknown page.
+ */
+export function embedDocumentIsChat(frame: FrameLike): boolean {
+  const doc = readableDocument(frame);
+  return doc ? doc.querySelector(`.${EMBED_SHELL_CLASS}`) !== null : false;
 }
 
 /**
@@ -444,16 +468,21 @@ export function ChatEmbedShell({
     const t = window.setTimeout(() => {
       if (ready) return;
       const win = iframeRef.current?.contentWindow;
-      if (iframeLoadedRef.current && win) {
-        // Iframe painted but never said ready — surface inside digichat transcript.
+      if (iframeLoadedRef.current && win && embedDocumentIsChat(iframeRef.current)) {
+        // The chat painted but never said ready — surface inside its transcript.
         win.postMessage(buildEmbedParentErrorMessage("ready_timeout"), targetOrigin);
         // Reveal the iframe so the in-chat error line is visible.
         setEmbedReady(true);
         setForceReveal(true);
         return;
       }
-      // No browsing context to post into — the error card in the chat slot.
-      logEmbedLoadFailure("no digichat:ready and the frame never loaded");
+      // Never loaded, or loaded something we cannot confirm is the chat (an
+      // error page, or a cross-origin frame): the error card in the chat slot.
+      logEmbedLoadFailure(
+        iframeLoadedRef.current
+          ? "no digichat:ready and the frame is not a readable chat"
+          : "no digichat:ready and the frame never loaded",
+      );
       setLoadFailed(true);
     }, EMBED_READY_TIMEOUT_MS);
     return () => {
@@ -505,9 +534,8 @@ export function ChatEmbedShell({
 
   // Retry reloads the embed in place: the invite key (if any) already lives in
   // `src`, and a page reload would lose it once the address bar was stripped.
+  // The ready effect (keyed on `attempt`) resets the load refs.
   const retryEmbed = () => {
-    iframeLoadedRef.current = false;
-    embedReadyRef.current = false;
     setLoadFailed(false);
     setForceReveal(false);
     setEmbedReady(false);
@@ -516,7 +544,22 @@ export function ChatEmbedShell({
 
   if (configError) {
     // A build with no embed origin cannot recover in place; reload the page.
-    return <EmbedLoadErrorCard onRetry={() => window.location.reload()} />;
+    return (
+      <div
+        data-theme={shellTheme}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          height: "100%",
+          minHeight: "100%",
+          width: "100%",
+          colorScheme: shellTheme,
+        }}
+      >
+        <EmbedLoadErrorCard onRetry={() => window.location.reload()} />
+      </div>
+    );
   }
 
   return (
@@ -590,6 +633,7 @@ export function ChatEmbedShell({
               <div style={{ width: "min(560px, 72vw)" }}>
                 <HeroBanner def={DIGICHAT} replayLoading />
               </div>
+              <span className="sr-only">Loading chat…</span>
             </div>
           ) : (
             <BootLabOverlay

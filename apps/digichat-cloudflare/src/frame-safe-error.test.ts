@@ -28,6 +28,7 @@ describe("frame-safe /embed failures", () => {
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
     expect(res.headers.get("content-disposition")).toBeNull();
     expect(res.headers.get("retry-after")).not.toBeNull();
+    expect(res.headers.get("cache-control")).toBe("no-store");
     const body = await res.text();
     expect(body).toBe(FRAME_SAFE_ERROR_HTML);
     expect(body).not.toContain("container_unavailable");

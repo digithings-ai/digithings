@@ -44,6 +44,8 @@ export function frameSafeErrorResponse(request: Request, res: Response): Respons
   headers.delete("content-encoding");
   headers.set("content-type", "text/html; charset=utf-8");
   headers.set("x-content-type-options", "nosniff");
+  // Never replayed from cache, so the page's Retry really asks again.
+  headers.set("cache-control", "no-store");
   // An HTML error page keeps its own body; anything else is replaced, so a
   // JSON or platform message never paints in the frame.
   return new Response(html ? res.body : FRAME_SAFE_ERROR_HTML, {
