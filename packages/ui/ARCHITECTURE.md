@@ -291,6 +291,14 @@ folded once the answer starts — with closed rows inside it, and the work
 content not mounted while the rows stay closed. (`showDetails` is set by every
 level and read by no renderer yet; it is not part of the contract.)
 
+**Spacing.** The chain's vertical rhythm is the `--space-1` … `--space-7` scale
+and the `--trace-*` tokens on `.digichat-thread` (`chat-aui.css`). The Worked
+title, the gap between sibling groups, the gap inside a group, and the
+reasoning header-to-body step all read those tokens. Sibling groups share
+`--trace-group-gap`; a tool group and a reasoning group do not carry their
+own margins. The chain header's marker-to-label gap stays `0.45rem` so it
+still matches the pre-response loader.
+
 **Reason.** The quiet contract was once a single `summaryOnly` branch inside
 the `group-chainOfThought` case, which read as if it covered only the
 combined case. It did not: because the tree nests, that branch was the
