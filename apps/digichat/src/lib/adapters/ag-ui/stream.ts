@@ -19,6 +19,7 @@ import {
   type UiStreamWriter,
 } from "@/lib/ui-stream-parts";
 import { toChatMessages } from "@/lib/adapters/shared/messages";
+import { guardRound, type TurnGuard } from "@/lib/guardrails/turn";
 import {
   createTextWriter,
   isRecord,
@@ -41,24 +42,28 @@ type Consumer = {
   activityDetail: ActivityDetail;
   toolNames: Map<string, string>;
   toolArgs: Map<string, string>;
+  /** False when this new tool call is past the cap and must not be rendered. */
+  admitToolStart?: () => boolean;
 };
 
-function consumeEvent(event: Record<string, unknown>, c: Consumer): void {
+function consumeEvent(event: Record<string, unknown>, c: Consumer): boolean {
   const type = stringField(event, "type");
-  if (!type) return;
+  if (!type) return false;
 
   switch (type) {
     case "THINKING_TEXT_MESSAGE_CONTENT": {
       writeReasoningDelta(c.writer, c.ctx, stringField(event, "delta") ?? "", c.activityDetail);
-      return;
+      return false;
     }
     case "TEXT_MESSAGE_CONTENT": {
       c.text.delta(stringField(event, "delta") ?? "");
-      return;
+      return false;
     }
     case "TOOL_CALL_START": {
       const callId = stringField(event, "toolCallId") ?? "tool";
       const name = stringField(event, "toolCallName") ?? "tool";
+      if (c.toolNames.has(callId)) return false;
+      if (c.admitToolStart && !c.admitToolStart()) return true;
       c.toolNames.set(callId, name);
       c.text.close();
       writeGatedSpan(
@@ -67,13 +72,13 @@ function consumeEvent(event: Record<string, unknown>, c: Consumer): void {
         { operation: "execute_tool", status: "started", label: name, toolName: name, callId },
         c.activityDetail,
       );
-      return;
+      return false;
     }
     case "TOOL_CALL_ARGS": {
       const callId = stringField(event, "toolCallId") ?? "tool";
       const delta = stringField(event, "delta") ?? "";
       if (delta) c.toolArgs.set(callId, (c.toolArgs.get(callId) ?? "") + delta);
-      return;
+      return false;
     }
     case "TOOL_CALL_END": {
       // Close the row so a server that never sends a result cannot leave the
@@ -96,7 +101,7 @@ function consumeEvent(event: Record<string, unknown>, c: Consumer): void {
         },
         c.activityDetail,
       );
-      return;
+      return false;
     }
     case "TOOL_CALL_RESULT": {
       const callId = stringField(event, "toolCallId") ?? "tool";
@@ -118,16 +123,16 @@ function consumeEvent(event: Record<string, unknown>, c: Consumer): void {
         },
         c.activityDetail,
       );
-      return;
+      return false;
     }
     case "RUN_ERROR": {
       const message = stringField(event, "message") ?? "AG-UI run failed";
       c.text.close();
       writeFailureStatus(c.writer, c.ctx, message, c.activityDetail);
-      return;
+      return false;
     }
     default:
-      return;
+      return false;
   }
 }
 
@@ -139,6 +144,7 @@ export async function createAgUiStreamResponse(opts: {
   /** Resolved by the caller from `backend.apiKeyEnv`; null when unset. */
   apiKey: string | null;
   signal?: AbortSignal;
+  guard?: TurnGuard;
 }): Promise<Response> {
   const headers = protocolJsonHeaders({
     apiKey: opts.apiKey,
@@ -160,12 +166,40 @@ export async function createAgUiStreamResponse(opts: {
       const text = createTextWriter(writer, ctx);
       const toolNames = new Map<string, string>();
       const toolArgs = new Map<string, string>();
+      const upstream = new AbortController();
+      const stopVisitor = () => upstream.abort();
+      opts.signal?.addEventListener("abort", stopVisitor);
+      let toolCallsSoFar = 0;
+      let capped = false;
+      const admitToolStart = () => {
+        const guard = opts.guard;
+        if (!guard?.active || guard.toolCap == null) return true;
+        if (toolCallsSoFar >= guard.toolCap) {
+          guard.noteToolCap(writer, toolCallsSoFar);
+          capped = true;
+          upstream.abort();
+          return false;
+        }
+        toolCallsSoFar += 1;
+        return true;
+      };
       try {
+        const instruction = await guardRound(opts.guard, {
+          writer,
+          pendingText: body,
+          signal: opts.signal,
+        });
+        let requestBody = body;
+        if (instruction) {
+          const parsed = JSON.parse(body) as { messages: { role: string; content: string }[] };
+          parsed.messages.push({ role: "user", content: instruction });
+          requestBody = JSON.stringify(parsed);
+        }
         const res = await fetch(opts.backend.url, {
           method: "POST",
           headers,
-          body,
-          signal: opts.signal,
+          body: requestBody,
+          signal: upstream.signal,
         });
         if (!res.ok || !res.body) {
           await res.body?.cancel().catch(() => {});
@@ -175,14 +209,30 @@ export async function createAgUiStreamResponse(opts: {
           // still ends on an error part instead of a successful empty turn.
           throw new Error(label);
         }
-        for await (const evt of iterateSse(res.body, opts.signal)) {
-          const json = parseSseJson(evt.data);
-          if (!json) continue;
-          if (isRecord(json)) {
-            consumeEvent(json, { writer, ctx, text, activityDetail: opts.activityDetail, toolNames, toolArgs });
+        try {
+          for await (const evt of iterateSse(res.body, upstream.signal)) {
+            const json = parseSseJson(evt.data);
+            if (!json || !isRecord(json)) continue;
+            if (
+              consumeEvent(json, {
+                writer,
+                ctx,
+                text,
+                activityDetail: opts.activityDetail,
+                toolNames,
+                toolArgs,
+                admitToolStart,
+              })
+            ) {
+              break;
+            }
           }
+        } catch (err) {
+          if (!capped || opts.signal?.aborted) throw err;
         }
       } finally {
+        opts.signal?.removeEventListener("abort", stopVisitor);
+        opts.guard?.release();
         text.close();
         finishStandardActivity(writer, ctx);
       }

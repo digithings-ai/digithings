@@ -125,6 +125,7 @@ export function toStockChatPrefsConfig(
     defaultLanguage: clientConfig.chrome.defaultLanguage,
     defaultModel: clientConfig.models.default,
     availableModels: clientConfig.models.available,
+    modelPicker: clientConfig.models.picker,
     allowModelPicker:
       clientConfig.models.allowPicker === true ||
       clientConfig.features.modelPicker === true,

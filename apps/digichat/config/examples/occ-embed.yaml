@@ -31,8 +31,26 @@ hosts:
       toolCalls: true
       sources: true
       branchPicker: true
-      modelPicker: false
+      modelPicker: true
       speech: false
+    models:
+      # Chris, 21 Oct 2026 19:19 Rome: "Yes, enable the model picker on OCC
+      # for 2.6.6, I sign off on overriding the DIG-4488 lock". occPicker is
+      # the switch (off keeps the operator model). The catalog is the same
+      # policy as digithings.ai. lockSessionControls below still hides MCP
+      # and tool session controls. DIG-4750 still refuses a raw id list.
+      occPicker: true
+      allowPicker: true
+      catalog: true
+      default: deepseek/deepseek-v4.1-flash-1017
+      priceCapUsdPerMillion: 2
+      # Chris, 21 Oct 2026 22:51 Rome: OCC has no token limits and no model
+      # limits. The invite link is the gate. No costPerWindow, so there is
+      # no premium meter and no premium-to-Auto fallback. The #6182 tool-call
+      # cap and answer guard stay; they are stability guardrails, not a
+      # token budget.
+      presets: [auto, reasoning, fast, light]
+      showFullList: true
     backend:
       type: digigraph
     # digisearch/digivault reach the model only as the MCP servers below
@@ -95,6 +113,9 @@ hosts:
       llmAccess: operator
       showByok: false
       showLanguageSelector: true
-      # Pin the house model and hide per-session model/MCP/tool controls.
+      # Pins the session: digigraph strips the session_* tools and the client
+      # hides MCP server controls (tools.allowUserToggle above still shows
+      # the tool toggle). The model picker stays available because
+      # models.available is the catalog, not empty. /theme stays available.
       lockSessionControls: true
       webSearch: false

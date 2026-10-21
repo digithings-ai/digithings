@@ -55,6 +55,19 @@ deployment:
     # config/examples/datatap-trial-deploy.md).
     projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/REPLACE-PROJECT
     agentName: REPLACE-AGENT-NAME
+    # Alias of guardrails.maxToolCallsPerTurn. Prefer the shared block below.
+    # maxToolCalls: 5
+    # maxToolCalls: 4
+  # Proposed guardrails for this trial. Commented, so nothing is applied.
+  # Uncomment the block and one maxToolCallsPerTurn line after confirming.
+  # tokensPerMinute.deployment is the Azure TPM for gpt-5.6-terra in
+  # westeurope. Fill that number in from Azure; do not guess it, and do not
+  # change the Azure deployment from here.
+  # guardrails:
+  #   maxToolCallsPerTurn: 5
+  #   # maxToolCallsPerTurn: 4
+  #   tokensPerMinute:
+  #     deployment: <Azure TPM for gpt-5.6-terra, westeurope>
   tools:
     # Declared for /tools. The Foundry agent owns these tools; the page does
     # not fetch them and the visitor cannot toggle them.

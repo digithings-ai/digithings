@@ -161,6 +161,18 @@ function toggleHint(on: boolean, onText: string, offText: string): string {
   return on ? `On · ${onText}` : `Off · ${offText}`;
 }
 
+/** Friendly /models hint. Preset tokens stay words; a concrete pick stays its id. */
+function modelChoiceLabel(model: string | undefined): string {
+  const value = model?.trim() ?? "";
+  if (!value) return "";
+  if (value === "auto" || value === "preset:auto") return "Auto";
+  if (value.startsWith("preset:")) {
+    const id = value.slice("preset:".length);
+    return id ? id.charAt(0).toUpperCase() + id.slice(1) : "";
+  }
+  return value;
+}
+
 /** Featured language rows so `/dutch` etc. still resolve. */
 export function featuredLanguageCommands(
   setLanguage: (code: string) => void,
@@ -205,7 +217,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
     } else if (def.id === "lang") {
       description = `Reply language (${languageLabel(prefs.language)})`;
     } else if (def.id === "models") {
-      description = prefs.model || def.hint;
+      description = modelChoiceLabel(prefs.model) || def.hint;
     } else if (def.id === "toolbar") {
       description = toggleHint(prefs.toolbar, "visible", "hidden");
     } else if (def.id === "scrollbar") {

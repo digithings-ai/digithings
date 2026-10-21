@@ -82,6 +82,10 @@ export function clientConfigFromEmbedTenant(
           allowPicker:
             embed.models?.allowPicker === true ||
             (embed.models?.allowPicker !== false && base.features.modelPicker),
+          // A Foundry tenant is blanked above. A catalog picker travels only
+          // with the tenant that resolved it, not from the house fallback,
+          // so a hand-listed tenant does not inherit another tenant's groups.
+          ...(embed.models?.picker ? { picker: embed.models.picker } : {}),
         },
     tools: {
       // An embed cannot turn toggling on over a base that locked it. Omitted

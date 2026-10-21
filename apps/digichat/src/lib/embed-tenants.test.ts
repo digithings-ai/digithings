@@ -525,6 +525,73 @@ describe("parseEmbedTenants", () => {
     });
   });
 
+  it("parses a foundry maxToolCalls cap and rejects a non-integer", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://example.services.ai.azure.com",
+            agentName: "digichat",
+            maxToolCalls: 4,
+          },
+          gateMode: "ungated",
+          token: "shh",
+        },
+      }),
+    );
+    expect(reg.get("example.com")?.backend).toMatchObject({ maxToolCalls: 4 });
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: {
+              type: "foundry",
+              projectEndpoint: "https://example.services.ai.azure.com",
+              agentName: "digichat",
+              maxToolCalls: 0,
+            },
+            gateMode: "ungated",
+            token: "shh",
+          },
+        }),
+      ),
+    ).toThrow(/maxToolCalls/);
+  });
+
+  it("parses shared guardrails and rejects answerAt above pauseAt", () => {
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          guardrails: { tokensPerMinute: { user: 80000 }, maxToolCallsPerTurn: 4 },
+          gateMode: "ungated",
+          token: "shh",
+        },
+      }),
+    );
+    expect(reg.get("example.com")?.guardrails).toEqual({
+      maxToolCallsPerTurn: 4,
+      tokensPerMinute: { user: 80000 },
+    });
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "digigraph" },
+            guardrails: { answerAt: 0.9, pauseAt: 0.9 },
+            gateMode: "ungated",
+            token: "shh",
+          },
+        }),
+      ),
+    ).toThrow(/answerAt must be below pauseAt/);
+  });
+
   it("throws on a non-https foundry projectEndpoint", () => {
     expect(() =>
       parseEmbedTenants(
