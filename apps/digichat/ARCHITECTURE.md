@@ -791,9 +791,11 @@ menu still lists the house backend under the same name.
 The picker test pins the label the menu renders, so a change of the value
 fails loudly. What no test could see was the drift itself: the chip read
 the constant while the menu read a copy of the value as it stood that day.
-The invariant is now pinned from the source
-(`src/lib/route-client-config.source.test.ts`): the menu names
-`HOUSE_BACKEND_ID`, and the id is written in one module only.
+The invariant is now pinned from the source: the menu's own pins in
+`src/components/stock/embed-composer-menu.source.test.ts`, and the app-wide
+rule in `src/lib/route-client-config.source.test.ts` — the menu names
+`HOUSE_BACKEND_ID`, and among the app modules under `src` the id is written
+in one place only.
 
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 (stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
