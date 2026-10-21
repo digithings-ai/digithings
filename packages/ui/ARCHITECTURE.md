@@ -726,4 +726,6 @@ values). It is
 pattern-based, so an unlabeled secret of unknown shape can
 still get through. The filename is
 `<deployment>-<YYYY-MM-DD-HHMM>-<question-slug>.html` (UTC, latest question,
-id-like words dropped).
+id-like words dropped). The filename reads the slug from the open page.
+The file itself does not keep `data-deployment` or any other deployment
+or tenant attribute.

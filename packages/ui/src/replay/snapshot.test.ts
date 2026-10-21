@@ -159,9 +159,9 @@ describe("deployment hide rules", () => {
       "</style>",
     ].join("");
     document.body.innerHTML = [
-      '<div data-stock-product data-deployment="Northwind" data-thread-skin="digichat">',
+      '<div data-stock-product data-deployment="Northwind" data-tenant-id="tenant-marker" data-thread-skin="digichat">',
       '<aside class="dc-thread-list">Other client positions</aside>',
-      '<div class="aui-thread-root">',
+      '<div class="aui-thread-root" data-deployment="Northwind">',
       '<div class="aui-user-message-content">What is the overnight book?</div>',
       '<div data-message-part-type="source-url">Hidden source body</div>',
       '<a data-source href="https://example.com/src">source link text</a>',
@@ -187,6 +187,10 @@ describe("deployment hide rules", () => {
     expect(html).toContain("What is the overnight book?");
     expect(html).toContain("folded tool result");
     expect(html).toContain("data-stock-product");
+    expect(html).not.toContain("data-deployment");
+    expect(html).not.toContain("data-tenant");
+    expect(html).not.toContain("tenant-marker");
+    expect(document.body.innerHTML).toContain("data-deployment");
     expect(html).not.toContain("Hidden source body");
     expect(html).not.toContain("source link text");
     expect(html).not.toContain("picker-model-name");

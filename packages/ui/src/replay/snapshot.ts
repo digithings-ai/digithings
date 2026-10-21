@@ -118,9 +118,8 @@ export function snapshotSource(doc: Document): HTMLElement | null {
   if (!thread) return null;
   const html = doc.createElement("html");
   copyShellAttributes(doc.documentElement, html);
-  const deployment = deploymentText(doc);
-  if (deployment) html.setAttribute("data-deployment", deployment);
   html.append(threadShell(doc, thread));
+  stripDeploymentAttributes(html);
   return html;
 }
 
@@ -193,9 +192,24 @@ function isClosedPanel(el: Element): boolean {
   return el.ownerDocument.querySelector(`[aria-controls="${cssEscape(id)}"]`) !== null;
 }
 
+function isDeploymentAttribute(name: string): boolean {
+  return /deployment|tenant/i.test(name);
+}
+
+/** The slug names the file. It does not belong in the file. */
+function stripDeploymentAttributes(root: Element): void {
+  const nodes = [root, ...root.querySelectorAll("*")];
+  for (const node of nodes) {
+    for (const attr of [...node.attributes]) {
+      if (isDeploymentAttribute(attr.name)) node.removeAttribute(attr.name);
+    }
+  }
+}
+
 function copyShellAttributes(from: Element, to: Element): void {
   for (const attr of from.attributes) {
     if (attr.name.toLowerCase().startsWith("on")) continue;
+    if (isDeploymentAttribute(attr.name)) continue;
     to.setAttribute(attr.name, attr.value);
   }
 }
