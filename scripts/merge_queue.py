@@ -1614,7 +1614,8 @@ _SCOPE_SHA_RE = re.compile(r"@(?P<sha>[0-9a-f]{7,40})\b")
 # discipline named the two verdicts "approve" and "changes needed"; a reviewer
 # writing that spelling must not slip past the gate.
 BLOCKING_VERDICTS = frozenset({"changes_requested", "changes_needed"})
-READABLE_VERDICTS = BLOCKING_VERDICTS | {"approved", "approve"}
+APPROVE_VERDICTS = frozenset({"approved", "approve"})
+READABLE_VERDICTS = BLOCKING_VERDICTS | APPROVE_VERDICTS
 
 
 def _normalise_verdict(value: str) -> str:
@@ -1670,6 +1671,13 @@ _PROSE_SHA_RE = re.compile(r"(?<![0-9a-zA-Z-])(?P<sha>[0-9a-f]{7,40})(?![0-9a-zA
 # and reading its first group as a commit would name a head nobody reviewed.
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
+# The seat a verdict belongs to. Every seat on this org pushes under one GitHub
+# login, so `author.login` cannot tell two reviewers apart — the seat id is the
+# provenance marker's `agent=` field, and it is the only place it is written.
+# A verdict whose seat cannot be read is judged by the newest-verdict rule
+# instead of by seat (see `_standing_seat_blocks`).
+_SEAT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$")
+
 
 def _comment_text(body: str) -> str:
     """The comment body with its HTML comments taken out."""
@@ -1702,6 +1710,16 @@ class PostedVerdict:
     comment_id: str
     author: str
     at: str
+    # The seat that posted it, read from the provenance marker. Empty when the
+    # comment carries no readable seat: every seat shares one GitHub login, so
+    # there is nothing else to tell them apart by.
+    seat: str = ""
+
+
+def _comment_seat(provenance: Mapping[str, str]) -> str:
+    """The seat that posted this comment, or "" when it cannot be read."""
+    agent = str(provenance.get("agent") or "").strip()
+    return agent if agent and _SEAT_ID_RE.match(agent) else ""
 
 
 def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
@@ -1734,7 +1752,8 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         # review opens with. The question this gate asks is "does this comment
         # name the head the PR stands at", so every sha in it is a candidate.
         claims = [found.group("sha") for found in _PROSE_SHA_RE.finditer(text)]
-    provenance_head = str(_provenance_fields(body).get("head") or "")
+    provenance = _provenance_fields(body)
+    provenance_head = str(provenance.get("head") or "")
     if provenance_head:
         claims.append(provenance_head)
     bindings: list[str] = []
@@ -1753,7 +1772,81 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         comment_id=str(comment.get("id") or ""),
         author=login,
         at=str(comment.get("createdAt") or ""),
+        seat=_comment_seat(provenance),
     )
+
+
+def _readable_verdicts(pr: dict[str, Any]) -> list[PostedVerdict]:
+    """Every verdict the queue can read on this PR, oldest first.
+
+    A verdict the queue cannot read is skipped rather than counted: a typo'd
+    marker, a comment with no verdict, or a reviewer's non-answer is a missing
+    signal, not a clearance, and letting it displace a real block would hand
+    anyone who can comment a way to unlock the queue.
+    """
+    verdicts: list[PostedVerdict] = []
+    for comment in pr.get("comments") or []:
+        if not isinstance(comment, Mapping):
+            continue
+        parsed = _comment_verdict(comment)
+        if parsed is None:
+            continue
+        verdicts.append(parsed)
+    verdicts.sort(key=lambda verdict: verdict.at)
+    return verdicts
+
+
+def _covers_head(verdict: PostedVerdict, head: str) -> bool:
+    """True when the verdict names the head the PR stands at.
+
+    A binding of 7 characters or more that prefixes the head binds it — the
+    same width the reviewer-independence gate reads.
+    """
+    if not head:
+        return False
+    return any(
+        len(binding) >= 7 and head.lower().startswith(binding.lower())
+        for binding in verdict.bindings
+    )
+
+
+def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
+    """The blocks the seats who posted them have not cleared, oldest first.
+
+    A blocking verdict belongs to the seat that posted it: that seat's own
+    later approve naming the head the PR stands at clears it, and nothing else
+    does. An approve by the same seat that names another head clears nothing —
+    it says nothing about this head. Another seat's approve clears nothing
+    either: `#6170` (DIG-4911) merged into `develop` on 2026-10-21 with the
+    security desk's `changes requested` on the branch, because the code
+    reviewer's later approve on the head was the newest readable verdict.
+
+    A verdict whose seat cannot be read is not judged here: the seat is
+    unknown, so the newest-verdict rule (`_latest_posted_verdict`) judges it.
+    That is a known limitation, not a choice — 33 of the 40 readable verdicts
+    on the open PRs carried no seat marker when this rule was measured.
+    """
+    by_seat: dict[str, list[PostedVerdict]] = {}
+    for verdict in _readable_verdicts(pr):
+        if verdict.seat:
+            by_seat.setdefault(verdict.seat, []).append(verdict)
+    standing: list[PostedVerdict] = []
+    for verdicts in by_seat.values():
+        newest = verdicts[-1]
+        if newest.verdict in BLOCKING_VERDICTS:
+            standing.append(newest)
+            continue
+        if newest.verdict in APPROVE_VERDICTS and _covers_head(newest, head):
+            # This seat approved the head the PR stands at: its block is cleared.
+            continue
+        # The seat's newest verdict does not clear this head. A block it posted
+        # earlier therefore still stands.
+        for verdict in reversed(verdicts[:-1]):
+            if verdict.verdict in BLOCKING_VERDICTS:
+                standing.append(verdict)
+                break
+    standing.sort(key=lambda verdict: verdict.at)
+    return standing
 
 
 def _latest_posted_verdict(pr: dict[str, Any]) -> PostedVerdict | None:
@@ -1764,16 +1857,8 @@ def _latest_posted_verdict(pr: dict[str, Any]) -> PostedVerdict | None:
     counted as the newest: letting a typo'd marker displace a real block would
     hand anyone who can comment a way to unlock the queue.
     """
-    best: PostedVerdict | None = None
-    for comment in pr.get("comments") or []:
-        if not isinstance(comment, Mapping):
-            continue
-        parsed = _comment_verdict(comment)
-        if parsed is None:
-            continue
-        if best is None or parsed.at >= best.at:
-            best = parsed
-    return best
+    verdicts = _readable_verdicts(pr)
+    return verdicts[-1] if verdicts else None
 
 
 def _sha_text(sha: str) -> str:
@@ -1792,26 +1877,45 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
     with no approve on the head it merged. Six digithings PRs did it between
     2026-10-20 and 2026-10-21 (#6115, #6074, #6071, #6019, #5968, #5761).
 
-    The rule reads the verdict now, not the branch:
+    The rule reads the verdict now, not the branch, and it is one rule with two
+    clauses, in this order. It is written down once, in
+    `docs/MERGE_QUEUE.md` ("The verdict rule"), so no two seats read it
+    differently:
 
-    * the newest readable verdict is the one that counts, whatever it is scoped
-      to — a blocking verdict blocks, and only a later approve clears it;
-    * an approve clears only when it names the head the PR stands at, so a
-      verdict written against a head that has moved cannot clear anything. The
-      head is named by the marker's `scope=`, by the provenance marker's `head=`,
-      or — for a verdict written in prose — by any sha the comment writes;
-    * a verdict the queue cannot read is skipped, not read as a clearance.
+    1. **A seat's own block stands until that seat clears it.** A blocking
+       verdict belongs to the seat that posted it. That seat's later approve
+       naming the head the PR stands at clears it; an approve naming another
+       head does not, and no other seat's approve does either. `#6170`
+       (DIG-4911) merged into `develop` on 2026-10-21 with the security desk's
+       `changes requested` still on the branch, because the code reviewer's
+       later approve on the head was the newest readable verdict — a second
+       sign-off was never asked for, so the queue never held the PR for it.
+    2. **Everything else is judged by the newest readable verdict.** The newest
+       readable verdict is the one that counts, whatever it is scoped to — a
+       blocking verdict blocks, and only a later approve clears it; an approve
+       clears only when it names the head the PR stands at; a verdict the queue
+       cannot read is skipped, not read as a clearance.
+
+    Clause 1 needs the seat, and the seat is written only in the provenance
+    marker (`agent=`): every seat pushes under one GitHub login, so a comment's
+    author cannot say who wrote it. A verdict whose seat cannot be read is
+    judged by clause 2 — the newest-verdict rule — because there is no seat to
+    hold it to. That is a known limitation of what the marker carries, not a
+    second policy.
 
     This is the value gate. Whether a review happened at all, and whether it came
     from another seat, is the coverage gate's question (`_review_coverage`), and
     the two stay apart on purpose (DIG-4795).
     """
+    head = str(pr.get("headRefOid") or "")
+    standing = _standing_seat_blocks(pr, head)
+    if standing:
+        return [_standing_seat_reason(pr, standing[-1], head)]
     latest = _latest_posted_verdict(pr)
     if latest is None:
         # No verdict the queue can read is not a verdict. The coverage gate
         # decides this PR, on its own evidence.
         return []
-    head = str(pr.get("headRefOid") or "")
     head_text = f"`{head[:12]}`" if head else "an unknown head"
     where = f"comment {latest.comment_id}" if latest.comment_id else "a comment"
     if latest.verdict in BLOCKING_VERDICTS:
@@ -1827,12 +1931,7 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
             f"the PR now stands at {head_text}, and a blocking "
             f"verdict stands until a later approve names the head it covers"
         ]
-    covering = [
-        binding
-        for binding in latest.bindings
-        if len(binding) >= 7 and head.lower().startswith(binding.lower())
-    ]
-    if covering:
+    if _covers_head(latest, head):
         return []
     return [
         f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
@@ -1840,6 +1939,24 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
         f"{_sha_text(latest.bindings[0] if latest.bindings else '')}, and the PR now "
         f"stands at {head_text}; an approve counts only when it names the head it covers"
     ]
+
+
+def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -> str:
+    """The refusal for a block the seat that posted it has not cleared."""
+    head_text = f"`{head[:12]}`" if head else "an unknown head"
+    where = f"comment {block.comment_id}" if block.comment_id else "a comment"
+    if block.scope:
+        scope_text = f", scoped to `{block.scope[:12]}`"
+    elif block.bindings:
+        scope_text = f", naming `{block.bindings[0][:12]}`"
+    else:
+        scope_text = ""
+    return (
+        f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+        f"({block.source}, in {where}){scope_text}, and the PR now stands at "
+        f"{head_text}; a blocking verdict stands until that seat posts a later "
+        f"approve naming the head it covers"
+    )
 
 
 def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
