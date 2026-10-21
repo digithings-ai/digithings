@@ -143,6 +143,8 @@ export type DigichatClientConfig = {
     showContextMeter?: boolean;
     webSearch?: boolean;
     searchEngine?: string;
+    /** Present only when the host locks session tool/MCP toggles. */
+    lockSessionControls?: boolean;
   };
   /** Discriminator only — never project endpoints / agent names */
   backendType: DigichatDeployment["backend"]["type"];
@@ -292,6 +294,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
         : {}),
       webSearch,
       ...(searchEngine ? { searchEngine } : {}),
+      ...(dep.gate.lockSessionControls === true ? { lockSessionControls: true } : {}),
     },
     backendType: dep.backend.type,
   };

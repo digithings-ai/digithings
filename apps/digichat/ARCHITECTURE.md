@@ -1095,31 +1095,47 @@ enforces the directive its own way:
 **Embed slash commands (#3418 / #3511 / #3556 / #3733 / #3736).** `@digithings/digichat-ui` `slash-commands.ts`
 owns the public palette. The first-party `digichat` Thread mounts assistant-ui
 `ComposerTriggerPopover` + `unstable_useSlashCommandAdapter` whenever session prefs
-are present (embed, modal popup, and full-app). Full-app `/` also keeps
-`ToolCatalogBar`. The palette is a **flat** composer-width list (command left,
+are present (embed, modal popup, and full-app). The product host does not
+mount tool chips. The palette is a **flat** composer-width list (command left,
 description right). No Tools / Session / Actions / Setup folders and no per-row
 Lucide icons. `/help` is a no-op placeholder — the list itself is the help; it
 must not dump into the composer.
 
-Each catalog tool has **one public name and two gestures**: empty Enter toggles the
-session pref (same as `/settings`); a remainder forces that tool for this send.
-`/digisearch RS256 JWT` and `/digivault notes` set `X-Digi-Force-Tool`. `/websearch query`
-sets a send-only web-search header. `/search`, `/vault`, and `/docs` are not public names.
+The composer holds one palette. A pane command (`/language `, `/theme `, `/tools `,
+`/models `, `/mcp `, and the other submenu commands) opens that pane and only that
+pane; typing, including a second `/`, filters the open pane. Backspacing out of the
+trailing space returns to the command list. Choosing an option writes the full
+sequence (`/language English`) and then runs it. The slash popover and the menu
+are never both open.
+
+Tools are not slash commands. `/digisearch`, `/digivault`, `/zammad`,
+and other catalog or MCP ids are not in the palette. Enabling or disabling a tool
+happens in `/tools`, which lists every tool and MCP server for the host.
+`session_toggle_tool` does not flip a tool: on an unlocked host it answers
+"Tools are changed in /tools." A Foundry
+host (`backend.type: foundry`) shows that list read-only, labelled "Managed by the
+agent", from the config catalog — the page does not call the agent to discover
+tools. A host with `gate.lockSessionControls` (OCC) or `tools.allowUserToggle: false`
+lists the same rows but does not toggle them. `/search`, `/vault`, and `/docs` are
+not public names. The BFF `X-Digi-Force-Tool` allowlist is unchanged; the palette
+no longer sends it.
 
 Web-search defaults (#3859, tool-only grounding — no synthesis-model pins):
 
 | surface | session pref | BFF forward |
 |---|---|---|
-| first-party chat (authenticated, null `embedConfig`) | on | when the browser asks AND `DIGICHAT_WEB_SEARCH=1` (deploy sets it) |
+| first-party chat (authenticated, null `embedConfig`) | deployment allow; stored opt-out is cleared on load | when the browser asks AND `DIGICHAT_WEB_SEARCH=1` (deploy sets it) |
 | tenant embeds with `webSearch: true` (digithings.ai, occ, local app/cli/modal) | on | when the browser asks AND the tenant allows |
 | datatap (`webSearch: false`) | off | never |
 
-Pref semantics: `readWebSearchPref` defaults on; the user opts out per surface via
-`/websearch` empty-Enter, `/settings`, or the composer menu (persisted as `"0"` in
-localStorage). Either side false — tenant gate or user pref — means the BFF does not
-send `X-Digi-Enable-Web-Search`, so the turn stays corpus-only.
-Menu pick inserts `/digisearch ` (trailing space) and does not fire immediately.
-Extra YAML/MCP catalog ids (`/datatap`) use the same pattern. Disabled catalog ids travel
+Pref semantics: `readWebSearchPref` defaults on; embed surfaces opt out via
+`/tools` or `/settings` (persisted as `"0"` in localStorage). Signed-in ChatShell
+has no `/tools` pane, so it does not read that key: on load it clears
+`digichat-web-search:auth` and follows the deployment allow (house:
+`NEXT_PUBLIC_DIGICHAT_WEB_SEARCH=1`). Either side false — tenant gate or, on an
+embed, the user pref — means the BFF does not send `X-Digi-Enable-Web-Search`,
+so the turn stays corpus-only.
+Disabled catalog ids travel
 as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp`, `/models`, `/effort`,
 `/search-engine`, `/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
 `/mcp` starts on the operator/session MCP list (status: Active / Disabled / Needs auth).
@@ -1266,9 +1282,11 @@ digichat-side semantics below as a live gate today.
 The `DIGICHAT_EMBED_TENANTS` env registry accepts the same operator-only fields on a tenant's
 `mcp.servers` entry (`token`/`tokenEnv`/`authHeader`), merged through the same loader and stripped
 by the same browser projections. `/tools` lists every
-connected catalog + MCP tool as On/Off (each is also a slash command). `/mcp` lists MCP
-tools with status Active / Disabled / Needs auth; Enter opens the session JSON and field
-editors (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**
+connected catalog + MCP tool. Where the host allows it, each row is On/Off.
+A Foundry host shows the same rows read-only ("Managed by the agent"). A locked
+host (`lockSessionControls`) lists them and does not toggle. `/mcp` lists MCP
+servers with status Active / Disabled / Needs auth; Enter opens the session JSON and field
+editors when the host allows editing (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**
 opens a popup → `POST /api/mcp/oauth/start` (PKCE, SSRF via `isAllowedMcpServerUrl`) → AS →
 `GET /api/mcp/oauth/callback` which `postMessage`s the token into `mcpCustom`. Start uses
 the operator YAML URL when the id matches; a client `url` is accepted only when
@@ -1281,7 +1299,8 @@ only when `mcp.allowUserServers` is true (`https://` + SSRF + count/size caps; o
 may still use `http` for docker DNS). Session URLs never echo
 back in the client config projection. `@assistant-ui/react-mcp` is not installed — visitor MCP
 is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trust as slash) to
-mutate language/model/effort/search-engine/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
+mutate language/model/effort/search-engine/MCP. `session_toggle_tool` does not flip a tool;
+it answers "Tools are changed in /tools." `session_upsert_mcp` cannot plant a new session URL
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
 `X-Digi-Effort` (low/medium/high) is forwarded to digigraph. `X-Digi-Search-Engine`
 (auto/internal/exa/tavily/parallel/firecrawl/tinyfish) is forwarded with it: effective
@@ -1297,7 +1316,7 @@ tenant-rollout reference.
 
 In-iframe “ask digichat” chrome is omitted on the first-party skin; outer launcher title /
 new chat / close and marketing footer attribution stay. Signed-in ChatShell keeps `/clear`
-`/history` `/scope` plus the same `/provider` / `/websearch` / `/settings` surface.
+`/history` `/scope` plus the same `/provider` / `/settings` surface.
 
 **Sources on the transcript (#3419 / 2.0).** assistant-ui `Source` parts and tool
 output document lists render inline in `ThreadSkinView` (`ThreadSource` for
@@ -1894,8 +1913,7 @@ embed stays grounded without a client-controlled prompt surface. YAML that omits
 `occ-embed.yaml`) keep `chrome.skin: digichat` with the digisearch / digivault
 catalog (web_search is not on the digithings.ai catalog: the license has
 no hosted-web-search scope; embed/popup session defaults the remaining tools ON). YAML `hosts` resolve for `/embed` first paint
-(first-party / token rules unchanged). `ProductStockShell` mounts
-`ToolCatalogBar` only for `chrome.mode: app`. Embed / modal / sidebar use
+(first-party / token rules unchanged). `ProductStockShell` does not mount a tool-catalog bar. Embed / modal / sidebar use
 assistant-ui `ComposerTriggerPopover` (`unstable_useSlashCommandAdapter`)
 instead; `/search` and `/vault` still arm `X-Digi-Force-Tool` when those ids
 are in the catalog, and session toggles send `X-Digi-Disabled-Tools`
@@ -1970,8 +1988,8 @@ tokens, Foundry endpoints, MCP URLs, and consume URLs. Widget.js and the
 dashboard popup merge chrome (labels/hotkeys) from that API.
 
 **Default UI:** `ThreadSkinView` inside `ProductStockShell` against
-`POST /api/chat`. `ToolCatalogBar` (tools.catalog) arms force-tool headers;
-force-tool values and model ids are catalog/allowlist-gated on the BFF
+`POST /api/chat`. Tool on/off is `/tools` only. `session_toggle_tool` refuses
+and points at `/tools`. Force-tool values and model ids are catalog/allowlist-gated on the BFF
 (fail closed).
 
 **Product CSS isolation:** `(digichat)/globals.css` mirrors the `(baseline)` stock sheet (Inter / IBM Plex Mono) plus thin `product-chrome.css` for paywall/BYOK/attribution. `assistant-ui-cli.css`, digichat-ui `session.css`/`cursor.css`, and terminal-loader sheets load only via `chat-shell-cli.css` on `ChatShell` (`persistence: server`).
