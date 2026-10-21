@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "115_plan_tier_brief_desk_studio.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "115_plan_tier_brief_desk_studio.sql"
 
 
 @pytest.fixture(scope="module")
@@ -26,7 +26,7 @@ def sql(raw: str) -> str:
 
 
 def test_migration_is_the_only_115() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("115_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("115_*.sql")) == [MIGRATION_PATH]
 
 
 def test_does_not_steal_cutover_113(sql: str) -> None:

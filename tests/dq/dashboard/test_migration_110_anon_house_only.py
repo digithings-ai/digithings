@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "110_anon_house_only_private_books.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "110_anon_house_only_private_books.sql"
 HOUSE_UUID = "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 SYSTEM_UUID = "1105372f-4109-5815-be5a-21091ccfc8ad"
 BOOK_TABLES = ("positions", "position_events", "nav_history", "portfolio_metrics")
@@ -39,7 +39,7 @@ def _anon_policy_body(sql: str, table: str) -> str:
 
 
 def test_migration_is_the_only_110() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("110_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("110_*.sql")) == [MIGRATION_PATH]
 
 
 def test_keeps_anon_read_policy_name_for_cutover_drop(sql: str) -> None:
