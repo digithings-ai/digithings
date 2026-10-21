@@ -192,12 +192,26 @@ jobs:
               echo "::error::$tag does not match apps/digichat/package.json ($version) — refusing to publish."
               exit 1
             fi
-            # `|| true` so the emptiness check below is reachable: under `set -e` a
-            # bad ref would abort the step with git's own `fatal: ambiguous
+            # The image is built from the CHECKED-OUT tree, so the commit the
+            # image is labelled with has to be the commit that tree is at. The
+            # tag ref the checkout fetched is resolved once more only to prove
+            # the two agree, so the label is always the tree's own commit and
+            # never a commit resolved from somewhere else.
+            # `|| true` so the emptiness checks below are reachable: under `set -e`
+            # a bad ref would abort the step with git's own `fatal: ambiguous
             # argument` before this diagnostic could explain what went wrong.
-            commit="$(git rev-list -n1 "$tag" 2>/dev/null || true)"
+            commit="$(git rev-parse HEAD 2>/dev/null || true)"
+            tag_commit="$(git rev-list -n1 "$tag" 2>/dev/null || true)"
             if [ -z "$commit" ]; then
+              echo "::error::the checked-out tree has no commit (git rev-parse HEAD failed) — there is nothing to bind an image to."
+              exit 1
+            fi
+            if [ -z "$tag_commit" ]; then
               echo "::error::$tag does not resolve to a commit — there is nothing to bind an image to."
+              exit 1
+            fi
+            if [ "$commit" != "$tag_commit" ]; then
+              echo "::error::the checked-out tree ($commit) is not the commit of $tag ($tag_commit) — refusing to bind an image to a tree it was not built from."
               exit 1
             fi
             image="${image_repo}:v${version}"
@@ -395,42 +409,81 @@ jobs:
           # digigraph/digisearch/digiquant/digitrace to reach, and /api/health
           # answers 503 when one of those checks fails: that is the route
           # telling the truth about a degraded environment, not a broken image.
-          # `curl --fail` on this URL is what killed run 39541165954 (the
-          # digichat-v2.6.4 tag push, 2026-10-21T03:57Z, "curl: (22) The
-          # requested URL returned error: 503"). So the body has to report the
-          # version it was built as, and a failing check is tolerated only when
-          # it is one of those four ecosystem services and the database is
-          # skipped.
-          api_response="$(curl --silent --show-error --max-time 30 --write-out '\n%{http_code}' "$base/api/health" || true)"
+          # The earlier lane asked for this URL with `curl --fail`, which is
+          # what killed run 39541165954 (the digichat-v2.6.4 tag push,
+          # 2026-10-21T03:57Z, "curl: (22) The requested URL returned error:
+          # 503"). So the body has to report the version it was built as, and
+          # a failing check is tolerated only when it is one of those four
+          # ecosystem services and the database is skipped.
+          #
+          # Only two answers are honest here: 200 (every check reachable) and
+          # 503 (the route telling the truth about a degraded environment).
+          # Any other status - a 500 from a route regression that still
+          # serialises `version`, a 502 from something in front of the app -
+          # is a fault and stops the lane.
+          curl_rc=0
+          api_response="$(curl --silent --show-error --max-time 60 --write-out '\n%{http_code}' "$base/api/health")" || curl_rc=$?
           api_status="$(printf '%s\n' "$api_response" | tail -n1)"
           api_body="$(printf '%s\n' "$api_response" | sed '$d')"
-          reported="$(jq -r '.version // ""' <<< "$api_body" 2>/dev/null || true)"
+          if [ "$curl_rc" -ne 0 ]; then
+            echo "::error::the request to /api/health did not complete (curl exited $curl_rc) — a timeout or a refused connection, not an answer from the image."
+            exit 1
+          fi
+          case "$api_status" in
+            200|503) ;;
+            *)
+              echo "::error::/api/health answered $api_status, not 200 or 503."
+              exit 1
+              ;;
+          esac
+          if [ -z "$api_body" ]; then
+            echo "::error::/api/health answered $api_status with no body — the route did not answer."
+            exit 1
+          fi
+          if ! reported="$(jq -er '.version // ""' <<< "$api_body" 2>/dev/null)"; then
+            echo "::error::/api/health answered $api_status but the body is not the health route's JSON (body starts with: ${api_body:0:200})."
+            exit 1
+          fi
           if [ "$reported" != "$VERSION" ]; then
             echo "::error::/api/health reports version '$reported', but this image was built as '$VERSION'."
             exit 1
           fi
           # Every check that is neither ok nor skipped has to be one of the four
-          # ecosystem services this container cannot reach. Anything else - a
-          # broken service, a failed database - is a real fault and stops here.
-          failing="$(jq -r '[(.checks // {}) | to_entries[] | select(.value != "ok" and .value != "skipped") | .key] | join(",")' <<< "$api_body" 2>/dev/null || true)"
+          # ecosystem services this container cannot reach, AND it has to have
+          # failed by not answering at all: the route records a fetch that never
+          # completed as "unreachable", and an upstream that ANSWERED with a
+          # non-2xx as "http_<status>". Only the first is the degradation this
+          # probe is allowed to tolerate. Anything else - a broken service, a
+          # failed database - is a real fault and stops here.
+          # One entry per line: a value that carries a newline must not be able
+          # to hide the entry behind it.
+          failing="$(jq -r '[(.checks // {}) | to_entries[] | select(.value != "ok" and .value != "skipped") | "\(.key)=\(.value)"] | join("\n")' <<< "$api_body" 2>/dev/null || true)"
           unexpected=""
           if [ -n "$failing" ]; then
-            IFS=',' read -r -a failing_keys <<< "$failing"
-            for key in "${failing_keys[@]}"; do
+            while IFS= read -r check; do
+              [ -n "$check" ] || continue
+              key="${check%%=*}"
+              value="${check#*=}"
               case "$key" in
-                digraph|digiquant|digitrace|digisearch) ;;
-                *) unexpected="${unexpected:+$unexpected,}$key" ;;
+                digraph|digiquant|digitrace|digisearch)
+                  if [ "$value" != "unreachable" ]; then
+                    unexpected="${unexpected:+$unexpected, }$key ($value)"
+                  fi
+                  ;;
+                service|database) ;;
+                *) unexpected="${unexpected:+$unexpected, }$key ($value)" ;;
               esac
-            done
+            done <<< "$failing"
           fi
           service="$(jq -r '.checks.service // "missing"' <<< "$api_body" 2>/dev/null || true)"
           database="$(jq -r '.checks.database // "missing"' <<< "$api_body" 2>/dev/null || true)"
+          failing_list="$(printf '%s' "$failing" | tr '\n' ',' | sed 's/,$//')"
           if [ -n "$unexpected" ] || [ "$service" != "ok" ] || { [ "$database" != "ok" ] && [ "$database" != "skipped" ]; }; then
             echo "::error::/api/health answered $api_status with checks that are not only the unreachable ecosystem services (service: $service, database: $database, unexpected: ${unexpected:-none})."
             exit 1
           fi
-          if [ "$api_status" != "200" ]; then
-            echo "::warning::/api/health answered $api_status: the image serves version $reported, and only the ecosystem services it cannot reach failed (${failing:-none})."
+          if [ "$api_status" = "503" ]; then
+            echo "::warning::/api/health answered $api_status: the image serves version $reported, and only the ecosystem services it cannot reach failed (${failing_list:-none})."
           fi
 
           echo "Probed ok: /healthz ok=true, /api/health version=$reported, revision bound to $COMMIT."
