@@ -1219,6 +1219,8 @@ function EmbedChat({
       openView: () => {
         setComposerMenu("view");
       },
+      themeLocked: true,
+      openTheme: () => {},
       openThinking: () => {
         setComposerMenu("thinking");
       },

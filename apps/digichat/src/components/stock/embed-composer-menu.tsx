@@ -55,6 +55,7 @@ import {
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
 import { byokActivationGate, pingByokKey } from "@/lib/byok-ping";
+import { HOUSE_BACKEND_ID } from "@/lib/provider-label";
 import {
   CUSTOM_PROVIDER_MODEL,
   PROVIDER_MENU_ORDER,
@@ -68,6 +69,12 @@ import {
 } from "@/components/stock/embed-provider-flow";
 import { listenMcpOAuthResult, startMcpOAuth } from "@/components/stock/embed-mcp-oauth";
 import { THINKING_MODES, VIEW_MODES } from "@/lib/view-modes";
+import {
+  applyDocumentTheme,
+  matchThemeStep,
+  readThemeState,
+  themeCycle,
+} from "@digithings/ui/theme";
 
 export type ComposerMenuKind =
   | "settings"
@@ -78,6 +85,7 @@ export type ComposerMenuKind =
   | "effort"
   | "search-engine"
   | "view"
+  | "theme"
   | "thinking"
   | "provider"
   | "help";
@@ -89,6 +97,7 @@ type MenuView =
   | "effort"
   | "search-engine"
   | "view"
+  | "theme"
   | "thinking"
   | "tools"
   | "mcp"
@@ -134,6 +143,7 @@ const MENU_PARENT: Record<MenuView, MenuView | null> = {
   effort: "main",
   "search-engine": "main",
   view: "main",
+  theme: "main",
   thinking: "main",
   tools: "main",
   mcp: "main",
@@ -190,6 +200,7 @@ function initialView(kind: ComposerMenuKind): MenuView {
   if (kind === "effort") return "effort";
   if (kind === "search-engine") return "search-engine";
   if (kind === "view") return "view";
+  if (kind === "theme") return "theme";
   if (kind === "thinking") return "thinking";
   if (kind === "tools") return "tools";
   if (kind === "mcp") return "mcp";
@@ -427,6 +438,7 @@ export function EmbedComposerMenu({
       tools: "tools",
       language: "language",
       view: "view",
+      theme: "theme",
       thinking: "thinking",
       effort: "effort",
       "search-engine": "search-engine",
@@ -574,6 +586,22 @@ export function EmbedComposerMenu({
       })),
     [api, onClose],
   );
+
+  const themeRows = useMemo((): MenuRow[] => {
+    const state = readThemeState();
+    const current = matchThemeStep(state.preference, state.palette, state.resolved);
+    return themeCycle().map((step) => ({
+      id: step.id,
+      label: slashName(`theme ${step.palette} ${step.mode}`),
+      value: step.label,
+      checked: current.id === step.id,
+      exclusive: true,
+      activate: () => {
+        applyDocumentTheme(step.mode, step.palette);
+        onClose();
+      },
+    }));
+  }, [onClose]);
 
   const thinkingRows = useMemo(
     (): MenuRow[] =>
@@ -816,8 +844,8 @@ export function EmbedComposerMenu({
     // key and returns routing to Cheaper Inference.
     const rows: MenuRow[] = [
       {
-        id: "cheaperinference",
-        label: slashName("cheaperinference"),
+        id: HOUSE_BACKEND_ID,
+        label: slashName(HOUSE_BACKEND_ID),
         value: "Default · no key",
         checked: !providerActive,
         exclusive: true,
@@ -873,23 +901,25 @@ export function EmbedComposerMenu({
             ? viewRows
             : view === "thinking"
               ? thinkingRows
-              : view === "tools"
-                ? toolsRows
-                : view === "mcp"
-                  ? mcpRows
-                  : view === "mcp-edit"
-                    ? []
-                    : view === "provider"
-                      ? providerRows
-                      : view === "provider-model"
-                        ? providerModelRows
-                        : view === "provider-key"
-                          ? []
-                          : view === "search-engine"
-                            ? engineRows
-                            : view === "help"
+              : view === "theme"
+                ? themeRows
+                : view === "tools"
+                    ? toolsRows
+                    : view === "mcp"
+                      ? mcpRows
+                      : view === "mcp-edit"
+                        ? []
+                        : view === "provider"
+                          ? providerRows
+                          : view === "provider-model"
+                            ? providerModelRows
+                            : view === "provider-key"
                               ? []
-                              : modelRows;
+                              : view === "search-engine"
+                                ? engineRows
+                                : view === "help"
+                                  ? []
+                                  : modelRows;
   const title =
     view === "language"
       ? "/language"
@@ -899,19 +929,21 @@ export function EmbedComposerMenu({
           ? "/effort"
           : view === "view"
             ? "/view"
-            : view === "thinking"
-              ? "/thinking"
-              : view === "tools"
-                ? "/tools"
-                : view === "mcp" || view === "mcp-edit"
-                  ? "/mcp"
-                  : view === "provider" || view === "provider-key" || view === "provider-model"
-                    ? "/provider"
-                    : view === "search-engine"
-                      ? "/search-engine"
-                      : view === "help"
-                        ? "/help"
-                        : "Settings";
+            : view === "theme"
+              ? "/theme"
+              : view === "thinking"
+                ? "/thinking"
+                : view === "tools"
+                  ? "/tools"
+                  : view === "mcp" || view === "mcp-edit"
+                    ? "/mcp"
+                    : view === "provider" || view === "provider-key" || view === "provider-model"
+                      ? "/provider"
+                      : view === "search-engine"
+                        ? "/search-engine"
+                        : view === "help"
+                          ? "/help"
+                          : "Settings";
 
   const safeCursor = rows.length ? Math.min(cursor, rows.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);
@@ -939,9 +971,7 @@ export function EmbedComposerMenu({
   // Form pages own the arrow keys and read-only pages have no rows; neither
   // can advertise "↑↓ navigate". Only the back gesture is true there.
   const formPage =
-    view === "provider-key" ||
-    (view === "provider-model" && customModel) ||
-    view === "mcp-edit";
+    view === "provider-key" || (view === "provider-model" && customModel) || view === "mcp-edit";
   const canNavigate = rows.length > 0 && !formPage && view !== "help";
 
   const move = useCallback(
@@ -1036,17 +1066,7 @@ export function EmbedComposerMenu({
         rows[cursor]?.activate();
       }
     },
-    [
-      api,
-      closeMcpIdDropdown,
-      cursor,
-      formPage,
-      goBack,
-      mcpIdDropdownOpen,
-      move,
-      rows,
-      view,
-    ],
+    [api, closeMcpIdDropdown, cursor, formPage, goBack, mcpIdDropdownOpen, move, rows, view],
   );
 
   useEffect(() => {
@@ -1149,9 +1169,7 @@ export function EmbedComposerMenu({
                         aria-label={row.id}
                         aria-selected={highlighted}
                         data-cursor={highlighted ? "true" : undefined}
-                        className={`${MCP_SUGGEST_ROW_CLASS} ${
-                          highlighted ? "bg-muted/50" : ""
-                        }`}
+                        className={`${MCP_SUGGEST_ROW_CLASS} ${highlighted ? "bg-muted/50" : ""}`}
                         ref={(node) => {
                           if (!highlighted || !node) return;
                           const root = node.closest("[data-mcp-id-dropdown]");
@@ -1164,7 +1182,9 @@ export function EmbedComposerMenu({
                         onMouseEnter={() => setMcpSuggestIndex(index)}
                         onClick={() => applyMcpSuggestion(row.id)}
                       >
-                        <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.id}</span>
+                        <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">
+                          {row.id}
+                        </span>
                         <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
                           {wellKnownMcpHost(row.url) || row.auth}
                         </span>
@@ -1188,7 +1208,6 @@ export function EmbedComposerMenu({
       role={formView ? "dialog" : "menu"}
       aria-label={title}
     >
-
       <div className="relative min-h-0">
         <div
           ref={menuBodyRef}
@@ -1519,7 +1538,7 @@ export function EmbedComposerMenu({
                   Commands
                 </span>
                 <span className="font-mono">
-                  /models · /language · /tools · /mcp · /settings · /new
+                  /models · /language · /tools · /mcp · /settings · /theme · /new
                 </span>
               </div>
               <span className="text-muted-foreground">Enter sends · Shift+Enter adds a line</span>
@@ -1563,7 +1582,9 @@ export function EmbedComposerMenu({
                         <DotMatrix state="user" className="size-3.5" />
                       </span>
                     ) : null}
-                    <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.label}</span>
+                    <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">
+                      {row.label}
+                    </span>
                     {row.value || (exclusive && row.checked) ? (
                       <span className="text-muted-foreground ml-auto flex min-w-0 max-w-[45%] items-center justify-end gap-2 truncate text-right text-xs">
                         {row.value ? <span className="truncate">{row.value}</span> : null}

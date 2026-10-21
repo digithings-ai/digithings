@@ -69,8 +69,7 @@ Default product path (digithings.ai `/chat` embed **and** dashboard
 `dashboard-modal.yaml`) allowlists **Cheaper Inference cheap house slugs
 only**:
 
-- `deepseek/deepseek-v4-flash` (default)
-- `deepseek/deepseek-v4-flash-0731`
+- `deepseek/deepseek-v4.1-flash-1017` (default; DeepSeek V4.1 Flash 1017 checkpoint since 2026-10-21)
 - `openai/gpt-oss-120b`
 - `z-ai/glm-5.3-flash`
 

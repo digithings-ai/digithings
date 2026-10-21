@@ -24,6 +24,7 @@ export type SlashId =
   | "effort"
   | "search-engine"
   | "view"
+  | "theme"
   | "thinking"
   | "sessions"
   | "compact"
@@ -217,6 +218,14 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     category: "setup",
   },
   {
+    id: "theme",
+    names: ["/theme"],
+    needsArg: false,
+    hint: "default dark, default light, then each palette",
+    kind: "client",
+    category: "setup",
+  },
+  {
     id: "thinking",
     names: ["/thinking"],
     needsArg: false,
@@ -362,6 +371,8 @@ export type SlashVisibility = {
   tools?: boolean;
   /** Artifact list for this session. Hide where there is no artifact surface. */
   artifacts?: boolean;
+  /** Colour theme. Hidden on a tenant-pinned embed (`themeLocked`). */
+  theme?: boolean;
 };
 
 export type ParsedSlash =
@@ -401,6 +412,7 @@ function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "mcp") return visibility?.mcp !== false;
   if (cmd.id === "tools") return visibility?.tools !== false;
   if (cmd.id === "artifacts") return visibility?.artifacts === true;
+  if (cmd.id === "theme") return visibility?.theme !== false;
   return true;
 }
 

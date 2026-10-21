@@ -1,8 +1,7 @@
 {
-  "default": "deepseek/deepseek-v4.1-flash",
+  "default": "deepseek/deepseek-v4.1-flash-1017",
   "available": [
-    "deepseek/deepseek-v4.1-flash",
-    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-pro",
     "openai/gpt-6-luna",
     "openai/gpt-5.6-luna",
@@ -13,7 +12,6 @@
     "google/gemini-3.1-flash-lite",
     "google/gemini-3.7-flash",
     "minimax/minimax-m3",
-    "deepseek/deepseek-v4-flash-0731",
     "openai/gpt-oss-120b"
   ]
 }

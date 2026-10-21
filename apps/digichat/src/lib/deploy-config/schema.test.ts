@@ -293,10 +293,9 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.gate.requiredPlanTier).toBe("desk");
     expect(cfg.deployment?.gate.showByok).toBe(true);
     expect(cfg.deployment?.gate.llmAccess).toBe("operator");
-    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4-flash");
+    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(cfg.deployment?.models.available).toEqual([
-      "deepseek/deepseek-v4-flash",
-      "deepseek/deepseek-v4-flash-0731",
+      "deepseek/deepseek-v4.1-flash-1017",
       "openai/gpt-oss-120b",
       "z-ai/glm-5.3-flash",
     ]);
@@ -326,10 +325,9 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
     expect(dt?.models.allowPicker).toBe(true);
-    expect(dt?.models.default).toBe("deepseek/deepseek-v4-flash");
+    expect(dt?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(dt?.models.available).toEqual([
-      "deepseek/deepseek-v4-flash",
-      "deepseek/deepseek-v4-flash-0731",
+      "deepseek/deepseek-v4.1-flash-1017",
       "openai/gpt-oss-120b",
       "z-ai/glm-5.3-flash",
     ]);
