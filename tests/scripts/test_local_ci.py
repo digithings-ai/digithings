@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -910,7 +911,13 @@ class StatusTargetUrlTest(NoRealNetwork, unittest.TestCase):
         self._unisolate()
 
     def _post(self):
-        _mod.gh = lambda *a: self.calls.append(list(a))
+        # The stub answers like a successful `gh api`: `status()` reads the
+        # answer, and an answer of None is a refused row, so a stub that
+        # returns None would leave the success path untested (DIG-4809).
+        def fake_gh(*a):
+            self.calls.append(list(a))
+            return "{}"
+        _mod.gh = fake_gh
         _mod.status("abc123", "success", "all gates passed")
 
     def _target_arg(self):
@@ -1199,3 +1206,85 @@ class AppRowFailsClosedTest(NoRealNetwork, unittest.TestCase):
         self.assertEqual(len(paths), 2)
         self.assertEqual(paths[0], paths[1])
         self.assertTrue(paths[0].endswith("/statuses/abc123"))
+
+    # The token GitHub issues is the opaque form; the plan writes it down as
+    # ghs_<appid>_<jwt>. Both are app tokens, and both must post the row.
+    def test_the_plain_installation_token_posts_the_row(self):
+        plain = "ghs_" + "w" * 36
+        self._write_token(plain)
+        self.assertTrue(_mod.app_status("abc123", _mod.status_fields("success", "ok")))
+        self.assertEqual(self._app_call()["env"]["GH_TOKEN"], plain)
+
+    def test_the_app_id_token_posts_the_row(self):
+        self._write_token(self.TOKEN)
+        self.assertTrue(_mod.app_status("abc123", _mod.status_fields("success", "ok")))
+        self.assertEqual(self._app_call()["env"]["GH_TOKEN"], self.TOKEN)
+
+    # A file holding the wrong secret must not hide a good one behind it.
+    def test_a_wrong_token_in_the_named_file_does_not_hide_the_good_one(self):
+        named = os.path.join(self._tmp, "named-token")
+        self._write_token(self.NOT_A_TOKEN, path=named)
+        self._write_token(self.TOKEN)
+        os.environ["LOCAL_CI_APP_TOKEN_FILE"] = named
+        self.assertTrue(_mod.app_status("abc123", _mod.status_fields("success", "ok")))
+        self.assertEqual(self._app_call()["env"]["GH_TOKEN"], self.TOKEN)
+
+    # A FIFO at the token path would block the tick for ever.
+    def test_a_fifo_at_the_token_path_does_not_block_the_tick(self):
+        fifo = os.path.join(self._tmp, "app-token-fifo")
+        os.mkfifo(fifo)
+        os.environ["LOCAL_CI_APP_TOKEN_FILE"] = fifo
+        result = {}
+
+        def read_it():
+            result["token"] = _mod._read_token_file(fifo)
+
+        reader = threading.Thread(target=read_it, daemon=True)
+        reader.start()
+        reader.join(2)
+        self.assertFalse(reader.is_alive(), "the read must not block on a FIFO")
+        self.assertEqual(result.get("token", ""), "")
+
+    # A row nobody wanted must not leave a line about a row nobody wanted.
+    def test_no_app_row_wanted_means_no_line_about_one(self):
+        self.sh_result = (1, "")
+        _mod.status("abc123", "failure", "fork code never runs here", app=False)
+        self.assertNotIn("local-ci/app not posted", " ".join(self.log_lines))
+
+    # The gate's environment is a copy: a test that changes it gives it back.
+    def test_the_isolation_gives_the_gate_environment_its_own_copy(self):
+        self.assertIsNot(_mod.ENV, self._saved_gate_env)
+
+    def test_the_isolation_gives_the_gate_environment_back(self):
+        saved = self._saved_gate_env
+        self._unisolate()
+        self.assertIs(_mod.ENV, saved)
+        self._isolate()
+
+
+class ForkRowWiringTest(unittest.TestCase):
+    """DIG-4809: a head this repository does not have gets the repo row alone.
+
+    A fork head is not a commit of this repository, so an app row for it is a
+    refused post and a log line per open fork per tick. The call sites are
+    pinned by reading the source: the suite drives `status()` directly and
+    cannot see which caller asked for the app row.
+    """
+
+    def _status_calls(self):
+        with open(os.path.join(_SCRIPTS, "local_ci.py")) as f:
+            tree = ast.parse(f.read())
+        return [node for node in ast.walk(tree)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "status"]
+
+    def test_every_fork_status_call_posts_the_repo_row_alone(self):
+        fork_calls = [c for c in self._status_calls()
+                      if any(isinstance(a, ast.Name) and a.id == "FORK_DESC"
+                             for a in c.args)]
+        self.assertTrue(fork_calls, "the fork call sites must be found")
+        for call in fork_calls:
+            app = [kw.value for kw in call.keywords if kw.arg == "app"]
+            self.assertEqual(len(app), 1, "a fork status call must pass app=False")
+            self.assertIsInstance(app[0], ast.Constant)
+            self.assertIs(app[0].value, False)

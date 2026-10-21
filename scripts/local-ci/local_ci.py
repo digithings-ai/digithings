@@ -241,8 +241,12 @@ def log_soft(msg):
         pass
 
 
-#: The shape of a GitHub App installation token: the app id, then the JWT.
-APP_TOKEN_SHAPE = re.compile(r"^ghs_[0-9]+_[A-Za-z0-9_\-\.]{20,}$")
+#: The shape of a GitHub App installation token. GitHub issues the opaque
+#: form - `ghs_` and a body with no separator - and the App plan writes the
+#: token down as `ghs_<appid>_<jwt>`. Both are accepted, and nothing else is:
+#: the row is posted under the app's bot, so a token that is not an app token
+#: would post it under the wrong identity (DIG-4809).
+APP_TOKEN_SHAPE = re.compile(r"^ghs_(?:[0-9]+_)?[A-Za-z0-9_\-\.]{20,}$")
 
 
 def _read_token_file(path):
@@ -266,24 +270,45 @@ def _read_token_file(path):
         return ""
 
 
+def _token_sources():
+    """Every place the app token can come from, in the order it is tried."""
+    for path in (os.environ.get("LOCAL_CI_APP_TOKEN_FILE"), APP_TOKEN_FILE):
+        if path:
+            yield _read_token_file(path)
+    yield (os.environ.get("CI_APP_TOKEN") or "").strip()
+
+
 def app_token():
     """The app installation token the pipeline minted, or "" when there is none.
 
     Read from the file the pipeline wrote for the worker alone, never printed
     and never taken from the command line. Only the first line of the file is
     the token: a file with more content must not put two lines into it. The
-    named file comes first, then the default file, then the environment as the
+    chain is the named file, the default file, then the environment as the
     fallback for a run that hands the token over directly. A named file that
     does not exist falls through to the default one instead of ending the
-    search (DIG-4809).
+    search, and a token that is not an app installation token is passed over
+    as well: a file holding the wrong secret must not hide a good one behind
+    it (DIG-4809).
     """
-    for path in (os.environ.get("LOCAL_CI_APP_TOKEN_FILE"), APP_TOKEN_FILE):
-        if not path:
-            continue
-        tok = _read_token_file(path)
+    for tok in _token_sources():
+        if tok and is_app_installation_token(tok):
+            return tok
+    return ""
+
+
+def raw_app_token():
+    """The first token the chain offers, whatever shape it has.
+
+    The shape of a token that was found is a diagnosis, not a result: the
+    reason a row was skipped is in the log, and the reason it says "not an
+    app installation token" has to be the token the worker actually read
+    (DIG-4809).
+    """
+    for tok in _token_sources():
         if tok:
             return tok
-    return (os.environ.get("CI_APP_TOKEN") or "").strip()
+    return ""
 
 
 def is_app_installation_token(tok):
@@ -350,10 +375,10 @@ def app_status(sha, fields):
     """
     tok = app_token()
     if not tok:
-        log_soft("app status: skipped, no app token")
-        return False
-    if not is_app_installation_token(tok):
-        log_soft("app status: skipped, the token is not an app installation token")
+        if raw_app_token():
+            log_soft("app status: skipped, the token is not an app installation token")
+        else:
+            log_soft("app status: skipped, no app token")
         return False
     env = dict(ENV)
     env["GH_TOKEN"] = tok
@@ -384,7 +409,8 @@ def status(sha, state, desc, app=True):
     """
     fields = status_fields(state, desc)
     if gh(*status_args(sha, CTX, fields)) is None:
-        log_soft(f"local-ci status: {state} was refused, {APP_CTX} not posted")
+        if app:
+            log_soft(f"local-ci status: {state} was refused, {APP_CTX} not posted")
         return False
     if app:
         app_status(sha, fields)
@@ -1334,7 +1360,7 @@ def not_open_verdict(pr, dry):
         desc = f"local-ci skipped: PR #{n} is {st.lower()}; nothing to gate"
         verdict = f"PR #{n} is {st.lower()}; {desc}"
         if not dry and sha:
-            status(sha, "failure", desc, app=not fork)
+            status(sha, "failure", desc)
     log(f"PR #{n} {sha[:12]} {st} ({when}): {verdict}")
     print(f"local-ci: {verdict}")
     return st0 if st0 in ("success", "failure", "error") else "failure"
