@@ -429,63 +429,42 @@ jobs:
             echo "::error::the request to /api/health did not complete (curl exited $curl_rc) — a timeout or a refused connection, not an answer from the image."
             exit 1
           fi
-          case "$api_status" in
-            200|503) ;;
+          # The rules live in ONE place: scripts/digichat_probe_verdict.mjs,
+          # which the local rehearsal calls too. The two lanes used to keep
+          # their own copy of the contract and drifted - the local lane never
+          # read the status code this lane reads - so a rehearsal could pass
+          # where the release failed.
+          #
+          # The helper comes from the tree when the tree has it (a tag cut
+          # after this contract landed) and from the workflow's own commit
+          # otherwise (a repair dispatch for an older tag): the rules that
+          # judge an image belong to the lane that runs, not to the image
+          # that is judged.
+          helper="scripts/digichat_probe_verdict.mjs"
+          if [ ! -f "$helper" ]; then
+            helper="/tmp/digichat_probe_verdict.mjs"
+            curl --silent --show-error --fail --max-time 30 \
+              "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/scripts/digichat_probe_verdict.mjs" \
+              --output "$helper" \
+              || { echo "::error::the probe verdict helper is not in the checkout and could not be fetched from ${GITHUB_SHA}."; exit 1; }
+          fi
+          # The verdict is the helper's OUTPUT, not its exit status: a wrapper
+          # that swallowed the exit code must not be able to turn a refusal
+          # into a pass.
+          verdict="$(printf '%s' "$api_body" | node "$helper" --status "$api_status" --version "$VERSION" || true)"
+          case "$verdict" in
+            "OK "*) ;;
             *)
-              echo "::error::/api/health answered $api_status, not 200 or 503."
+              reason="$(printf '%s' "$verdict" | sed -e 's/^REFUSE //' | tr '\n\r' '  ')"
+              echo "::error::${reason:-the probe verdict helper returned no verdict.}"
               exit 1
               ;;
           esac
-          if [ -z "$api_body" ]; then
-            echo "::error::/api/health answered $api_status with no body — the route did not answer."
-            exit 1
-          fi
-          if ! reported="$(jq -er '.version // ""' <<< "$api_body" 2>/dev/null)"; then
-            echo "::error::/api/health answered $api_status but the body is not the health route's JSON (body starts with: ${api_body:0:200})."
-            exit 1
-          fi
-          if [ "$reported" != "$VERSION" ]; then
-            echo "::error::/api/health reports version '$reported', but this image was built as '$VERSION'."
-            exit 1
-          fi
-          # Every check that is neither ok nor skipped has to be one of the four
-          # ecosystem services this container cannot reach, AND it has to have
-          # failed by not answering at all: the route records a fetch that never
-          # completed as "unreachable", and an upstream that ANSWERED with a
-          # non-2xx as "http_<status>". Only the first is the degradation this
-          # probe is allowed to tolerate. Anything else - a broken service, a
-          # failed database - is a real fault and stops here.
-          # One entry per line: a value that carries a newline must not be able
-          # to hide the entry behind it.
-          failing="$(jq -r '[(.checks // {}) | to_entries[] | select(.value != "ok" and .value != "skipped") | "\(.key)=\(.value)"] | join("\n")' <<< "$api_body" 2>/dev/null || true)"
-          unexpected=""
-          if [ -n "$failing" ]; then
-            while IFS= read -r check; do
-              [ -n "$check" ] || continue
-              key="${check%%=*}"
-              value="${check#*=}"
-              case "$key" in
-                digraph|digiquant|digitrace|digisearch)
-                  if [ "$value" != "unreachable" ]; then
-                    unexpected="${unexpected:+$unexpected, }$key ($value)"
-                  fi
-                  ;;
-                service|database) ;;
-                *) unexpected="${unexpected:+$unexpected, }$key ($value)" ;;
-              esac
-            done <<< "$failing"
-          fi
-          service="$(jq -r '.checks.service // "missing"' <<< "$api_body" 2>/dev/null || true)"
-          database="$(jq -r '.checks.database // "missing"' <<< "$api_body" 2>/dev/null || true)"
-          failing_list="$(printf '%s' "$failing" | tr '\n' ',' | sed 's/,$//')"
-          if [ -n "$unexpected" ] || [ "$service" != "ok" ] || { [ "$database" != "ok" ] && [ "$database" != "skipped" ]; }; then
-            echo "::error::/api/health answered $api_status with checks that are not only the unreachable ecosystem services (service: $service, database: $database, unexpected: ${unexpected:-none})."
-            exit 1
-          fi
+          reported="${verdict#OK version=}"
+          reported="${reported%% *}"
           if [ "$api_status" = "503" ]; then
-            echo "::warning::/api/health answered $api_status: the image serves version $reported, and only the ecosystem services it cannot reach failed (${failing_list:-none})."
+            echo "::warning::/api/health answered $api_status: the image serves version $reported, and only the ecosystem services it cannot reach failed (${verdict##*tolerated=})."
           fi
-
           echo "Probed ok: /healthz ok=true, /api/health version=$reported, revision bound to $COMMIT."
 
       - name: Push the probed image
