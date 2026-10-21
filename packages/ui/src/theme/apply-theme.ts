@@ -156,6 +156,13 @@ export function applyDocumentTheme(
     writeKey(writable, THEME_STORAGE_KEY, preference === "auto" ? null : preference);
     writeKey(writable, PALETTE_STORAGE_KEY, pal === "default" ? null : pal);
   }
+  if (doc) {
+    try {
+      doc.defaultView?.dispatchEvent(new Event(THEME_CHANGE_EVENT));
+    } catch {
+      /* ignore */
+    }
+  }
   return resolved;
 }
 
@@ -167,6 +174,15 @@ export type ThemeStep = {
   palette: PaletteName;
 };
 
+/** False when the palette's light block is its dark block (no light variant). */
+export function hasLightVariant(id: PaletteId): boolean {
+  const { light, dark } = PALETTES[id];
+  return light.bg !== dark.bg;
+}
+
+/** Fired on window after every applyDocumentTheme, so a provider can re-read the document. */
+export const THEME_CHANGE_EVENT = "dt-theme-change";
+
 export function themeCycle(): readonly ThemeStep[] {
   const steps: ThemeStep[] = [
     { id: "default:dark", label: "default · dark", mode: "dark", palette: "default" },
@@ -174,7 +190,12 @@ export function themeCycle(): readonly ThemeStep[] {
   ];
   for (const id of PALETTE_IDS) {
     steps.push({ id: `${id}:dark`, label: `${id} · dark`, mode: "dark", palette: id });
-    steps.push({ id: `${id}:light`, label: `${id} · light`, mode: "light", palette: id });
+    // A palette whose source registry has no distinct light variant
+    // (catppuccin-frappe, catppuccin-macchiato) would paint its dark canvas
+    // under the light chrome, so it offers dark only.
+    if (hasLightVariant(id)) {
+      steps.push({ id: `${id}:light`, label: `${id} · light`, mode: "light", palette: id });
+    }
   }
   return steps;
 }

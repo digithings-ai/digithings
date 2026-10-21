@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyDocumentTheme,
+  hasLightVariant,
   matchThemeStep,
   nextThemeStep,
   PALETTE_IDS,
@@ -28,7 +29,14 @@ afterEach(() => {
 describe("theme cycle", () => {
   it("is default dark, default light, then each palette dark and light", () => {
     const steps = themeCycle();
-    expect(steps).toHaveLength(2 + PALETTE_IDS.length * 2);
+    const lightless = PALETTE_IDS.filter((id) => !hasLightVariant(id));
+    // The source registry gives these two the same block for both modes.
+    expect(lightless).toEqual(["catppuccin-frappe", "catppuccin-macchiato"]);
+    expect(steps).toHaveLength(2 + PALETTE_IDS.length * 2 - lightless.length);
+    for (const id of lightless) {
+      expect(steps.some((s) => s.id === `${id}:light`)).toBe(false);
+      expect(steps.some((s) => s.id === `${id}:dark`)).toBe(true);
+    }
     expect(steps.slice(0, 4).map((s) => s.id)).toEqual([
       "default:dark",
       "default:light",

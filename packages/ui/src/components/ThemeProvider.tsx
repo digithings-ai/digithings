@@ -28,6 +28,7 @@ import {
   nextThemeStep,
   readPaintedTheme,
   readThemeState,
+  THEME_CHANGE_EVENT,
   type PaletteName,
   type ResolvedTheme,
   type ThemePreference,
@@ -136,15 +137,22 @@ export function ThemeProvider({
     // tenant's theme, and digiquant.io paints dark itself with no
     // themeInitScript. Applying storage here flipped such a page to whatever
     // the dashboard last mirrored into `dt-theme` on that origin.
-    const painted = readPaintedTheme();
-    const stored = readThemeState().preference;
-    // A stored mode the page did not paint (a pinned surface) is not this
-    // page's preference; the painted mode is.
-    setPreference(stored === "auto" || stored === painted.resolved ? stored : painted.resolved);
-    setPaletteState(painted.palette);
-    setResolved(painted.resolved);
+    const sync = () => {
+      const painted = readPaintedTheme();
+      const stored = readThemeState().preference;
+      // A stored mode the page did not paint (a pinned surface) is not this
+      // page's preference; the painted mode is.
+      setPreference(stored === "auto" || stored === painted.resolved ? stored : painted.resolved);
+      setPaletteState(painted.palette);
+      setResolved(painted.resolved);
+    };
+    sync();
     // A pinned embed owns its document: no OS follow there.
     if (document.documentElement.getAttribute("data-theme-pin") === "1") return;
+    // Any painter (the /theme command, the picker, this provider) goes through
+    // applyDocumentTheme, which announces the change; re-read so the context
+    // and the OS guard below never disagree with what is painted.
+    window.addEventListener(THEME_CHANGE_EVENT, sync);
     const mq = matchMedia("(prefers-color-scheme: light)");
     const onOS = () => {
       if (preferenceRef.current !== "auto") return;
@@ -154,7 +162,10 @@ export function ThemeProvider({
       );
     };
     mq.addEventListener("change", onOS);
-    return () => mq.removeEventListener("change", onOS);
+    return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT, sync);
+      mq.removeEventListener("change", onOS);
+    };
   }, [setPreference]);
 
   const setTheme = useCallback(
