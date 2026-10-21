@@ -11,13 +11,17 @@ deployment:
     theme: dark
     skin: digichat
     title: ask datatap
-    # Client-facing copy for the trial: this tenant is a DataTap trial, and
-    # the agent reaches the enterprise database through the DataTap MCP.
+    # Client-facing copy for the trial. The trial tenant holds a sample
+    # dataset (the public Enron email archive and its attached documents),
+    # not the visitor's own data, so the copy says what is actually there.
+    # The agent reaches it through the DataTap MCP.
     welcome:
-      title: Ask about your DataTap trial.
+      title: Ask about the Enron email archive.
       body:
-        - This is a DataTap trial. The agent reaches your enterprise database
-          through the DataTap MCP, so it can answer with your own data.
+        - This DataTap trial runs on a sample dataset, the public Enron email
+          archive and the documents attached to those emails.
+        - The agent searches and opens them through the DataTap MCP, and shows
+          which emails and documents each answer used.
     # Starters are tested live against the trial agent (Enron sample data):
     # each must finish with no tool error on two runs and show a different
     # tool path. Re-test them when the trial data or agent changes.
@@ -27,7 +31,7 @@ deployment:
       - Which emails mention Arthur Andersen, and what was the concern?
       - Who sends the most email in this archive, and what about?
       - Find an email about the Dabhol power plant and open it.
-    placeholder: Ask about your data, your pipelines or the platform
+    placeholder: Ask about the Enron emails and documents
   persistence: none
   auth: anonymous
   features:
