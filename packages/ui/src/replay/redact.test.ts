@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REDACTED, redactHtml, redactString, redactValue } from "./redact";
+import { REDACTED, redactString, redactValue } from "./redact";
 
 const HEX48 = "a1b2c3d4".repeat(6);
 const HEX40 = "0123456789".repeat(4);
@@ -50,17 +50,6 @@ describe("redactString", () => {
     expect(out).toContain(HEX64);
     expect(out).toContain("?token=[redacted]");
     expect(out).toContain("ok=1");
-  });
-});
-
-describe("redactHtml", () => {
-  it("redacts page text and leaves an inlined data uri alone", () => {
-    const uri = `data:font/woff2;base64,${HEX48}eyJhbGciOiJIUzI1NiJ9`;
-    const html = `<p>${HEX48}</p><style>src:url("${uri}")</style>`;
-    const out = redactHtml(html);
-    expect(out).toContain(uri);
-    expect(out).not.toContain(`<p>${HEX48}</p>`);
-    expect(out).toContain(`<p>${REDACTED}</p>`);
   });
 });
 
@@ -151,6 +140,19 @@ describe("redactString: cookies, sessions, DSNs, and prose", () => {
       "Authorization: [redacted]",
     );
     expect(redactString("authorization=abc123def456")).toBe("authorization=[redacted]");
+  });
+});
+
+describe("redactString is idempotent", () => {
+  it("leaves an already redacted value alone", () => {
+    for (const input of [
+      '"api_key": "supersecretvalue"',
+      "password=hunter22",
+      "token: abcdef123",
+    ]) {
+      const once = redactString(input);
+      expect(redactString(once)).toBe(once);
+    }
   });
 });
 

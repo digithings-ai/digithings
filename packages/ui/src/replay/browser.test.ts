@@ -51,3 +51,42 @@ describe("inlineDomAssets", () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });
+
+describe("downloadThreadSnapshot (end to end)", () => {
+  it("clones, freezes, redacts and downloads a well-formed file", async () => {
+    vi.resetModules();
+    const saved: Array<{ name: string; body: string }> = [];
+    vi.doMock("../components/chat/transcript", () => ({
+      downloadTextFile: (name: string, body: string) => void saved.push({ name, body }),
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
+    const { downloadThreadSnapshot } = await import("./browser");
+    const doc = document.implementation.createHTMLDocument("chat");
+    doc.body.innerHTML = [
+      '<div data-deployment="Northwind">',
+      '<div class="aui-user-message-content">How do I set the Cookie header?</div>',
+      '<div class="aui-md"><pre><code>Cookie: session=abc123456</code></pre><p>Then reload.</p></div>',
+      '<pre data-slot="tool-fallback-json"><span>{</span>\n  <span>"password"</span>: <span>"hunter2"</span>\n<span>}</span></pre>',
+      '<form class="aui-composer-root"><textarea></textarea></form>',
+      "</div>",
+    ].join("");
+    await downloadThreadSnapshot(doc, "2026-10-21T15:04:00.000Z");
+    vi.unstubAllGlobals();
+    vi.doUnmock("../components/chat/transcript");
+
+    expect(saved).toHaveLength(1);
+    const { name, body } = saved[0]!;
+    expect(name).toBe("northwind-2026-10-21-1504-how-do-i-set-the-cookie-header.html");
+    expect(body).not.toContain("abc123456");
+    expect(body).not.toContain("hunter2");
+    expect(body).not.toContain("aui-composer");
+    const parsed = new DOMParser().parseFromString(body, "text/html");
+    expect(parsed.querySelector(".aui-md p")?.textContent).toBe("Then reload.");
+    expect(parsed.querySelector(".aui-md pre")?.textContent).toMatch(
+      /^Cookie: (session=)?\[redacted\]$/,
+    );
+  });
+});

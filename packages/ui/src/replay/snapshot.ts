@@ -6,7 +6,7 @@
  * and anything that sends a message are removed. No script is added.
  */
 
-import { redactHtml } from "./redact";
+import { redactSnapshotDom } from "./redact-dom";
 
 export const SNAPSHOT_CSS = `
 details > summary { list-style: none; cursor: pointer; }
@@ -47,7 +47,6 @@ const CONTENT_LINK = [
   ".aui-user-message-content",
   ".aui-assistant-message-content",
   "[data-slot='aui_assistant-message-content']",
-  "[data-slot='aui_user-message-content']",
   "[data-slot='reasoning-content']",
   "[data-slot='tool-fallback-content']",
   "[data-slot='tool-fallback-result']",
@@ -58,7 +57,7 @@ const CONTENT_LINK = [
   ".aui-md",
 ].join(",");
 
-const USER_QUESTION = ".aui-user-message-content, [data-slot='aui_user-message-content']";
+const USER_QUESTION = ".aui-user-message-content";
 
 const PANEL_STYLE_PROPS = [
   "height",
@@ -92,6 +91,9 @@ export function transformSnapshotDom(root: HTMLElement): void {
 
 export function serializeSnapshot(root: HTMLElement, css: string): string {
   const doc = root.ownerDocument;
+  // Redact text and attribute values before the page CSS goes in, so the
+  // inlined fonts and the stylesheet are never rewritten.
+  redactSnapshotDom(root);
   const head = ensureHead(root);
   head.querySelectorAll("style, link, base").forEach((node) => node.remove());
   head
@@ -107,7 +109,7 @@ export function serializeSnapshot(root: HTMLElement, css: string): string {
   style.textContent = `${css}\n${SNAPSHOT_CSS}`;
   head.append(style);
   const html = root.tagName === "HTML" ? root.outerHTML : `<html>${root.outerHTML}</html>`;
-  return redactHtml(`<!DOCTYPE html>\n${html}`);
+  return `<!DOCTYPE html>\n${html}`;
 }
 
 function ensureHead(root: HTMLElement): HTMLElement {
@@ -165,10 +167,10 @@ function findPanel(root: ParentNode, trigger: Element): HTMLElement | null {
   }
   const next = trigger.nextElementSibling;
   if (next instanceof HTMLElement && looksLikePanel(next)) return next;
-  const parent = trigger.parentElement;
-  if (!parent) return null;
-  for (const child of parent.children) {
-    if (child !== trigger && child instanceof HTMLElement && looksLikePanel(child)) return child;
+  // Scan forward from the trigger: with two disclosures under one parent, the
+  // second trigger must not take the first one's panel.
+  for (let sib = trigger.nextElementSibling; sib; sib = sib.nextElementSibling) {
+    if (sib instanceof HTMLElement && looksLikePanel(sib)) return sib;
   }
   return null;
 }

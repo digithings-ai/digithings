@@ -704,6 +704,10 @@ page as one file (`packages/ui/src/replay/`). The file is the rendered DOM:
 styles and same-origin images are inlined, the composer is removed, and
 work-chain, reasoning, tool, and source disclosures become `<details>` so
 they still open offline. Closed panels stay mounted (`keepMounted`) so a
-folded tool call is still in the file. Secrets, including a standalone
-48-hex invite key, are stripped from the HTML. The filename is
-`<deployment>-<YYYY-MM-DD-HHMM>-<question-slug>.html`.
+folded tool call is still in the file. `redact-dom.ts` redacts text and
+attribute values on the cloned DOM before serialization (tool JSON by key,
+everything else with the `redact.ts` patterns, including a standalone 48-hex
+invite key). It is pattern-based, so an unlabeled secret of unknown shape can
+still get through. The filename is
+`<deployment>-<YYYY-MM-DD-HHMM>-<question-slug>.html` (UTC, latest question,
+id-like words dropped).

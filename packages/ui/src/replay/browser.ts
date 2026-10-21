@@ -14,6 +14,17 @@ import {
 
 const URL_RE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
 
+/** One slow asset must not hang the export; it is dropped instead. */
+const ASSET_TIMEOUT_MS = 8000;
+
+function fetchAsset(fetchImpl: typeof fetch, url: string): Promise<Response> {
+  const signal =
+    typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+      ? AbortSignal.timeout(ASSET_TIMEOUT_MS)
+      : undefined;
+  return fetchImpl(url, signal ? { signal } : undefined);
+}
+
 export function liveSheetText(
   doc: Document | null = typeof document === "undefined" ? null : document,
 ): string {
@@ -53,7 +64,7 @@ export async function inlineAssetUrls(
       continue;
     }
     try {
-      const res = await fetchImpl(absolute);
+      const res = await fetchAsset(fetchImpl, absolute);
       if (!res.ok) {
         replacements.set(raw, "");
         continue;
@@ -98,7 +109,7 @@ export async function inlineDomAssets(
         continue;
       }
       try {
-        const res = await fetchImpl(absolute);
+        const res = await fetchAsset(fetchImpl, absolute);
         if (!res.ok) {
           node.removeAttribute(attr);
           continue;

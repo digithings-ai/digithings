@@ -4,7 +4,8 @@
 
 export { downloadThreadSnapshot, inlineAssetUrls, inlineDomAssets, liveSheetText } from "./browser";
 export { snapshotFilename } from "./filename";
-export { REDACTED, redactHtml, redactString, redactValue } from "./redact";
+export { REDACTED, redactString, redactValue } from "./redact";
+export { redactBlockText, redactSnapshotDom } from "./redact-dom";
 export {
   deploymentText,
   questionText,

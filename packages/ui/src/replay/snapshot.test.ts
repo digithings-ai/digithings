@@ -12,7 +12,8 @@ const SECRET = "dgk_live_TESTSECRET99";
 function page(): HTMLElement {
   document.documentElement.setAttribute("data-theme", "dark");
   document.head.innerHTML = [
-    '<link rel="stylesheet" href="https://cdn.example/chat.css">',
+    // A data: href, so happy-dom makes no network request (mocks only).
+    '<link rel="stylesheet" href="data:text/css,.x%7B%7D">',
     "<style>.live { color: CanvasText; }</style>",
     "<script>window.__sent = true</script>",
   ].join("");
@@ -67,6 +68,18 @@ describe("snapshotFilename", () => {
   it("does not put a bare invite key in the file name", () => {
     expect(snapshotFilename("desk", "2026-10-21T15:04:00.000Z", HEX48)).not.toContain(HEX48);
   });
+
+  it("drops id-like words the patterns do not know and cuts at a word", () => {
+    const name = snapshotFilename(
+      "desk",
+      "2026-10-21T15:04:00.000Z",
+      "Show me the api key 9f8e7d6c5b4a and explain every single step of the rotation process",
+    );
+    expect(name).not.toContain("9f8e7d6c5b4a");
+    const slug = name.replace(/^desk-2026-10-21-1504-/, "").replace(/\.html$/, "");
+    expect(slug.length).toBeLessThanOrEqual(48);
+    expect(slug).toBe("show-me-the-api-key-and-explain-every-single");
+  });
 });
 
 describe("transformSnapshotDom", () => {
@@ -89,6 +102,7 @@ describe("transformSnapshotDom", () => {
     expect(html).toContain("[redacted]");
     expect(html).toContain("https://digithings.ai/docs");
     expect(html).not.toContain("cdn.example");
+    expect(html).not.toContain("data:text/css");
     expect(html).not.toMatch(/<link\b/i);
     expect(html).toContain("What is the overnight book?");
     expect(html).toContain("data-snapshot-css");
