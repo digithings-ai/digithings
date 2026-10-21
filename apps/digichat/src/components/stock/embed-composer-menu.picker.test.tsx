@@ -484,6 +484,41 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
+  it("offers digillm's Router above catalog presets when the router is on", async () => {
+    const onClose = vi.fn();
+    const setModel = vi.fn();
+    const picker = {
+      showFullList: false,
+      presets: [
+        {
+          id: "auto",
+          label: "Auto",
+          description: "DeepSeek V4.1 Flash 1017, our default.",
+          model: "alpha",
+        },
+      ],
+      groups: [],
+    };
+    render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
+        <EmbedComposerMenu
+          kind="models"
+          picker={picker}
+          models={["alpha"]}
+          routerEnabled
+          onClose={onClose}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+    const radios = await screen.findAllByRole("menuitemradio");
+    expect(radios.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("digillm picks Reasoning, Fast, or Light"),
+      expect.stringContaining("Auto"),
+    ]);
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /Router/ }));
+    expect(setModel).toHaveBeenCalledWith("digillm/router");
+  });
+
   it("renders the newest-generation catalog and omits superseded models", async () => {
     const onClose = vi.fn();
     const resolved = resolveModelCatalog(

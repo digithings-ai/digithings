@@ -3,6 +3,8 @@
  * so embed-client and tenant-config routes stay compatible while migrating.
  */
 
+import { defaultThreadSkinForTenant } from "@digithings/ui/chat/skins";
+import { DIGILLM_ROUTER_MODEL_ID } from "@/lib/digillm-router";
 import type { EmbedTenantClientConfig } from "@/lib/embed-client-config";
 import type { DigichatDeployment } from "./schema";
 import {
@@ -10,7 +12,6 @@ import {
   toDigichatClientConfig,
   type DigichatClientConfig,
 } from "./client-projection";
-import { defaultThreadSkinForTenant } from "@digithings/ui/chat/skins";
 
 /** Merge legacy embed client fields into a DigichatClientConfig for ProductStockShell. */
 export function clientConfigFromEmbedTenant(
@@ -115,7 +116,7 @@ export function clientConfigFromEmbedTenant(
     ...(embed.digillm?.router.enabled === true
       ? {
           digillm: {
-            router: { enabled: true as const, modelId: "digillm/router" as const },
+            router: { enabled: true as const, modelId: DIGILLM_ROUTER_MODEL_ID },
           },
         }
       : {}),

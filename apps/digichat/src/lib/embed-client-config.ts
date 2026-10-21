@@ -12,6 +12,7 @@ import { mcpSubTools } from "@/lib/deploy-config/client-projection";
  * never part of it — see toEmbedClientConfig, which copies declared fields only.
  */
 
+import { DIGILLM_ROUTER_MODEL_ID } from "@/lib/digillm-router";
 import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
 import { getTenantSuggestionPool } from "@/lib/embed-suggestion-pools";
 import type { PageContextMode } from "@/lib/deploy-config/schema";
@@ -115,7 +116,7 @@ export type EmbedTenantClientConfig = {
    * stay on the server; the browser learns the picker id.
    */
   digillm?: {
-    router: { enabled: true; modelId: "digillm/router" };
+    router: { enabled: true; modelId: typeof DIGILLM_ROUTER_MODEL_ID };
   };
   /**
    * Discriminator only — never project Foundry endpoints / digigraph URLs.
@@ -217,7 +218,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     ...(cfg.digillm?.router?.enabled === true
       ? {
           digillm: {
-            router: { enabled: true as const, modelId: "digillm/router" as const },
+            router: { enabled: true as const, modelId: DIGILLM_ROUTER_MODEL_ID },
           },
         }
       : {}),

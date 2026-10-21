@@ -24,6 +24,7 @@ import {
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 import { DEPLOY_DEFAULT_MODELS } from "./deploy-models";
 import type { ModelPickerView } from "@/lib/model-picker-catalog";
+import { DIGILLM_ROUTER_MODEL_ID } from "@/lib/digillm-router";
 
 /** Search-engine ids the BFF forwards to digigraph (digisearch vocabulary, #4724). */
 export const SEARCH_ENGINE_ALLOWLIST: ReadonlySet<string> = new Set([
@@ -153,7 +154,7 @@ export type DigichatClientConfig = {
    * id, not the exemplar phrases or the pinned model ids.
    */
   digillm?: {
-    router: { enabled: true; modelId: "digillm/router" };
+    router: { enabled: true; modelId: typeof DIGILLM_ROUTER_MODEL_ID };
   };
 };
 
@@ -302,7 +303,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
     },
     backendType: dep.backend.type,
     ...(dep.digillm?.router?.enabled === true
-      ? { digillm: { router: { enabled: true as const, modelId: "digillm/router" as const } } }
+      ? { digillm: { router: { enabled: true as const, modelId: DIGILLM_ROUTER_MODEL_ID } } }
       : {}),
   };
 }
