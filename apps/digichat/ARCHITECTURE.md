@@ -1105,7 +1105,9 @@ are never both open.
 
 Tools are not slash commands. `/digisearch`, `/digivault`, `/websearch`, `/zammad`,
 and other catalog or MCP ids are not in the palette. Enabling or disabling a tool
-happens in `/tools`, which lists every tool and MCP server for the host. A Foundry
+happens in `/tools`, which lists every tool and MCP server for the host.
+`session_toggle_tool` does not flip a tool: on an unlocked host it answers
+"Tools are changed in /tools." A Foundry
 host (`backend.type: foundry`) shows that list read-only, labelled "Managed by the
 agent", from the config catalog — the page does not call the agent to discover
 tools. A host with `gate.lockSessionControls` (OCC) or `tools.allowUserToggle: false`
@@ -1292,7 +1294,8 @@ only when `mcp.allowUserServers` is true (`https://` + SSRF + count/size caps; o
 may still use `http` for docker DNS). Session URLs never echo
 back in the client config projection. `@assistant-ui/react-mcp` is not installed — visitor MCP
 is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trust as slash) to
-mutate language/model/effort/search-engine/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
+mutate language/model/effort/search-engine/MCP. `session_toggle_tool` does not flip a tool;
+it answers "Tools are changed in /tools." `session_upsert_mcp` cannot plant a new session URL
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
 `X-Digi-Effort` (low/medium/high) is forwarded to digigraph. `X-Digi-Search-Engine`
 (auto/internal/exa/tavily/parallel/firecrawl/tinyfish) is forwarded with it: effective
@@ -1980,8 +1983,8 @@ tokens, Foundry endpoints, MCP URLs, and consume URLs. Widget.js and the
 dashboard popup merge chrome (labels/hotkeys) from that API.
 
 **Default UI:** `ThreadSkinView` inside `ProductStockShell` against
-`POST /api/chat`. Tool on/off is `/tools` only;
-force-tool values and model ids are catalog/allowlist-gated on the BFF
+`POST /api/chat`. Tool on/off is `/tools` only. `session_toggle_tool` refuses
+and points at `/tools`. Force-tool values and model ids are catalog/allowlist-gated on the BFF
 (fail closed).
 
 **Product CSS isolation:** `(digichat)/globals.css` mirrors the `(baseline)` stock sheet (Inter / IBM Plex Mono) plus thin `product-chrome.css` for paywall/BYOK/attribution. `assistant-ui-cli.css`, digichat-ui `session.css`/`cursor.css`, and terminal-loader sheets load only via `chat-shell-cli.css` on `ChatShell` (`persistence: server`).

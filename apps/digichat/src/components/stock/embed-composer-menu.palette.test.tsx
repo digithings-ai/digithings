@@ -117,6 +117,18 @@ describe("composer palette sync", () => {
     expect(api.setComposerDraft).toHaveBeenCalledWith(expect.stringMatching(/^\/theme /));
   });
 
+  it("toggles a tool from /tools on an unlocked host", async () => {
+    const user = userEvent.setup();
+    const api = prefs({ toolControl: "toggle", hasDigisearch: true });
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="tools" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    await user.click(screen.getByRole("menuitemcheckbox", { name: /^Search/ }));
+    expect(api.setDigisearch).toHaveBeenCalledWith(!api.prefs.digisearch);
+  });
+
   it("lists foundry tools read-only", async () => {
     const user = userEvent.setup();
     const api = prefs({
