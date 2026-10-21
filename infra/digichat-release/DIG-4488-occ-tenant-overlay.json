@@ -1,10 +1,18 @@
 {
-  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json. This file carries no token and no mcp rows: the OCC token is a client secret and lives only in the host secret store. Never write this file to the worker secret. This overlay carries the OCC tenant alone: it sets no corpus routing and no model list, so the composed registry keeps the live OCC corpus routing.",
+  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json. This file carries no token and no mcp rows: the OCC token is a client secret and lives only in the host secret store. Never write this file to the worker secret. This overlay carries the OCC tenant alone: it sets no corpus routing. It sets a catalog policy (price cap, presets, full list) and no raw model id list, so the composed registry keeps the live OCC corpus routing and serves the curated picker.",
   "DIGICHAT_EMBED_TENANTS": {
     "occ.digithings.ai": {
       "slug": "occ",
       "gateMode": "ungated",
       "webSearch": false,
+      "models": {
+        "allowPicker": true,
+        "catalog": true,
+        "default": "deepseek/deepseek-v4.1-flash-1017",
+        "priceCapUsdPerMillion": 2,
+        "presets": ["auto", "reasoning", "fast", "light", "router"],
+        "showFullList": true
+      },
       "backend": {
         "type": "digigraph"
       }

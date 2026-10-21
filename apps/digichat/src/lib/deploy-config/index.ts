@@ -17,6 +17,8 @@ export {
   welcomeTitle,
   welcomeBodyLines,
   allowlistModelId,
+  resolveHouseModelSelection,
+  routerModelsHeader,
   type WelcomeCopy,
   type DigichatConfig,
   type DigichatDeployment,

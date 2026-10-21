@@ -41,6 +41,8 @@ from digillm import (
     get_provider_api_key_env,
     is_registered_provider,
 )
+from digillm.client import pop_router_models as _pop_router_models
+from digillm.client import push_router_models as _push_router_models
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -825,6 +827,30 @@ def pop_house_model(token: Token[str | None]) -> None:
 
 def get_house_model_override() -> str | None:
     return _house_model_override.get()
+
+
+def push_router_models(value: str | None) -> Token[tuple[str, ...] | None]:
+    """Bind the OpenRouter router allowlist, intersected with the session list.
+
+    An empty session allowlist binds nothing, so a caller cannot widen the
+    router past what the operator published. At most 64 ids.
+    """
+    allow = session_model_allowlist()
+    raw = (value or "").strip()
+    if not allow or not raw:
+        return _push_router_models(None)
+    ids: list[str] = []
+    for part in raw.split(","):
+        slug = part.strip()
+        if slug and slug in allow and slug not in ids:
+            ids.append(slug)
+        if len(ids) >= 64:
+            break
+    return _push_router_models(",".join(ids) if ids else None)
+
+
+def pop_router_models(token: Token[tuple[str, ...] | None]) -> None:
+    _pop_router_models(token)
 
 
 def get_model_for_mode() -> str:

@@ -59,6 +59,12 @@ const PREFS_DEPS = {
   renderMenuPanes: (menu: {
     kind: ComposerMenuKind;
     models: readonly string[];
+    defaultModel?: string;
+    modelPicker?: {
+      presets: readonly { id: string; label: string; description: string; model: string }[];
+      groups: readonly { provider: string; models: readonly { id: string; label: string }[] }[];
+      showFullList: boolean;
+    };
     providerSeed?: string;
     mcpSeed?: string;
     onClose: () => void;
@@ -66,6 +72,8 @@ const PREFS_DEPS = {
     <EmbedComposerMenu
       kind={menu.kind}
       models={menu.models}
+      defaultModel={menu.defaultModel}
+      picker={menu.modelPicker}
       onClose={menu.onClose}
       providerSeed={menu.providerSeed}
       mcpSeed={menu.mcpSeed}

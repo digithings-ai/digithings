@@ -23,6 +23,7 @@ import {
 } from "@/lib/baseline-embed";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 import { DEPLOY_DEFAULT_MODELS } from "./deploy-models";
+import type { ModelPickerView } from "@/lib/model-picker-catalog";
 
 /** Search-engine ids the BFF forwards to digigraph (digisearch vocabulary, #4724). */
 export const SEARCH_ENGINE_ALLOWLIST: ReadonlySet<string> = new Set([
@@ -79,6 +80,8 @@ export type DigichatClientModels = {
   default?: string;
   available: string[];
   allowPicker: boolean;
+  /** Presets and provider groups. Present when the deployment uses the catalog. */
+  picker?: ModelPickerView;
 };
 
 export type DigichatClientSubTool = { id: string; label?: string };
@@ -248,6 +251,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       ...(models?.default ? { default: models.default } : {}),
       available: [...(models?.available ?? [])],
       allowPicker,
+      ...(models?.picker ? { picker: models.picker } : {}),
     },
     cli: { enabled: dep.cli?.enabled === true },
     tools: {

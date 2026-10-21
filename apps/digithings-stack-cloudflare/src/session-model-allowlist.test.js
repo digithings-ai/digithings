@@ -33,9 +33,13 @@ const deployModels = JSON.parse(
 const allowlist = SESSION_MODEL_ALLOWLIST_DEFAULT.split(",").map((slug) => slug.trim()).filter(Boolean);
 
 describe("session model allowlist", () => {
-  it("allows exactly the models the deployment publishes", () => {
+  it("allows the session superset, which covers every published model", () => {
     expect(new Set(allowlist).size).toBe(allowlist.length);
-    expect([...allowlist].sort()).toEqual([...deployModels.available].sort());
+    expect([...allowlist].sort()).toEqual([...deployModels.sessionAllowlist].sort());
+    for (const id of deployModels.available) {
+      expect(allowlist).toContain(id);
+    }
+    expect(allowlist.length).toBeGreaterThan(deployModels.available.length);
   });
 
   it("allows the published default model", () => {

@@ -341,6 +341,46 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
+  it("puts presets above provider groups and selects a preset token", async () => {
+    const onClose = vi.fn();
+    const setModel = vi.fn();
+    const picker = {
+      showFullList: true,
+      presets: [
+        {
+          id: "auto",
+          label: "Auto",
+          description: "DeepSeek V4.1 Flash 1017, our default.",
+          model: "alpha",
+        },
+        {
+          id: "reasoning",
+          label: "Reasoning",
+          description: "Best reasoning in this list.",
+          model: "beta",
+        },
+      ],
+      groups: [{ provider: "DeepSeek", models: [{ id: "alpha", label: "Flash" }] }],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha"]} onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+    const radios = await screen.findAllByRole("menuitemradio");
+    expect(radios.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Auto"),
+      expect.stringContaining("Reasoning"),
+      expect.stringContaining("Flash"),
+    ]);
+    expect(screen.queryByRole("menuitem", { name: "DeepSeek" })).toBeNull();
+    expect(screen.getByText("DeepSeek")).not.toBeNull();
+    expect(screen.getByText("Best reasoning in this list.")).not.toBeNull();
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /Reasoning/ }));
+    expect(setModel).toHaveBeenCalledWith("preset:reasoning");
+    unmount();
+  });
+
   it("does not offer auto when a model is pinned", async () => {
     const onClose = vi.fn();
     const { unmount } = render(

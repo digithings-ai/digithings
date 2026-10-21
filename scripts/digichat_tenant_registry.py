@@ -150,7 +150,18 @@ ALLOWED_NESTED_KEYS = {
     ),
     "gate": frozenset(["consumeUrl"]),
     "accent": frozenset(["color", "foreground"]),
-    "models": frozenset(["default", "available", "allowPicker"]),
+    "models": frozenset(
+        [
+            "default",
+            "available",
+            "allowPicker",
+            "catalog",
+            "priceCapUsdPerMillion",
+            "presets",
+            "showFullList",
+            "minContextTokens",
+        ]
+    ),
     "tools": frozenset(["allowUserToggle", "catalog"]),
     "tools.catalog": frozenset(["id", "default", "label", "tools"]),
 }
@@ -180,11 +191,12 @@ OCC_LOCKED_BACKEND_KEYS = ("digisearchIndex", "vaultPathPrefix")
 # (scripts/occ_invite_key_write.sh enforces the same rule).
 FORBIDDEN_INDEX = "occ_tickets"
 
-# The OCC tenant carries no `models` section: its model picker stays closed
-# for a client tenant (DIG-4486 refused the picker, DIG-4750 confirmed the
-# refusal). Removing a `models` section from the OCC entry is a defect fix
-# against that standing refusal, so the tools remove it. Adding one is a
-# fresh ruling for Counsel, so the tools refuse it in every source.
+# DIG-4486 refused an OCC model picker and DIG-4750 confirmed that refusal:
+# a raw `models.available` id list does not belong on a client tenant.
+# digichat 2.6.6 narrows that, at the product owner's request: a catalog
+# policy (cap, presets, whether the full list is shown) is allowed. A raw
+# `available` array is still refused on the way in and stripped from a live
+# copy. This is not a Counsel ruling that the open list is fine.
 OCC_MODELS_KEY = "models"
 
 # The Workers KV copy of the registry. A KV copy whose credential references
@@ -457,14 +469,40 @@ def _credential_refs(composed):
     return refs
 
 
-def _refuse_occ_models(host, source):
-    """The OCC tenant must not gain a models section in any source."""
+def _refuse_occ_model_list(host, source):
+    """A raw OCC model id list is still refused. A catalog policy is not."""
     raise RegistryRefusal(
-        "%s entry %r carries '%s'; the OCC tenant keeps a closed model picker "
-        "(DIG-4750), so no models section belongs in it. Removing one is a "
-        "defect fix this tool makes; adding one is a ruling for Counsel."
+        "%s entry %r carries '%s.available'; DIG-4750 refused an open model id "
+        "list for the OCC tenant. A catalog policy (catalog, price cap, presets) "
+        "is the 2.6.6 picker. A raw available array is still refused."
         % (source, host, OCC_MODELS_KEY)
     )
+
+
+def _occ_models_from_overlay(host, overlay_entry, source):
+    """Refuse an overlay that tries to set a raw OCC model id list."""
+    if host != OCC_HOST or OCC_MODELS_KEY not in overlay_entry:
+        return
+    models = overlay_entry.get(OCC_MODELS_KEY)
+    if isinstance(models, dict) and "available" in models:
+        _refuse_occ_model_list(host, source)
+
+
+def _strip_occ_model_list(host, merged, removed):
+    """Drop a raw available list. Keep a catalog policy. Drop an empty section."""
+    if host != OCC_HOST or OCC_MODELS_KEY not in merged:
+        return
+    models = merged.get(OCC_MODELS_KEY)
+    if not isinstance(models, dict):
+        del merged[OCC_MODELS_KEY]
+        removed.append("%s.%s" % (host, OCC_MODELS_KEY))
+        return
+    if "available" in models:
+        del models["available"]
+        removed.append("%s.models.available" % host)
+    if not models:
+        del merged[OCC_MODELS_KEY]
+        removed.append("%s.%s" % (host, OCC_MODELS_KEY))
 
 
 # ---------------------------------------------------------------------------
@@ -530,10 +568,8 @@ def compose_registry(live, overlay):
             )
         _check_overlay_value(host, overlay_entry, "", ALLOWED_OVERLAY_KEYS)
 
-        # Guard 3b: the OCC tenant keeps a closed model picker, so no source
-        # may add a models section for it.
-        if host == OCC_HOST and OCC_MODELS_KEY in overlay_entry:
-            _refuse_occ_models(host, "overlay")
+        # Guard 3b: a raw OCC model id list is refused. A catalog policy is not.
+        _occ_models_from_overlay(host, overlay_entry, "overlay")
 
         merged = copy.deepcopy(live_entry)
         for key, value in overlay_entry.items():
@@ -543,12 +579,9 @@ def compose_registry(live, overlay):
                 merged[key] = copy.deepcopy(value)
         # The live token always wins, whatever the overlay said.
         merged["token"] = token
-        # The OCC tenant carries no models section. A copy that has one is a
-        # defect against the standing refusal, so it is removed here and the
-        # changed-path list names it.
-        if host == OCC_HOST and OCC_MODELS_KEY in merged:
-            del merged[OCC_MODELS_KEY]
-            removed.append("%s.%s" % (host, OCC_MODELS_KEY))
+        # A raw available list on the OCC tenant is stripped. A catalog policy
+        # stays. The section is removed only when nothing else remains.
+        _strip_occ_model_list(host, merged, removed)
         composed[host] = merged
 
     # Guard 4: no tenant was lost and every tenant has a token.
@@ -682,10 +715,8 @@ def compose_kv_registry(kv_live, overlay, legacy=None):
             )
         _check_overlay_value(host, overlay_entry, "", ALLOWED_OVERLAY_KEYS)
 
-        # Guard 3: the OCC tenant keeps a closed model picker, so no source
-        # may add a models section for it.
-        if host == OCC_HOST and OCC_MODELS_KEY in overlay_entry:
-            _refuse_occ_models(host, "overlay")
+        # Guard 3: a raw OCC model id list is refused. A catalog policy is not.
+        _occ_models_from_overlay(host, overlay_entry, "overlay")
 
         merged = copy.deepcopy(base_entry)
         for key, value in overlay_entry.items():
@@ -693,11 +724,9 @@ def compose_kv_registry(kv_live, overlay, legacy=None):
                 merged["backend"] = _deep_merge(merged.get("backend", {}), value)
             else:
                 merged[key] = copy.deepcopy(value)
-        # The OCC tenant carries no models section, in the KV copy either:
-        # this is the copy that is served for it.
-        if host == OCC_HOST and OCC_MODELS_KEY in merged:
-            del merged[OCC_MODELS_KEY]
-            removed.append("%s.%s" % (host, OCC_MODELS_KEY))
+        # The KV copy is the one that is served. Strip a raw available list.
+        # Keep a catalog policy. Drop the section only when it is empty.
+        _strip_occ_model_list(host, merged, removed)
         # Guard 5: the KV copy replaces the legacy entry for a host, so a
         # field that lives only in the legacy copy stops being served the
         # moment the KV copy is written. The plan would not show it, and the

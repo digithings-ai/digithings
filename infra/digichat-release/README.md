@@ -264,11 +264,13 @@ writes nothing at all: no file, no KV key, no secret, no recycle. If the
 secret write fails after the KV write, the apply puts the previous KV copy
 back, so the two copies never disagree about a tenant.
 
-The OCC tenant entry carries **no `models` section**, in either copy. With no
-model list the embed shows no model choice and forwards no visitor-picked model
-id, and the house default model answers every OCC turn. An overlay that tries to
-set a `models` section for that host is refused; the compose instead removes a
-`models` section the live copy carries and reports it as a removed path.
+The OCC tenant may carry a catalog policy (`catalog`, price cap, presets,
+`showFullList`, `default`, `allowPicker`) and must not carry a raw
+`models.available` id list. DIG-4750 refused an open id list; the curated
+catalog is the picker. An overlay that sets `models.available` for that host
+is refused. Compose strips `available` from a live copy and removes the
+section only when nothing else remains. With the catalog policy set, the embed
+shows presets and the price-capped list, and the visitor's pick is allowlisted.
 
 The container reads its environment at boot, so a registry change needs the
 container recycle the script performs. A digichat release that carries
@@ -281,29 +283,27 @@ rotation runbook.
 
 ### The OCC-only overlay
 
-`DIG-4488-occ-tenant-overlay.json` carries the OCC tenant alone. The composer
-removes the `models` section from the OCC entry in both copies, so the OCC embed
-shows no model choice and the house default model answers every OCC turn. The
-overlay does not touch the `digithings.ai` tenant.
+`DIG-4488-occ-tenant-overlay.json` carries the OCC tenant alone. It sets the
+catalog policy and no raw model id list. The overlay does not touch the
+`digithings.ai` tenant.
 
-The overlay pins four OCC fields: `slug`, `gateMode`, `webSearch` and the
-`backend` type. The live OCC entry held these four values on 21 Oct 2026, so
-the composed registry then differs from the live one in the `models` section
-alone. If a live entry differs in one of the four, the compose plan reports
-that path as changed before anything is written.
+The overlay pins `slug`, `gateMode`, `webSearch`, the `backend` type, and the
+catalog policy. Corpus routing stays on the live copy. A live entry that
+already matches those four fields still changes in `models` when the live copy
+has no catalog policy, or when it still carries a raw `available` list.
 
 The staged overlay `DIG-3556-staged-prod-tenant-config.json` carries both
-tenants. It also sends the `digithings.ai` tenant to the `digithings_docs`
-corpus and turns its web search off. That switch waits for the DIG-3556 rollout
-steps: the merged `DIGI_TENANT_CORPUS_MAP` prompt for `digithings`, and the
-corpus backfill.
+tenants and the same catalog policy on each. It also sends the `digithings.ai`
+tenant to the `digithings_docs` corpus and turns its web search off. That
+switch waits for the DIG-3556 rollout steps: the merged `DIGI_TENANT_CORPUS_MAP`
+prompt for `digithings`, and the corpus backfill.
 
 | Scope | Overlay | Change to the `digithings.ai` tenant |
 |---|---|---|
 | OCC only | `DIG-4488-occ-tenant-overlay.json` | none |
-| Full staged | `DIG-3556-staged-prod-tenant-config.json` | corpus routing and web search |
+| Full staged | `DIG-3556-staged-prod-tenant-config.json` | corpus routing, web search, and the catalog policy |
 
-Both scopes write the same KV key and remove the same `models` section. Only the
+Both scopes write the same KV key and the same OCC catalog policy. The
 `digithings.ai` tenant differs.
 
 ```sh

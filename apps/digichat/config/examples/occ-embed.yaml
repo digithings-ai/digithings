@@ -31,8 +31,20 @@ hosts:
       toolCalls: true
       sources: true
       branchPicker: true
-      modelPicker: false
+      modelPicker: true
       speech: false
+    models:
+      # Same catalog as digithings.ai. Presets are the friendly rows;
+      # the full list sits under them. lockSessionControls below still
+      # hides MCP and tool session controls. The visitor may pick a model
+      # from this list only (DIG-4750 refused an open id list; the catalog
+      # policy is the 2.6.6 narrowing of that refusal).
+      allowPicker: true
+      catalog: true
+      default: deepseek/deepseek-v4.1-flash-1017
+      priceCapUsdPerMillion: 2
+      presets: [auto, reasoning, fast, light, router]
+      showFullList: true
     backend:
       type: digigraph
     # digisearch/digivault reach the model only as the MCP servers below
@@ -95,6 +107,7 @@ hosts:
       llmAccess: operator
       showByok: false
       showLanguageSelector: true
-      # Pin the house model and hide per-session model/MCP/tool controls.
+      # Hide per-session MCP and tool controls. The model picker stays
+      # available because models.available is the catalog, not empty.
       lockSessionControls: true
       webSearch: false

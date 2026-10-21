@@ -119,6 +119,17 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       ...(typeof cfg.models?.allowPicker === "boolean"
         ? { allowPicker: cfg.models.allowPicker }
         : {}),
+      ...(cfg.models?.catalog === true ? { catalog: true as const } : {}),
+      ...(typeof cfg.models?.priceCapUsdPerMillion === "number"
+        ? { priceCapUsdPerMillion: cfg.models.priceCapUsdPerMillion }
+        : {}),
+      ...(cfg.models?.presets ? { presets: [...cfg.models.presets] } : {}),
+      ...(typeof cfg.models?.showFullList === "boolean"
+        ? { showFullList: cfg.models.showFullList }
+        : {}),
+      ...(typeof cfg.models?.minContextTokens === "number"
+        ? { minContextTokens: cfg.models.minContextTokens }
+        : {}),
     },
     cli: { enabled: false },
     backend: cfg.backend,
@@ -276,9 +287,25 @@ function resolveMcpServerTokens(
   return changed ? { ...dep, mcp: { ...dep.mcp!, servers: next } } : dep;
 }
 
+function openRouterConfigured(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): boolean {
+  const key = env["OPENROUTER_API_KEY"];
+  return typeof key === "string" && key.trim().length > 0;
+}
+
+/** Drop a resolved catalog so a second parse fills it again instead of refusing the list. */
+function unresolveCatalog(dep: DigichatDeployment): DigichatDeployment {
+  if (!dep.models?.catalog) return dep;
+  const models = { ...dep.models, available: [] };
+  delete models.picker;
+  return { ...dep, models };
+}
+
 function mergeEmbedTenantsOverlay(
   config: DigichatConfig | null,
   tenantsRaw: string | undefined,
+  openRouter: boolean,
 ): DigichatConfig {
   const registry = parseEmbedTenants(tenantsRaw);
   if (registry.size === 0) {
@@ -287,7 +314,14 @@ function mergeEmbedTenantsOverlay(
   }
 
   const hosts: Record<string, DigichatDeployment> = {
-    ...(config?.hosts ? structuredClone(config.hosts) : {}),
+    ...(config?.hosts
+      ? Object.fromEntries(
+          Object.entries(structuredClone(config.hosts)).map(([host, dep]) => [
+            host,
+            unresolveCatalog(dep),
+          ]),
+        )
+      : {}),
   };
 
   // Registry is host → config. New hosts hydrate fully. Existing YAML hosts
@@ -309,10 +343,11 @@ function mergeEmbedTenantsOverlay(
   return parseDigichatConfig(
     {
       version: 1,
-      ...(config?.deployment ? { deployment: config.deployment } : {}),
+      ...(config?.deployment ? { deployment: unresolveCatalog(config.deployment) } : {}),
       hosts,
     },
     "digichat config (tenants merge)",
+    { openRouterConfigured: openRouter },
   );
 }
 
@@ -400,7 +435,9 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
 
   if (contents != null && contents.trim()) {
     const parsed = parseYamlOrJson(contents, path);
-    fromFile = parseDigichatConfig(parsed, path);
+    fromFile = parseDigichatConfig(parsed, path, {
+      openRouterConfigured: openRouterConfigured(env),
+    });
   } else if (contents != null && !contents.trim()) {
     throw new Error(`${path}: empty file`);
   } else if (!allowMissing && opts.fileContents === undefined && !existsSync(path)) {
@@ -410,7 +447,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
   const tenantsRaw = env.DIGICHAT_EMBED_TENANTS;
   let merged: DigichatConfig;
   if (tenantsRaw?.trim()) {
-    merged = mergeEmbedTenantsOverlay(fromFile, tenantsRaw);
+    merged = mergeEmbedTenantsOverlay(fromFile, tenantsRaw, openRouterConfigured(env));
   } else if (fromFile) {
     merged = fromFile;
   } else {
@@ -448,6 +485,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
         },
       },
       "digichat config (dev default)",
+      { openRouterConfigured: openRouterConfigured(env) },
     );
   }
 

@@ -226,13 +226,20 @@ async def byok_header_context(request: Request, call_next):
                 service="digigraph",
             )
 
-    from digigraph.model_config import pop_house_model, push_house_model
+    from digigraph.model_config import (
+        pop_house_model,
+        pop_router_models,
+        push_house_model,
+        push_router_models,
+    )
 
     tok = push_byok_header(request)
     house_tok = push_house_model(request.headers.get("x-digi-house-model"))
+    router_tok = push_router_models(request.headers.get("x-digi-router-models"))
     try:
         return await call_next(request)
     finally:
+        pop_router_models(router_tok)
         pop_house_model(house_tok)
         pop_byok(tok)
 

@@ -115,6 +115,14 @@ export type MenuRow = {
   checked?: boolean;
   /** Single-choice list: radio disc, not On/Off. */
   exclusive?: boolean;
+  /** Provider label. Not a control, so arrows and Home/End skip it. */
+  heading?: boolean;
+};
+
+export type ComposerModelPicker = {
+  presets: readonly { id: string; label: string; description: string; model: string }[];
+  groups: readonly { provider: string; models: readonly { id: string; label: string }[] }[];
+  showFullList: boolean;
 };
 
 /**
@@ -127,8 +135,31 @@ export type MenuRow = {
  * server lists) has no row to land on and starts at the top.
  */
 export function cursorOnCurrentRow(rows: MenuRow[]): number {
-  const index = rows.findIndex((row) => row.exclusive === true && row.checked === true);
-  return index >= 0 ? index : 0;
+  const index = rows.findIndex(
+    (row) => row.exclusive === true && row.checked === true && row.heading !== true,
+  );
+  if (index >= 0) return index;
+  const first = rows.findIndex((row) => row.heading !== true);
+  return first >= 0 ? first : 0;
+}
+
+function selectableIndexes(rows: readonly MenuRow[]): number[] {
+  const indexes: number[] = [];
+  rows.forEach((row, index) => {
+    if (row.heading !== true) indexes.push(index);
+  });
+  return indexes;
+}
+
+function stepSelectable(current: number, delta: number, rows: readonly MenuRow[]): number {
+  const selectable = selectableIndexes(rows);
+  if (!selectable.length) return 0;
+  let pos = selectable.indexOf(current);
+  if (pos < 0) {
+    pos = selectable.findIndex((index) => index >= current);
+    if (pos < 0) pos = 0;
+  }
+  return selectable[nextPaletteIndex(pos, delta, selectable.length)] ?? selectable[0] ?? 0;
 }
 
 /**
@@ -289,6 +320,7 @@ export function EmbedComposerMenu({
   kind,
   models,
   defaultModel,
+  picker,
   onClose,
   onActivateProvider,
   onClearProvider,
@@ -302,6 +334,8 @@ export function EmbedComposerMenu({
   models?: readonly string[];
   /** Deployment default: `auto` (or empty) makes Auto the checked first row. */
   defaultModel?: string;
+  /** Catalog presets and provider groups. Absent keeps the id list. */
+  picker?: ComposerModelPicker;
   onClose: () => void;
   onActivateProvider?: (key: string, provider: BYOKProvider, model: string) => void;
   onClearProvider?: () => void;
@@ -487,6 +521,55 @@ export function EmbedComposerMenu({
   );
 
   const modelRows = useMemo((): MenuRow[] => {
+    // A connected BYOK provider replaces the house catalog with that
+    // provider's own models. The catalog picker is the house list.
+    if (picker && !providerActive) {
+      const selected = api.prefs.model;
+      const presetRows: MenuRow[] = picker.presets.map((preset) => {
+        const token = `preset:${preset.id}`;
+        const checked =
+          preset.id === "auto"
+            ? !selected || selected === "auto" || selected === token
+            : selected === token;
+        return {
+          id: token,
+          label: preset.label,
+          value: preset.description,
+          checked,
+          exclusive: true,
+          activate: () => {
+            const next = preset.id === "auto" ? "" : token;
+            api.setModel(next);
+            onPickSessionModel?.(next);
+            onClose();
+          },
+        };
+      });
+      const groupRows: MenuRow[] = picker.showFullList
+        ? picker.groups.flatMap((group) => [
+            {
+              id: `heading:${group.provider}`,
+              label: group.provider,
+              value: "",
+              heading: true,
+              activate: () => {},
+            },
+            ...group.models.map((model) => ({
+              id: model.id,
+              label: model.label,
+              value: "",
+              checked: selected === model.id,
+              exclusive: true,
+              activate: () => {
+                api.setModel(model.id);
+                onPickSessionModel?.(model.id);
+                onClose();
+              },
+            })),
+          ])
+        : [];
+      if (presetRows.length || groupRows.length) return [...presetRows, ...groupRows];
+    }
     // Auto is only a real option when the deployment default is Auto (no
     // pinned model); a tenant that pins a default should not offer a way to
     // silently leave it.
@@ -537,7 +620,7 @@ export function EmbedComposerMenu({
         },
       })),
     ];
-  }, [available, api, defaultModel, onClose, onPickSessionModel, providerActive]);
+  }, [available, api, defaultModel, onClose, onPickSessionModel, picker, providerActive]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
@@ -977,9 +1060,9 @@ export function EmbedComposerMenu({
   const move = useCallback(
     (delta: number) => {
       if (!rows.length) return;
-      setCursor((c) => nextPaletteIndex(c, delta, rows.length));
+      setCursor((c) => stepSelectable(c, delta, rows));
     },
-    [rows.length],
+    [rows],
   );
 
   const goBack = useCallback(() => {
@@ -1051,13 +1134,14 @@ export function EmbedComposerMenu({
       if (event.key === "Home") {
         event.preventDefault();
         event.stopPropagation();
-        setCursor(0);
+        setCursor(selectableIndexes(rows)[0] ?? 0);
         return;
       }
       if (event.key === "End") {
         event.preventDefault();
         event.stopPropagation();
-        setCursor(Math.max(0, rows.length - 1));
+        const selectable = selectableIndexes(rows);
+        setCursor(selectable[selectable.length - 1] ?? Math.max(0, rows.length - 1));
         return;
       }
       if (event.key === "Enter") {
@@ -1555,6 +1639,17 @@ export function EmbedComposerMenu({
           view !== "mcp-edit" &&
           view !== "help"
             ? rows.map((row, index) => {
+                if (row.heading) {
+                  return (
+                    <div
+                      key={row.id}
+                      role="presentation"
+                      className="text-muted-foreground px-2 pt-2 pb-0.5 text-[11px] uppercase tracking-wide"
+                    >
+                      {row.label}
+                    </div>
+                  );
+                }
                 const toggle =
                   typeof row.checked === "boolean" && (view === "main" || view === "tools");
                 const exclusive = Boolean(row.exclusive);

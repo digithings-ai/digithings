@@ -325,15 +325,22 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
     expect(dt?.models.allowPicker).toBe(true);
+    expect(dt?.models.catalog).toBe(true);
     expect(dt?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
-    expect(dt?.models.available).toEqual([
-      "deepseek/deepseek-v4.1-flash-1017",
-      "openai/gpt-oss-120b",
-      "z-ai/glm-5.3-flash",
-    ]);
+    expect(dt?.models.available).toContain("deepseek/deepseek-v4.1-flash-1017");
+    expect(dt?.models.available).toContain("deepseek/deepseek-v4.1-flash");
+    expect(dt?.models.available).toContain("google/gemini-3.1-flash-lite");
+    expect(dt?.models.available).toContain("openai/gpt-5.6-luna");
+    expect(dt?.models.available).not.toContain("openai/gpt-5.6-sol");
+    expect(dt?.models.available).not.toContain("google/gemini-3.7-flash");
     expect(dt?.models.available.some((id) => id.endsWith(":free"))).toBe(false);
-    expect(dt?.models.available).not.toContain("google/gemini-3.1-flash-lite");
-    expect(dt?.models.available).not.toContain("openai/gpt-5.6-luna");
+    expect(dt?.models.picker?.presets.map((preset) => preset.id)).toEqual([
+      "auto",
+      "reasoning",
+      "fast",
+      "light",
+    ]);
+    expect(dt?.models.picker?.groups.length).toBeGreaterThan(0);
     expect(dt?.mcp?.allowUserServers).toBe(false);
     expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
 
@@ -359,6 +366,12 @@ describe("DigichatConfigSchema", () => {
       "backlinks",
     ]);
     expect(occHost?.gate?.webSearch).toBe(false);
+    expect(occHost?.gate?.lockSessionControls).toBe(true);
+    expect(occHost?.features.modelPicker).toBe(true);
+    expect(occHost?.models.catalog).toBe(true);
+    expect(occHost?.models.allowPicker).toBe(true);
+    expect(occHost?.models.picker?.presets[0]?.id).toBe("auto");
+    expect(occHost?.chrome.theme).toBe("light");
     expect(occHost?.mcp?.allowUserServers).toBe(false);
     expect(occHost?.mcp?.servers.map((s) => s.id)).toEqual([
       "zammad",

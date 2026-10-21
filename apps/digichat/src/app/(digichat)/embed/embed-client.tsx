@@ -1412,6 +1412,7 @@ function EmbedChat({
           kind={composerMenu}
           models={stockClient.models.available}
           defaultModel={stockClient.models.default}
+          picker={stockClient.models.picker}
           onClose={() => {
             setComposerMenu(null);
             setProviderSeed(undefined);

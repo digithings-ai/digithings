@@ -41,15 +41,17 @@ hosts:
       branchPicker: true
       modelPicker: true
     models:
-      # Default product picker is Cheaper Inference cheap slugs only (#3829).
-      # OpenRouter never appears here — even if OPENROUTER_API_KEY is set.
-      # BYOK (`gate.showByok`) is the only way the list expands.
-      default: deepseek/deepseek-v4.1-flash-1017
-      available:
-        - deepseek/deepseek-v4.1-flash-1017
-        - openai/gpt-oss-120b
-        - z-ai/glm-5.3-flash
+      # Catalog picker: presets, then every tool-capable model under the
+      # output cap. The list is config/model-picker-catalog.json, not a
+      # hand-written allowlist. OpenRouter appears only as the Router
+      # preset, and only when OPENROUTER_API_KEY is set at load.
+      # BYOK (`gate.showByok`) still replaces /models with that provider.
       allowPicker: true
+      catalog: true
+      default: deepseek/deepseek-v4.1-flash-1017
+      priceCapUsdPerMillion: 2
+      presets: [auto, reasoning, fast, light, router]
+      showFullList: true
     backend:
       type: digigraph
       # Tenant corpus for D1 FTS. Without this, digigraph overwrites path_prefix

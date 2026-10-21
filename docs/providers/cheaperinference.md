@@ -65,18 +65,24 @@ own key and upstream configuration.
 
 ## digichat public picker (#3829)
 
-Default product path (digithings.ai `/chat` embed **and** dashboard
-`dashboard-modal.yaml`) allowlists **Cheaper Inference cheap house slugs
-only**:
+digithings.ai and the OCC embed resolve the picker from
+`apps/digichat/config/model-picker-catalog.json`: presets first (Auto,
+Reasoning, Fast, Light, and the OpenRouter router when that key is set), then
+every tool-capable model under the deployment's output-price cap. The default
+preset is `deepseek/deepseek-v4.1-flash-1017` (DeepSeek V4.1 Flash 1017 on
+Cheaper Inference). Cheaper Inference has no router model. OpenRouter is not a
+free model list on that picker; `openrouter/auto` appears only as the Router
+preset, and only when `OPENROUTER_API_KEY` is set at load. The router receives
+the deployment's allowed ids.
 
-- `deepseek/deepseek-v4.1-flash-1017` (default; DeepSeek V4.1 Flash 1017 checkpoint since 2026-10-21)
-- `openai/gpt-oss-120b`
-- `z-ai/glm-5.3-flash`
+The dashboard (`dashboard-modal.yaml`) keeps its own three-slug list:
+`deepseek/deepseek-v4.1-flash-1017`, `openai/gpt-oss-120b`, and
+`z-ai/glm-5.3-flash`. The DataTap trial embed uses Azure Foundry and does not
+inherit this catalog.
 
-Every id is on `config/litellm.cheaperinference.yaml` and
-`_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE`. OpenRouter (`:free` or paid) is **not**
-on that list, even if `OPENROUTER_API_KEY` / Groq credentials exist. The BFF
-rejects any other house `X-Digi-Model`.
+Every house id on the catalog is on `config/litellm.cheaperinference.yaml` and
+`_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE`. The BFF rejects any other house
+`X-Digi-Model`.
 
 **BYOK** (`gate.showByok`): connecting a visitor provider replaces `/models`
 with that provider’s presets (existing BYOK catalog). The house allowlist does

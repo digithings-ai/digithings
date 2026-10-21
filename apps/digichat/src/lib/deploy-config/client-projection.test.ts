@@ -127,10 +127,44 @@ describe("page-layout embeds keep embed chrome (#3733)", () => {
   });
 });
 
+describe("foundry tenants do not inherit the house catalog", () => {
+  it("blanks models and the picker even when a catalog was attached", () => {
+    const foundry = {
+      slug: "datatap",
+      gateMode: "ungated",
+      theme: "dark",
+      accent: null,
+      attribution: false,
+      backendType: "foundry",
+      models: {
+        default: "deepseek/deepseek-v4.1-flash-1017",
+        available: ["deepseek/deepseek-v4.1-flash-1017"],
+        allowPicker: true,
+        picker: {
+          showFullList: true,
+          presets: [
+            {
+              id: "auto",
+              label: "Auto",
+              description: "default",
+              model: "deepseek/deepseek-v4.1-flash-1017",
+            },
+          ],
+          groups: [],
+        },
+      },
+    } as EmbedTenantClientConfig;
+    const client = clientConfigFromEmbedTenant(foundry);
+    expect(client.models.available).toEqual([]);
+    expect(client.models.allowPicker).toBe(false);
+    expect(client.models.picker).toBeUndefined();
+  });
+});
+
 describe("baseline embed models catalog (Cheaper Inference default)", () => {
   it("ships the deploy catalog with the V4.1 Flash default and an enabled picker", () => {
     expect(DEFAULT_CLIENT_CONFIG.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
-    expect(DEFAULT_CLIENT_CONFIG.models.available).toHaveLength(12);
+    expect(DEFAULT_CLIENT_CONFIG.models.available).toHaveLength(21);
     expect(DEFAULT_CLIENT_CONFIG.models.available).toContain("deepseek/deepseek-v4.1-flash-1017");
     expect(DEFAULT_CLIENT_CONFIG.models.allowPicker).toBe(true);
   });

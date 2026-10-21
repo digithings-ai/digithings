@@ -12,12 +12,20 @@
       "lockSessionControls": true
     }
   },
-  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json. This file carries no token and no mcp rows: the OCC token is a client secret and lives only in the host secret store. Never write this file to the worker secret. The digigraph half (DIGI_TENANT_CORPUS_MAP) still goes to the digigraph env.",
+  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json. This file carries no token and no mcp rows: the OCC token is a client secret and lives only in the host secret store. Never write this file to the worker secret. Both tenants set a catalog policy for the model picker and no raw model id list. The digigraph half (DIGI_TENANT_CORPUS_MAP) still goes to the digigraph env.",
   "DIGICHAT_EMBED_TENANTS": {
     "digithings.ai": {
       "slug": "digithings",
       "gateMode": "ungated",
       "webSearch": false,
+      "models": {
+        "allowPicker": true,
+        "catalog": true,
+        "default": "deepseek/deepseek-v4.1-flash-1017",
+        "priceCapUsdPerMillion": 2,
+        "presets": ["auto", "reasoning", "fast", "light", "router"],
+        "showFullList": true
+      },
       "backend": {
         "type": "digigraph",
         "digisearchIndex": "digithings_docs",
@@ -28,6 +36,14 @@
       "slug": "occ",
       "gateMode": "ungated",
       "webSearch": false,
+      "models": {
+        "allowPicker": true,
+        "catalog": true,
+        "default": "deepseek/deepseek-v4.1-flash-1017",
+        "priceCapUsdPerMillion": 2,
+        "presets": ["auto", "reasoning", "fast", "light", "router"],
+        "showFullList": true
+      },
       "backend": {
         "type": "digigraph"
       }

@@ -20,6 +20,7 @@ import {
   VIEW_MODES,
 } from "@/lib/view-modes";
 import { HEX_COLOR } from "@/lib/hex-color";
+import { resolveModelCatalog } from "@/lib/model-picker-catalog";
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
@@ -227,6 +228,34 @@ export const FeaturesSchema = z.preprocess(
     .strict(),
 );
 
+const ModelPickerPresetSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    description: z.string(),
+    model: z.string().min(1),
+  })
+  .strict();
+
+const ModelPickerGroupSchema = z
+  .object({
+    provider: z.string().min(1),
+    models: z.array(z.object({ id: z.string().min(1), label: z.string().min(1) }).strict()),
+  })
+  .strict();
+
+/**
+ * Resolved picker. Deployments do not write this; `parseDigichatConfig`
+ * fills it when `catalog` is set. A hand-written copy is dropped.
+ */
+const ModelPickerSchema = z
+  .object({
+    presets: z.array(ModelPickerPresetSchema),
+    groups: z.array(ModelPickerGroupSchema),
+    showFullList: z.boolean(),
+  })
+  .strict();
+
 export const ModelsSchema = z
   .object({
     default: z.string().min(1).optional(),
@@ -236,6 +265,21 @@ export const ModelsSchema = z
      * `features.modelPicker` alias is folded into this during projection.
      */
     allowPicker: z.boolean().optional(),
+    /**
+     * When true, `available` is filled from the model catalog (price cap,
+     * tool support, context floor). A hand-written `available` list beside
+     * it is refused, so the catalog is the list.
+     */
+    catalog: z.boolean().optional(),
+    /** USD per million output tokens. Omit to use the catalog default. */
+    priceCapUsdPerMillion: z.number().positive().optional(),
+    /** Which preset rows the picker offers. Omit to offer every catalog preset. */
+    presets: z.array(z.enum(["auto", "reasoning", "fast", "light", "router"])).optional(),
+    /** When false, the picker shows presets only and the allowlist is those models. */
+    showFullList: z.boolean().optional(),
+    /** Minimum context window. Omit to use the catalog default. */
+    minContextTokens: z.number().int().positive().optional(),
+    picker: ModelPickerSchema.optional(),
   })
   .strict();
 
@@ -666,8 +710,104 @@ export function allowlistModelId(
   return available.includes(id) ? id : undefined;
 }
 
+const PRESET_PREFIX = "preset:";
+
+/**
+ * Map a picker token (`preset:reasoning`) onto its concrete catalog id, then
+ * apply the deployment allowlist. An unknown preset is not allowed.
+ */
+export function resolveHouseModelSelection(
+  models: DigichatDeployment["models"] | undefined,
+  requested: string | null | undefined,
+): string | undefined {
+  const id = requested?.trim() || undefined;
+  if (id?.startsWith(PRESET_PREFIX)) {
+    const presetId = id.slice(PRESET_PREFIX.length);
+    const hit = models?.picker?.presets.find((preset) => preset.id === presetId);
+    if (!hit) return undefined;
+    return allowlistModelId(models, hit.model);
+  }
+  return allowlistModelId(models, requested);
+}
+
+/**
+ * Comma list of concrete models for the OpenRouter router. Empty unless the
+ * visitor picked the router preset. The browser never supplies this list.
+ */
+export function routerModelsHeader(
+  models: DigichatDeployment["models"] | undefined,
+  selected: string | undefined,
+): string | undefined {
+  const router = models?.picker?.presets.find((preset) => preset.id === "router");
+  if (!router || !selected || router.model !== selected) return undefined;
+  const ids = (models?.available ?? []).filter((id) => id !== router.model).slice(0, 64);
+  return ids.length ? ids.join(",") : undefined;
+}
+
+type CatalogModels = DigichatDeployment["models"];
+
+function applyModelCatalog(
+  models: CatalogModels,
+  ctx: string,
+  openRouterConfigured: boolean,
+): CatalogModels {
+  if (!models?.catalog) {
+    if (!models?.picker) return models;
+    const rest = { ...models };
+    delete rest.picker;
+    return rest;
+  }
+  if ((models.available?.length ?? 0) > 0) {
+    throw new Error(
+      `${ctx}: models.catalog is set together with models.available; delete the hand list, the catalog fills it`,
+    );
+  }
+  const resolved = resolveModelCatalog(
+    {
+      default: models.default,
+      priceCapUsdPerMillion: models.priceCapUsdPerMillion,
+      presets: models.presets,
+      showFullList: models.showFullList,
+      minContextTokens: models.minContextTokens,
+    },
+    { openRouterConfigured },
+  );
+  return {
+    ...models,
+    available: resolved.available,
+    default: resolved.default,
+    picker: resolved.picker,
+  };
+}
+
+function applyCatalogConfig(
+  config: DigichatConfig,
+  ctx: string,
+  openRouterConfigured: boolean,
+): DigichatConfig {
+  const deployment = config.deployment
+    ? {
+        ...config.deployment,
+        models: applyModelCatalog(config.deployment.models, ctx, openRouterConfigured),
+      }
+    : config.deployment;
+  const hosts = config.hosts
+    ? Object.fromEntries(
+        Object.entries(config.hosts).map(([host, dep]) => [
+          host,
+          { ...dep, models: applyModelCatalog(dep.models, `${ctx} hosts.${host}`, openRouterConfigured) },
+        ]),
+      )
+    : config.hosts;
+  return { ...config, deployment, hosts };
+}
+
 /** Parse + validate unknown JSON/YAML object. Throws on failure (fail closed). */
-export function parseDigichatConfig(input: unknown, ctx = "digichat config"): DigichatConfig {
+export function parseDigichatConfig(
+  input: unknown,
+  ctx = "digichat config",
+  opts?: { openRouterConfigured?: boolean },
+): DigichatConfig {
   const result = DigichatConfigSchema.safeParse(input);
   if (!result.success) {
     const detail = result.error.issues
@@ -675,5 +815,5 @@ export function parseDigichatConfig(input: unknown, ctx = "digichat config"): Di
       .join("; ");
     throw new Error(`${ctx}: ${detail}`);
   }
-  return result.data;
+  return applyCatalogConfig(result.data, ctx, opts?.openRouterConfigured === true);
 }

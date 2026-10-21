@@ -559,12 +559,13 @@ async function handleChat(
   // House-path session model (non-BYOK, allowlisted). digigraph only binds it
   // when the slug is also on its own DIGI_SESSION_MODEL_ALLOWLIST.
   let houseSessionModel: string | undefined;
+  let routerModels: string | undefined;
   try {
-    const { allowlistModelId } = await import("@/lib/deploy-config");
+    const { resolveHouseModelSelection, routerModelsHeader } = await import("@/lib/deploy-config");
     if (byokKey) {
       if (requestedModel) modelId = requestedModel;
     } else if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
-      const allowed = allowlistModelId(dep.models, requestedModel);
+      const allowed = resolveHouseModelSelection(dep.models, requestedModel);
       if (requestedModel && allowed === undefined) {
         runLock.release();
         return new Response(
@@ -576,7 +577,10 @@ async function handleChat(
         );
       }
       if (allowed) modelId = allowed;
-      if (requestedModel && allowed) houseSessionModel = allowed;
+      if (requestedModel && allowed) {
+        houseSessionModel = allowed;
+        routerModels = routerModelsHeader(dep.models, allowed);
+      }
     } else if (configFailed && requestedModel) {
       // The deployment config could not be read, so we cannot prove the model
       // is allowed → fail closed rather than forward an unverified id.
@@ -856,6 +860,7 @@ async function handleChat(
   // BYOK: forward per-request key to digigraph; never log or persist.
   if (!byokKey && houseSessionModel) {
     upstreamHeaders["X-Digi-House-Model"] = houseSessionModel;
+    if (routerModels) upstreamHeaders["X-Digi-Router-Models"] = routerModels;
   }
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;

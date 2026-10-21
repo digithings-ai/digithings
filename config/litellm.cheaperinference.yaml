@@ -16,11 +16,9 @@
 # :online / unmapped pins fail closed under CI-only house (#3660).
 
 model_list:
-  # DeepSeek V4.1 Flash 1017 checkpoint — the house DeepSeek flash model
-  # (Chris, 2026-10-21). The legacy flash slugs below (deepseek-v4.1-flash,
-  # deepseek-v4-flash, deepseek-v4-flash-0731) are kept as aliases that
-  # route to the same 1017 upstream, so configs outside this repo (worker
-  # vars, tenant configs) move to 1017 on the next LiteLLM deploy.
+  # DeepSeek V4.1 Flash 1017 checkpoint — the house default (Chris, 2026-10-21).
+  # Older flash checkpoints are distinct products on the Cheaper Inference
+  # markets page and route to themselves so the picker can offer each one.
   - model_name: deepseek/deepseek-v4.1-flash-1017
     litellm_params: &ci_ds_v41_flash_1017
       model: openai/deepseek-v4.1-flash-1017
@@ -34,7 +32,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4.1-flash
     litellm_params: &ci_ds_v41_flash
-      model: openai/deepseek-v4.1-flash-1017  # legacy alias → 1017 (2026-10-21)
+      model: openai/deepseek-v4.1-flash
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:
@@ -100,7 +98,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4-flash
     litellm_params: &ci_ds_v4_flash
-      model: openai/deepseek-v4.1-flash-1017  # legacy alias → 1017 (2026-10-21)
+      model: openai/deepseek-v4-flash
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:
@@ -166,7 +164,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4-flash-0731
     litellm_params: &ci_ds_v4_flash_0731
-      model: openai/deepseek-v4.1-flash-1017  # legacy alias → 1017 (2026-10-21)
+      model: openai/deepseek-v4-flash-0731
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:
@@ -212,3 +210,72 @@ model_list:
       configurable_clientside_auth_params:
         - api_key
         - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+
+  # DeepSeek versions the catalog offers once they clear the price cap and
+  # context floor. Each is its own upstream id. No openrouter/auto route:
+  # that router is called directly, with an allowlist, and only when configured.
+  - model_name: deepseek/deepseek-v4-pro-0813
+    litellm_params: &ci_ds_v4_pro_0813
+      model: openai/deepseek-v4-pro-0813
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/deepseek/deepseek-v4-pro-0813
+    litellm_params: *ci_ds_v4_pro_0813
+
+  - model_name: deepseek/deepseek-v4-flash-0731-fast
+    litellm_params: &ci_ds_v4_flash_0731_fast
+      model: openai/deepseek-v4-flash-0731-fast
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/deepseek/deepseek-v4-flash-0731-fast
+    litellm_params: *ci_ds_v4_flash_0731_fast
+
+  - model_name: deepseek/deepseek-v3.1
+    litellm_params: &ci_ds_v31
+      model: openai/deepseek-v3.1
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/deepseek/deepseek-v3.1
+    litellm_params: *ci_ds_v31
+
+  - model_name: deepseek/deepseek-v3.2
+    litellm_params: &ci_ds_v32
+      model: openai/deepseek-v3.2
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/deepseek/deepseek-v3.2
+    litellm_params: *ci_ds_v32
+
+  - model_name: deepseek/deepseek-r1-0528
+    litellm_params: &ci_ds_r1_0528
+      model: openai/deepseek-r1-0528
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/deepseek/deepseek-r1-0528
+    litellm_params: *ci_ds_r1_0528
+
+  - model_name: deepseek/deepseek-r1
+    litellm_params: &ci_ds_r1
+      model: openai/deepseek-r1
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/deepseek/deepseek-r1
+    litellm_params: *ci_ds_r1

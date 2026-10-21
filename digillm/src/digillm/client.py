@@ -45,7 +45,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextvars import ContextVar, copy_context
+from contextvars import ContextVar, Token, copy_context
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -774,21 +774,77 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
 # meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
 # CI catalog and fail closed when CI is the selected house upstream (#3660).
-# DeepSeek flash: every house flash slug routes to the V4.1 Flash 1017 checkpoint
-# (2026-10-21). The older slugs stay as aliases so pins outside the repo keep working.
+# DeepSeek flash checkpoints are distinct products (2026-10-21 markets page).
+# The 1017 checkpoint stays the house default; the older flash ids route to
+# themselves so the picker can offer each version that meets the price cap.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash",
+    "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-0731": "deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4-flash-0731-fast": "deepseek-v4-flash-0731-fast",
     "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
+    "deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro-0813",
+    "deepseek/deepseek-v3.1": "deepseek-v3.1",
+    "deepseek/deepseek-v3.2": "deepseek-v3.2",
+    "deepseek/deepseek-r1-0528": "deepseek-r1-0528",
+    "deepseek/deepseek-r1": "deepseek-r1",
     "google/gemini-3.7-flash": "gemini-3.7-flash",
     "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
-    "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",
     "openai/gpt-oss-120b": "gpt-oss-120b",
     "z-ai/glm-5.3-flash": "glm-5.3-flash",
 }
+
+
+# Models the OpenRouter auto router may spend on for this request. Empty means
+# ``openrouter/auto`` is not a routed call: CI house still fails closed rather
+# than sending an unconstrained router at OpenRouter.
+_router_models: ContextVar[tuple[str, ...] | None] = ContextVar(
+    "digillm_router_models", default=None
+)
+
+
+def push_router_models(value: str | None) -> Token[tuple[str, ...] | None]:
+    """Bind the router allowlist (comma-separated). At most 64 ids."""
+    raw = (value or "").strip()
+    if not raw:
+        return _router_models.set(None)
+    ids: list[str] = []
+    for part in raw.split(","):
+        slug = part.strip()
+        if slug and slug not in ids:
+            ids.append(slug)
+        if len(ids) >= 64:
+            break
+    return _router_models.set(tuple(ids) if ids else None)
+
+
+def pop_router_models(token: Token[tuple[str, ...] | None]) -> None:
+    _router_models.reset(token)
+
+
+def get_router_models() -> tuple[str, ...] | None:
+    return _router_models.get()
+
+
+def _is_openrouter_auto(model: str) -> bool:
+    if model in {"openrouter/auto", "openrouter/openrouter/auto"}:
+        return True
+    provider, model_id = _parse_provider_prefix(model)
+    return provider == "openrouter" and model_id in {"auto", "openrouter/auto"}
+
+
+def _openrouter_auto_routed(model: str) -> bool:
+    """True when this call may hit OpenRouter's auto router with an allowlist.
+
+    Requires a non-empty router context and ``OPENROUTER_API_KEY``. Without
+    either, the call is not given an unconstrained OpenRouter route.
+    """
+    models = _router_models.get()
+    key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    return bool(models) and bool(key) and _is_openrouter_auto(model)
 
 
 def _api_base_is_cheaperinference() -> bool:
@@ -1023,6 +1079,8 @@ def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
 
 def _effective_model_id(model: str) -> str:
     """Model id on the wire: full caller string for LiteLLM; vendor slug otherwise."""
+    if _openrouter_auto_routed(model):
+        return "openrouter/auto"
     bare = cheaperinference_bare_id_for_house_slug(model)
     if bare is not None and _cheaperinference_direct_house():
         return bare
@@ -1070,10 +1128,15 @@ def get_client_for_model(model: str) -> OpenAI:
             f"provider {provider!r} (expected {expected!r}); refusing silent "
             "house/vendor fallthrough."
         )
+    # OpenRouter auto, only with an allowlist already bound for this request.
+    # Direct to OpenRouter (not the LiteLLM proxy, and not Cheaper Inference):
+    # there is no unconstrained ``openrouter/auto`` route on the CI overlay.
+    if _openrouter_auto_routed(model):
+        provider = "openrouter"
     # Cheaper Inference default base: mapped house slugs use get_client(); a catalog
     # miss (sonar / :online / maverick / grok-4.3|4.6 / anthropic) always raises —
     # there is no OpenRouter fallback.
-    if _is_ci_catalog_miss(model):
+    elif _is_ci_catalog_miss(model):
         _raise_for_ci_catalog_miss(model)
     elif cheaperinference_bare_id_for_house_slug(model) is not None and (
         _cheaperinference_direct_house()
@@ -1081,7 +1144,7 @@ def get_client_for_model(model: str) -> OpenAI:
         if _api_base_is_cheaperinference():
             return get_client()
         return _cheaperinference_direct_client()
-    if provider is None or _use_default_base_client(model):
+    if not _openrouter_auto_routed(model) and (provider is None or _use_default_base_client(model)):
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]
     api_key = os.environ.get(cfg["api_key_env"], "").strip()
@@ -1943,8 +2006,11 @@ def completion(
         )
 
     attempt_scope = _attempt_scope.get()
+    routed_auto = _openrouter_auto_routed(model)
     cache_status = (
-        CacheStatus.BYPASSED if tools or _byok_override.get() is not None else CacheStatus.MISS
+        CacheStatus.BYPASSED
+        if tools or _byok_override.get() is not None or routed_auto
+        else CacheStatus.MISS
     )
     if attempt_scope is not None:
         attempt_scope.cache_status = cache_status
@@ -1952,7 +2018,7 @@ def completion(
     # Cache only tool-free, non-BYOK requests (BYOK keys must not pollute or
     # read the shared in-process cache; tool calls may have side effects).
     cache_key: str | None = None
-    if not tools and _byok_override.get() is None:
+    if not tools and _byok_override.get() is None and not routed_auto:
         cache_key = _llm_cache_key(
             effective_model, messages, temperature, response_format, max_tokens
         )
@@ -1986,6 +2052,12 @@ def completion(
         kwargs["tool_choice"] = tool_choice
     elif response_format is not None:
         kwargs["response_format"] = response_format
+    if routed_auto:
+        # OpenAI SDK extra_body is merged onto the JSON body. OpenRouter reads
+        # a top-level ``models`` array as the router's allowlist.
+        extra = dict(kwargs.get("extra_body") or {})
+        extra["models"] = list(_router_models.get() or ())
+        kwargs["extra_body"] = extra
 
     try:
         r = create_with_retry(kwargs)
