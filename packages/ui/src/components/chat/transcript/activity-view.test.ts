@@ -426,8 +426,13 @@ describe("toCanonRows — the honest negative is a result row", () => {
         outcome: { name: "digisearch", query: "jwt", state: "failed" },
       },
     ]);
-    expect(row).toMatchObject({
+    // The WHOLE row, not a subset. A failed search claims no count, carries
+    // no documents and has no in-flight body: a "no hits" meta would say the
+    // search came back empty, a "Searching…" body would say it was still
+    // running, and both are the lies this leaf exists to remove.
+    expect(row).toEqual({
       kind: "tool",
+      key: "status-0",
       name: "Search the knowledge base",
       args: "jwt",
       status: "error",
@@ -444,11 +449,55 @@ describe("toCanonRows — the honest negative is a result row", () => {
         outcome: { name: "digisearch", query: "jwt", state: "unreadable" },
       },
     ]);
-    expect(row).toMatchObject({
+    // The whole row again: an unreadable result has no count to show and no
+    // documents to fold open, so the row carries neither.
+    expect(row).toEqual({
       kind: "tool",
+      key: "status-0",
       name: "Search the knowledge base",
       args: "jwt",
       status: "ok",
+    });
+  });
+
+  it("names the tool the outcome names, not the tool it came from", () => {
+    // GUARD. The outcome carries the tool that ran, so the row names THAT
+    // tool. A row that always read "Search the knowledge base" would name a
+    // tool that never ran — the no-invent class this leaf guards.
+    const row = onlyRow([
+      {
+        kind: "status",
+        message: 'Search for "auth" failed.',
+        outcome: { name: "digivault", query: "auth", state: "failed" },
+      },
+    ]);
+    expect(row).toEqual({
+      kind: "tool",
+      key: "status-0",
+      name: "Vault",
+      args: "auth",
+      status: "error",
+    });
+  });
+
+  it("keeps its own query when the row before it shows a different one", () => {
+    // The emitter replaces a tool row in place, so a promoted row's neighbour
+    // is another tool's row. The query on the row belongs to this outcome,
+    // unless the row above already showed the same one.
+    const rows = rowsOf([
+      { kind: "tool_result", name: "digivault", query: "auth", hits: [], count: 0 },
+      {
+        kind: "status",
+        message: 'Search for "jwt" failed.',
+        outcome: { name: "digisearch", query: "jwt", state: "failed" },
+      },
+    ]);
+    expect(rows[1]).toEqual({
+      kind: "tool",
+      key: "status-1",
+      name: "Search the knowledge base",
+      args: "jwt",
+      status: "error",
     });
   });
 
@@ -515,6 +564,23 @@ describe("toCanonRows — the honest negative is a result row", () => {
           kind: "status",
           message: "unreadable",
           outcome: { name: "digisearch", query: "jwt", state: "unreadable" },
+        },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it("settles the tool it names even while the call's query is still empty", () => {
+    // The settlement key is the tool NAME, and the module's own docstring
+    // says why: a call's query is often still empty while it is in flight, so
+    // keying on name+query would leave the caret waiting on a call that has
+    // already been answered.
+    expect(
+      liveActivityLabel([
+        { kind: "tool_call", name: "digisearch", query: "" },
+        {
+          kind: "status",
+          message: "failed",
+          outcome: { name: "digisearch", query: "jwt", state: "failed" },
         },
       ]),
     ).toBeUndefined();
