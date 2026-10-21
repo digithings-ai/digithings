@@ -220,6 +220,10 @@ def test_flash_slugs_including_release_alias_to_1017() -> None:
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-pro-0813")
         == "deepseek-v4-pro-0813"
     )
+    assert (
+        client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-flash-0731-fast")
+        == "deepseek-v4-flash-0731-fast"
+    )
 
 
 def test_openrouter_auto_without_allowlist_stays_a_catalog_miss(

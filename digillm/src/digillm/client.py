@@ -774,10 +774,10 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
 # meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
 # CI catalog and fail closed when CI is the selected house upstream (#3660).
-# DeepSeek flash: every house flash slug routes to the V4.1 Flash 1017
-# checkpoint (2026-10-21). The older slugs stay as aliases so pins outside
-# the repo keep working. The ``*-release`` names do the same: Chris decided
-# 1017 replaces the older flash checkpoints everywhere.
+# DeepSeek flash: the house flash slugs and the ``*-release`` names route to
+# the V4.1 Flash 1017 checkpoint (2026-10-21). Chris decided 1017 replaces
+# the older flash checkpoints. The 0731 fast row is its own markets id, with
+# its own price, so that slug keeps its bare name instead of aliasing to 1017.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
