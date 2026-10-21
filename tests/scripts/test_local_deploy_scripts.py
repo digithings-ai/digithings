@@ -165,6 +165,30 @@ def test_publish_image_packages_the_digichat_inputs_before_it_builds() -> None:
     assert "--npm-only" in body, "only the npm inputs are packaged for this image"
 
 
+def _no_comments(script: str) -> str:
+    """Strip ``#`` to end of line, so prose in a comment block cannot satisfy an assertion.
+
+    The trap the workflow test closes, for this script: moving a guard into the
+    comment block above it leaves the assertions green and the lane unguarded.
+    """
+    return re.sub(r"#.*$", "", script, flags=re.M)
+
+
+def _refuses(guards: str, marker: str) -> bool:
+    """True when the diagnostic ``marker`` is followed by an ``exit 1``.
+
+    A refusal that prints an error and keeps going is not a refusal. This
+    script writes its guards as one-liners, so the exit sits on the message's
+    own line or within the next few lines.
+    """
+    lines = guards.splitlines()
+    for index, line in enumerate(lines):
+        if marker in line:
+            if "exit 1" in "\n".join(lines[index : index + 3]):
+                return True
+    return False
+
+
 def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
     """The rehearsal has to fail where the CI lane fails.
 
@@ -173,8 +197,12 @@ def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
     boots the image bare and reads the /api/health status instead of demanding
     a 200 - a standalone container has no ecosystem services to reach, so 503
     is the expected answer - so the local probe has to do the same.
+
+    The assertions are on the executable text, with the comments stripped: a
+    substring check that a comment can satisfy proves nothing, and the whole
+    checks block can be deleted behind one.
     """
-    body = read("publish_image.sh")
+    body = _no_comments(read("publish_image.sh"))
     assert 'docker run --detach --rm --publish 127.0.0.1::3000 "$NAME"' in body, (
         "the digichat probe must boot the image bare, the way the CI probe does"
     )
@@ -186,6 +214,32 @@ def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
         "a bare container answers /api/health with 503; --fail turns the "
         "expected degradation into a red rehearsal"
     )
+    # The status is READ, and only the two honest answers are accepted: a 500
+    # that still serialises the version is a fault, not a degraded environment.
+    assert "api_status" in body, "the probe must read the status code, not demand one"
+    assert "--write-out" in body, "the probe must read the status code it accepts"
+    assert "200|503)" in body, (
+        "the probe must accept only 200 and 503: any other status is a fault"
+    )
+    # The four ecosystem services, and only when the fetch never completed.
+    for service in ("digraph", "digiquant", "digitrace", "digisearch"):
+        assert service in body, (
+            f"the probe must name {service} as a service a standalone container "
+            "cannot reach, so its failure reads as a degradation and not a fault"
+        )
+    assert "unreachable" in body, (
+        "the tolerated failure is the one the route records when the fetch never "
+        "completed; an upstream that answered http_<status> is a real fault"
+    )
+    # The version is still the contract: it is what catches a stale layer.
     assert '[ "$reported" = "$VERSION" ]' in body, (
         "the version the image serves is still the contract"
     )
+    # The verdict must not hang on a magic string the payload could produce.
+    assert "CLEAN" in body and "BAD:" in body, (
+        "the success sentinel has to be a value the health payload cannot produce"
+    )
+    # And the refusal has to actually exit.
+    assert _refuses(
+        body, "not only the unreachable ecosystem services"
+    ), "a diagnostic without an exit behind it reports success and the publish goes on"
