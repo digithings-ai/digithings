@@ -97,13 +97,13 @@ describe("parseSlashInput", () => {
   });
 
   it("parses extra catalog MCP tools", () => {
-    const extra = [catalogToolSlashDef({ id: "datatap", label: "DataTap" })];
-    expect(parseSlashInput("/datatap", extra)).toMatchObject({
+    const extra = [catalogToolSlashDef({ id: "widget", label: "Widget" })];
+    expect(parseSlashInput("/widget", extra)).toMatchObject({
       kind: "command",
-      command: { id: "datatap", kind: "tool" },
+      command: { id: "widget", kind: "tool" },
       arg: "",
     });
-    expect(parseSlashInput("/datatap pipeline status", extra)).toMatchObject({
+    expect(parseSlashInput("/widget pipeline status", extra)).toMatchObject({
       kind: "command",
       arg: "pipeline status",
     });

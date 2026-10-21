@@ -2,7 +2,7 @@
 "use client";
 
 /**
- * Force-web arm is tenant-gated (#3871): a deny tenant (datatap-shape,
+ * Force-web arm is tenant-gated (#3871): a deny tenant (sample-shape,
  * tenantAllowsWeb false) typing `/websearch foo` must not set the pending
  * web-search flag, while an allowed tenant still arms this-send web search.
  * The BFF deny stays as backstop; this pins the client arm point.
@@ -126,7 +126,7 @@ function submitAs(api: EmbedChatPrefsApi, text: string): void {
 }
 
 describe("DigichatSkin force-web arm (#3871)", () => {
-  it("datatap-shape deny tenant typing /websearch foo emits no pending flag", () => {
+  it("deny tenant typing /websearch foo emits no pending flag", () => {
     const sessionKey = "deny-tenant-websearch";
     submitAs(
       prefsApi({ tenantAllowsWeb: false, sessionKey, catalogTools: [] }),

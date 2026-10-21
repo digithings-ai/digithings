@@ -508,7 +508,7 @@ export function formatCliSettingLine(row: CliSettingRow, selected: boolean): str
   return `${mark} ${row.label} → ${row.actionLabel} — ${row.description}`;
 }
 
-/** Extra catalog/MCP tool as a slash def (`/datatap` empty=toggle). */
+/** Extra catalog/MCP tool as a slash def (`/widget` empty=toggle). */
 export function catalogToolSlashDef(entry: {
   id: string;
   label?: string;

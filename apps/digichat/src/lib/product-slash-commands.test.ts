@@ -104,16 +104,16 @@ describe("slashSubmitAction", () => {
 
   it("forces extra MCP catalog ids", () => {
     const extra = extraSlashDefs(
-      api({ catalogTools: [{ id: "datatap", label: "DataTap" }] }),
+      api({ catalogTools: [{ id: "widget", label: "Widget" }] }),
     );
-    expect(slashSubmitAction("/datatap pipeline status", extra)).toEqual({
+    expect(slashSubmitAction("/widget pipeline status", extra)).toEqual({
       kind: "force",
-      forceTool: "datatap",
+      forceTool: "widget",
       text: "pipeline status",
     });
-    expect(slashSubmitAction("/datatap", extra)).toMatchObject({
+    expect(slashSubmitAction("/widget", extra)).toMatchObject({
       kind: "run",
-      command: { id: "datatap" },
+      command: { id: "widget" },
       arg: "",
     });
   });
@@ -160,7 +160,7 @@ describe("catalogForceTool", () => {
   it("maps vault locate onto the BFF catalog id", () => {
     expect(catalogForceTool("digivault_search_notes")).toBe("digivault");
     expect(catalogForceTool("digisearch")).toBe("digisearch");
-    expect(catalogForceTool("datatap")).toBe("datatap");
+    expect(catalogForceTool("widget")).toBe("widget");
   });
 });
 
@@ -205,9 +205,9 @@ describe("buildProductSlashCommands", () => {
 
   it("adds extra MCP catalog commands", () => {
     const ids = buildProductSlashCommands(
-      api({ catalogTools: [{ id: "datatap", label: "DataTap" }] }),
+      api({ catalogTools: [{ id: "widget", label: "Widget" }] }),
     ).map((c) => c.id);
-    expect(ids).toContain("datatap");
+    expect(ids).toContain("widget");
   });
 
   it("still parses /digisearch as a tool command", () => {
@@ -338,13 +338,13 @@ describe("executeSlashDef", () => {
     const extra = extraSlashDefs(
       api({
         catalogTools: [{ id: "digisearch" }],
-        mcpServers: [{ id: "datatap", label: "DataTap" }],
+        mcpServers: [{ id: "widget", label: "Widget" }],
       }),
     );
-    expect(extra.map((d) => d.names[0])).toEqual(["/datatap"]);
-    expect(slashSubmitAction("/datatap pipeline", extra)).toEqual({
+    expect(extra.map((d) => d.names[0])).toEqual(["/widget"]);
+    expect(slashSubmitAction("/widget pipeline", extra)).toEqual({
       kind: "force",
-      forceTool: "datatap",
+      forceTool: "widget",
       text: "pipeline",
     });
   });
@@ -366,14 +366,14 @@ describe("executeSlashDef", () => {
   it("toggles extra MCP tools", () => {
     const a = api({
       extraToolOn: () => true,
-      catalogTools: [{ id: "datatap" }],
+      catalogTools: [{ id: "widget" }],
     });
     executeSlashDef(
-      { id: "datatap", names: ["/datatap"], needsArg: false, hint: "", kind: "tool" },
+      { id: "widget", names: ["/widget"], needsArg: false, hint: "", kind: "tool" },
       "",
       a,
     );
-    expect(a.setExtraTool).toHaveBeenCalledWith("datatap", false);
+    expect(a.setExtraTool).toHaveBeenCalledWith("widget", false);
   });
 });
 
