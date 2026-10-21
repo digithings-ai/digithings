@@ -326,6 +326,10 @@ Three things about the knob. The gate reads the **process environment**, not the
 
 The port digigraph actually listens on is set elsewhere, so the two have to agree: the host dev server takes `DG_PORT` (`scripts/run_local.sh`, default `18000`), and the no-Docker stack takes `PORT_GRAPH` (`scripts/run_stack_local.sh`, default `8000`, the same ports as compose).
 
+One rule, wherever the port comes from: a port is plain decimal digits, `1`–`65535`, no sign and no surrounding whitespace. A contract row in `config/contract/services.yaml` that carries its own `port:` is read by the same validator, so a row whose port is not one is **refused** the same way — the row **fails** the gate and names the row and the value, it never falls back to a built-in URL, and it never crashes the gate with a stack trace. A row without a `port:` keeps the built-in URL and its knob.
+
+The contract is read as the text that was written, so the YAML resolver cannot turn a bad port into a good one: `port: 8_000` is the text `8_000` and is refused, not the number `8000` that YAML 1.1 would have made of it. A port also has to read back the way it is written, so `port: 017` is refused — the file would otherwise mean two different ports. A row that carries a `port:` is checked even when it also carries a `url:`, and when both are valid the `url:` wins. A row whose `url:` points off the machine is refused, because the gate only probes `127.0.0.1`, and a row whose `url:`, `health_path:` or `requires:` is not text is refused rather than guessed at. A refused row is checked in **every** profile, so a bad row cannot hide behind a profile, and a row the contract does not name is still reported, as `contract row <n>`. A contract file that is neither readable YAML nor JSON is a clean error, not a stack trace.
+
 ---
 
 ## 12. digichat configuration
