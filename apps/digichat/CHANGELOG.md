@@ -1,21 +1,22 @@
 ## [2.6.7](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.6...digichat-v2.6.7) (2026-10-22)
 
 The invite-only OCC embed loads again, a visitor who leaves or presses stop
-ends the model call, the house chat shows its context meter, and one answer
+ends the model call, the house chat can carry a context meter, and one answer
 exports as HTML from the message menu.
 
-2.6.6 was rolled back from the digithings.ai / OCC deployment within the hour
-(22 Oct, 00:52 Rome): every invite-token request to `/embed` answered 500.
+2.6.6 was rolled back from the digithings.ai / OCC deployment: every
+invite-token request to `/embed` answered 500.
 2.6.7 carries the fix and everything 2.6.6 shipped.
 
 ### Bug Fixes
 
 * **digichat:** an embed request that carries `?token=` loads again behind the trusted-proxy entrypoint. Next now listens on `localhost`, so the token-strip rewrite stays internal and no longer becomes a 500 with no content type ([#6222](https://github.com/digithings-ai/digithings/pull/6222))
 * **digichat:** when a visitor leaves or presses stop, the entrypoint closes the upstream request, so the model call and the session's run lock end with it ([#6182](https://github.com/digithings-ai/digithings/pull/6182))
+* **digichat:** a Foundry tool-call wrapper left unclosed at the end of an answer no longer reaches the visitor ([#6182](https://github.com/digithings-ai/digithings/pull/6182))
 
 ### Features
 
-* **digichat:** the house chat shows the composer context meter (`gate.showContextMeter`) ([#6213](https://github.com/digithings-ai/digithings/pull/6213))
+* **digichat:** the composer context meter can be switched on for the house chat slugs only (`showContextMeter`, on for them unless set false, refused on any other host) ([#6213](https://github.com/digithings-ai/digithings/pull/6213))
 * **digichat:** export one answer as HTML from the message menu ([#6218](https://github.com/digithings-ai/digithings/pull/6218))
 
 ### Known limits
@@ -23,6 +24,7 @@ exports as HTML from the message menu.
 * Premium spend counters are per instance. With `DIGICHAT_TRUSTED_PROXIES` unset, anonymous visitors behind a shared ingress share one premium allowance and one guardrail bucket on that instance.
 * In the redacted `/export html`, a `)` or a backtick inside a secret leaks the rest of that value.
 * The clipboard, mailto, `.txt` and minimal-HTML exports are not redacted.
+* The live house chat publishes no models yet, so it shows no context-meter bar. Digigraph reporting the served model is a follow-up.
 
 ## [2.6.6](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.5...digichat-v2.6.6) (2026-10-21)
 
