@@ -29,7 +29,7 @@ export function highlightJson(text: string): ReactNode[] {
     const kind = str ? (colon ? "key" : "string") : bool ? "boolean" : nul ? "null" : num ? "number" : "";
     if (str && colon) {
       out.push(
-        <span key={key++} className="aui-json-key text-sky-600 dark:text-sky-300" data-json="key">
+        <span key={key++} className="aui-json-key text-chart-1" data-json="key">
           {str}
         </span>,
         colon,
@@ -40,10 +40,10 @@ export function highlightJson(text: string): ReactNode[] {
           key={key++}
           data-json={kind}
           className={cn(
-            kind === "string" && "aui-json-string text-emerald-700 dark:text-emerald-300",
-            kind === "number" && "aui-json-number text-amber-700 dark:text-amber-300",
+            kind === "string" && "aui-json-string text-up",
+            kind === "number" && "aui-json-number text-warn",
             (kind === "boolean" || kind === "null") &&
-              "aui-json-literal text-violet-700 dark:text-violet-300",
+              "aui-json-literal text-chart-4",
           )}
         >
           {whole}
