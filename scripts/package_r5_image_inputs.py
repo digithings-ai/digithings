@@ -83,6 +83,18 @@ NPM_MANIFESTS = {
 #: It is what lets a reader — and ``check_only`` — tell a tree packaged for one
 #: image apart from a tree that is missing a changed source.
 NPM_SCOPE = "npm-only"
+#: The scope name recorded on a provenance that covers only the stack inputs.
+#: Same purpose as ``NPM_SCOPE``, for the image that installs workspace wheels
+#: and a frozen export and installs no npm tarball.
+STACK_SCOPE = "stack-only"
+#: The paths under ``OUT`` the stack image's Dockerfile COPYs. The stack image
+#: installs no npm tarball and no runner payload, so a stack-only tree holds
+#: exactly these — and the Dockerfile's COPY list is the contract this pins.
+STACK_OUTPUTS = (
+    "stack/requirements.txt",
+    "stack/wheels",
+    "stack/digisearch-seeds",
+)
 RUNNER_FILES = (
     "scripts/refresh_market_data_r2.py",
     "scripts/backfill_market_data_r2.py",
@@ -308,14 +320,34 @@ def _write_provenance(
     _provenance_path().write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
 
-def check_only(paths: dict[str, Path] | None = None, provenance: Path | None = None) -> int:
+def check_only(
+    paths: dict[str, Path] | None = None,
+    provenance: Path | None = None,
+    scope: str | None = None,
+) -> int:
     """0 when the packaged inputs match the sources, 1 on drift, 2 when unknown.
 
     ``head`` is informational only: the decision rests on content, so a different
     commit with identical inputs still passes.
+
+    ``scope`` asks about one image's inputs only. A scoped check reads the
+    scope's sources and the scope's recorded fingerprints and ignores what the
+    tree carries beyond it — a tree packaged for the whole set still satisfies a
+    scoped check for the stack image. It refuses a tree packaged for a DIFFERENT
+    scope, and a scoped tree still fails a full check, because a partial tree
+    must never read as a complete one.
     """
     target = _provenance_path() if provenance is None else provenance
+    if scope is not None and paths is not None:
+        raise SystemExit(
+            "check_only() takes a scope OR an explicit path set, not both: a scope "
+            "already says which inputs the question is about"
+        )
     selected = input_paths() if paths is None else paths
+    if scope == STACK_SCOPE:
+        selected = stack_input_paths()
+    elif scope == NPM_SCOPE:
+        selected = npm_input_paths()
     try:
         document = json.loads(target.read_text(encoding="utf-8"))
         recorded = document["packages"]
@@ -332,20 +364,34 @@ def check_only(paths: dict[str, Path] | None = None, provenance: Path | None = N
         print(f"  rebuild: {REMEDIATION}")
         return 2
 
+    recorded_scope = document.get("scope")
+    if scope is not None and recorded_scope is not None and recorded_scope != scope:
+        print(f"ABORT: image-packages/ was packaged for {recorded_scope}, not {scope}.")
+        print("       a tree packaged for another image does not carry this one's inputs.")
+        print(f"  rebuild: {REMEDIATION}")
+        return 1
+
     current = {name: content_digest(path) for name, path in selected.items()}
     added = sorted(set(current) - set(recorded))
     removed = sorted(set(recorded) - set(current))
     changed = sorted(
         name for name in current if name in recorded and current[name] != recorded[name]
     )
+    if scope is not None:
+        # A scoped check asks about the scope's inputs only: what a full tree
+        # carries beyond them is not drift.
+        removed = []
     if not (added or removed or changed):
         print(f"ok: image-packages provenance matches {len(current)} packaged input(s)")
         return 0
-    if document.get("scope") == NPM_SCOPE and added:
+    if recorded_scope is not None and added:
         # A tree packaged for one image is not a tree for another. The reason
         # this refuses is INCOMPLETENESS, not staleness, and a reader who is
         # told "stale" looks for a changed source instead of a missing wheel.
-        print("ABORT: image-packages/ carries only the digichat image's npm inputs —")
+        if recorded_scope == NPM_SCOPE:
+            print("ABORT: image-packages/ carries only the digichat image's npm inputs —")
+        else:
+            print(f"ABORT: image-packages/ carries only the {recorded_scope} inputs —")
         print("       it does not cover every packaged input, so a deploy built on it")
         print("       would ship an image without its wheels.")
         print(f"  missing: {', '.join(added)}")
@@ -555,6 +601,20 @@ def npm_input_paths() -> dict[str, Path]:
     return {name: path for name, path in input_paths().items() if path in manifest_sources}
 
 
+def stack_input_paths() -> dict[str, Path]:
+    """The inputs the stack image installs — the stack half of :func:`input_paths`.
+
+    The stack image COPYs ``image-packages/stack/{requirements.txt,wheels,
+    digisearch-seeds}`` and installs no npm tarball and no runner payload, so
+    this scope covers the nine workspace packages it installs and the seed
+    corpus it bakes in. The digisearch seeds are the one payload input the
+    stack image reads, and they are a source tree of their own.
+    """
+    paths = {package: REPO / package for package, _ in STACK_PACKAGES}
+    paths["payload:digisearch/seeds"] = REPO / "digisearch" / "seeds"
+    return paths
+
+
 def npm_only() -> int:
     """Package only the npm inputs, for the digichat image.
 
@@ -576,16 +636,78 @@ def npm_only() -> int:
     return 0
 
 
+def stack_only() -> int:
+    """Package only the stack image's inputs.
+
+    The stack image installs nine workspace wheels, the frozen export of their
+    dependency set and the digisearch seeds. It installs no npm tarball and no
+    runner payload, so packaging those would make a production deploy depend on
+    tools and on a network the image does not use: the runner project alone
+    runs a fresh ``uv lock`` against PyPI, and the npm step packs five
+    workspaces the image never installs.
+
+    The provenance written here covers ONLY these inputs and says so, so a full
+    ``--check-only`` still refuses this tree: a partial tree must never read as
+    a complete one.
+    """
+    if OUT.exists():
+        shutil.rmtree(OUT)
+    stack_wheels = OUT / "stack" / "wheels"
+    stack_wheels.mkdir(parents=True)
+    for package, _extras in STACK_PACKAGES:
+        _build_wheel(package, stack_wheels)
+    export_dir = OUT / "exports"
+    export_dir.mkdir(parents=True)
+    stack_exports: list[Path] = []
+    for package, extras in STACK_PACKAGES:
+        dest = export_dir / f"stack-{package}.txt"
+        _export(package, extras, dest)
+        stack_exports.append(dest)
+    stack_req = OUT / "stack" / "requirements.txt"
+    stack_req.write_text("\n".join(_merge(stack_exports)) + "\n", encoding="utf-8")
+    seeds = REPO / "digisearch" / "seeds"
+    shutil.copytree(seeds, OUT / "stack" / "digisearch-seeds")
+    # Last, so the record describes the artifacts on disk.
+    _write_provenance(stack_input_paths(), scope=STACK_SCOPE)
+    print(f"wrote {OUT / 'stack'} (stack inputs only)")
+    print("  the npm and runner inputs are NOT in this tree; a worker deploy")
+    print("  needs the full generator:")
+    print(f"    {REMEDIATION}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
-    if args == ["--check-only"]:
-        return check_only()
-    if args == ["--npm-only"]:
+    check = False
+    scope: str | None = None
+    for arg in args:
+        if arg == "--check-only":
+            check = True
+        elif arg == "--npm-only":
+            if scope is not None and scope != NPM_SCOPE:
+                raise SystemExit(
+                    f"--{scope} and --npm-only ask for two different images' inputs; "
+                    "package one image at a time"
+                )
+            scope = NPM_SCOPE
+        elif arg == "--stack-only":
+            if scope is not None and scope != STACK_SCOPE:
+                raise SystemExit(
+                    f"--{scope} and --stack-only ask for two different images' inputs; "
+                    "package one image at a time"
+                )
+            scope = STACK_SCOPE
+        else:
+            raise SystemExit(
+                f"unknown argument(s): {' '.join(args)} "
+                "(want --check-only, --npm-only or --stack-only)"
+            )
+    if check:
+        return check_only(scope=scope)
+    if scope == NPM_SCOPE:
         return npm_only()
-    if args:
-        raise SystemExit(
-            f"unknown argument(s): {' '.join(args)} (want --check-only or --npm-only)"
-        )
+    if scope == STACK_SCOPE:
+        return stack_only()
 
     if OUT.exists():
         shutil.rmtree(OUT)

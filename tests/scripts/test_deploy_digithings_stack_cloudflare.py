@@ -314,27 +314,36 @@ def test_the_deploy_command_and_secrets_are_unchanged() -> None:
     )
     deploy_env = (deploy_step.get("env") or {})
     assert deploy_env["CLOUDFLARE_API_TOKEN"] == (
-        "${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}"
+        "${{ secrets.CLOUDFLARE_API_TOKEN }}"
     ), (
-        "wrangler authenticates from CLOUDFLARE_API_TOKEN, and in this house "
-        "that name is also the Vectorize/D1 token: exporting the D1 token "
-        "makes every deploy fail with code 10000. The deploy credential "
-        "must come from a Workers Scripts:Edit token under a distinct name."
+        "wrangler authenticates from the CLOUDFLARE_API_TOKEN environment "
+        "variable, and the repo secret of that name is the Workers token this "
+        "lane deploys with - the lane was green on it on 2026-10-13 (run "
+        "7de39ec9a), and the cron and runner deploy lanes read the same "
+        "secret. This lane once read a distinct name, "
+        "CLOUDFLARE_WORKERS_API_TOKEN, on the theory that the name is also "
+        "the local developer's Vectorize/D1 token (the trap in "
+        "apps/digithings-stack-cloudflare/wrangler.toml). No secret of that "
+        "name exists, so wrangler was handed an empty token and the deploy "
+        "failed on auth (run 39482995993). If a Workers token ever has to "
+        "live under a different name, that secret has to be CREATED first - "
+        "a name with no secret behind it deploys nothing."
     )
     assert deploy_env["CLOUDFLARE_ACCOUNT_ID"] == (
         "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
     )
 
 
-def test_the_deploy_fails_loudly_when_the_workers_token_is_missing() -> None:
+def test_the_deploy_fails_loudly_when_the_token_is_missing() -> None:
     """An empty secret is a silent deploy, so the lane has to look before it pushes.
 
     Actions substitutes an empty string for a secret name it cannot resolve, so
-    `secrets.CLOUDFLARE_WORKERS_API_TOKEN` reached wrangler as an empty
-    `CLOUDFLARE_API_TOKEN` and the failure landed on wrangler as an auth error
-    rather than on the missing credential. #6013 added the read; the secret was
-    never created. This pins the preflight that says so, and pins that it never
-    prints the value.
+    a read of a name nobody defined reached wrangler as an empty token and the
+    failure landed on wrangler as an auth error rather than on the missing
+    credential. #6013 added the read of `secrets.CLOUDFLARE_WORKERS_API_TOKEN`
+    and that secret was never created. This pins the preflight that says so,
+    pins that it looks at the credential the deploy actually exports, and pins
+    that it never prints the value.
     """
     steps = _steps(_stack_spec(), "deploy")
     preflight = next(
@@ -347,11 +356,13 @@ def test_the_deploy_fails_loudly_when_the_workers_token_is_missing() -> None:
         "error (DIG-4717)"
     )
     env = preflight.get("env") or {}
-    assert env.get("CLOUDFLARE_WORKERS_API_TOKEN") == (
-        "${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}"
+    assert env.get("CLOUDFLARE_API_TOKEN") == (
+        "${{ secrets.CLOUDFLARE_API_TOKEN }}"
     ), (
         "the preflight must look at the same name the deploy exports, or it "
-        "checks a different credential than the one that runs"
+        "checks a different credential than the one that runs. "
+        "CLOUDFLARE_WORKERS_API_TOKEN is not that name: no secret answers it at "
+        "any level, so a preflight on it can never pass (DIG-4717, #6076)"
     )
     script = str(preflight.get("run") or "")
     assert "-z" in script and "exit 1" in script, (
@@ -360,13 +371,13 @@ def test_the_deploy_fails_loudly_when_the_workers_token_is_missing() -> None:
     assert "::error::" in script, (
         "the preflight must say what is missing on the run page, not just exit 1"
     )
-    assert "CLOUDFLARE_WORKERS_API_TOKEN is present" in script, (
+    assert "CLOUDFLARE_API_TOKEN is present" in script, (
         "the success path must say the token is present"
     )
     unguarded = [
         line
         for line in script.splitlines()
-        if "$CLOUDFLARE_WORKERS_API_TOKEN" in line and "[" not in line
+        if "$CLOUDFLARE_API_TOKEN" in line and "[" not in line
     ]
     assert not unguarded, (
         f"the preflight expands the token outside a test, which would print it: {unguarded}"
