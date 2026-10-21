@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
+import { DotMatrix } from "./DotMatrix";
 import {
   ReasoningContent as GalleryReasoningContent,
   ReasoningRoot as GalleryReasoningRoot,
@@ -24,7 +25,7 @@ import {
 } from "./stock/tool-group.aui";
 
 /**
- * DIG-4669: a disclosure trigger is named by its visible text, once.
+ * DIG-4669: a control is named by its visible text, once.
  *
  * PR #6034 replaced the nameless lucide glyphs in the chat triggers with
  * DotMatrix instances that carry a label, and DotMatrix renders that label as
@@ -33,8 +34,9 @@ import {
  * announced "Reasoning Reasoning (5s) Toggle reasoning" - the label twice,
  * plus a chevron name the button never needed.
  *
- * The rule these tests pin: the visible text is the name of the control, and
- * every glyph inside it is decorative.
+ * The rule these tests pin: a control that has visible text is named by that
+ * text, and every glyph inside it is decorative. A control with no visible
+ * text is named by its glyph.
  */
 
 afterEach(cleanup);
@@ -49,7 +51,6 @@ describe("disclosure trigger accessible names", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "Reasoning (5s)" });
-    expect(trigger).toBeTruthy();
     expect(trigger.querySelector('[role="img"]')).toBeNull();
   });
 
@@ -62,7 +63,6 @@ describe("disclosure trigger accessible names", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "Reasoning (5s)" });
-    expect(trigger).toBeTruthy();
     expect(trigger.querySelector('[role="img"]')).toBeNull();
   });
 
@@ -75,11 +75,10 @@ describe("disclosure trigger accessible names", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "3 tool calls" });
-    expect(trigger).toBeTruthy();
     expect(trigger.querySelector('[role="img"]')).toBeNull();
   });
 
-  it("names the running tool group trigger by its count only", () => {
+  it("keeps the running state of the tool group on the trigger, not in a second name", () => {
     render(
       <ToolGroupRoot>
         <ToolGroupTrigger count={1} active />
@@ -87,9 +86,23 @@ describe("disclosure trigger accessible names", () => {
       </ToolGroupRoot>,
     );
 
+    // The group is collapsed while the tools run, so the trigger is the only
+    // thing on screen that knows about it: the state has to be on it.
     const trigger = screen.getByRole("button", { name: "1 tool call" });
-    expect(trigger).toBeTruthy();
+    expect(trigger.getAttribute("aria-busy")).toBe("true");
     expect(trigger.querySelector('[role="img"]')).toBeNull();
+  });
+
+  it("leaves a finished tool group not busy", () => {
+    render(
+      <ToolGroupRoot>
+        <ToolGroupTrigger count={1} />
+        <ToolGroupContent>the calls</ToolGroupContent>
+      </ToolGroupRoot>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "1 tool call" });
+    expect(trigger.getAttribute("aria-busy")).toBeNull();
   });
 
   it("names the tool fallback trigger by its visible text only", () => {
@@ -101,7 +114,22 @@ describe("disclosure trigger accessible names", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "Used tool: digisearch" });
-    expect(trigger).toBeTruthy();
+    expect(trigger.querySelector('[role="img"]')).toBeNull();
+  });
+
+  it("names the running tool fallback trigger by its visible text only", () => {
+    render(
+      <ToolFallbackRoot>
+        <ToolFallbackTrigger
+          toolName="digisearch"
+          title="digisearch"
+          status={{ type: "running" }}
+        />
+        <ToolFallbackContent>the result</ToolFallbackContent>
+      </ToolFallbackRoot>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Running tool: digisearch" });
     expect(trigger.querySelector('[role="img"]')).toBeNull();
   });
 
@@ -115,5 +143,17 @@ describe("disclosure trigger accessible names", () => {
 
     const trigger = screen.getByRole("button", { name: "Reasoning (5s)" });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("still names a control that has no visible text by its glyph", () => {
+    render(
+      <button type="button">
+        <DotMatrix state="download" label="Download" />
+      </button>,
+    );
+
+    // The other half of the rule: a glyph that is the only content of a
+    // control is the name of that control.
+    screen.getByRole("button", { name: "Download" });
   });
 });

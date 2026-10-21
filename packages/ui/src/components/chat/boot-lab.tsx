@@ -349,7 +349,7 @@ function TypedLabel({ text, instant }: { text: string; instant: boolean }) {
 function SpinnerLine({ label }: { label?: string | null }) {
   return (
     <span className="dboot-lab-line dboot-lab-spin">
-      <DotMatrix state="loading" className="!size-3" />
+      <DotMatrix state="loading" decorative className="!size-3" />
       {label ? <span>{label}</span> : null}
     </span>
   );

@@ -512,7 +512,10 @@ export type DotMatrixState = keyof typeof PATTERNS;
 
 const dotMatrixStates = Object.keys(PATTERNS) as readonly DotMatrixState[];
 
-type DotMatrixBaseProps = Omit<ComponentProps<"span">, "children"> & {
+// `role` and `aria-label` are the component's own: a caller cannot set a
+// name the component would not announce, and cannot put a name on a glyph
+// the component renders as decorative.
+type DotMatrixBaseProps = Omit<ComponentProps<"span">, "children" | "role" | "aria-label"> & {
   state?: DotMatrixState;
 };
 

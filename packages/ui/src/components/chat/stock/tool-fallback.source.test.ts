@@ -24,8 +24,8 @@ describe("stock ToolFallback source guard", () => {
     expect(source).toMatch(/<DotMatrix/);
     // The trigger's visible text already names the status, so the glyph must
     // not carry a second name of its own (DIG-4669).
-    expect(source).toMatch(/<DotMatrix[\s\S]{0,120}?decorative/);
-    expect(source).not.toMatch(/label=\{label\}/);
+    expect(source).toMatch(/<DotMatrix\s+state=\{matrixState\}\s+decorative/);
+    expect(source).not.toMatch(/<DotMatrix[^>]*label=/);
     expect(source).not.toMatch(/LoaderIcon/);
     expect(source).not.toMatch(/CheckIcon/);
     expect(source).not.toMatch(/XCircleIcon/);

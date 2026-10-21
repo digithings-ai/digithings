@@ -25,10 +25,18 @@ describe("DotMatrix accessible name", () => {
     expect(html).not.toContain("sr-only");
   });
 
-  it("hides a decorative glyph from the accessibility tree", () => {
+  it("renders a decorative glyph with no name at all", () => {
     const html = renderToStaticMarkup(<DotMatrix state="expand" decorative />);
     expect(html).toContain('aria-hidden="true"');
     expect(html).not.toContain('role="img"');
     expect(html).not.toContain("aria-label");
+  });
+
+  it("refuses a label on a decorative glyph", () => {
+    const html = renderToStaticMarkup(
+      // @ts-expect-error a decorative glyph carries no name, so it takes no label
+      <DotMatrix state="expand" decorative label="Toggle" />,
+    );
+    expect(html).not.toContain("Toggle");
   });
 });
