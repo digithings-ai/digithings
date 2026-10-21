@@ -398,6 +398,31 @@ that carries neither a seat nor a run, or that names a different head, is
 for a review from another seat. The refusal names the head the queue expected, so
 the PR says what it is waiting for.
 
+**The marker stands alone, and its values are records.** The provenance marker is
+read only when it stands alone on its line: a list bullet may carry it and the
+`<!-- in-session-review -->` marker may sit beside it, but no other text may share
+the line — so a comment that quotes the marker to explain it is prose, not a claim.
+And a value that cannot be a record (a placeholder, a typo, an example) is refused
+by name and never sent to the API: the API answers questions about runs and seats,
+and a value that is not a run id has no answer to give. Asking anyway used to turn a
+fact the gate held into a failed read, and a failed read is a transport failure —
+the queue then reports a broken API and stops merging every PR (DIG-4809, 21 Oct
+2026).
+
+What the API answers is a fact, not a failure. A run id it does not know (404) and a
+run id it refuses outright (400) are both answers — no such record — and neither is
+a broken API; only a read that fails (a timeout, a 401, a 5xx) is a failed read. A
+run the API knows but that carries no seat is refused by name as well: the marker
+claims a seat and a run, and neither of them can be checked, so the queue cannot say
+who reviewed. A seat id is the same id whatever case it is written in, so the gate
+compares one spelling of it.
+
+The author's side follows the same rule. A commit trailer that names something the
+API would refuse — `Paperclip-Agent-Id:` or `Paperclip-Run-Id:` with a value that is
+not an id — leaves the seat that wrote that commit unknown, and an unknown seat may
+be the seat that posted the review. The gate refuses the PR there rather than drop
+the seat silently, because an author it cannot name is not an author it can clear.
+
 The author seat's own run window is a **second reason attached to that seat's own
 marker**, not a veto on the queue. A review from another seat posted while the
 author was still working is that seat's review, and it counts: a window that
