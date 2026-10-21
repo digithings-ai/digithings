@@ -21,10 +21,11 @@ PLACEHOLDER_PATTERNS = [
     # The GitHub App token placeholder (DIG-4803): `ghs_<appid>_<jwt>`. A real
     # token is base64url - no angle bracket can be in it - so a `ghs_` value
     # that holds one is the documented placeholder and not a credential. The
-    # rule is anchored on the prefix, so it cannot be used to smuggle a real
-    # value past the vendor-prefix loop by putting a placeholder word in front
-    # of it.
-    r'^ghs_.*<[^>]+>',
+    # rule covers the **whole value** and only that shape, like the `<...>`
+    # rule above: a bracket anywhere else - in a trailing comment, or after the
+    # token - does not turn a real token into a placeholder, and the vendor
+    # prefix loop keeps its promise.
+    r'^ghs_<[^>]+>_<[^>]+>$',
 ]
 #: Name-side patterns. This is a substring test (`p in var.upper()`), so an entry
 #: claims every name containing it. Matching is only half the guard: a line is

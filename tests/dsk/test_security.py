@@ -83,11 +83,16 @@ class TestRedactSecrets:
         # The App token shape of DIG-4803: the prefix, the numeric app id, an
         # underscore, then a JWT body. Synthetic, not a real credential, and
         # assembled in parts so the file holds no token-shaped literal.
-        token = "ghs_" + "123456" + "_" + (
-            "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9."
-            "eyJpc3MiOiIxMjM0NTY3ODkwIn0."
-            "SflKxwRJSMeKKF2QT4"
-            "fwpMeJf36POk6yJV_adQssw5c"
+        token = (
+            "ghs_"
+            + "123456"
+            + "_"
+            + (
+                "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9."
+                "eyJpc3MiOiIxMjM0NTY3ODkwIn0."
+                "SflKxwRJSMeKKF2QT4"
+                "fwpMeJf36POk6yJV_adQssw5c"
+            )
         )
         redacted, count = redact_secrets(f"token: {token}")
         assert "ghs_" not in redacted

@@ -117,6 +117,40 @@ def test_a_placeholder_word_does_not_hide_an_app_token() -> None:
     assert cec.looks_cred_val("ghs_" + APP_ID + "_your_token_here_000000") is True
 
 
+def test_the_rule_is_what_catches_the_app_token() -> None:
+    """The app-token rule is the gate, not the entropy score.
+
+    The fixture above is low-entropy enough for the score to stay quiet, so
+    the assertion below only holds when the `^ghs_` rule matches it. Without
+    that rule the value is not reported at all.
+    """
+    rules = [p for p in cec.CRED_VALUE_PATTERNS if p.startswith("^ghs_")]
+    assert any(re.match(p, "ghs_" + APP_ID + "_your_token_here_000000") for p in rules), rules
+
+
+def test_a_bracket_in_a_trailing_comment_does_not_hide_an_app_token() -> None:
+    """A real token with a bracket in the comment is still a credential.
+
+    The placeholder exemption covers the whole value, so a comment that holds
+    a bracket cannot reach it: the value is the token, the token is real.
+    """
+    assert cec.looks_cred_val(APP_TOKEN + "  # minted by <the ci app>") is True
+
+
+def test_a_bracket_after_the_token_does_not_hide_an_app_token() -> None:
+    """A bracket appended to the value does not turn it into a placeholder."""
+    assert cec.looks_cred_val(APP_TOKEN + "<x>") is True
+
+
+def test_a_placeholder_app_id_with_a_real_body_is_a_credential() -> None:
+    """Only the documented whole-value shape is a placeholder.
+
+    `ghs_<appid>_<jwt>` with a real body in the second half is a real token
+    with a written-down app id, and it has to be reported.
+    """
+    assert cec.looks_cred_val("ghs_<appid>_" + JWT_HEAD + JWT_BODY + JWT_SIGN) is True
+
+
 def test_the_app_token_rules_are_not_end_anchored() -> None:
     """A structural guard on the same defect class as the vendor prefixes.
 
@@ -135,13 +169,7 @@ def test_the_app_token_rule_matches_the_app_token_and_not_the_placeholder() -> N
     assert not any(re.match(p, PLACEHOLDER) for p in rules), rules
 
 
-def test_the_tracked_example_files_stay_clean() -> None:
+def test_the_tracked_example_files_stay_clean(monkeypatch: pytest.MonkeyPatch) -> None:
     """The corpus fence: no tracked `.example` / `.template` file is reported."""
-    import os
-
-    cwd = os.getcwd()
-    os.chdir(REPO_ROOT)
-    try:
-        assert cec.main() == 0
-    finally:
-        os.chdir(cwd)
+    monkeypatch.chdir(REPO_ROOT)
+    assert cec.main() == 0

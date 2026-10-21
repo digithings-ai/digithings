@@ -118,6 +118,16 @@ def test_the_documented_placeholder_is_not_caught() -> None:
 
 
 @pytest.mark.unit
+def test_a_prefixed_token_is_not_caught() -> None:
+    """The rule needs a word boundary before the prefix.
+
+    `xghs_123_...` is not a GitHub token - the prefix has to start a word -
+    and the sibling rule in `digiskills` holds the same boundary.
+    """
+    assert not _matches(_rules()[_RULE], "x%s\n" % _app_token())
+
+
+@pytest.mark.unit
 def test_the_classic_token_stays_the_default_rule_job() -> None:
     assert not _matches(_rules()[_RULE], "%s\n" % _classic_token())
 
@@ -188,9 +198,14 @@ def test_repository_has_no_findings_from_the_new_rule(tmp_path: Path) -> None:
     The scan is repository-relative on purpose. The allowlist paths in
     ``.gitleaks.toml`` are written relative to the repository root
     (``^tests/``, ``^docs/.*\\.md$``, ...), so an absolute scan path would not
-    match them and the test fixtures themselves would be reported. That is also
-    how CI scans: gitleaks walks the git history, where every path is relative
-    to the repository root.
+    match them and the fixtures the default ruleset reports - the classic
+    ``ghs_`` token in the shape test, for one - would land in the report.
+
+    The scope is the **working tree**, which is not the scope of the push
+    gate: CI walks the git history (``gitleaks detect`` over the log), and
+    this control cannot see a value that only ever existed in a commit. That
+    history was measured separately for this rule - 0 findings over 12763
+    commits - and the gap is closed in the comment in ``.gitleaks.toml``.
     """
     findings = _scan(Path("."), tmp_path / "report.json", cwd=_REPO_ROOT)
     rules_hit = {f["RuleID"] for f in findings} & {_RULE}
