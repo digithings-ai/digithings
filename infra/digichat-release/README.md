@@ -279,6 +279,41 @@ for the staged overlay, and
 [`docs/ops/SECRETS_ROTATION.md`](../../docs/ops/SECRETS_ROTATION.md) for the
 rotation runbook.
 
+### The OCC-only overlay
+
+`DIG-4488-occ-tenant-overlay.json` carries the OCC tenant alone. It names no
+`models` section, so the OCC embed shows no model choice and the house default
+model answers every OCC turn. It does not touch the `digithings.ai` tenant.
+
+The staged overlay `DIG-3556-staged-prod-tenant-config.json` carries both
+tenants. It also sends the `digithings.ai` tenant to the `digithings_docs`
+corpus and turns its web search off. That switch waits for the DIG-3556 rollout
+steps: the merged `DIGI_TENANT_CORPUS_MAP` prompt for `digithings`, and the
+corpus backfill.
+
+| Scope | Overlay | Change to the `digithings.ai` tenant |
+|---|---|---|
+| OCC only | `DIG-4488-occ-tenant-overlay.json` | none |
+| Full staged | `DIG-3556-staged-prod-tenant-config.json` | corpus routing and web search |
+
+Both scopes write the same KV key and remove the same `models` section. Only the
+`digithings.ai` tenant differs.
+
+```sh
+# scope A: the OCC tenant only
+python3 scripts/digichat_tenant_registry.py apply \
+  --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
+  --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json
+
+# scope B: the OCC tenant and the staged digithings.ai corpus switch
+python3 scripts/digichat_tenant_registry.py apply \
+  --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
+  --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
+```
+
+A human runs the apply. The script asks for a typed confirmation before it
+writes the KV key, the Worker secret, or recycles the container.
+
 ## Command matrix
 
 | Goal | Command |
@@ -292,6 +327,7 @@ rotation runbook.
 | Local monorepo build | `make up-digichat` |
 | Validate the deployment config | `make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml` |
 | Plan the digichat tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json` |
+| Plan the OCC-only tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json` |
 | Client install guide | [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) |
 | Populate client docs (offline) | [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../docs/digichat/CLIENT-DOCS-ONBOARD.md) |
 | Post-publish smoke | [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md) |

@@ -1,0 +1,12 @@
+{
+  "DIGICHAT_EMBED_TENANTS": {
+    "occ.digithings.ai": {
+      "slug": "occ",
+      "gateMode": "ungated",
+      "webSearch": false,
+      "backend": {
+        "type": "digigraph"
+      }
+    }
+  }
+}
