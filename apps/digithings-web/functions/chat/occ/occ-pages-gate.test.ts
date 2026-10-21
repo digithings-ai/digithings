@@ -58,6 +58,7 @@ describe("Pages /chat/occ gate", () => {
   });
 
   it("answers a no-key request exactly like a path that does not exist", async () => {
+    assets.fetch.mockClear();
     // The nonexistent-path baseline: what the asset server returns for /xyz
     // and /chat/does-not-exist (no function runs for those paths).
     const baselines = await Promise.all(

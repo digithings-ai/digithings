@@ -160,13 +160,6 @@ function logEmbedLoadFailure(reason: string): void {
 }
 
 /**
- * True when the frame loaded a document that is not the chat: an error page
- * (500, 503, a platform error), a 404, or anything else without the embed
- * shell. Only knowable same-origin (production serves /embed on the page's
- * own origin); a cross-origin frame (local dev) reads as "unknown" and the
- * ready timeout decides instead.
- */
-/**
  * The class the digichat embed puts on its root (apps/digichat
  * `embed-route-shell.tsx`). A contract test reads that source, so a rename
  * there fails CI instead of turning every /chat load into the error card.
@@ -185,6 +178,13 @@ function readableDocument(frame: FrameLike): Document | null {
   }
 }
 
+/**
+ * True when the frame loaded a document that is not the chat: an error page
+ * (500, 503, a platform error), a 404, or anything else without the embed
+ * shell. Only knowable same-origin (production serves /embed on the page's
+ * own origin); a cross-origin frame reads as "unknown" and the ready timeout
+ * decides instead.
+ */
 export function embedDocumentFailed(frame: FrameLike): boolean {
   const doc = readableDocument(frame);
   return doc ? doc.querySelector(`.${EMBED_SHELL_CLASS}`) === null : false;
