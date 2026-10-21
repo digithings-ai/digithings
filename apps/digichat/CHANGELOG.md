@@ -1,3 +1,14 @@
+## [2.6.3](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.2...digichat-v2.6.3) (2026-10-21)
+
+A turn shows one thing moving: the work block no longer appears before the
+agent has done anything, and the composer row does not open with a stray
+separator.
+
+### Bug Fixes
+
+* **chat:** a status part alone gets no work block — the loading row waits for the agent, and the work block takes over the moment reasoning, a tool call or the answer arrives ([#6108](https://github.com/digithings-ai/digithings/pull/6108))
+* **chat:** the composer row lists its facts without a dangling separator ([#6098](https://github.com/digithings-ai/digithings/pull/6098))
+
 ## [2.6.2](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.1...digichat-v2.6.2) (2026-10-21)
 
 A turn shows one thing moving at a time, and a tool failure says what went
