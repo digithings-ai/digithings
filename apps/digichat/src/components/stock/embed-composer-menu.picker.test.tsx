@@ -317,6 +317,106 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     vi.unstubAllGlobals();
   });
 
+  it("routes a /theme pick through a tenant embed's own theme, not localStorage", async () => {
+    const user = userEvent.setup();
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
+    const setTheme = vi.fn();
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider
+        value={prefs({
+          themeState: { preference: "light", palette: "default", resolved: "light" },
+          setTheme,
+        })}
+      >
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("menuitem", { name: /\/theme/ }));
+    // Opens on the tenant's own theme (light here), not on dt-theme.
+    const current = await screen.findByRole("menuitemradio", { name: /\/theme default light/i });
+    expect(current).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("menuitemradio", { name: /\/theme aura dark/i }));
+
+    expect(setTheme).toHaveBeenCalledWith("dark", "aura");
+    expect(store.size).toBe(0);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    vi.unstubAllGlobals();
+  });
+
+  it("drops the pick when an embed's checked theme row is chosen again", async () => {
+    const user = userEvent.setup();
+    const setTheme = vi.fn();
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider
+        value={prefs({
+          themeState: { preference: "light", palette: "default", resolved: "light" },
+          setTheme,
+        })}
+      >
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("menuitem", { name: /\/theme/ }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /\/theme default light/i }));
+
+    // "auto" is how an embed clears the pick (embedThemePick("auto") is null).
+    expect(setTheme).toHaveBeenCalledTimes(1);
+    expect(setTheme).toHaveBeenCalledWith("auto", "default");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it("pins the mode when the app's checked theme row is chosen with no stored theme", async () => {
+    const user = userEvent.setup();
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
+    document.documentElement.removeAttribute("data-palette");
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("menuitem", { name: /\/theme/ }));
+    // No dt-theme: the app follows the OS, and the checked row is that mode.
+    const checked = (await screen.findAllByRole("menuitemradio")).find(
+      (row) => row.getAttribute("aria-checked") === "true",
+    );
+    expect(checked).toBeTruthy();
+    const mode = /light/i.test(checked!.textContent ?? "") ? "light" : "dark";
+    await user.click(checked!);
+
+    expect(store.get("dt-theme")).toBe(mode);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    vi.unstubAllGlobals();
+  });
+
   it("shows the search-engine row on the main menu when the tenant allows web", async () => {
     const onClose = vi.fn();
     const { unmount } = render(

@@ -46,7 +46,12 @@ import {
   toolsMenuSummary,
   type SessionMcpConfig,
 } from "@/components/stock/embed-mcp-flow";
-import { buildProductSlashCommands, languageSelectOptions } from "@/lib/product-slash-commands";
+import {
+  applyThemePick,
+  buildProductSlashCommands,
+  currentThemeState,
+  languageSelectOptions,
+} from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
 import {
   byokRequiresModel,
@@ -70,12 +75,7 @@ import {
 import { listenMcpOAuthResult, startMcpOAuth } from "@/components/stock/embed-mcp-oauth";
 import { THINKING_MODES, VIEW_MODES } from "@/lib/view-modes";
 import { TRACE_DENSITIES, TRACE_DENSITY_LABELS } from "@digithings/ui/chat/trace-spacing";
-import { readEffectiveThemeState } from "@/lib/palette-prefs";
-import {
-  applyDocumentTheme,
-  matchThemeStep,
-  themeCycle,
-} from "@digithings/ui/theme";
+import { matchThemeStep, themeCycle } from "@digithings/ui/theme";
 
 export type ComposerMenuKind =
   | "settings"
@@ -701,7 +701,7 @@ export function EmbedComposerMenu({
   );
 
   const themeRows = useMemo((): MenuRow[] => {
-    const state = readEffectiveThemeState();
+    const state = currentThemeState(api);
     const current = matchThemeStep(state.preference, state.palette, state.resolved);
     return themeCycle().map((step) => ({
       id: step.id,
@@ -710,11 +710,19 @@ export function EmbedComposerMenu({
       checked: current.id === step.id,
       exclusive: true,
       activate: () => {
-        applyDocumentTheme(step.mode, step.palette);
+        if (api.setTheme && current.id === step.id) {
+          // On a host that owns the theme (an embed), the checked row drops
+          // the visitor's pick, so the chat follows the parent / tenant again.
+          applyThemePick(api, "auto", step.palette);
+        } else {
+          // Document theme (the app): any row, the checked one included,
+          // pins that mode and palette, as before 2.6.6.
+          applyThemePick(api, step.mode, step.palette);
+        }
         onClose();
       },
     }));
-  }, [onClose]);
+  }, [api, onClose]);
 
   const thinkingRows = useMemo(
     (): MenuRow[] =>

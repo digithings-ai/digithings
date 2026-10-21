@@ -117,9 +117,35 @@ PROVENANCE_SHADOW = "shadow"
 PROVENANCE_ENFORCE = "enforce"
 PROVENANCE_MODES: tuple[str, ...] = (PROVENANCE_OFF, PROVENANCE_SHADOW, PROVENANCE_ENFORCE)
 
+#: The three ways the comparison between the build's own commit and the pull
+#: request head can be applied.
+#:
+#: The launcher pipeline that runs the check is bound to the commit its own
+#: repository checked out - the launcher's `main` commit, never the pull request
+#: head - so that comparison can never succeed while the launcher runs one
+#: build for the whole repository (DIG-4809). `enforce` is today's behaviour: a
+#: build that ran another commit is a refusal. `shadow` measures it: the
+#: mismatch is written to the log and the queue merges anyway. `off` does not
+#: look at the commit at all.
+#:
+#: The comparison is the only thing that ties a build to a pull request head,
+#: so it cannot be softened on its own: a queue that no longer compares the
+#: commit and still trusts a `local-ci` row would accept a row that says
+#: nothing about this head. The trusted receipt is what replaces it - a status
+#: written by the CI's own GitHub App installation, on the head commit, which
+#: no seat can write. A policy that softens the comparison without asking for
+#: that receipt is refused when the policy file is read.
+COMMIT_MATCH_ENFORCE = "enforce"
+COMMIT_MATCH_SHADOW = "shadow"
+COMMIT_MATCH_OFF = "off"
+COMMIT_MATCH_MODES: tuple[str, ...] = (COMMIT_MATCH_ENFORCE, COMMIT_MATCH_SHADOW, COMMIT_MATCH_OFF)
+
 #: DIG-4809 names this switch: the environment wins over the policy file, so the
 #: mode can be changed on the running host without a code change.
 PROVENANCE_MODE_ENV = "MQ_CI_PROVENANCE"
+
+#: The same for the commit comparison: the environment wins over the file.
+COMMIT_MATCH_ENV = "MQ_CI_COMMIT_MATCH"
 #: Where the shadow log goes. The launchd job's own error log keeps the line too.
 PROVENANCE_LOG_ENV = "MQ_CI_PROVENANCE_LOG"
 PROVENANCE_LOG_PATH = Path.home() / ".config" / "digithings" / "merge-queue" / "ci-provenance.log"
@@ -154,6 +180,10 @@ _PIPELINE_UNFINISHED_STATES: frozenset[str] = frozenset(
 #: given less: there the read is a measurement, not a verdict.
 PROVENANCE_READ_TIMEOUT = 5.0
 PROVENANCE_READ_TIMEOUT_SHADOW = 2.0
+#: The read of the commit statuses, which is a GitHub call rather than a call
+#: to the deployment's own network. It gets its own limit because a read that
+#: hangs is a tick that hangs, and the queue reads one commit per pull request.
+PROVENANCE_STATUS_TIMEOUT = 10.0
 
 #: The provenance log grows by one line per pull request per tick, so it is
 #: capped: the oldest file is dropped when the log passes this size.
@@ -244,6 +274,38 @@ def _effective_mode(cfg: ReviewIndependence) -> str:
 
 
 @dataclass(frozen=True)
+class TrustedReceipt:
+    """The receipt a seat cannot write: a status written by a known CI writer.
+
+    A commit status is worth exactly what its writer is worth: "any person or
+    integration with write permissions can set the state of any status check"
+    (GitHub's commit status documentation). The `local-ci` row is written with a
+    user token, so it is a statement - anybody with a token can write it, and
+    the queue cannot tell that statement from the CI's own.
+
+    A row written by the GitHub App installation is a receipt. The app's token
+    is the CI's own and nobody else's, so a row it wrote on a commit says that
+    the CI ran on that commit. That is what binds a check to a pull request
+    head, which the build's own `commit` field cannot do while the launcher
+    runs one build for a whole repository.
+
+    `creators` are the logins allowed to write the receipt. A `Bot` login is
+    the shape an app installation writes under; a human login in that list
+    would make the receipt forgeable again, so the list is the trust decision
+    and it is read from the policy file rather than guessed.
+    """
+
+    #: The status context the trusted receipt is written under.
+    context: str = ""
+    #: The logins allowed to write the trusted receipt.
+    creators: tuple[str, ...] = ()
+    #: Whether the queue asks for a receipt at all. A policy that does not ask
+    #: for one does not read the status list: the chain is switched on by the
+    #: policy change that comes with the CI's own installation token.
+    required: bool = False
+
+
+@dataclass(frozen=True)
 class CiProvenance:
     """How the queue decides that a `local-ci` status came from a real build.
 
@@ -297,6 +359,13 @@ class CiProvenance:
     #: the wrong repository.
     woodpecker_repo_names: Mapping[str, str] = field(default_factory=dict)
     steps: Mapping[str, str] = field(default_factory=dict)
+    #: The receipt the queue trusts in addition to the build check. Empty means
+    #: no receipt is asked for, which is today's state: the CI worker writes the
+    #: app row only when it holds an app installation token, and it does not
+    #: hold one yet (DIG-4803, DIG-4809).
+    trusted_receipt: TrustedReceipt = field(default_factory=TrustedReceipt)
+    #: How the comparison between the build's commit and the head is applied.
+    commit_match: str = COMMIT_MATCH_ENFORCE
 
 
 @dataclass(frozen=True)
@@ -456,6 +525,24 @@ def _load_ci_provenance(raw: Mapping[str, Any] | None, path: Path) -> CiProvenan
         raise QueueError(
             f"{path}: ci_provenance.require_config must be true or false"
         )
+    commit_match = str(raw.get("commit_match") or COMMIT_MATCH_ENFORCE).strip().lower()
+    if commit_match not in COMMIT_MATCH_MODES:
+        raise QueueError(
+            f"{path}: ci_provenance.commit_match is {commit_match!r}; it must be one of "
+            f"{', '.join(COMMIT_MATCH_MODES)}"
+        )
+    receipt = _load_trusted_receipt(raw.get("trusted_receipt"), path)
+    if commit_match != COMMIT_MATCH_ENFORCE and not receipt.required:
+        # The commit comparison is the only thing that ties a build to a pull
+        # request head, and it cannot succeed while the launcher runs one build
+        # for a whole repository. A policy that softens it without asking for a
+        # trusted receipt would leave the queue trusting a row that says nothing
+        # about this head - so the policy file is refused rather than loaded.
+        raise QueueError(
+            f"{path}: ci_provenance.commit_match is {commit_match!r}, so the queue needs "
+            "a trusted receipt to bind a status to the head commit, but "
+            "ci_provenance.trusted_receipt does not require one"
+        )
     return CiProvenance(
         mode=mode,
         hosts=tuple(str(host) for host in (hosts_raw or [])),
@@ -478,7 +565,57 @@ def _load_ci_provenance(raw: Mapping[str, Any] | None, path: Path) -> CiProvenan
             for repo, name in (raw.get("woodpecker_repo_names") or {}).items()
         },
         steps={str(repo): str(step) for repo, step in (raw.get("steps") or {}).items()},
+        trusted_receipt=receipt,
+        commit_match=commit_match,
     )
+
+
+def _load_trusted_receipt(raw: Any, path: Path) -> TrustedReceipt:
+    """Read the `trusted_receipt` block of the policy file.
+
+    No block at all means no receipt is asked for: the CI worker writes the app
+    row only when it holds an app installation token, and it does not hold one
+    yet, so a policy that demanded the receipt today would refuse every pull
+    request for a reason nobody could fix.
+
+    A block that is present but incomplete is refused rather than ignored. A
+    receipt with no context names nothing, and a receipt with no trusted
+    writer is a receipt anybody can write - the two failures of this gate
+    would come back as a queue that trusts the wrong thing.
+    """
+    if raw is None:
+        return TrustedReceipt()
+    if not isinstance(raw, Mapping):
+        raise QueueError(f"{path}: ci_provenance.trusted_receipt must be an object")
+    context = str(raw.get("context") or "").strip()
+    creators_raw = raw.get("creators")
+    if isinstance(creators_raw, str) or (
+        creators_raw is not None and not isinstance(creators_raw, list)
+    ):
+        raise QueueError(
+            f"{path}: ci_provenance.trusted_receipt.creators must be a list of logins, "
+            "not a string"
+        )
+    creators = tuple(
+        str(login).strip() for login in (creators_raw or []) if str(login).strip()
+    )
+    require = raw.get("require")
+    if require is not None and not isinstance(require, bool):
+        raise QueueError(
+            f"{path}: ci_provenance.trusted_receipt.require must be true or false"
+        )
+    # A block with no `require` key at all means the receipt is required. That
+    # is the fail-closed direction: a hand edit that drops the key must not
+    # turn a security gate off. The price is a loud refusal of every pull
+    # request until the CI writes a receipt, so the key is written down in the
+    # policy note and in docs/MERGE_QUEUE.md and the rule is pinned by a test.
+    required = True if require is None else bool(require)
+    if required and (not context or not creators):
+        raise QueueError(
+            f"{path}: ci_provenance.trusted_receipt must name a context and at least one "
+            "creator when it is required"
+        )
+    return TrustedReceipt(context=context, creators=creators, required=required)
 
 
 def _load_review_independence(raw: Mapping[str, Any], path: Path) -> ReviewIndependence:
@@ -515,8 +652,16 @@ def _load_review_independence(raw: Mapping[str, Any], path: Path) -> ReviewIndep
     )
 
 
-def _gh_json(*args: str) -> Any:
-    proc = subprocess.run(["gh", *args], capture_output=True, text=True)
+def _gh_json(*args: str, timeout: float | None = None) -> Any:
+    try:
+        proc = subprocess.run(
+            ["gh", *args], capture_output=True, text=True, timeout=timeout
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise QueueError(
+            f"gh {' '.join(args[:2])} timed out after {timeout} seconds "
+            "(retryable transport error; retry the read)"
+        ) from exc
     if proc.returncode != 0:
         # A non-zero exit is an operational transport failure (auth, rate
         # limit, 504 deadline), never a parse problem: name the exit status
@@ -657,12 +802,33 @@ class Provenance:
     that carried the build's number would post a fresh comment on the pull
     request every time the CI ran. `detail` holds the volatile part - the build
     number, the shas, the URL - and it goes to the log, never to the verdict.
+
+    `measured` is a condition that was found and deliberately not refused: the
+    commit comparison in `shadow` mode finds a build that ran another commit
+    and writes it down instead of blocking on it. It is the same kind of text
+    as `reason` and it goes to the log under its own verb, so a measurement is
+    never read as a verdict.
     """
 
     ok: bool
     reason: str
     detail: str = ""
     target_url: str = ""
+    measured: str = ""
+
+
+def commit_match_mode(policy: Policy) -> str:
+    """How the build's commit is compared with the head. The environment wins.
+
+    An unreadable value is read as `enforce`, not as `off`: a typo in the
+    switch that decides what the queue trusts must not silence it.
+    """
+    raw = str(os.environ.get(COMMIT_MATCH_ENV) or "").strip().lower()
+    if not raw:
+        return policy.ci_provenance.commit_match
+    if raw not in COMMIT_MATCH_MODES:
+        return COMMIT_MATCH_ENFORCE
+    return raw
 
 
 def provenance_mode(policy: Policy) -> str:
@@ -1052,6 +1218,7 @@ def verify_ci_provenance(
     *,
     mode: str | None = None,
     context: str = "",
+    commit_match: str | None = None,
 ) -> Provenance:
     """Check the pull request's status against the build it names.
 
@@ -1074,7 +1241,33 @@ def verify_ci_provenance(
         return Provenance(
             False, f"the '{ctx}' status carries no target_url, so it names no build"
         )
+    match = commit_match or commit_match_mode(policy)
+    return _verify_build(
+        target,
+        prov,
+        repo,
+        str(pr.get("headRefOid") or ""),
+        active,
+        match,
+        subject="status",
+    )
 
+
+def _verify_build(
+    target: str,
+    prov: CiProvenance,
+    repo: str | None,
+    head: str,
+    active: str,
+    match: str,
+    subject: str,
+) -> Provenance:
+    """Read the build a status names and say whether it answers for this head.
+
+    `subject` is what named the build - a `status` or a `receipt` - so the
+    reason says which of the two it was. The reason text is what the live
+    driver keys its handback comment on, so it never carries the build number.
+    """
     parsed = urllib.parse.urlparse(target)
     host = _host_of_url(target)
     if not parsed.scheme or not host:
@@ -1200,7 +1393,7 @@ def verify_ci_provenance(
     if status == 404:
         return Provenance(
             False,
-            "the build named by the status does not exist",
+            f"the build named by the {subject} does not exist",
             detail=detail,
             target_url=target,
         )
@@ -1223,7 +1416,7 @@ def verify_ci_provenance(
     if not build_status or build_status in _PIPELINE_UNFINISHED_STATES:
         return Provenance(
             False,
-            "the build named by the status has not finished",
+            f"the build named by the {subject} has not finished",
             detail=f"{detail} (status {build_status or 'unknown'})",
             target_url=target,
         )
@@ -1240,7 +1433,7 @@ def verify_ci_provenance(
     if states is None:
         return Provenance(
             False,
-            f"the build named by the status has no '{step}' step, so it says nothing "
+            f"the build named by the {subject} has no '{step}' step, so it says nothing "
             f"about {repo or 'this repository'}",
             detail=detail,
             target_url=target,
@@ -1248,7 +1441,7 @@ def verify_ci_provenance(
     if len(states) > 1:
         return Provenance(
             False,
-            f"the build named by the status has more than one '{step}' step, so it "
+            f"the build named by the {subject} has more than one '{step}' step, so it "
             f"says nothing about {repo or 'this repository'}",
             detail=detail,
             target_url=target,
@@ -1257,42 +1450,231 @@ def verify_ci_provenance(
     if state != "success":
         return Provenance(
             False,
-            f"the '{step}' step of the build named by the status is {state}",
+            f"the '{step}' step of the build named by the {subject} is {state}",
             detail=detail,
+            target_url=target,
+        )
+
+    label = repo or "this repository"
+    ok_reason = f"the build named by the {subject} ran '{step}' for {label}"
+    if match == COMMIT_MATCH_OFF:
+        # The commit comparison is off: the build is read, and nothing is said about
+        # which commit it ran. Only for a policy that has another way of tying a
+        # status to the head - the trusted receipt.
+        return Provenance(
+            True,
+            ok_reason,
+            detail=f"{detail} (build status {build_status})",
             target_url=target,
         )
 
     commit = str(payload.get("commit") or "").strip().lower()
-    head = str(pr.get("headRefOid") or "").strip().lower()
+    head = str(head or "").strip().lower()
+    mismatch = ""
     if not head:
+        mismatch = "the pull request head sha is unknown, so no build can be matched to it"
+    elif not commit:
+        mismatch = (
+            f"the build named by the {subject} reports no commit, so it cannot be "
+            "matched to the head"
+        )
+    elif commit != head:
+        mismatch = f"the build named by the {subject} ran another commit"
+        detail = f"{detail} ran commit {commit[:12]}, not the head {head[:12]}"
+    if mismatch and match == COMMIT_MATCH_ENFORCE:
         return Provenance(
             False,
-            "the pull request head sha is unknown, so no build can be matched to it",
+            mismatch,
             detail=detail,
             target_url=target,
         )
-    if not commit:
+    if mismatch:
+        # The comparison is measured, not enforced: the build is reported as what it
+        # is, and the reason it did not match the head is kept for the log.
         return Provenance(
-            False,
-            "the build named by the status reports no commit, so it cannot be matched "
-            "to the head",
+            True,
+            ok_reason,
             detail=detail,
             target_url=target,
-        )
-    if commit != head:
-        return Provenance(
-            False,
-            "the build named by the status ran another commit",
-            detail=f"{detail} ran commit {commit[:12]}, not the head {head[:12]}",
-            target_url=target,
+            measured=mismatch,
         )
 
     return Provenance(
         True,
-        f"the build named by the status ran '{step}' for {repo or 'this repository'} "
-        "at the head commit",
+        f"the build named by the {subject} ran '{step}' for {label} at the head commit",
         detail=f"{detail} at commit {head[:12]} (build status {build_status})",
         target_url=target,
+    )
+
+
+def _status_writer(row: Mapping[str, Any]) -> str:
+    """The login of the account that wrote a status row.
+
+    The REST endpoint answers with a `creator` object; a row without one, or
+    with one that is not an object, has no writer the queue can name.
+    """
+    creator = row.get("creator")
+    if not isinstance(creator, Mapping):
+        return ""
+    return str(creator.get("login") or "").strip()
+
+
+def _newest_receipt_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """The newest of the rows, by the time GitHub stamped it.
+
+    The REST endpoint spells the times `created_at` and `updated_at`; the
+    GraphQL rollup spells them `startedAt` and `createdAt`. Both are read,
+    because which one comes depends on the endpoint in front of us.
+    """
+
+    def stamp(row: Mapping[str, Any]) -> str:
+        for key in (
+            "created_at",
+            "updated_at",
+            "started_at",
+            "startedAt",
+            "createdAt",
+            "completedAt",
+        ):
+            value = row.get(key)
+            if value:
+                return str(value)
+        return ""
+
+    return max(enumerate(rows), key=lambda pair: (stamp(pair[1]), pair[0]))[1]
+
+
+def _commit_statuses(repo: str | None, sha: str) -> tuple[list[dict[str, Any]], str]:
+    """The commit statuses on one commit, with the writer of each.
+
+    The GraphQL rollup the queue already reads carries no creator: a status
+    context says what the status was and which build it names, not who wrote
+    it. That one fact is what a trusted receipt is made of, so the receipt is
+    read from the REST endpoint, which does say it.
+
+    A read that fails is a problem, not an absence: the queue cannot tell "no
+    receipt" from "no way to read the receipts", so it says so and stops.
+    """
+    if not repo:
+        return [], "the repository is unknown"
+    try:
+        rows = _gh_json(
+            "api",
+            f"repos/{repo}/commits/{sha}/statuses?per_page=100",
+            timeout=PROVENANCE_STATUS_TIMEOUT,
+        )
+    except QueueError as exc:
+        return [], str(exc)
+    if not isinstance(rows, list):
+        return [], "the API answered with something that is not a list of statuses"
+    return [dict(row) for row in rows if isinstance(row, Mapping)], ""
+
+
+def verify_trusted_receipt(
+    pr: Mapping[str, Any],
+    policy: Policy,
+    repo: str | None,
+    *,
+    mode: str | None = None,
+    commit_match: str | None = None,
+) -> Provenance | None:
+    """The receipt that a seat cannot write.
+
+    `None` means the policy asks for no receipt, which is different from a
+    receipt that is missing.
+
+    A `local-ci` status is worth only its writer's worth: it is posted with a
+    user token, so a seat that runs the check itself can post the same green
+    row. The receipt is the same status posted by the CI's own GitHub App
+    installation, so the writer is the CI and nobody else. It also answers the
+    question the build's own commit cannot answer today: it sits on the head
+    commit, so it binds the receipt to the head.
+
+    A row that was written by somebody else does not cancel a receipt that was
+    written by the app. The queue looks for a trusted receipt; a forged row
+    beside a real one is the forged writer's business, not the pull request's.
+    That way a seat cannot hold a pull request by writing a failing status
+    next to the CI's own passing one.
+    """
+    prov = policy.ci_provenance
+    receipt = prov.trusted_receipt
+    if not receipt.context or not receipt.creators:
+        return None
+    if not receipt.required:
+        # A receipt the policy does not require is not read. The queue looks at
+        # every open pull request on every tick, and a status list it is not
+        # going to obey buys nothing while the CI writes none. The chain is
+        # switched on by the policy change that comes with the CI's own token.
+        return None
+    active = mode or provenance_mode(policy)
+    if active == PROVENANCE_OFF:
+        return None
+
+    head = str(pr.get("headRefOid") or "").strip().lower()
+    if not head:
+        return Provenance(
+            False,
+            "the pull request head sha is unknown, so the trusted receipt cannot be read",
+        )
+
+    rows, problem = _commit_statuses(repo, head)
+    if problem:
+        return Provenance(
+            False,
+            "the commit statuses could not be read",
+            detail=problem,
+        )
+    mine = [row for row in rows if str(row.get("context") or "") == receipt.context]
+    if not mine:
+        return Provenance(
+            False, f"no '{receipt.context}' receipt is reported on the head commit"
+        )
+
+    trusted = [row for row in mine if _status_writer(row) in receipt.creators]
+    if trusted:
+        # The newest row the CI itself wrote is the CI's own verdict on the
+        # head, and it is the only one that counts. An earlier green row does
+        # not survive a later red one: the app is the CI, so its last word on
+        # this head is the word. A row somebody else wrote is left out
+        # entirely, which is what keeps a forged row from cancelling the
+        # receipt.
+        row = _newest_receipt_row(trusted)
+        state = str(row.get("state") or "").strip().lower() or "unknown"
+        if state != "success":
+            return Provenance(False, f"the '{receipt.context}' receipt is {state}")
+    else:
+        successful = [
+            row for row in mine if str(row.get("state") or "").strip().lower() == "success"
+        ]
+        if successful:
+            newest = _newest_receipt_row(successful)
+            writer = _status_writer(newest)
+            return Provenance(
+                False,
+                f"the '{receipt.context}' receipt was written by "
+                f"{writer or 'an unknown writer'}, which is not a trusted CI writer",
+                detail=f"the trusted writers are {', '.join(receipt.creators)}",
+            )
+        newest = _newest_receipt_row(mine)
+        state = str(newest.get("state") or "").strip().lower() or "unknown"
+        return Provenance(False, f"the '{receipt.context}' receipt is {state}")
+
+    row = _newest_receipt_row(trusted)
+    target = _status_target_url(row)
+    if not target:
+        return Provenance(
+            False,
+            f"the '{receipt.context}' receipt carries no target_url, so it names no build",
+        )
+    match = commit_match or commit_match_mode(policy)
+    return _verify_build(
+        target,
+        prov,
+        repo,
+        head,
+        active,
+        match,
+        subject="receipt",
     )
 
 
@@ -1437,6 +1819,7 @@ def _log_provenance(
     reason: str,
     detail: str,
     mode: str,
+    verb: str = "",
 ) -> None:
     """Record what the gate found.
 
@@ -1452,8 +1835,12 @@ def _log_provenance(
     again each time is how the 48 hour window turns into tens of thousands of
     lines nobody reads. A refusal that repeats is counted in the index instead,
     and the count says how often the gate saw it.
+
+    A measurement is written under its own verb, so a line that says what the
+    gate would have said cannot be read as a verdict.
     """
-    verb = "would refuse" if mode == PROVENANCE_SHADOW else "refuses"
+    if not verb:
+        verb = "would refuse" if mode == PROVENANCE_SHADOW else "refuses"
     line = (
         f"CI provenance ({mode}): PR #{pr.get('number', 0)} {repo or '?'} — "
         f"{verb} '{required}': {reason}"
@@ -1519,19 +1906,119 @@ def _rotate_provenance_log(path: Path) -> bool:
 def _gate_ci_provenance(
     pr: Mapping[str, Any], policy: Policy, repo: str | None, required: str
 ) -> list[str]:
-    """The reasons a status is not evidence. Empty when it is."""
+    """The reasons a status is not evidence. Empty when it is.
+
+    There are two chains and they answer different questions.
+
+    The first chain asks whether the status names a build, and whether that
+    build really ran this repository's check and passed. It is what DIG-4794
+    shipped, and it is the chain that measured the wrong commit on a live pull
+    request.
+
+    The second chain asks who wrote the status. The `local-ci` row is posted
+    with a user token, so the build it names can be copied from any recent
+    build, and the writer of the row is the only thing that says whether the
+    check ran on this head. The receipt is the same status posted by the CI's
+    own GitHub App installation, and it sits on the head commit.
+
+    The commit comparison is governed by its own switch, because it is the one
+    check that cannot pass with the launcher as it is today: the pipeline the
+    worker runs in is the launcher repository's own cron run, so the build's
+    commit is never the pull request's head. Turning the comparison off without
+    the receipt would leave nothing binding a status to a head, so the policy
+    that asks for the softer comparison has to ask for the receipt too.
+    """
     mode = provenance_mode(policy)
     if mode == PROVENANCE_OFF:
         return []
+    reasons: list[str] = []
+    match = commit_match_mode(policy)
+    receipt = policy.ci_provenance.trusted_receipt
+    if match != COMMIT_MATCH_ENFORCE and not receipt.required:
+        # The environment can override the policy file, so the invariant the
+        # policy loader checks is checked again here: without the receipt,
+        # softening the comparison would let any green row through.
+        _log_provenance(
+            pr,
+            repo,
+            required,
+            "the policy does not require a trusted CI receipt, so nothing binds a "
+            "status to the head commit",
+            f"the commit comparison is {match!r}",
+            mode,
+        )
+        if mode != PROVENANCE_SHADOW:
+            return [
+                f"required check '{required}' has no trusted CI receipt: the policy "
+                "does not require one, so nothing binds a status to the head commit"
+            ]
+
     result = verify_ci_provenance(pr, policy, repo, mode=mode, context=required)
-    if result.ok:
-        return []
-    _log_provenance(pr, repo, required, result.reason, result.detail, mode)
-    if mode == PROVENANCE_SHADOW:
-        return []
-    return [
-        f"required check '{required}' has no verified Woodpecker provenance: {result.reason}"
-    ]
+    if not result.ok:
+        _log_provenance(pr, repo, required, result.reason, result.detail, mode)
+        if mode != PROVENANCE_SHADOW:
+            reasons.append(
+                f"required check '{required}' has no verified Woodpecker provenance: "
+                f"{result.reason}"
+            )
+    elif result.measured:
+        _log_provenance(
+            pr, repo, required, result.measured, result.detail, mode, "measured"
+        )
+
+    receipt_result = verify_trusted_receipt(pr, policy, repo, mode=mode)
+    if receipt_result is None:
+        return reasons
+    context = receipt.context or "the trusted CI receipt"
+    if not receipt_result.ok:
+        _log_provenance(
+            pr, repo, context, receipt_result.reason, receipt_result.detail, mode
+        )
+        # The receipt is required by the policy, so a missing or untrusted one
+        # is a refusal - in shadow mode it is the refusal the gate would make.
+        if mode != PROVENANCE_SHADOW and receipt.required:
+            reasons.append(
+                f"required check '{context}' is not accepted as a trusted CI "
+                f"receipt: {receipt_result.reason}"
+            )
+    elif receipt_result.measured:
+        _log_provenance(
+            pr,
+            repo,
+            context,
+            receipt_result.measured,
+            receipt_result.detail,
+            mode,
+            "measured",
+        )
+    return reasons
+
+
+def _governed_receipt_context(policy: Policy) -> str:
+    """The receipt context, when the chain that reads it is the one in force.
+
+    The receipt is the CI's own row, and the chain that reads it asks who
+    wrote it. The generic scan in `_gate_checks` reads every status that is
+    neither a required check nor an ignored one, so without this a seat's own
+    failing `local-ci/app` row would hold a pull request next to the CI's own
+    passing one - which is the one thing the receipt chain exists to prevent.
+
+    The context is only left to the receipt chain while that chain reads it: a
+    receipt the policy does not require, a gate that is off, and a policy with
+    no required status check all mean nobody reads the row, so the scan keeps
+    it and a red row still holds the pull request.
+    """
+    receipt = policy.ci_provenance.trusted_receipt
+    context = str(receipt.context or "").strip()
+    if not context or not receipt.required:
+        return ""
+    if provenance_mode(policy) == PROVENANCE_OFF:
+        return ""
+    if not any(
+        check in policy.status_context_checks for check in policy.required_checks
+    ):
+        return ""
+    return context
 
 
 def _gate_checks(pr: dict[str, Any], policy: Policy, repo: str | None = None) -> list[str]:
@@ -1580,8 +2067,14 @@ def _gate_checks(pr: dict[str, Any], policy: Policy, repo: str | None = None) ->
 
     # A non-required check that failed is still a red build. The base branch has a
     # CI contract whether or not GitHub enforces it.
+    receipt_context = _governed_receipt_context(policy)
     for name, entries in by_name.items():
         if name in policy.required_checks or name in policy.ignored_checks:
+            continue
+        if name == receipt_context:
+            # The receipt is the CI's own row, and the chain that reads it asks
+            # who wrote it. A seat's failing row beside the CI's own passing
+            # one is the seat's business, not a red build.
             continue
         for entry in entries:
             state = str(entry.get("conclusion") or entry.get("state") or "")
@@ -1987,6 +2480,12 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
 # reviewed head. A marker with no provenance is a missing signal, not a
 # clearance: it cannot be shown to come from another seat, so it does not count.
 #
+# Two rules keep the claim honest. The marker stands alone on its own line, so
+# a sentence that quotes the marker is prose about it and not the claim. And a
+# value that cannot be a record — a placeholder, a typo — is refused by name,
+# never sent to the API: the API answers questions about records, and a value
+# that is not one has no answer to give.
+#
 # The `<!-- in-session-review -->` marker stays exactly as it is. It is what
 # `scripts/check_review_coverage.py` matches, and putting the provenance in a
 # second marker keeps every other consumer of that literal working — including
@@ -2001,7 +2500,40 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
 
 REVIEW_PROVENANCE_MARKER = "digithings-review"
 
-_PROVENANCE_RE = re.compile(r"<!--\s*digithings-review\b(?P<fields>[^>]*?)\s*-->")
+# The provenance marker is a claim, and a claim is a line of its own: nothing
+# but the marker (and the in-session marker beside it) may share the line. A
+# marker quoted inside a sentence is prose about the marker, not the claim.
+# The queue used to read it as the claim — a review comment that explained the
+# marker ("the gate wants a `<!-- digithings-review agent=… run=… head=… -->`
+# marker") handed the queue placeholder values as if they were a seat and a
+# run. The queue then asked the Paperclip API about `…`, the read failed on a
+# healthy API, and the gate reported a transport failure instead of the fact
+# about the marker it had in hand (DIG-4809, 21 Oct 2026).
+#
+# A blockquote is not a claim either: a quoted reply carries someone else's
+# words, so a marker inside one says nothing about the seat that replied.
+_PROVENANCE_RE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?"
+    r"(?:<!--[ \t]*in-session-review[ \t]*-->[ \t]*)?"
+    r"<!--\s*digithings-review\b(?P<fields>[^>]*?)\s*-->"
+    r"(?:[ \t]*<!--[ \t]*in-session-review[ \t]*-->)?[ \t\r]*$",
+    re.MULTILINE,
+)
+
+#: A seat id and a run id are Paperclip uuids, and the Paperclip API accepts
+#: only the RFC 4122 shapes it accepts: version 1 to 5, variant 8, 9, a or b.
+#: A value outside that shape is refused by the server with a 400, and a 400
+#: read as a failed read is a transport failure — so the queue checks the shape
+#: itself and never sends a value the server would refuse (DIG-4809, 21 Oct
+#: 2026, measured against the live API: `11111111-1111-1111-1111-…` answers
+#: 400, `11111111-1111-4111-8111-…` answers 404 for a run nobody has).
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}"
+    r"-[0-9a-fA-F]{12}$"
+)
+
+#: A head sha, at any length git accepts as an abbreviation.
+_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 _VERDICT_LINE_RE = re.compile(r"^[ \t]*Review verdict:", re.MULTILINE)
 _ISSUE_KEY_RE = re.compile(r"\bDIG-(?P<number>\d+)\b", re.IGNORECASE)
 _AGENT_TRAILER_RE = re.compile(
@@ -2025,6 +2557,18 @@ class _PaperclipMissing(_PaperclipUnavailable):
     that names no issue, or a run id nobody has ever heard of, is something
     the gate has to judge. It is kept apart from `_PaperclipUnavailable` so a
     missing record is never read as "the API is down".
+    """
+
+
+class _AuthorUnidentified(RuntimeError):
+    """A commit names a run the API would refuse, so its seat is unknown.
+
+    A commit trailer that carries something which is not a run id cannot be
+    resolved to the seat that wrote the commit. That seat is then an author
+    the gate does not know about, and a seat it does not know about can post
+    the review the gate is about to count as independent. The gate refuses
+    rather than guesses: an author it cannot name is not an author it can
+    clear.
     """
 
 
@@ -2183,15 +2727,22 @@ class ReviewerProvenance:
                 ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
             except urllib.error.HTTPError as exc:
-                if exc.code == 404:
+                if exc.code in (400, 404):
                     # A fact, not a failure: the API answered, and the answer is
                     # "no such record". A ticket key that names no issue, or a run
                     # id nobody has ever heard of, is exactly what the gate has to
-                    # judge — it must not be read as "the API is down". The same
-                    # holds for any other 4xx: the API answered, and its answer
-                    # does not change when we ask again.
+                    # judge — it must not be read as "the API is down".
+                    #
+                    # A 400 is the server refusing the address: an id that is not
+                    # a shape it accepts. There is no record under that address
+                    # either, so it is the same fact as the 404. Reading it as a
+                    # failed read would turn a bad id in a comment into a
+                    # transport failure, and a transport failure stops every
+                    # merge in the queue on a healthy API (DIG-4809, 21 Oct 2026).
                     raise _PaperclipMissing(f"Paperclip has no {path}") from exc
                 if exc.code < 500:
+                    # 401 and 403 are the credential talking, not the record: the
+                    # queue cannot read anything, so it says so.
                     raise _PaperclipUnavailable(
                         f"Paperclip answered {exc.code} for {path}"
                     ) from exc
@@ -2332,8 +2883,10 @@ def _review_markers(comments: list[Any]) -> list[ReviewMarker]:
             ReviewMarker(
                 comment_id=str(comment.get("id") or ""),
                 at=str(comment.get("createdAt") or ""),
-                agent=str(fields.get("agent") or ""),
-                run=str(fields.get("run") or ""),
+                # A uuid is the same uuid whatever case it is written in, and
+                # the API accepts either, so the gate compares one spelling.
+                agent=str(fields.get("agent") or "").lower(),
+                run=str(fields.get("run") or "").lower(),
                 head=str(fields.get("head") or _scope_head(body)),
             )
         )
@@ -2437,10 +2990,21 @@ def _author_context(
             continue
         body = str(commit.get("messageBody") or commit.get("message") or "")
         for match in _AGENT_TRAILER_RE.finditer(body):
-            authors.add(match.group("agent"))
+            agent = match.group("agent")
+            if not _UUID_RE.match(agent):
+                # The trailer names something the API would refuse, so the seat
+                # that wrote this commit is unknown. An unknown seat can be the
+                # author of the very review the gate is about to count, so the
+                # gate refuses instead of dropping the seat silently
+                # (DIG-4809, 21 Oct 2026).
+                raise _AuthorUnidentified("a commit names a seat id that is not one")
+            authors.add(agent.lower())
         for match in _RUN_TRAILER_RE.finditer(body):
-            run = prov.run(match.group("run"))
-            seat = str((run or {}).get("agentId") or "")
+            run_id = match.group("run")
+            if not _UUID_RE.match(run_id):
+                raise _AuthorUnidentified("a commit names a run id that is not one")
+            run = prov.run(run_id.lower())
+            seat = str((run or {}).get("agentId") or "").lower()
             if seat:
                 authors.add(seat)
     key = _ticket_key(pr)
@@ -2450,7 +3014,7 @@ def _author_context(
         stamps = _author_dates(pr)
         counts: dict[str, int] = {}
         for run in prov.issue_runs(issue_id):
-            seat = str(run.get("agentId") or "")
+            seat = str(run.get("agentId") or "").lower()
             if not seat:
                 continue
             if str(run.get("contextIssueId") or "") != issue_id:
@@ -2556,6 +3120,11 @@ def _marker_problems(
 
     An empty problem list means the marker counts: it names the head the PR
     stands at, and it came from a seat that is not the author.
+
+    A value that cannot be a record — a placeholder, a typo, a quoted example —
+    is judged by name and never sent to the API. The API answers questions
+    about records; a value that is not one has no answer, and asking turns the
+    fact the gate holds into a failed read (DIG-4809, 21 Oct 2026).
     """
     problems: list[str] = []
     if not marker.head:
@@ -2563,29 +3132,64 @@ def _marker_problems(
             f"names no head SHA, so it says nothing about the head `{head[:12]}` "
             "this PR stands at"
         )
+    elif not _SHA_RE.match(marker.head):
+        problems.append(
+            f"names head `{marker.head[:12]}`, which is not a commit SHA, "
+            f"so it says nothing about the head `{head[:12]}` this PR stands at"
+        )
     elif not _head_binds(marker.head, head):
         problems.append(
             f"names head `{marker.head[:12]}` while this PR stands at `{head[:12]}`"
         )
     reviewer = ""
     if marker.run:
-        run = prov.run(marker.run)
-        if run is None:
+        if not _UUID_RE.match(marker.run):
+            # A value that is not a run id is not a record the API could ever
+            # know, so it is never sent. Asking anyway turns a fact about the
+            # marker into a failed read — and a failed read is a transport
+            # failure, which stops every merge in the queue on a healthy API.
             problems.append(
-                f"names run `{marker.run[:8]}`, which the Paperclip API does not know"
+                f"names run `{marker.run[:12]}`, which is not a run id, "
+                "so no run was checked"
             )
         else:
-            reviewer = str(run.get("agentId") or "")
-            if marker.agent and reviewer and marker.agent != reviewer:
+            run = prov.run(marker.run)
+            if run is None:
                 problems.append(
-                    f"names seat `{marker.agent[:8]}` while run `{marker.run[:8]}` "
-                    f"belongs to seat `{reviewer[:8]}`"
+                    f"names run `{marker.run[:8]}`, which the Paperclip API does not know"
                 )
+            else:
+                reviewer = str(run.get("agentId") or "").lower()
+                if not reviewer:
+                    # The run is known, but it names no seat. The marker claims
+                    # a seat and a run, and neither of them can be checked, so
+                    # the gate cannot say who reviewed: that is a missing
+                    # signal, not a clearance.
+                    problems.append(
+                        "names a run that carries no seat, so the queue cannot say "
+                        "who reviewed"
+                    )
+                elif marker.agent and not _UUID_RE.match(marker.agent):
+                    problems.append(
+                        f"names seat `{marker.agent[:12]}`, which is not a seat id, "
+                        f"so it cannot be checked against run `{marker.run[:8]}`"
+                    )
+                elif marker.agent and marker.agent != reviewer:
+                    problems.append(
+                        f"names seat `{marker.agent[:8]}` while run `{marker.run[:8]}` "
+                        f"belongs to seat `{reviewer[:8]}`"
+                    )
     elif marker.agent:
-        reviewer = marker.agent
-        problems.append(
-            f"names seat `{marker.agent[:8]}` but no run to check that seat against"
-        )
+        if not _UUID_RE.match(marker.agent):
+            problems.append(
+                f"names seat `{marker.agent[:12]}`, which is not a seat id, "
+                "so it names no seat the queue could check"
+            )
+        else:
+            reviewer = marker.agent
+            problems.append(
+                f"names seat `{marker.agent[:8]}` but no run to check that seat against"
+            )
     else:
         problems.append("carries neither a seat nor a run")
     if reviewer and reviewer in authors:
@@ -2659,6 +3263,17 @@ def _reviewer_independence(
         return Independence(
             disqualified=every_marker,
             unverifiable=f"the review seats could not be checked: {exc}",
+        )
+    except _AuthorUnidentified as exc:
+        # The commit names an author the gate cannot resolve. The seat that
+        # wrote it may be the seat that posted the review, so the gate cannot
+        # show the review to come from another seat and says so.
+        return Independence(
+            disqualified=every_marker,
+            unverifiable=(
+                f"the PR's authoring seat could not be identified: {exc}, so no "
+                "review on it can be shown to come from a different seat"
+            ),
         )
     if not authors:
         return Independence(
