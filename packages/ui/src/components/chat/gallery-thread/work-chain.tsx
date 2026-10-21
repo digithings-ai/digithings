@@ -127,7 +127,7 @@ export function WorkChain({
             stays where it belongs, on the tool rows. */}
         <DotMatrix
           state={markerRunning ? "loading" : "idle"}
-          label={title}
+          decorative
           className="!size-3 shrink-0"
         />
         <span
@@ -142,7 +142,7 @@ export function WorkChain({
         >
           <DotMatrix
             state="expand"
-            label="Toggle the work"
+            decorative
             className="size-3 shrink-0"
           />
         </span>

@@ -92,7 +92,7 @@ const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
               {/* Same mark language as the composer menu: the highlighted
                   row gets the user-message chevron and shifts right. */}
               <span className="aui-menu-cursor" aria-hidden>
-                <DotMatrix state="user" className="size-3.5" />
+                <DotMatrix state="user" decorative className="size-3.5" />
               </span>
               <span className="shrink-0 font-medium">{item.label}</span>
               {item.description ? (

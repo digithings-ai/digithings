@@ -691,7 +691,7 @@ const ThreadScrollToBottom: FC = () => {
         variant="outline"
         className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
-        <DotMatrix state="scroll" label="Scroll to bottom" className="size-3.5" />
+        <DotMatrix state="scroll" decorative className="size-3.5" />
       </TooltipIconButton>
     </ThreadPrimitive.ScrollToBottom>
   );
@@ -755,7 +755,7 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
       <span className="aui-msg-marker" aria-hidden="true">
         <DotMatrix
           state="example"
-          label="Example"
+          decorative
           className="aui-thread-welcome-suggestion-mark size-3.5"
         />
       </span>
@@ -773,7 +773,7 @@ const ThreadSuggestionItem: FC = () => {
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix
             state="example"
-            label="Example"
+            decorative
             className="aui-thread-welcome-suggestion-mark size-3.5"
           />
         </span>
@@ -1003,7 +1003,7 @@ const ComposerSendControls: FC = () => {
             >
               <DotMatrix
                 state="dictate"
-                label="Voice input"
+                decorative
                 className="aui-composer-dictate-icon size-3.5"
               />
             </TooltipIconButton>
@@ -1022,7 +1022,7 @@ const ComposerSendControls: FC = () => {
             >
               <DotMatrix
                 state="stop"
-                label="Stop dictation"
+                decorative
                 className="aui-composer-stop-dictation-icon size-3.5"
               />
             </TooltipIconButton>
@@ -1044,7 +1044,7 @@ const ComposerSendControls: FC = () => {
         >
           <DotMatrix
             state="send"
-            label="Send"
+            decorative
             className="aui-composer-send-icon size-3.5"
           />
         </Button>
@@ -1060,7 +1060,7 @@ const ComposerSendControls: FC = () => {
           >
             <DotMatrix
               state="stop"
-              label="Stop generating"
+              decorative
               className="aui-composer-cancel-icon size-3.5"
             />
           </Button>
@@ -1357,26 +1357,26 @@ const AssistantActionBar: FC = () => {
         >
           <BranchPickerPrimitive.Previous asChild>
             <TooltipIconButton tooltip="Undo">
-              <DotMatrix state="prev" label="Undo" className="size-3.5" />
+              <DotMatrix state="prev" decorative className="size-3.5" />
             </TooltipIconButton>
           </BranchPickerPrimitive.Previous>
         </AuiIf>
       ) : null}
       <ActionBarPrimitive.Reload asChild>
         <TooltipIconButton tooltip="Redo">
-          <DotMatrix state="refresh" label="Redo" className="size-3.5" />
+          <DotMatrix state="refresh" decorative className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Reload>
       {feedback ? (
         <>
           <ActionBarPrimitive.FeedbackPositive asChild>
             <TooltipIconButton tooltip="Good response">
-              <DotMatrix state="thumbsUp" label="Good response" className="size-3.5" />
+              <DotMatrix state="thumbsUp" decorative className="size-3.5" />
             </TooltipIconButton>
           </ActionBarPrimitive.FeedbackPositive>
           <ActionBarPrimitive.FeedbackNegative asChild>
             <TooltipIconButton tooltip="Bad response">
-              <DotMatrix state="thumbsDown" label="Bad response" className="size-3.5" />
+              <DotMatrix state="thumbsDown" decorative className="size-3.5" />
             </TooltipIconButton>
           </ActionBarPrimitive.FeedbackNegative>
         </>
@@ -1384,7 +1384,7 @@ const AssistantActionBar: FC = () => {
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger asChild>
           <TooltipIconButton tooltip="More">
-            <DotMatrix state="more" label="More" className="size-3.5" />
+            <DotMatrix state="more" decorative className="size-3.5" />
           </TooltipIconButton>
         </ActionBarMorePrimitive.Trigger>
         <ActionBarMorePrimitive.Content
@@ -1395,7 +1395,7 @@ const AssistantActionBar: FC = () => {
         >
           <ActionBarPrimitive.ExportMarkdown asChild>
             <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink">
-              <DotMatrix state="export" label="Export" className="size-3.5" />
+              <DotMatrix state="export" decorative className="size-3.5" />
               Export as Markdown
             </ActionBarMorePrimitive.Item>
           </ActionBarPrimitive.ExportMarkdown>
@@ -1473,7 +1473,7 @@ const UserActionBar: FC = () => {
         className="aui-user-action-edit"
         onClick={onEdit}
       >
-        <DotMatrix state="edit" label="Edit" className="size-3.5" />
+        <DotMatrix state="edit" decorative className="size-3.5" />
       </TooltipIconButton>
     </ActionBarPrimitive.Root>
   );
@@ -1494,7 +1494,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
     >
       <BranchPickerPrimitive.Previous asChild>
         <TooltipIconButton tooltip="Previous">
-          <DotMatrix state="prev" label="Previous" className="size-3.5" />
+          <DotMatrix state="prev" decorative className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Previous>
       <span className="aui-branch-picker-state font-medium">
@@ -1502,7 +1502,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
       </span>
       <BranchPickerPrimitive.Next asChild>
         <TooltipIconButton tooltip="Next">
-          <DotMatrix state="next" label="Next" className="size-3.5" />
+          <DotMatrix state="next" decorative className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Next>
     </BranchPickerPrimitive.Root>

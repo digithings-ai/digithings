@@ -34,7 +34,7 @@ export function WorkChainSummary({
     >
       <DotMatrix
         state={status.running ? "loading" : "success"}
-        label={status.label}
+        decorative
         className="size-4 shrink-0"
       />
       <span
