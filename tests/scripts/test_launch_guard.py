@@ -6,7 +6,8 @@ The guard is the thing that makes "a seat never runs the runner" true instead of
 written down, so the tests here are about the decision, not about the style of
 the decision: a seat-shaped run is refused, the launchd daemon and the CI
 container are not, and the answer does not move when the shell environment
-changes or when `gh` is put on the PATH.
+changes, when `gh` is put on the PATH, or when a fake `launchctl` is put there
+too.
 """
 import importlib.util
 import json
@@ -45,7 +46,7 @@ def _seat_facts(**overrides):
         "ppid": 99,
         "uid": os.getuid(),
         "ancestors": [
-            {"pid": 99, "argv": ["/bin/zsh", "-c", "twelvex_ci.py --pr 368"]},
+            {"pid": 99, "argv": ["/bin/zsh", "-c", "local_ci.py --pr 368"]},
             {"pid": 1, "argv": ["/sbin/launchd"]},
         ],
         "dockerenv": False,
@@ -99,6 +100,21 @@ ps() { touch "$LAUNCH_GUARD_MARKER"; /bin/ps "$@"; }
 export -f gh ps
 """
 
+# A fake launchctl, first on the PATH. It answers the guard the way a seat
+# wants it to be answered: the canonical plist path, the runner's own path as
+# the job's argument, and the pid of whoever asked. A guard that ran this would
+# believe every word of it.
+_FAKE_LAUNCHCTL = r"""#!/bin/sh
+touch "$LAUNCH_GUARD_LAUNCHCTL_MARKER"
+printf 'gui/501/ai.digithings.local-ci = {\n\tpath = %s/Library/LaunchAgents/ai.digithings.local-ci.plist\n\tprogram = /usr/bin/python3\n\targuments = {\n\t\t/usr/bin/python3\n\t\t%s\n\t}\n\tpid = %s\n}\n' "$HOME" "$LAUNCH_GUARD_RUNNER" "$PPID"
+"""
+
+# A fake ps, first on the PATH. It only says that it was asked.
+_FAKE_PS = r"""#!/bin/sh
+touch "$LAUNCH_GUARD_PS_MARKER"
+exec /bin/ps "$@"
+"""
+
 # The child collects the facts for real - no injected facts - and decides.
 _COLLECT_CHILD = """\
 import json, sys
@@ -120,19 +136,31 @@ def _collect_in_child(case, hostile=False, extra=None):
     """Collect the facts in a child process. Returns (report, markers).
 
     The report is what the child decided. The markers say whether the poison
-    was armed (so the test knows the attack was in place) and whether `gh` was
-    called (so the test knows it was not).
+    was armed (so the test knows the attack was in place), whether `gh` was
+    called (so the test knows it was not), and whether a fake `launchctl` or
+    `ps` from the PATH was run (so the test knows the guard did not believe
+    the PATH).
     """
     tmp = tempfile.mkdtemp(prefix="launch-guard-")
     case.addCleanup(shutil.rmtree, tmp, True)
     gh_marker = os.path.join(tmp, "gh-was-called")
     poison_marker = os.path.join(tmp, "poison-was-sourced")
+    launchctl_marker = os.path.join(tmp, "launchctl-was-called")
+    ps_marker = os.path.join(tmp, "ps-was-called")
     bindir = os.path.join(tmp, "bin")
     os.makedirs(bindir)
     shim = os.path.join(bindir, "gh")
     with open(shim, "w", encoding="utf-8") as fh:
         fh.write(f"#!/bin/sh\ntouch '{gh_marker}'\nexit 0\n")
     os.chmod(shim, 0o755)
+    fake_launchctl = os.path.join(bindir, "launchctl")
+    with open(fake_launchctl, "w", encoding="utf-8") as fh:
+        fh.write(_FAKE_LAUNCHCTL)
+    os.chmod(fake_launchctl, 0o755)
+    fake_ps = os.path.join(bindir, "ps")
+    with open(fake_ps, "w", encoding="utf-8") as fh:
+        fh.write(_FAKE_PS)
+    os.chmod(fake_ps, 0o755)
     poison = os.path.join(tmp, "poison.bash")
     with open(poison, "w", encoding="utf-8") as fh:
         fh.write(_POISON)
@@ -147,6 +175,9 @@ def _collect_in_child(case, hostile=False, extra=None):
         "HOME": tmp,
         "LAUNCH_GUARD_MARKER": gh_marker,
         "LAUNCH_GUARD_POISON_MARKER": poison_marker,
+        "LAUNCH_GUARD_LAUNCHCTL_MARKER": launchctl_marker,
+        "LAUNCH_GUARD_PS_MARKER": ps_marker,
+        "LAUNCH_GUARD_RUNNER": os.path.realpath(_RUNNER),
     }
     if hostile:
         env.update({
@@ -163,7 +194,86 @@ def _collect_in_child(case, hostile=False, extra=None):
     if result.returncode != 0:
         raise AssertionError(f"the collecting child failed: {result.stderr}")
     report = json.loads(result.stdout)
-    markers = {"gh": gh_marker, "poison": poison_marker}
+    markers = {"gh": gh_marker, "poison": poison_marker,
+               "launchctl": launchctl_marker, "ps": ps_marker}
+    return report, markers
+
+
+# The child that orphans itself: it forks, the parent leaves, and the process
+# that is left is reparented to launchd, so its parent pid is 1 - the shape a
+# launchd job's process has. That is the shape a seat would use to pretend to
+# be the daemon.
+_ORPHAN_CHILD = """\
+import json, os, sys, time
+sys.path.insert(0, sys.argv[1])
+runner = sys.argv[2]
+out = sys.argv[3]
+pid = os.fork()
+if pid > 0:
+    os._exit(0)
+for _ in range(500):
+    if os.getppid() == 1:
+        break
+    time.sleep(0.01)
+report = {"pid": os.getpid(), "ppid": os.getppid()}
+try:
+    import launch_guard as lg
+    facts = lg.collect_facts(runner)
+    allowed, reason = lg.decide(facts)
+    report["allowed"] = allowed
+    report["reason"] = reason
+    report["facts"] = facts
+except BaseException as exc:
+    report["allowed"] = None
+    report["reason"] = repr(exc)
+    report["facts"] = {}
+with open(out, "w", encoding="utf-8") as fh:
+    json.dump(report, fh)
+"""
+
+
+def _collect_in_orphan(case, extra=None):
+    """Collect the facts from a process that orphaned itself to launchd.
+
+    Returns (report, markers). The report is the orphan's decision; the markers
+    say whether the fake launchctl from the PATH was run.
+    """
+    tmp = tempfile.mkdtemp(prefix="launch-guard-orphan-")
+    case.addCleanup(shutil.rmtree, tmp, True)
+    launchctl_marker = os.path.join(tmp, "launchctl-was-called")
+    ps_marker = os.path.join(tmp, "ps-was-called")
+    bindir = os.path.join(tmp, "bin")
+    os.makedirs(bindir)
+    fake_launchctl = os.path.join(bindir, "launchctl")
+    with open(fake_launchctl, "w", encoding="utf-8") as fh:
+        fh.write(_FAKE_LAUNCHCTL)
+    os.chmod(fake_launchctl, 0o755)
+    fake_ps = os.path.join(bindir, "ps")
+    with open(fake_ps, "w", encoding="utf-8") as fh:
+        fh.write(_FAKE_PS)
+    os.chmod(fake_ps, 0o755)
+    child = os.path.join(tmp, "orphan.py")
+    with open(child, "w", encoding="utf-8") as fh:
+        fh.write(_ORPHAN_CHILD)
+    out = os.path.join(tmp, "report.json")
+    env = {
+        "PATH": bindir + ":/usr/bin:/bin:/usr/sbin:/sbin",
+        "HOME": tmp,
+        "LAUNCH_GUARD_LAUNCHCTL_MARKER": launchctl_marker,
+        "LAUNCH_GUARD_PS_MARKER": ps_marker,
+        "LAUNCH_GUARD_RUNNER": os.path.realpath(_RUNNER),
+    }
+    env.update(extra or {})
+    result = subprocess.run(
+        [sys.executable, child, _SCRIPTS, _RUNNER, out],
+        capture_output=True, text=True, env=env, timeout=120, check=False)
+    if result.returncode != 0:
+        raise AssertionError(f"the orphaning child failed: {result.stderr}")
+    if not os.path.exists(out):
+        raise AssertionError(f"the orphaning child wrote no report: {result.stdout}")
+    with open(out, "r", encoding="utf-8") as fh:
+        report = json.load(fh)
+    markers = {"launchctl": launchctl_marker, "ps": ps_marker}
     return report, markers
 
 
@@ -451,6 +561,64 @@ class NoGitHubTests(unittest.TestCase):
         for forbidden in ("BASH_ENV", "ZDOTDIR", "PAPERCLIP_AGENT_ID", "PAPERCLIP_RUN_ID",
                           "PAPERCLIP_TASK_ID", "unset -f", "env -u"):
             self.assertNotIn(forbidden, code)
+
+
+class SystemToolTests(unittest.TestCase):
+    """The guard asks the system about the system, never the PATH.
+
+    A seat that puts its own `launchctl` or `ps` first on the PATH would
+    otherwise answer the guard's own question: the forged job reports the
+    seat's pid, the forged plist path looks canonical, and the forged
+    arguments match the file that is running.
+    """
+
+    def test_the_tools_the_guard_uses_are_system_files(self):
+        for name in ("launchctl", "ps"):
+            path = _guard.trusted_tool(name)
+            if path is not None:
+                self.assertTrue(os.path.isabs(path), path)
+                self.assertTrue(_guard._is_system_binary(path), path)
+        self.assertIsNone(_guard.trusted_tool("definitely-not-a-tool"))
+
+    def test_a_file_the_seat_owns_is_not_a_system_tool(self):
+        tmp = tempfile.mkdtemp(prefix="launch-guard-")
+        try:
+            mine = os.path.join(tmp, "launchctl")
+            with open(mine, "w", encoding="utf-8") as fh:
+                fh.write("#!/bin/sh\nexit 0\n")
+            self.assertFalse(_guard._is_system_binary(mine))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_guard_does_not_run_a_launchctl_from_the_path(self):
+        """A fake launchctl on the PATH is never run."""
+        report, markers = _collect_in_child(
+            self, hostile=True, extra={"XPC_SERVICE_NAME": "ai.digithings.local-ci"})
+        self.assertIs(report["allowed"], False, report.get("reason"))
+        self.assertFalse(os.path.exists(markers["launchctl"]),
+                         "the guard ran a launchctl from the PATH")
+
+    def test_the_guard_does_not_run_a_ps_from_the_path(self):
+        report, markers = _collect_in_child(self, hostile=True)
+        self.assertIs(report["allowed"], False, report.get("reason"))
+        self.assertFalse(os.path.exists(markers["ps"]), "the guard ran a ps from the PATH")
+
+    def test_an_orphaned_process_with_a_shadowed_launchctl_is_refused(self):
+        """The whole attack, end to end: the shape the 21 Oct bypass would take.
+
+        The child orphans itself to launchd, so its parent pid is 1; it claims
+        the trusted label; and the launchctl on its PATH reports a job with its
+        own pid, the canonical plist path and the runner's own path. A guard
+        that believed the PATH would call this the daemon.
+        """
+        report, markers = _collect_in_orphan(
+            self, extra={"XPC_SERVICE_NAME": "ai.digithings.local-ci"})
+        self.assertNotEqual(report["ppid"], os.getpid(), "the child was not orphaned")
+        if sys.platform == "darwin":
+            self.assertEqual(report["ppid"], 1, "the orphan was not reparented to launchd")
+        self.assertIs(report["allowed"], False, report.get("reason"))
+        self.assertFalse(os.path.exists(markers["launchctl"]),
+                         "the guard ran a launchctl from the PATH")
 
 
 class CliTests(unittest.TestCase):

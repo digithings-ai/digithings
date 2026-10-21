@@ -41,7 +41,10 @@ the runner twice from its own shell. The guard reads kernel and launchd facts
 only: the pid of this process, the process tree, the pid launchd reports for the
 job, the loaded job's own arguments, and the container's entrypoint. It never
 reads `BASH_ENV`, `PAPERCLIP_*` or `ZDOTDIR`, and it never calls `gh`, so
-unsetting those changes nothing.
+unsetting those changes nothing. It also never runs a tool from the `PATH`:
+`launchctl` and `ps` are run from their absolute path and only when they are
+root-owned files, so a seat that puts a fake `launchctl` first on the `PATH`
+cannot answer the guard's own question with a job that reports the seat's pid.
 
 What each launcher has to show:
 
@@ -70,7 +73,8 @@ What the guard is not: a proof. At the same uid a seat can copy the runner and r
 its own copy, drive the container with its own token, or rewrite the daemon's
 plist and reload the job under the same label. What the guard does buy is that
 the cheap forgeries fail: an unset environment, a forged label, an orphaned
-process tree, a job loaded from somewhere else, a job that asks for one PR. The
+process tree, a job loaded from somewhere else, a job that asks for one PR, a
+shadowed `launchctl`. The
 queue-side provenance check (DIG-4794) is what makes a `local-ci` status count
 only when it comes from the pipeline.
 

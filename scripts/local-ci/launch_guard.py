@@ -27,16 +27,20 @@ Everything else is refused: a hand-run from any shell, a seat's shell, a script
 a seat detached, a job a seat installed. The decision reads kernel and launchd
 facts only - the pid of this process, the process tree, the pid launchd reports
 for the job, the container's entrypoint - never BASH_ENV, PAPERCLIP_*,
-ZDOTDIR, and never `gh` - so unsetting those variables changes nothing.
+ZDOTDIR, and never `gh` - so unsetting those variables changes nothing. The
+tools it asks those questions of are the system's own: launchctl and ps are run
+from their absolute path and only when they are root-owned files, never from
+the PATH, so a seat that puts a fake launchctl first on PATH cannot answer the
+guard's own question.
 
 What this is not: a proof. At the same uid a seat can copy the runner and run
 its own copy without this module, drive the container with its own token, or
 rewrite the daemon's plist and reload the job under the same label. What the
 guard does buy is that the cheap forgeries fail: an unset environment, a
 forged label, an orphaned process tree, a job loaded from somewhere else, a job
-that asks for one PR. The authoritative boundary is the queue-side provenance
-check (DIG-4794): only a `local-ci` status that carries the verified
-Woodpecker target_url counts.
+that asks for one PR, a shadowed launchctl. The authoritative boundary is the
+queue-side provenance check (DIG-4794): only a `local-ci` status that carries
+the verified Woodpecker target_url counts.
 
 Usage:
   python3 scripts/local-ci/launch_guard.py --runner scripts/local-ci/local_ci.py
@@ -48,6 +52,7 @@ This module is byte-identical in the digithings and twelve-x repositories.
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import time
@@ -63,6 +68,17 @@ TRUSTED_LAUNCHD_LABELS = ("ai.digithings.local-ci", "ai.digithings.twelvex-ci")
 CONTAINER_RUNNER_ROOT = "/opt/local-ci"
 CONTAINER_ENTRYPOINT = "/opt/local-ci/worker_entrypoint.sh"
 
+# The tools the guard shells out to, and the only paths it will run them from.
+# PATH is never consulted: a seat that puts its own `launchctl` first on PATH
+# would otherwise answer the guard's own question - the forged job would report
+# the seat's pid, the forged plist path would look canonical, and the forged
+# arguments would match. Only a root-owned file that nobody else can write is
+# accepted, so the fake has to be root's file to be believed.
+TRUSTED_TOOL_PATHS = {
+    "launchctl": ("/bin/launchctl", "/usr/bin/launchctl"),
+    "ps": ("/bin/ps", "/usr/bin/ps"),
+}
+
 # How far up the process tree the guard looks. A launchd job is one hop away;
 # the container entrypoint is at pid 1. Ten is plenty and keeps the walk cheap.
 MAX_ANCESTORS = 10
@@ -70,6 +86,35 @@ MAX_ANCESTORS = 10
 # The log the guard appends its decision to. One JSON line per decision, so a
 # refused run is evidence and not a rumour.
 LOG_NAME = "launch-guard.jsonl"
+
+
+# ------------------------------------------------------------- system tools --
+
+def _is_system_binary(path):
+    """True when the path is a regular file owned by root that nobody else can write."""
+    try:
+        info = os.stat(path)
+    except OSError:
+        return False
+    if not stat.S_ISREG(info.st_mode):
+        return False
+    if info.st_uid != 0:
+        return False
+    return not info.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+
+
+def trusted_tool(name):
+    """The absolute path of a system tool, or None when there is no trustworthy one.
+
+    PATH is never consulted, and a file the seat owns is never believed: the
+    guard asks the system about the system, so the answer has to come from a
+    file the seat cannot write. When no such file exists the tool is not
+    available, and the guard says so rather than guessing.
+    """
+    for path in TRUSTED_TOOL_PATHS.get(name, ()):
+        if _is_system_binary(path):
+            return path
+    return None
 
 
 # --------------------------------------------------------------- process facts --
@@ -108,8 +153,11 @@ def _proc_ppid(pid):
 
 def _ps(args):
     """Run ps and return its stdout, or None when ps could not answer."""
+    tool = trusted_tool("ps")
+    if tool is None:
+        return None
     try:
-        proc = subprocess.run(["ps"] + args, capture_output=True, text=True, timeout=10,
+        proc = subprocess.run([tool] + args, capture_output=True, text=True, timeout=10,
                               check=False)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -204,11 +252,14 @@ def canonical_plist_path(label):
 
 def launchctl_job(label, uid=None):
     """The loaded job's facts, or None when the job is not loaded."""
+    tool = trusted_tool("launchctl")
+    if tool is None:
+        return None
     if uid is None:
         uid = os.getuid()
     try:
         proc = subprocess.run(
-            ["launchctl", "print", f"gui/{uid}/{label}"],
+            [tool, "print", f"gui/{uid}/{label}"],
             capture_output=True, text=True, timeout=15, check=False,
         )
     except (OSError, subprocess.SubprocessError):
