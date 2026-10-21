@@ -691,6 +691,8 @@ export function stripFoundryCitationMarkers(text: string): string {
  */
 export class FoundryToolLeakFilter {
   private buf = "";
+  /** Resume point for an open call. The bytes before it are not scanned again. */
+  private hold: CallHold | null = null;
 
   /**
    * @returns text that is safe to stream, or `null` when the delta was held /
@@ -700,8 +702,17 @@ export class FoundryToolLeakFilter {
     const cleaned = stripFoundryCitationMarkers(delta);
     if (!cleaned && !this.buf) return null;
 
-    const drained = drainLeaks(this.buf + cleaned);
+    const held = this.hold;
+    const drained = held
+      ? continueHeldCall(this.buf, held, cleaned)
+      : drainLeaks(this.buf + cleaned);
+    if (drained.hold.length > MAX_LEAK_HOLD) {
+      this.buf = "";
+      this.hold = null;
+      return (drained.emit + drained.hold) || null;
+    }
     this.buf = drained.hold;
+    this.hold = drained.holdState;
     return drained.emit || null;
   }
 
@@ -723,6 +734,7 @@ export class FoundryToolLeakFilter {
     if (!this.buf) return null;
     const held = this.buf;
     this.buf = "";
+    this.hold = null;
     const drained = drainLeaks(held);
     if (!drained.hold) return drained.emit || null;
     if (abandonedToolLeak(drained.hold)) return drained.emit || null;
@@ -731,27 +743,62 @@ export class FoundryToolLeakFilter {
 }
 
 const REMOTE_SEARCH_STATUS = "(remote search in progress)";
+/** Past this, an unclosed call is released as prose so it cannot eat the answer. */
+const MAX_LEAK_HOLD = 8 * 1024;
+const CALL_HEAD = "remote_functions";
+
+interface CallHold {
+  i: number;
+  wrapped: boolean;
+  depth: number;
+  quote: string | null;
+  /** 1 matching the head, 2 after the head, 3 inside the argument list, 4 wrapper close. */
+  phase: 1 | 2 | 3 | 4;
+  headI: number;
+}
+
+interface Drain {
+  emit: string;
+  hold: string;
+  holdState: CallHold | null;
+}
+
+/**
+ * A drop that does not advance must not discard the text still in the buffer.
+ * `rest === null` means the caller emits `emit` and stops.
+ */
+export function consumeLeakDrop(
+  emit: string,
+  rest: string,
+  start: number,
+  end: number,
+): { emit: string; rest: string | null } {
+  if (end <= start) return { emit: emit + rest, rest: null };
+  return { emit: emit + rest.slice(0, start), rest: rest.slice(end) };
+}
 
 /**
  * Emit text with every raw `remote_functions` call removed. A call is
  * recognized at a word boundary anywhere in the buffer, not only at the
  * start. After one call is dropped, the remainder is scanned again, so
- * back-to-back calls go too. An unfinished call is held from its start.
+ * back-to-back calls go too. An unfinished call, including a trailing
+ * `r` / `re` / `rem` / `remo` / `remot`, is held from its start.
  */
-function drainLeaks(raw: string): { emit: string; hold: string } {
+function drainLeaks(raw: string): Drain {
   let emit = "";
   let rest = raw;
   while (rest) {
     const leak = findRemoteFunctionsLeak(rest);
     if (leak?.kind === "drop") {
-      if (leak.end <= leak.start) break;
-      emit += rest.slice(0, leak.start);
-      rest = rest.slice(leak.end);
+      const step = consumeLeakDrop(emit, rest, leak.start, leak.end);
+      if (step.rest === null) return { emit: step.emit, hold: "", holdState: null };
+      emit = step.emit;
+      rest = step.rest;
       continue;
     }
     if (leak?.kind === "hold") {
       emit += rest.slice(0, leak.start);
-      return { emit, hold: rest.slice(leak.start) };
+      return { emit, hold: rest.slice(leak.start), holdState: leak.hold };
     }
     const status = takeLeadingStatus(rest);
     if (status?.kind === "drop") {
@@ -759,10 +806,20 @@ function drainLeaks(raw: string): { emit: string; hold: string } {
       rest = status.rest;
       continue;
     }
-    if (status?.kind === "hold") return { emit, hold: rest };
-    return { emit: emit + rest, hold: "" };
+    if (status?.kind === "hold") return { emit, hold: rest, holdState: null };
+    return { emit: emit + rest, hold: "", holdState: null };
   }
-  return { emit, hold: "" };
+  return { emit, hold: "", holdState: null };
+}
+
+/** Append to a held call without rereading the bytes already scanned. */
+function continueHeldCall(buf: string, hold: CallHold, delta: string): Drain {
+  const combined = buf + delta;
+  if (combined.length > MAX_LEAK_HOLD) return { emit: combined, hold: "", holdState: null };
+  const call = scanRemoteFunctionsCall(combined, hold);
+  if (call?.kind === "prefix") return { emit: "", hold: combined, holdState: call.hold };
+  if (call?.kind === "complete") return drainLeaks(combined.slice(call.end));
+  return drainLeaks(combined);
 }
 
 /** `(remote search in progress)` only when it leads the remaining text. */
@@ -788,12 +845,15 @@ function takeLeadingStatus(
  */
 function findRemoteFunctionsLeak(
   text: string,
-): { kind: "drop"; start: number; end: number } | { kind: "hold"; start: number } | null {
+):
+  | { kind: "drop"; start: number; end: number }
+  | { kind: "hold"; start: number; hold: CallHold }
+  | null {
   const needle = "remote";
   let from = 0;
   while (from < text.length) {
     const i = text.indexOf(needle, from);
-    if (i < 0) return null;
+    if (i < 0) break;
     const prev = i === 0 ? "" : text[i - 1]!;
     if (prev && /[\w]/.test(prev)) {
       from = i + needle.length;
@@ -802,8 +862,26 @@ function findRemoteFunctionsLeak(
     const start = prev === "(" ? i - 1 : i;
     const call = scanRemoteFunctionsCall(text.slice(start));
     if (call?.kind === "complete") return { kind: "drop", start, end: start + call.end };
-    if (call?.kind === "prefix") return { kind: "hold", start };
+    if (call?.kind === "prefix") return { kind: "hold", start, hold: call.hold };
     from = i + needle.length;
+  }
+  return trailingCallPrefix(text);
+}
+
+/**
+ * A chunk can end inside the word `remote`, before `indexOf("remote")` can
+ * see it. Hold that trailing prefix — `r` through `remot`, or `(r` through
+ * `(remote` — using the same `head.startsWith` rule as the call scanner.
+ * A bare `(` is not a prefix. A letter glued to the previous word is not either.
+ */
+function trailingCallPrefix(text: string): { kind: "hold"; start: number; hold: CallHold } | null {
+  const limit = CALL_HEAD.length + 2;
+  const from = Math.max(0, text.length - (limit - 1));
+  for (let start = from; start < text.length; start++) {
+    const prev = start === 0 ? "" : text[start - 1]!;
+    if (prev && /[\w]/.test(prev)) continue;
+    const call = scanRemoteFunctionsCall(text.slice(start));
+    if (call?.kind === "prefix") return { kind: "hold", start, hold: call.hold };
   }
   return null;
 }
@@ -822,61 +900,93 @@ function abandonedToolLeak(raw: string): boolean {
  */
 function scanRemoteFunctionsCall(
   t: string,
-): { kind: "prefix" } | { kind: "complete"; end: number } | null {
-  let i = 0;
-  let wrapped = false;
-  if (t[i] === "(") {
-    wrapped = true;
+  held?: CallHold,
+): { kind: "prefix"; hold: CallHold } | { kind: "complete"; end: number } | null {
+  let i = held?.i ?? 0;
+  let wrapped = held?.wrapped ?? false;
+  let depth = held?.depth ?? 0;
+  let quote: string | null = held?.quote ?? null;
+  let phase: 0 | 1 | 2 | 3 | 4 = held?.phase ?? 0;
+  let headI = held?.headI ?? 0;
+  const prefix = (): { kind: "prefix"; hold: CallHold } => ({
+    kind: "prefix",
+    hold: { i, wrapped, depth, quote, phase: phase === 0 ? 1 : phase, headI },
+  });
+
+  if (phase === 0) {
+    if (i >= t.length) return null;
+    if (t[i] === "(") {
+      wrapped = true;
+      i++;
+    }
+    phase = 1;
+    headI = 0;
+  }
+  if (phase === 1) {
+    while (headI < CALL_HEAD.length) {
+      if (i >= t.length) return headI > 0 ? prefix() : null;
+      if (t[i] !== CALL_HEAD[headI]) return null;
+      i++;
+      headI++;
+    }
+    phase = 2;
+  }
+  if (phase === 2) {
+    while (i < t.length && t[i] === ".") {
+      const dot = i;
+      const seg = i + 1;
+      i++;
+      while (i < t.length && /[\w]/.test(t[i]!)) i++;
+      if (i === seg) {
+        // Keep the dot for the next chunk so `remote_functions.` + `azure` stays one name.
+        if (i >= t.length) {
+          i = dot;
+          return prefix();
+        }
+        return null;
+      }
+    }
+    if (i >= t.length) return prefix();
+    if (t[i] === ")") {
+      // Bare token `(remote_functions.azure_ai_search)` or the same token
+      // closed with only a paren. Text after it is the answer.
+      const end = i + 1;
+      if (wrapped || end === t.length || /\s/.test(t[end] ?? "")) return { kind: "complete", end };
+      return null;
+    }
+    if (t[i] !== "(") return null;
     i++;
+    depth = 1;
+    quote = null;
+    phase = 3;
   }
-  const head = "remote_functions";
-  const from = t.slice(i);
-  if (!from.startsWith(head)) {
-    if (from.length > 0 && head.startsWith(from)) return { kind: "prefix" };
-    return null;
-  }
-  i += head.length;
-  while (i < t.length && t[i] === ".") {
-    const seg = i + 1;
-    i++;
-    while (i < t.length && /[\w]/.test(t[i]!)) i++;
-    if (i === seg) return i === t.length ? { kind: "prefix" } : null;
-  }
-  if (i >= t.length) return { kind: "prefix" };
-  if (t[i] === ")") {
-    // Bare token `(remote_functions.azure_ai_search)` or the same token
-    // closed with only a paren. Text after it is the answer.
-    const end = i + 1;
-    if (wrapped || end === t.length || /\s/.test(t[end] ?? "")) return { kind: "complete", end };
-    return null;
-  }
-  if (t[i] !== "(") return null;
-  i++;
-  let depth = 1;
-  let quote: string | null = null;
-  while (i < t.length && depth > 0) {
-    const c = t[i]!;
-    if (quote) {
-      if (c === "\\") {
-        i += 2;
+  if (phase === 3) {
+    while (i < t.length && depth > 0) {
+      const c = t[i]!;
+      if (quote) {
+        if (c === "\\") {
+          if (i + 1 >= t.length) return prefix();
+          i += 2;
+          continue;
+        }
+        if (c === quote) quote = null;
+        i++;
         continue;
       }
-      if (c === quote) quote = null;
+      if (c === '"' || c === "'") {
+        quote = c;
+        i++;
+        continue;
+      }
+      if (c === "(" || c === "{" || c === "[") depth++;
+      else if (c === ")" || c === "}" || c === "]") depth--;
       i++;
-      continue;
     }
-    if (c === '"' || c === "'") {
-      quote = c;
-      i++;
-      continue;
-    }
-    if (c === "(" || c === "{" || c === "[") depth++;
-    else if (c === ")" || c === "}" || c === "]") depth--;
-    i++;
+    if (depth > 0 || quote) return i >= t.length ? prefix() : null;
+    phase = 4;
   }
-  if (depth > 0 || quote) return i >= t.length ? { kind: "prefix" } : null;
   if (wrapped) {
-    if (i >= t.length) return { kind: "prefix" };
+    if (i >= t.length) return prefix();
     if (t[i] !== ")") return null;
     i++;
   }
