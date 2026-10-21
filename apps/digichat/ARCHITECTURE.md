@@ -775,10 +775,18 @@ their own — the provider menu they render cannot activate an own key — so
 they name the house backend; the embed surface names its own provider while
 a key is set.
 
-The house backend id appears a second time inline in the provider menu
-(`src/components/stock/embed-composer-menu.tsx`), which lists the house
-backend as one provider choice among the own-key ones. That copy is the one
-to watch for drift.
+**The house backend id has one home (DIG-4887).** Decision: the provider menu
+(`src/components/stock/embed-composer-menu.tsx`) reads the house backend id
+from the same `HOUSE_BACKEND_ID` constant as the chip and the static
+surfaces, and keeps no copy of its own. The menu lists the house backend as
+one provider choice among the own-key ones, and both the row's id and its
+label come from that constant. Reason: the id used to be written inline in
+the menu, so the provider menu and the composer chip each named the house
+backend from a place of their own and could drift apart - the chip would
+name one backend while the menu offered another, and no test could see it.
+DIG-4597 introduced the constant for exactly this reason and left that copy
+as "the one to watch for drift"; DIG-4887 closed it. The value did not
+change, so the menu still lists `cheaperinference`.
 
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 (stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
