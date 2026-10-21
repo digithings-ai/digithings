@@ -11,6 +11,7 @@ import {
   GateSchema,
   parseDigichatConfig,
   resolveHouseModelSelection,
+  deploymentRateLimitEnabled,
   premiumModelsHeader,
   routerModelsHeader,
   welcomeTitle,
@@ -347,8 +348,10 @@ describe("DigichatConfigSchema", () => {
       maxToolCallsPerTurn: 5,
       answerAt: 0.7,
       pauseAt: 0.9,
+      rateLimit: true,
     });
     expect(trial.deployment?.guardrails?.tokensPerMinute).toBeUndefined();
+    expect(deploymentRateLimitEnabled(trial.deployment?.guardrails)).toBe(true);
     expect(trial.deployment?.backend).not.toHaveProperty("maxToolCalls");
   });
 
@@ -518,8 +521,10 @@ describe("DigichatConfigSchema", () => {
       maxToolCallsPerTurn: 5,
       answerAt: 0.7,
       pauseAt: 0.9,
+      rateLimit: true,
       tokensPerMinute: { user: 80000 },
     });
+    expect(deploymentRateLimitEnabled(dt?.guardrails)).toBe(true);
     expect(dt?.prompt).toContain("Web search is on");
     expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
 
@@ -534,7 +539,9 @@ describe("DigichatConfigSchema", () => {
       maxToolCallsPerTurn: 5,
       answerAt: 0.7,
       pauseAt: 0.9,
+      rateLimit: false,
     });
+    expect(deploymentRateLimitEnabled(occHost?.guardrails)).toBe(false);
     // backend.digisearchIndex was retired; Help search reaches the model only as
     // the digisearch MCP server, whose setup names the occ_help index.
     expect(occHost?.tools?.catalog).toEqual([]);

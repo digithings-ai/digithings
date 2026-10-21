@@ -49,9 +49,10 @@ hosts:
       type: digigraph
       digisearchIndex: null
       vaultPathPrefix: null
-    # Per-visitor TPM off. Tool-call cap and answer guard stay from defaults.
-    # The process-wide request limiter is not a per-deployment key.
+    # Per-visitor TPM off. Request limiter off. The invite is the only gate.
+    # Tool-call cap and answer guard stay from defaults.
     guardrails:
+      rateLimit: false
       tokensPerMinute: null
     prompt: null
     tokenEnv: null

@@ -1,7 +1,7 @@
 version: 1
 # Local / first-party app (Auth.js session + server persistence).
 # House catalog, meter, prompt, and the per-visitor TPM are cleared.
-# The tool-call cap and the answer guard stay.
+# The request limiter, the tool-call cap, and the answer guard stay.
 extends: defaults
 hosts: null
 deployment:

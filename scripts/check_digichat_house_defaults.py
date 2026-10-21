@@ -74,6 +74,8 @@ def main() -> int:
         problems.append("defaults.yaml answer guard must be answerAt 0.7 and pauseAt 0.9")
     if (guardrails.get("tokensPerMinute") or {}).get("deployment") is not None:
         problems.append("defaults.yaml must not set a shared deployment TPM")
+    if guardrails.get("rateLimit") is not True:
+        problems.append("defaults.yaml guardrails.rateLimit must be true")
     prompt = house.get("prompt") or ""
     if PROMPT_MARK not in prompt:
         problems.append("defaults.yaml prompt must say web search is on")
@@ -95,6 +97,26 @@ def main() -> int:
             encoding="utf-8"
         ):
             problems.append(f"{label} overlay must not turn showContextMeter on")
+
+    occ = yaml.safe_load(OCC.read_text(encoding="utf-8"))
+    occ_guard = ((occ.get("hosts") or {}).get("occ.digithings.ai") or {}).get("guardrails") or {}
+    if occ_guard.get("rateLimit") is not False:
+        problems.append("occ overlay must set guardrails.rateLimit false")
+    if occ_guard.get("tokensPerMinute") is not None:
+        problems.append("occ overlay must clear tokensPerMinute")
+    for inherited in ("maxToolCallsPerTurn", "answerAt", "pauseAt"):
+        if inherited in occ_guard:
+            problems.append(f"occ overlay must inherit {inherited} from defaults")
+
+    trial_text = DATATAP.read_text(encoding="utf-8")
+    if "TODO" not in trial_text:
+        problems.append("datatap trial must leave the shared TPM as a TODO")
+    trial = yaml.safe_load(trial_text)
+    trial_guard = ((trial.get("deployment") or {}).get("guardrails") or {})
+    if trial_guard.get("tokensPerMinute") is not None:
+        problems.append("datatap trial must leave tokensPerMinute unset")
+    if "rateLimit" in trial_guard:
+        problems.append("datatap trial must inherit the request limiter")
 
     catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
     catalog_ids = {row["id"] for row in catalog["models"]}

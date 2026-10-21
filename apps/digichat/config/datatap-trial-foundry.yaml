@@ -9,8 +9,9 @@ version: 1
 # Catalog, premium meter, house prompt, per-visitor TPM, and the context
 # meter stay off. One shared allowance (tokensPerMinute.deployment) is this
 # trial's cap. The Azure TPM for gpt-5.6-terra in westeurope is not in this
-# repo, so that number is not filled in. The tool-call cap and the answer
-# guard stay.
+# repo.
+# TODO: leave that shared allowance unset until the Azure number is known.
+# The tool-call cap and the answer guard stay. The request limiter stays.
 extends: defaults
 embedHosts:
   - datatapstream.com
@@ -73,9 +74,10 @@ deployment:
     projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/REPLACE-PROJECT
     agentName: REPLACE-AGENT-NAME
   # The house per-visitor minute is cleared. The shared allowance is
-  # tokensPerMinute.deployment. The Azure TPM for gpt-5.6-terra in
-  # westeurope is not in this repo, so the number is not filled in.
-  # Tool-call cap and answer guard are inherited.
+  # tokensPerMinute.deployment.
+  # TODO: set tokensPerMinute.deployment when the Azure number is known.
+  # Do not guess it. Tool-call cap and answer guard are inherited.
+  # The request limiter stays on.
   guardrails:
     tokensPerMinute: null
   prompt: null

@@ -427,6 +427,7 @@ deployment:
       maxToolCallsPerTurn: 5,
       answerAt: 0.7,
       pauseAt: 0.9,
+      rateLimit: true,
       tokensPerMinute: { user: 80000 },
     });
   });

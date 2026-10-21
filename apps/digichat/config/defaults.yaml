@@ -83,11 +83,16 @@ deployment: &house
   # The 80000-token minute is per visitor, and it belongs to house because
   # house is public. OCC clears it. The DataTap trial replaces it with one
   # shared allowance. Anonymous traffic is keyed by the server-derived
-  # client IP. A visitor's own key does not lift these caps yet.
+  # client IP.
+  # rateLimit is the chat request limiter (per visitor, and per IP for an
+  # anonymous embed). A visitor's own key skips this limiter and the
+  # per-visitor minute. The tool-call cap, the answer guard, and a shared
+  # deployment minute stay on.
   guardrails:
     maxToolCallsPerTurn: 5
     answerAt: 0.7
     pauseAt: 0.9
+    rateLimit: true
     tokensPerMinute:
       user: 80000
   tools:

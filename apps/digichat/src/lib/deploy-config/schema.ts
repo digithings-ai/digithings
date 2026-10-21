@@ -754,6 +754,13 @@ export const GuardrailsSchema = z
       })
       .strict()
       .optional(),
+    /**
+     * Chat request limiter for this deployment. Omit or true keeps the
+     * process default (per visitor, and per IP for anonymous embed).
+     * `false` turns it off. OCC does that. The tool-call cap and the
+     * answer guard are separate and stay on.
+     */
+    rateLimit: z.boolean().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -769,6 +776,13 @@ export const GuardrailsSchema = z
   });
 
 export type GuardrailsConfig = z.infer<typeof GuardrailsSchema>;
+
+/** Omitted means the request limiter is on. `false` is the per-deployment off switch. */
+export function deploymentRateLimitEnabled(
+  guardrails: { rateLimit?: boolean } | null | undefined,
+): boolean {
+  return guardrails?.rateLimit !== false;
+}
 
 export const DeploymentSchema = z
   .object({

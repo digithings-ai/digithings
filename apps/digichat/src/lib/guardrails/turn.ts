@@ -114,6 +114,11 @@ export function createTurnGuard(opts: {
   userId?: string | null;
   /** Server-derived client IP. A client session id is not a budget key. */
   ip?: string | null;
+  /**
+   * Drop the per-visitor token minute. A visitor's own key is not our
+   * spend. The deployment TPM, the tool-call cap, and the answer guard stay.
+   */
+  omitUserTpm?: boolean;
   store?: GuardrailStore;
   now?: () => number;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -129,7 +134,7 @@ export function createTurnGuard(opts: {
       limit: resolved.deploymentTokensPerMinute,
     });
   }
-  if (resolved.userTokensPerMinute) {
+  if (resolved.userTokensPerMinute && !opts.omitUserTpm) {
     const who = guardrailIdentity(opts);
     scopes.push({
       key: `tpm:user:${opts.slug}:${who}`,

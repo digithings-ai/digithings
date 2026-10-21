@@ -58,8 +58,9 @@ and the agent carries the search index + MCP tool server-side.
   rows stay dropped by design.
 - `guardrails` inherits the stability cap from defaults: `maxToolCallsPerTurn: 5`,
   `answerAt: 0.7`, `pauseAt: 0.9`. The per-visitor house minute is cleared.
-  `tokensPerMinute.deployment` is the trial's one shared allowance and stays
-  unset until the Azure TPM for gpt-5.6-terra in westeurope is known.
+  `tokensPerMinute.deployment` is the trial's one shared allowance.
+  TODO: it stays unset until the Azure TPM for gpt-5.6-terra in westeurope
+  is known. The request limiter stays on.
   `maxToolCallsPerTurn` follows the per-adapter matrix in `toolCallCapSupport`
   (`src/lib/deploy-config/schema.ts`) and the Guardrails section of
   `apps/digichat/ARCHITECTURE.md`. Foundry and the AI SDK backends
