@@ -22,6 +22,7 @@ import {
   type UiStreamWriter,
 } from "@/lib/ui-stream-parts";
 import { toChatMessages } from "@/lib/adapters/shared/messages";
+import { guardRound, type TurnGuard } from "@/lib/guardrails/turn";
 import {
   createTextWriter,
   isRecord,
@@ -163,6 +164,7 @@ export async function createLangGraphStreamResponse(opts: {
   /** Resolved by the caller from `backend.apiKeyEnv`; null when unset. */
   apiKey: string | null;
   signal?: AbortSignal;
+  guard?: TurnGuard;
 }): Promise<Response> {
   const url = `${opts.backend.apiUrl.replace(/\/+$/, "")}/runs/stream`;
   const headers: Record<string, string> = {
@@ -184,10 +186,23 @@ export async function createLangGraphStreamResponse(opts: {
       const toolNames = new Map<string, string>();
       const toolArgs = new Map<string, string>();
       try {
+        const instruction = await guardRound(opts.guard, {
+          writer,
+          pendingText: body,
+          signal: opts.signal,
+        });
+        let requestBody = body;
+        if (instruction) {
+          const parsed = JSON.parse(body) as {
+            input: { messages: { role: string; content: string }[] };
+          };
+          parsed.input.messages.push({ role: "user", content: instruction });
+          requestBody = JSON.stringify(parsed);
+        }
         const res = await fetch(url, {
           method: "POST",
           headers,
-          body,
+          body: requestBody,
           signal: opts.signal,
         });
         if (!res.ok || !res.body) {
@@ -210,6 +225,7 @@ export async function createLangGraphStreamResponse(opts: {
           }
         }
       } finally {
+        opts.guard?.release();
         text.close();
         finishStandardActivity(writer, ctx);
       }

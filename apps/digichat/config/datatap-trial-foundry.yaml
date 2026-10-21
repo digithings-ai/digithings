@@ -55,16 +55,19 @@ deployment:
     # config/examples/datatap-trial-deploy.md).
     projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/REPLACE-PROJECT
     agentName: REPLACE-AGENT-NAME
-    # maxToolCalls caps tool calls per user turn. Unset means unlimited, which
-    # is the default for every other deployment. The Responses API field is
-    # max_tool_calls; the Foundry adapter enforces the same number for MCP.
-    #
-    # DataTap trial (Foundry agent datatap-trial, model gpt-5.6-terra) hits
-    # 429s once a turn chains 8 or more MCP calls against a tight
-    # tokens-per-minute limit. Proposed cap is 5; 4 is the other candidate.
-    # Confirm with Chris, then uncomment ONE line. A comment is not applied.
+    # Alias of guardrails.maxToolCallsPerTurn. Prefer the shared block below.
     # maxToolCalls: 5
     # maxToolCalls: 4
+  # Proposed guardrails for this trial. Commented, so nothing is applied.
+  # Uncomment the block and one maxToolCallsPerTurn line after confirming.
+  # tokensPerMinute.deployment is the Azure TPM for gpt-5.6-terra in
+  # westeurope. Fill that number in from Azure; do not guess it, and do not
+  # change the Azure deployment from here.
+  # guardrails:
+  #   maxToolCallsPerTurn: 5
+  #   # maxToolCallsPerTurn: 4
+  #   tokensPerMinute:
+  #     deployment: <Azure TPM for gpt-5.6-terra, westeurope>
   tools:
     allowUserToggle: true
     catalog: []

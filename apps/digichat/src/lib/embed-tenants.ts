@@ -13,7 +13,12 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
-import { SEARCH_ENGINES, type PageContextMode } from "@/lib/deploy-config/schema";
+import {
+  GuardrailsSchema,
+  SEARCH_ENGINES,
+  type GuardrailsConfig,
+  type PageContextMode,
+} from "@/lib/deploy-config/schema";
 import {
   MAX_MCP_TOOL_ENTRIES,
   MAX_MCP_TOOL_NAME_LENGTH,
@@ -131,6 +136,8 @@ export type EmbedTenantConfig = {
   slug: string;
   aliases?: string[];
   backend: EmbedBackendConfig;
+  /** Same block as the deployment YAML. Omit and every guard is off. */
+  guardrails?: GuardrailsConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   /**
@@ -854,11 +861,22 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     };
   }
 
+  let guardrails: GuardrailsConfig | undefined;
+  if (v.guardrails !== undefined) {
+    const parsed = GuardrailsSchema.safeParse(v.guardrails);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "invalid guardrails";
+      throw new Error(`${ctx}: guardrails ${message}`);
+    }
+    guardrails = parsed.data;
+  }
+
   return {
     mcp,
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
     backend: backendCfg,
+    ...(guardrails ? { guardrails } : {}),
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
     skin:

@@ -21,6 +21,7 @@ import {
 } from "@/lib/ui-stream-parts";
 import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
 import { CredentialRedirectError, fetchGuarded } from "@/lib/fetch-guarded";
+import type { TurnGuard } from "@/lib/guardrails/turn";
 
 export type DigigraphTracePayload = {
   v?: number;
@@ -382,6 +383,8 @@ export async function createDigigraphTraceStreamResponse(opts: {
   model?: string;
   /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
   signal?: AbortSignal;
+  /** Shared TPM / tool-cap guard. Inactive when the deployment sets neither. */
+  guard?: TurnGuard;
 }) {
   const stripped = uiMessagesForUpstream(opts.messages).map((m) => {
     const { id: _omit, ...rest } = m;
@@ -402,6 +405,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let textOpen = false;
       /** Any answer text was written — the normal success signal. */
       let textEmitted = false;
+      let toolCallsSoFar = 0;
       const activityCtx = createActivityWriteContext();
       const openText = () => {
         if (textOpen) return;
@@ -426,9 +430,21 @@ export async function createDigigraphTraceStreamResponse(opts: {
       // success tail: a part left streaming keeps the thinking animation
       // parked above the final state (foundry wraps the same way).
       try {
+      let outbound = coreMessagesToDigigraphOpenAi(coreMessages);
+      if (opts.guard?.active) {
+        const clearance = await opts.guard.beforeRound({
+          writer,
+          pendingText: outbound.map((message) => message.content).join("\n"),
+          toolCallsSoFar: 0,
+          signal: opts.signal,
+        });
+        if (clearance.action !== "proceed") {
+          outbound = [...outbound, { role: "user", content: clearance.instruction }];
+        }
+      }
       const bodyPayload: Record<string, unknown> = {
         model,
-        messages: coreMessagesToDigigraphOpenAi(coreMessages),
+        messages: outbound,
         stream: true,
       };
       // #2572: never follow cross-origin redirects while carrying BYOK /
@@ -669,6 +685,14 @@ export async function createDigigraphTraceStreamResponse(opts: {
           // resets which text part subsequent "content" deltas land in.
           if (payload.type === "round_boundary") {
             closeText();
+            if (opts.guard?.active) {
+              await opts.guard.beforeRound({
+                writer,
+                pendingText: outbound.map((message) => message.content).join("\n"),
+                toolCallsSoFar,
+                signal: opts.signal,
+              });
+            }
             continue;
           }
 
@@ -677,7 +701,18 @@ export async function createDigigraphTraceStreamResponse(opts: {
             closeText();
           }
           for (const span of spans) {
-            writeStandardActivity(writer, span, activityCtx);
+            if (span.operation === "execute_tool") toolCallsSoFar += 1;
+            const next =
+              opts.guard?.active && span.toolResult !== undefined
+                ? {
+                    ...span,
+                    toolResult: opts.guard.capToolPayload(span.toolResult) as typeof span.toolResult,
+                  }
+                : span;
+            writeStandardActivity(writer, next, activityCtx);
+          }
+          if (opts.guard?.active && toolCallsSoFar === opts.guard.toolCap) {
+            opts.guard.noteToolCap(writer, toolCallsSoFar);
           }
         }
       }
@@ -690,6 +725,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
           type: "message-metadata",
           messageMetadata: { usage: usageMetadata },
         });
+        opts.guard?.recordUsage(usageMetadata);
       }
       // #3910: a real 200 always has a non-null body even when the upstream
       // sends no bytes, so `!res.body` only catches 204/205/HEAD. Without this,
@@ -707,6 +743,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       } finally {
+        opts.guard?.release();
         // Idempotent when the turn already settled on the success path.
         finishStandardActivity(writer, activityCtx);
         closeText();

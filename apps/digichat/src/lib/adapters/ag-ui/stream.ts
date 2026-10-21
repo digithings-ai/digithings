@@ -19,6 +19,7 @@ import {
   type UiStreamWriter,
 } from "@/lib/ui-stream-parts";
 import { toChatMessages } from "@/lib/adapters/shared/messages";
+import { guardRound, type TurnGuard } from "@/lib/guardrails/turn";
 import {
   createTextWriter,
   isRecord,
@@ -139,6 +140,7 @@ export async function createAgUiStreamResponse(opts: {
   /** Resolved by the caller from `backend.apiKeyEnv`; null when unset. */
   apiKey: string | null;
   signal?: AbortSignal;
+  guard?: TurnGuard;
 }): Promise<Response> {
   const headers = protocolJsonHeaders({
     apiKey: opts.apiKey,
@@ -161,10 +163,21 @@ export async function createAgUiStreamResponse(opts: {
       const toolNames = new Map<string, string>();
       const toolArgs = new Map<string, string>();
       try {
+        const instruction = await guardRound(opts.guard, {
+          writer,
+          pendingText: body,
+          signal: opts.signal,
+        });
+        let requestBody = body;
+        if (instruction) {
+          const parsed = JSON.parse(body) as { messages: { role: string; content: string }[] };
+          parsed.messages.push({ role: "user", content: instruction });
+          requestBody = JSON.stringify(parsed);
+        }
         const res = await fetch(opts.backend.url, {
           method: "POST",
           headers,
-          body,
+          body: requestBody,
           signal: opts.signal,
         });
         if (!res.ok || !res.body) {
@@ -183,6 +196,7 @@ export async function createAgUiStreamResponse(opts: {
           }
         }
       } finally {
+        opts.guard?.release();
         text.close();
         finishStandardActivity(writer, ctx);
       }

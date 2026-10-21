@@ -57,6 +57,14 @@ hosts:
       # hitCount: 0 with no error (#3838).
       digisearchIndex: digithings_docs
       vaultPathPrefix: clients/digithings
+    # Proposed per-user token budget for the public chat. Commented, so it is
+    # off. 80000 tokens in a rolling minute is several ordinary questions
+    # (a couple of tool calls and a few thousand tokens of docs) — more than
+    # a person types — and pauses a bot that loops the same prompt. A bot that
+    # mints a new session per request is keyed separately; see ARCHITECTURE.md.
+    # guardrails:
+    #   tokensPerMinute:
+    #     user: 80000
     tools:
       allowUserToggle: true
       catalog:

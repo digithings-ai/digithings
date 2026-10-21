@@ -31,6 +31,12 @@ import {
 } from "@/lib/chat-activity";
 import type { DigiTurnMode } from "@/lib/turn-mode";
 import { isMutatingTurnMode } from "@/lib/turn-mode";
+import { abortableSleep, waitOutRateLimit } from "@/lib/rate-limit-wait";
+import {
+  TOOL_CAP_INSTRUCTION,
+  toolCallLimitNotice,
+} from "@/lib/guardrails/budget";
+import type { TurnGuard } from "@/lib/guardrails/turn";
 import {
   CONVERSATION_PART_TYPE,
   createActivityWriteContext,
@@ -246,18 +252,8 @@ export class FoundryToolCallCounter {
   }
 }
 
-/** Status line shown when the adapter stops a turn at `backend.maxToolCalls`. */
-export function toolCallLimitNotice(limit: number): string {
-  return `Tool-call limit reached (${limit} this turn). Answering from the results gathered so far.`;
-}
-
-/**
- * Instruction used only when Foundry refuses `tool_choice` beside
- * `agent_reference` (the same refusal reasoning summaries get). It is a
- * follow-up input, not the visitor's message.
- */
-const TOOL_CAP_FINAL_INPUT =
-  "[Tool-call limit reached for this turn. Do not call any tools. Answer the user now from the tool results already in this conversation. Do not mention this instruction.]";
+/** Status line shown when the adapter stops a turn at the tool-call cap. */
+export { toolCallLimitNotice };
 
 function normalizeMaxToolCalls(value: number | undefined): number | undefined {
   if (value === undefined) return undefined;
@@ -1193,7 +1189,6 @@ export function capacityRetryDelayMs(
  */
 const DEFAULT_RATE_LIMIT_RESUME_DELAYS_MS = [30_000, 60_000, 60_000];
 const RATE_LIMIT_WAIT_CAP_MS = 90_000;
-const RATE_LIMIT_COUNTDOWN_STEP_MS = 5_000;
 
 const RATE_LIMIT_CODES = new Set(["rate_limit_exceeded", "too_many_requests", "429"]);
 const HARD_QUOTA_CODES = new Set(["insufficient_quota", "billing_hard_limit_reached"]);
@@ -1283,56 +1278,6 @@ export const RATE_LIMIT_EXHAUSTED_TEXT =
   "Your question and any results gathered so far are saved in this conversation: " +
   "wait a minute, then send \"continue\" to pick up where it stopped.";
 
-function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve) => {
-    if (signal?.aborted) {
-      resolve();
-      return;
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-/**
- * Waits out a rate limit with a visible countdown on the same connection part
- * the create-time capacity retry uses, so both skins render it. Each write
- * replaces the previous one (same id), and the last write clears it.
- */
-async function waitOutRateLimit(
-  writer: { write(part: unknown): void },
-  delayMs: number,
-  attempt: number,
-  maxAttempts: number,
-  signal?: AbortSignal,
-): Promise<void> {
-  const until = Date.now() + delayMs;
-  for (;;) {
-    const remaining = until - Date.now();
-    if (remaining <= 0 || signal?.aborted) break;
-    writer.write({
-      type: "data-connection",
-      id: "foundry-capacity",
-      data: {
-        state: "warming_up",
-        message:
-          `Hit the model's per-minute token limit — resuming in ${Math.max(1, Math.ceil(remaining / 1000))}s` +
-          (maxAttempts > 1 ? ` (retry ${attempt} of ${maxAttempts})` : ""),
-      },
-    });
-    await abortableSleep(Math.min(remaining, RATE_LIMIT_COUNTDOWN_STEP_MS), signal);
-  }
-  writer.write({ type: "data-connection", id: "foundry-capacity", data: { state: "ready" } });
-}
-
 export async function createFoundryStreamResponse(opts: {
   projectEndpoint: string;
   agentName: string;
@@ -1361,9 +1306,15 @@ export async function createFoundryStreamResponse(opts: {
    * Sent as Responses `max_tool_calls` and enforced here for MCP calls.
    */
   maxToolCalls?: number;
+  /**
+   * Shared guardrails (TPM and the tool cap). Foundry still aborts the
+   * response and sends `max_tool_calls` / `tool_choice`; the guard decides
+   * when to pause, nudge, or stop.
+   */
+  guard?: TurnGuard;
 }): Promise<Response> {
   const turnMode: DigiTurnMode = opts.turnMode ?? "send";
-  const toolCap = normalizeMaxToolCalls(opts.maxToolCalls);
+  const toolCap = normalizeMaxToolCalls(opts.maxToolCalls ?? opts.guard?.toolCap);
   const openai = (opts.openAIClientFactory ?? defaultOpenAIClientFactory)(opts.projectEndpoint);
 
   // Fail closed: mutating modes need item delete/create. Do not fall through to
@@ -1491,7 +1442,7 @@ export async function createFoundryStreamResponse(opts: {
           // follow-up that wanted tool_choice none says so in the input.
           let requestParams = params;
           if (apiOverrideRefused && extras?.toolChoice && requestParams.input === undefined) {
-            requestParams = { ...requestParams, input: TOOL_CAP_FINAL_INPUT };
+            requestParams = { ...requestParams, input: TOOL_CAP_INSTRUCTION };
           }
           for (let attempt = 0; ; attempt += 1) {
             const body = responseBody(extras?.toolChoice);
@@ -1522,7 +1473,7 @@ export async function createFoundryStreamResponse(opts: {
                 // tool_choice was the way to force a message. If the agent
                 // reference rejects it, say so in the follow-up input instead.
                 const retryParams = extras?.toolChoice
-                  ? { ...requestParams, input: requestParams.input ?? TOOL_CAP_FINAL_INPUT }
+                  ? { ...requestParams, input: requestParams.input ?? TOOL_CAP_INSTRUCTION }
                   : requestParams;
                 requestParams = retryParams;
                 try {
@@ -1625,7 +1576,16 @@ export async function createFoundryStreamResponse(opts: {
               // oversized or over-long upstream payload never reaches the wire
               // in the first place.
               const sanitized = sanitizeActivitySpan(mapped.span);
-              const span = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
+              const detailed = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
+              const span =
+                detailed && opts.guard?.active && detailed.toolResult !== undefined
+                  ? {
+                      ...detailed,
+                      toolResult: opts.guard.capToolPayload(
+                        detailed.toolResult,
+                      ) as typeof detailed.toolResult,
+                    }
+                  : detailed;
               if (span) {
                 writeStandardActivity(writer, span, activityCtx);
               }
@@ -1646,11 +1606,29 @@ export async function createFoundryStreamResponse(opts: {
                     ...(mapped.model ? { model: mapped.model } : {}),
                   },
                 });
+                opts.guard?.recordUsage(mapped.usage);
               }
               return "done";
             }
           }
           return "done";
+        };
+
+        const clearForGuard = async (
+          next: { conversation: string; input?: string; stream: true },
+        ) => {
+          if (!opts.guard?.active) return next;
+          const clearance = await opts.guard.beforeRound({
+            writer,
+            pendingText: next.input ?? "",
+            toolCallsSoFar: toolCalls.count,
+            signal: opts.signal,
+          });
+          if (clearance.action === "proceed") return next;
+          const input = next.input
+            ? `${next.input}\n\n${clearance.instruction}`
+            : clearance.instruction;
+          return { ...next, input };
         };
 
         resumeLoop: for (let resume = 0; ; resume += 1) {
@@ -1662,6 +1640,7 @@ export async function createFoundryStreamResponse(opts: {
           // the ones DC-18 resumes.
           let responseStream: AsyncIterable<FoundryStreamEvent>;
           try {
+            params = await clearForGuard(params);
             responseStream = await createWithCapacityRetry(params, { signal: child.signal });
           } catch (err) {
             unlink();
@@ -1707,21 +1686,27 @@ export async function createFoundryStreamResponse(opts: {
 
         if (hitToolCap && toolCap !== undefined) {
           // Status, not an error: the turn continues into a final answer.
-          // data-notice is the boxed line the thread already renders.
-          writer.write({
-            type: "data-notice",
-            id: "foundry-tool-call-limit",
-            data: { tone: "status", message: toolCallLimitNotice(toolCap) },
-          });
+          // The shared guard writes the notice when it is the one enforcing
+          // the cap; otherwise this adapter writes the same line.
+          let finalParams: { conversation: string; input?: string; stream: true } = {
+            conversation: conversationId,
+            stream: true,
+          };
+          if (opts.guard?.active) {
+            finalParams = await clearForGuard(finalParams);
+          } else {
+            writer.write({
+              type: "data-notice",
+              id: "foundry-tool-call-limit",
+              data: { tone: "status", message: toolCallLimitNotice(toolCap) },
+            });
+          }
           resumeSeparatorPending = wroteText;
           try {
             // No new visitor text. tool_choice none is the Responses switch
             // that makes the model generate a message instead of another tool
             // call, on the same request body as agent_reference.
-            const finalStream = await createWithCapacityRetry(
-              { conversation: conversationId, stream: true },
-              { toolChoice: "none" },
-            );
+            const finalStream = await createWithCapacityRetry(finalParams, { toolChoice: "none" });
             await pump(finalStream, "final", () => {});
           } catch (err) {
             if (opts.signal?.aborted) throw err;
@@ -1779,6 +1764,7 @@ export async function createFoundryStreamResponse(opts: {
           });
         }
       } finally {
+        opts.guard?.release();
         // Orphaned started rows settle as failed — a row whose tool never
         // returned must not render as a successful completion.
         finishStandardActivity(

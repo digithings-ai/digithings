@@ -1214,6 +1214,50 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       maxToolCalls?: number;
     };
     expect(call?.maxToolCalls).toBe(5);
+    expect(call && "guard" in call).toBe(true);
+  });
+
+  it("prefers guardrails.maxToolCallsPerTurn over the Foundry alias", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "foundry-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "foundry-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://x/",
+          agentName: "datatap-trial",
+          maxToolCalls: 9,
+        },
+        guardrails: { maxToolCallsPerTurn: 4 },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://foundry-tenant.digithings.ai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+      maxToolCalls?: number;
+      guard?: { toolCap?: number; active?: boolean };
+    };
+    expect(call?.maxToolCalls).toBe(4);
+    expect(call?.guard?.active).toBe(true);
+    expect(call?.guard?.toolCap).toBe(4);
   });
 
   it("returns 400 when OpenRouter BYOK missing model", async () => {

@@ -294,6 +294,53 @@ describe("DigichatConfigSchema", () => {
     }
   });
 
+  it("accepts shared guardrails and rejects a fraction that cannot pause", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "x",
+        backend: { type: "digigraph" },
+        guardrails: {
+          maxToolCallsPerTurn: 5,
+          tokensPerMinute: { deployment: 100_000, user: 80_000 },
+        },
+      },
+    });
+    expect(cfg.deployment?.guardrails).toEqual({
+      maxToolCallsPerTurn: 5,
+      tokensPerMinute: { deployment: 100_000, user: 80_000 },
+    });
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          backend: { type: "digigraph" },
+          guardrails: { answerAt: 0.95 },
+        },
+      }),
+    ).toThrow(/answerAt must be below pauseAt/);
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          backend: { type: "digigraph" },
+          guardrails: { tokensPerMinute: { user: 0 } },
+        },
+      }),
+    ).toThrow(/user/);
+
+    const trial = parseDigichatConfig(
+      loadYaml(
+        readFileSync(resolve(__dirname, "../../../config/datatap-trial-foundry.yaml"), "utf8"),
+      ),
+      "datatap-trial-foundry.yaml",
+    );
+    expect(trial.deployment?.guardrails).toBeUndefined();
+    expect(trial.deployment?.backend).not.toHaveProperty("maxToolCalls");
+  });
+
   it("fails closed on foundry http endpoint", () => {
     expect(() =>
       parseDigichatConfig({
@@ -386,6 +433,7 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.models.available).not.toContain("google/gemini-3.1-flash-lite");
     expect(dt?.models.available).not.toContain("openai/gpt-5.6-luna");
     expect(dt?.mcp?.allowUserServers).toBe(false);
+    expect(dt?.guardrails).toBeUndefined();
     expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
 
     const occ = parseDigichatConfig(
@@ -395,6 +443,7 @@ describe("DigichatConfigSchema", () => {
     const occHost = occ.hosts?.["occ.digithings.ai"];
     expect(occHost?.chrome.skin).toBe("digichat");
     expect(occHost?.backend.type).toBe("digigraph");
+    expect(occHost?.guardrails).toBeUndefined();
     // backend.digisearchIndex was retired; Help search reaches the model only as
     // the digisearch MCP server, whose setup names the occ_help index.
     expect(occHost?.tools?.catalog).toEqual([]);

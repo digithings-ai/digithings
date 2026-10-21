@@ -3,6 +3,7 @@ import {
   streamText,
   smoothStream,
   toUIMessageStream,
+  createUIMessageStream,
   createUIMessageStreamResponse,
   type UIMessage,
 } from "ai";
@@ -30,6 +31,7 @@ import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/st
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
+import { createTurnGuard, guardrailPrepareStep } from "@/lib/guardrails/turn";
 import { resolveLanguageCode } from "@/lib/languages";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getHeartbeatContext, licenseRefusal } from "@/lib/license/state";
@@ -318,6 +320,16 @@ async function handleChat(
   // Embed wins wherever both exist so the embed surface stays byte-identical;
   // the change is the session surface gaining the deployment config.
   const backend = embedConfig?.backend ?? dep?.backend;
+  const foundryAlias = backend && isFoundryConfig(backend) ? backend.maxToolCalls : undefined;
+  // Embed wins, same as the backend. Off unless a key or the Foundry alias is set.
+  const guard = createTurnGuard({
+    slug: embedConfig?.slug ?? dep?.slug ?? tenantSlug,
+    guardrails: embedConfig?.guardrails ?? dep?.guardrails,
+    foundryMaxToolCalls: foundryAlias,
+    userId: ownerUserSub,
+    sessionId,
+    ip: clientIpForRateLimit(req),
+  });
   // The registry describes the backend once (#4522): the streaming path is
   // chosen from `adapter.protocol`, never from a `backend.type` comparison.
   const adapter = backendAdapterFor(backend?.type);
@@ -619,7 +631,8 @@ async function handleChat(
         signal: req.signal,
         responseLanguage: languageCode,
         turnMode,
-        maxToolCalls: foundryBackend.maxToolCalls,
+        maxToolCalls: guard.toolCap ?? foundryBackend.maxToolCalls,
+        guard,
       });
     } catch (err) {
       runLock.release();
@@ -647,6 +660,7 @@ async function handleChat(
           responseHeaders,
           activityDetail,
           signal: req.signal,
+          guard,
         }),
       );
     } catch (err) {
@@ -698,6 +712,7 @@ async function handleChat(
           responseHeaders,
           webSearch: webSearchEnabled,
           signal: req.signal,
+          guard,
         }),
       );
     } catch (err) {
@@ -890,12 +905,61 @@ async function handleChat(
           // tenant curates a list) or the curated default.
           model: byokKey ? undefined : modelId,
           signal: req.signal,
+          guard,
         }),
       );
     } catch (err) {
       runLock.release();
       throw err;
     }
+  }
+
+  if (guard.active) {
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        try {
+          const result = streamText({
+            model,
+            messages: coreMessages,
+            headers: upstreamHeaders,
+            abortSignal: req.signal,
+            experimental_transform: smoothStream({ chunking: "word" }),
+            prepareStep: (step) =>
+              guardrailPrepareStep({
+                guard,
+                writer,
+                signal: req.signal,
+                steps: step.steps,
+                messages: step.messages,
+                instructions:
+                  typeof step.instructions === "string" ? step.instructions : undefined,
+              }),
+            onFinish: (event) => {
+              guard.recordUsage(event.usage);
+            },
+          });
+          writer.merge(
+            toUIMessageStream({
+              stream: result.stream,
+              sendSources: true,
+              sendReasoning: true,
+            }),
+          );
+        } catch (err) {
+          guard.release();
+          throw err;
+        }
+      },
+      onFinish: () => {
+        guard.release();
+      },
+    });
+    return finish(
+      createUIMessageStreamResponse({
+        stream,
+        headers: responseHeaders,
+      }),
+    );
   }
 
   const result = streamText({

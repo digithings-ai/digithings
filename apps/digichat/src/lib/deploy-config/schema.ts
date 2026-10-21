@@ -300,14 +300,8 @@ export const FoundryBackendSchema = z
       .refine((u) => u.startsWith("https:"), "projectEndpoint must be https"),
     agentName: z.string().min(1),
     /**
-     * Per-turn tool-call cap for this Foundry agent. Omit for no cap.
-     *
-     * Sent as the Responses API `max_tool_calls` on the same request as
-     * `agent_reference`. That parameter is documented for built-in tools
-     * (file search, web search, and the like). MCP calls are a separate tool
-     * category, so the Foundry adapter also stops the turn at this count,
-     * asks for a final answer, and shows a status notice. See
-     * `apps/digichat/ARCHITECTURE.md` (Foundry tenants).
+     * Back-compat alias of `guardrails.maxToolCallsPerTurn` for Foundry
+     * deployments that already set it. The shared key wins when both are set.
      */
     maxToolCalls: z.number().int().positive().max(100).optional(),
   })
@@ -601,6 +595,47 @@ export const GateSchema = z
   })
   .strict();
 
+const GuardrailFraction = z.number().gt(0).max(1);
+const GuardrailTpm = z.number().int().positive().max(10_000_000);
+
+/**
+ * Optional turn guardrails. Omit the block, or any key, and that guard is off.
+ * Fractions default to 0.7 (`answerAt`) and 0.9 (`pauseAt`) when a TPM is set.
+ * `answerAt` must stay below `pauseAt`.
+ */
+export const GuardrailsSchema = z
+  .object({
+    /** Tool calls allowed in one user turn, on every backend. */
+    maxToolCallsPerTurn: z.number().int().positive().max(100).optional(),
+    /** Fraction of the TPM where the model is asked to answer with what it has. */
+    answerAt: GuardrailFraction.optional(),
+    /** Fraction of the TPM where the turn waits for the rolling window. */
+    pauseAt: GuardrailFraction.optional(),
+    tokensPerMinute: z
+      .object({
+        /** Shared by every turn on this deployment. Match an upstream TPM. */
+        deployment: GuardrailTpm.optional(),
+        /** Per user, else session, else client IP. */
+        user: GuardrailTpm.optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const answer = value.answerAt ?? 0.7;
+    const pause = value.pauseAt ?? 0.9;
+    if (answer >= pause) {
+      ctx.addIssue({
+        code: "custom",
+        message: "answerAt must be below pauseAt",
+        path: ["answerAt"],
+      });
+    }
+  });
+
+export type GuardrailsConfig = z.infer<typeof GuardrailsSchema>;
+
 export const DeploymentSchema = z
   .object({
     slug: z.string().regex(SLUG, "slug must be lowercase alphanumeric/hyphens"),
@@ -632,6 +667,8 @@ export const DeploymentSchema = z
     models: ModelsSchema.default({ available: [] }),
     cli: CliSchema.default({ enabled: false }),
     backend: BackendSchema,
+    /** Off unless a key is set. See ARCHITECTURE.md, Guardrails. */
+    guardrails: GuardrailsSchema.optional(),
     tools: ToolsSchema.optional(),
     mcp: McpSchema.optional(),
     gate: GateSchema.default({ mode: "ungated", activityDetail: "labels" }),

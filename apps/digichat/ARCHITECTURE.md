@@ -1056,33 +1056,70 @@ standard tool Result pane with mid-stream completion — display parity with a
 directly-plugged tool, no per-tool UI. `mcp_approval_request` is unmapped by
 design: trial agents auto-approve server-side.
 
-**Per-turn tool-call cap (`backend.maxToolCalls`).** Optional positive integer
-on a Foundry backend (1–100). Omit it and the turn is unlimited — that is the
-default for every deployment other than one that sets the key. The DataTap
-trial yaml (`config/datatap-trial-foundry.yaml`) documents a proposed value of
-5 (4 is the other candidate) as a comment until that value is confirmed; a
-comment is not applied.
+**Guardrails (`guardrails`).** Optional on a deployment. Omit the block and
+every guard is off. Two settings apply on every backend (Foundry,
+OpenAI-compatible, digigraph / Cheaper Inference, and the rest):
 
-Microsoft Foundry's Create Response body lists `max_tool_calls` and
-`agent_reference` on the same request, so the adapter sends
-`max_tool_calls` beside the agent reference when the key is set. OpenAI's
-description of that parameter, which Foundry's Responses surface follows, caps
-**built-in** tools only ("The maximum number of total calls to built-in tools
-that can be processed in a response… Any further attempts to call a tool by
-the model will be ignored"). MCP is a separate tool category in that reference,
-and the trial's long chains are `mcp_call`. The adapter therefore also counts
-tool-call items (`mcp_call`, `file_search_call`, `azure_ai_search_call`, and
-other `*_call` items — not their `_output` twins). The call that would exceed
-the cap is not shown. The in-flight response is aborted, then one follow-up
-`responses.create` runs with `tool_choice: "none"` (same request body:
-`none` means the model generates a message and does not call a tool) so the
-turn still ends in an answer. If Foundry rejects that override with
-`400 Not allowed when agent is specified` — the refusal already observed for
-per-call reasoning summaries — the follow-up is retried without `tool_choice`
-and with a bracketed instruction to answer from the results already gathered.
-The chat shows a status `data-notice` (neutral, not an error) that the
-tool-call limit was reached. A turn that finishes at or under the cap does
-not show the notice.
+```yaml
+guardrails:                      # omit the block and every guard is off
+  maxToolCallsPerTurn: 5         # optional, 1–100
+  answerAt: 0.7                  # optional; default 0.7 when a TPM is set
+  pauseAt: 0.9                   # optional; default 0.9; must be above answerAt
+  tokensPerMinute:
+    deployment: 100000           # optional; match an upstream TPM
+    user: 80000                  # optional; per user, else session, else IP
+```
+
+The numbers in that block are the shape. No shipped yaml sets them. The
+public digithings.ai example only comments a per-user value of 80000.
+
+`maxToolCallsPerTurn` caps tool calls in one user turn. `backend.maxToolCalls`
+on a Foundry backend is the same setting; the shared key wins when both are
+set. `tokensPerMinute.deployment` is the deployment's own limit (an Azure TPM,
+for example), shared by every turn on that deployment. `tokensPerMinute.user`
+is the per-person limit for a public chat: a real user id, otherwise the
+session id, otherwise the client IP. `embed:anonymous` is not a person and
+`unknown` is not an address, so anonymous traffic with a session id is keyed
+by that session — a bot that mints a new session per request is not collapsed
+onto one IP.
+
+The counter is a rolling 60 seconds of reported usage, plus an estimate of the
+next round (about 4 characters per token) held as a reservation so concurrent
+turns on one instance share the window. Under `answerAt` the turn proceeds.
+Between the thresholds the model is asked to answer with what it already has.
+At `pauseAt`, or when the next round would exceed the limit, the turn waits on
+the same connection-status waiter as a mid-stream rate limit (#6110), shows
+"Pausing for the token limit, resuming shortly", keeps the loading animation,
+then continues the same turn. The wait stops at 90 seconds. A round larger
+than the whole limit is nudged instead of failed. Crossing a limit pauses with
+that notice. It does not error the turn. Tool results are clipped to the room
+left in the tighter scope.
+
+The window is per Node instance. `installGuardrailStore` is the seam for a
+host that has shared storage (a Durable Object or KV on the Cloudflare
+Worker). The digichat container does not hold that binding — the worker only
+forwards tenant JSON — and nothing here creates one. Without a shared store,
+two instances do not see each other's spend.
+
+Foundry still does the parts only that API needs. It sends Responses
+`max_tool_calls` beside `agent_reference` (that parameter covers built-in
+tools; MCP calls are counted in the adapter), drops the call that would pass
+the cap, aborts the in-flight response, and follows up with `tool_choice:
+"none"`. A `400 Not allowed when agent is specified` falls back to a bracketed
+instruction. The chat shows a status `data-notice`, not an error, and only
+when a call was actually stopped.
+
+AI SDK backends apply the same decision in `prepareStep` (`toolChoice: "none"`
+once the cap is spent). Digigraph and the other single-request adapters gate
+before the upstream fetch and again when they observe another round.
+Digigraph's tool loop runs upstream, so a cap there is a notice plus a wrap-up
+on the next round the adapter can see; it does not abort the upstream call.
+
+The DataTap trial yaml leaves a proposed cap of 5 (4 is the other candidate)
+and a deployment TPM commented out until the Azure number for gpt-5.6-terra in
+westeurope is confirmed. The public digithings.ai example comments a per-user
+limit of 80000 and does not enable it. OCC and the trial do not carry that
+per-user value.
 
 A reasoning disclosure appears only when the Foundry event includes summary text. Operators enable that
 summary on the agent definition: the Responses API refuses a per-call
