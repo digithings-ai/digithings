@@ -113,9 +113,7 @@ export interface FoundryConversationItemsApi {
   list(
     conversationId: string,
     opts?: { order?: "asc" | "desc"; limit?: number },
-  ):
-    | Promise<{ data: FoundryConversationItem[] } | FoundryConversationItem[]>
-    | AsyncIterable<FoundryConversationItem>;
+  ): Promise<{ data: FoundryConversationItem[] } | FoundryConversationItem[]> | AsyncIterable<FoundryConversationItem>;
   /**
    * OpenAI / Foundry client shape: `delete(itemId, { conversation_id })`
    * — not `(conversationId, itemId)`.
@@ -147,7 +145,7 @@ export interface OpenAIResponsesClientLike {
         /** SDK-level retries; the adapter owns capacity retries (#5979). */
         maxRetries?: number;
         body: { agent_reference: { name: string; type: "agent_reference" } };
-      },
+      }
     ): Promise<AsyncIterable<FoundryStreamEvent>>;
   };
 }
@@ -412,9 +410,7 @@ function parseJsonObject(value: unknown): Record<string, unknown> | null {
  * (record, array, or number) so structured results stay structured; fall back
  * to the raw string when it is not JSON. Never throw, never return empty.
  */
-function parseMcpResult(
-  value: unknown,
-): Record<string, unknown> | unknown[] | number | string | undefined {
+function parseMcpResult(value: unknown): Record<string, unknown> | unknown[] | number | string | undefined {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return undefined;
@@ -423,8 +419,7 @@ function parseMcpResult(
       // JSON `null` parses to a value, but it is not a result. Returning the
       // raw string here would render the literal text `null` as the output.
       if (parsed === null) return undefined;
-      if (parsed && typeof parsed === "object")
-        return parsed as Record<string, unknown> | unknown[];
+      if (parsed && typeof parsed === "object") return parsed as Record<string, unknown> | unknown[];
       if (typeof parsed === "number" && Number.isFinite(parsed)) return parsed;
     } catch {
       // Not JSON — fall through to the raw string below.
@@ -462,8 +457,12 @@ function searchOutputDocuments(raw: unknown): ActivityDocument[] {
     if (!id || seen.has(id)) continue;
     seen.add(id);
 
-    const title = pickString(doc, "title", "SourceName") ?? humanizeChunkId(id);
-    const path = pickString(doc, "url", "Url") ?? id;
+    const title =
+      pickString(doc, "title", "SourceName") ??
+      humanizeChunkId(id);
+    const path =
+      pickString(doc, "url", "Url") ??
+      id;
     const content = typeof doc.content === "string" ? doc.content : undefined;
     const snippet = content && isReadableSnippet(content) ? content : undefined;
     documents.push({ title, path, ...(snippet ? { snippet } : {}) });
@@ -527,9 +526,7 @@ function extractTextDelta(value: unknown): string | null {
 
   if (Array.isArray(record.content)) {
     const fromContent = record.content
-      .map((entry) =>
-        entry && typeof entry === "object" ? (entry as Record<string, unknown>).text : null,
-      )
+      .map((entry) => (entry && typeof entry === "object" ? (entry as Record<string, unknown>).text : null))
       .filter((text): text is string => typeof text === "string")
       .join("");
     if (fromContent) return fromContent;
@@ -643,20 +640,57 @@ export interface FoundryMapState {
   sawSearchOutput: boolean;
   /**
    * MCP call arguments streamed on `response.mcp_call_arguments.delta` /
-   * `.done`, keyed by output item id. Foundry can stream an MCP call's input
-   * there and close the `mcp_call` item with `arguments` empty or `"{}"`, which
-   * left the row showing `{}` (the get_item display bug). The `.done` item
-   * falls back to these.
+   * `.done`, keyed by output item id (the events' `item_id`). Foundry can
+   * stream an MCP call's input there and close the `mcp_call` item with
+   * `arguments` empty or `"{}"`, which left the row showing `{}` (the get_item
+   * display bug). The item's `.done` falls back to these and then drops them.
    */
-  mcpArguments?: Record<string, string>;
+  mcpArguments?: Map<string, StreamedMcpArguments>;
 }
 
-/** The arguments streamed for one MCP call item, or undefined. */
-function streamedMcpArguments(state: FoundryMapState | undefined, itemId: string | undefined) {
-  if (!state?.mcpArguments || !itemId) return undefined;
-  return Object.prototype.hasOwnProperty.call(state.mcpArguments, itemId)
-    ? state.mcpArguments[itemId]
-    : undefined;
+interface StreamedMcpArguments {
+  text: string;
+  /** Set by `.done`: a later delta for the same id starts a new buffer. */
+  closed: boolean;
+}
+
+/** Cap on one call's streamed arguments; the wire keeps far less anyway. */
+const MAX_STREAMED_MCP_ARGUMENTS = 64 * 1024;
+
+function hasKeys(value: Record<string, unknown> | null): value is Record<string, unknown> {
+  return value !== null && Object.keys(value).length > 0;
+}
+
+function recordMcpArgumentsDelta(state: FoundryMapState, itemId: string, delta: string): void {
+  const map = (state.mcpArguments ??= new Map());
+  const prior = map.get(itemId);
+  const entry = prior && !prior.closed ? prior : { text: "", closed: false };
+  if (entry.text.length + delta.length <= MAX_STREAMED_MCP_ARGUMENTS) entry.text += delta;
+  map.set(itemId, entry);
+}
+
+function recordMcpArgumentsDone(state: FoundryMapState, itemId: string, args: string): void {
+  const map = (state.mcpArguments ??= new Map());
+  const prior = map.get(itemId);
+  // A full `.done` replaces the fragments. An empty or `"{}"` one (the same
+  // shape that empties the item) must not throw away fragments that hold the
+  // real input.
+  if (hasKeys(parseJsonObject(args)) || !prior) {
+    map.set(itemId, { text: args.slice(0, MAX_STREAMED_MCP_ARGUMENTS), closed: true });
+  } else {
+    prior.closed = true;
+  }
+}
+
+/** Take (and forget) the arguments streamed for one MCP call item. */
+function takeStreamedMcpArguments(
+  state: FoundryMapState | undefined,
+  itemId: string | undefined,
+): Record<string, unknown> | null {
+  if (!state?.mcpArguments || !itemId) return null;
+  const entry = state.mcpArguments.get(itemId);
+  state.mcpArguments.delete(itemId);
+  return entry ? parseJsonObject(entry.text) : null;
 }
 
 function mapOutputItemDone(
@@ -712,10 +746,8 @@ function mapOutputItemDone(
   if (item?.type === "mcp_call") {
     const name = mcpToolName(item);
     const ownArgs = parseJsonObject(item.arguments);
-    const args =
-      ownArgs && Object.keys(ownArgs).length
-        ? ownArgs
-        : (parseJsonObject(streamedMcpArguments(state, item.id)) ?? ownArgs);
+    const streamedArgs = takeStreamedMcpArguments(state, item.id);
+    const args = hasKeys(ownArgs) ? ownArgs : (streamedArgs ?? ownArgs);
     // A failed MCP call carries the server's complaint on `error` (string or
     // object) and usually no output. Pass it through as the tool's result so
     // the failed row shows the MCP's own words under the arguments
@@ -904,8 +936,7 @@ export function mapFoundryEvent(
     case "response.mcp_call_arguments.delta": {
       const { item_id: itemId, delta } = event as { item_id?: unknown; delta?: unknown };
       if (state && typeof itemId === "string" && typeof delta === "string") {
-        state.mcpArguments ??= {};
-        state.mcpArguments[itemId] = (streamedMcpArguments(state, itemId) ?? "") + delta;
+        recordMcpArgumentsDelta(state, itemId, delta);
       }
       return null;
     }
@@ -915,8 +946,7 @@ export function mapFoundryEvent(
         arguments?: unknown;
       };
       if (state && typeof itemId === "string" && typeof args === "string") {
-        state.mcpArguments ??= {};
-        state.mcpArguments[itemId] = args;
+        recordMcpArgumentsDone(state, itemId, args);
       }
       return null;
     }
@@ -936,9 +966,7 @@ export function mapFoundryEvent(
     }
     case "response.error": {
       const message = String((event as { message?: unknown }).message ?? "Unknown error");
-      return isRateLimitFailure(event)
-        ? { type: "rate-limit", message }
-        : { type: "error", message };
+      return isRateLimitFailure(event) ? { type: "rate-limit", message } : { type: "error", message };
     }
     // A throttled model call after the response has started (after tool calls,
     // typically) does not throw at `responses.create`: Foundry fails the
@@ -1025,8 +1053,7 @@ const RATE_LIMIT_COUNTDOWN_STEP_MS = 5_000;
 
 const RATE_LIMIT_CODES = new Set(["rate_limit_exceeded", "too_many_requests", "429"]);
 const HARD_QUOTA_CODES = new Set(["insufficient_quota", "billing_hard_limit_reached"]);
-const RATE_LIMIT_TEXT =
-  /exceeded (?:the )?(?:token )?rate limit|rate limit (?:is |has been )?(?:exceeded|reached)|too many requests/i;
+const RATE_LIMIT_TEXT = /exceeded (?:the )?(?:token )?rate limit|rate limit (?:is |has been )?(?:exceeded|reached)|too many requests/i;
 
 /** The upstream error object, wherever this payload keeps it. */
 function upstreamErrorObject(value: unknown): Record<string, unknown> | null {
@@ -1034,8 +1061,7 @@ function upstreamErrorObject(value: unknown): Record<string, unknown> | null {
   const v = value as Record<string, unknown>;
   const response = v.response as Record<string, unknown> | undefined;
   for (const candidate of [response?.error, v.error]) {
-    if (typeof candidate === "object" && candidate !== null)
-      return candidate as Record<string, unknown>;
+    if (typeof candidate === "object" && candidate !== null) return candidate as Record<string, unknown>;
   }
   return v;
 }
@@ -1077,13 +1103,9 @@ export function isRateLimitFailure(value: unknown): boolean {
 export function rateLimitHintMs(value: unknown): number | null {
   const fromHeaders = retryAfterMs(value);
   if (fromHeaders !== null) return fromHeaders;
-  const message =
-    upstreamErrorMessage(value) ?? (value instanceof Error ? value.message : undefined);
+  const message = upstreamErrorMessage(value) ?? (value instanceof Error ? value.message : undefined);
   if (!message) return null;
-  const match =
-    /(?:try again|retry)\s+(?:in|after)\s+(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|secs?|seconds?)\b/i.exec(
-      message,
-    );
+  const match = /(?:try again|retry)\s+(?:in|after)\s+(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|secs?|seconds?)\b/i.exec(message);
   if (!match) return null;
   const n = Number(match[1]);
   if (!Number.isFinite(n) || n < 0) return null;
@@ -1115,7 +1137,7 @@ class FoundryRateLimitError extends Error {
 export const RATE_LIMIT_EXHAUSTED_TEXT =
   "The model's per-minute token limit was reached and did not clear after several retries. " +
   "Your question and any results gathered so far are saved in this conversation: " +
-  'wait a minute, then send "continue" to pick up where it stopped.';
+  "wait a minute, then send \"continue\" to pick up where it stopped.";
 
 function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return Promise.resolve();
@@ -1300,11 +1322,9 @@ export async function createFoundryStreamResponse(opts: {
           createParams.input = createdConversation ? applyGroundingDirective(message) : message;
         }
 
-        const createWithCapacityRetry = async (params: {
-          conversation: string;
-          input?: string;
-          stream: true;
-        }) => {
+        const createWithCapacityRetry = async (
+          params: { conversation: string; input?: string; stream: true },
+        ) => {
           const schedule = opts.capacityRetryDelaysMs ?? DEFAULT_CAPACITY_RETRY_DELAYS_MS;
           for (let attempt = 0; ; attempt += 1) {
             try {
@@ -1417,11 +1437,7 @@ export async function createFoundryStreamResponse(opts: {
             if (!isRateLimitFailure(err)) throw err;
             const delay = rateLimitResumeDelayMs(err, resume, resumeSchedule);
             if (delay === null) {
-              writer.write({
-                type: "data-connection",
-                id: "foundry-capacity",
-                data: { state: "ready" },
-              });
+              writer.write({ type: "data-connection", id: "foundry-capacity", data: { state: "ready" } });
               throw err;
             }
             console.warn(
@@ -1484,7 +1500,10 @@ export async function createFoundryStreamResponse(opts: {
           // error — can carry stack traces or internal hostnames, and this
           // response reaches anonymous embed visitors. Log it server-side;
           // never stream it. Same pattern as adapters/digithings/stream.ts.
-          console.error("[foundry] stream error", err instanceof Error ? err.message : String(err));
+          console.error(
+            "[foundry] stream error",
+            err instanceof Error ? err.message : String(err)
+          );
           writer.write({
             type: "error",
             errorText: "The assistant is unavailable right now. Please try again shortly.",
@@ -1496,7 +1515,9 @@ export async function createFoundryStreamResponse(opts: {
         finishStandardActivity(
           writer,
           activityCtx,
-          failure ? { toolName: failure.toolName, errorText: failure.errorText } : undefined,
+          failure
+            ? { toolName: failure.toolName, errorText: failure.errorText }
+            : undefined,
         );
         closeText();
       }
