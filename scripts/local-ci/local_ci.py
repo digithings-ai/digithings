@@ -223,24 +223,59 @@ def build_target_url():
     return (os.environ.get("LOCAL_CI_TARGET_URL") or os.environ.get("CI_PIPELINE_URL") or "").strip()
 
 
+def log_soft(msg):
+    """A log line that never breaks the caller.
+
+    The app row goes out after the `local-ci` row. A log directory that cannot
+    be written must not cost the row, and must not stop the tick.
+    """
+    try:
+        log(msg)
+    except OSError:
+        pass
+
+
 def app_token():
     """The app installation token the pipeline minted, or "" when there is none.
 
-    Read from the file the pipeline wrote, never printed and never taken from
-    the command line: the file is 0600, owned by the worker, and no log line
-    holds it. The environment is the fallback for a run that hands the token
-    over directly.
+    Read from the file the pipeline wrote for the worker alone, never printed
+    and never taken from the command line. Only the first line of the file is
+    the token: a file with more content must not put two lines into it. The
+    environment is the fallback for a run that hands the token over directly.
     """
     path = os.environ.get("LOCAL_CI_APP_TOKEN_FILE") or APP_TOKEN_FILE
     try:
         with open(path) as f:
-            tok = f.read().strip()
+            tok = f.readline().strip()
     except OSError:
         tok = ""
     return tok or (os.environ.get("CI_APP_TOKEN") or "").strip()
 
 
-def app_status(sha, state, desc):
+def status_fields(state, desc):
+    """The fields of one status row: the verdict, the description and the build.
+
+    Both rows are built from this one call, so the `local-ci` row and the
+    `local-ci/app` row cannot disagree about anything but the context.
+    """
+    fields = {"state": state, "description": desc[:139]}
+    target = build_target_url()
+    if target:
+        fields["target_url"] = target
+    return fields
+
+
+def status_args(sha, ctx, fields):
+    """The `gh api` arguments for one status row."""
+    args = ["api", "-X", "POST", f"repos/{REPO}/statuses/{sha}",
+            "-f", f"state={fields['state']}", "-f", f"context={ctx}",
+            "-f", f"description={fields['description']}"]
+    if "target_url" in fields:
+        args += ["-f", f"target_url={fields['target_url']}"]
+    return args
+
+
+def app_status(sha, fields):
     """Post the same verdict under `local-ci/app`, with the app's own token.
 
     The token goes into the child's environment, never into its arguments, so
@@ -250,21 +285,16 @@ def app_status(sha, state, desc):
     """
     tok = app_token()
     if not tok:
-        log("app status: skipped, no app token")
+        log_soft("app status: skipped, no app token")
         return False
-    args = ["api", "-X", "POST", f"repos/{REPO}/statuses/{sha}", "-f", f"state={state}",
-            "-f", f"context={APP_CTX}", "-f", f"description={desc[:139]}"]
-    target = build_target_url()
-    if target:
-        args += ["-f", f"target_url={target}"]
     env = dict(ENV)
     env["GH_TOKEN"] = tok
     env["GITHUB_TOKEN"] = tok
-    rc, _ = sh(["gh", *args], timeout=120, env=env)
+    rc, _ = sh(["gh", *status_args(sha, APP_CTX, fields)], timeout=120, env=env)
     if rc != 0:
-        log(f"app status: failed (rc={rc})")
+        log_soft(f"app status: failed (rc={rc})")
         return False
-    log(f"app status: {state} {APP_CTX}")
+    log_soft(f"app status: {fields['state']} {APP_CTX}")
     return True
 
 
@@ -276,15 +306,12 @@ def status(sha, state, desc):
     before it trusts the green (DIG-4794).
 
     The same verdict goes out under `local-ci/app`, posted with the app's own
-    token, so the two rows are always the same verdict (DIG-4809).
+    token. Both rows are built from one set of fields, so they are always the
+    same verdict (DIG-4809).
     """
-    args = ["api", "-X", "POST", f"repos/{REPO}/statuses/{sha}", "-f", f"state={state}",
-            "-f", f"context={CTX}", "-f", f"description={desc[:139]}"]
-    target = build_target_url()
-    if target:
-        args += ["-f", f"target_url={target}"]
-    gh(*args)
-    app_status(sha, state, desc)
+    fields = status_fields(state, desc)
+    gh(*status_args(sha, CTX, fields))
+    app_status(sha, fields)
 
 
 def review_status(sha, state, desc):
