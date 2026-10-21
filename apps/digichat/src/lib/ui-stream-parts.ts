@@ -307,6 +307,15 @@ function failedToolErrorText(span: ActivitySpan): string {
     const record = result as Record<string, unknown>;
     if (typeof record.content === "string" && record.content.trim()) return record.content;
     if (typeof record.error === "string" && record.error.trim()) return record.error;
+    // An error object (MCP / tool payload): show it whole, not "Tool failed."
+    // (DIG-4459).
+    if (record.error && typeof record.error === "object") {
+      try {
+        return JSON.stringify(record.error, null, 2);
+      } catch {
+        /* fall through */
+      }
+    }
   }
   return "Tool failed.";
 }
