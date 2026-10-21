@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DigichatThread, type GroupDisclosureMode } from "./DigichatThread";
+import { setExportKeepMounted } from "../../replay/export-mount";
 import { workVisibilityForView, type WorkVisibility } from "./stock/skin-types";
 
 const adapter: ChatModelAdapter = {
@@ -353,12 +354,6 @@ function Harness({
   );
 }
 
-function visibleText(root: ParentNode): string {
-  const clone = (root instanceof Element ? root : document.body).cloneNode(true) as HTMLElement;
-  clone.querySelectorAll("[hidden]").forEach((node) => node.remove());
-  return clone.textContent ?? "";
-}
-
 async function mount(props: HarnessProps = {}) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -603,12 +598,26 @@ describe("DigichatThread", () => {
       }
       // And the work itself is not on the page.
       for (const text of shape.work) {
-        expect(visibleText(host), shape.name).not.toContain(text);
+        expect(host.textContent, shape.name).not.toContain(text);
       }
       // The answer is still there: the fold takes the work, not the reply.
       expect(host.textContent, shape.name).toContain("grounded answer");
       unmount();
     }
+  });
+
+  it("mounts closed work only while an export is reading the page", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: REASONING_ONLY_MESSAGES,
+      workVisibility: "quiet",
+    });
+    await act(async () => {});
+    expect(host.textContent).not.toContain("thinking through the plan");
+    setExportKeepMounted(true);
+    expect(host.textContent).toContain("thinking through the plan");
+    setExportKeepMounted(false);
+    expect(host.textContent).not.toContain("thinking through the plan");
+    unmount();
   });
 
   it("keeps the work shut while the agent works when the client is quiet", async () => {
@@ -628,9 +637,7 @@ describe("DigichatThread", () => {
     const row = host.querySelector('[data-slot="tool-group-root"]');
     expect(row).toBeTruthy();
     expect(row?.hasAttribute("data-closed")).toBe(true);
-    // The running tool stays in the DOM (so an HTML export can still open it)
-    // but it is hidden with the closed panel.
-    expect(visibleText(host)).not.toContain("Running tool: digisearch");
+    expect(host.textContent).not.toContain("Running tool: digisearch");
     unmount();
 
     // The control: the same turn under the balanced level opens the row.

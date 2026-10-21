@@ -193,6 +193,71 @@ describe("deployment hide rules", () => {
     expect(html).not.toContain("covered picker note");
     expect(html).not.toContain("Other client positions");
   });
+
+  it("drops a source inside a folded panel when sources are off", () => {
+    document.head.innerHTML = [
+      "<style>",
+      '[data-stock-product] [data-message-part-type^="source"],',
+      "[data-stock-product] a[data-source] { display: none !important; }",
+      "</style>",
+    ].join("");
+    document.body.innerHTML = [
+      "<div data-stock-product>",
+      '<div class="aui-thread-root">',
+      '<div class="aui-user-message-content">What is the overnight book?</div>',
+      '<div id="chain" data-slot="aui_work-chain-content" hidden>',
+      "<p>folded tool result</p>",
+      '<div data-message-part-type="source-url">Panel source body</div>',
+      '<a data-source href="https://example.com/inside">panel source link</a>',
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+    const shell = snapshotSource(document);
+    expect(shell).not.toBeNull();
+    transformSnapshotDom(shell!);
+    const html = serializeSnapshot(shell!, "");
+    expect(html).toContain("What is the overnight book?");
+    expect(html).toContain("folded tool result");
+    expect(html).not.toContain("Panel source body");
+    expect(html).not.toContain("panel source link");
+    expect(document.body.textContent).toContain("Panel source body");
+  });
+
+  it("inlines the deployment hide rules and still drops what they hide", () => {
+    const rules = [
+      '[data-stock-product] [data-slot="aui_reasoning"], [data-stock-product] .aui-reasoning-root { display: none !important; }',
+      '[data-stock-product] [data-slot="aui_tool-fallback"], [data-stock-product] .aui-tool-fallback-root { display: none !important; }',
+      '[data-stock-product] [data-message-part-type^="source"], [data-stock-product] a[data-source] { display: none !important; }',
+      '[data-stock-product] [data-slot="aui_composer-add-attachment"], [data-stock-product] .aui-composer-add-attachment { display: none !important; }',
+      '[data-stock-product] [data-slot="aui_branch-picker"], [data-stock-product] .aui-branch-picker-root { display: none !important; }',
+      "[data-stock-product] [data-deploy-model-picker] { display: none !important; }",
+    ].join("\n");
+    document.head.innerHTML = `<style>${rules}</style>`;
+    document.body.innerHTML = [
+      '<div data-stock-product data-deployment="Northwind">',
+      '<div class="aui-thread-root">',
+      '<div class="aui-user-message-content">What is the overnight book?</div>',
+      "<div data-deploy-model-picker>picker-model-name</div>",
+      '<div id="chain" data-slot="aui_work-chain-content" hidden>',
+      "<p>folded tool result</p>",
+      '<div data-slot="aui_reasoning">hidden reasoning text</div>',
+      '<div data-message-part-type="source-url">Panel source body</div>',
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+    const shell = snapshotSource(document);
+    expect(shell).not.toBeNull();
+    transformSnapshotDom(shell!);
+    const html = serializeSnapshot(shell!, rules);
+    expect(html).toContain("folded tool result");
+    expect(html).toContain('[data-message-part-type^="source"]');
+    expect(html).toContain("[data-deploy-model-picker]");
+    expect(html).not.toContain("Panel source body");
+    expect(html).not.toContain("hidden reasoning text");
+    expect(html).not.toContain("picker-model-name");
+  });
 });
 
 describe("refresh meta", () => {

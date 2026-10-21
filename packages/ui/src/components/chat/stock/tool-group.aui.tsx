@@ -18,6 +18,7 @@ import {
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useExportKeepMounted } from "../../../replay/export-mount";
 
 const ANIMATION_DURATION = 200;
 
@@ -157,9 +158,10 @@ function ToolGroupContent({
   children,
   ...props
 }: React.ComponentProps<typeof CollapsibleContent>) {
+  const keepMounted = useExportKeepMounted();
   return (
     <CollapsibleContent
-      keepMounted
+      keepMounted={keepMounted}
       data-slot="tool-group-content"
       className={cn(
         "aui-tool-group-content relative overflow-hidden text-sm outline-none",

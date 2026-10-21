@@ -168,20 +168,19 @@ function cloneWithoutHidden(live: HTMLElement): HTMLElement {
 }
 
 function suppressed(el: Element): boolean {
-  // A closed panel is `display: none` only so the disclosure can open offline.
-  // Deployment hide rules do not use the hidden attribute.
-  if (insideClosedPanel(el)) return false;
+  // The closed panel itself stays so a folded tool call can open offline.
+  // A descendant the deployment has hidden is still dropped.
+  if (isClosedPanel(el)) return false;
   const view = el.ownerDocument.defaultView;
   if (!view) return false;
   const style = view.getComputedStyle(el);
-  return style.display === "none" || style.visibility === "hidden";
-}
-
-function insideClosedPanel(el: Element): boolean {
-  for (let cursor: Element | null = el; cursor; cursor = cursor.parentElement) {
-    if (isClosedPanel(cursor)) return true;
-  }
-  return false;
+  if (style.display === "none") return true;
+  if (style.visibility !== "hidden") return false;
+  const parent = el.parentElement;
+  if (!parent) return true;
+  // Visibility inherits. A child of an already-hidden parent is not a
+  // deployment hide of its own.
+  return view.getComputedStyle(parent).visibility !== "hidden";
 }
 
 function isClosedPanel(el: Element): boolean {

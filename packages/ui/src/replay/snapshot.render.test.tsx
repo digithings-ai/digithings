@@ -8,6 +8,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DigichatThread } from "../components/chat/DigichatThread";
+import { setExportKeepMounted } from "./export-mount";
 import { serializeSnapshot, transformSnapshotDom } from "./snapshot";
 
 const adapter: ChatModelAdapter = {
@@ -28,7 +29,7 @@ const MESSAGES: ThreadMessageLike[] = [
         type: "tool-call",
         toolCallId: "t1",
         toolName: "digisearch",
-        argsText: "{\"q\":\"book\"}",
+        argsText: '{"q":"book"}',
         result: "vault-row-marker",
       },
       { type: "text", text: "The book is flat." },
@@ -59,7 +60,9 @@ describe("rendered thread snapshot", () => {
       root.render(<Harness />);
     });
 
+    setExportKeepMounted(true);
     const live = document.documentElement.cloneNode(true) as HTMLElement;
+    setExportKeepMounted(false);
     transformSnapshotDom(live);
     const html = serializeSnapshot(live, ".aui-md { white-space: pre-wrap; }");
 

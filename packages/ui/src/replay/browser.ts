@@ -5,6 +5,7 @@
  */
 
 import { downloadTextFile } from "../components/chat/transcript";
+import { setExportKeepMounted } from "./export-mount";
 import { snapshotFilename } from "./filename";
 import {
   deploymentText,
@@ -165,18 +166,25 @@ export async function downloadThreadSnapshot(
   exportedAt = new Date().toISOString(),
 ): Promise<void> {
   if (!doc?.documentElement) throw new Error(MISSING_THREAD_MESSAGE);
-  const shell = snapshotSource(doc);
-  if (!shell) {
-    showSnapshotError(doc, MISSING_THREAD_MESSAGE);
-    throw new Error(MISSING_THREAD_MESSAGE);
+  // Closed reasoning and tool panels unmount on the live page. Mount them
+  // only for this read, then put the page back.
+  setExportKeepMounted(true);
+  try {
+    const shell = snapshotSource(doc);
+    if (!shell) {
+      showSnapshotError(doc, MISSING_THREAD_MESSAGE);
+      throw new Error(MISSING_THREAD_MESSAGE);
+    }
+    const question = questionText(shell);
+    const css = await inlineAssetUrls(liveSheetText(doc));
+    transformSnapshotDom(shell);
+    await inlineDomAssets(shell);
+    const html = serializeSnapshot(shell, css);
+    const name = snapshotFilename(deploymentText(doc), exportedAt, question);
+    downloadTextFile(name, html, "text/html;charset=utf-8");
+  } finally {
+    setExportKeepMounted(false);
   }
-  const question = questionText(shell);
-  const css = await inlineAssetUrls(liveSheetText(doc));
-  transformSnapshotDom(shell);
-  await inlineDomAssets(shell);
-  const html = serializeSnapshot(shell, css);
-  const name = snapshotFilename(deploymentText(doc), exportedAt, question);
-  downloadTextFile(name, html, "text/html;charset=utf-8");
 }
 
 function sameOriginUrl(raw: string, origin: string, href: string): string | null {

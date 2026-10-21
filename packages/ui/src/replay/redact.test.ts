@@ -184,6 +184,13 @@ describe("redactValue", () => {
     expect(url).toContain("ok=1");
   });
 
+  it("replaces a Key-Pair-Id query value", () => {
+    const url = redactString("https://files.example/o?Key-Pair-Id=pair-plain-9f3c2a&ok=1");
+    expect(url).not.toContain("pair-plain-9f3c2a");
+    expect(url).toContain("?Key-Pair-Id=[redacted]");
+    expect(url).toContain("ok=1");
+  });
+
   it("replaces sensitive object keys entirely", () => {
     const out = redactValue({
       authorization: `Bearer ${JWT}`,
