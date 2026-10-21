@@ -82,7 +82,7 @@ const indicator = (host: HTMLElement) =>
 const visibleText = (el: HTMLElement | null) => {
   if (!el) return null;
   const clone = el.cloneNode(true) as HTMLElement;
-  clone.querySelectorAll(".sr-only").forEach((n) => n.remove());
+  clone.querySelectorAll(".sr-only, [data-slot='screen-reader-name']").forEach((n) => n.remove());
   return (clone.textContent ?? "").trim();
 };
 const workChain = (host: HTMLElement) =>

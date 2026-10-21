@@ -684,34 +684,63 @@
   min-width: 0;
 }
 
-.digichat-thread [data-slot="reasoning-trigger-chevron"],
-.digichat-thread [data-slot="tool-fallback-trigger-chevron"],
-.digichat-launcher [data-slot="reasoning-trigger-chevron"],
-.digichat-launcher [data-slot="tool-fallback-trigger-chevron"] {
+/* One disclosure caret for every trace row. Right when closed; a quarter
+   turn down when THAT row is open. The rotate is on the cube svg
+   (`dot-matrix-grid`) only. The wrapper holds the pixel chevron, and a
+   transform there turns the screen-reader name with the glyph. The caret
+   is a direct child of its trigger, so the open rule starts at that trigger:
+   an open chain (`data-open` on the Base UI root) must not spin the closed
+   rows inside it. */
+.digichat-thread [data-slot="disclosure-chevron"],
+.digichat-launcher [data-slot="disclosure-chevron"] {
   display: inline-flex;
+  position: relative;
   width: 0.55rem;
   height: 0.55rem;
+  flex: 0 0 0.55rem;
   align-items: center;
   justify-content: center;
   transform: none;
-  transform-origin: 50% 50%;
-  transition: none;
   animation: none;
 }
 
-.digichat-thread [data-slot="reasoning-trigger-chevron"] [data-slot="dot-matrix"],
-.digichat-thread [data-slot="tool-fallback-trigger-chevron"] [data-slot="dot-matrix"],
-.digichat-launcher [data-slot="reasoning-trigger-chevron"] [data-slot="dot-matrix"],
-.digichat-launcher [data-slot="tool-fallback-trigger-chevron"] [data-slot="dot-matrix"] {
+.digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix"],
+.digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix"] {
   width: 0.55rem;
   height: 0.55rem;
+  max-width: 0.55rem;
+  max-height: 0.55rem;
+  transform: none;
+  animation: none;
 }
 
-.digichat-thread [data-slot="reasoning-root"][data-state="open"] [data-slot="reasoning-trigger-chevron"],
-.digichat-thread [data-slot="tool-fallback-root"][data-state="open"] [data-slot="tool-fallback-trigger-chevron"],
-.digichat-launcher [data-slot="reasoning-root"][data-state="open"] [data-slot="reasoning-trigger-chevron"],
-.digichat-launcher [data-slot="tool-fallback-root"][data-state="open"] [data-slot="tool-fallback-trigger-chevron"] {
+.digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  transform: rotate(0deg);
+  transform-origin: 50% 50%;
+  transition: transform 150ms ease;
+  animation: none;
+}
+
+.digichat-thread [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-thread [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-thread [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
   transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+  .digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+    transition: none;
+  }
 }
 
 /* The disclosure animates at the upstream duration (200ms): switching it off
@@ -730,30 +759,17 @@
 }
 
 /* Grouped tool-call disclosure: match the reasoning trigger rhythm. */
+.digichat-thread [data-slot="aui_work-chain"],
+.digichat-launcher [data-slot="aui_work-chain"] {
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+}
+
 .digichat-thread [data-slot="aui_work-chain-trigger"],
 .digichat-launcher [data-slot="aui_work-chain-trigger"] {
-  display: inline-flex;
+  display: flex;
   width: fit-content;
-}
-
-.digichat-thread [data-slot="aui_work-chain-chevron"],
-.digichat-launcher [data-slot="aui_work-chain-chevron"] {
-  display: inline-flex;
-  width: 0.55rem;
-  height: 0.55rem;
-  align-items: center;
-  justify-content: center;
-}
-
-.digichat-thread [data-slot="aui_work-chain-chevron"] [data-slot="dot-matrix"],
-.digichat-launcher [data-slot="aui_work-chain-chevron"] [data-slot="dot-matrix"] {
-  width: 0.55rem;
-  height: 0.55rem;
-}
-
-.digichat-thread [data-slot="aui_work-chain"][data-state="open"] [data-slot="aui_work-chain-chevron"],
-.digichat-launcher [data-slot="aui_work-chain"][data-state="open"] [data-slot="aui_work-chain-chevron"] {
-  transform: rotate(90deg);
 }
 
 .digichat-thread [data-slot="aui_work-chain-content"],
@@ -784,34 +800,21 @@
 .digichat-thread [data-slot="tool-group-trigger-loader"],
 .digichat-launcher [data-slot="tool-group-trigger-loader"] {
   display: inline-flex;
-  width: 0.875rem;
-  height: 0.875rem;
+  width: 0.75rem;
+  height: 0.75rem;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
-.digichat-thread [data-slot="tool-group-trigger-chevron"],
-.digichat-launcher [data-slot="tool-group-trigger-chevron"] {
-  display: inline-flex;
-  width: 0.55rem;
-  height: 0.55rem;
-  align-items: center;
-  justify-content: center;
-  transform: none;
-  transform-origin: 50% 50%;
-  transition: none;
-  animation: none;
-}
-
-.digichat-thread [data-slot="tool-group-trigger-chevron"] [data-slot="dot-matrix"],
-.digichat-launcher [data-slot="tool-group-trigger-chevron"] [data-slot="dot-matrix"] {
-  width: 0.55rem;
-  height: 0.55rem;
-}
-
-.digichat-thread [data-slot="tool-group-root"][data-state="open"] [data-slot="tool-group-trigger-chevron"],
-.digichat-launcher [data-slot="tool-group-root"][data-state="open"] [data-slot="tool-group-trigger-chevron"] {
-  transform: rotate(90deg);
+.digichat-thread [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix"],
+.digichat-launcher [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix"],
+.digichat-thread [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix-grid"] {
+  width: 0.75rem;
+  height: 0.75rem;
+  max-width: 0.75rem;
+  max-height: 0.75rem;
 }
 
 /* Same as the reasoning and tool rows: keep the upstream 200ms collapse. */
@@ -835,6 +838,13 @@
 .digichat-launcher [data-slot="aui_chain-of-thought"] {
   margin-top: 0.75rem;
   margin-bottom: 0.75rem;
+}
+
+/* The pre-response loader sits flush in the message. The chain that replaces
+   it must not pick up this rhythm, or the marker jumps down on the handoff. */
+.digichat-thread [data-slot="aui_assistant-message-content"] > [data-slot="aui_chain-of-thought"]:first-child,
+.digichat-launcher [data-slot="aui_assistant-message-content"] > [data-slot="aui_chain-of-thought"]:first-child {
+  margin-top: 0;
 }
 
 /* Portaled layers (tooltips, menus, dialogs) render under <body>, outside the

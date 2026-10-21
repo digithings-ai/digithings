@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ComponentProps } from "react";
+import { useEffect, useState, type ComponentProps, type CSSProperties } from "react";
 
 /**
  * 5×5 snap-on/off cube matrix. Motion states are agent actions; static
@@ -540,11 +540,21 @@ function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
+/** The cube svg fills its box. A bare svg otherwise paints at its 300px default. */
+const gridStyle: CSSProperties = {
+  display: "block",
+  width: "100%",
+  height: "100%",
+  maxWidth: "100%",
+  maxHeight: "100%",
+};
+
 function DotMatrix({
   className,
   state = "loading",
   label,
   decorative = false,
+  style,
   ...props
 }: DotMatrixProps) {
   const frames = PATTERNS[state];
@@ -576,13 +586,17 @@ function DotMatrix({
         ? { "aria-hidden": true }
         : { role: "img", "aria-label": name })}
       className={cx("inline-block size-4 shrink-0", className)}
+      style={{ ...style, position: "relative" }}
     >
       <svg
         data-slot="dot-matrix-grid"
         aria-hidden
         viewBox="0 0 20 20"
+        width="100%"
+        height="100%"
         fill="currentColor"
         className="size-full"
+        style={gridStyle}
       >
         {Array.from({ length: CELL_COUNT }, (_, i) => {
           if (!lit.has(i)) return null;
