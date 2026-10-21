@@ -38,6 +38,7 @@ import {
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
+import { connectionStatusText } from "../connection-status";
 import { Skeleton } from "../../../ui/skeleton";
 import { cn } from "./cn";
 import { SkinCredit } from "../stock/skin-credit";
@@ -1075,30 +1076,10 @@ const AssistantWorkingIndicator: FC = () => {
       (part) => part.type === "tool-call" && part.status.type === "running",
     ),
   );
-  // Latest data-connection state wins: the BFF replaces `connecting` with
-  // `warming_up` while it retries a booting upstream (#4753) and with
-  // `connected` once the stream starts.
-  const connectionState = useAuiState((s) => {
-    let state: string | undefined;
-    for (const part of s.message.parts) {
-      if (part.type === "data" && part.name === "connection") {
-        const next = (part.data as { state?: string } | undefined)?.state;
-        if (typeof next === "string") state = next;
-      }
-    }
-    return state;
-  });
-  const connectionMessage = useAuiState((s) => {
-    let message: string | undefined;
-    for (const part of s.message.parts) {
-      if (part.type !== "data" || part.name !== "connection") continue;
-      const data = (part.data ?? {}) as { state?: string; message?: unknown };
-      if (data.state === "warming_up" && typeof data.message === "string" && data.message.length > 0) {
-        message = data.message;
-      }
-    }
-    return message;
-  });
+  // Text only when the server sent a status message (DIG-4459): a bare
+  // `connecting` is the plain wait for a response, so the row is the
+  // animation alone. No client-side default copy.
+  const statusText = useAuiState((s) => connectionStatusText(s.message.parts));
   const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
   return (
@@ -1113,10 +1094,8 @@ const AssistantWorkingIndicator: FC = () => {
       />
       {wakePhase === "waking" ? (
         <span className="text-xs text-muted-foreground">Waking up services…</span>
-      ) : connectionState === "warming_up" ? (
-        <span className="text-xs text-muted-foreground">{connectionMessage ?? "Warming up…"}</span>
-      ) : connectionState === "connecting" ? (
-        <span className="text-xs text-muted-foreground">Connecting…</span>
+      ) : statusText ? (
+        <span className="text-xs text-muted-foreground">{statusText}</span>
       ) : null}
     </span>
   );

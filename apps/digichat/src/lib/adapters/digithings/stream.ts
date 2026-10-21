@@ -505,7 +505,9 @@ export async function createDigigraphTraceStreamResponse(opts: {
                 writer.write({
                   type: "data-connection",
                   id: "digigraph-connection",
-                  data: { state: "warming_up" },
+                  // The status line the chat shows (DIG-4459): the client
+                  // has no default copy, so the server names the wait.
+                  data: { state: "warming_up", message: "Waking up services…" },
                 });
               }
               const serverDelayMs = parseRetryAfterMs(res.headers.get("retry-after"));
