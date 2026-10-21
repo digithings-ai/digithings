@@ -40,7 +40,6 @@ SCRIPT = REPO_ROOT / "scripts" / "check_required_policy_checks.py"
 INVENTORY = REPO_ROOT / ".github" / "policy-checks.yml"
 CONTEXTS = REPO_ROOT / ".github" / "required-contexts.txt"
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
-PR_HYGIENE_YML = REPO_ROOT / ".github" / "workflows" / "ci-pr-hygiene.yml"
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 
 #: The live required contexts on develop as of 2026-10-07, read from
@@ -131,10 +130,11 @@ def test_committed_contexts_match_the_dated_live_gate_read() -> None:
     Stated honestly, because the name used to claim more than it does: this
     compares the committed file to a *dated literal* transcribed on 2026-10-07.
     It makes no network call and cannot detect drift that happened after that
-    date. What re-verifies the snapshot against the live gate is the scheduled
-    ``--live`` job in ci-pr-hygiene.yml — see
-    ``test_the_snapshot_is_reverified_by_a_scheduled_live_read`` — and the
-    literal above is that job's human-readable statement of what it proved.
+    date. Nothing re-verifies the snapshot against the live gate on a clock —
+    the guard compares the snapshot with the writer script that applies it, and
+    the ``--live`` read against the inventory — so the literal above is a dated
+    statement of what was true then, and a human runs the live read. See
+    ``test_the_rejected_app_credential_design_stays_deleted``.
     """
     assert guard.read_contexts_file(CONTEXTS) == LIVE_CONTEXTS
 
@@ -178,9 +178,7 @@ def test_declaring_a_check_required_that_the_gate_does_not_hold_fails() -> None:
     merge and branch protection disagrees."""
     inventory, tracked = guard.load_inventory(INVENTORY)
     mutated = [
-        dataclasses.replace(c, enforcement="required")
-        if c.context == "gitleaks-scan"
-        else c
+        dataclasses.replace(c, enforcement="required") if c.context == "gitleaks-scan" else c
         for c in inventory
     ]
 
@@ -236,9 +234,7 @@ def test_requiring_gitleaks_without_a_path_filter_does_not_stall() -> None:
     findings = _run(*guard.load_inventory(INVENTORY), contexts)
 
     assert "policy.stall" not in _codes(findings)
-    facts = guard.read_workflow_facts(
-        guard.WORKFLOWS_DIR / "security-gitleaks.yml", "develop"
-    )
+    facts = guard.read_workflow_facts(guard.WORKFLOWS_DIR / "security-gitleaks.yml", "develop")
     assert facts.path_filter is None
 
 
@@ -466,6 +462,17 @@ def test_a_branches_ignore_glob_that_does_not_match_is_reachable(tmp_path: Path)
     assert guard.read_workflow_facts(path, "develop").reports_on_develop_pr("develop") == (True, "")
 
 
+def test_an_unreadable_branches_ignore_filter_fails_closed(tmp_path: Path) -> None:
+    """A filter nobody could read is a filter nobody can rule out, so the rule
+    fails closed the same way an unreadable `types:` value does. Reading it as
+    "absent" would call the check reachable on the strength of a value that was
+    never understood."""
+    path = _synthetic_workflow(tmp_path, "t.yml", "    branches-ignore: develop\n")
+    reachable, reason = guard.read_workflow_facts(path, "develop").reports_on_develop_pr("develop")
+    assert not reachable
+    assert "unreadable" in reason
+
+
 def test_a_branches_ignore_filter_on_a_required_context_is_a_stall(tmp_path: Path) -> None:
     """`branches` was already checked; `branches-ignore` is the same filter spelled
     as an exclusion, and skipping it left a required check silently unreportable."""
@@ -561,7 +568,7 @@ def test_an_inventory_entry_naming_an_untracked_workflow_is_a_finding(tmp_path: 
 
 def test_an_untracked_workflow_that_cannot_be_parsed_is_reported_not_raised(tmp_path: Path) -> None:
     """Raising would hand any untracked workflow file a veto over the guard — and
-    most of the 45 untracked files are not policy surfaces."""
+    most of the 58 untracked files are not policy surfaces."""
     root = _workflows_copy(tmp_path)
     (root / "broken.yml").write_text("on: [this is not a mapping\n", encoding="utf-8")
     _inventory, tracked = guard.load_inventory(INVENTORY)
@@ -672,9 +679,7 @@ def test_a_known_gap_suppresses_reachability_only_while_the_entry_is_ungated() -
     the entry stays advisory. Promote it and the gap becomes a `policy.stall`
     again, which is the whole point: the acceptance expires at promotion."""
     inventory, tracked = guard.load_inventory(INVENTORY)
-    reporter = next(
-        c for c in inventory if c.context == "Workflow secret references (PR reporter)"
-    )
+    reporter = next(c for c in inventory if c.context == "Workflow secret references (PR reporter)")
     assert reporter.known_gap, "the gap this workflow really has must be recorded"
     facts = guard.read_workflow_facts(
         guard.WORKFLOWS_DIR / "security-workflow-secret-refs.yml", "develop"
@@ -708,33 +713,52 @@ def test_a_gated_by_that_is_not_in_the_live_gate_is_a_finding() -> None:
     assert "actionlint" in _subjects(findings, "policy.bad-gated-by")
 
 
-# The snapshot has to be re-checked against reality on a clock.
+# The live gate is read by a human, not by a job. Nothing may quietly put the
+# rejected credential design back.
 
 
-def test_the_snapshot_is_reverified_by_a_scheduled_live_read() -> None:
-    """Nothing re-reads the live gate, so invisible drift is the failure mode the
-    renamed tautological test used to hide.
+def test_the_rejected_app_credential_design_stays_deleted() -> None:
+    """The GitHub App design was rejected on 2026-10-07: its manifest, its
+    minting script and its tests were deleted by that same change. The
+    credential the registry actually names is a fine-grained PAT
+    (`POLICY_CHECK_READER_TOKEN`, docs/ops/policy-check-credential.md), and it
+    needs no app id and no installation id.
 
-    Rides the existing digithings-cron dispatch rather than an `on.schedule:`
-    trigger, which tests/scripts/test_no_gha_schedules.py forbids, and is unnamed
-    so it does not become a policy surface the inventory has to list.
+    A job that reads the deleted design can never work: the minting script does
+    not exist, and the secret it wanted was never provisioned. So no workflow
+    may name any of it again.
     """
-    doc = yaml.safe_load(PR_HYGIENE_YML.read_text(encoding="utf-8"))
-    job = doc["jobs"]["policy-gate-live"]
-    assert "name" not in job, "a named job is a policy surface and must be declared"
-    assert job["if"] == "github.event_name == 'workflow_dispatch'"
-    assert "needs" not in job, "depending on the PR-only path-filter would skip this forever"
-    assert job["environment"] == "cron", (
-        "without it secrets.* resolves empty and the read never runs"
+    banned = (
+        "mint_policy_check_token",
+        "POLICY_CHECK_APP_PRIVATE_KEY",
+        "POLICY_CHECK_APP_ID",
+        "POLICY_CHECK_INSTALLATION_ID",
     )
-    script = job["steps"][-1]["run"]
-    assert "scripts/check_required_policy_checks.py --live" in script
-    # An absent credential is unvalidated, never a failure — a canary that starts
-    # red because it cannot read a secret is how a check becomes a silent stop.
-    assert "::notice" in script and "exit 0" in script
+    for path in sorted(WORKFLOWS_DIR.glob("*.yml")):
+        text = path.read_text(encoding="utf-8")
+        for name in banned:
+            assert name not in text, f"{path.name} still uses the rejected design: {name}"
+    assert not (REPO_ROOT / "scripts" / "mint_policy_check_token.py").exists()
 
+
+def test_no_workflow_claims_to_re_read_the_live_gate() -> None:
+    """The gap is real and is named in prose, not papered over with a job that
+    cannot run: the workflow that would carry it is disabled on GitHub by the
+    2026-10-14 cost lock and its digithings-cron row is `enabled: false`. A
+    check that rides a deliberately silent lane reports nothing, and the
+    `secrets_audit.py` red it caused is a canary that is red for the wrong
+    reason.
+    """
+    for path in sorted(WORKFLOWS_DIR.glob("*.yml")):
+        text = path.read_text(encoding="utf-8")
+        assert "check_required_policy_checks.py --live" not in text, (
+            f"{path.name} runs the live gate; nothing re-reads it on a clock today"
+        )
     cron = (REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts").read_text(encoding="utf-8")
-    assert 'wd("ci-pr-hygiene"' in cron, "the dispatch this rides must still be scheduled"
+    assert 'wd("ci-pr-hygiene"' in cron, "the dispatch row itself must still be there"
+    assert "ci-pr-hygiene" in cron and "enabled: false" in cron, (
+        "the ci-pr-hygiene clock is held off; a job added to it would never run"
+    )
 
 
 def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() -> None:
@@ -1052,8 +1076,6 @@ def test_the_cli_fails_when_the_writer_and_snapshot_drift(tmp_path: Path) -> Non
     assert "writer.snapshot-drift" in proc.stdout
 
 
-
-
 # ── DIG-2237 C-1: review horizons on the issue-alone advisories ───────────────
 
 #: The three advisory entries whose only support is `issue:` (DIG-2098 rev 8,
@@ -1089,9 +1111,7 @@ def test_a_past_review_by_is_a_warning_not_a_finding() -> None:
     inventory, tracked = guard.load_inventory(INVENTORY)
     assert _run(inventory, tracked, LIVE_CONTEXTS) == []
     aged = [
-        dataclasses.replace(c, review_by="2000-01-01")
-        if c.context == "Validate PR title"
-        else c
+        dataclasses.replace(c, review_by="2000-01-01") if c.context == "Validate PR title" else c
         for c in inventory
     ]
     assert guard.stale_advisories(aged) != []

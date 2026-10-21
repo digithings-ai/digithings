@@ -33,7 +33,7 @@ list disagree:
     nowhere. It runs, it goes red, and merges continue. Four of these exist
     right now (gitleaks, PR hygiene, PR title, and, on main,
     review coverage); they are declared in the inventory so they are visible in
-    one place instead of inferred from 53 workflow files. (DCO sign-off was a
+    one place instead of inferred from 66 workflow files. (DCO sign-off was a
     fifth until Chris dropped it entirely on 2026-10-15, DIG-3845.)
   * **untracked producer** — ``tracked_workflows`` is a hand-maintained
     allowlist, and an allowlist with no completeness check is not an inventory.
@@ -204,6 +204,10 @@ class WorkflowFacts:
     #: ``pull_request.branches-ignore``, which removes the workflow from the
     #: stated branches rather than restricting it to them.
     branch_ignore: list[str] | None = None
+    #: True when ``pull_request.branches-ignore`` is declared but unreadable.
+    #: A filter nobody could read is a filter nobody can rule out, so the
+    #: rule fails closed rather than treating it as absent.
+    branch_ignore_unreadable: bool = False
     #: ``pull_request.types``. ``None`` means the key is absent, which GitHub
     #: reads as DEFAULT_PR_TYPES, so an absent key is reachable. A declared
     #: list missing any of ``DEFAULT_PR_TYPES`` is not.
@@ -227,6 +231,13 @@ class WorkflowFacts:
                 f"the workflow-level `pull_request:` branches filter "
                 f"({self.branch_filter}) does not include `{branch}`, so this check "
                 f"never reports on a PR into `{branch}`"
+            )
+        if self.branch_ignore_unreadable:
+            return False, (
+                "the workflow-level `pull_request:` branches-ignore filter is "
+                "declared but unreadable, so it cannot be shown that it excludes "
+                f"nothing: this check may never report on a PR into `{branch}`. "
+                "Make it a list of patterns, or drop it"
             )
         if self.branch_ignore is not None and _branch_matches(branch, self.branch_ignore):
             return False, (
@@ -315,9 +326,14 @@ def read_workflow_facts(path: Path, branch: str) -> WorkflowFacts:
     branches = pr.get("branches")
     if isinstance(branches, list):
         facts.branch_filter = [str(b) for b in branches]
-    ignored = pr.get("branches-ignore")
-    if isinstance(ignored, list):
-        facts.branch_ignore = [str(b) for b in ignored]
+    if "branches-ignore" in pr:
+        ignored = pr["branches-ignore"]
+        if isinstance(ignored, list):
+            facts.branch_ignore = [str(b) for b in ignored]
+        else:
+            # A filter nobody could read is a filter nobody can rule out, so it
+            # fails closed the same way an unreadable `types:` value does.
+            facts.branch_ignore_unreadable = True
     # A declared `types:` list is the whole reachability story, because for
     # `pull_request` `GITHUB_SHA` is the last merge commit on the PR merge branch
     # and a required context has to report against that commit for the PR to ever
@@ -616,7 +632,7 @@ def reconcile(
     # Untracked workflows are parsed so that producer resolution can name the file
     # that actually reports a context. They are deliberately *not* candidates for
     # `policy.ungated`: an untracked workflow is by definition not yet declared to
-    # be a policy surface, and reporting all 45 of them would bury the real
+    # be a policy surface, and reporting all 58 of them would bury the real
     # finding under noise nobody would read.
     untracked_facts = untracked_facts or {}
 

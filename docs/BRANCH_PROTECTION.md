@@ -143,7 +143,7 @@ not overlap; dropping the old one would leave a real hole.
 
 ### Completeness: `tracked_workflows` is an allowlist, not the scope
 
-`.github/policy-checks.yml` tracks 8 of the 53 workflow files — the ones with policy
+`.github/policy-checks.yml` tracks 8 of the 66 workflow files — the ones with policy
 surfaces. That is the right size, but an allowlist nobody checks for completeness is not an
 inventory: a brand-new workflow carrying a real gate would be out of scope by construction,
 and `policy.untracked-producer` would never be raised.
@@ -153,11 +153,11 @@ live or declared context, and fails when the producer is untracked — including
 producer is untracked *and* cannot report, which previously drew `policy.undeclared-gate`
 and then stopped, giving the wrong diagnosis on exactly the case `gitleaks-scan` exists to
 exercise. Adding a workflow is therefore not free: either name it in `tracked_workflows`, or
-do not give any of its jobs a `name:`. Migrating all 53 is not the answer and is not
+do not give any of its jobs a `name:`. Migrating all 66 is not the answer and is not
 required.
 
 An untracked file that will not parse is reported (`policy.unreadable-workflow`), not
-raised — otherwise any of the 45 untracked workflows could take the guard down with an
+raised — otherwise any of the 58 untracked workflows could take the guard down with an
 unreadable error instead of a diagnosis. A **tracked** file that will not parse still
 raises, because a tracked file is a declared surface.
 
@@ -175,39 +175,51 @@ workflow can read it. The snapshot is only trustworthy if it is updated in the s
 change as the protection itself — run `--live` after any manual branch-protection edit
 and commit the difference, or the guard is checking a fiction.
 
-### Re-verifying the snapshot on a clock
+### Keeping the snapshot true
 
 Doing that by hand leaves one gap: nothing catches a branch-protection edit that nobody ran
 `--live` after. The PR path cannot close it, because `GITHUB_TOKEN` cannot read branch
 protection at all, so putting the read on the PR path would mean putting a human-only
 credential in front of every merge.
 
-So it runs on a schedule instead. The `policy-gate-live` job in
-[`ci-pr-hygiene.yml`](../.github/workflows/ci-pr-hygiene.yml) mints a
-[`policy-check-reader`](../docs/ops/policy-check-credential.md) installation token, exports
-it as `GH_TOKEN`, and runs the guard with `--live`, failing when the snapshot and the live
-gate disagree. Three deliberate choices:
+**Nothing closes that gap today, and this section says so instead of pretending otherwise.**
+An earlier draft of this work carried a `policy-gate-live` job in
+[`ci-pr-hygiene.yml`](../.github/workflows/ci-pr-hygiene.yml) that was meant to run the
+`--live` read on a clock. It was removed, for three reasons that are all still true:
 
-- **It rides the existing `digithings-cron` dispatch** (`jobs.ts`, daily 06:21 UTC,
-  `workflow_dispatch` against `develop`) rather than adding an `on.schedule:` trigger, which
-  `tests/scripts/test_no_gha_schedules.py` forbids.
-- **The job is unnamed.** A job with a `name:` is a policy surface that the inventory must
-  list, and a check that reads branch protection must never appear on the PR path.
-- **`environment: cron` is declared on it.** Without that, `secrets.*` resolves to empty
-  rather than to the key, so the read would fail as "no key" and never as "permission
-  denied".
+- **It could never run.** The workflow it lived in is `disabled_manually` on GitHub since
+  the 2026-10-14 cost lock, and its `digithings-cron` row is `enabled: false`
+  (`apps/digithings-cron/src/jobs.ts`). A job on a lane that is deliberately silent is a job
+  that reports nothing.
+- **Its credential design was rejected.** It read `POLICY_CHECK_APP_PRIVATE_KEY` /
+  `POLICY_CHECK_APP_ID` / `POLICY_CHECK_INSTALLATION_ID` and called
+  `scripts/mint_policy_check_token.py` — the GitHub App design that was **rejected on
+  2026-10-07**, whose manifest, minting script and tests were deleted by that same change.
+  The credential the registry actually names is a fine-grained PAT stored as
+  `POLICY_CHECK_READER_TOKEN` (see
+  [`docs/ops/policy-check-credential.md`](../docs/ops/policy-check-credential.md)), and it
+  needs no app id and no installation id.
+- **It would have been a red run, not a check.** The secret it read is not provisioned (the
+  `cron` environment holds no secrets at all) and creating it needs `Administration: write`,
+  which is Chris-only on this one-member org. A canary that starts red because it cannot
+  read its own secret is how a check becomes a silent stop.
 
-An **absent credential is reported as unvalidated, never as a failure** — the job posts
-`::notice` and exits 0. A canary that starts red because it cannot read its own secret is
-how a check becomes a silent stop, which is what happened to the token canary in #2541. A
-present credential that disagrees with the snapshot *is* a failure.
+**What the guard does check, mechanically.** `scripts/check_required_policy_checks.py` always
+compares the committed snapshot against `scripts/set-branch-protection.sh` — the writer that
+applies it — and fails when the two disagree, so the snapshot and the writer cannot drift
+apart. What it does *not* do is compare the snapshot with the live gate: under `--live` the
+guard reconciles the **live** context set against the **inventory** in
+`.github/policy-checks.yml` (in both directions — a required context that is missing from
+the gate, and a live context that the inventory never declares), and separately checks the
+snapshot against the writer. So a hand edit of branch protection shows up as a drift between
+the live set and the inventory, while a hand edit of the snapshot alone shows up as a drift
+between the snapshot and the writer. Only the combination of both checks is a proof that the
+three agree, and running them is a human step today.
 
-> **Not yet provisioned.** The `policy-check-reader` App, the `cron`-scoped
-> `POLICY_CHECK_APP_PRIVATE_KEY` secret and the `POLICY_CHECK_APP_ID` /
-> `POLICY_CHECK_INSTALLATION_ID` variables do not exist yet (the `cron` environment holds
-> no secrets at all), and creating the App needs `Administration: write`, which is
-> Chris-only on this one-member org. Until they exist the job notices and exits 0 on every
-> run. Provisioning is tracked on DIG-2237; nothing else here depends on it.
+**When the credential is provisioned**, the automated live read belongs in its own workflow
+with its own clock row, against the PAT the registry names — not in a job riding a disabled
+lane. That is a separate piece of work with a human gate, not a follow-up hidden in this
+change.
 
 ### Declaring a new policy check
 
@@ -239,8 +251,11 @@ rather than a fact. `advisory` with none of the three raises.
 There is a separate, narrower field for a gap that is **accepted on purpose**: `known_gap:`.
 It suppresses the reachability finding for that entry while the entry is ungated, and stops
 applying the moment the entry reaches the live gate — at that point the check really does
-have to report, so the accepted gap has expired. `gitleaks-scan` is the only entry with one
-today.
+have to report, so the accepted gap has expired. **`Workflow secret references (PR reporter)`
+is the only entry with one today**: it lives in its own path-filtered workflow, so it does
+not report on every PR shape while it stays advisory, and the day it is promoted the gap
+closes. (`gitleaks-scan` used to be the carrier; its own `paths-ignore` was removed upstream
+in #5318, so that gap is gone.)
 
 A job counts as a policy surface when it has an explicit `name:`. A job without one
 reports under its job id and is folded into an aggregator instead. Naming a job makes it
