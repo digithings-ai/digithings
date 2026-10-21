@@ -316,3 +316,266 @@ def test_a_live_registry_with_a_scalar_backend_is_refused_by_name():
     with pytest.raises(registry.RegistryRefusal) as refusal:
         registry.compose_registry(broken, {})
     assert "backend must be an object" in str(refusal.value)
+
+
+# ---------------------------------------------------------------------------
+# The Workers KV copy
+# ---------------------------------------------------------------------------
+
+# A fake Workers KV copy of the registry. It holds credential references by
+# name, never values, exactly like the live copy.
+KV_LIVE = {
+    "occ.digithings.ai": {
+        "slug": "occ",
+        "gateMode": "ungated",
+        "webSearch": False,
+        "tokenEnv": "OCC_INVITE_KEY",
+        "lockSessionControls": True,
+        "backend": {
+            "type": "digigraph",
+            # Synthetic corpus routing, as in the legacy fixture above.
+            "digisearchIndex": "tenant_corpus",
+            "vaultPathPrefix": "clients/tenant-vault",
+        },
+        "mcp": {"servers": [{"id": "operator", "tokenEnv": "MCP_EDGE_KEY"}]},
+        "tools": {"catalog": [{"id": "digisearch"}]},
+        # The defect: a models section opens the model picker for a client
+        # tenant. DIG-4486 refused the picker and DIG-4750 confirmed it.
+        "models": {
+            "default": "house/model",
+            "available": ["house/model", "other/model"],
+            "allowPicker": True,
+        },
+    },
+}
+
+
+def test_the_kv_compose_removes_the_occ_models_section():
+    """The KV copy is the copy that is served, so it must carry no models."""
+    composed, report = registry.compose_kv_registry(KV_LIVE, {})
+    occ = composed["occ.digithings.ai"]
+    assert "models" not in occ
+    assert "occ.digithings.ai.models" in report["removed_paths"]
+    assert "occ.digithings.ai.models" in report["changed_paths"]
+
+
+def test_the_kv_compose_keeps_the_credential_reference_and_never_a_value():
+    composed, _ = registry.compose_kv_registry(KV_LIVE, {})
+    occ = composed["occ.digithings.ai"]
+    assert occ["tokenEnv"] == "OCC_INVITE_KEY"
+    assert "token" not in occ
+    assert occ["mcp"]["servers"][0]["tokenEnv"] == "MCP_EDGE_KEY"
+    assert "token" not in occ["mcp"]["servers"][0]
+
+
+def test_the_kv_compose_keeps_the_base_corpus_routing_when_the_overlay_omits_it():
+    overlay = {"occ.digithings.ai": {"backend": {"type": "digigraph"}}}
+    composed, _ = registry.compose_kv_registry(KV_LIVE, overlay)
+    backend = composed["occ.digithings.ai"]["backend"]
+    assert backend["digisearchIndex"] == KV_LIVE["occ.digithings.ai"]["backend"]["digisearchIndex"]
+    assert (
+        backend["vaultPathPrefix"] == (KV_LIVE["occ.digithings.ai"]["backend"]["vaultPathPrefix"])
+    )
+
+
+def test_the_kv_compose_never_adds_a_tenant_the_kv_copy_does_not_have():
+    overlay = {"occ.digithings.ai": {"slug": "occ"}, "digithings.ai": {"slug": "digithings"}}
+    composed, report = registry.compose_kv_registry(KV_LIVE, overlay)
+    assert sorted(composed) == ["occ.digithings.ai"]
+    assert report["hosts_only_in_overlay"] == ["digithings.ai"]
+
+
+def test_the_kv_compose_refuses_an_overlay_that_sets_models_for_the_occ_tenant():
+    overlay = {"occ.digithings.ai": {"models": {"allowPicker": True}}}
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_kv_registry(KV_LIVE, overlay)
+    assert "models" in str(refusal.value)
+
+
+def test_the_legacy_compose_refuses_an_overlay_that_sets_models_for_the_occ_tenant():
+    overlay = {"occ.digithings.ai": {"models": {"allowPicker": True}}}
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_registry(LIVE, overlay)
+    assert "models" in str(refusal.value)
+
+
+def test_the_legacy_compose_removes_a_models_section_the_live_copy_carries():
+    """A live copy that carries one is a defect, so it is removed."""
+    broken = json.loads(json.dumps(LIVE))
+    broken["occ.digithings.ai"]["models"] = {"allowPicker": True}
+    composed, report = registry.compose_registry(broken, {})
+    assert "models" not in composed["occ.digithings.ai"]
+    assert "occ.digithings.ai.models" in report["removed_paths"]
+
+
+def test_the_kv_compose_refuses_a_kv_copy_that_carries_a_token_value():
+    broken = json.loads(json.dumps(KV_LIVE))
+    broken["occ.digithings.ai"]["token"] = "tok-occ"
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_kv_registry(broken, {})
+    assert "references by name only" in str(refusal.value)
+
+
+def test_the_kv_compose_refuses_an_overlay_that_may_not_set_the_occ_corpus():
+    overlay = {"occ.digithings.ai": {"backend": {"digisearchIndex": "other_index"}}}
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_kv_registry(KV_LIVE, overlay)
+    assert "may not set digisearchIndex" in str(refusal.value)
+
+
+def test_a_kv_copy_without_a_corpus_for_the_occ_tenant_is_refused():
+    broken = json.loads(json.dumps(KV_LIVE))
+    del broken["occ.digithings.ai"]["backend"]["digisearchIndex"]
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_kv_registry(broken, {})
+    assert "does not route" in str(refusal.value)
+
+
+def test_the_kv_plan_names_the_key_and_never_prints_a_value():
+    composed, report = registry.compose_kv_registry(KV_LIVE, {})
+    plan = registry.render_kv_plan(composed, report, "kv", "overlay", "embed-tenants", "ns-id")
+    assert "embed-tenants" in plan
+    assert "ns-id" in plan
+    assert "occ.digithings.ai.models" in plan
+    assert "OCC_INVITE_KEY" not in plan
+
+
+def test_the_namespace_id_is_read_from_the_worker_config(tmp_path):
+    config = tmp_path / "wrangler.toml"
+    config.write_text(
+        'name = "worker"\n'
+        "\n"
+        "[[kv_namespaces]]\n"
+        'binding = "DIGICHAT_TENANTS_KV"\n'
+        'id = "namespace-under-test"\n'
+        "\n"
+        "[vars]\n"
+        'SOMETHING = "else"\n',
+        encoding="utf-8",
+    )
+    assert registry.kv_namespace_id(str(tmp_path)) == "namespace-under-test"
+    assert registry.kv_namespace_id(str(tmp_path), "OTHER_BINDING") is None
+
+
+def test_the_namespace_id_is_unknown_when_the_config_cannot_be_read(tmp_path):
+    assert registry.kv_namespace_id(str(tmp_path / "missing")) is None
+
+
+def test_the_kv_document_travels_as_a_file_and_not_as_a_value(monkeypatch):
+    """A command line is readable by every local process through ps."""
+    seen = {}
+
+    def fake_run(argv, cwd=None, stdin_text=None):
+        seen["argv"] = list(argv)
+        return 0, ""
+
+    monkeypatch.setattr(registry, "_run", fake_run)
+    temp = registry.write_temp_json({"occ.digithings.ai": {"slug": "occ"}})
+    try:
+        code, _out = registry.kv_key_put("embed-tenants", "ns-id", temp, ["wrangler"], ".")
+    finally:
+        os.unlink(temp)
+    assert code == 0
+    assert "--path" in seen["argv"]
+    assert temp in seen["argv"]
+    assert "embed-tenants" in seen["argv"]
+
+
+def test_the_apply_writes_the_kv_copy_before_the_legacy_secret(tmp_path, monkeypatch):
+    """The legacy secret alone changes nothing that is served.
+
+    The KV copy wins for a tenant whose credential references resolve, so
+    the KV copy is written first and the container is recycled last.
+    """
+    live = tmp_path / "live.json"
+    live.write_text(json.dumps(LIVE), encoding="utf-8")
+    kv = tmp_path / "kv.json"
+    kv.write_text(json.dumps(KV_LIVE), encoding="utf-8")
+    overlay = tmp_path / "overlay.json"
+    overlay.write_text(json.dumps({"occ.digithings.ai": {"slug": "occ"}}), encoding="utf-8")
+    key_file = tmp_path / "admin-key.txt"
+    key_file.write_text("admin-key-value\n", encoding="utf-8")
+
+    calls = []
+    documents = []
+
+    def fake_run(argv, cwd=None, stdin_text=None):
+        calls.append(list(argv))
+        if "--path" in argv:
+            path = argv[argv.index("--path") + 1]
+            with open(path, "r", encoding="utf-8") as handle:
+                documents.append(handle.read())
+        return 0, "\nhttp_code=200\n"
+
+    monkeypatch.setattr(registry, "_run", fake_run)
+    code = registry.main(
+        [
+            "apply",
+            "--live-from",
+            str(live),
+            "--kv-from",
+            str(kv),
+            "--kv-namespace-id",
+            "ns-id",
+            "--overlay",
+            str(overlay),
+            "--admin-key-file",
+            str(key_file),
+            "--worker-dir",
+            str(tmp_path),
+            "--confirm",
+            "APPLY",
+        ]
+    )
+    assert code == 0
+    kinds = []
+    for argv in calls:
+        if argv[0] == "curl":
+            kinds.append("recycle")
+        elif "secret" in argv:
+            kinds.append("secret")
+        elif "kv" in argv:
+            kinds.append("kv")
+    assert kinds == ["kv", "secret", "recycle"]
+    # The KV document that was written carries no models section and no
+    # credential value.
+    assert len(documents) == 1
+    document = json.loads(documents[0])
+    assert "models" not in document["occ.digithings.ai"]
+    assert "token" not in document["occ.digithings.ai"]
+
+
+def test_the_apply_refuses_a_kv_copy_that_carries_a_token_value(tmp_path, monkeypatch):
+    live = tmp_path / "live.json"
+    live.write_text(json.dumps(LIVE), encoding="utf-8")
+    broken = json.loads(json.dumps(KV_LIVE))
+    broken["occ.digithings.ai"]["token"] = "tok-occ"
+    kv = tmp_path / "kv.json"
+    kv.write_text(json.dumps(broken), encoding="utf-8")
+    overlay = tmp_path / "overlay.json"
+    overlay.write_text(json.dumps({"occ.digithings.ai": {"slug": "occ"}}), encoding="utf-8")
+
+    calls = []
+
+    def fake_run(argv, cwd=None, stdin_text=None):
+        calls.append(list(argv))
+        return 0, "\nhttp_code=200\n"
+
+    monkeypatch.setattr(registry, "_run", fake_run)
+    code = registry.main(
+        [
+            "apply",
+            "--live-from",
+            str(live),
+            "--kv-from",
+            str(kv),
+            "--kv-namespace-id",
+            "ns-id",
+            "--overlay",
+            str(overlay),
+            "--confirm",
+            "APPLY",
+        ]
+    )
+    assert code == 2
+    assert calls == []
