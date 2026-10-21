@@ -467,6 +467,14 @@ services:
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
       - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      # The MCP server binds every interface INSIDE the container. The host
+      # publish is 127.0.0.1:8765, and a server listening on the container's
+      # own loopback is unreachable through a published port: the host curl
+      # answers nothing at all, and the other containers cannot reach it by
+      # service name (the OCC embed config uses
+      # http://digisearch-mcp:8765/mcp). The host side stays on loopback.
+      # Override in the root .env; the value here is the default.
+      - DIGISEARCH_MCP_HOST=${DIGISEARCH_MCP_HOST:-0.0.0.0}
       # Monitor store home: the same store the digisearch service uses, on the
       # same volume. The MCP server creates watches in it, and a store of its
       # own would lose every watch on the next recreate.
@@ -495,7 +503,12 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
-      # Loopback by default; set DIGIVAULT_MCP_HOST in .env for published-port access.
+      # The MCP server binds every interface INSIDE the container, so the
+      # published port 127.0.0.1:8769 answers and the other containers can
+      # reach it by service name (http://digivault-mcp:8769/mcp). The host
+      # side stays on loopback. Override in the root .env; the value here is
+      # the default.
+      - DIGIVAULT_MCP_HOST=${DIGIVAULT_MCP_HOST:-0.0.0.0}
     volumes:
       - digivault_data:/data/vault
 

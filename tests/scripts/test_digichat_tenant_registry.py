@@ -13,6 +13,7 @@ pytestmark = pytest.mark.unit
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "digichat_tenant_registry.py"
 STAGED = REPO / "infra" / "digichat-release" / "DIG-3556-staged-prod-tenant-config.json"
+OCC_ONLY = REPO / "infra" / "digichat-release" / "DIG-4488-occ-tenant-overlay.json"
 
 
 def _load_module():
@@ -66,6 +67,11 @@ def _staged_overlay():
         return json.load(handle)
 
 
+def _occ_only_overlay():
+    with OCC_ONLY.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
 def test_compose_keeps_every_live_tenant_and_token():
     overlay = {"digithings.ai": {"backend": {"digisearchIndex": "digithings_docs"}}}
     composed, report = registry.compose_registry(LIVE, overlay)
@@ -115,6 +121,58 @@ def test_the_repo_overlay_carries_the_occ_tenant():
     assert "occ.digithings.ai" in overlay
     assert "token" not in overlay["occ.digithings.ai"]
     assert "mcp" not in overlay["occ.digithings.ai"]
+
+
+def test_the_occ_only_overlay_carries_one_tenant_and_no_credential():
+    """The OCC-only overlay is the scoped apply: the OCC tenant, and nothing else."""
+    overlay = registry.load_registry(_occ_only_overlay(), str(OCC_ONLY))
+    assert sorted(overlay) == ["occ.digithings.ai"]
+    entry = overlay["occ.digithings.ai"]
+    assert "token" not in entry
+    assert "tokenEnv" not in entry
+    assert "mcp" not in entry
+    assert "models" not in entry
+    backend = entry.get("backend") or {}
+    assert "digisearchIndex" not in backend
+    assert "vaultPathPrefix" not in backend
+
+
+def test_the_occ_only_overlay_carries_the_overlay_note():
+    """An operator who opens only this file reads that it is an overlay.
+
+    The note is a sibling of the tenant payload, so the composer never reads
+    it: Guard 3 refuses an unknown key inside a tenant entry.
+    """
+    document = _occ_only_overlay()
+    note = document.get("DIGICHAT_EMBED_TENANTS_note")
+    assert isinstance(note, str)
+    assert "OVERLAY, not the registry" in note
+    assert "Never write this file to the worker secret" in note
+
+    overlay = registry.load_registry(document, str(OCC_ONLY))
+    assert sorted(overlay) == ["occ.digithings.ai"]
+    assert "DIGICHAT_EMBED_TENANTS_note" not in overlay["occ.digithings.ai"]
+
+    composed, report = registry.compose_registry(LIVE, overlay)
+    assert sorted(composed) == sorted(LIVE)
+    assert report["changed_paths"] == []
+
+
+def test_the_occ_only_overlay_leaves_the_digithings_tenant_alone():
+    overlay = registry.load_registry(_occ_only_overlay(), str(OCC_ONLY))
+    composed, report = registry.compose_registry(LIVE, overlay)
+    assert sorted(composed) == sorted(LIVE)
+    assert composed["digithings.ai"] == LIVE["digithings.ai"]
+    assert composed["digiquant.io"] == LIVE["digiquant.io"]
+    assert not [p for p in report["changed_paths"] if p.startswith("digithings.ai")]
+
+
+def test_the_occ_only_overlay_removes_the_models_section_from_the_kv_copy():
+    overlay = registry.load_registry(_occ_only_overlay(), str(OCC_ONLY))
+    composed, report = registry.compose_kv_registry(KV_LIVE, overlay)
+    assert "models" not in composed["occ.digithings.ai"]
+    assert "occ.digithings.ai.models" in report["removed_paths"]
+    assert composed["occ.digithings.ai"]["tokenEnv"] == "OCC_INVITE_KEY"
 
 
 def test_overlay_with_a_token_is_refused():

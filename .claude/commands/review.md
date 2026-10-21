@@ -113,12 +113,26 @@ labelled as one.
    for ordinary service-scope findings whole-service blast radius means Medium is the
    floor ([CODE_REVIEW_POLICY.md § Severity is blast radius](docs/agents/CODE_REVIEW_POLICY.md)).
 
-4. **Post the findings**, even when there are none. The comment MUST open with this
-   exact marker or the gate will refuse the label:
+4. **Post the findings**, even when there are none. The comment MUST open with these
+   two exact markers or the gate will refuse the label:
 
    ```
    <!-- in-session-review -->
+   <!-- digithings-review agent=<your Paperclip agent id> run=<your Paperclip run id> head=<the PR's head sha> -->
    ```
+
+   The first marker is the claim that a review ran. The second one is the
+   provenance the merge queue reads: which seat reviewed, in which run, and on
+   which head. Fill it from the environment and from GitHub, never by hand:
+
+   ```bash
+   gh pr view <N> --json headRefOid --jq .headRefOid
+   ```
+
+   `agent` is `$PAPERCLIP_AGENT_ID`, `run` is `$PAPERCLIP_RUN_ID`, and `head` is
+   the sha the command above prints. A marker whose seat, run or head is wrong —
+   or missing — is dropped by the queue, and the PR waits for another seat's
+   review.
 
    Then: what was checked, the confirmed findings most-severe-first with
    `file:line` and the evidence, and what was checked and found clean. If nothing
@@ -127,6 +141,12 @@ labelled as one.
    ```bash
    gh pr comment <N> --body-file /path/to/findings.md
    ```
+
+   **The authoring seat's own review of its own PR does not count.** The queue
+   drops a marker that came from the seat that owns the PR's ticket, and a marker
+   posted while that seat's run on that ticket was still active — which is how a
+   seat's own subagent review is caught too. If you opened the PR, hand it to
+   another seat.
 
 5. **Label it** so `ci-review-coverage.yml` can see it:
 

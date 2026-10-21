@@ -11,7 +11,7 @@
     "landing mid-unrelated-work.",
 
     "branchPrefix MUST stay under chore/. Two repo gates depend on it: the",
-    "module-branch-protection ruleset requires {feat,fix,docs,chore}/<slug>, and",
+    "module-branch-protection ruleset requires {feat,fix,docs,chore,revert}/<slug>, and",
     "ci-pr-hygiene.yml's linkage check bypasses chore/* — a bot PR cannot carry a",
     "Fixes #N. Renovate's default 'renovate/' prefix fails both gates.",
 

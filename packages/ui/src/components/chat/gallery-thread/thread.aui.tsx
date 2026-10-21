@@ -1174,8 +1174,17 @@ const AssistantMessage: FC = () => {
                 // The parts still render bare: a backend notice (DIG-4459)
                 // rides a data part and must not vanish with the header.
                 if (!holdsWork) return <>{children}</>;
-                // Quiet clients see one line for the whole chain instead of
-                // the two collapsibles.
+                // The chain is the one disclosure boundary: every work part
+                // nests under it (see `chainGroupBy`), so the level's fold
+                // rule here reaches a reasoning-only, a tool-only and a
+                // combined turn alike. The rows inside take their own rule
+                // from the same disclosure. See the decision note in
+                // packages/ui/ARCHITECTURE.md.
+                //
+                // The `hidden` level this branch served is retired: the
+                // `summaryOnly` field is always false now, and a quiet
+                // client gets the folded chain below instead of a summary
+                // line. The branch stays until the field goes.
                 if (disclosure.summaryOnly) {
                   return (
                     <div data-slot="aui_chain-of-thought">

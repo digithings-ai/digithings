@@ -16,7 +16,7 @@ Prefer **in-session** review on a **fresh-context subagent** (author session mus
 | digithings / Cursor | Same `/review` path (or equivalent fresh-context subagent). Optional: Bugbot / security-review when they fit. **Not** the CodeRabbit Cursor plugin `code-review` / `code-reviewer` skills. |
 | twelve-x / other org repos | Same idea: fresh subagent + findings posted on the PR |
 
-Post findings on the record (PR comment). digithings requires `<!-- in-session-review -->` + `reviewed:agent` for the coverage gate. The merge queue is a second, separate gate on the comment — see [Posted verdicts](#posted-verdicts-merge-queue-gate).
+Post findings on the record (PR comment). digithings requires `<!-- in-session-review -->` + `reviewed:agent` for the coverage gate, and a `<!-- digithings-review agent=… run=… head=… -->` provenance marker beside it for the merge queue's reviewer-independence gate — see [Reviewer independence](#reviewer-independence-merge-queue-gate). The merge queue is a second, separate gate on the comment — see [Posted verdicts](#posted-verdicts-merge-queue-gate).
 
 ## Posted verdicts (merge-queue gate)
 
@@ -39,9 +39,65 @@ Post that marker in a comment of its own. Do not paste this block into a comment
 - **Spelling.** `_normalise_verdict()` lowercases and turns `-` into `_`, so `changes-requested` is the same as `changes_requested`. It does not collapse spaces, so `verdict=changes requested` is not readable. Any other spelling is ignored.
 - **A missing or misspelled `verdict=` neither blocks nor clears.** The comment is skipped, so an earlier blocking verdict still stands.
 - **`scope=` must carry a full 40-character lowercase sha.** `_on_pr_history()` applies a blocking verdict only while that sha is the PR head or still in the PR's commits, and it compares the whole string, so a 7-character prefix is read and then never matches. A blocking verdict with no sha, with an uppercase sha, or with a sha that a force-push or rebase removed silently stops applying. Post a new verdict after the fix.
+- **A rebase drops the verdict that was posted against the old commits.** A rebase rewrites the commits, so the sha the verdict named is no longer among the PR's commits and the verdict stops applying — the same rebase sensitivity the reviewer-independence gate has on the author side, on the verdict side. "Post a new verdict after the fix" means after a rebase too: the verdict that counted was a verdict on code that no longer exists.
 - **The newest readable verdict wins.** A later `verdict=approved` clears an earlier block. The parser filters on no author and no association, so anyone who can comment on the PR can clear it — an approved marker is not evidence that a review happened. Check the comment thread before you merge.
 
 `verdict=` is not emitted by the marker producer yet (DIG-2281). Until it is, the gate only fires on a marker posted by hand — post it in a comment of its own.
+
+## Reviewer independence (merge-queue gate)
+
+A marker is a claim, and a claim can be self-issued. The merge queue counts a
+review marker as coverage only when the comment carries a provenance marker of its
+own, next to `<!-- in-session-review -->`:
+
+```html
+<!-- digithings-review agent=<paperclip-agent-uuid> run=<paperclip-run-uuid> head=<40-char-head-sha> -->
+```
+
+The first marker says a review ran; the second says which seat ran it, in which
+run, and on which head. Fill the values from the environment
+(`PAPERCLIP_AGENT_ID`, `PAPERCLIP_RUN_ID`) and from
+`gh pr view <N> --json headRefOid --jq .headRefOid` — never by hand.
+
+| Field | Effect |
+|-------|--------|
+| `agent=` | The seat that claims the review. The queue resolves the run to the seat that owned it and refuses a marker whose two disagree. |
+| `run=` | The Paperclip run the review came from. The queue reads `/api/heartbeat-runs/{run}`; a run the API does not know is refused. |
+| `head=` | The head the review covered. It must be the PR's current head; a marker naming an older head is refused. The sha may be written at any length of 7 characters or more and is read as a prefix of the head — post the full sha, but a short one still binds. |
+
+Two rules follow:
+
+- **The author's own seat does not count.** The seat that *wrote the PR's code*
+  cannot be the seat whose review counts — neither its own comment, nor a
+  subagent or same-session review it posted while its own run on that ticket was
+  still active. The author is read from the branch (the `Paperclip-Agent-Id:` and
+  `Paperclip-Run-Id:` commit trailers, and the runs on the PR's own ticket that
+  were open when the commits were written — the commit's author date, which a
+  rebase preserves), **not** from the ticket's assignee: owning the ticket is not
+  authorship, and a reviewer that owns the ticket still reviews. The author's run
+  window is not a veto on other seats — a review from another seat posted while the
+  author was still working counts.
+- **The head must be the current one.** A verdict on an older head says nothing
+  about the code the PR stands at now.
+
+The queue reads the **last** review marker on the PR, and the gate judges that
+one and no other. A stale last marker is a refusal, not a cue to look further
+back: the head only moves forward, so an earlier marker can only bind an older
+head, and the remedy is a new review — by another seat — not an older one.
+
+A marker that breaks either rule is **dropped**, not forgiven: the PR then fails
+the coverage gate and waits for a review from another seat, and the refusal names
+the head the queue expected. Every other marker on the PR is dropped with it, so
+no earlier review stands in for the failing one. A marker the queue could not
+judge at all — the Paperclip API could not be read, or the PR's authoring seat
+could not be identified from the branch — is dropped on the same terms. The gate
+measures in **shadow** mode while it rolls out (DIG-4809); see
+[MERGE_QUEUE.md § Reviewer independence](../MERGE_QUEUE.md#reviewer-independence).
+
+This is an **accountability record, not proof**: every seat pushes under one
+GitHub login, so GitHub cannot tell who typed a comment. The queue checks the
+declared provenance against the Paperclip record — not the keystroke. Per-seat
+GitHub identity is DIG-4803.
 
 ## Blocking verdicts
 
@@ -121,6 +177,12 @@ submits a review, so a tool review on its own leaves no verdict the gate can see
 either post a `verdict=` marker in a comment of its own (see
 [Posted verdicts](#posted-verdicts-merge-queue-gate)) or submit a
 `CHANGES_REQUESTED` review.
+
+The `<!-- digithings-review … -->` provenance marker is **not** this marker and is
+not third-party: it is the reviewing seat's own declaration, written on purpose
+next to `<!-- in-session-review -->` (see
+[Reviewer independence](#reviewer-independence-merge-queue-gate)). Do not carry
+provenance by adding fields to the power-pack marker.
 
 ## Metered third parties (quota)
 
