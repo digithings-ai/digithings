@@ -167,6 +167,13 @@ export type EmbedTenantConfig = {
    */
   showLanguageSelector?: boolean;
   /**
+   * When true, the composer seeds a known context window even if
+   * `models.available` is empty, so the existing context meter renders.
+   * Does not open the model picker. Explicit false turns it off, including
+   * for the house slugs that otherwise seed that window.
+   */
+  showContextMeter?: boolean;
+  /**
    * When true, this tenant pins the house default model and hides the
    * per-session model/MCP/tool controls: the X-Digi-Model header is ignored
    * (house default model) and digigraph hides session_set_model /
@@ -621,6 +628,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
     throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
   }
+  if (v.showContextMeter !== undefined && typeof v.showContextMeter !== "boolean") {
+    throw new Error(`${ctx}: showContextMeter must be a boolean`);
+  }
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
@@ -855,6 +865,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
+    ...(typeof v.showContextMeter === "boolean" ? { showContextMeter: v.showContextMeter } : {}),
     ...(v.lockSessionControls === true ? { lockSessionControls: true } : {}),
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
     view: v.view !== undefined ? normalizeViewMode(v.view) : undefined,

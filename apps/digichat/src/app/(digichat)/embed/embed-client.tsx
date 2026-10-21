@@ -46,6 +46,7 @@ import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/emb
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
+import { sessionModelSeed, showModelPicker } from "@/lib/session-model-seed";
 import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
   useBYOKKey,
@@ -553,12 +554,15 @@ function EmbedChat({
     ...DEFAULT_EMBED_CHAT_PREFS,
     // Start on the tenant's curated default so the first turn uses the model
     // the picker shows as selected (v4.1-flash on OCC) instead of falling
-    // through to the digigraph operator default. Only tenants that publish a
-    // list can be picked, so only they get a preselected value.
-    model:
-      stockClient.models.available.length > 0
-        ? stockClient.models.default?.trim() || stockClient.models.available[0] || ""
-        : "",
+    // through to the digigraph operator default. A host with an empty list
+    // still seeds a known window when the context meter is on for it, so the
+    // existing bar can render. The picker stays closed until a list is published.
+    model: sessionModelSeed({
+      slug: tenantCfg.slug,
+      available: stockClient.models.available,
+      defaultModel: stockClient.models.default,
+      showContextMeter: tenantCfg.showContextMeter,
+    }),
     language: tenantLanguage,
     view: stockClient.features.view,
     thinking: stockClient.features.thinking,
@@ -1190,9 +1194,11 @@ function EmbedChat({
 
   const catalog = stockClient.tools.catalog;
   const catalogTools = useMemo(() => catalogToolsFromClient(stockClient), [stockClient]);
-  const showModels =
-    (stockClient.models.allowPicker === true || stockClient.features.modelPicker === true) &&
-    stockClient.models.available.length > 0;
+  const showModels = showModelPicker({
+    allowPicker: stockClient.models.allowPicker,
+    featureModelPicker: stockClient.features.modelPicker,
+    available: stockClient.models.available,
+  });
   const prefsApi = useMemo<EmbedChatPrefsApi>(
     () => ({
       prefs: chatPrefs,

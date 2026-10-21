@@ -575,6 +575,12 @@ export const GateSchema = z
     lockedContact: z.string().optional(),
     showByok: z.boolean().optional(),
     showLanguageSelector: z.boolean().optional(),
+    /**
+     * Seed a known context window so the existing composer meter renders
+     * when this host publishes no model list. Does not open the picker.
+     * Omitted stays off, except the house slugs (see session-model-seed).
+     */
+    showContextMeter: z.boolean().optional(),
     lockSessionControls: z.boolean().optional(),
     /** Legacy embed field — also implies tools.catalog web_search when true */
     webSearch: z.boolean().optional(),

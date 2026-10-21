@@ -898,6 +898,57 @@ describe("parseEmbedTenants", () => {
     ).toThrow(/showLanguageSelector must be a boolean/);
   });
 
+  it("accepts showContextMeter and rejects a non-boolean", () => {
+    const on = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          showContextMeter: true,
+        },
+      }),
+    );
+    expect(on.get("example.com")?.showContextMeter).toBe(true);
+    const off = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          showContextMeter: false,
+        },
+      }),
+    );
+    expect(off.get("example.com")?.showContextMeter).toBe(false);
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            token: "t",
+            showContextMeter: "yes",
+          },
+        }),
+      ),
+    ).toThrow(/showContextMeter must be a boolean/);
+    const unset = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+        },
+      }),
+    );
+    expect(unset.get("example.com")?.showContextMeter).toBeUndefined();
+  });
+
   it("leaves showLanguageSelector undefined when unset", () => {
     const registry = parseEmbedTenants(
       JSON.stringify({

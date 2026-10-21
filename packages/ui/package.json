@@ -49,6 +49,7 @@
     "./chat/overlay-scrollbar": "./src/components/chat/overlay-scrollbar.tsx",
     "./chat/skins": "./src/components/chat/skins/index.ts",
     "./chat/skins/digichat": "./src/components/chat/skins/digichat.tsx",
+    "./chat/context-meter": "./src/components/chat/skins/digichat-context-meter.tsx",
     "./chat/stock": "./src/components/chat/stock/index.ts",
     "./chat/stock/thread": "./src/components/chat/stock/thread.aui.tsx",
     "./chat/transcript": "./src/components/chat/transcript/index.ts",

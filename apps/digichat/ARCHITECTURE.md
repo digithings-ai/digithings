@@ -640,7 +640,10 @@ for per-tenant corpus isolation — forwarded as `X-Digi-Corpus-Index` /
 `X-Digi-Vault-Prefix` on `/api/chat`), `gateMode` (`turn_limited` | `ungated` |
 `trial_form`), `theme`
 (`dark` | `light`), optional `accent` hex pair, `activityDetail`
-(`off` | `labels` | `full`), optional UI flags `showByok` / `showStatusBar` /
+(`off` | `labels` | `full`), optional UI flags `showByok` / `showStatusBar` / `showContextMeter`
+(seed the existing context meter when `models.available` is empty; house slugs
+`digithings` and `digithings-ai` seed it unless the flag is false; other hosts
+stay off) /
 `layout` (`page` | `embed`) — independent of `gateMode` (never derive
 `showByok = !ungated`), optional `llmAccess`
 (`free_then_byok` | `byok_only` | `backend_only` | `operator`) for LLM spend

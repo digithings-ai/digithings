@@ -107,6 +107,7 @@ ALLOWED_OVERLAY_KEYS = frozenset(
         "activityDetail",
         "showByok",
         "showLanguageSelector",
+        "showContextMeter",
         "showStatusBar",
         "webSearch",
         "view",

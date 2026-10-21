@@ -69,6 +69,12 @@ export type EmbedTenantClientConfig = {
   layout?: "page" | "embed";
   llmAccess?: EmbedLlmAccess;
   showLanguageSelector?: boolean;
+  /**
+   * Seed the context meter when the published model list is empty.
+   * Explicit false opts a house slug out. Omit leaves the seed rule to
+   * the slug (house on, every other host off).
+   */
+  showContextMeter?: boolean;
   /** Tenant allows opt-in web search UI (#3420). Default false. */
   webSearch?: boolean;
   /** Chain-of-thought view mode (reasoning + tool calls). Omit = deploy default. */
@@ -170,6 +176,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     // showByok, by product decision (#2103). DEFAULT_EMBED_TENANT_CONFIG
     // above (the unresolved/gated fallback) stays false.
     showLanguageSelector: cfg.showLanguageSelector ?? true,
+    ...(typeof cfg.showContextMeter === "boolean" ? { showContextMeter: cfg.showContextMeter } : {}),
     // Tenant-gated default-on (#3420, #3859): omit/false stays corpus-only;
     // an enabled tenant pairs with the default-on user pref before digichat
     // sends X-Digi-Enable-Web-Search.

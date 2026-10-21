@@ -330,6 +330,7 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
     expect(dt?.models.allowPicker).toBe(true);
+    expect(dt?.gate.showContextMeter).toBe(true);
     expect(dt?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(dt?.models.available).toEqual([
       "deepseek/deepseek-v4.1-flash-1017",
@@ -364,6 +365,7 @@ describe("DigichatConfigSchema", () => {
       "backlinks",
     ]);
     expect(occHost?.gate?.webSearch).toBe(false);
+    expect(occHost?.gate?.showContextMeter).toBeUndefined();
     expect(occHost?.mcp?.allowUserServers).toBe(false);
     expect(occHost?.mcp?.servers.map((s) => s.id)).toEqual([
       "zammad",

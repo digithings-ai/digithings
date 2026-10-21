@@ -92,6 +92,10 @@ hosts:
       llmAccess: free_then_byok
       showByok: true
       showLanguageSelector: true
+      # The existing composer context meter. On even when the published
+      # model list is empty (live digithings.ai sends available: []).
+      # Does not open the model picker.
+      showContextMeter: true
       # The digigraph license has no hosted-web-search scope. Requesting it
       # 403s the whole turn. Leave this off; the stream adapter still retries
       # once as plain inference if an overlay turns it back on.
