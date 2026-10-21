@@ -188,7 +188,7 @@ describe("embed /theme pick (2.6.6)", () => {
     vi.stubGlobal("sessionStorage", {
       getItem: backing.getItem,
       setItem: (k: string, v: string) => {
-        if (failWrites && !k.endsWith(":probe")) throw new Error("QuotaExceededError");
+        if (failWrites && !k.endsWith("-probe")) throw new Error("QuotaExceededError");
         backing.setItem(k, v);
       },
       removeItem: backing.removeItem,
@@ -198,6 +198,16 @@ describe("embed /theme pick (2.6.6)", () => {
     failWrites = true;
     writeEmbedUserTheme(key, { mode: "dark", palette: "dracula" });
     expect(readEmbedUserTheme(key)).toEqual({ mode: "dark", palette: "dracula" });
+  });
+
+  it("a tenant slugged probe keeps its pick: the probe key is not a pick key", () => {
+    const backing = memoryStore();
+    vi.stubGlobal("sessionStorage", backing);
+    const key = embedUserThemeKey("probe");
+    backing.setItem(key, JSON.stringify({ mode: "light", palette: "aura" }));
+    expect(readEmbedUserTheme(key)).toEqual({ mode: "light", palette: "aura" });
+    expect(readEmbedUserTheme(key)).toEqual({ mode: "light", palette: "aura" });
+    expect(backing.getItem(key)).not.toBeNull();
   });
 
   it("clears the pick, and ignores a malformed one", () => {

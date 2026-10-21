@@ -65,13 +65,11 @@ describe("embed stock chrome wiring", () => {
   it("offers /theme on every embed tenant, keeping the other #6122 locks (2.6.6)", () => {
     expect(embedClientSrc).not.toMatch(/themeLocked:\s*true/);
     expect(embedClientSrc).toMatch(/openTheme: \(\) => \{\s*setComposerMenu\("theme"\);/);
-    expect(embedClientSrc).toMatch(/themeState: \{ preference: theme\.mode/);
-    expect(embedClientSrc).toMatch(/setTheme: \(preference, palette\) =>/);
-    // A pick is per tab and per tenant; precedence and auto are pinned in
-    // embed-theme-messages.test.ts (resolveEmbedTheme / embedThemePick).
+    // The api part itself is built by embedThemePrefs and tested by behaviour
+    // in product-slash-commands.theme.test.ts; here only that the embed uses it.
+    expect(embedClientSrc).toMatch(/\.\.\.embedThemePrefs\(\{\s*theme,\s*onThemePick,/);
     expect(embedClientSrc).toMatch(/embedUserThemeKey\(tenantCfg\.slug\)/);
     expect(embedClientSrc).toMatch(/resolveEmbedTheme\(\{\s*pick: userTheme,/);
-    expect(embedClientSrc).toMatch(/onThemePick\(embedThemePick\(preference, palette\)\)/);
     // Sessions and artifacts stay closed on embeds.
     expect(embedClientSrc).toMatch(/openSessions: \(\) => \{\}/);
     expect(embedClientSrc).toMatch(/openArtifacts: \(\) => \{\}/);

@@ -1374,7 +1374,9 @@ lasts for the tab: it is stored in sessionStorage under
 sessionStorage cannot be written) and never in the platform `dt-theme` /
 `dt-palette` keys. It sets `data-theme`, `data-palette`, and `theme-color` on the
 embed document. `/theme auto` drops the pick, so the embed returns to the
-parent / `?theme=` / tenant theme. Without a pick, an embed hosted by
+parent / `?theme=` / tenant theme; in the picker, choosing the checked row does
+the same (in the full app the checked row still pins that mode). The api part is
+`embedThemePrefs`. Without a pick, an embed hosted by
 digithings.ai follows the parent site's theme; a standalone embed starts on the
 tenant theme.
 

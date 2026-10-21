@@ -111,7 +111,7 @@ import {
 import {
   applyEmbedDocumentTheme,
   applyEmbedPalette,
-  embedThemePick,
+  embedThemePrefs,
   embedUserThemeKey,
   parseEmbedThemeParam,
   parseEmbedUserTheme,
@@ -426,11 +426,10 @@ function EmbedPageInner({
   // ThemeClassSync mirrors [data-theme] onto .dark/.light; the wrapper below
   // keeps its class for Tailwind `dark:` inside the subtree.
   //
-  // The app-wide ThemeProvider installs a prefers-color-scheme listener that
-  // rewrites <html data-theme> whenever there is no `dt-theme` key — always
-  // true for an anonymous embed visitor. Re-assert the effective theme via a
-  // MutationObserver so OS flips (and ThemeProvider) cannot silently override
-  // a parent- or tenant-forced theme (#1434).
+  // ThemeProvider bails on a pinned document, so it does not repaint the
+  // embed today. The MutationObserver stays as a guard: anything else that
+  // rewrites <html data-theme> (an OS-flip listener, a stray script) cannot
+  // silently override the effective theme (#1434).
   useEffect(() => {
     const el = document.documentElement;
     const desired = effectiveTheme;
@@ -1269,13 +1268,13 @@ function EmbedChat({
       },
       // /theme is open on every embed (2.6.6). The tenant's theme is the
       // start; a pick lasts for this tab and is not written to localStorage.
-      openTheme: () => {
-        setComposerMenu("theme");
-      },
-      themeState: { preference: theme.mode, palette: theme.palette, resolved: theme.mode },
-      setTheme: (preference, palette) => {
-        onThemePick(embedThemePick(preference, palette));
-      },
+      ...embedThemePrefs({
+        theme,
+        onThemePick,
+        openTheme: () => {
+          setComposerMenu("theme");
+        },
+      }),
       openThinking: () => {
         setComposerMenu("thinking");
       },

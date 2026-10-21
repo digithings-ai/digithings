@@ -11,6 +11,7 @@
  * use postMessage so the iframe does not reload.
  */
 
+import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import { normalizePalette, themeColorFor, type PaletteName } from "@digithings/ui/theme";
 
 export const THEME_MESSAGE_TYPE = "digichat:theme" as const;
@@ -112,8 +113,9 @@ function sessionStore(): SessionStore | null {
     // Safari private mode and a full quota expose sessionStorage but throw on write.
     let writable = true;
     try {
-      session.setItem("dc-embed-theme:probe", "1");
-      session.removeItem("dc-embed-theme:probe");
+      // Not a pick key: embedUserThemeKey always has a ":" before the slug.
+      session.setItem("dc-embed-theme-probe", "1");
+      session.removeItem("dc-embed-theme-probe");
     } catch {
       writable = false;
     }
@@ -131,6 +133,29 @@ export function embedThemePick(
   palette: PaletteName,
 ): EmbedUserTheme | null {
   return preference === "auto" ? null : { mode: preference, palette };
+}
+
+/**
+ * The `/theme` part of an embed's prefs api. The embed owns its theme, so
+ * reads come from what it paints and a pick goes to `onThemePick` (this tab
+ * only), never to the platform's dt-theme / dt-palette keys.
+ */
+export function embedThemePrefs(opts: {
+  theme: EmbedUserTheme;
+  onThemePick: (next: EmbedUserTheme | null) => void;
+  openTheme: () => void;
+}): Pick<EmbedChatPrefsApi, "openTheme" | "themeState" | "setTheme"> {
+  return {
+    openTheme: opts.openTheme,
+    themeState: {
+      preference: opts.theme.mode,
+      palette: opts.theme.palette,
+      resolved: opts.theme.mode,
+    },
+    setTheme: (preference, palette) => {
+      opts.onThemePick(embedThemePick(preference, palette));
+    },
+  };
 }
 
 /** The mode an embed paints: pick > parent postMessage > `?theme=` > tenant (default dark). */
