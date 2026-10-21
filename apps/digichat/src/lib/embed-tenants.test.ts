@@ -898,11 +898,11 @@ describe("parseEmbedTenants", () => {
     ).toThrow(/showLanguageSelector must be a boolean/);
   });
 
-  it("accepts showContextMeter and rejects a non-boolean", () => {
+  it("accepts showContextMeter on the house slugs and rejects it elsewhere", () => {
     const on = parseEmbedTenants(
       JSON.stringify({
-        "example.com": {
-          slug: "example",
+        "digithings.ai": {
+          slug: "digithings",
           backend: { type: "digigraph" },
           gateMode: "ungated",
           token: "t",
@@ -910,11 +910,11 @@ describe("parseEmbedTenants", () => {
         },
       }),
     );
-    expect(on.get("example.com")?.showContextMeter).toBe(true);
+    expect(on.get("digithings.ai")?.showContextMeter).toBe(true);
     const off = parseEmbedTenants(
       JSON.stringify({
-        "example.com": {
-          slug: "example",
+        "www.digithings.ai": {
+          slug: "digithings-ai",
           backend: { type: "digigraph" },
           gateMode: "ungated",
           token: "t",
@@ -922,12 +922,27 @@ describe("parseEmbedTenants", () => {
         },
       }),
     );
-    expect(off.get("example.com")?.showContextMeter).toBe(false);
+    expect(off.get("www.digithings.ai")?.showContextMeter).toBe(false);
     expect(() =>
       parseEmbedTenants(
         JSON.stringify({
           "example.com": {
             slug: "example",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            token: "t",
+            showContextMeter: true,
+          },
+        }),
+      ),
+    ).toThrow(
+      /showContextMeter is only valid for slugs digithings and digithings-ai, not "example"/,
+    );
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "digithings.ai": {
+            slug: "digithings",
             backend: { type: "digigraph" },
             gateMode: "ungated",
             token: "t",

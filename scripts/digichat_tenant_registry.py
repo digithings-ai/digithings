@@ -175,6 +175,8 @@ OBJECT_OVERLAY_PATHS = frozenset(
 # nor change them. The corpus name itself stays in the private release-lane
 # paths: this public script states the rule without writing it down.
 OCC_HOST = "occ.digithings.ai"
+# showContextMeter seeds the house catalog default. Only these slugs may set it.
+HOUSE_CONTEXT_METER_SLUGS = frozenset(("digithings", "digithings-ai"))
 # Backend keys the overlay may not set for the OCC tenant.
 OCC_LOCKED_BACKEND_KEYS = ("digisearchIndex", "vaultPathPrefix")
 # The retired OCC ticket corpus must never be routed to
@@ -468,6 +470,25 @@ def _refuse_occ_models(host, source):
     )
 
 
+def _overlay_context_meter_slug(overlay_entry, base_entry):
+    """Slug the meter flag applies to: the overlay slug, else the live slug."""
+    overlay_slug = overlay_entry.get("slug")
+    if isinstance(overlay_slug, str) and overlay_slug.strip():
+        return overlay_slug.strip()
+    base_slug = base_entry.get("slug") if isinstance(base_entry, dict) else None
+    if isinstance(base_slug, str) and base_slug.strip():
+        return base_slug.strip()
+    return ""
+
+
+def _refuse_house_context_meter(host, slug):
+    """The meter flag seeds the house catalog. Other slugs stay off it."""
+    raise RegistryRefusal(
+        "overlay entry %r sets 'showContextMeter' for slug %r; only the "
+        "house slugs digithings and digithings-ai may carry that flag" % (host, slug)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Compose
 # ---------------------------------------------------------------------------
@@ -535,6 +556,10 @@ def compose_registry(live, overlay):
         # may add a models section for it.
         if host == OCC_HOST and OCC_MODELS_KEY in overlay_entry:
             _refuse_occ_models(host, "overlay")
+        if "showContextMeter" in overlay_entry:
+            meter_slug = _overlay_context_meter_slug(overlay_entry, live_entry)
+            if meter_slug not in HOUSE_CONTEXT_METER_SLUGS:
+                _refuse_house_context_meter(host, meter_slug)
 
         merged = copy.deepcopy(live_entry)
         for key, value in overlay_entry.items():
@@ -687,6 +712,10 @@ def compose_kv_registry(kv_live, overlay, legacy=None):
         # may add a models section for it.
         if host == OCC_HOST and OCC_MODELS_KEY in overlay_entry:
             _refuse_occ_models(host, "overlay")
+        if "showContextMeter" in overlay_entry:
+            meter_slug = _overlay_context_meter_slug(overlay_entry, base_entry)
+            if meter_slug not in HOUSE_CONTEXT_METER_SLUGS:
+                _refuse_house_context_meter(host, meter_slug)
 
         merged = copy.deepcopy(base_entry)
         for key, value in overlay_entry.items():

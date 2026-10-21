@@ -26,7 +26,7 @@ describe("sessionModelSeed", () => {
     expect(DEPLOY_DEFAULT_MODELS.default).toBe(FLASH);
   });
 
-  it("seeds an explicit default for any host that opts in", () => {
+  it("does not seed a non-house slug that sets the flag", () => {
     expect(
       sessionModelSeed({
         slug: "example",
@@ -34,12 +34,14 @@ describe("sessionModelSeed", () => {
         defaultModel: FLASH,
         showContextMeter: true,
       }),
-    ).toBe(FLASH);
+    ).toBe("");
   });
 
   it("leaves other hosts and an explicit house opt-out on an empty model", () => {
     expect(sessionModelSeed({ slug: "occ", available: [] })).toBe("");
-    expect(sessionModelSeed({ slug: "datatap-trial-foundry", available: [] })).toBe("");
+    expect(sessionModelSeed({ slug: "trial-foundry", available: [], showContextMeter: true })).toBe(
+      "",
+    );
     expect(
       sessionModelSeed({
         slug: "digithings",
@@ -47,9 +49,12 @@ describe("sessionModelSeed", () => {
         showContextMeter: false,
       }),
     ).toBe("");
+    expect(contextMeterEnabled(undefined, "digithings")).toBe(true);
+    expect(contextMeterEnabled(undefined, "digithings-ai")).toBe(true);
+    expect(contextMeterEnabled(true, "digithings")).toBe(true);
     expect(contextMeterEnabled(undefined, "occ")).toBe(false);
     expect(contextMeterEnabled(false, "digithings-ai")).toBe(false);
-    expect(contextMeterEnabled(true, "example")).toBe(true);
+    expect(contextMeterEnabled(true, "example")).toBe(false);
   });
 
   it("does not open the picker just because the meter has a window", () => {

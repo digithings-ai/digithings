@@ -6,6 +6,8 @@ import { DEPLOY_DEFAULT_MODELS } from "./deploy-config/deploy-models";
  * meter (which needs a known window) renders nothing. OCC omits `models`
  * and inherits the deploy catalog, which is why that host shows the meter.
  * These slugs seed the same catalog default unless `showContextMeter` is false.
+ * A true flag on any other slug does nothing: the seed must not put the
+ * house catalog on a tenant the bridge keeps off it.
  */
 const HOUSE_CONTEXT_METER_SLUGS = new Set(["digithings", "digithings-ai"]);
 
@@ -14,7 +16,6 @@ export function contextMeterEnabled(
   slug: string | undefined,
 ): boolean {
   if (showContextMeter === false) return false;
-  if (showContextMeter === true) return true;
   return slug !== undefined && HOUSE_CONTEXT_METER_SLUGS.has(slug);
 }
 

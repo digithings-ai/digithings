@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -80,31 +80,28 @@ describe("house host context meter", () => {
     expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
   });
 
-  it("keeps the meter off for DataTap and for an OCC host with an empty list", () => {
-    const datatapRaw = readFileSync(
-      resolve(__dirname, "../../config/datatap-trial-foundry.yaml"),
-      "utf8",
+  it("keeps the meter off for the foundry trial and for an OCC host with an empty list", () => {
+    const configDir = resolve(__dirname, "../../config");
+    const trialName = readdirSync(configDir).find((entry) => entry.endsWith("-trial-foundry.yaml"));
+    if (!trialName) throw new Error("foundry trial config is missing");
+    const trialRaw = readFileSync(resolve(configDir, trialName), "utf8");
+    const trial = parseDigichatConfig(loadYaml(trialRaw), trialName).deployment!;
+    expect(trial.gate.showContextMeter).toBeUndefined();
+    const trialClient = clientConfigFromEmbedTenant(
+      toEmbedClientConfig(deploymentToEmbedTenant(trial)),
     );
-    const datatap = parseDigichatConfig(
-      loadYaml(datatapRaw),
-      "datatap-trial-foundry.yaml",
-    ).deployment!;
-    expect(datatap.gate.showContextMeter).toBeUndefined();
-    const datatapClient = clientConfigFromEmbedTenant(
-      toEmbedClientConfig(deploymentToEmbedTenant(datatap)),
-    );
-    const datatapModel = sessionModelSeed({
-      slug: datatapClient.slug,
-      available: datatapClient.models.available,
-      defaultModel: datatapClient.models.default,
-      showContextMeter: datatapClient.gate.showContextMeter,
+    const trialModel = sessionModelSeed({
+      slug: trialClient.slug,
+      available: trialClient.models.available,
+      defaultModel: trialClient.models.default,
+      showContextMeter: true,
     });
-    expect(datatapClient.backendType).toBe("foundry");
-    expect(datatapClient.models.available).toEqual([]);
-    expect(datatapClient.models.allowPicker).toBe(false);
-    expect(datatapModel).toBe("");
-    const { container: datatapDom } = paint(datatapModel);
-    expect(datatapDom.querySelector(".aui-context-meter")).toBeNull();
+    expect(trialClient.backendType).toBe("foundry");
+    expect(trialClient.models.available).toEqual([]);
+    expect(trialClient.models.allowPicker).toBe(false);
+    expect(trialModel).toBe("");
+    const { container: trialDom } = paint(trialModel);
+    expect(trialDom.querySelector(".aui-context-meter")).toBeNull();
 
     const occRaw = readFileSync(resolve(__dirname, "../../config/examples/occ-embed.yaml"), "utf8");
     const occ = parseDigichatConfig(loadYaml(occRaw), "occ-embed.yaml").hosts![

@@ -169,8 +169,9 @@ export type EmbedTenantConfig = {
   /**
    * When true, the composer seeds a known context window even if
    * `models.available` is empty, so the existing context meter renders.
-   * Does not open the model picker. Explicit false turns it off, including
-   * for the house slugs that otherwise seed that window.
+   * Does not open the model picker. Only slugs `digithings` and
+   * `digithings-ai` may set it; any other slug is refused. Explicit false
+   * turns it off for those house slugs, which otherwise seed that window.
    */
   showContextMeter?: boolean;
   /**
@@ -368,6 +369,9 @@ function validateApiKeyEnv(value: unknown, ctx: string): string {
   }
   return value;
 }
+
+/** House product slugs. A registry entry for any other slug may not set the meter flag. */
+const HOUSE_CONTEXT_METER_SLUGS = new Set(["digithings", "digithings-ai"]);
 
 function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   const ctx = `DIGICHAT_EMBED_TENANTS["${hostKey}"]`;
@@ -630,6 +634,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   }
   if (v.showContextMeter !== undefined && typeof v.showContextMeter !== "boolean") {
     throw new Error(`${ctx}: showContextMeter must be a boolean`);
+  }
+  if (typeof v.showContextMeter === "boolean" && !HOUSE_CONTEXT_METER_SLUGS.has(v.slug)) {
+    throw new Error(
+      `${ctx}: showContextMeter is only valid for slugs digithings and digithings-ai, ` +
+        `not "${v.slug}"`,
+    );
   }
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
