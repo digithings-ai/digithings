@@ -22,11 +22,11 @@
  *    (`3 notes` / `no hits`) — the fact a reader actually wants folded, and
  *    the only way a collapsed result row stays honest about whether the search
  *    found anything.
- *  - **`status` rows have already lost their structure.** By the time a
- *    withheld-documents or failed-search outcome reaches here it is prose
- *    (`Found results for "x".`), with the tool name and query dissolved into
- *    the string upstream. Parsing them back out of prose would be guesswork,
- *    so these render as canon system asides rather than as fake tool rows.
+ *  - **`status` rows without an outcome have already lost their structure.** By the time a
+ *    withheld-documents outcome reaches here it is prose (`Found results for "x".`), with the tool
+ *    name and query dissolved into the string upstream. Parsing them back out of prose would be
+ *    guesswork, so these render as canon system asides rather than as fake tool rows. A `status`
+ *    carrying an `outcome` keeps its structure and renders as a first-class tool row instead.
  *  - **Reasoning arrives as one blob**, not pre-segmented steps, so it maps to
  *    `ChatThinking`'s `children` disclosure rather than its railed `steps`
  *    list. See `ChatThinking`'s own docstring, which prescribes exactly this.
@@ -272,8 +272,24 @@ export function toCanonRows(activities: readonly DigiChatActivity[]): CanonActiv
           ...(activity.questions?.length ? { questions: activity.questions } : {}),
         };
 
-      case "status":
-        return { kind: "aside", key, message: activity.message };
+      case "status": {
+        // Absent outcome: a quiet note (e.g. results exist but tenant detail
+        // withholds them). Present outcome: the emitter kept the structure,
+        // so this renders as a first-class tool row — "failed" as an error,
+        // "unreadable" as an honest unknown with NO count. A missing count
+        // stays missing: defaulting it to the zero string would read as
+        // "no hits", the exact lie this removes.
+        const outcome = activity.outcome;
+        if (!outcome) return { kind: "aside", key, message: activity.message };
+        const outcomeArgs = displayArgs(outcome.query, previousQueryAt(activities, i));
+        return {
+          kind: "tool",
+          key,
+          name: toolDisplayName(outcome.name),
+          ...(outcomeArgs ? { args: outcomeArgs } : {}),
+          status: outcome.state === "failed" ? "error" : "ok",
+        };
+      }
 
       default: {
         const _exhaustive: never = activity;
@@ -311,6 +327,12 @@ export function liveActivityLabel(activities: DigiChatActivity[]): string | unde
     switch (activity.kind) {
       case "tool_result":
         settledTools.add(activity.name);
+        break;
+      case "status":
+        // A promoted status settles exactly the tool it names — keyed by
+        // name, the same key tool_result uses, so one tool's outcome never
+        // silences a different tool still running.
+        if (activity.outcome) settledTools.add(activity.outcome.name);
         break;
       case "tool_call": {
         if (settledTools.has(activity.name)) break;
