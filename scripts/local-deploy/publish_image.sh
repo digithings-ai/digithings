@@ -53,6 +53,15 @@ if [ "$IMAGE" = "digichat" ]; then
     [ "${TAG#digichat-v}" = "$VERSION" ] || { echo "ERROR: $TAG does not match apps/digichat/package.json ($VERSION)." >&2; exit 1; }
     COMMIT="$(git rev-list -n1 "$TAG" 2>/dev/null || true)"
     [ -n "$COMMIT" ] || { echo "ERROR: $TAG does not resolve to a commit." >&2; exit 1; }
+    # The image is built from the working tree, so the working tree has to BE
+    # the tag: labelling an image with a commit it was not built from is the
+    # hole this lane exists to close. The GitHub lane checks the tag out and
+    # compares HEAD with it; the rehearsal has to hold the same line.
+    head_commit="$(git rev-parse HEAD 2>/dev/null || true)"
+    [ "$head_commit" = "$COMMIT" ] || {
+      echo "ERROR: $TAG resolves to $COMMIT, but the working tree is at ${head_commit:-no commit} — check the tag out before publishing it." >&2
+      exit 1
+    }
     NAME="$REPO:v$VERSION"
   else
     COMMIT="$(git rev-parse HEAD)"
@@ -137,9 +146,7 @@ if [ "$IMAGE" = "digichat" ]; then
   # The version has to be right either way, and a failing check is tolerated
   # only when it is one of the four ecosystem services AND the fetch never
   # completed ("unreachable"): the route records an upstream that answered
-  # with a non-2xx as "http_<status>", and that is a real fault. This is the
-  # same contract the CI lane holds in
-  # .github/workflows/publish-digichat-image.yml.
+  # with a non-2xx as "http_<status>", and that is a real fault.
   curl_rc=0
   api_response="$(curl --silent --show-error --max-time 60 --write-out '\n%{http_code}' "$base/api/health")" || curl_rc=$?
   api_status="$(printf '%s\n' "$api_response" | tail -n1)"
@@ -148,51 +155,15 @@ if [ "$IMAGE" = "digichat" ]; then
     echo "ERROR: the request to /api/health did not complete (curl exited $curl_rc) — a timeout or a refused connection, not an answer from the image." >&2
     exit 1
   fi
-  case "$api_status" in
-    200|503) ;;
-    *) echo "ERROR: /api/health answered '$api_status', not 200 or 503." >&2; exit 1 ;;
-  esac
-  [ -n "$api_body" ] || { echo "ERROR: /api/health answered '$api_status' with no body — the route did not answer." >&2; exit 1; }
-  reported="$(node -e 'const fs = require("fs");
-let raw = "";
-try { raw = fs.readFileSync(0, "utf8"); } catch (e) { raw = ""; }
-let body = null;
-try { body = JSON.parse(raw); } catch (e) { body = null; }
-if (body === null || typeof body !== "object") { process.stdout.write("NOTJSON"); }
-else if (body.version === undefined || body.version === null) { process.stdout.write("NOVERSION"); }
-else { process.stdout.write(String(body.version)); }' <<< "$api_body" 2>/dev/null || true)"
-  case "$reported" in
-    NOTJSON) echo "ERROR: /api/health answered '$api_status' with a body that is not JSON — the route did not answer." >&2; exit 1 ;;
-    NOVERSION) echo "ERROR: /api/health answered '$api_status' with JSON that carries no version." >&2; exit 1 ;;
-  esac
-  [ "$reported" = "$VERSION" ] || { echo "ERROR: serves version '$reported', built '$VERSION'." >&2; exit 1; }
-  checks_verdict="$(node -e 'const fs = require("fs");
-let raw = "";
-try { raw = fs.readFileSync(0, "utf8"); } catch (e) { raw = ""; }
-let body = null;
-try { body = JSON.parse(raw); } catch (e) { body = null; }
-const checks = body && typeof body === "object" && body.checks && typeof body.checks === "object" ? body.checks : {};
-const ecosystem = ["digraph", "digiquant", "digitrace", "digisearch"];
-const bad = [];
-const tolerated = [];
-if ((checks.service || "missing") !== "ok") bad.push("service=" + (checks.service || "missing"));
-const database = checks.database || "missing";
-if (database !== "ok" && database !== "skipped") bad.push("database=" + database);
-for (const key of Object.keys(checks)) {
-  if (key === "service" || key === "database") continue;
-  const value = checks[key];
-  if (value === "ok" || value === "skipped") continue;
-  // Only "unreachable" is the degradation this probe tolerates: the route
-  // records a fetch that never completed that way, and an upstream that
-  // answered with a non-2xx as http_<status>.
-  if (ecosystem.indexOf(key) !== -1 && value === "unreachable") { tolerated.push(key + "=" + value); continue; }
-  bad.push(key + "=" + value);
-}
-process.stdout.write(bad.length ? "BAD:" + bad.join(",") : "CLEAN " + (tolerated.length ? tolerated.join(",") : "none"));' <<< "$api_body" 2>/dev/null || true)"
-  verdict="${checks_verdict%% *}"
-  tolerated="${checks_verdict#* }"
-  [ "$verdict" = "CLEAN" ] || { echo "ERROR: /api/health reports checks that are not only the unreachable ecosystem services (${checks_verdict:-no verdict})." >&2; exit 1; }
-  echo "Probe: /api/health answered '$api_status' (version $reported); tolerated: ${tolerated:-none}."
+  # The rules live in ONE place: scripts/digichat_probe_verdict.mjs, which the
+  # GitHub lane calls too. The two lanes used to keep their own copy of the
+  # contract and drifted - the local lane never read the status code the CI
+  # lane read - so a rehearsal could pass where the release failed.
+  verdict="$(printf '%s' "$api_body" | node scripts/digichat_probe_verdict.mjs --status "$api_status" --version "$VERSION")" || {
+    echo "ERROR: $(printf '%s' "$verdict" | sed 's/^REFUSE //')" >&2
+    exit 1
+  }
+  echo "Probe: /api/health $verdict"
 else
   for _ in $(seq 60); do
     status=$(docker inspect -f '{{.State.Health.Status}}' "$probe_container")

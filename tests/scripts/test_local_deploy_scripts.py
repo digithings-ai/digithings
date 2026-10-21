@@ -209,48 +209,22 @@ def _refuses(guards: str, marker: str) -> bool:
     return False
 
 
-_PROBE_PROGRAMS = re.compile(r"node -e '(.*?)' <<< \"\$api_body\"", re.S)
-
-
-def _probe_programs(script: str) -> list[str]:
-    """The programs the probe runs on the health body, in file order."""
-    programs = _PROBE_PROGRAMS.findall(script)
-    assert len(programs) >= 2, (
-        "the probe must read the health body through node: one program for the "
-        "version it serves, one for the checks it reports"
-    )
-    return programs
-
-
-def _probe_output(program: str, body: str) -> str:
-    result = subprocess.run(
-        ["node", "-e", program],
-        input=body,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.stdout
-
-
 def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
-    """The rehearsal has to fail where the CI lane fails.
+    """The rehearsal has to judge the image the way the CI lane judges it.
 
     A rehearsal that passes where the CI probe fails is worse than no
-    rehearsal: it reports the lane green while the lane is red. The CI probe
-    boots the image bare and reads the /api/health status instead of demanding
-    a 200 - a standalone container has no ecosystem services to reach, so 503
-    is the expected answer - so the local probe has to do the same.
+    rehearsal: it reports the lane green while the lane is red. The two
+    lanes used to keep their own copy of the rules and drifted - the local
+    lane never read the status code the CI lane read - so the rules now
+    live in scripts/digichat_probe_verdict.mjs and both lanes call it. The
+    rules themselves are pinned by behaviour in
+    tests/scripts/test_digichat_probe_verdict.py; what is pinned here is
+    that this lane really calls the shared helper, reads the status and
+    exits on a refusal.
 
     The text assertions run against the executable text, with the comments
-    stripped: a substring check that a comment can satisfy proves nothing. The
-    verdict is then pinned behaviourally: the probe's own node programs are
-    driven with the bodies the health route can produce, so widening the
-    tolerated set, dropping a requirement or moving the sentinel into a
-    payload value all fail here.
+    stripped: a substring check that a comment can satisfy proves nothing.
     """
-    if shutil.which("node") is None:
-        pytest.skip("node is needed to drive the probe's own programs")
     script = read("publish_image.sh")
     body = _no_comments(script)
     assert 'docker run --detach --rm --publish 127.0.0.1::3000 "$NAME"' in body, (
@@ -264,91 +238,44 @@ def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
         "a bare container answers /api/health with 503; --fail turns the "
         "expected degradation into a red rehearsal"
     )
-    # The status is READ, and only the two honest answers are accepted: a 500
-    # that still serialises the version is a fault, not a degraded environment.
+    # The status is READ, not demanded.
     assert "api_status" in body, "the probe must read the status code, not demand one"
     assert "--write-out" in body, "the probe must read the status code it accepts"
-    assert "200|503)" in body, (
-        "the probe must accept only 200 and 503: any other status is a fault"
-    )
     assert "curl_rc" in body, (
         "a transfer that never completed is not an answer: the probe has to "
         "tell a timeout apart from a status the image served"
     )
-    # The version is still the contract: it is what catches a stale layer.
-    assert '[ "$reported" = "$VERSION" ]' in body, (
-        "the version the image serves is still the contract"
+    # The rules are the shared helper's, not a second copy of them.
+    assert "scripts/digichat_probe_verdict.mjs" in body, (
+        "the rehearsal must judge the image with the same helper the CI lane "
+        "uses, so the two cannot drift apart again"
     )
-    # The verdict must not hang on a magic string the payload could produce.
-    assert "CLEAN" in body and "BAD:" in body, (
-        "the success sentinel has to be a value the health payload cannot produce"
+    assert '--status "$api_status"' in body and '--version "$VERSION"' in body, (
+        "the helper has to be given the status it read and the version the "
+        "image was built as"
     )
     # And the refusal has to actually exit.
-    assert _refuses(
-        body, "not only the unreachable ecosystem services"
-    ), "a diagnostic without an exit behind it reports success and the publish goes on"
-    assert _refuses(
-        body, "serves version"
-    ), "a wrong version without an exit behind it publishes the wrong image"
-
-    version_program, checks_program = _probe_programs(script)[:2]
-
-    # A bare container: the four ecosystem services cannot be reached, so the
-    # route answers 503 with four "unreachable" and the probe has to accept it.
-    bare = {
-        "version": "2.6.4",
-        "checks": {
-            "service": "ok",
-            "database": "skipped",
-            "digraph": "unreachable",
-            "digisearch": "unreachable",
-            "digiquant": "unreachable",
-            "digitrace": "unreachable",
-        },
-    }
-    assert _probe_output(version_program, json.dumps(bare)) == "2.6.4"
-    assert _probe_output(checks_program, json.dumps(bare)).startswith("CLEAN"), (
-        "the bare-container degradation is what the probe has to tolerate"
+    assert _refuses(body, "REFUSE"), (
+        "a diagnostic without an exit behind it reports success and the publish goes on"
     )
 
-    # An upstream that ANSWERED is a fault, not a degradation.
-    answered = {
-        "version": "2.6.4",
-        "checks": {"service": "ok", "database": "skipped", "digraph": "http_500"},
-    }
-    assert _probe_output(checks_program, json.dumps(answered)).startswith("BAD:"), (
-        "a service that answered http_<status> must not be tolerated"
-    )
 
-    # A broken service, a broken database, a missing service and a missing
-    # checks block are all faults.
-    for checks in (
-        {"service": "error", "database": "skipped"},
-        {"service": "ok", "database": "error"},
-        {"database": "skipped"},
-    ):
-        payload = json.dumps({"version": "2.6.4", "checks": checks})
-        assert _probe_output(checks_program, payload).startswith("BAD:"), (
-            f"the probe must refuse {checks}"
-        )
-    assert _probe_output(checks_program, json.dumps({"version": "2.6.4"})).startswith(
-        "BAD:"
-    ), "a body with no checks at all must be refused"
+def test_the_local_publish_binds_the_image_to_the_tree_it_builds() -> None:
+    """A release image may not carry the label of a commit it was not built from.
 
-    # A check whose key collides with the old success sentinel must not pass.
-    collides = {
-        "version": "2.6.4",
-        "checks": {"service": "ok", "database": "skipped", "ok": "error"},
-    }
-    assert _probe_output(checks_program, json.dumps(collides)).startswith("BAD:"), (
-        "the success sentinel must not be a value the payload can produce"
+    The local lane builds the working tree, so a tag whose commit is not the
+    checked-out HEAD would be labelled with a commit the image does not
+    contain. The GitHub lane checks the tag out and compares HEAD with it;
+    the rehearsal has to hold the same line.
+    """
+    body = _no_comments(read("publish_image.sh"))
+    assert 'head_commit="$(git rev-parse HEAD' in body, (
+        "the rehearsal must resolve the commit it actually builds from"
     )
-
-    # The version program reports the version in the body, so the shell can
-    # refuse an image that serves the wrong one.
-    assert _probe_output(version_program, json.dumps({"version": "2.5.0"})) == "2.5.0"
-    assert _probe_output(version_program, "<html>gateway error</html>") == "NOTJSON", (
-        "a body that is not JSON has to be told apart from a JSON body without "
-        "a version"
+    assert '"$head_commit" = "$COMMIT"' in body, (
+        "the rehearsal must refuse to label an image with a commit it was not "
+        "built from"
     )
-    assert _probe_output(version_program, json.dumps({"status": "ok"})) == "NOVERSION"
+    assert _refuses(body, "check the tag out"), (
+        "a refusal to publish an unbound image has to stop the publish"
+    )
