@@ -69,8 +69,21 @@ deployment:
   #   tokensPerMinute:
   #     deployment: <Azure TPM for gpt-5.6-terra, westeurope>
   tools:
-    allowUserToggle: true
-    catalog: []
+    # Declared for /tools. The Foundry agent owns these tools; the page does
+    # not fetch them and the visitor cannot toggle them.
+    allowUserToggle: false
+    catalog:
+      - id: file_search
+        label: Search
+        default: true
+      - id: datatap
+        label: DataTap
+        default: true
+        tools:
+          - id: datatap__list_connections
+            label: List connections
+          - id: datatap__get_item
+            label: Open item
   gate:
     mode: ungated
     activityDetail: full

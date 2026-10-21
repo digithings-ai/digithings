@@ -2028,6 +2028,40 @@ it("does not charge when upstream fails before an answer", async () => {
   expect(onUsage).not.toHaveBeenCalled();
 });
 
+it("charges once when the stream errors after text has started", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "Partial answer." } }],
+          usage: { prompt_tokens: 8, completion_tokens: 2, total_tokens: 10 },
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [{ delta: { digigraph_error: { code: "upstream_error", message: "boom" } } }],
+        })}\n\n`,
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+  const onUsage = vi.fn();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    onUsage,
+  });
+  await new Response(res.body).text();
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({
+    inputTokens: 8,
+    outputTokens: 2,
+    totalTokens: 10,
+  });
+});
+
 it("charges reported usage once when the trace stream finishes", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(

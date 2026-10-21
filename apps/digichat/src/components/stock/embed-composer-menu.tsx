@@ -22,7 +22,7 @@ import {
 import { createPortal } from "react-dom";
 import { DotMatrix } from "@digithings/ui/chat/dot-matrix";
 import { Button, Input, Label } from "@digithings/ui/ui";
-import { nextPaletteIndex, VIEW_LABELS } from "@digithings/digichat-ui";
+import { nextPaletteIndex, optionDraft, paneDraftForId, submenuRows, VIEW_LABELS } from "@digithings/digichat-ui";
 import { useEmbedChatPrefs } from "@digithings/ui/chat/stock";
 import {
   applyWellKnownMcp,
@@ -120,6 +120,11 @@ export type MenuRow = {
   exclusive?: boolean;
   /** Provider label. Not a control, so arrows and Home/End skip it. */
   heading?: boolean;
+  /** Composer text while this row is selected (`/language English`). */
+  insert?: string;
+  /** Option text the pane filter matches (`English`, `default dark`). */
+  token?: string;
+  aliases?: readonly string[];
 };
 
 export type ComposerModelPicker = {
@@ -141,7 +146,7 @@ export type ComposerModelPicker = {
  * A page without a current value (the root, the on/off toggles, the tool and
  * server lists) has no row to land on and starts at the top.
  */
-export function cursorOnCurrentRow(rows: MenuRow[]): number {
+export function cursorOnCurrentRow(rows: readonly MenuRow[]): number {
   const index = rows.findIndex(
     (row) => row.exclusive === true && row.checked === true && row.heading !== true,
   );
@@ -195,6 +200,22 @@ const MENU_PARENT: Record<MenuView, MenuView | null> = {
   "provider-key": "provider",
   "provider-model": "provider",
   help: "main",
+};
+
+/** Escape from a pane writes the command without the trailing space. */
+const PANE_BACK_TOKEN: Partial<Record<MenuView, string>> = {
+  language: "/language",
+  models: "/models",
+  effort: "/effort",
+  "search-engine": "/search-engine",
+  view: "/view",
+  density: "/density",
+  theme: "/theme",
+  thinking: "/thinking",
+  tools: "/tools",
+  mcp: "/mcp",
+  provider: "/provider",
+  help: "/help",
 };
 
 const EFFORTS = ["low", "medium", "high"] as const;
@@ -421,6 +442,7 @@ export function EmbedComposerMenu({
   const keyInputRef = useRef<HTMLInputElement>(null);
   const customModelRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
+  const echoArmed = useRef(false);
   const mcpDraftRef = useRef(mcpDraft);
   const keyFormId = useId();
   const openKey = `${kind}\0${providerSeed ?? ""}\0${mcpSeed ?? ""}`;
@@ -473,6 +495,15 @@ export function EmbedComposerMenu({
     setMcpIdDropdownOpen(false);
   }
 
+  const commitExclusive = useCallback(
+    (apply: () => void) => {
+      apply();
+      if (api.composerDraftBound) queueMicrotask(() => api.setComposerDraft?.(""));
+      else onClose();
+    },
+    [api, onClose],
+  );
+
   /**
    * The root is the same command list the `/` palette filters — one source of
    * truth, so going back never lands on a second, shorter "main". Rows that
@@ -497,17 +528,20 @@ export function EmbedComposerMenu({
       .filter((command) => command.id !== "settings")
       .map((command) => {
         const node = NODE_BY_ID[command.id];
+        const draft = node ? paneDraftForId(command.id) : null;
         return {
           id: command.id,
           label: command.label ?? `/${command.id}`,
           value: command.description ?? "",
+          ...(draft ? { insert: draft } : {}),
           activate: node
             ? () => {
-                // The page seeds its own cursor: it opens on the current value.
-                setView(node);
+                if (api.composerDraftBound && draft) api.setComposerDraft?.(draft);
+                else setView(node);
               }
             : () => {
                 command.execute();
+                if (api.composerDraftBound) api.setComposerDraft?.("");
                 onClose();
               },
         };
@@ -525,13 +559,15 @@ export function EmbedComposerMenu({
           value: native,
           checked: selected,
           exclusive: true,
+          insert: optionDraft("/language", o.label),
+          token: o.label,
+          ...(native ? { aliases: [native] } : {}),
           activate: () => {
-            api.setLanguage(o.value);
-            onClose();
+            commitExclusive(() => api.setLanguage(o.value));
           },
         };
       }),
-    [languages, api, onClose],
+    [languages, api, commitExclusive],
   );
 
   const modelRows = useMemo((): MenuRow[] => {
@@ -551,11 +587,14 @@ export function EmbedComposerMenu({
           value: preset.description,
           checked,
           exclusive: true,
+          insert: optionDraft("/models", preset.label),
+          token: preset.label,
           activate: () => {
             const next = preset.id === "auto" ? "" : token;
-            api.setModel(next);
-            onPickSessionModel?.(next);
-            onClose();
+            commitExclusive(() => {
+              api.setModel(next);
+              onPickSessionModel?.(next);
+            });
           },
         };
       });
@@ -574,10 +613,13 @@ export function EmbedComposerMenu({
               value: "",
               checked: selected === model.id,
               exclusive: true,
+              insert: optionDraft("/models", model.label),
+              token: model.label,
               activate: () => {
-                api.setModel(model.id);
-                onPickSessionModel?.(model.id);
-                onClose();
+                commitExclusive(() => {
+                  api.setModel(model.id);
+                  onPickSessionModel?.(model.id);
+                });
               },
             })),
           ])
@@ -599,9 +641,10 @@ export function EmbedComposerMenu({
             value: "deployment default",
             checked: !api.prefs.model || api.prefs.model === "auto",
             exclusive: true,
+            insert: optionDraft("/models", "auto"),
+            token: "auto",
             activate: () => {
-              api.setModel("");
-              onClose();
+              commitExclusive(() => api.setModel(""));
             },
           },
         ]
@@ -627,14 +670,17 @@ export function EmbedComposerMenu({
         value: "",
         checked: (providerActive?.model || api.prefs.model) === id,
         exclusive: true,
+        insert: optionDraft("/models", id),
+        token: id,
         activate: () => {
-          api.setModel(id);
-          onPickSessionModel?.(id);
-          onClose();
+          commitExclusive(() => {
+            api.setModel(id);
+            onPickSessionModel?.(id);
+          });
         },
       })),
     ];
-  }, [available, api, defaultModel, onClose, onPickSessionModel, picker, providerActive]);
+  }, [available, api, commitExclusive, defaultModel, onPickSessionModel, picker, providerActive]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
@@ -644,12 +690,13 @@ export function EmbedComposerMenu({
         value: "",
         checked: api.prefs.effort === id,
         exclusive: true,
+        insert: optionDraft("/effort", id),
+        token: id,
         activate: () => {
-          api.setEffort(id);
-          onClose();
+          commitExclusive(() => api.setEffort(id));
         },
       })),
-    [api, onClose],
+    [api, commitExclusive],
   );
 
   const engineRows = useMemo(
@@ -660,12 +707,13 @@ export function EmbedComposerMenu({
         value: SEARCH_ENGINE_LABELS[id] ?? "",
         checked: (api.prefs.searchEngine || "auto") === id,
         exclusive: true,
+        insert: optionDraft("/search-engine", id),
+        token: id,
         activate: () => {
-          api.setSearchEngine(id);
-          onClose();
+          commitExclusive(() => api.setSearchEngine(id));
         },
       })),
-    [api, onClose],
+    [api, commitExclusive],
   );
 
   const viewRows = useMemo(
@@ -676,12 +724,13 @@ export function EmbedComposerMenu({
         value: VIEW_LABELS[id],
         checked: api.prefs.view === id,
         exclusive: true,
+        insert: optionDraft("/view", id),
+        token: id,
         activate: () => {
-          api.setView(id);
-          onClose();
+          commitExclusive(() => api.setView(id));
         },
       })),
-    [api, onClose],
+    [api, commitExclusive],
   );
 
   const densityRows = useMemo(
@@ -692,12 +741,13 @@ export function EmbedComposerMenu({
         value: TRACE_DENSITY_LABELS[id],
         checked: api.prefs.density === id,
         exclusive: true,
+        insert: optionDraft("/density", id),
+        token: id,
         activate: () => {
-          api.setDensity(id);
-          onClose();
+          commitExclusive(() => api.setDensity(id));
         },
       })),
-    [api, onClose],
+    [api, commitExclusive],
   );
 
   const themeRows = useMemo((): MenuRow[] => {
@@ -709,20 +759,23 @@ export function EmbedComposerMenu({
       value: step.label,
       checked: current.id === step.id,
       exclusive: true,
+      insert: slashName(`theme ${step.palette} ${step.mode}`),
+      token: `${step.palette} ${step.mode}`,
       activate: () => {
-        if (api.setTheme && current.id === step.id) {
-          // On a host that owns the theme (an embed), the checked row drops
-          // the visitor's pick, so the chat follows the parent / tenant again.
-          applyThemePick(api, "auto", step.palette);
-        } else {
-          // Document theme (the app): any row, the checked one included,
-          // pins that mode and palette, as before 2.6.6.
-          applyThemePick(api, step.mode, step.palette);
-        }
-        onClose();
+        commitExclusive(() => {
+          if (api.setTheme && current.id === step.id) {
+            // On a host that owns the theme (an embed), the checked row drops
+            // the visitor's pick, so the chat follows the parent / tenant again.
+            applyThemePick(api, "auto", step.palette);
+          } else {
+            // Document theme (the app): any row, the checked one included,
+            // pins that mode and palette, as before 2.6.6.
+            applyThemePick(api, step.mode, step.palette);
+          }
+        });
       },
     }));
-  }, [api, onClose]);
+  }, [api, commitExclusive]);
 
   const thinkingRows = useMemo(
     (): MenuRow[] =>
@@ -732,12 +785,13 @@ export function EmbedComposerMenu({
         value: THINKING_LABELS[id] ?? "",
         checked: api.prefs.thinking === id,
         exclusive: true,
+        insert: optionDraft("/thinking", id),
+        token: id,
         activate: () => {
-          api.setThinking(id);
-          onClose();
+          commitExclusive(() => api.setThinking(id));
         },
       })),
-    [api, onClose],
+    [api, commitExclusive],
   );
 
   const toggleTool = useCallback(
@@ -821,25 +875,35 @@ export function EmbedComposerMenu({
         },
       ];
     }
+    const readOnly = api.toolControl === "agent" || api.toolControl === "locked";
+    const agent = api.toolControl === "agent";
     // Each group row is followed by its individual tools (per-tool toggles).
     return toolRows.flatMap((t): MenuRow[] => {
       const on = connectedToolIsOn(t.id, toolOnInput);
       const group: MenuRow = {
         id: t.id,
-        label: slashName(t.slash),
-        value: on ? "On" : "Off",
-        checked: on,
-        activate: () => toggleTool(t.id),
+        label: t.label,
+        value: agent ? "Managed by the agent" : on ? "On" : "Off",
+        ...(agent ? {} : { checked: on }),
+        insert: optionDraft("/tools", t.label),
+        token: t.label,
+        activate: () => {
+          if (readOnly) return;
+          toggleTool(t.id);
+        },
       };
       const subs = (t.tools ?? []).map((sub): MenuRow => {
         const subOn = on && api.extraToolOn(sub.id);
+        const subLabel = sub.label?.trim() || sub.id;
         return {
           id: `${t.id}::${sub.id}`,
-          label: `  ../${sub.id}`,
-          value: subOn ? "On" : "Off",
-          checked: subOn,
+          label: `  ${subLabel}`,
+          value: agent ? "Managed by the agent" : subOn ? "On" : "Off",
+          ...(agent ? {} : { checked: subOn }),
+          insert: optionDraft("/tools", subLabel),
+          token: subLabel,
           activate: () => {
-            if (!on) return;
+            if (readOnly || !on) return;
             api.setExtraTool(sub.id, !api.extraToolOn(sub.id));
           },
         };
@@ -849,13 +913,29 @@ export function EmbedComposerMenu({
   }, [api, kind, onClose, toggleTool, toolOnInput, toolRows]);
 
   const mcpRows = useMemo((): MenuRow[] => {
+    const readOnly = api.toolControl === "agent" || api.toolControl === "locked";
+    const agent = api.toolControl === "agent";
+    if (agent && mcpConfigs.length === 0) {
+      return toolRows.map((t) => ({
+        id: t.id,
+        label: t.label,
+        value: "Managed by the agent",
+        insert: optionDraft("/mcp", t.label),
+        token: t.label,
+        activate: () => {},
+      }));
+    }
     const rows: MenuRow[] = mcpConfigs.map((s) => {
       const status = mcpStatus(s, api.extraToolOn(s.id));
+      const label = s.label || s.id;
       return {
         id: s.id,
-        label: slashName(s.id),
-        value: mcpStatusLabel(status),
+        label,
+        value: agent ? "Managed by the agent" : mcpStatusLabel(status),
+        insert: optionDraft("/mcp", label),
+        token: label,
         activate: () => {
+          if (readOnly) return;
           setMcpDraft(s);
           setMcpError(null);
           setMcpSuggestIndex(-1);
@@ -864,7 +944,7 @@ export function EmbedComposerMenu({
         },
       };
     });
-    if (api.allowAddMcp) {
+    if (api.allowAddMcp && !readOnly) {
       rows.push({
         id: "mcp-new",
         label: slashName("mcp new"),
@@ -879,7 +959,7 @@ export function EmbedComposerMenu({
       });
     }
     return rows;
-  }, [api, mcpConfigs]);
+  }, [api, mcpConfigs, toolRows]);
 
   const mcpSuggestions = useMemo(
     () => (mcpDraft.source === "session" ? wellKnownMcpSuggestions(mcpDraft.id) : []),
@@ -1043,6 +1123,19 @@ export function EmbedComposerMenu({
                                 : view === "help"
                                   ? []
                                   : modelRows;
+  const paletteFilter =
+    view === "main" ||
+    view === "help" ||
+    view === "mcp-edit" ||
+    view === "provider-key" ||
+    (view === "provider-model" && customModel)
+      ? ""
+      : (api.paletteQuery ?? "");
+  const selection = submenuRows(
+    rows.map((row) => ({ ...row, token: row.token ?? row.label })),
+    paletteFilter,
+  );
+  const shown = selection.rows;
   const title =
     view === "language"
       ? "/language"
@@ -1070,7 +1163,7 @@ export function EmbedComposerMenu({
                           ? "/help"
                           : "Settings";
 
-  const safeCursor = rows.length ? Math.min(cursor, rows.length - 1) : 0;
+  const safeCursor = shown.length ? Math.min(cursor, shown.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);
 
   /**
@@ -1083,7 +1176,7 @@ export function EmbedComposerMenu({
   if (seededView !== view) {
     const from = seededView;
     setSeededView(view);
-    let seed = cursorOnCurrentRow(rows);
+    let seed = cursorOnCurrentRow(shown);
     if (view === "provider" && (from === "provider-key" || from === "provider-model")) {
       // Back from a provider form: land on the provider the user opened, not
       // on the one that happens to be connected.
@@ -1092,19 +1185,42 @@ export function EmbedComposerMenu({
     }
     setCursor(seed);
   }
+  const filterKey = `${view}\0${paletteFilter}`;
+  const [appliedFilter, setAppliedFilter] = useState(filterKey);
+  if (appliedFilter !== filterKey) {
+    setAppliedFilter(filterKey);
+    if (selection.cursor >= 0) setCursor(selection.cursor);
+  }
 
   // Form pages own the arrow keys and read-only pages have no rows; neither
   // can advertise "↑↓ navigate". Only the back gesture is true there.
   const formPage =
     view === "provider-key" || (view === "provider-model" && customModel) || view === "mcp-edit";
-  const canNavigate = rows.length > 0 && !formPage && view !== "help";
+  const canNavigate = shown.length > 0 && !formPage && view !== "help";
+
+  const runRow = useCallback(
+    (row: MenuRow | undefined) => {
+      if (!row) return;
+      if (row.insert) api.setComposerDraft?.(row.insert);
+      row.activate();
+    },
+    [api],
+  );
+
+  useEffect(() => {
+    if (!echoArmed.current) return;
+    echoArmed.current = false;
+    const row = shown[cursor];
+    if (row?.insert) api.setComposerDraft?.(row.insert);
+  }, [api, cursor, shown]);
 
   const move = useCallback(
     (delta: number) => {
-      if (!rows.length) return;
-      setCursor((c) => stepSelectable(c, delta, rows));
+      if (!shown.length) return;
+      echoArmed.current = true;
+      setCursor((c) => stepSelectable(c, delta, shown));
     },
-    [rows],
+    [shown],
   );
 
   const goBack = useCallback(() => {
@@ -1115,7 +1231,16 @@ export function EmbedComposerMenu({
     }
     const parent = MENU_PARENT[view];
     if (!parent) {
+      if (api.composerDraftBound && kind === "settings") {
+        api.setComposerDraft?.("/settings");
+        return;
+      }
       onClose();
+      return;
+    }
+    const back = PANE_BACK_TOKEN[view];
+    if (parent === "main" && api.composerDraftBound && back) {
+      api.setComposerDraft?.(back);
       return;
     }
     if (view === "mcp-edit") {
@@ -1126,7 +1251,7 @@ export function EmbedComposerMenu({
     // The page we land on seeds its own cursor (the current value, or the
     // provider row the user drilled into).
     setView(parent);
-  }, [customModel, onClose, view]);
+  }, [api, customModel, kind, onClose, view]);
 
   useEffect(() => {
     if (view === "provider-key") keyInputRef.current?.focus();
@@ -1164,7 +1289,7 @@ export function EmbedComposerMenu({
       if (event.key === "ArrowRight") {
         event.preventDefault();
         event.stopPropagation();
-        rows[cursor]?.activate();
+        runRow(shown[cursor]);
         return;
       }
       if (event.key === "ArrowLeft") {
@@ -1176,23 +1301,25 @@ export function EmbedComposerMenu({
       if (event.key === "Home") {
         event.preventDefault();
         event.stopPropagation();
-        setCursor(selectableIndexes(rows)[0] ?? 0);
+        echoArmed.current = true;
+        setCursor(selectableIndexes(shown)[0] ?? 0);
         return;
       }
       if (event.key === "End") {
         event.preventDefault();
         event.stopPropagation();
-        const selectable = selectableIndexes(rows);
-        setCursor(selectable[selectable.length - 1] ?? Math.max(0, rows.length - 1));
+        echoArmed.current = true;
+        const selectable = selectableIndexes(shown);
+        setCursor(selectable[selectable.length - 1] ?? Math.max(0, shown.length - 1));
         return;
       }
       if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        rows[cursor]?.activate();
+        runRow(shown[cursor]);
       }
     },
-    [api, closeMcpIdDropdown, cursor, formPage, goBack, mcpIdDropdownOpen, move, rows, view],
+    [closeMcpIdDropdown, cursor, formPage, goBack, mcpIdDropdownOpen, move, runRow, shown, view],
   );
 
   useEffect(() => {
@@ -1247,7 +1374,7 @@ export function EmbedComposerMenu({
   const onRowKey = (event: ReactKeyboardEvent, index: number) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      rows[index]?.activate();
+      runRow(shown[index]);
     }
   };
 
@@ -1680,7 +1807,7 @@ export function EmbedComposerMenu({
           !(view === "provider-model" && customModel) &&
           view !== "mcp-edit" &&
           view !== "help"
-            ? rows.map((row, index) => {
+            ? shown.map((row, index) => {
                 if (row.heading) {
                   return (
                     <div
@@ -1710,8 +1837,11 @@ export function EmbedComposerMenu({
                     ref={(node) => {
                       if (index === cursor) node?.scrollIntoView({ block: "nearest" });
                     }}
-                    onMouseEnter={() => setCursor(index)}
-                    onClick={() => row.activate()}
+                    onMouseEnter={() => {
+                      echoArmed.current = true;
+                      setCursor(index);
+                    }}
+                    onClick={() => runRow(row)}
                     onKeyDown={(e) => onRowKey(e, index)}
                   >
                     {/* The user-message chevron marks the cursor on every page,

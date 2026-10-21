@@ -13,13 +13,9 @@ vi.mock("@/lib/warmup-gate", () => ({
   getWarmupServiceNames: () => ["auth", "assistant"],
 }));
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import type { AssistantRuntime } from "@assistant-ui/react";
 import { ProductStockShell } from "./product-shell";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
-import {
-  takePendingForceTool,
-} from "@/lib/pending-chat-headers";
 
 vi.mock("@digithings/ui/chat/stock/thread", () => ({
   Thread: () => <div data-testid="stock-thread">stock thread</div>,
@@ -210,9 +206,7 @@ describe("ProductStockShell", () => {
     expect(document.querySelector("[data-tool-catalog]")).toBeNull();
   });
 
-  it("keeps Search / Vault / Web search on the full-app digichat skin", async () => {
-    takePendingForceTool("embed-host");
-    const user = userEvent.setup();
+  it("does not mount tool chips on the full-app digichat skin", () => {
     const runtime = {} as AssistantRuntime;
     render(
       <ProductStockShell
@@ -237,13 +231,10 @@ describe("ProductStockShell", () => {
         }}
       />,
     );
-    const bar = document.querySelector("[data-tool-catalog]");
-    expect(bar).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Search" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Vault" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Web search" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Search" }));
-    expect(takePendingForceTool("embed-host")).toBe("digisearch");
+    expect(document.querySelector("[data-tool-catalog]")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Search" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Vault" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Web search" })).toBeNull();
   });
 
   it("omits the tool catalog on layout templates", () => {

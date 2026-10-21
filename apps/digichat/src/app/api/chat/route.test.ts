@@ -491,9 +491,11 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(res.status).toBe(200);
       const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
         model?: string;
+        onUsage?: unknown;
         responseHeaders?: Record<string, string>;
       };
       expect(call?.model).toBe("z-ai/glm-5.3");
+      expect(call?.onUsage).toBeUndefined();
       expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBeUndefined();
     } finally {
       resetDigichatConfigForTests();

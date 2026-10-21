@@ -810,6 +810,34 @@ describe("EmbedComposerMenu current value", () => {
     const openai = await screen.findByRole("menuitemradio", { name: /\/openai/ });
     expect(hasChevron(openai)).toBe(true);
   });
+
+  it("closes a model pick when the composer writer is not bound", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const api = prefs({ setComposerDraft: vi.fn() });
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="models" models={["alpha", "beta"]} onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+    await user.click(await screen.findByRole("menuitemradio", { name: "beta" }));
+    expect(api.setModel).toHaveBeenCalledWith("beta");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the provider page on Escape when the composer writer is not bound", async () => {
+    const user = userEvent.setup();
+    const setComposerDraft = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={prefs({ setComposerDraft })}>
+        <EmbedComposerMenu kind="provider" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    await screen.findByRole("menuitemradio", { name: /\/cheaperinference/ });
+    await user.keyboard("{Escape}");
+    expect(setComposerDraft).not.toHaveBeenCalled();
+    expect(await screen.findByRole("menuitem", { name: /\/language/ })).toBeTruthy();
+  });
 });
 
 describe("cursorOnCurrentRow", () => {
