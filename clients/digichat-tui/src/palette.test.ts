@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { exportMarkdown, historySkeleton, sessionTitle, spinnerFrame } from "./chrome";
 import { INITIAL_UI, reduceKey } from "./keys";
-import { DEFAULT_PREFS, commandIds, paletteRows, submitDraft } from "./palette";
+import { applyChoice, choiceOptions, DEFAULT_PREFS, commandIds, paletteRows, submitDraft } from "./palette";
 import { applyStoredTheme, BG } from "./theme";
 
 const ctx = {
@@ -35,6 +35,11 @@ test("/theme writes the shared file and keeps the default colours until asked", 
   process.env.DIGITHINGS_THEME_FILE = join(dir, "theme.json");
   try {
     expect(paletteRows("/theme", DEFAULT_PREFS).map((row) => row.id)).toContain("theme");
+    const opened = submitDraft("/theme", DEFAULT_PREFS);
+    expect(opened).toMatchObject({ type: "choices", id: "theme" });
+    const options = choiceOptions("theme", DEFAULT_PREFS).map((row) => row.value);
+    expect(options[0]).toBe("default:dark");
+    expect(options).toContain("aura:dark");
     const set = submitDraft("/theme dracula", DEFAULT_PREFS);
     expect(set).toMatchObject({ type: "note", note: "theme auto · dracula" });
     applyStoredTheme();
@@ -44,6 +49,10 @@ test("/theme writes the shared file and keeps the default colours until asked", 
     applyStoredTheme();
     expect(BG).toBe("#08090b");
     expect(submitDraft("/theme nope", DEFAULT_PREFS)).toMatchObject({ type: "note", note: "unknown theme" });
+    const picked = applyChoice("theme", "github:light", DEFAULT_PREFS);
+    expect(picked).toMatchObject({ type: "note", note: "theme light · github" });
+    applyStoredTheme();
+    expect(BG).not.toBe("#08090b");
   } finally {
     if (previous === undefined) delete process.env.DIGITHINGS_THEME_FILE;
     else process.env.DIGITHINGS_THEME_FILE = previous;

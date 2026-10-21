@@ -4,7 +4,12 @@
  * session-prefs / view-modes schema (C7); send applies them as DigiChat
  * BFF headers on `/api/v1/chat`.
  */
-import { applyTuiThemeArg } from "../../../packages/ui/src/theme/tui-prefs";
+import { themeCycle } from "../../../packages/ui/src/theme/apply-theme";
+import {
+  applyTuiThemeArg,
+  readTuiPrefs,
+  writeTuiPrefs,
+} from "../../../packages/ui/src/theme/tui-prefs";
 import { applyStoredTheme } from "./theme";
 
 export type ChatPrefs = {
@@ -102,7 +107,7 @@ const COMMANDS: readonly Command[] = [
   { id: "models", names: ["/models"], hint: "Pick model", kind: "action" },
   { id: "effort", names: ["/effort"], hint: "low / medium / high", kind: "choice" },
   { id: "view", names: ["/view"], hint: "hidden / compact / balanced / detailed", kind: "choice" },
-  { id: "theme", names: ["/theme"], hint: "dark / light / auto, or a colour palette", kind: "action" },
+  { id: "theme", names: ["/theme"], hint: "default dark, default light, then each palette", kind: "choice" },
   { id: "thinking", names: ["/thinking"], hint: "auto / collapsed / open", kind: "choice" },
   { id: "search-engine", names: ["/search-engine"], hint: "auto / exa / tavily / parallel / firecrawl / tinyfish", kind: "choice" },
   { id: "byok", names: ["/provider", "/byok", "/key"], hint: "API provider", kind: "action" },
@@ -241,6 +246,7 @@ export function choiceOptions(id: string, prefs: ChatPrefs): { value: string; la
   if (id === "thinking") return THINKING.map((row) => ({ value: row.value, label: row.label }));
   if (id === "effort") return EFFORT.map((row) => ({ value: row.value, label: row.label }));
   if (id === "search-engine") return ENGINES.map((row) => ({ value: row.value, label: row.label }));
+  if (id === "theme") return themeCycle().map((step) => ({ value: step.id, label: step.label }));
   return [];
 }
 
@@ -253,6 +259,13 @@ export function applyChoice(id: string, value: string, prefs: ChatPrefs): Comman
   if (id === "effort") return withPrefs({ ...prefs, effort: value as ChatPrefs["effort"] }, `effort ${value}`);
   if (id === "search-engine") {
     return withPrefs({ ...prefs, searchEngine: value as ChatPrefs["searchEngine"] }, `search ${value}`);
+  }
+  if (id === "theme") {
+    const step = themeCycle().find((item) => item.id === value);
+    if (!step) return { type: "note", note: "" };
+    writeTuiPrefs({ mode: step.mode, palette: step.palette });
+    applyStoredTheme();
+    return { type: "note", note: `theme ${step.mode} · ${step.palette}` };
   }
   return { type: "note", note: "" };
 }
@@ -283,6 +296,7 @@ export function runCommand(id: string, prefs: ChatPrefs, arg: string): CommandRe
     return { type: "note", note: "" };
   }
   if (id === "theme") {
+    if (!arg.trim()) return { type: "choices", id, note: "" };
     const note = applyTuiThemeArg(arg);
     applyStoredTheme();
     return { type: "note", note };
@@ -338,12 +352,18 @@ export function submitDraft(draft: string, prefs: ChatPrefs): CommandResult {
 
 export type SettingRow = { id: string; label: string; description: string; kind: "toggle" | "choice" | "pane" };
 
+function themeSettingDescription(): string {
+  const stored = readTuiPrefs();
+  return `${stored.palette} · ${stored.mode}`;
+}
+
 export function settingsRows(prefs: ChatPrefs): SettingRow[] {
   return [
     { id: "websearch", label: "web search", description: onOff(prefs.webSearch, "External cites", "corpus only"), kind: "toggle" },
     { id: "digisearch", label: "digisearch", description: onOff(prefs.digisearch, "knowledge base", "disabled this session"), kind: "toggle" },
     { id: "digivault", label: "digivault", description: onOff(prefs.digivault, "vault notes", "disabled this session"), kind: "toggle" },
     { id: "view", label: "view", description: prefs.view, kind: "choice" },
+    { id: "theme", label: "theme", description: themeSettingDescription(), kind: "choice" },
     { id: "thinking", label: "thinking", description: prefs.thinking, kind: "choice" },
     { id: "lang", label: "language", description: languageLabel(prefs.language), kind: "choice" },
     { id: "effort", label: "effort", description: prefs.effort, kind: "choice" },
