@@ -3,7 +3,7 @@
  * Object instance that owns the container (run-watch DIG-4753). This suite
  * pins the behaviour of the Worker around that hop.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DURABLE_OBJECT_UNAVAILABLE,
   RECONNECT_RETRY_AFTER_SECONDS,
@@ -120,10 +120,36 @@ describe("the container hop when the platform closes the Durable Object instance
     const res = await handle(heartbeat(), env(), stub.connect);
     expect(res.status).toBe(503);
     expect(res.headers.get("Retry-After")).toBe(String(RECONNECT_RETRY_AFTER_SECONDS));
-    const body = (await res.json()) as { error: string; detail: string };
-    expect(body.error).toBe(DURABLE_OBJECT_UNAVAILABLE);
-    expect(body.detail).toContain("retry later");
+    // The body is exactly this: the cause of the failure never leaves the
+    // Worker, so a platform error or a stack trace cannot ride along.
+    expect(await res.json()).toEqual({
+      error: DURABLE_OBJECT_UNAVAILABLE,
+      detail: "the runner's Durable Object instance was not available; retry later",
+    });
     expect(attempts).toBe(2);
+  });
+
+  it("logs the exit line when the instance stays unavailable", async () => {
+    const lines: Record<string, unknown>[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+      lines.push(JSON.parse(String(line)) as Record<string, unknown>);
+    });
+    try {
+      const stub = stubFactory(async () => {
+        throw goneError();
+      });
+      const res = await handle(heartbeat({ job_id: "twelve-x-primemarket-heartbeat" }), env(), stub.connect);
+      expect(res.status).toBe(503);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lines).toContainEqual({
+      job: "twelve-x-primemarket-heartbeat",
+      route: "heartbeat",
+      event: "exit",
+      exit_code: null,
+      error: DURABLE_OBJECT_UNAVAILABLE,
+    });
   });
 
   it("does not retry a failure that is not a Durable Object close", async () => {
@@ -145,6 +171,31 @@ describe("the container hop when the platform closes the Durable Object instance
     });
     const res = await handle(heartbeat(), env(), stub.connect);
     expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "busy" });
+    expect(attempts).toBe(1);
+  });
+
+  it("answers 502 container_failed when the container fails", async () => {
+    let attempts = 0;
+    const stub = stubFactory(async () => {
+      attempts += 1;
+      return new Response("boom", { status: 500 });
+    });
+    const res = await handle(heartbeat(), env(), stub.connect);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "container_failed" });
+    expect(attempts).toBe(1);
+  });
+
+  it("answers 502 container_bad_json when the container answers nonsense", async () => {
+    let attempts = 0;
+    const stub = stubFactory(async () => {
+      attempts += 1;
+      return new Response("not json", { status: 200 });
+    });
+    const res = await handle(heartbeat(), env(), stub.connect);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "container_bad_json" });
     expect(attempts).toBe(1);
   });
 

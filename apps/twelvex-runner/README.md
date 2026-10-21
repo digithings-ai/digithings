@@ -79,11 +79,13 @@ binding. If that reconnect fails too, the Worker answers `503` with
 { "error": "durable_object_unavailable", "detail": "the runner's Durable Object instance was not available; retry later" }
 ```
 
-The answer is retryable on purpose: the caller retries after the
-`Retry-After` window and the platform starts a new instance. A failure that is
-not a Durable Object recycle is not retried and is not masked. The reconnect
-lives in `@digithings/durable-object-reconnect`, shared with the other
-container Workers.
+The answer is retryable on purpose: a caller that honours `Retry-After` waits
+that window, the platform starts a new instance and the request lands. The
+caller today (`digithings-cron`) does not read the header, so a `503` fails
+that cycle of the job loudly instead of being retried in the same request. A
+failure that is not a Durable Object recycle is not retried and is not masked.
+The reconnect lives in `@digithings/durable-object-reconnect`, shared with the
+other container Workers.
 
 ## DRY_RUN
 

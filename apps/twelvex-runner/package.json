@@ -14,7 +14,7 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "test": "vitest run && python3 -m unittest container/server_test.py",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

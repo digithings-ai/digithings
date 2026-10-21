@@ -72,16 +72,21 @@ export function errorMessage(error: unknown): string {
  * request is gone", so a reconnect is worth one attempt.
  *
  * Matched on the message, because the runtime raises a plain error and there is
- * no class to switch on. The first pattern is the platform's own wording; the
- * others are the sibling shapes and require the message to name a Durable
- * Object, so unrelated failures are never mistaken for an eviction.
+ * no class to switch on. Every pattern requires the message to name a Durable
+ * Object: the platform's own wording ("this Durable Object instance is no
+ * longer active") and the sibling shapes ("Durable Object is gone", "Durable
+ * Object reset"). A message that does not name one is not an eviction of the
+ * instance, so it is never claimed as one: a container that says "no longer
+ * active", or a Durable Object that says "storage quota exceeded", keeps its
+ * own error instead of being retried and then reported as unavailable.
  */
 export function isDurableObjectGone(error: unknown): boolean {
   const text = errorMessage(error).toLowerCase();
   if (!text) return false;
-  if (text.includes("no longer active")) return true;
   if (!text.includes("durable object")) return false;
-  return text.includes("is gone") || text.includes("reset");
+  return (
+    text.includes("no longer active") || text.includes("is gone") || text.includes("reset")
+  );
 }
 
 /**

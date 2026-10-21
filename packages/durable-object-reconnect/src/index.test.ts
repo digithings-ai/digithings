@@ -37,6 +37,17 @@ describe("isDurableObjectGone", () => {
     expect(isDurableObjectGone(goneError("container /run HTTP 409 already_running"))).toBe(false);
   });
 
+  it("does not claim a container that says it is no longer active", () => {
+    // The message does not name a Durable Object, so it is not an eviction of
+    // the instance. Claiming it would retry a container failure and then
+    // report it as an unavailable Durable Object.
+    expect(isDurableObjectGone(goneError("the container is no longer active"))).toBe(false);
+  });
+
+  it("does not claim a Durable Object failure that is not a close", () => {
+    expect(isDurableObjectGone(goneError("Durable Object storage quota exceeded"))).toBe(false);
+  });
+
   it("does not claim an unrelated failure", () => {
     expect(isDurableObjectGone(goneError("boom"))).toBe(false);
     expect(isDurableObjectGone(new Error(""))).toBe(false);
@@ -158,6 +169,55 @@ describe("fetchDurableObject", () => {
     expect(attempts).toBe(1);
   });
 
+  it("does not mask an unrelated failure that happens on the reconnect", async () => {
+    // The first attempt says the instance is gone, so a reconnect is made. The
+    // reconnect fails with a real error: that error must reach the caller, not
+    // be reported as an unavailable Durable Object.
+    let attempts = 0;
+    const boom = new Error("boom on the reconnect");
+    await expect(
+      fetchDurableObject(
+        () => ({
+          fetch: async () => {
+            attempts += 1;
+            if (attempts === 1) throw goneError();
+            throw boom;
+          },
+        }),
+        () => jobRequest(),
+      ),
+    ).rejects.toBe(boom);
+    expect(attempts).toBe(2);
+  });
+
+  it("reconnects when resolving the stub says the instance is gone", async () => {
+    let connects = 0;
+    const res = await fetchDurableObject(
+      () => {
+        connects += 1;
+        if (connects === 1) throw goneError();
+        return { fetch: async () => new Response("ok") };
+      },
+      () => jobRequest(),
+    );
+    expect(res.status).toBe(200);
+    expect(connects).toBe(2);
+  });
+
+  it("raises a retryable error when resolving the stub keeps failing", async () => {
+    let connects = 0;
+    await expect(
+      fetchDurableObject(
+        () => {
+          connects += 1;
+          throw goneError();
+        },
+        () => jobRequest(),
+      ),
+    ).rejects.toBeInstanceOf(DurableObjectUnavailableError);
+    expect(connects).toBe(2);
+  });
+
   it("honours a single attempt when asked for one", async () => {
     let attempts = 0;
     await expect(
@@ -200,6 +260,9 @@ describe("durableObjectUnavailableResponse", () => {
     const res = durableObjectUnavailableResponse("the instance was not available; retry later");
     expect(res.status).toBe(503);
     expect(res.headers.get("Retry-After")).toBe(String(RECONNECT_RETRY_AFTER_SECONDS));
+    // The value the README and the Workers document, pinned as a literal: the
+    // back-off window is a contract with the caller.
+    expect(res.headers.get("Retry-After")).toBe("30");
     const body = (await res.json()) as { error: string; detail: string };
     expect(body.error).toBe(DURABLE_OBJECT_UNAVAILABLE);
     expect(body.detail).toBe("the instance was not available; retry later");

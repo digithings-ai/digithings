@@ -58,8 +58,12 @@ describe("the worker answers 503 when the Durable Object is unreachable", () => 
     );
     expect(res.status).toBe(503);
     expect(res.headers.get("Retry-After")).toBe(String(RECONNECT_RETRY_AFTER_SECONDS));
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(DURABLE_OBJECT_UNAVAILABLE);
+    // The body is exactly this: the cause of the failure never leaves the
+    // Worker, so a platform error or a stack trace cannot ride along.
+    expect(await res.json()).toEqual({
+      error: DURABLE_OBJECT_UNAVAILABLE,
+      detail: "the runner's Durable Object instance was not available; retry later",
+    });
     expect(attempts).toBe(2);
   });
 
