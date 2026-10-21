@@ -60,7 +60,20 @@ const theme = SLASH_COMMANDS.find((command) => command.id === "theme");
 
 describe("/theme", () => {
   beforeEach(() => {
-    localStorage.clear();
+    // happy-dom's storage is not usable under every Node (a recent Node ships
+    // its own `localStorage` global that shadows it), so stub a Map-backed one,
+    // the same way web-search-pref.test.ts does.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.removeAttribute("data-palette");
     window.matchMedia = () =>
@@ -73,7 +86,7 @@ describe("/theme", () => {
   });
 
   afterEach(() => {
-    localStorage.clear();
+    vi.unstubAllGlobals();
   });
 
   it("sets mode and palette, and auto keeps the palette key", () => {

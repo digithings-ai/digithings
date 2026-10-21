@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider, useTheme } from "./ThemeProvider";
 
 type MediaStub = {
@@ -61,7 +61,20 @@ describe("ThemeProvider", () => {
   let media: MediaStub;
 
   beforeEach(() => {
-    localStorage.clear();
+    // happy-dom's storage is not usable under every Node (a recent Node ships
+    // its own `localStorage` global that shadows it), so stub a Map-backed one,
+    // the same way the digichat pref tests do.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.removeAttribute("data-palette");
     media = installMedia(false);
@@ -69,7 +82,7 @@ describe("ThemeProvider", () => {
 
   afterEach(() => {
     cleanup();
-    localStorage.clear();
+    vi.unstubAllGlobals();
   });
 
   it("toggle walks default dark, default light, then the first palette", () => {

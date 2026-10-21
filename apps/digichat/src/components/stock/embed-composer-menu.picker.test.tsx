@@ -275,6 +275,19 @@ describe("EmbedComposerMenu exclusive pickers", () => {
 
   it("lists /theme in settings and paints the chosen palette", async () => {
     const user = userEvent.setup();
+    // happy-dom's storage is not usable under every Node (a recent Node ships
+    // its own `localStorage` global that shadows it), so stub a Map-backed one.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
     localStorage.setItem("dt-theme", "dark");
     localStorage.removeItem("dt-palette");
     document.documentElement.removeAttribute("data-palette");
@@ -298,6 +311,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(localStorage.getItem("dt-palette")).toBe("aura");
     expect(onClose).toHaveBeenCalledTimes(1);
     unmount();
+    vi.unstubAllGlobals();
   });
 
   it("shows the search-engine row on the main menu when the tenant allows web", async () => {
