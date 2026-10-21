@@ -79,7 +79,6 @@ export type EmbedTenantClientConfig = {
   effort?: "low" | "medium" | "high";
   toolbar?: boolean;
   scrollbars?: "always" | "auto";
-  palette?: string;
   searchEngine?: string;
   /** Catalog entries — no MCP URLs */
   tools?: {
@@ -181,7 +180,6 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     ...(cfg.effort ? { effort: cfg.effort } : {}),
     ...(cfg.toolbar === false ? { toolbar: false } : {}),
     ...(cfg.scrollbars ? { scrollbars: cfg.scrollbars } : {}),
-    ...(cfg.palette ? { palette: cfg.palette } : {}),
     ...(cfg.searchEngine ? { searchEngine: cfg.searchEngine } : {}),
     tools: cfg.tools,
     mcp: cfg.mcp

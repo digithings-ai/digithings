@@ -95,7 +95,6 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       accent: cfg.accent,
       attribution: cfg.attribution,
       defaultLanguage: cfg.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
-      ...(cfg.palette ? { palette: cfg.palette } : {}),
       toolbar: cfg.toolbar !== false,
       scrollbars: cfg.scrollbars ?? "always",
       transcript: { userAlign: "right" },

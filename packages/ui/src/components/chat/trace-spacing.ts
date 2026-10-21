@@ -88,16 +88,6 @@ export const TRACE_SPACING: Record<TraceDensity, TraceSpacingTokens> = {
   },
 };
 
-const TOKEN_VARS: Record<keyof TraceSpacingTokens, string> = {
-  titleGap: "--trace-title-gap",
-  groupGap: "--trace-group-gap",
-  withinGap: "--trace-within-gap",
-  headerGap: "--trace-header-gap",
-  bodyPad: "--trace-body-pad",
-  bodyIndent: "--trace-body-indent",
-  chainGap: "--trace-chain-gap",
-};
-
 export function isTraceDensity(value: string): value is TraceDensity {
   return (TRACE_DENSITIES as readonly string[]).includes(value);
 }
@@ -152,16 +142,4 @@ export function writeStoredDensity(density: TraceDensity, storage?: DensityStora
   } catch {
     /* private mode */
   }
-}
-
-/** CSS custom properties for one density. Inline style or the stylesheet. */
-export function traceSpacingVars(density: TraceDensity): Record<string, string> {
-  const tokens = TRACE_SPACING[density];
-  const vars: Record<string, string> = {};
-  for (const [key, cssVar] of Object.entries(TOKEN_VARS) as Array<
-    [keyof TraceSpacingTokens, string]
-  >) {
-    vars[cssVar] = tokens[key];
-  }
-  return vars;
 }

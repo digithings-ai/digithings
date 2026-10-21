@@ -89,6 +89,31 @@ describe("deployment palette default", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 
+  it("has dt-theme stored before the change event fires, so the provider syncs the new mode", () => {
+    const seen: Array<string | null> = [];
+    const onChange = () => seen.push(store.get("dt-theme") ?? null);
+    window.addEventListener(THEME_CHANGE_EVENT, onChange);
+    applyThemeModeKeepingPalette("light");
+    window.removeEventListener(THEME_CHANGE_EVENT, onChange);
+    expect(seen).toEqual(["light"]);
+  });
+
+  it("paints the deployment palette when storage access throws (no stored choice)", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    });
+    applyDeployedPalette("dracula");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("dracula");
+  });
+
   it("leaves a pinned embed document alone", () => {
     const meta = document.createElement("meta");
     meta.setAttribute("name", "theme-color");

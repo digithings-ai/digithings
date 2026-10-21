@@ -1820,7 +1820,7 @@ part-driven vs chrome-driven is indexed in digiweb
 | `features.effort` | `low \| medium \| high` | Seeds `/effort`. Default `medium`. A palette choice overrides it for the session; `/new` returns to this value. |
 | `features.view` | `quiet \| balanced \| verbose` | Already the chain disclosure. Seeds `/view`. Session choice wins until `/new`. |
 | `features.thinking` | `auto \| collapsed \| open` | Seeds `/thinking`. Session choice wins until `/new`. |
-| `chrome.palette` | `default` or a palette id | Deployment palette. Omitted means the digichat skin palette. A stored `dt-palette` wins and is not overwritten. Does not change `data-theme`. |
+| `chrome.palette` | `default` or a palette id | Deployment palette for `mode: app`. Omitted means the digichat skin palette. A stored `dt-palette` choice wins and is not overwritten; picking the "default" palette removes `dt-palette`, so the deployment palette paints again on the next load (an explicit "no palette" choice is a follow-up). Not available on embeds: the embed pins its own theme, and the tenant registry refuses `palette`. Does not change `data-theme`. |
 | `chrome.toolbar` | bool, default `true` | Seeds `/toolbar`. |
 | `chrome.scrollbars` | `always \| auto`, default `always` | Seeds `/scrollbar`. |
 | `gate.searchEngine` | `auto \| internal \| exa \| tavily \| parallel \| firecrawl \| tinyfish` | Seeds `/search-engine`. Omitted means auto. Engine name only. |

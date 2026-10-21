@@ -27,15 +27,16 @@ import {
  */
 export function applyThemeModeKeepingPalette(preference: ThemePreference): void {
   const state = readEffectiveThemeState();
-  // Paint without persisting, then store the mode alone: dt-palette is never
-  // written here, not even briefly.
-  applyDocumentTheme(preference, state.palette, undefined, { persist: false });
+  // Store the mode alone first, then paint without persisting: dt-palette is
+  // never written here, and the dt-theme-change event the paint dispatches
+  // finds the new mode already in storage (ThemeProvider syncs from storage).
   try {
     if (preference === "auto") localStorage.removeItem(THEME_STORAGE_KEY);
     else localStorage.setItem(THEME_STORAGE_KEY, preference);
   } catch {
     /* no storage */
   }
+  applyDocumentTheme(preference, state.palette, undefined, { persist: false });
 }
 
 /**
@@ -68,7 +69,7 @@ export function applyDeployedPalette(palette: string | null | undefined): void {
   try {
     if (storedPaletteChoice() != null) return;
   } catch {
-    return;
+    /* storage unreadable: no stored choice, so the deployment default paints */
   }
   const id = (palette ?? "").trim().toLowerCase();
   if (!id || id === "default" || !isPaletteId(id)) return;

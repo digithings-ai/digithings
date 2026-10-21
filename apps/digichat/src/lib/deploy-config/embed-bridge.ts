@@ -49,7 +49,6 @@ export function clientConfigFromEmbedTenant(
       accent: embed.accent,
       attribution: embed.attribution,
       defaultLanguage: embed.defaultLanguage ?? base.chrome.defaultLanguage,
-      ...(embed.palette ? { palette: embed.palette } : {}),
       toolbar: embed.toolbar ?? base.chrome.toolbar,
       scrollbars: embed.scrollbars ?? base.chrome.scrollbars,
     },

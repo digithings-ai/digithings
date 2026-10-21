@@ -20,7 +20,6 @@ import {
 } from "@/lib/deploy-config/mcp-servers";
 import { HEX_COLOR } from "@/lib/hex-color";
 import { normalizeTraceDensity } from "@digithings/ui/chat/trace-spacing";
-import { isPaletteId, type PaletteId } from "@digithings/ui/theme";
 import { LANGUAGES } from "@/lib/languages";
 import {
   THINKING_MODES,
@@ -204,8 +203,6 @@ export type EmbedTenantConfig = {
   toolbar?: boolean;
   /** Scrollbar gutter. Omit keeps `always`. */
   scrollbars?: "always" | "auto";
-  /** Named palette. Omit keeps the skin palette. */
-  palette?: "default" | PaletteId;
   /** Web-search engine name. Omit means auto. */
   searchEngine?: "auto" | "internal" | "exa" | "tavily" | "parallel" | "firecrawl" | "tinyfish";
   /** page = full content chrome inside iframe; embed = compact iframe child. */
@@ -658,12 +655,11 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.scrollbars !== undefined && v.scrollbars !== "always" && v.scrollbars !== "auto") {
     throw new Error(`${ctx}: scrollbars must be "always" or "auto"`);
   }
-  let palette: "default" | PaletteId | undefined;
-  const paletteId = typeof v.palette === "string" ? v.palette.trim().toLowerCase() : undefined;
-  if (paletteId !== undefined && (paletteId === "default" || isPaletteId(paletteId))) {
-    palette = paletteId;
-  } else if (v.palette !== undefined) {
-    throw new Error(`${ctx}: palette must be "default" or a known palette id`);
+  // An embed pins its own document theme (embed-route-shell), so a tenant
+  // palette could never paint. Refuse it rather than accept a no-op key; the
+  // deploy YAML's chrome.palette works for mode: app.
+  if (v.palette !== undefined) {
+    throw new Error(`${ctx}: palette is not supported on embeds (the embed owns its theme)`);
   }
   if (
     v.searchEngine !== undefined &&
@@ -873,7 +869,6 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     ...(v.scrollbars === "always" || v.scrollbars === "auto"
       ? { scrollbars: v.scrollbars }
       : {}),
-    ...(palette ? { palette } : {}),
     ...(typeof v.searchEngine === "string" &&
     (SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase())
       ? {

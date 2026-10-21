@@ -43,13 +43,47 @@ describe("normalizeEmbedHost", () => {
 });
 
 describe("parseEmbedTenants", () => {
-  it("accepts a palette id in any case, as the yaml schema does", () => {
+  it("refuses a palette: an embed owns its theme, so the key could never paint", () => {
     const base = JSON.parse(VALID) as Record<string, Record<string, unknown>>;
     const [host] = Object.keys(base);
-    base[host].palette = " Dracula ";
-    expect(parseEmbedTenants(JSON.stringify(base)).get(host)?.palette).toBe("dracula");
-    base[host].palette = "nope";
-    expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/palette/);
+    base[host].palette = "dracula";
+    expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/palette is not supported on embeds/);
+  });
+
+  it("refuses bad values for the chrome seed keys", () => {
+    const cases: Array<[string, unknown, RegExp]> = [
+      ["density", "dense", /density must be/],
+      ["effort", "max", /effort must be/],
+      ["toolbar", "no", /toolbar must be a boolean/],
+      ["scrollbars", "never", /scrollbars must be/],
+      ["searchEngine", "bing", /searchEngine is not a known engine/],
+    ];
+    for (const [key, value, message] of cases) {
+      const base = JSON.parse(VALID) as Record<string, Record<string, unknown>>;
+      const [host] = Object.keys(base);
+      base[host][key] = value;
+      expect(() => parseEmbedTenants(JSON.stringify(base)), key).toThrow(message);
+    }
+  });
+
+  it("keeps valid chrome seed keys", () => {
+    const base = JSON.parse(VALID) as Record<string, Record<string, unknown>>;
+    const [host] = Object.keys(base);
+    Object.assign(base[host], {
+      density: "airy",
+      effort: "high",
+      toolbar: false,
+      scrollbars: "auto",
+      searchEngine: " Exa ",
+    });
+    const t = parseEmbedTenants(JSON.stringify(base)).get(host);
+    expect(t).toMatchObject({
+      density: "airy",
+      effort: "high",
+      toolbar: false,
+      scrollbars: "auto",
+      searchEngine: "exa",
+    });
   });
 
   it("returns an empty registry for unset or blank env", () => {
