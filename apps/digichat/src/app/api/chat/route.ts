@@ -31,6 +31,7 @@ import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/st
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
+import { createTurnGuard, guardrailPrepareStep } from "@/lib/guardrails/turn";
 import { resolveLanguageCode } from "@/lib/languages";
 import { premiumModelsHeader } from "@/lib/deploy-config/schema";
 import { catalogModelRate, premiumIdsFromGroups } from "@/lib/model-picker-catalog";
@@ -45,6 +46,7 @@ import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import {
   checkEmbedIpRateLimit,
+  clientIpForEmbedLimit,
   clientIpForRateLimit,
 } from "@/lib/embed-ip-rate-limit";
 import {
@@ -326,6 +328,15 @@ async function handleChat(
   // Embed wins wherever both exist so the embed surface stays byte-identical;
   // the change is the session surface gaining the deployment config.
   const backend = embedConfig?.backend ?? dep?.backend;
+  const foundryAlias = backend && isFoundryConfig(backend) ? backend.maxToolCalls : undefined;
+  // Embed wins, same as the backend. Off unless a key or the Foundry alias is set.
+  const guard = createTurnGuard({
+    slug: embedConfig?.slug ?? dep?.slug ?? tenantSlug,
+    guardrails: embedConfig?.guardrails ?? dep?.guardrails,
+    foundryMaxToolCalls: foundryAlias,
+    userId: ownerUserSub,
+    ip: clientIpForRateLimit(req),
+  });
   // The registry describes the backend once (#4522): the streaming path is
   // chosen from `adapter.protocol`, never from a `backend.type` comparison.
   const adapter = backendAdapterFor(backend?.type);
@@ -469,14 +480,13 @@ async function handleChat(
 
     if (!quotaSatisfied) {
       try {
-        const ip = clientIpForRateLimit(req);
-        // "unknown" is what clientIpForRateLimit returns when no socket
-        // address was captured. Forwarded headers are not an identity (see
-        // that module). Treating "unknown" as one would collapse every
-        // visitor with no captured socket into a single shared quota bucket,
-        // permanently gating everyone after the first 3 turns total. Skip the
-        // quota entirely in that case and fail open, consistent with this
-        // module's "best-effort, not an authorization boundary" philosophy
+        const ip = clientIpForEmbedLimit(req);
+        // "unknown" is what the embed limiter returns when no visitor address
+        // can be derived. It is not an identity. Treating it as one would
+        // collapse every such visitor into a single shared quota bucket.
+        // Skip the quota in that case and fail open. A shared ingress with
+        // DIGICHAT_TRUSTED_PROXIES unset still resolves through the develop
+        // visitor header, so this skip is not the steady state there.
         // (embed-turn-quota.ts).
         if (ip !== "unknown") {
           if (quotaServiceUnavailable) {
@@ -631,6 +641,7 @@ async function handleChat(
       modelId,
       defaultModel: tenantDefaultModel,
       premium: premiumIds.includes(modelId),
+      premiumIds,
       rate: catalogModelRate(modelId),
       budget: dep.models.costPerWindow,
       userKey: premiumUserKey(
@@ -666,6 +677,8 @@ async function handleChat(
         signal: req.signal,
         responseLanguage: languageCode,
         turnMode,
+        maxToolCalls: guard.toolCap ?? foundryBackend.maxToolCalls,
+        guard,
       });
     } catch (err) {
       runLock.release();
@@ -693,6 +706,7 @@ async function handleChat(
           responseHeaders,
           activityDetail,
           signal: req.signal,
+          guard,
         }),
       );
     } catch (err) {
@@ -744,6 +758,7 @@ async function handleChat(
           responseHeaders,
           webSearch: webSearchEnabled,
           signal: req.signal,
+          guard,
         }),
       );
     } catch (err) {
@@ -943,6 +958,7 @@ async function handleChat(
           signal: req.signal,
           preface: premiumNotice,
           onUsage: chargePremium,
+          guard,
         }),
       );
     } catch (err) {
@@ -952,6 +968,64 @@ async function handleChat(
   }
 
   if (chargePremium) chargePremium();
+
+  if (guard.active) {
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        try {
+          if (premiumNotice) {
+            const textId = "premium-fallback";
+            writer.write({ type: "text-start", id: textId });
+            writer.write({
+              type: "text-delta",
+              id: textId,
+              delta: `${premiumNotice}\n\n`,
+            });
+            writer.write({ type: "text-end", id: textId });
+          }
+          const result = streamText({
+            model,
+            messages: coreMessages,
+            headers: upstreamHeaders,
+            abortSignal: req.signal,
+            experimental_transform: smoothStream({ chunking: "word" }),
+            prepareStep: (step) =>
+              guardrailPrepareStep({
+                guard,
+                writer,
+                signal: req.signal,
+                steps: step.steps,
+                messages: step.messages,
+                instructions:
+                  typeof step.instructions === "string" ? step.instructions : undefined,
+              }),
+            onFinish: (event) => {
+              guard.recordUsage(event.usage);
+            },
+          });
+          writer.merge(
+            toUIMessageStream({
+              stream: result.stream,
+              sendSources: true,
+              sendReasoning: true,
+            }),
+          );
+        } catch (err) {
+          guard.release();
+          throw err;
+        }
+      },
+      onFinish: () => {
+        guard.release();
+      },
+    });
+    return finish(
+      createUIMessageStreamResponse({
+        stream,
+        headers: responseHeaders,
+      }),
+    );
+  }
 
   const result = streamText({
     model,

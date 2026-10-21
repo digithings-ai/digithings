@@ -154,6 +154,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     },
     cli: { enabled: false },
     backend: cfg.backend,
+    ...(cfg.guardrails ? { guardrails: cfg.guardrails } : {}),
     ...(catalog.length
       ? { tools: { allowUserToggle: cfg.tools?.allowUserToggle ?? true, catalog } }
       : {}),
@@ -185,6 +186,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     slug: dep.slug,
     aliases: dep.aliases,
     backend: dep.backend,
+    ...(dep.guardrails ? { guardrails: dep.guardrails } : {}),
     gateMode: dep.gate.mode,
     theme: dep.chrome.theme,
     skin: dep.chrome.skin,

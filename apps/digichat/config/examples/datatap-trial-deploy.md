@@ -56,6 +56,14 @@ and the agent carries the search index + MCP tool server-side.
   dev MCP server (MCP tool, custom-keys connection, tenant key).
 - Reasoning summary **enabled** on the agent definition, otherwise thinking
   rows stay dropped by design.
+- `guardrails` (optional) is off unless a key is set. `maxToolCallsPerTurn`
+  caps tool calls per turn on every backend; `backend.maxToolCalls` remains
+  the Foundry alias and the shared key wins. `tokensPerMinute.deployment`
+  matches an upstream TPM and `tokensPerMinute.user` is a per-person limit.
+  The trial yaml leaves a proposed cap of `5` (alternative `4`) and the
+  deployment TPM commented out until the Azure number for gpt-5.6-terra in
+  westeurope is filled in. See the Guardrails section in
+  `apps/digichat/ARCHITECTURE.md`.
 - The agent's search tool needs a project connection that can **read the index
   definition**, not just query it. A query key returns `403` on
   `GET /indexes/<name>`, and the tool is refused with "Access denied. Check

@@ -13,7 +13,13 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
-import { SEARCH_ENGINES, type PageContextMode } from "@/lib/deploy-config/schema";
+import {
+  GuardrailsSchema,
+  SEARCH_ENGINES,
+  toolCallCapIssue,
+  type GuardrailsConfig,
+  type PageContextMode,
+} from "@/lib/deploy-config/schema";
 import {
   MAX_MCP_TOOL_ENTRIES,
   MAX_MCP_TOOL_NAME_LENGTH,
@@ -52,7 +58,16 @@ export type EmbedBackendConfig =
       /** digivault path prefix forwarded as X-Digi-Vault-Prefix */
       vaultPathPrefix?: string;
     }
-  | { type: "foundry"; projectEndpoint: string; agentName: string }
+  | {
+      type: "foundry";
+      projectEndpoint: string;
+      agentName: string;
+      /**
+       * Per-turn tool-call cap. Same key as the deployment YAML
+       * (`backend.maxToolCalls`). Omit for no cap.
+       */
+      maxToolCalls?: number;
+    }
   | {
       type: "openai-completions" | "openai-responses";
       /** https OpenAI-compatible base URL. */
@@ -122,6 +137,8 @@ export type EmbedTenantConfig = {
   slug: string;
   aliases?: string[];
   backend: EmbedBackendConfig;
+  /** Same block as the deployment YAML. Omit and every guard is off. */
+  guardrails?: GuardrailsConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   /**
@@ -433,7 +450,24 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     if (typeof backend.agentName !== "string" || !backend.agentName.trim()) {
       throw new Error(`${ctx}: foundry backend requires an "agentName"`);
     }
-    backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
+    let maxToolCalls: number | undefined;
+    if (backend.maxToolCalls !== undefined) {
+      if (
+        typeof backend.maxToolCalls !== "number" ||
+        !Number.isInteger(backend.maxToolCalls) ||
+        backend.maxToolCalls < 1 ||
+        backend.maxToolCalls > 100
+      ) {
+        throw new Error(`${ctx}: foundry backend.maxToolCalls must be an integer from 1 to 100`);
+      }
+      maxToolCalls = backend.maxToolCalls;
+    }
+    backendCfg = {
+      type: "foundry",
+      projectEndpoint: backend.projectEndpoint,
+      agentName: backend.agentName,
+      ...(maxToolCalls !== undefined ? { maxToolCalls } : {}),
+    };
   } else if (backend?.type === "openai-completions" || backend?.type === "openai-responses") {
     // OpenAI-compatible AI-SDK backends (#4535). Same field shape for both; the
     // wire format is the only difference. `apiKeyEnv` must name a
@@ -850,11 +884,28 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     };
   }
 
+  let guardrails: GuardrailsConfig | undefined;
+  if (v.guardrails !== undefined) {
+    const parsed = GuardrailsSchema.safeParse(v.guardrails);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "invalid guardrails";
+      throw new Error(`${ctx}: guardrails ${message}`);
+    }
+    guardrails = parsed.data;
+  }
+  const capIssue = toolCallCapIssue(
+    backendCfg.type,
+    guardrails?.maxToolCallsPerTurn ??
+      (backendCfg.type === "foundry" ? backendCfg.maxToolCalls : undefined),
+  );
+  if (capIssue) throw new Error(`${ctx}: ${capIssue}`);
+
   return {
     mcp,
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
     backend: backendCfg,
+    ...(guardrails ? { guardrails } : {}),
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
     skin:

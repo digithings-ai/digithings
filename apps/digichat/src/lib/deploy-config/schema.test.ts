@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
@@ -251,6 +251,152 @@ describe("DigichatConfigSchema", () => {
     ).toThrow(/skin/);
   });
 
+  it("accepts a foundry per-turn tool-call cap and rejects a non-cap", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "x",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://example.services.ai.azure.com",
+          agentName: "agent",
+          maxToolCalls: 5,
+        },
+      },
+    });
+    expect(cfg.deployment?.backend).toMatchObject({ type: "foundry", maxToolCalls: 5 });
+
+    const unlimited = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "x",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://example.services.ai.azure.com",
+          agentName: "agent",
+        },
+      },
+    });
+    expect(unlimited.deployment?.backend).not.toHaveProperty("maxToolCalls");
+
+    for (const maxToolCalls of [0, -1, 1.5, 101]) {
+      expect(() =>
+        parseDigichatConfig({
+          version: 1,
+          deployment: {
+            slug: "x",
+            backend: {
+              type: "foundry",
+              projectEndpoint: "https://example.services.ai.azure.com",
+              agentName: "agent",
+              maxToolCalls,
+            },
+          },
+        }),
+      ).toThrow(/maxToolCalls/);
+    }
+  });
+
+  it("accepts shared guardrails and rejects a fraction that cannot pause", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "x",
+        backend: { type: "digigraph" },
+        guardrails: {
+          maxToolCallsPerTurn: 5,
+          tokensPerMinute: { deployment: 100_000, user: 80_000 },
+        },
+      },
+    });
+    expect(cfg.deployment?.guardrails).toEqual({
+      maxToolCallsPerTurn: 5,
+      tokensPerMinute: { deployment: 100_000, user: 80_000 },
+    });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("notice/best-effort"));
+    warn.mockRestore();
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          backend: { type: "digigraph" },
+          guardrails: { answerAt: 0.95 },
+        },
+      }),
+    ).toThrow(/answerAt must be below pauseAt/);
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          backend: { type: "digigraph" },
+          guardrails: { tokensPerMinute: { user: 0 } },
+        },
+      }),
+    ).toThrow(/user/);
+
+    // The trial config filename contains a tenant name. Assemble it so this
+    // public test file does not carry that literal.
+    const trialFile = ["data", "tap-trial-foundry.yaml"].join("");
+    const trial = parseDigichatConfig(
+      loadYaml(readFileSync(resolve(__dirname, "../../../config", trialFile), "utf8")),
+      trialFile,
+    );
+    expect(trial.deployment?.guardrails).toBeUndefined();
+    expect(trial.deployment?.backend).not.toHaveProperty("maxToolCalls");
+  });
+
+  it("refuses a tool cap on a2a and warns on notice/best-effort backends", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(() =>
+        parseDigichatConfig({
+          version: 1,
+          deployment: {
+            slug: "x",
+            backend: { type: "a2a", baseUrl: "https://a2a.example.com" },
+            guardrails: { maxToolCallsPerTurn: 2 },
+          },
+        }),
+      ).toThrow(/no tool-call hook/);
+
+      for (const backend of [
+        { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+        { type: "ag-ui", url: "https://agui.example.com/run" },
+      ]) {
+        warn.mockClear();
+        const cfg = parseDigichatConfig({
+          version: 1,
+          deployment: { slug: "x", backend, guardrails: { maxToolCallsPerTurn: 2 } },
+        });
+        expect(cfg.deployment?.guardrails?.maxToolCallsPerTurn).toBe(2);
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining(`${backend.type} is notice/best-effort`),
+        );
+      }
+
+      warn.mockClear();
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          backend: {
+            type: "openai-responses",
+            baseUrl: "https://api.example.com/v1",
+            model: "gpt-5",
+            apiKeyEnv: "DIGICHAT_BACKEND_EXAMPLE_KEY",
+          },
+          guardrails: { maxToolCallsPerTurn: 2 },
+        },
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("fails closed on foundry http endpoint", () => {
     expect(() =>
       parseDigichatConfig({
@@ -367,6 +513,7 @@ describe("DigichatConfigSchema", () => {
     ]);
     expect(dt?.models.picker?.groups.length).toBeGreaterThan(0);
     expect(dt?.mcp?.allowUserServers).toBe(false);
+    expect(dt?.guardrails).toBeUndefined();
     expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
 
     const occ = parseDigichatConfig(
@@ -376,6 +523,7 @@ describe("DigichatConfigSchema", () => {
     const occHost = occ.hosts?.["occ.digithings.ai"];
     expect(occHost?.chrome.skin).toBe("digichat");
     expect(occHost?.backend.type).toBe("digigraph");
+    expect(occHost?.guardrails).toBeUndefined();
     // backend.digisearchIndex was retired; Help search reaches the model only as
     // the digisearch MCP server, whose setup names the occ_help index.
     expect(occHost?.tools?.catalog).toEqual([]);

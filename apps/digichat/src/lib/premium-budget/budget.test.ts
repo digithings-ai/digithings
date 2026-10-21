@@ -1,6 +1,10 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import catalogJson from "../../../config/model-picker-catalog.json";
-import { clientIpForRateLimit } from "@/lib/embed-ip-rate-limit";
+import {
+  PEER_IP_HEADER,
+  PEER_STAMP_HEADER,
+  clientIpForRateLimit,
+} from "@/lib/embed-ip-rate-limit";
 import {
   PREMIUM_BUDGET_MESSAGE,
   PREMIUM_BUDGET_TURNS,
@@ -94,48 +98,82 @@ describe("premium spend budget", () => {
     expect(blocked.notice).toBe(PREMIUM_BUDGET_MESSAGE);
   });
 
-  it("keeps rotating X-Forwarded-For values on one budget key", () => {
-    delete process.env.DIGICHAT_TRUSTED_PROXIES;
-    const keyFor = (xff: string, peer?: string) => {
-      const headers: Record<string, string> = {
-        "x-forwarded-for": xff,
-        "cf-connecting-ip": xff.split(",")[0]?.trim() ?? "",
-      };
-      if (peer) headers["x-digichat-peer-ip"] = peer;
-      const ip = clientIpForRateLimit(new Request("http://localhost/api/chat", { headers }));
-      return premiumUserKey("public", premiumSpendIdentity({ userId: "embed:anonymous", ip }));
-    };
-    const forwarded = ["198.51.100.1", "198.51.100.2, 10.0.0.1", "203.0.113.50"];
-    const unsigned = forwarded.map((xff) => keyFor(xff));
-    expect(new Set(unsigned).size).toBe(1);
-    expect(unsigned[0]).toBe("public:anonymous");
-
-    const peered = forwarded.map((xff) => keyFor(xff, "203.0.113.7"));
-    expect(new Set(peered).size).toBe(1);
-    expect(peered[0]).toBe("public:203.0.113.7");
-
+  it("drops to Auto when the configured default is itself premium", () => {
     const rate = { inputPerM: glm!.inputPerM, outputPerM: glm!.outputPerM };
     const now = Date.now();
-    for (const key of peered) chargePremiumUsage(key, rate, undefined, now);
-    const shared = applyPremiumBudget({
+    chargePremiumUsage("digithings:anon", rate, undefined, now);
+    chargePremiumUsage("digithings:anon", rate, undefined, now);
+    chargePremiumUsage("digithings:anon", rate, undefined, now);
+    const blocked = applyPremiumBudget({
       modelId: "z-ai/glm-5.3",
+      defaultModel: "google/gemini-3.8-flash",
       premium: true,
+      premiumIds: ["google/gemini-3.8-flash", "z-ai/glm-5.3"],
       rate,
       budget: { usd: 0.0125565, windowSeconds: 86_400 },
-      userKey: peered[0]!,
+      userKey: "digithings:anon",
       nowMs: Date.now(),
     });
-    expect(shared.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
-    const spoofed = applyPremiumBudget({
-      modelId: "z-ai/glm-5.3",
-      premium: true,
-      rate,
-      budget: { usd: 0.0125565, windowSeconds: 86_400 },
-      userKey: "public:198.51.100.1",
-      nowMs: Date.now(),
-    });
-    expect(spoofed.notice).toBeUndefined();
-    expect(spoofed.modelId).toBe("z-ai/glm-5.3");
+    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
+    expect(blocked.modelId).not.toBe("google/gemini-3.8-flash");
+    expect(blocked.notice).toBe(PREMIUM_BUDGET_MESSAGE);
+    expect(blocked.notice).toMatch(/Answering with Auto instead/);
+  });
+
+  it("keeps rotating X-Forwarded-For values on one budget key", () => {
+    delete process.env.DIGICHAT_TRUSTED_PROXIES;
+    delete process.env.DIGICHAT_PEER_STAMP;
+    try {
+      const keyFor = (xff: string, peer?: string, stamp?: string) => {
+        const headers: Record<string, string> = { "x-forwarded-for": xff };
+        if (peer) headers[PEER_IP_HEADER] = peer;
+        if (stamp) headers[PEER_STAMP_HEADER] = stamp;
+        // A bare peer has no stamp, so forwarded headers stay spoofable and
+        // must not open a budget key. A matching stamp is the socket.
+        if (!stamp) headers["cf-connecting-ip"] = xff.split(",")[0]?.trim() ?? "";
+        const ip = clientIpForRateLimit(new Request("http://localhost/api/chat", { headers }));
+        return premiumUserKey("public", premiumSpendIdentity({ userId: "embed:anonymous", ip }));
+      };
+      const forwarded = ["198.51.100.1", "198.51.100.2, 10.0.0.1", "203.0.113.50"];
+      const unsigned = forwarded.map((xff) => keyFor(xff));
+      expect(new Set(unsigned).size).toBe(1);
+      expect(unsigned[0]).toBe("public:anonymous");
+
+      const barePeer = forwarded.map((xff) => keyFor(xff, "203.0.113.7"));
+      expect(new Set(barePeer).size).toBe(1);
+      expect(barePeer[0]).toBe("public:anonymous");
+
+      process.env.DIGICHAT_PEER_STAMP = "stamp-secret";
+      const stamped = forwarded.map((xff) => keyFor(xff, "203.0.113.7", "stamp-secret"));
+      expect(new Set(stamped).size).toBe(1);
+      expect(stamped[0]).toBe("public:203.0.113.7");
+
+      const rate = { inputPerM: glm!.inputPerM, outputPerM: glm!.outputPerM };
+      const now = Date.now();
+      for (const key of stamped) chargePremiumUsage(key, rate, undefined, now);
+      const shared = applyPremiumBudget({
+        modelId: "z-ai/glm-5.3",
+        premium: true,
+        rate,
+        budget: { usd: 0.0125565, windowSeconds: 86_400 },
+        userKey: stamped[0]!,
+        nowMs: Date.now(),
+      });
+      expect(shared.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
+      const spoofed = applyPremiumBudget({
+        modelId: "z-ai/glm-5.3",
+        premium: true,
+        rate,
+        budget: { usd: 0.0125565, windowSeconds: 86_400 },
+        userKey: "public:198.51.100.1",
+        nowMs: Date.now(),
+      });
+      expect(spoofed.notice).toBeUndefined();
+      expect(spoofed.modelId).toBe("z-ai/glm-5.3");
+    } finally {
+      delete process.env.DIGICHAT_PEER_STAMP;
+      delete process.env.DIGICHAT_TRUSTED_PROXIES;
+    }
   });
 
   it("does not meter a preset or a deployment with no budget", () => {

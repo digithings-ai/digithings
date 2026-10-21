@@ -1,11 +1,9 @@
 /**
  * Per-user premium spend. Auto and the other presets are not metered.
  *
- * #6182's guardrails block (`tokensPerMinute`) is not on this branch. When
- * that PR lands, fold this module in beside it as `guardrails.costPerWindow`.
- * The in-memory window is per Node instance, the same limit #6182 documents
- * for its user counter. `installPremiumSpendStore` is the seam for a shared
- * store. This module does not call a provider.
+ * This sits beside `guardrails.tokensPerMinute` as `models.costPerWindow`.
+ * The in-memory window is per Node instance. `installPremiumSpendStore` is
+ * the seam for a shared store. This module does not call a provider.
  */
 
 import { autoPresetModelId } from "@/lib/model-picker-catalog";
@@ -86,10 +84,11 @@ export function resetPremiumSpendForTests(): void {
 }
 
 /**
- * Same order as #6182's `guardrailIdentity`. A client session header is not
- * a budget key. `embed:anonymous` is not a person, and `unknown` is not an
- * address (`clientIpForRateLimit`). Callers with neither share `anonymous`.
- * Replace this with `guardrailIdentity` when that PR lands.
+ * Same order as `guardrailIdentity`. A client session header is not a
+ * budget key. `embed:anonymous` is not a person, and `unknown` is not an
+ * address. The address is `clientIpForRateLimit`: a stamped socket, or a
+ * peer listed in `DIGICHAT_TRUSTED_PROXIES`. A caller-supplied header is
+ * not a key. Callers with neither share `anonymous`.
  */
 export function premiumSpendIdentity(opts: {
   userId?: string | null;
@@ -124,6 +123,8 @@ export function applyPremiumBudget(input: {
   modelId: string;
   defaultModel: string | undefined;
   premium: boolean;
+  /** Premium group ids. A default in this list is not a safe fallback. */
+  premiumIds?: readonly string[];
   rate: PremiumRate | undefined;
   budget: CostPerWindow | undefined;
   userKey: string;
@@ -140,7 +141,9 @@ export function applyPremiumBudget(input: {
   const windowMs = (input.budget.windowSeconds ?? DEFAULT_PREMIUM_WINDOW_SECONDS) * 1000;
   const spent = store.spent(input.userKey, nowMs, windowMs);
   if (spent >= input.budget.usd) {
-    const fallback = input.defaultModel?.trim() || autoPresetModelId();
+    const configured = input.defaultModel?.trim() ?? "";
+    const defaultIsPremium = configured.length > 0 && (input.premiumIds ?? []).includes(configured);
+    const fallback = configured && !defaultIsPremium ? configured : autoPresetModelId();
     return {
       modelId: fallback,
       notice: PREMIUM_BUDGET_MESSAGE,
