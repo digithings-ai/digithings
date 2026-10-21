@@ -775,10 +775,27 @@ their own — the provider menu they render cannot activate an own key — so
 they name the house backend; the embed surface names its own provider while
 a key is set.
 
-The house backend id appears a second time inline in the provider menu
-(`src/components/stock/embed-composer-menu.tsx`), which lists the house
-backend as one provider choice among the own-key ones. That copy is the one
-to watch for drift.
+**The house backend id has one home (DIG-4887).** Decision: the provider menu
+(`src/components/stock/embed-composer-menu.tsx`) reads the house backend id
+from the same `HOUSE_BACKEND_ID` constant as the chip and the static
+surfaces, and keeps no copy of its own. The menu lists the house backend as
+one provider choice among the own-key ones, and both the row's id and its
+label come from that constant. Reason: the id used to be written inline in
+the menu, so the provider menu and the composer chip each named the house
+backend from a place of their own and could drift apart — the chip would
+name one backend while the menu offered another. DIG-4597 introduced the
+constant and made the surfaces read it, and it left that copy as "the one
+to watch for drift"; DIG-4887 closed it. The value did not change, so the
+menu still lists the house backend under the same name.
+
+The picker test pins the label the menu renders, so a change of the value
+fails loudly. What no test could see was the drift itself: the chip read
+the constant while the menu read a copy of the value as it stood that day.
+The invariant is now pinned from the source: the menu's own pins in
+`src/components/stock/embed-composer-menu.source.test.ts`, and the app-wide
+rule in `src/lib/route-client-config.source.test.ts` — the menu names
+`HOUSE_BACKEND_ID`, and among the app modules under `src` the id is written
+in one place only.
 
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 (stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
@@ -1829,6 +1846,18 @@ part-driven vs chrome-driven is indexed in digiweb
 | `features.attachments` | bool | Default **true** (composer attach). Product / DataTap / dashboard YAML set false. |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |
+| `features.density` | `compact \| default \| airy` | Worked-chain rhythm. Default `default` (the fixed spacing). A browser `dt-density` choice wins over this for that user. Unlike the other embed prefs (session-only), `/density` persists in localStorage, so a choice can carry between same-origin surfaces (browsers that partition third-party iframe storage keep an embedded chat separate). |
+| `features.effort` | `low \| medium \| high` | Seeds `/effort`. Default `medium`. A palette choice overrides it for the session; `/new` returns to this value. |
+| `features.view` | `quiet \| balanced \| verbose` | Already the chain disclosure. Seeds `/view`. Session choice wins until `/new`. |
+| `features.thinking` | `auto \| collapsed \| open` | Seeds `/thinking`. Session choice wins until `/new`. |
+| `chrome.palette` | `default` or a palette id | Deployment palette for `mode: app`. Omitted means the digichat skin palette. A stored `dt-palette` choice wins and is not overwritten; picking the "default" palette removes `dt-palette`, so the deployment palette paints again on the next load (an explicit "no palette" choice is a follow-up). Not available on embeds: the embed pins its own theme, and the tenant registry refuses `palette`. Does not change `data-theme`. |
+| `chrome.toolbar` | bool, default `true` | Seeds `/toolbar`. |
+| `chrome.scrollbars` | `always \| auto`, default `always` | Seeds `/scrollbar`. |
+| `gate.searchEngine` | `auto \| internal \| exa \| tavily \| parallel \| firecrawl \| tinyfish` | Seeds `/search-engine`. Omitted means auto. Engine name only. |
+
+`/models` reads `models.default`. `/language` reads `chrome.defaultLanguage`. `/theme` mode reads `chrome.theme` for the no-JS paint; a stored `dt-theme` still follows the OS when absent, which is unchanged. Web search, digisearch, and digivault stay capability flags (`gate` / catalog), not new defaults.
+
+The trial, OCC and digithings.ai configs omit the new keys, so they stay on these defaults.
 
 `chrome.skin` selects one of the 11 official assistant-ui catalog templates
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`

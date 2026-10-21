@@ -29,6 +29,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setSearchEngine: vi.fn(),
     setToolbar: vi.fn(),
     setScrollbars: vi.fn(),
+    setDensity: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -51,6 +52,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openEffort: vi.fn(),
     openSearchEngine: vi.fn(),
     openView: vi.fn(),
+    openDensity: vi.fn(),
     openThinking: vi.fn(),
     openLanguage: vi.fn(),
     openSessions: vi.fn(),
@@ -122,6 +124,25 @@ describe("/theme", () => {
     executeSlashDef(theme!, "default dark", prefs);
     expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("keeps a deployment palette when only the mode is typed", () => {
+    // Painted by the deployment (no stored dt-palette), as the picker shows it.
+    document.documentElement.setAttribute("data-palette", "dracula");
+    executeSlashDef(theme!, "light", api());
+    expect(document.documentElement.getAttribute("data-palette")).toBe("dracula");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    // The mode is stored; the deployment's palette is not frozen into storage.
+    expect(localStorage.getItem("dt-theme")).toBe("light");
+    expect(localStorage.getItem("dt-palette")).toBeNull();
+  });
+
+  it("keeps a stored palette choice when only the mode is typed", () => {
+    localStorage.setItem("dt-palette", "aura");
+    document.documentElement.setAttribute("data-palette", "aura");
+    executeSlashDef(theme!, "dark", api());
+    expect(localStorage.getItem("dt-palette")).toBe("aura");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
   });
 
   it("opens the picker for an empty or unknown argument", () => {

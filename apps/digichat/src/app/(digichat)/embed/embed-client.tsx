@@ -34,8 +34,11 @@ import {
   EmbedChatPrefsProvider,
   SkinCredit,
   catalogToolsFromClient,
+  chromePrefsFromDeploy,
   disabledCatalogIds,
   extraOffFromCatalog,
+  persistDensity,
+  useStoredDensityAfterMount,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
 } from "@digithings/ui/chat/stock";
@@ -559,8 +562,20 @@ function EmbedChat({
     language: tenantLanguage,
     view: stockClient.features.view,
     thinking: stockClient.features.thinking,
+    // No storage on the first render (hydration); see useStoredDensityAfterMount.
+    ...chromePrefsFromDeploy(
+      {
+        density: stockClient.features.density,
+        effort: stockClient.features.effort,
+        searchEngine: stockClient.gate.searchEngine,
+        toolbar: stockClient.chrome.toolbar,
+        scrollbars: stockClient.chrome.scrollbars,
+      },
+      null,
+    ),
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
+  useStoredDensityAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
@@ -1208,12 +1223,23 @@ function EmbedChat({
       setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
       setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
       setScrollbars: (mode) => setChatPrefs((p) => ({ ...p, scrollbars: mode })),
+      setDensity: (density) => {
+        persistDensity(density);
+        setChatPrefs((p) => ({ ...p, density }));
+      },
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
+          ...chromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+          }),
           extra: extraOffFromCatalog(catalogTools),
         }),
       tenantAllowsWeb,
@@ -1266,6 +1292,9 @@ function EmbedChat({
       openView: () => {
         setComposerMenu("view");
       },
+      openDensity: () => {
+        setComposerMenu("density");
+      },
       // /theme is open on every embed (2.6.6). The tenant's theme is the
       // start; a pick lasts for this tab and is not written to localStorage.
       ...embedThemePrefs({
@@ -1289,6 +1318,13 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
+          ...chromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+          }),
           extra: extraOffFromCatalog(catalogTools),
         });
         chat.reset?.();
@@ -1299,6 +1335,13 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
+          ...chromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+          }),
           extra: extraOffFromCatalog(catalogTools),
         });
         chat.reset?.();
@@ -1328,6 +1371,11 @@ function EmbedChat({
       theme.mode,
       theme.palette,
       onThemePick,
+      stockClient.features.density,
+      stockClient.features.effort,
+      stockClient.gate.searchEngine,
+      stockClient.chrome.toolbar,
+      stockClient.chrome.scrollbars,
     ],
   );
 

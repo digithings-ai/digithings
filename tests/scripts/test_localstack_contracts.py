@@ -383,6 +383,191 @@ def test_the_digigraph_probe_follows_the_port_override_in_the_merged_catalogue()
     assert url == "http://127.0.0.1:18000/healthz"
 
 
+# --- the digigraph port knob is a port, or it is refused (DIG-4911) ---------
+#
+# A value that is not a port does not make the templated URL unparseable: it
+# makes the URL point somewhere else. "8000@evil.com" expands to
+# "http://127.0.0.1:8000@evil.com/healthz", which parses, with "127.0.0.1:8000"
+# read as userinfo and the host read as "evil.com". So the value is validated
+# before it is templated, and a value that is not a port is refused.
+
+
+def _digigraph_check():
+    return next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "8000@evil.com",
+        "8000/@evil.com",
+        "8000#x",
+        "0",
+        "65536",
+        "-1",
+        "+8000",
+        " 8000",
+        "８０００",
+        "0x1F40",
+    ],
+)
+def test_the_digigraph_probe_refuses_a_value_that_is_not_a_port(value):
+    """Each of these is a value a raw expansion would have templated.
+
+    Surrounding whitespace is in the list: a port is plain decimal digits
+    (DIG-4911 ask 1), so " 8000" is refused and never trimmed into a port.
+    The Supabase pair keeps its own soft policy, because localstack.localenv
+    normalizes DT_SUPABASE_PORT before the contracts see it.
+    """
+    check = _digigraph_check()
+    with pytest.raises(contracts.InvalidPort) as excinfo:
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": value})
+    message = str(excinfo.value)
+    # The operator has to learn which knob is wrong.
+    assert "DT_DIGIGRAPH_PORT" in message
+    # ... and that the value they exported is the one that is wrong.
+    assert value in message
+
+
+def test_the_refusal_is_a_refusal_and_not_a_fall_back_to_the_default():
+    """A refused knob must not become the default port behind the operator's back."""
+    check = _digigraph_check()
+    with pytest.raises(contracts.InvalidPort):
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "8000@evil.com"})
+    # The default is still what an unset knob gives - the refusal is about the
+    # value, not about the port the default happens to be.
+    assert contracts.resolve(check, {})[0] == "http://127.0.0.1:8000/healthz"
+
+
+def test_a_refusal_names_the_reason_and_the_range():
+    check = _digigraph_check()
+    with pytest.raises(contracts.InvalidPort) as excinfo:
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "65536"})
+    message = str(excinfo.value)
+    assert "DT_DIGIGRAPH_PORT" in message
+    assert "65536" in message
+    assert "1-65535" in message
+
+
+def test_a_refusal_says_what_a_port_looks_like():
+    check = _digigraph_check()
+    with pytest.raises(contracts.InvalidPort) as excinfo:
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "8000@evil.com"})
+    assert "decimal digits" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("value", ["1", "18000", "65535"])
+def test_the_digigraph_probe_accepts_a_plain_port(value):
+    check = _digigraph_check()
+    url, reason = contracts.resolve(check, {"DT_DIGIGRAPH_PORT": value})
+    assert reason is None
+    assert url == f"http://127.0.0.1:{value}/healthz"
+    split = urlsplit(url)
+    assert split.hostname == "127.0.0.1"
+    assert split.port == int(value)
+
+
+@pytest.mark.parametrize("config", [{}, {"DT_DIGIGRAPH_PORT": ""}])
+def test_the_digigraph_probe_keeps_the_default_when_the_knob_is_unset_or_empty(config):
+    check = _digigraph_check()
+    url, reason = contracts.resolve(check, config)
+    assert reason is None
+    assert url == "http://127.0.0.1:8000/healthz"
+    assert urlsplit(url).hostname == "127.0.0.1"
+
+
+def test_the_resolved_url_is_refused_unless_it_is_loopback_on_that_port():
+    """The guard is on the URL the probe opens, not only on the value's shape.
+
+    A template that named a host other than 127.0.0.1 would carry a perfectly
+    valid port, so the digit check alone would let it through. The resolved
+    URL is parsed and refused unless it is the loopback probe on the port
+    that was validated.
+    """
+    off_machine = contracts.Check(
+        name="digigraph",
+        kind="http",
+        url="http://example.com:${DT_DIGIGRAPH_PORT:-8000}/healthz",
+        profiles=("core",),
+        source="test",
+    )
+    with pytest.raises(contracts.InvalidPort) as excinfo:
+        contracts.resolve(off_machine, {"DT_DIGIGRAPH_PORT": "8000"})
+    message = str(excinfo.value)
+    assert "127.0.0.1" in message
+    # The needle is a parsed value, not a string literal, so the CodeQL rule
+    # py/incomplete-url-substring-sanitization does not read this as a check
+    # on a URL substring (the alert it raised on the previous head). The line
+    # stays: it is the only pin on "the refusal names the offending host".
+    assert urlsplit(off_machine.url).hostname in message
+
+
+def test_the_raw_expansion_would_have_pointed_off_the_machine():
+    """The control: what the code did before the refusal, and why it mattered.
+
+    Without the validation the raw value is templated into the URL and the
+    result parses - with the host reading "evil.com" and "127.0.0.1:8000"
+    read as userinfo. The probe would have left the machine.
+    """
+    naive = "http://127.0.0.1:8000@evil.com/healthz"
+    split = urlsplit(naive)
+    assert split.hostname == "evil.com"
+    assert split.username == "127.0.0.1"
+    # And the value the gate now refuses is exactly that one.
+    with pytest.raises(contracts.InvalidPort):
+        contracts.resolve(_digigraph_check(), {"DT_DIGIGRAPH_PORT": "8000@evil.com"})
+
+
+def test_every_port_knob_is_validated_and_guarded():
+    """The rule is not a list of knobs: it is the port slot of the URL.
+
+    Every built-in row that templates a knob has to refuse a value that is
+    not a port, and the URL it resolves to has to be the loopback probe on
+    the port the knob was validated to carry. There is no strict-knob list to
+    keep in sync, so a new templated row is guarded the moment it lands.
+    """
+    templated = [c for c in contracts.BUILTIN_CHECKS if c.url and "${" in c.url]
+    assert templated, "the catalogue templates knobs; the guard has to cover them"
+    for check in templated:
+        knob = re.search(r"\$\{([A-Za-z_][A-Za-z0-9_]*)", check.url).group(1)
+        with pytest.raises(contracts.InvalidPort):
+            contracts.resolve(check, {knob: "8000@evil.com"})
+        url = contracts.resolve(check, {knob: "18000"})[0]
+        assert urlsplit(url).hostname == "127.0.0.1"
+        assert urlsplit(url).port == 18000
+
+
+def test_the_refusal_covers_the_port_as_well_as_the_host():
+    """The guard checks the port too, not only the host.
+
+    Deleting the port half of the comparison leaves the host half to catch
+    the off-machine case, so the suite would stay green on a guard that
+    accepts a URL on the loopback but on the wrong port.
+    """
+    with pytest.raises(contracts.InvalidPort):
+        contracts._assert_loopback_port(
+            "http://127.0.0.1:9999/healthz", "DT_DIGIGRAPH_PORT", 8000
+        )
+
+
+def test_a_knob_outside_the_port_slot_keeps_the_plain_expansion():
+    """The port slot decides, not a knob list.
+
+    A reference that does not stand for the port keeps the plain expansion,
+    so this change does not alter how a non-port templated default behaves.
+    """
+    other = contracts.Check(
+        name="probe",
+        kind="http",
+        url="http://127.0.0.1:8000/${DT_OTHER_PATH:-api}/x",
+        profiles=("core",),
+        source="test",
+    )
+    assert contracts.resolve(other, {"DT_OTHER_PATH": "api"})[0] == (
+        "http://127.0.0.1:8000/api/x"
+    )
+
+
 def test_env_expansion_falls_back_to_the_declared_default():
     check = contracts.Check(
         name="probe",
@@ -570,16 +755,18 @@ def test_every_knob_row_is_guarded():
     assert templated == {name for name, _ in PORT_KNOBS}
 
 
-def test_a_port_knob_with_surrounding_whitespace_is_still_a_port():
-    """Whitespace is noise around a number, not a different number.
+def test_a_port_knob_with_surrounding_whitespace_is_refused():
+    """Whitespace around a port is not a port.
 
-    The Supabase port knob already strips (localstack.supabase_ports), so the
-    gate must agree with it rather than refuse a value the stack accepts.
+    DIG-4911 ask 1: the port is plain decimal digits, so " 18000 " is not one
+    and is refused like any other value that is not a port. The Supabase pair
+    keeps its own soft policy, because localstack.localenv normalizes
+    DT_SUPABASE_PORT before the contracts see it.
     """
     check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
-    url, reason = contracts.resolve(check, {"DT_DIGIGRAPH_PORT": " 18000 "})
-    assert reason is None
-    assert url == "http://127.0.0.1:18000/healthz"
+    with pytest.raises(contracts.InvalidPort) as excinfo:
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": " 18000 "})
+    assert "DT_DIGIGRAPH_PORT" in str(excinfo.value)
 
 
 def test_the_dashboard_api_probe_never_leaves_loopback():

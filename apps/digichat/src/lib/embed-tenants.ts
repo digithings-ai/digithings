@@ -13,12 +13,13 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
-import type { PageContextMode } from "@/lib/deploy-config/schema";
+import { SEARCH_ENGINES, type PageContextMode } from "@/lib/deploy-config/schema";
 import {
   MAX_MCP_TOOL_ENTRIES,
   MAX_MCP_TOOL_NAME_LENGTH,
 } from "@/lib/deploy-config/mcp-servers";
 import { HEX_COLOR } from "@/lib/hex-color";
+import { normalizeTraceDensity } from "@digithings/ui/chat/trace-spacing";
 import { LANGUAGES } from "@/lib/languages";
 import {
   THINKING_MODES,
@@ -194,6 +195,16 @@ export type EmbedTenantConfig = {
    * collapsed (pinned closed), open (pinned expanded).
    */
   thinking?: ThinkingMode;
+  /** Worked-chain rhythm. Omit keeps `default`. */
+  density?: "compact" | "default" | "airy";
+  /** Session effort seed. Omit keeps `medium`. */
+  effort?: "low" | "medium" | "high";
+  /** Composer toolbar. Omit keeps it on. */
+  toolbar?: boolean;
+  /** Scrollbar gutter. Omit keeps `always`. */
+  scrollbars?: "always" | "auto";
+  /** Web-search engine name. Omit means auto. */
+  searchEngine?: "auto" | "internal" | "exa" | "tavily" | "parallel" | "firecrawl" | "tinyfish";
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
@@ -625,6 +636,38 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.thinking !== undefined && !THINKING_MODES.includes(v.thinking as ThinkingMode)) {
     throw new Error(`${ctx}: thinking must be "auto", "collapsed", or "open"`);
   }
+  const density =
+    typeof v.density === "string" ? normalizeTraceDensity(v.density) : null;
+  if (v.density !== undefined && !density) {
+    throw new Error(`${ctx}: density must be "compact", "default", or "airy"`);
+  }
+  if (
+    v.effort !== undefined &&
+    v.effort !== "low" &&
+    v.effort !== "medium" &&
+    v.effort !== "high"
+  ) {
+    throw new Error(`${ctx}: effort must be "low", "medium", or "high"`);
+  }
+  if (v.toolbar !== undefined && typeof v.toolbar !== "boolean") {
+    throw new Error(`${ctx}: toolbar must be a boolean`);
+  }
+  if (v.scrollbars !== undefined && v.scrollbars !== "always" && v.scrollbars !== "auto") {
+    throw new Error(`${ctx}: scrollbars must be "always" or "auto"`);
+  }
+  // An embed pins its own document theme (embed-route-shell), so a tenant
+  // palette could never paint. Refuse it rather than accept a no-op key; the
+  // deploy YAML's chrome.palette works for mode: app.
+  if (v.palette !== undefined) {
+    throw new Error(`${ctx}: palette is not supported on embeds (the embed owns its theme)`);
+  }
+  if (
+    v.searchEngine !== undefined &&
+    (typeof v.searchEngine !== "string" ||
+      !(SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase()))
+  ) {
+    throw new Error(`${ctx}: searchEngine is not a known engine`);
+  }
   if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
     throw new Error(`${ctx}: attachments must be a boolean`);
   }
@@ -818,6 +861,20 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)
       ? (v.thinking as ThinkingMode)
       : undefined,
+    ...(density ? { density } : {}),
+    ...(v.effort === "low" || v.effort === "medium" || v.effort === "high"
+      ? { effort: v.effort }
+      : {}),
+    ...(v.toolbar === false ? { toolbar: false as const } : {}),
+    ...(v.scrollbars === "always" || v.scrollbars === "auto"
+      ? { scrollbars: v.scrollbars }
+      : {}),
+    ...(typeof v.searchEngine === "string" &&
+    (SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase())
+      ? {
+          searchEngine: v.searchEngine.trim().toLowerCase() as (typeof SEARCH_ENGINES)[number],
+        }
+      : {}),
     attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
     dictation: typeof v.dictation === "boolean" ? v.dictation : undefined,
     speech: typeof v.speech === "boolean" ? v.speech : undefined,

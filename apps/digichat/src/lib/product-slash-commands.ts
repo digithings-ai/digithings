@@ -21,11 +21,7 @@ import {
   languageLabel,
   tryResolveLanguageInput,
 } from "@/lib/languages";
-import {
-  isLegacyViewMode,
-  isViewMode,
-  normalizeViewMode,
-} from "@/lib/view-modes";
+import { isTraceDensity } from "@digithings/ui/chat/trace-spacing";
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import {
   applyDocumentTheme,
@@ -33,10 +29,15 @@ import {
   isThemePreference,
   matchThemeStep,
   normalizePalette,
-  readThemeState,
   type ThemePreference,
   type ThemeState,
 } from "@digithings/ui/theme";
+import {
+  isLegacyViewMode,
+  isViewMode,
+  normalizeViewMode,
+} from "@/lib/view-modes";
+import { applyThemeModeKeepingPalette, readEffectiveThemeState } from "@/lib/palette-prefs";
 import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
 
 export type SlashSubmitAction =
@@ -112,7 +113,9 @@ export function visibilityFromPrefs(api: EmbedChatPrefsApi): SlashVisibility {
 
 /** The theme `/theme` reads: the host's own (tenant embed) or the document's. */
 export function currentThemeState(api: EmbedChatPrefsApi): ThemeState {
-  return api.themeState ?? readThemeState();
+  // The painted palette when the host does not own the theme (a deployment
+  // palette is painted, not stored).
+  return api.themeState ?? readEffectiveThemeState();
 }
 
 /** Apply a `/theme` pick through the host when it owns the theme, else document-wide. */
@@ -168,6 +171,8 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = toggleHint(prefs.vault, "vault notes", "disabled this session");
     } else if (def.id === "view") {
       description = `View: ${prefs.view}`;
+    } else if (def.id === "density") {
+      description = `Density: ${prefs.density}`;
     } else if (def.id === "theme") {
       const state = currentThemeState(api);
       description = matchThemeStep(state.preference, state.palette, state.resolved).label;
@@ -234,6 +239,12 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       else api.openView();
       return;
     }
+    case "density": {
+      const raw = arg.trim().toLowerCase();
+      if (isTraceDensity(raw)) api.setDensity(raw);
+      else api.openDensity();
+      return;
+    }
     case "theme": {
       if (api.themeLocked) return;
       const raw = arg.trim().toLowerCase();
@@ -241,9 +252,14 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
         api.openTheme?.();
         return;
       }
+      // The painted palette, so `/theme light` keeps a deployment palette the
+      // picker and the row description already show (not storage alone).
       const state = currentThemeState(api);
       if (isThemePreference(raw)) {
-        applyThemePick(api, raw, state.palette);
+        // A host-owned theme (embed) takes the pick; the app changes the mode
+        // and keeps the painted palette without freezing it into dt-palette.
+        if (api.setTheme) applyThemePick(api, raw, state.palette);
+        else applyThemeModeKeepingPalette(raw);
         return;
       }
       if (raw === "default" || isPaletteId(raw)) {
