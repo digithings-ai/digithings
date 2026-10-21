@@ -45,6 +45,14 @@ LOGD = f"{HOME}/.config/digithings/logs/local-ci"
 LOCK = f"{HOME}/.config/digithings/state/local-ci.lock"
 PAUSE = f"{HOME}/.config/digithings/state/worktree-pause"
 CTX = "local-ci"; MAX_PER_TICK = 2; MIN_AVAIL_MB = 2048; MIN_FREE_PCT = 20.0
+# The app's own status row, posted with the app's installation token (DIG-4809).
+# The pipeline mints the token before the worker starts and writes it to this
+# file; the worker then posts the same verdict twice, once per identity, so
+# the two rows can be compared for 48 hours. The app token is the only
+# identity allowed to post this row: with no token there is no row at all,
+# because a row under another identity would be worse than no row.
+APP_CTX = "local-ci/app"
+APP_TOKEN_FILE = f"{HOME}/.config/digithings/secrets/app-token"
 # Primary memory gate (DIG-3783): skip below this system-wide free percentage,
 # the same signal the board driver uses. vm_stat reclaimable MB is the fallback.
 # Exact context name required by main's branch protection (ci-review-coverage.yml
@@ -119,16 +127,20 @@ ENV = build_env()
 def log(m):
     with open(f"{LOGD}/local-ci.log", "a") as f: f.write(time.strftime("%F %T ") + m + "\n")
 
-def sh(cmd, cwd=None, timeout=1800, out=None, name=None):
+def sh(cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
     """Run a command under a wall-clock timeout that takes the WHOLE tree down.
 
     `subprocess.run(timeout=)` kills only the direct child: the wrangler and
     esbuild grandchildren survive, are re-parented to pid 1 and leak (8 leaked
     trees measured 2026-10-19). The child gets its own process group so the
     timeout can break the tree, and its identity is recorded for the watchdog.
+
+    `env` replaces the gate's environment for this one call. The app status
+    posts with the app's own token, and that token belongs in the child's
+    environment and not in the gate's (DIG-4809).
     """
     try:
-        p = subprocess.Popen(cmd, cwd=cwd, env=ENV, stdout=subprocess.PIPE,
+        p = subprocess.Popen(cmd, cwd=cwd, env=ENV if env is None else env, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, text=True,
                              start_new_session=True, shell=isinstance(cmd, str))
     except OSError as e:
@@ -211,12 +223,60 @@ def build_target_url():
     return (os.environ.get("LOCAL_CI_TARGET_URL") or os.environ.get("CI_PIPELINE_URL") or "").strip()
 
 
+def app_token():
+    """The app installation token the pipeline minted, or "" when there is none.
+
+    Read from the file the pipeline wrote, never printed and never taken from
+    the command line: the file is 0600, owned by the worker, and no log line
+    holds it. The environment is the fallback for a run that hands the token
+    over directly.
+    """
+    path = os.environ.get("LOCAL_CI_APP_TOKEN_FILE") or APP_TOKEN_FILE
+    try:
+        with open(path) as f:
+            tok = f.read().strip()
+    except OSError:
+        tok = ""
+    return tok or (os.environ.get("CI_APP_TOKEN") or "").strip()
+
+
+def app_status(sha, state, desc):
+    """Post the same verdict under `local-ci/app`, with the app's own token.
+
+    The token goes into the child's environment, never into its arguments, so
+    it cannot land in a process listing or in the log line the runner writes
+    for every command it starts. With no token there is no row: the app is the
+    only identity allowed to post this one.
+    """
+    tok = app_token()
+    if not tok:
+        log("app status: skipped, no app token")
+        return False
+    args = ["api", "-X", "POST", f"repos/{REPO}/statuses/{sha}", "-f", f"state={state}",
+            "-f", f"context={APP_CTX}", "-f", f"description={desc[:139]}"]
+    target = build_target_url()
+    if target:
+        args += ["-f", f"target_url={target}"]
+    env = dict(ENV)
+    env["GH_TOKEN"] = tok
+    env["GITHUB_TOKEN"] = tok
+    rc, _ = sh(["gh", *args], timeout=120, env=env)
+    if rc != 0:
+        log(f"app status: failed (rc={rc})")
+        return False
+    log(f"app status: {state} {APP_CTX}")
+    return True
+
+
 def status(sha, state, desc):
     """Post the `local-ci` status, naming the build when there is one.
 
     The name is what makes the status evidence: a commit status is worth what
     its writer is worth, and the queue reads the build back from Woodpecker
     before it trusts the green (DIG-4794).
+
+    The same verdict goes out under `local-ci/app`, posted with the app's own
+    token, so the two rows are always the same verdict (DIG-4809).
     """
     args = ["api", "-X", "POST", f"repos/{REPO}/statuses/{sha}", "-f", f"state={state}",
             "-f", f"context={CTX}", "-f", f"description={desc[:139]}"]
@@ -224,6 +284,7 @@ def status(sha, state, desc):
     if target:
         args += ["-f", f"target_url={target}"]
     gh(*args)
+    app_status(sha, state, desc)
 
 
 def review_status(sha, state, desc):
