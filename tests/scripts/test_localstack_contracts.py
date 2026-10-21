@@ -776,3 +776,148 @@ def test_the_dashboard_api_probe_never_leaves_loopback():
     assert urlsplit(resolved).hostname == "127.0.0.1"
     with pytest.raises(contracts.InvalidPort):
         contracts.resolve(check, {"DT_DASHBOARD_API_PORT": "8000@evil.com"})
+
+
+# --- a contract row's port is a port, or the row is refused (DIG-4905) -----
+#
+# A contract row can carry a `port:` key, and the catalogue turns it into the
+# loopback URL of that row. The port used to be read with a bare int(): "8_000"
+# and "+8000" were coerced into a number, and "8000@evil.com" raised a bare
+# ValueError that reached `dt status` as a traceback. The port is read with
+# the same validator the knobs use, so the module holds one idea of what a
+# port is. A row that carries anything else is refused: the row stays in the
+# catalogue with the reason on it, so the merge cannot fall back to the
+# built-in URL and the gate fails the row.
+
+
+def _contract(tmp_path: Path, body: str) -> None:
+    """Write a contract file into a root the catalogue reader accepts."""
+    (tmp_path / "config" / "contract").mkdir(parents=True)
+    (tmp_path / "config" / "contract" / "services.yaml").write_text(body, encoding="utf-8")
+
+
+def _digigraph_row(tmp_path: Path) -> contracts.Check:
+    checks, _origin = contracts.load_checks(tmp_path)
+    return next(c for c in checks if c.name == "digigraph")
+
+
+@pytest.mark.parametrize("value", [*NOT_A_PORT, " 8000 "])
+def test_a_contract_row_with_a_port_that_is_not_a_port_is_refused(tmp_path, value):
+    """The contract port is read with the same rule as the knobs.
+
+    "8_000" and "+8000" were the two shapes int() read as numbers, and
+    "8000@evil.com" was the one that raised. None of them is a port, and a
+    port carries no whitespace either.
+    """
+    _contract(
+        tmp_path,
+        "services:\n"
+        "  - name: digigraph\n"
+        f"    port: {value!r}\n"
+        "    health_path: /healthz\n",
+    )
+    row = _digigraph_row(tmp_path)
+    with pytest.raises(contracts.InvalidPort) as caught:
+        contracts.resolve(row, {})
+    message = str(caught.value)
+    # The operator has to learn which row is wrong ...
+    assert "digigraph" in message
+    # ... and which value they wrote.
+    assert value in message
+
+
+def test_a_refused_contract_row_does_not_fall_back_to_the_built_in_url(tmp_path):
+    """A refusal is not a quiet fallback to the default port.
+
+    The merge takes the contract row over the built-in one, so a row that
+    carries a refused port must not leave the built-in URL standing: the
+    operator asked for a port that is not a port, and the gate has to say so
+    instead of probing something else.
+    """
+    _contract(
+        tmp_path,
+        "services:\n"
+        "  - name: digigraph\n"
+        "    port: '8000@evil.com'\n"
+        "    health_path: /healthz\n",
+    )
+    row = _digigraph_row(tmp_path)
+    assert row.url is None, "a refused row must not carry a URL"
+    with pytest.raises(contracts.InvalidPort):
+        contracts.resolve(row, {})
+
+
+def test_reading_a_contract_with_a_bad_port_does_not_raise(tmp_path):
+    """`dt status` reads the catalogue before it probes anything.
+
+    The bare ValueError out of the old int() reached `dt status` as a
+    traceback. The refusal travels on the row instead, so reading the
+    catalogue never raises.
+    """
+    _contract(
+        tmp_path,
+        "services:\n  - name: digigraph\n    port: '8000@evil.com'\n",
+    )
+    checks, origin = contracts.load_checks(tmp_path)
+    assert origin != "built-in defaults"
+    assert [c.name for c in checks if c.refusal] == ["digigraph"]
+
+
+@pytest.mark.parametrize("port", [1, 8000, 9999, 65535])
+def test_a_contract_row_with_a_valid_port_still_composes_the_loopback_url(
+    tmp_path, port
+):
+    """The rule refuses the values that are not ports, not the ports."""
+    _contract(
+        tmp_path,
+        "services:\n"
+        "  - name: digigraph\n"
+        f"    port: {port}\n"
+        "    health_path: /healthz\n",
+    )
+    row = _digigraph_row(tmp_path)
+    assert row.refusal is None
+    assert row.url == f"http://127.0.0.1:{port}/healthz"
+    assert urlsplit(row.url).hostname == "127.0.0.1"
+    assert urlsplit(row.url).port == port
+
+
+@pytest.mark.parametrize("yaml_port", ["8000.0", "true"])
+def test_a_contract_port_that_is_not_an_integer_is_refused(tmp_path, yaml_port):
+    """The port arrives from YAML, so it can be a float or a bool first.
+
+    ``port: 8000.0`` is a number and not a port, and ``port: true`` is not a
+    number at all. Neither is coerced into one.
+    """
+    _contract(
+        tmp_path,
+        f"services:\n  - name: digigraph\n    port: {yaml_port}\n",
+    )
+    row = _digigraph_row(tmp_path)
+    with pytest.raises(contracts.InvalidPort):
+        contracts.resolve(row, {})
+
+
+def test_a_contract_row_without_a_port_keeps_the_built_in_url(tmp_path):
+    """A row that carries no port is not a refusal (unchanged behaviour).
+
+    The contract we ship lists its services with a container_port and no
+    health port, so those rows fall back to the built-in URL as they always
+    did -- the digigraph row keeps its DT_DIGIGRAPH_PORT knob.
+    """
+    _contract(
+        tmp_path,
+        "services:\n  - name: digigraph\n    profile: core\n",
+    )
+    row = _digigraph_row(tmp_path)
+    assert row.refusal is None
+    assert row.url == "http://127.0.0.1:${DT_DIGIGRAPH_PORT:-8000}/healthz"
+
+
+def test_the_shipped_contract_carries_no_refusal():
+    """The contract we ship must not trip the rule it introduced."""
+    checks, origin = contracts.load_checks(REPO_ROOT)
+    assert origin != "built-in defaults"
+    assert [c.name for c in checks if c.refusal] == []
+    digigraph = next(c for c in checks if c.name == "digigraph")
+    assert digigraph.url == "http://127.0.0.1:${DT_DIGIGRAPH_PORT:-8000}/healthz"

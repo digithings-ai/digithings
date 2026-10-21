@@ -403,3 +403,31 @@ def test_a_port_knob_that_is_not_a_port_opens_no_connection():
 
     assert refused.results[0].url is None
     assert accepted.results[0].url == "http://127.0.0.1:18000/healthz"
+
+
+def test_a_refused_contract_row_fails_the_check_instead_of_skipping(tmp_path):
+    """A contract row whose port is not a port is a FAILED row.
+
+    The same channel as a refused knob: a traceback would take the whole
+    gate down, and a SKIP would let the gate read as healthy while one
+    surface went unverified. The detail names the value that is wrong.
+    """
+    (tmp_path / "config" / "contract").mkdir(parents=True)
+    (tmp_path / "config" / "contract" / "services.yaml").write_text(
+        "services:\n"
+        "  - name: digigraph\n"
+        "    port: '8000@evil.com'\n"
+        "    health_path: /healthz\n",
+        encoding="utf-8",
+    )
+    checks, _origin = contracts.load_checks(tmp_path)
+    row = next(c for c in checks if c.name == "digigraph")
+
+    report = health.run_gate((row,), timeout=1.0)
+
+    assert not report.ok, "a contract port that would point off the machine must fail"
+    assert _names(report.failed) == ("digigraph",)
+    assert _names(report.skipped) == ()
+    assert "8000@evil.com" in report.results[0].detail
+    # No URL was built, so no request can leave the machine.
+    assert report.results[0].url is None

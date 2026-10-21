@@ -326,6 +326,8 @@ Three things about the knob. The gate reads the **process environment**, not the
 
 The port digigraph actually listens on is set elsewhere, so the two have to agree: the host dev server takes `DG_PORT` (`scripts/run_local.sh`, default `18000`), and the no-Docker stack takes `PORT_GRAPH` (`scripts/run_stack_local.sh`, default `8000`, the same ports as compose).
 
+One rule, wherever the port comes from: a port is plain decimal digits, `1`–`65535`, no sign and no surrounding whitespace. A contract row in `config/contract/services.yaml` that carries its own `port:` is read by the same validator, so a row whose port is not one is **refused** the same way — the row **fails** the gate and names the row and the value, it never falls back to a built-in URL, and it never crashes the gate with a stack trace. A row without a `port:` keeps the built-in URL and its knob.
+
 ---
 
 ## 12. digichat configuration

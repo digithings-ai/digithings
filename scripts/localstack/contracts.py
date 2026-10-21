@@ -21,6 +21,11 @@ is not a port number is refused (:class:`InvalidPort`) instead of being
 substituted: ``8000@evil.com`` is a legal userinfo string, so
 ``urlsplit("http://127.0.0.1:8000@evil.com/healthz")`` reports the host as
 ``evil.com`` and the probe would leave this machine.
+
+One rule, wherever the port comes from: a port is plain decimal digits in
+1-65535. A knob value that is not one is refused, and so is a contract row
+whose ``port:`` is not one -- the same validator reads both, so the module
+cannot end up with two ideas of what a port is.
 """
 
 from __future__ import annotations
@@ -113,6 +118,11 @@ class Check:
     #: configured URL exactly as given (the default, and what every check
     #: except dashboard-api relies on).
     path: str | None = None
+    #: Why this row was refused, when the catalogue refused it: a contract
+    #: row whose ``port:`` is not a port. The refusal is raised at resolve
+    #: time, so the gate reports the row as **failed** -- a misconfiguration
+    #: -- and never as a skip and never on a fallback URL.
+    refusal: str | None = None
 
     def in_profile(self, profile: str) -> bool:
         return profile in self.profiles or "all" in self.profiles
@@ -129,6 +139,7 @@ class Check:
             "expect_status": list(self.expect_status),
             "read_path": self.read_path,
             "path": self.path,
+            "refusal": self.refusal,
         }
 
 
@@ -380,11 +391,31 @@ def _normalise_profiles(raw: Any, default: tuple[str, ...]) -> tuple[str, ...]:
     return default
 
 
-def _compose_url(port: Any, path: Any, host: str = "127.0.0.1") -> str | None:
+def _compose_url(
+    port: Any, path: Any, host: str = LOOPBACK_HOST, name: str = "contract"
+) -> str | None:
+    """The loopback URL of a contract row that carries a port.
+
+    The port is read with the same validator the knobs use, so the module
+    cannot hold two ideas of what a port is: a port is plain decimal digits
+    in 1-65535, wherever it comes from. ``int()`` is not enough -- it reads
+    ``8_000`` and ``+8000`` as numbers, and on ``8000@evil.com`` it raises a
+    bare ``ValueError`` that reached ``dt status`` as a traceback. A value
+    that is not a port is refused (:class:`InvalidPort`), never coerced and
+    never dropped.
+
+    The composed URL is then checked to be the loopback probe on the port
+    that was validated, so a change to the host cannot move the probe off
+    this machine.
+    """
     if port is None:
         return None
+    raw = port if isinstance(port, str) else str(port)
+    validated = _port_value(f"contract row {name!r} port", raw)
     suffix = path if isinstance(path, str) and path.startswith("/") else ""
-    return f"http://{host}:{int(port)}{suffix or '/healthz'}"
+    url = f"http://{host}:{validated}{suffix or '/healthz'}"
+    _assert_loopback_port(url, f"contract row {name!r} port", validated)
+    return url
 
 
 def checks_from_contract(doc: Any) -> tuple[Check, ...]:
@@ -394,6 +425,10 @@ def checks_from_contract(doc: Any) -> tuple[Check, ...]:
     Per-row keys are tolerant (``url``/``health_url``, ``port``+``health_path``)
     because two S1 PRs are open and neither has merged. Rows we cannot read are
     skipped rather than guessed at.
+
+    A row whose ``port:`` is not a port is **refused**, not skipped: the row
+    stays in the catalogue carrying the reason, so the merge cannot fall back
+    to the built-in URL and the gate reports the row as failed (DIG-4905).
     """
     rows: Any = doc
     if isinstance(doc, dict):
@@ -411,8 +446,16 @@ def checks_from_contract(doc: Any) -> tuple[Check, ...]:
         if not isinstance(name, str):
             continue
         url = row.get("url") or row.get("health_url")
+        refusal: str | None = None
         if not isinstance(url, str) or not url:
-            url = _compose_url(row.get("port"), row.get("health_path"))
+            try:
+                url = _compose_url(row.get("port"), row.get("health_path"), name=name)
+            except InvalidPort as exc:
+                # Refused, not skipped and not coerced: the row keeps its place
+                # in the catalogue with the reason on it, so the gate reports
+                # the misconfiguration instead of probing something else.
+                url = None
+                refusal = str(exc)
         out.append(
             Check(
                 name=name,
@@ -422,6 +465,7 @@ def checks_from_contract(doc: Any) -> tuple[Check, ...]:
                 source=f"config contract row {name!r}",
                 requires=row.get("requires"),
                 method=str(row.get("method") or "GET").upper(),
+                refusal=refusal,
             )
         )
     return tuple(out)
@@ -456,6 +500,21 @@ def merge_contract(checks: tuple[Check, ...]) -> tuple[Check, ...]:
         override = by_name.pop(builtin.name, None)
         if override is None:
             merged.append(builtin)
+            continue
+        if override.refusal:
+            # A refused contract row does not fall back to the built-in URL:
+            # the row asked for a port that is not a port, and the gate has to
+            # say so instead of quietly probing something else.
+            merged.append(
+                replace(
+                    builtin,
+                    url=None,
+                    profiles=override.profiles,
+                    method=override.method,
+                    kind=override.kind if override.kind else builtin.kind,
+                    refusal=override.refusal,
+                )
+            )
             continue
         merged.append(
             replace(
@@ -648,11 +707,17 @@ def resolve(check: Check, config: dict[str, str]) -> tuple[str | None, str | Non
     configuration and has none is *skipped with a reason* -- never passed.
 
     Raises :class:`InvalidPort` when a port knob carries a value that is not
-    a port. That is a refusal and not a skip: a skip would let the gate report
-    a check it never ran as a pass, so the caller turns it into a failure.
-    The caller has to catch it -- ``health.run_gate`` does, and turns it into
-    a FAILED result that names the knob.
+    a port, and when the catalogue refused a row outright (a contract row
+    whose ``port:`` is not a port). That is a refusal and not a skip: a skip
+    would let the gate report a check it never ran as a pass, so the caller
+    turns it into a failure. The caller has to catch it -- ``health.run_gate``
+    does, and turns it into a FAILED result that names the knob.
     """
+    if check.refusal:
+        # The catalogue refused this row when it was read (a contract row
+        # whose port is not a port). The refusal is raised here, where every
+        # other refusal is raised, so the gate reports it as a failure.
+        raise InvalidPort(check.refusal)
     if check.requires:
         value = config.get(check.requires)
         if not value:
