@@ -128,8 +128,7 @@ export function buildEmbedThemeMessage(
   ts = Date.now(),
   palette?: string,
 ): { type: typeof THEME; theme: EmbedShellTheme; ts: number; palette?: string } {
-  const message = { type: THEME, theme, ts, ...(palette ? { palette } : {}) };
-  return message;
+  return palette ? { type: THEME, theme, ts, palette } : { type: THEME, theme, ts };
 }
 
 /** Parent → embed: surface handshake/load failures inside CliThread. */
