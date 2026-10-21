@@ -28,7 +28,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .contracts import FAILED, PASSED, SKIPPED, Check, resolve
+from .contracts import FAILED, PASSED, SKIPPED, Check, InvalidPort, resolve
 
 DEFAULT_TIMEOUT = 5.0
 
@@ -235,7 +235,16 @@ def run_check(
 ) -> Result:
     """Probe one check and classify the outcome."""
     config = config or {}
-    url, reason = resolve(check, config)
+    try:
+        url, reason = resolve(check, config)
+    except InvalidPort as exc:
+        # A knob that is not a port never reaches the network: the check fails
+        # with the reason instead of the gate opening a URL nobody can
+        # account for. It is a failure and not a skip, because a skip reads as
+        # "not verified" while this is "the configuration is wrong" -- and a
+        # skip would let the gate report a check it never ran as a pass
+        # (DIG-4911).
+        return Result(check.name, FAILED, str(exc), None, 0)
     if url is None:
         return Result(check.name, SKIPPED, reason or "no url configured", None, 0)
 

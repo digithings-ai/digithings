@@ -291,6 +291,16 @@ folded once the answer starts — with closed rows inside it, and the work
 content not mounted while the rows stay closed. (`showDetails` is set by every
 level and read by no renderer yet; it is not part of the contract.)
 
+**Spacing.** The chain's vertical rhythm is the `--trace-space-1` … `--trace-space-7` scale
+and the `--trace-*` tokens, declared once on `.digichat-thread, .digichat-launcher` in
+`src/styles/chat-aui.css` (the skin, `chat-digichat.css`, only reads them). The scale is
+separate from the design tokens' `--space-*` names; `trace-spacing.source.test.ts` keeps it so. The Worked
+title, the gap between sibling groups, the gap inside a group, and the
+reasoning header-to-body step all read those tokens. Sibling groups share
+`--trace-group-gap`; a tool group and a reasoning group do not carry their
+own margins. The chain header's marker-to-label gap stays `0.45rem` so it
+still matches the pre-response loader.
+
 **Reason.** The quiet contract was once a single `summaryOnly` branch inside
 the `group-chainOfThought` case, which read as if it covered only the
 combined case. It did not: because the tree nests, that branch was the
@@ -454,6 +464,22 @@ and run `make agents-init` (CI enforces idempotence).
   returns-matrix cell ink, the light diff palette) so a hue change that drops
   a pair under AA fails the kit suite. Measure with the composited fill, not
   the flat surface — the matrix and diff washes both composite over a ground.
+
+## Platform colour theme
+
+`packages/ui/src/theme/` owns mode and palette for every web surface that
+opts in. Mode is `light`, `dark`, or `auto` (`dt-theme` stores only `light`
+or `dark`; auto removes the key). Palette is `default` or one of the 32
+DigiVoice ids in `dt-palette`. The existing light/dark toggle advances one
+stop: default dark, default light, then each palette in dark and then light.
+`/theme` is one entry in the existing slash list and uses that same list.
+The tables are generated from
+`digivoice/hammerspoon/theme_registry.json` by
+`scripts/generate_platform_palettes.py` (`packages/design/palettes.css`,
+`palette-registry.ts`, `themeInit.ts`). `default` leaves `tokens.css` in
+charge. The dashboard keeps its own provider and never writes `dt-palette`.
+TUIs read the same ids from `@digithings/ui/theme/tui` and share
+`~/.digithings/theme.json`.
 
 ## RTL & logical properties (#4306)
 

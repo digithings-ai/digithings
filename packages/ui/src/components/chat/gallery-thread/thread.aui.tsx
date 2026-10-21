@@ -40,6 +40,7 @@ import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
 import { connectionStatusText } from "../connection-status";
+import { WorkStatusLead } from "../work-status-lead";
 import { Skeleton } from "../../../ui/skeleton";
 import { cn } from "./cn";
 import { SkinCredit } from "../stock/skin-credit";
@@ -1083,21 +1084,17 @@ const AssistantWorkingIndicator: FC = () => {
   const statusText = useAuiState((s) => connectionStatusText(s.message.parts));
   const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
+  const statusLabel = wakePhase === "waking" ? "Waking up services…" : statusText;
   return (
     <span
       data-slot="aui_assistant-message-indicator"
-      className="flex items-center gap-2"
+      className="aui-work-status"
     >
-      <DotMatrix
-        state="loading"
-        label="Assistant is working"
-        className="!size-3"
+      <WorkStatusLead
+        marker="loading"
+        markerLabel="Assistant is working"
+        label={statusLabel}
       />
-      {wakePhase === "waking" ? (
-        <span className="text-xs text-muted-foreground">Waking up services…</span>
-      ) : statusText ? (
-        <span className="text-xs text-muted-foreground">{statusText}</span>
-      ) : null}
     </span>
   );
 };

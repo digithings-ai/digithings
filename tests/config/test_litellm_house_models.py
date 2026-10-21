@@ -290,6 +290,8 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
     assert overlay.is_file()
     names = _model_names(overlay)
     expected = {
+        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4.1-flash",
         "deepseek/deepseek-v4-flash",
         "deepseek/deepseek-v4-flash-0731",
         "deepseek/deepseek-v4-pro",
@@ -316,8 +318,7 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
 # Cheap CI house slugs for the default product picker. Must exist on both the
 # overlay and ``_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE``. Never OpenRouter ``:free``.
 _PRODUCT_CI_CHEAP_PICKER = (
-    "deepseek/deepseek-v4-flash",
-    "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4.1-flash-1017",
     "openai/gpt-oss-120b",
     "z-ai/glm-5.3-flash",
 )
@@ -329,7 +330,7 @@ def _assert_ci_only_product_picker(models: dict) -> None:
     overlay_names = _model_names(CONFIG / "litellm.cheaperinference.yaml")
     available = list(models["available"])
     assert models["allowPicker"] is True
-    assert models["default"] == "deepseek/deepseek-v4-flash"
+    assert models["default"] == "deepseek/deepseek-v4.1-flash-1017"
     assert models["default"] in available
     assert available == list(_PRODUCT_CI_CHEAP_PICKER)
     assert not any(str(m).endswith(":free") for m in available)
@@ -386,7 +387,7 @@ def test_merge_litellm_cheaperinference_replaces_mapped_drops_retired() -> None:
     by_name = {e["model_name"]: e for e in merged["model_list"] if isinstance(e, dict)}
     flash = by_name["deepseek/deepseek-v4-flash"]["litellm_params"]
     assert flash["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
-    assert flash["model"] == "openai/deepseek-v4-flash"
+    assert flash["model"] == "openai/deepseek-v4.1-flash-1017"
     resurrected = sorted(_RETIRED_OPENROUTER_ROUTES & by_name.keys())
     assert not resurrected, f"merge resurrected retired OpenRouter routes: {resurrected}"
 

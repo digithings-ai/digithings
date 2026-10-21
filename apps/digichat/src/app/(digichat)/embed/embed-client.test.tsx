@@ -114,10 +114,14 @@ function codeOnly(source: string): string {
  * re-targeting the pin.
  */
 function providerLabelExpression(code: string): string {
+  // The label is named once in the file. A second mention - a second
+  // property, an assignment, a computed key - is a second naming of it,
+  // wherever it is written.
+  const mentions = (code.match(/providerLabel/g) ?? []).length;
   const sites = [...code.matchAll(/providerLabel\s*:/g)];
-  if (sites.length !== 1) {
+  if (mentions !== 1 || sites.length !== 1) {
     throw new Error(
-      `the source wires ${sites.length} provider labels, expected exactly one`,
+      `the source names the provider label ${mentions} time(s), expected once`,
     );
   }
   const at = (sites[0].index ?? 0) + sites[0][0].length;
@@ -150,13 +154,14 @@ function providerLabelExpression(code: string): string {
   return rest.trim();
 }
 
-/** The expression without the whitespace that formatting may change. */
+/** The expression without the whitespace and the casts formatting may change. */
 function normalised(expression: string): string {
   return expression
     .replace(/\s+/g, " ")
     .replace(/\(\s+/g, "(")
     .replace(/\s+\)/g, ")")
     .replace(/,\)/g, ")")
+    .replace(/\s+as\s+[A-Za-z_$][\w$]*/g, "")
     .trim();
 }
 

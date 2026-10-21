@@ -43,11 +43,13 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import http.client
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -2501,6 +2503,42 @@ class Independence:
     unverifiable: str = ""
 
 
+#: How long one read of the Paperclip API may take, and how many times it may
+#: be tried.
+#:
+#: The queue reads Paperclip over a link that is sometimes slow: on 2026-10-21
+#: the Code Reviewer measured `GET /api/issues/{id}` at 31.5 s, 36.5 s and
+#: 30.7 s in a slow window, `GET /api/heartbeat-runs/{id}` at 12.6 s to 27.7 s,
+#: and `GET /api/issues/{id}/runs` with no answer at all in 60 s. The old
+#: 10-second read turned every one of those into a refusal, and a refusal for
+#: a transport reason is indistinguishable from a refusal for a real one — so
+#: in `enforce` mode a slow API would have blocked pull requests for a reason
+#: that has nothing to do with review independence.
+#:
+#: The read is a GET, so it is safe to try again: a second attempt asks the
+#: same question, and a question that was not answered is not an answer. The
+#: budget bounds the attempts of one read: the pause before the second attempt
+#: and the attempt itself both happen inside it, so one path costs the budget
+#: once and not once per attempt. It is a budget per path and not per tick:
+#: the gate reads a ticket, a run and a pull request's runs, so a control plane
+#: that does not answer costs that much again for each of them.
+#:
+#: The timeout is the socket timeout of one request. That is what covers the
+#: case that was measured: a control plane that thinks for half a minute
+#: before it answers. A server that answers slowly instead of late is a
+#: different shape, and a socket timeout does not bound it.
+#:
+#: The four numbers are the fix, and the suite pins them: a timeout below the
+#: slowest answer measured turns a slow API back into a refusal, a budget
+#: below the timeout leaves no room for the second attempt, and a backoff that
+#: hammers a struggling control plane makes the second attempt likelier to
+#: fail than the first.
+PAPERCLIP_READ_TIMEOUT = 45
+PAPERCLIP_READ_BUDGET = 60.0
+PAPERCLIP_READ_ATTEMPTS = 2
+PAPERCLIP_RETRY_BACKOFF = 3.0
+
+
 class ReviewerProvenance:
     """The Paperclip facts the reviewer gate needs: tickets, seats and runs.
 
@@ -2570,25 +2608,67 @@ class ReviewerProvenance:
                 "Accept": "application/json",
             },
         )
-        try:
-            with urllib.request.urlopen(request, timeout=10) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:
-                # A fact, not a failure: the API answered, and the answer is
-                # "no such record". A ticket key that names no issue, or a run
-                # id nobody has ever heard of, is exactly what the gate has to
-                # judge — it must not be read as "the API is down".
-                raise _PaperclipMissing(f"Paperclip has no {path}") from exc
+        deadline = time.monotonic() + PAPERCLIP_READ_BUDGET
+        attempts = 0
+        failure: Exception | None = None
+        for attempt in range(1, PAPERCLIP_READ_ATTEMPTS + 1):
+            if attempt > 1:
+                # The pause is inside the budget, not on top of it: a retry
+                # that starts after the deadline spends the read on a question
+                # that was never going to be asked in time.
+                pause = min(
+                    PAPERCLIP_RETRY_BACKOFF, max(0.0, deadline - time.monotonic())
+                )
+                if pause <= 0:
+                    break
+                time.sleep(pause)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            attempts += 1
+            try:
+                with urllib.request.urlopen(
+                    request, timeout=min(PAPERCLIP_READ_TIMEOUT, remaining)
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                if exc.code == 404:
+                    # A fact, not a failure: the API answered, and the answer is
+                    # "no such record". A ticket key that names no issue, or a run
+                    # id nobody has ever heard of, is exactly what the gate has to
+                    # judge — it must not be read as "the API is down". The same
+                    # holds for any other 4xx: the API answered, and its answer
+                    # does not change when we ask again.
+                    raise _PaperclipMissing(f"Paperclip has no {path}") from exc
+                if exc.code < 500:
+                    raise _PaperclipUnavailable(
+                        f"Paperclip answered {exc.code} for {path}"
+                    ) from exc
+                # A server-side error can be transient, so it earns one more try.
+                failure = exc
+            except OSError as exc:
+                # A timeout and a refused connection are both transport facts and
+                # neither is a fact about the world: nothing was answered, so
+                # nothing was judged, and both earn one more try.
+                failure = exc
+            except (http.client.HTTPException, ValueError) as exc:
+                # The answer was cut off or was not JSON: a truncated or proxied
+                # response. It is not the fact the gate needs, so it earns one
+                # more try.
+                failure = exc
+            else:
+                self._cache[path] = payload
+                return payload
+        if failure is None:
             raise _PaperclipUnavailable(
-                f"Paperclip answered {exc.code} for {path}"
-            ) from exc
-        except (urllib.error.URLError, OSError, ValueError) as exc:
-            raise _PaperclipUnavailable(
-                f"Paperclip could not be read for {path}: {exc}"
-            ) from exc
-        self._cache[path] = payload
-        return payload
+                f"Paperclip could not be read for {path}: the read budget was spent"
+            )
+        if isinstance(failure, urllib.error.HTTPError):
+            detail = f"Paperclip answered {failure.code} for {path}"
+        else:
+            detail = f"Paperclip could not be read for {path}: {failure}"
+        plural = "attempt" if attempts == 1 else "attempts"
+        raise _PaperclipUnavailable(f"{detail} (after {attempts} {plural})") from failure
 
     def ticket(self, key: str) -> dict[str, Any] | None:
         """The Paperclip issue behind a ticket key, or None when there is none."""

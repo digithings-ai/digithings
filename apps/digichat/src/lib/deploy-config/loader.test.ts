@@ -375,8 +375,8 @@ deployment:
     expect(cfg.deployment?.chrome.theme).toBe("dark");
     expect(cfg.deployment?.features.attachments).toBe(true);
     expect(cfg.deployment?.tools?.catalog ?? []).toEqual([]);
-    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash");
-    expect(cfg.deployment?.models.available).toHaveLength(14);
+    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
+    expect(cfg.deployment?.models.available).toHaveLength(12);
     expect(cfg.deployment?.models.allowPicker).toBe(true);
     expect(cfg.deployment?.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
     // Least-privilege fallback: an unconfigured container must not expose BYOK,

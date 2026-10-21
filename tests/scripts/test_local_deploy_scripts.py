@@ -8,6 +8,7 @@ embeds a secret. No network, Docker or Cloudflare credential is needed.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -165,16 +166,66 @@ def test_publish_image_packages_the_digichat_inputs_before_it_builds() -> None:
     assert "--npm-only" in body, "only the npm inputs are packaged for this image"
 
 
+def _no_comments(script: str) -> str:
+    """Strip shell comments, so prose in a comment block cannot satisfy an assertion.
+
+    The trap the workflow test closes, for this script: moving a guard into the
+    comment block above it leaves the assertions green and the lane unguarded.
+    A ``#`` inside a quoted literal is left alone: stripping it would change
+    the text under test without changing what the script does.
+    """
+    stripped: list[str] = []
+    for line in script.splitlines():
+        quote = ""
+        cut = len(line)
+        for index, char in enumerate(line):
+            if quote:
+                if char == quote:
+                    quote = ""
+                continue
+            if char in "'\"":
+                quote = char
+                continue
+            if char == "#" and (index == 0 or line[index - 1].isspace()):
+                cut = index
+                break
+        stripped.append(line[:cut])
+    return "\n".join(stripped)
+
+
+def _refuses(guards: str, marker: str) -> bool:
+    """True when the diagnostic ``marker`` is followed by an ``exit 1``.
+
+    A refusal that prints an error and keeps going is not a refusal. This
+    script writes its guards as one-liners, so the exit sits on the message's
+    own line or within the next few lines.
+    """
+    lines = guards.splitlines()
+    for index, line in enumerate(lines):
+        if marker in line:
+            if "exit 1" in "\n".join(lines[index : index + 3]):
+                return True
+    return False
+
+
 def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
-    """The rehearsal has to fail where the CI lane fails.
+    """The rehearsal has to judge the image the way the CI lane judges it.
 
     A rehearsal that passes where the CI probe fails is worse than no
-    rehearsal: it reports the lane green while the lane is red. The CI probe
-    boots the image bare and reads the /api/health status instead of demanding
-    a 200 - a standalone container has no ecosystem services to reach, so 503
-    is the expected answer - so the local probe has to do the same.
+    rehearsal: it reports the lane green while the lane is red. The two
+    lanes used to keep their own copy of the rules and drifted - the local
+    lane never read the status code the CI lane read - so the rules now
+    live in scripts/digichat_probe_verdict.mjs and both lanes call it. The
+    rules themselves are pinned by behaviour in
+    tests/scripts/test_digichat_probe_verdict.py; what is pinned here is
+    that this lane really calls the shared helper, reads the status and
+    exits on a refusal.
+
+    The text assertions run against the executable text, with the comments
+    stripped: a substring check that a comment can satisfy proves nothing.
     """
-    body = read("publish_image.sh")
+    script = read("publish_image.sh")
+    body = _no_comments(script)
     assert 'docker run --detach --rm --publish 127.0.0.1::3000 "$NAME"' in body, (
         "the digichat probe must boot the image bare, the way the CI probe does"
     )
@@ -186,6 +237,135 @@ def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
         "a bare container answers /api/health with 503; --fail turns the "
         "expected degradation into a red rehearsal"
     )
-    assert '[ "$reported" = "$VERSION" ]' in body, (
-        "the version the image serves is still the contract"
+    # The status is READ, not demanded.
+    assert "api_status" in body, "the probe must read the status code, not demand one"
+    assert "--write-out" in body, "the probe must read the status code it accepts"
+    assert "curl_rc" in body, (
+        "a transfer that never completed is not an answer: the probe has to "
+        "tell a timeout apart from a status the image served"
     )
+    # The rules are the shared helper's, not a second copy of them.
+    assert "scripts/digichat_probe_verdict.mjs" in body, (
+        "the rehearsal must judge the image with the same helper the CI lane "
+        "uses, so the two cannot drift apart again"
+    )
+    assert '--status "$api_status"' in body and '--version "$VERSION"' in body, (
+        "the helper has to be given the status it read and the version the "
+        "image was built as"
+    )
+    # And the refusal has to actually exit.
+    assert _refuses(body, "REFUSE"), (
+        "a diagnostic without an exit behind it reports success and the publish goes on"
+    )
+
+
+def test_the_local_publish_binds_the_image_to_the_tree_it_builds() -> None:
+    """A release image may not carry the label of a commit it was not built from.
+
+    The local lane builds the working tree, so a tag whose commit is not the
+    checked-out HEAD would be labelled with a commit the image does not
+    contain. The GitHub lane checks the tag out and compares HEAD with it;
+    the rehearsal has to hold the same line.
+    """
+    body = _no_comments(read("publish_image.sh"))
+    assert 'head_commit="$(git rev-parse HEAD' in body, (
+        "the rehearsal must resolve the commit it actually builds from"
+    )
+    assert 'if [ "$head_commit" != "$COMMIT" ]; then' in body, (
+        "the rehearsal must refuse to label an image with a commit it was not "
+        "built from"
+    )
+    assert _refuses(body, "check the tag out"), (
+        "a refusal to publish an unbound image has to stop the publish"
+    )
+
+
+def _marked_block(body: str, name: str) -> str:
+    match = re.search(rf"# {name}:begin\n(.*?)# {name}:end", body, re.S)
+    assert match, f"the {name} block is not marked in publish_image.sh"
+    return match.group(1)
+
+
+def test_the_probe_refuses_on_the_verdict_text_and_not_on_the_exit_status(tmp_path: Path) -> None:
+    """A helper that refuses but exits 0 still stops the lane.
+
+    The decision is the helper's OUTPUT. If it were the exit status, a wrapper
+    that swallowed the status would turn a refusal into a pass and the lane
+    would publish an image it just refused.
+    """
+    body = read("publish_image.sh")
+    block = _marked_block(body, "probe-verdict")
+    stub = tmp_path / "stub_helper.sh"
+    stub.write_text("printf 'REFUSE stubbed refusal\\n'\n")
+    # bash, not cat: the stub has to RUN and exit 0, so that a lane deciding
+    # on the exit status instead of the text cannot pass this test.
+    block = block.replace("node scripts/digichat_probe_verdict.mjs", f"bash {stub}")
+    script = tmp_path / "probe.sh"
+    script.write_text(
+        "set -u\napi_body='{}'\napi_status='503'\nVERSION='2.6.4'\n" + block
+    )
+    result = subprocess.run(["bash", str(script)], capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "stubbed refusal" in result.stderr
+
+
+def test_the_probe_accepts_a_verdict_that_says_ok(tmp_path: Path) -> None:
+    """The same block must let an OK verdict through.
+
+    A block that refuses everything would pass the refusal test above, so the
+    OK path is driven here as well.
+    """
+    body = read("publish_image.sh")
+    block = _marked_block(body, "probe-verdict")
+    stub = tmp_path / "stub_helper.sh"
+    stub.write_text("printf 'OK version=2.6.4 status=503 tolerated=digraph=unreachable\\n'\n")
+    block = block.replace("node scripts/digichat_probe_verdict.mjs", f"bash {stub}")
+    script = tmp_path / "probe.sh"
+    script.write_text(
+        "set -u\napi_body='{}'\napi_status='503'\nVERSION='2.6.4'\n" + block
+    )
+    result = subprocess.run(["bash", str(script)], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    assert "stubbed refusal" not in result.stderr
+
+
+def test_the_clean_tree_refusal_stops_the_publish(tmp_path: Path) -> None:
+    """An image may not carry content the commit it is labelled with does not have.
+
+    The lane builds the working tree, so uncommitted edits would end up in an
+    image labelled with a commit that does not contain them.
+    """
+    body = read("publish_image.sh")
+    block = _marked_block(body, "clean-tree")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    git = bindir / "git"
+    git.write_text("#!/bin/sh\nprintf ' M apps/digichat/page.tsx\\n'\n")
+    git.chmod(0o755)
+    script = tmp_path / "clean.sh"
+    script.write_text("set -u\nCOMMIT=abc123\n" + block)
+    env = dict(os.environ, PATH=f"{bindir}:{os.environ.get('PATH', '')}")
+    result = subprocess.run(
+        ["bash", str(script)], capture_output=True, text=True, check=False, env=env
+    )
+    assert result.returncode != 0
+    assert "uncommitted changes" in result.stderr
+    git.write_text("#!/bin/sh\nexit 0\n")
+    result = subprocess.run(
+        ["bash", str(script)], capture_output=True, text=True, check=False, env=env
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_the_tree_guard_refuses_a_tree_that_is_not_the_tag(tmp_path: Path) -> None:
+    """The guard is a plain comparison, so no operator can turn it into a no-op."""
+    body = read("publish_image.sh")
+    block = _marked_block(body, "tree-guard")
+    script = tmp_path / "guard.sh"
+    script.write_text("set -u\nhead_commit=aaaa\nCOMMIT=bbbb\nTAG=v9.9.9\n" + block)
+    result = subprocess.run(["bash", str(script)], capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "check the tag out" in result.stderr
+    script.write_text("set -u\nhead_commit=aaaa\nCOMMIT=aaaa\nTAG=v9.9.9\n" + block)
+    result = subprocess.run(["bash", str(script)], capture_output=True, text=True, check=False)
+    assert result.returncode == 0

@@ -14,6 +14,13 @@ accepted because two S1 PRs are open and this leaf must not invent a third:
 
 * ``config/contract/services.yaml``  (PR #5352)
 * ``config/contract/contract.yaml``  (PR #5359)
+
+Every default URL here addresses the loopback host, and the only part of it
+that moves is the port, which an operator's knob carries. A knob value that
+is not a port number is refused (:class:`InvalidPort`) instead of being
+substituted: ``8000@evil.com`` is a legal userinfo string, so
+``urlsplit("http://127.0.0.1:8000@evil.com/healthz")`` reports the host as
+``evil.com`` and the probe would leave this machine.
 """
 
 from __future__ import annotations
@@ -35,8 +42,8 @@ except ImportError:  # imported as a plain module
 #: The Supabase API port the local stack probes. The whole Supabase port set
 #: moves with it (see localstack.supabase_ports), so one knob keeps the gate
 #: and the instance the CLI started on the same port. Only the PORT is
-#: templated - the host stays 127.0.0.1, so the gate can never point off this
-#: machine.
+#: templated - the host stays 127.0.0.1, and the substituted port is
+#: validated, so the gate can never point off this machine.
 _SUPABASE_API_PORT = "${%s:-%d}" % (PORT_ENV, DEFAULT_API_PORT)
 
 PROFILES: tuple[str, ...] = ("core", "quant", "chat", "trace", "all")
@@ -52,6 +59,36 @@ CONTRACT_PATHS: tuple[str, ...] = (
 PASSED = "passed"
 FAILED = "failed"
 SKIPPED = "skipped"
+
+#: The host every built-in probe stays on.
+LOOPBACK_HOST = "127.0.0.1"
+
+#: A port number: ASCII digits, 1-65535. ``str.isdigit`` is not enough -- it
+#: accepts non-ASCII digits -- and ``int()`` is not enough either: it reads
+#: ``8_000`` and ``+8000`` as numbers a URL may not carry. The pattern is
+#: anchored with ``fullmatch`` (never ``$``, which also accepts a trailing
+#: newline).
+_PORT_RE = re.compile(r"[0-9]{1,5}")
+
+#: The lowest port a probe may address.
+MIN_PORT = 1
+
+#: The highest port a probe may address.
+MAX_PORT = 65535
+
+
+class InvalidPort(ValueError):
+    """A port knob carried something that is not a port.
+
+    Raised instead of building a URL out of the value. The gate opens the URL
+    it resolves, so a knob value is the one thing that can move a probe off
+    this machine: ``urlsplit("http://127.0.0.1:8000@evil.com/healthz")``
+    reports the host as ``evil.com``.
+
+    A refusal, not a fallback and not a skip: the operator sees which knob is
+    wrong, and the gate does not report a check it never ran as a pass
+    (DIG-4911).
+    """
 
 
 @dataclass(frozen=True)
@@ -155,8 +192,22 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
         # syntax is expanded by _expand_env() at resolve time, so an operator
         # who exports the knob moves the probe with the service. It takes a
         # port number: the gate reads the process environment, not the root
-        # .env, and a value that is not a port makes the URL unparseable
-        # rather than pointing it somewhere else.
+        # .env, and a value that is not a port is refused (InvalidPort)
+        # rather than substituted -- '8000@evil.com' would make the probe
+        # leave this machine.
+        #
+        # The value is validated as a plain integer port *before* it is
+        # templated: ASCII digits only, 1-65535, and an empty value keeps the
+        # default. Anything else is refused, never templated and never
+        # silently replaced by the default. The reason is that a value that is
+        # not a port does not make the URL unparseable - it makes the URL
+        # point somewhere else: "8000@evil.com" expands to
+        # "http://127.0.0.1:8000@evil.com/healthz", where "127.0.0.1:8000" is
+        # userinfo and the host is "evil.com" (same for "8000/@evil.com" and
+        # "8000#x"). The resolved URL is then parsed and refused unless it is
+        # still the loopback probe on the validated port, so the guarantee
+        # test_builtin_urls_are_labelled_local_loopback relies on holds on the
+        # URL the probe actually opens and not only on the template.
         #
         # Only the PORT is templated, for the digichat reason: templating the
         # host would let this gate point off the developer's machine, and
@@ -206,7 +257,8 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
         # for a LAN bind, but a bind on 0.0.0.0 still answers on 127.0.0.1, and
         # test_builtin_urls_are_labelled_local_loopback requires a default that
         # is provably loopback. Templating the host would let this gate point off
-        # the developer's machine.
+        # the developer's machine. The substituted port is validated, so the
+        # knob cannot carry a host either.
         # The ${...:-default} syntax mirrors compose's own line and is expanded
         # by _expand_env() at resolve time, so the default follows the variable.
         source=(
@@ -238,7 +290,8 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
         # Only the PORT is templated, for the digichat reason: templating
         # the host would let this gate point off the developer's machine,
         # and test_builtin_urls_are_labelled_local_loopback requires a
-        # provably loopback default.
+        # provably loopback default. The substituted port is validated, so
+        # the knob cannot carry a host either.
         #
         # 8887 is the measured wrangler-dev port for dashboard-api (workerd
         # listening there, answering for this service). orchestrate.py passes
@@ -429,21 +482,146 @@ def select(checks: tuple[Check, ...], profile: str) -> tuple[Check, ...]:
 _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 
+def _port_value(name: str, value: str) -> int:
+    """The port ``name`` carries, or refuse.
+
+    A port is ASCII decimal digits only, at most five of them, with a value
+    in 1-65535. Anything else is refused with the variable and the value
+    named: never templated, and never silently replaced by the default,
+    because a value that is not a port does not make the URL unparseable - it
+    makes the URL point somewhere else.
+
+    No surrounding whitespace either: a port is written as plain decimal
+    digits, so ``" 8000"`` is not a port (DIG-4911, ask 1) and the value is
+    refused rather than trimmed into one.
+    """
+    if not _PORT_RE.fullmatch(value):
+        raise InvalidPort(
+            f"{name}={value!r} is not a port: expected {MIN_PORT}-{MAX_PORT} "
+            "written as plain decimal digits"
+        )
+    port = int(value)
+    if not MIN_PORT <= port <= MAX_PORT:
+        raise InvalidPort(
+            f"{name}={value!r} is not a port: outside {MIN_PORT}-{MAX_PORT}"
+        )
+    return port
+
+
+def _assert_loopback_port(url: str, name: str, port: int) -> None:
+    """Refuse a resolved URL that is not the loopback probe on ``port``.
+
+    Defence in depth. The value is validated before it is templated, so this
+    cannot fire on the shipped templates; it is here so that a change to a
+    template (a second host, another expansion, a different default) cannot
+    quietly move the probe off the machine. It also catches the shape the
+    digit check cannot see on its own: a URL that parses into a host other
+    than 127.0.0.1, or into a port other than the validated one.
+    """
+    split = urllib.parse.urlsplit(url)
+    try:
+        host = split.hostname
+        resolved_port = split.port
+    except ValueError:  # a netloc that does not carry a numeric port
+        host, resolved_port = None, None
+    if host != LOOPBACK_HOST or resolved_port != port:
+        raise InvalidPort(
+            f"{name} resolved to {url!r}: the probe must stay on "
+            f"http://{LOOPBACK_HOST}:{port}"
+        )
+
+
+def _authority_span(url: str) -> tuple[int, int]:
+    """The character range of a URL template's authority (the host:port part).
+
+    ``(0, 0)`` when the template carries no ``scheme://`` prefix: a bare
+    ``host:port`` string is not a URL and has no authority to point at.
+    """
+    marker = url.find("://")
+    if marker < 0:
+        return (0, 0)
+    start = marker + 3
+    end = len(url)
+    for index in range(start, len(url)):
+        if url[index] in "/?#":
+            end = index
+            break
+    return (start, end)
+
+
+def _fills_the_port_slot(url: str, start: int) -> bool:
+    """True when the reference at ``start`` stands for the URL's port.
+
+    The port slot is the ``:`` that separates the host from the port inside
+    the authority. A reference behind a ``/`` is in the path and one that
+    follows ``://`` is the host -- neither of them is a port.
+    """
+    auth_start, auth_end = _authority_span(url)
+    if not (auth_start <= start < auth_end):
+        return False
+    if start == 0 or url[start - 1] != ":":
+        return False
+    # '://' is the scheme separator, not the port separator.
+    return start < 2 or url[start - 2] != "/"
+
+
 def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
     """Expand ``${VAR:-default}`` references in a built-in default URL.
 
     Only applied to the *default* URL. A ``requires`` value is returned exactly
     as configured (see :func:`resolve`), because a caller-configured local
     binding route is keyed on the exact path it supplies.
+
+    A reference that fills the port slot has to carry a port number. The
+    value lands in a URL the gate then opens, and a value that is not a port
+    is the one thing that can move that URL off this machine: ``8000@evil.com``
+    makes ``urlsplit(...).hostname`` read ``evil.com``. So such a value is
+    refused loudly (:class:`InvalidPort`) rather than substituted.
+
+    The port value is validated as it was written, not as a stripped copy: a
+    port is plain decimal digits, so ``" 8000"`` is refused like any other
+    value that is not a port (DIG-4911, ask 1). A reference outside the port
+    slot is an ordinary value, and its surrounding whitespace is stripped.
+
+    The Supabase pair keeps its own soft policy: ``localstack.localenv``
+    normalizes ``DT_SUPABASE_PORT`` before the contracts see it, so the
+    contracts never receive a padded value for that knob.
+
+    The URL that comes out is then parsed and refused unless it is still the
+    loopback probe on the validated port (:func:`_assert_loopback_port`), so
+    the guarantee holds on the URL the probe actually opens and not only on
+    the shape of the value.
     """
     if url is None or "${" not in url:
         return url
 
+    ports: dict[str, int] = {}
+
     def sub(match: re.Match[str]) -> str:
         name, default = match.group(1), match.group(2)
-        return config.get(name) or (default or "")
+        raw = config.get(name) or default or ""
+        if _fills_the_port_slot(url, match.start()):
+            # The value has to be a port before it is templated: a value that
+            # is not a port is the one thing that can move the URL off this
+            # machine, so it is refused loudly instead of substituted. It is
+            # validated as it was written: a port is plain decimal digits, so
+            # a padded value (" 8000") is refused, not trimmed into one.
+            port = _port_value(name, raw)
+            ports[name] = port
+            # What lands in the URL is the validated integer, so the port
+            # slot carries the port and nothing else.
+            return str(port)
+        # A reference outside the port slot is an ordinary value: its
+        # surrounding whitespace is noise and is stripped.
+        return raw.strip()
 
-    return _ENV_REF.sub(sub, url)
+    expanded = _ENV_REF.sub(sub, url)
+    # Defence in depth: the resolved URL is the one the probe opens, so it is
+    # parsed and refused unless it still is the loopback probe on the port the
+    # knob was validated to carry.
+    for name, port in ports.items():
+        _assert_loopback_port(expanded, name, port)
+    return expanded
 
 
 def _with_path(base: str, path: str) -> str:
@@ -468,6 +646,12 @@ def resolve(check: Check, config: dict[str, str]) -> tuple[str | None, str | Non
 
     Returns ``(url, skip_reason)``. Exactly one is ``None``. A check that needs
     configuration and has none is *skipped with a reason* -- never passed.
+
+    Raises :class:`InvalidPort` when a port knob carries a value that is not
+    a port. That is a refusal and not a skip: a skip would let the gate report
+    a check it never ran as a pass, so the caller turns it into a failure.
+    The caller has to catch it -- ``health.run_gate`` does, and turns it into
+    a FAILED result that names the knob.
     """
     if check.requires:
         value = config.get(check.requires)
