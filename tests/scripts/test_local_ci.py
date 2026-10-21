@@ -28,6 +28,25 @@ _mod = importlib.util.module_from_spec(_spec)
 sys.modules["local_ci"] = _mod
 _spec.loader.exec_module(_mod)
 
+
+class _AllowedGuard:
+    """The launch guard, stubbed to allow the run (DIG-4796).
+
+    The real guard lives in scripts/local-ci/launch_guard.py and is tested in
+    test_launch_guard.py. The tests here cover the flow behind it, so the
+    guard is stubbed for the whole module: the runner asks the guard at every
+    entry point that does work, and a stub that is only in place for one test
+    would leave the others refused.
+    """
+
+    @staticmethod
+    def enforce(runner_path, ctx, facts=None):
+        return True
+
+
+_mod.launch_guard = _AllowedGuard
+
+
 # vm_stat sample shaped like the 09:20 CEST evidence on DIG-3783: free 3,635 +
 # speculative 10,206 + purgeable 7,206 pages read ~345MB while 991,764 inactive
 # pages (~15.5GB) sat reclaimable at 69% system-wide free.
@@ -745,6 +764,10 @@ class ExplicitPrStateTest(NoRealNetwork, unittest.TestCase):
         _mod.list_prs = lambda base: []
         _mod.acquire_lock = lambda: True
         _mod.watchdog = lambda: None
+        # The launch guard refuses a run that no trusted launcher started
+        # (DIG-4796). These tests drive the flow behind that check, so the
+        # guard is stubbed; test_launch_guard.py is where it is tested.
+        _mod.launch_guard = _AllowedGuard
         _mod.process = lambda pr, dry: (self.calls.append("process"), "success")[1]
         _mod.process_applied = lambda pr, dry: (self.calls.append("process_applied"), "success")[1]
         _mod.process_review = lambda pr, dry: (self.calls.append("process_review"), "success")[1]
