@@ -279,3 +279,104 @@ model_list:
         - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
   - model_name: openrouter/deepseek/deepseek-r1
     litellm_params: *ci_ds_r1
+
+  # Current generation added 2026-10-21. Older rows stay above so a wider
+  # generation window still routes. No openrouter/auto route.
+  - model_name: openai/gpt-6.1-sol
+    litellm_params: &ci_gpt_61_sol
+      model: openai/gpt-6.1-sol
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/openai/gpt-6.1-sol
+    litellm_params: *ci_gpt_61_sol
+
+  - model_name: google/gemini-3.5-flash-lite
+    litellm_params: &ci_gemini_35_flash_lite
+      model: openai/gemini-3.5-flash-lite
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/google/gemini-3.5-flash-lite
+    litellm_params: *ci_gemini_35_flash_lite
+
+  - model_name: google/gemini-3.8-flash
+    litellm_params: &ci_gemini_38_flash
+      model: openai/gemini-3.8-flash
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/google/gemini-3.8-flash
+    litellm_params: *ci_gemini_38_flash
+
+  - model_name: z-ai/glm-5.3
+    litellm_params: &ci_glm_53
+      model: openai/glm-5.3
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/z-ai/glm-5.3
+    litellm_params: *ci_glm_53
+
+  - model_name: qwen/qwen3.8-27b
+    litellm_params: &ci_qwen38_27b
+      model: openai/qwen3.8-27b
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/qwen/qwen3.8-27b
+    litellm_params: *ci_qwen38_27b
+
+  - model_name: qwen/qwen3.8-max
+    litellm_params: &ci_qwen38_max
+      model: openai/qwen3.8-max
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/qwen/qwen3.8-max
+    litellm_params: *ci_qwen38_max
+
+  - model_name: qwen/qwen3.8-2.4t-a95b
+    litellm_params: &ci_qwen38_24t
+      model: openai/qwen3.8-2.4t-a95b
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/qwen/qwen3.8-2.4t-a95b
+    litellm_params: *ci_qwen38_24t
+
+  - model_name: qwen/qwen3.8-max-0902
+    litellm_params: &ci_qwen38_max_0902
+      model: openai/qwen3.8-max-0902
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/qwen/qwen3.8-max-0902
+    litellm_params: *ci_qwen38_max_0902
+
+  - model_name: xiaomi/mimo-v2.6-pro
+    litellm_params: &ci_mimo_v26_pro
+      model: openai/mimo-v2.6-pro
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/xiaomi/mimo-v2.6-pro
+    litellm_params: *ci_mimo_v26_pro

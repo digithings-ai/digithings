@@ -331,8 +331,14 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(dt?.models.available).toContain("deepseek/deepseek-v4.1-flash-1017");
     expect(dt?.models.available).toContain("deepseek/deepseek-v4.1-flash");
-    expect(dt?.models.available).toContain("google/gemini-3.1-flash-lite");
-    expect(dt?.models.available).toContain("openai/gpt-5.6-luna");
+    expect(dt?.models.available).toContain("google/gemini-3.5-flash-lite");
+    expect(dt?.models.available).toContain("openai/gpt-6-luna");
+    expect(dt?.models.available).toContain("qwen/qwen3.8-flash");
+    expect(dt?.models.available).toContain("z-ai/glm-5.3-flash");
+    expect(dt?.models.available).not.toContain("openai/gpt-5.6-luna");
+    expect(dt?.models.available).not.toContain("google/gemini-3.1-flash-lite");
+    expect(dt?.models.available).not.toContain("deepseek/deepseek-v4-pro");
+    expect(dt?.models.available).not.toContain("z-ai/glm-4.7-flash");
     expect(dt?.models.available).not.toContain("openai/gpt-5.6-sol");
     expect(dt?.models.available).not.toContain("google/gemini-3.7-flash");
     expect(dt?.models.available.some((id) => id.endsWith(":free"))).toBe(false);

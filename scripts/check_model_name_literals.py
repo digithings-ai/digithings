@@ -564,8 +564,9 @@ KNOWN_REMAINING: dict[str, _Allowance] = {
     # routing table and which are a description.
     "apps/digithings-web/lib/appPresets.ts": _Allowance(2, 2),
     # House-slug map. DeepSeek flash checkpoints stay distinct (2.6.6 catalog);
-    # each routed id is one literal. Shrinks when the map is generated (#5029).
-    "digillm/src/digillm/client.py": _Allowance(33, 33),
+    # the guard counts a house slug and its bare id when both match the id
+    # shape. Shrinks when the map is generated (#5029).
+    "digillm/src/digillm/client.py": _Allowance(57, 57),
     # The OCC session model picker (2026-10-13, DIG-1210): the default of
     # `env.DIGI_SESSION_MODEL_ALLOWLIST` in the stack Worker, i.e. the list
     # digigraph binds against per session when the var is unset. The live worker

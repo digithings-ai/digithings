@@ -1,7 +1,8 @@
 /**
  * Curated digichat model picker. Prices, context, tool support, and the
  * preset rules live in `config/model-picker-catalog.json`. This module only
- * applies a deployment's cap and preset selection. It does not call a provider.
+ * applies the newest-generation rule, then a deployment's cap and preset
+ * selection. It does not call a provider.
  */
 
 import catalogJson from "../../config/model-picker-catalog.json";
@@ -13,6 +14,9 @@ export type CatalogModel = {
   id: string;
   label: string;
   provider: string;
+  family: string;
+  generation: number;
+  released?: string;
   inputPerM: number;
   outputPerM: number;
   context: number;
@@ -45,6 +49,9 @@ type CatalogFile = {
     priceCapUsdPerMillion: number;
     minContextTokens: number;
     minTtftSamples: number;
+    latestGenerationsPerFamily: number;
+    maxAgeDays: number | null;
+    asOf: string;
   };
   providerOrder: string[];
   presets: CatalogPresetDef[];
@@ -78,6 +85,8 @@ export type CatalogPolicy = {
   presets?: readonly string[];
   showFullList?: boolean;
   minContextTokens?: number;
+  latestGenerationsPerFamily?: number;
+  maxAgeDays?: number | null;
 };
 
 export type ResolvedCatalog = {
@@ -111,6 +120,54 @@ function byProviderThenPrice(a: CatalogModel, b: CatalogModel): number {
 
 function passesFloor(model: CatalogModel, minContext: number): boolean {
   return model.tools === true && model.context >= minContext;
+}
+
+const MS_PER_DAY = 86_400_000;
+
+function ageDays(asOf: string, released: string): number | null {
+  const end = Date.parse(`${asOf}T00:00:00Z`);
+  const start = Date.parse(`${released}T00:00:00Z`);
+  if (Number.isNaN(end) || Number.isNaN(start)) return null;
+  return Math.floor((end - start) / MS_PER_DAY);
+}
+
+/**
+ * Tool-capable models at or above the context floor, limited to the newest
+ * generations of each family. A max age drops a dated row; a row with no
+ * release date stays. The price cap is applied later.
+ */
+function generationWindow(policy: CatalogPolicy): CatalogModel[] {
+  const minContext = policy.minContextTokens ?? catalog.policy.minContextTokens;
+  const latestN =
+    policy.latestGenerationsPerFamily ?? catalog.policy.latestGenerationsPerFamily;
+  const maxAge = policy.maxAgeDays !== undefined ? policy.maxAgeDays : catalog.policy.maxAgeDays;
+  if (!Number.isInteger(latestN) || latestN < 1) {
+    throw new Error("model catalog: latestGenerationsPerFamily must be a positive integer");
+  }
+  const floored = catalog.models.filter((model) => passesFloor(model, minContext));
+  const byFamily = new Map<string, CatalogModel[]>();
+  for (const model of floored) {
+    if (!model.family || typeof model.generation !== "number") {
+      throw new Error(`model catalog: ${model.id} has no family or generation`);
+    }
+    const rows = byFamily.get(model.family) ?? [];
+    rows.push(model);
+    byFamily.set(model.family, rows);
+  }
+  const kept: CatalogModel[] = [];
+  for (const rows of byFamily.values()) {
+    const generations = [...new Set(rows.map((row) => row.generation))].sort((a, b) => b - a);
+    const keep = new Set(generations.slice(0, latestN));
+    for (const row of rows) {
+      if (!keep.has(row.generation)) continue;
+      if (typeof maxAge === "number" && row.released) {
+        const age = ageDays(catalog.policy.asOf, row.released);
+        if (age !== null && age > maxAge) continue;
+      }
+      kept.push(row);
+    }
+  }
+  return kept;
 }
 
 function presetDef(id: PresetId): CatalogPresetDef | undefined {
@@ -148,7 +205,6 @@ export function resolveModelCatalog(
   opts: { openRouterConfigured: boolean },
 ): ResolvedCatalog {
   const cap = policy.priceCapUsdPerMillion ?? catalog.policy.priceCapUsdPerMillion;
-  const minContext = policy.minContextTokens ?? catalog.policy.minContextTokens;
   const minSamples = catalog.policy.minTtftSamples;
   const showFullList = policy.showFullList !== false;
   const requested = policy.presets ?? catalog.presets.map((preset) => preset.id);
@@ -157,15 +213,15 @@ export function resolveModelCatalog(
   }
   const wanted = new Set(requested);
 
-  const floored = catalog.models.filter((model) => passesFloor(model, minContext));
+  const current = generationWindow(policy);
   const pinnedId = policy.default?.trim() || autoModelId();
-  const pinned = floored.find((model) => model.id === pinnedId);
+  const pinned = current.find((model) => model.id === pinnedId);
   if (!pinned) {
     throw new Error(
-      "model catalog: default model is not in the catalog or is under the context floor",
+      "model catalog: default model is not in the current generation or is under the context floor",
     );
   }
-  const capped = floored
+  const capped = current
     .filter((model) => model.outputPerM <= cap || model.id === pinned.id)
     .sort(byProviderThenPrice);
 

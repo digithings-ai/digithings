@@ -794,7 +794,22 @@ _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
     "openai/gpt-oss-120b": "gpt-oss-120b",
+    "openai/gpt-6-luna": "gpt-6-luna",
+    "openai/gpt-5-mini": "gpt-5-mini",
+    "openai/gpt-6.1-sol": "gpt-6.1-sol",
+    "google/gemini-3.5-flash-lite": "gemini-3.5-flash-lite",
+    "google/gemini-3.8-flash": "gemini-3.8-flash",
+    "z-ai/glm-5.3": "glm-5.3",
     "z-ai/glm-5.3-flash": "glm-5.3-flash",
+    "z-ai/glm-4.7-flash": "glm-4.7-flash",
+    "qwen/qwen3.8-flash": "qwen3.8-flash",
+    "qwen/qwen3.8-27b": "qwen3.8-27b",
+    "qwen/qwen3.8-max": "qwen3.8-max",
+    "qwen/qwen3.8-2.4t-a95b": "qwen3.8-2.4t-a95b",
+    "qwen/qwen3.8-max-0902": "qwen3.8-max-0902",
+    "xiaomi/mimo-v2.6-flash": "mimo-v2.6-flash",
+    "xiaomi/mimo-v2.6-pro": "mimo-v2.6-pro",
+    "minimax/minimax-m3": "minimax-m3",
 }
 
 

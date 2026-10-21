@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UIMessage } from "ai";
 import { useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
 import {
+  embedAllowsThemeSwitch,
   embedParentOrigin,
   readTrialProofMessage,
   TRIAL_PROOF_MESSAGE_TYPE,
@@ -677,5 +678,14 @@ describe("the embed composer provider chip", () => {
     // third time.
     expect((code.match(/\bbackendLabel\b/g) ?? []).length).toBe(2);
     expect(code.match(helperImport)).toHaveLength(1);
+  });
+});
+
+describe("OCC theme switching", () => {
+  it("allows a theme pick on OCC and keeps other embeds locked", () => {
+    expect(embedAllowsThemeSwitch("https://occ.digithings.ai", "digithings")).toBe(true);
+    expect(embedAllowsThemeSwitch(undefined, "occ")).toBe(true);
+    expect(embedAllowsThemeSwitch("https://digithings.ai", "digithings")).toBe(false);
+    expect(embedAllowsThemeSwitch(undefined, "datatap-trial")).toBe(false);
   });
 });

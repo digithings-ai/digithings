@@ -326,6 +326,21 @@ def test_picker_catalog_models_are_on_the_ci_overlay() -> None:
     assert "openrouter/auto" not in names
 
 
+def test_picker_catalog_models_map_to_ci_bare_ids() -> None:
+    """Direct digillm clients resolve every catalog house id to a CI bare id."""
+    from digillm.client import cheaperinference_bare_id_for_house_slug
+
+    catalog = json.loads(
+        (REPO_ROOT / "apps/digichat/config/model-picker-catalog.json").read_text(encoding="utf-8")
+    )
+    missing = sorted(
+        model["id"]
+        for model in catalog["models"]
+        if cheaperinference_bare_id_for_house_slug(model["id"]) is None
+    )
+    assert not missing, f"catalog ids missing from the CI slug map: {missing}"
+
+
 # Cheap CI house slugs for the default product picker. Must exist on both the
 # overlay and ``_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE``. Never OpenRouter ``:free``.
 _PRODUCT_CI_CHEAP_PICKER = (

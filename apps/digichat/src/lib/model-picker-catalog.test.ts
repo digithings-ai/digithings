@@ -24,46 +24,104 @@ describe("model picker catalog", () => {
     expect(catalogJson.source).toMatch(/cheaperinference.com\/markets/);
     expect(catalogJson.source).toMatch(/No chat\/completions/);
     expect(catalogJson.source.toLowerCase()).toMatch(/no router model/);
+    expect(catalogJson.policy.latestGenerationsPerFamily).toBe(1);
+    expect(catalogJson.policy.maxAgeDays).toBeNull();
+    expect(catalogJson.policy.asOf).toBe("2026-10-21");
     expect(catalogJson.routers.map((router) => router.requires)).toEqual(["openrouter"]);
   });
 
-  it("keeps both DeepSeek V4.1 Flash checkpoints and every DeepSeek row under the cap", () => {
+  it("keeps only the newest generation of each family under the cap", () => {
     const resolved = policy();
-    expect(resolved.available).toContain("deepseek/deepseek-v4.1-flash-1017");
-    expect(resolved.available).toContain("deepseek/deepseek-v4.1-flash");
-    const deepseek = models.filter(
-      (model) =>
-        model.provider === "DeepSeek" &&
-        model.tools &&
-        model.context >= catalogJson.policy.minContextTokens &&
-        model.outputPerM <= catalogJson.policy.priceCapUsdPerMillion,
-    );
-    for (const model of deepseek) {
-      expect(resolved.available).toContain(model.id);
+    expect(resolved.available).toEqual([
+      "deepseek/deepseek-v4.1-flash-1017",
+      "deepseek/deepseek-v4.1-flash",
+      "openai/gpt-oss-120b",
+      "openai/gpt-6-luna",
+      "google/gemini-3.5-flash-lite",
+      "z-ai/glm-5.3-flash",
+      "qwen/qwen3.8-flash",
+      "qwen/qwen3.8-27b",
+      "xiaomi/mimo-v2.6-flash",
+      "xiaomi/mimo-v2.6-pro",
+      "minimax/minimax-m3",
+    ]);
+    for (const id of [
+      "deepseek/deepseek-v4-pro",
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-flash-0731",
+      "deepseek/deepseek-v4-flash-0731-fast",
+      "deepseek/deepseek-v4-pro-0813",
+      "deepseek/deepseek-v3.2",
+      "deepseek/deepseek-v3.1",
+      "deepseek/deepseek-r1",
+      "z-ai/glm-4.7-flash",
+      "openai/gpt-5.6-luna",
+      "openai/gpt-5-mini",
+      "google/gemini-3.1-flash-lite",
+    ]) {
+      expect(models.some((model) => model.id === id)).toBe(true);
+      expect(resolved.available).not.toContain(id);
     }
-    expect(resolved.available).not.toContain("deepseek/deepseek-r1");
+    expect(models.some((model) => model.id === "google/gemma-4-31b-it")).toBe(false);
   });
 
-  it("drops models over the output cap and keeps the pinned default if the cap would exclude it", () => {
+  it("drops models over the output cap and keeps a pinned current-generation default", () => {
     const resolved = policy();
-    expect(resolved.available).not.toContain("openai/gpt-5.6-sol");
-    expect(resolved.available).not.toContain("google/gemini-3.7-flash");
+    expect(resolved.available).not.toContain("z-ai/glm-5.3");
+    expect(resolved.available).not.toContain("google/gemini-3.8-flash");
+    expect(resolved.available).not.toContain("openai/gpt-6.1-sol");
+    expect(resolved.available).not.toContain("qwen/qwen3.8-max");
     const high = resolveModelCatalog(
-      { default: "openai/gpt-5.6-sol", priceCapUsdPerMillion: 2, showFullList: true },
+      { default: "z-ai/glm-5.3", priceCapUsdPerMillion: 2, showFullList: true },
       { openRouterConfigured: false },
     );
-    expect(high.default).toBe("openai/gpt-5.6-sol");
-    expect(high.available).toContain("openai/gpt-5.6-sol");
+    expect(high.default).toBe("z-ai/glm-5.3");
+    expect(high.available).toContain("z-ai/glm-5.3");
+    expect(() =>
+      resolveModelCatalog(
+        { default: "openai/gpt-5.6-sol", priceCapUsdPerMillion: 2 },
+        { openRouterConfigured: false },
+      ),
+    ).toThrow(/current generation/);
   });
 
-  it("picks Auto, Reasoning, Fast, and Light from the capped set", () => {
+  it("brings the previous generation back when the catalog keeps two", () => {
+    const wide = resolveModelCatalog(
+      { latestGenerationsPerFamily: 2, showFullList: true },
+      { openRouterConfigured: false },
+    );
+    expect(wide.available).toContain("deepseek/deepseek-v4-pro");
+    expect(wide.available).toContain("z-ai/glm-4.7-flash");
+    expect(wide.available).toContain("openai/gpt-5.6-luna");
+    expect(wide.available).not.toContain("deepseek/deepseek-v3.2");
+    expect(wide.available).not.toContain("openai/gpt-5-mini");
+    expect(wide.picker.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
+      "deepseek/deepseek-v4-pro",
+    );
+  });
+
+  it("drops a dated checkpoint past maxAgeDays and keeps an undated one", () => {
+    expect(() =>
+      resolveModelCatalog({ maxAgeDays: 3 }, { openRouterConfigured: false }),
+    ).toThrow(/current generation/);
+    const aged = resolveModelCatalog(
+      { maxAgeDays: 3, default: "z-ai/glm-5.3-flash", priceCapUsdPerMillion: 20 },
+      { openRouterConfigured: false },
+    );
+    expect(aged.available).toContain("z-ai/glm-5.3-flash");
+    expect(aged.available).toContain("z-ai/glm-5.3");
+    expect(aged.available).not.toContain("deepseek/deepseek-v4.1-flash-1017");
+    expect(aged.available).not.toContain("qwen/qwen3.8-max-0902");
+  });
+
+  it("picks Auto, Reasoning, Fast, and Light from the newest capped set", () => {
     const resolved = policy();
     const byId = Object.fromEntries(resolved.picker.presets.map((preset) => [preset.id, preset]));
     expect(byId.auto?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(byId.auto?.description).toMatch(/DeepSeek V4.1 Flash 1017/);
-    expect(byId.reasoning?.model).toBe("deepseek/deepseek-v4-pro");
+    expect(byId.reasoning?.model).toBe("z-ai/glm-5.3-flash");
     expect(byId.reasoning?.description).toMatch(/Best reasoning/);
-    expect(byId.fast?.model).toBe("z-ai/glm-4.7-flash");
+    expect(byId.fast?.model).toBe("google/gemini-3.5-flash-lite");
     expect(byId.fast?.description).toMatch(/Fastest/);
     expect(byId.light?.model).toBe("openai/gpt-oss-120b");
     expect(byId.light?.description).toMatch(/Lowest price/);
@@ -99,8 +157,8 @@ describe("model picker catalog", () => {
     expect(hidden.picker.groups).toEqual([]);
     expect(hidden.available).toEqual([
       "deepseek/deepseek-v4.1-flash-1017",
-      "deepseek/deepseek-v4-pro",
-      "z-ai/glm-4.7-flash",
+      "z-ai/glm-5.3-flash",
+      "google/gemini-3.5-flash-lite",
       "openai/gpt-oss-120b",
     ]);
   });

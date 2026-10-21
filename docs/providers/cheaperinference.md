@@ -68,7 +68,9 @@ own key and upstream configuration.
 digithings.ai and the OCC embed resolve the picker from
 `apps/digichat/config/model-picker-catalog.json`: presets first (Auto,
 Reasoning, Fast, Light, and the OpenRouter router when that key is set), then
-every tool-capable model under the deployment's output-price cap. The default
+the newest generation of each family that is tool-capable, at or above the
+context floor, and under the deployment's output-price cap. Older generations
+stay in the catalog file; the resolver drops them. The default
 preset is `deepseek/deepseek-v4.1-flash-1017` (DeepSeek V4.1 Flash 1017 on
 Cheaper Inference). Cheaper Inference has no router model. OpenRouter is not a
 free model list on that picker; `openrouter/auto` appears only as the Router

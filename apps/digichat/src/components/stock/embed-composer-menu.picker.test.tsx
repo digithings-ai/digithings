@@ -12,6 +12,7 @@ import {
   EmbedChatPrefsProvider,
   type EmbedChatPrefsApi,
 } from "@digithings/ui/chat/stock";
+import { resolveModelCatalog } from "@/lib/model-picker-catalog";
 
 /** Navigated row: the user-message chevron on the left. */
 function hasChevron(row: HTMLElement): boolean {
@@ -378,6 +379,35 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(screen.getByText("Best reasoning in this list.")).not.toBeNull();
     await userEvent.click(screen.getByRole("menuitemradio", { name: /Reasoning/ }));
     expect(setModel).toHaveBeenCalledWith("preset:reasoning");
+    unmount();
+  });
+
+  it("renders the newest-generation catalog and omits superseded models", async () => {
+    const onClose = vi.fn();
+    const resolved = resolveModelCatalog(
+      { presets: ["auto", "reasoning", "fast", "light"], showFullList: true },
+      { openRouterConfigured: false },
+    );
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" } })}>
+        <EmbedComposerMenu
+          kind="models"
+          picker={resolved.picker}
+          models={resolved.available}
+          onClose={onClose}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(await screen.findByRole("menuitemradio", { name: /Auto/ })).not.toBeNull();
+    expect(screen.getByText("GLM 5.3 Flash. Best reasoning in this list.")).not.toBeNull();
+    expect(screen.getByText("Gemini 3.5 Flash Lite. Fastest model in this list.")).not.toBeNull();
+    expect(screen.getByText("GPT-OSS 120B. Lowest price in this list.")).not.toBeNull();
+    expect(screen.getByText("Qwen 3.8 Flash")).not.toBeNull();
+    expect(screen.getByText("Qwen 3.8 27B")).not.toBeNull();
+    expect(screen.queryByText("DeepSeek V4 Pro")).toBeNull();
+    expect(screen.queryByText("GLM 4.7 Flash")).toBeNull();
+    expect(screen.queryByText("GPT-5.6 Luna")).toBeNull();
+    expect(screen.queryByText("Gemini 3.1 Flash Lite")).toBeNull();
     unmount();
   });
 
