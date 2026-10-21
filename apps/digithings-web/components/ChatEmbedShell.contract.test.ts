@@ -101,6 +101,24 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
     expect(src).toContain("opacity: revealed ? 1 : 0");
+
+    // The full-page routes paint the digichat hero banner in that same cover
+    // instead of the tool chain: /chat and /chat/occ are only the chat, so a
+    // simulated tool list would invent work the visitor never started. The
+    // landing pop-up leaves warmupLoader at its default ("toolchain") and
+    // keeps the BootLabOverlay branch above.
+    expect(src).toContain('from "@digithings/hero-banner/web"');
+    expect(src).toContain('from "@digithings/hero-banner/definitions"');
+    expect(src).toContain('warmupLoader?: "toolchain" | "banner"');
+    expect(src).toContain('warmupLoader = "toolchain"');
+    expect(src).toContain('warmupLoader === "banner"');
+    expect(src).toContain("<HeroBanner def={DIGICHAT} replayLoading />");
+
+    const pageShellSrc = readFileSync(
+      fileURLToPath(new URL("./ChatPageShell.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(pageShellSrc).toContain('warmupLoader="banner"');
     // Curated per-host copy rides into the iframe URL. The strings themselves
     // live in lib/embedCopy.ts now, so the landing page's FAQ band can mount the
     // same conversation with the same welcome — assert both halves: the URL

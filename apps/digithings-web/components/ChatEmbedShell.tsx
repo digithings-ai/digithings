@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { DIGICHAT } from "@digithings/hero-banner/definitions";
+import { HeroBanner } from "@digithings/hero-banner/web";
 import { BootLabOverlay } from "@digithings/ui/chat/boot-lab";
 import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
@@ -188,6 +190,14 @@ export type ChatEmbedShellProps = {
    * every visitor. See `@/lib/inviteToken`.
    */
   acceptsInviteToken?: boolean;
+  /**
+   * What the cold-start cover paints. `"toolchain"` is the shared
+   * BootLabOverlay tool-chain (the landing pop-up's LiveAsk keeps it);
+   * `"banner"` is the digichat hero banner alone, for the full-page /chat and
+   * /chat/occ routes, where the page is nothing but the chat and a simulated
+   * tool list would be inventing work the visitor never started.
+   */
+  warmupLoader?: "toolchain" | "banner";
 };
 
 /**
@@ -202,7 +212,9 @@ export type ChatEmbedShellProps = {
  * nav), but a cold Container has no document to run it in. Until the frame
  * paints, this shell covers the wait with the same `@digithings/ui`
  * BootLabOverlay tool-chain the embed uses — shown only after WARMUP_DELAY_MS so
- * warm loads never flash it, and crossfaded out on `digichat:ready`. The
+ * warm loads never flash it, and crossfaded out on `digichat:ready`. Full-page
+ * routes (`ChatPageShell`) pass `warmupLoader="banner"` and get the digichat
+ * hero banner in the same cover instead. The
  * iframe stays opacity-0 underneath and the frame slot is painted from the
  * first HTML by `.dc-chat-frame` in globals.css (`--chat-frame-canvas` per
  * `[data-theme]`), so a white default document never flashes.
@@ -215,6 +227,7 @@ export function ChatEmbedShell({
   embedOrigin,
   embedHost = DEFAULT_CHAT_EMBED_HOST,
   acceptsInviteToken = false,
+  warmupLoader = "toolchain",
 }: ChatEmbedShellProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const iframeLoadedRef = useRef(false);
@@ -488,25 +501,46 @@ export function ChatEmbedShell({
             background: "transparent",
           }}
         >
-          <BootLabOverlay
-            // The canonical tool-chain boot: rows pull the image, mount the
-            // configuration, warm the runtime, then the last row waits for the
-            // app's real ready edge — the digichat:ready postMessage, passed
-            // through as readyEdge because the app runs in another document.
-            // Facts are the deployment's real values (never invented counts):
-            // both live tenants run the digigraph backend.
-            variant="tooltask"
-            // The last rows wait on real edges: "wake up services" on the
-            // warm-up probe, "wire in the backend" on digichat:ready.
-            ready={revealed}
-            readyEdge={revealed}
-            onSettled={() => {}}
-            facts={{
-              starters: EMBED_SHELL_COPY[embedHost]?.suggestions.length,
-              backend: "digigraph",
-              services: serviceNames,
-            }}
-          />
+          {warmupLoader === "banner" ? (
+            // Full-page chat (/chat, /chat/occ): the digichat hero banner
+            // alone, centered both ways. No copy and no spinner — the page is
+            // the chat, so the cover is the product's own mark playing its
+            // LOADING pass. The wrapper is what gives the canvas a width;
+            // HeroBanner sizes itself to its container.
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                height: "100%",
+              }}
+            >
+              <div style={{ width: "min(560px, 72vw)" }}>
+                <HeroBanner def={DIGICHAT} replayLoading />
+              </div>
+            </div>
+          ) : (
+            <BootLabOverlay
+              // The canonical tool-chain boot: rows pull the image, mount the
+              // configuration, warm the runtime, then the last row waits for the
+              // app's real ready edge — the digichat:ready postMessage, passed
+              // through as readyEdge because the app runs in another document.
+              // Facts are the deployment's real values (never invented counts):
+              // both live tenants run the digigraph backend.
+              variant="tooltask"
+              // The last rows wait on real edges: "wake up services" on the
+              // warm-up probe, "wire in the backend" on digichat:ready.
+              ready={revealed}
+              readyEdge={revealed}
+              onSettled={() => {}}
+              facts={{
+                starters: EMBED_SHELL_COPY[embedHost]?.suggestions.length,
+                backend: "digigraph",
+                services: serviceNames,
+              }}
+            />
+          )}
         </div>
       ) : null}
 

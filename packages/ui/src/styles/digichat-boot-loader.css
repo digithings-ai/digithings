@@ -408,6 +408,14 @@
   text-align: left;
 }
 
+/* The digichat skin lets the row label size to its text (`flex: 0 1 auto`), so
+   the duration would sit right after it. Pin it to the row's right edge so
+   every row's timer shares one column. */
+.dboot-lab-tools .aui-tool-fallback-duration {
+  margin-left: auto;
+  text-align: right;
+}
+
 /* Handoff switch: `drift` lifts the overlay as it fades so the swap reads as
    one motion with the chat entering underneath. */
 .dboot-overlay[data-drift="true"] {
