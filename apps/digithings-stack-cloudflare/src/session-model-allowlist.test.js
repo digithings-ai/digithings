@@ -33,13 +33,17 @@ const deployModels = JSON.parse(
 const allowlist = SESSION_MODEL_ALLOWLIST_DEFAULT.split(",").map((slug) => slug.trim()).filter(Boolean);
 
 describe("session model allowlist", () => {
-  it("allows the session superset, which covers every published model", () => {
+  it("allows exactly the published, price-capped list", () => {
     expect(new Set(allowlist).size).toBe(allowlist.length);
     expect([...allowlist].sort()).toEqual([...deployModels.sessionAllowlist].sort());
-    for (const id of deployModels.available) {
-      expect(allowlist).toContain(id);
-    }
-    expect(allowlist.length).toBeGreaterThan(deployModels.available.length);
+    expect([...allowlist].sort()).toEqual([...deployModels.available].sort());
+  });
+
+  it("matches the wrangler.toml value it mirrors", () => {
+    const toml = readFileSync(resolve(here, "../wrangler.toml"), "utf-8");
+    const line = toml.split("\n").find((row) => row.startsWith("DIGI_SESSION_MODEL_ALLOWLIST"));
+    const value = line?.split('"')[1] ?? "";
+    expect(value.split(",").sort()).toEqual([...allowlist].sort());
   });
 
   it("allows the published default model", () => {

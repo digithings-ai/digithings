@@ -133,7 +133,7 @@ def test_the_occ_only_overlay_carries_one_tenant_and_no_credential():
     assert "mcp" not in entry
     assert entry["models"]["catalog"] is True
     assert "available" not in entry["models"]
-    assert entry["models"]["presets"] == ["auto", "reasoning", "fast", "light", "router"]
+    assert entry["models"]["presets"] == ["auto", "reasoning", "fast", "light"]
     backend = entry.get("backend") or {}
     assert "digisearchIndex" not in backend
     assert "vaultPathPrefix" not in backend

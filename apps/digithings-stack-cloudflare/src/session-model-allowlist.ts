@@ -3,16 +3,12 @@
  *
  * digigraph binds a requested slug only when it is on
  * `DIGI_SESSION_MODEL_ALLOWLIST` (see `digigraph/src/digigraph/model_config.py`),
- * so this list is the session picker's contract with digigraph. The published
- * picker (`available`) is a subset: the session list also carries over-cap
- * catalog ids and the OpenRouter router so a deployment that raises the cap
- * can still bind them.
- *
- * The published `available` list is the default price cap. A deployment may
- * raise that cap, and the OpenRouter router is bindable only when configured,
- * so digigraph's allowlist is the wider `sessionAllowlist` (every routable
- * catalog id plus the router). The model names live in `config/`, not in
- * code (the model-name literal guard, #5029).
+ * so this list is the session picker's contract with digigraph. It equals the
+ * published picker (`available`) at the catalog's price cap: digigraph is the
+ * last hop before a bill, so an over-cap id or the OpenRouter router is never
+ * bound even if some host hand-writes it into `available`. Raising a cap means
+ * raising this list too. The model names live in `config/`, not in code (the
+ * model-name literal guard, #5029).
  */
 import deployModels from "../../digichat/config/digichat-deploy-models.json";
 

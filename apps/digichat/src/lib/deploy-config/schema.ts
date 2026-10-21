@@ -758,8 +758,10 @@ function applyModelCatalog(
     return rest;
   }
   if ((models.available?.length ?? 0) > 0) {
-    throw new Error(
-      `${ctx}: models.catalog is set together with models.available; delete the hand list, the catalog fills it`,
+    // One bad registry row must not fail the whole container's config: the
+    // catalog wins and the hand list is ignored.
+    console.warn(
+      `${ctx}: models.catalog is set together with models.available; the hand list is ignored`,
     );
   }
   const resolved = resolveModelCatalog(

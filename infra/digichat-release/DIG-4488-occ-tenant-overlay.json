@@ -10,7 +10,7 @@
         "catalog": true,
         "default": "deepseek/deepseek-v4.1-flash-1017",
         "priceCapUsdPerMillion": 2,
-        "presets": ["auto", "reasoning", "fast", "light", "router"],
+        "presets": ["auto", "reasoning", "fast", "light"],
         "showFullList": true
       },
       "backend": {

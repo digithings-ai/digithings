@@ -505,6 +505,25 @@ describe("force-tool allowlist", () => {
     expect(filterForceToolHeader(dep, "not-a-tool")).toBeUndefined();
   });
 
+  it("keeps a resolved tenant's picker so preset picks still resolve", () => {
+    const picker = {
+      showFullList: true,
+      groups: [],
+      presets: [{ id: "reasoning", label: "Reasoning", description: "", model: "m/reason" }],
+    };
+    const dep = embedTenantToDeployment({
+      slug: "x",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      attribution: false,
+      activityDetail: "labels",
+      models: { default: "m/reason", available: ["m/reason"], catalog: true, picker },
+    });
+    expect(dep.models?.picker).toEqual(picker);
+  });
+
   it("denies digisearch/digivault when catalog empty (fail-closed, #3806)", () => {
     const dep = embedTenantToDeployment({
       slug: "x",

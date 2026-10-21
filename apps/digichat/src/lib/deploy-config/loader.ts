@@ -130,6 +130,9 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       ...(typeof cfg.models?.minContextTokens === "number"
         ? { minContextTokens: cfg.models.minContextTokens }
         : {}),
+      // A resolved tenant carries its picker; without it a preset:<id> pick
+      // through the fallback deployment would be refused.
+      ...(cfg.models?.picker ? { picker: structuredClone(cfg.models.picker) } : {}),
     },
     cli: { enabled: false },
     backend: cfg.backend,

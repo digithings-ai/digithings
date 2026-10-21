@@ -80,9 +80,12 @@ The dashboard (`dashboard-modal.yaml`) keeps its own three-slug list:
 `z-ai/glm-5.3-flash`. The Foundry trial embed uses Azure Foundry and does not
 inherit this catalog.
 
-Every house id on the catalog is on `config/litellm.cheaperinference.yaml` and
-`_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE`. The BFF rejects any other house
-`X-Digi-Model`.
+Every house id on the catalog is on `config/litellm.cheaperinference.yaml`
+(tested). `_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE` maps the ids added for the
+catalog; some older ids are not in that map. The BFF rejects any other house
+`X-Digi-Model`, and digigraph binds only ids on the capped
+`DIGI_SESSION_MODEL_ALLOWLIST`. The OpenRouter router preset is off in the
+shipped configs.
 
 **BYOK** (`gate.showByok`): connecting a visitor provider replaces `/models`
 with that provider’s presets (existing BYOK catalog). The house allowlist does

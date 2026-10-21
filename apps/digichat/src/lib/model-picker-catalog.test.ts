@@ -113,7 +113,16 @@ describe("model picker catalog", () => {
     for (const id of deployModels.available) {
       expect(deployModels.sessionAllowlist).toContain(id);
     }
-    expect(deployModels.sessionAllowlist).toContain("openrouter/auto");
-    expect(deployModels.sessionAllowlist).toContain("openai/gpt-5.6-sol");
+    // digigraph's list is the capped list: no over-cap id, no router.
+    expect(deployModels.sessionAllowlist).toEqual(deployModels.available);
+    expect(deployModels.sessionAllowlist).not.toContain("openrouter/auto");
+    const catalogRows = JSON.parse(JSON.stringify(catalogJson)).models as Array<{
+      id: string;
+      outputPerM: number;
+    }>;
+    for (const id of deployModels.sessionAllowlist) {
+      const row = catalogRows.find((model) => model.id === id);
+      if (id !== deployModels.default) expect(row?.outputPerM ?? Infinity).toBeLessThanOrEqual(2);
+    }
   });
 });

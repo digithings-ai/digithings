@@ -43,7 +43,7 @@ hosts:
       catalog: true
       default: deepseek/deepseek-v4.1-flash-1017
       priceCapUsdPerMillion: 2
-      presets: [auto, reasoning, fast, light, router]
+      presets: [auto, reasoning, fast, light]
       showFullList: true
     backend:
       type: digigraph
@@ -107,7 +107,9 @@ hosts:
       llmAccess: operator
       showByok: false
       showLanguageSelector: true
-      # Hide per-session MCP and tool controls. The model picker stays
-      # available because models.available is the catalog, not empty.
+      # Pins the session: digigraph strips the session_* tools and the client
+      # hides MCP server controls (tools.allowUserToggle above still shows
+      # the tool toggle). The model picker stays available because
+      # models.available is the catalog, not empty. /theme stays available.
       lockSessionControls: true
       webSearch: false

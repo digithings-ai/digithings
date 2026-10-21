@@ -127,16 +127,15 @@ function fill(template: string, label: string): string {
   return template.split("{label}").join(label);
 }
 
-/** Every routable catalog id, ignoring the price cap, plus configured routers. */
+/**
+ * digigraph's session allowlist: the published list at the catalog's own price
+ * cap, nothing over it and no router. digigraph is the last hop before a bill,
+ * so it must not bind an id the cap excludes even if a hand-written
+ * `available` list on some host offers one. A deployment that raises its cap
+ * needs this list (and DIGI_SESSION_MODEL_ALLOWLIST) raised with it.
+ */
 export function sessionAllowlistIds(): string[] {
-  const models = catalog.models
-    .filter((model) => passesFloor(model, catalog.policy.minContextTokens))
-    .sort(byProviderThenPrice);
-  const ids = models.map((model) => model.id);
-  for (const router of catalog.routers) {
-    if (!ids.includes(router.id)) ids.push(router.id);
-  }
-  return ids;
+  return resolveModelCatalog({}, { openRouterConfigured: false }).available;
 }
 
 /**

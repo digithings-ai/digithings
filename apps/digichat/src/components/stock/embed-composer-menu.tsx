@@ -154,13 +154,17 @@ function selectableIndexes(rows: readonly MenuRow[]): number[] {
 function stepSelectable(current: number, delta: number, rows: readonly MenuRow[]): number {
   const selectable = selectableIndexes(rows);
   if (!selectable.length) return 0;
-  let pos = selectable.indexOf(current);
+  const pos = selectable.indexOf(current);
   if (pos < 0) {
-    pos = selectable.findIndex((index) => index >= current);
-    if (pos < 0) pos = 0;
+    // On a heading (or past the end): one step lands on the nearest selectable
+    // row in that direction, without applying the delta a second time.
+    if (delta > 0) return selectable.find((index) => index > current) ?? selectable[0] ?? 0;
+    return [...selectable].reverse().find((index) => index < current) ?? selectable[selectable.length - 1] ?? 0;
   }
   return selectable[nextPaletteIndex(pos, delta, selectable.length)] ?? selectable[0] ?? 0;
 }
+
+export const stepSelectableForTests = stepSelectable;
 
 /**
  * The menu is a tree, not a set of modes: every page has exactly one parent.

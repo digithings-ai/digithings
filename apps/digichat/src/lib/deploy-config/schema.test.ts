@@ -9,6 +9,8 @@ import {
   disclosureIsVisible,
   GateSchema,
   parseDigichatConfig,
+  resolveHouseModelSelection,
+  routerModelsHeader,
   welcomeTitle,
 } from "./schema";
 import { allowedForceTools } from "./force-tool";
@@ -665,6 +667,59 @@ describe("allowlistModelId", () => {
     expect(allowlistModelId(models, "b")).toBe("b");
     expect(allowlistModelId(models, "c")).toBeUndefined();
     expect(allowlistModelId(models, undefined)).toBe("a");
+  });
+});
+
+describe("preset selection on the BFF", () => {
+  const models = {
+    default: "m/auto",
+    available: ["m/auto", "m/reason", "m/light"],
+    picker: {
+      showFullList: true,
+      groups: [],
+      presets: [
+        { id: "auto", label: "Auto", description: "", model: "m/auto" },
+        { id: "reasoning", label: "Reasoning", description: "", model: "m/reason" },
+        { id: "fast", label: "Fast", description: "", model: "m/off-list" },
+        { id: "router", label: "Router", description: "", model: "openrouter/auto" },
+      ],
+    },
+  };
+
+  it("maps a preset token onto its model and re-checks the allowlist", () => {
+    expect(resolveHouseModelSelection(models, "preset:reasoning")).toBe("m/reason");
+    expect(resolveHouseModelSelection(models, " preset:auto ")).toBe("m/auto");
+    // A preset whose model is not on the list is refused, not forwarded.
+    expect(resolveHouseModelSelection(models, "preset:fast")).toBeUndefined();
+    expect(resolveHouseModelSelection(models, "preset:nope")).toBeUndefined();
+    expect(resolveHouseModelSelection(models, "preset:")).toBeUndefined();
+  });
+
+  it("keeps raw ids on the allowlist and refuses the rest", () => {
+    expect(resolveHouseModelSelection(models, "m/light")).toBe("m/light");
+    expect(resolveHouseModelSelection(models, "openai/gpt-5.6-sol")).toBeUndefined();
+    expect(resolveHouseModelSelection(models, undefined)).toBe("m/auto");
+  });
+
+  it("builds the router list only for the router pick, never including the router", () => {
+    expect(routerModelsHeader(models, "m/auto")).toBeUndefined();
+    expect(routerModelsHeader(models, undefined)).toBeUndefined();
+    const withRouter = { ...models, available: [...models.available, "openrouter/auto"] };
+    expect(routerModelsHeader(withRouter, "openrouter/auto")).toBe("m/auto,m/reason,m/light");
+    const noRouterPreset = { ...models, picker: { ...models.picker, presets: [] } };
+    expect(routerModelsHeader(noRouterPreset, "openrouter/auto")).toBeUndefined();
+  });
+
+  it("lets the catalog win over a hand list instead of failing the config", () => {
+    const raw = loadYaml(
+      readFileSync(resolve(examplesDir, "digithings-ai-embed.yaml"), "utf8"),
+    ) as { hosts: Record<string, { models: Record<string, unknown> }> };
+    const host = Object.keys(raw.hosts)[0]!;
+    raw.hosts[host]!.models.available = ["openai/gpt-5.6-sol"];
+    const parsed = parseDigichatConfig(raw, "mixed.yaml");
+    const available = parsed.hosts?.[host]?.models.available ?? [];
+    expect(available).not.toContain("openai/gpt-5.6-sol");
+    expect(available).toContain("deepseek/deepseek-v4.1-flash-1017");
   });
 });
 
