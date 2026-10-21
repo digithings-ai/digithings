@@ -109,7 +109,6 @@ import {
   parseThemeMessage,
   type EmbedTheme,
 } from "@/lib/embed-theme-messages";
-import { THEME_STORAGE_KEY } from "@digithings/ui/theme";
 import {
   pageContextCreateAttachment,
   parsePageContextMessage,
@@ -117,28 +116,6 @@ import {
 } from "@/lib/embed-page-context-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
-
-/** OCC visitors may switch theme. Other embeds stay on the tenant or parent theme. */
-export function embedAllowsThemeSwitch(host: string | undefined, slug: string | undefined): boolean {
-  if (slug === "occ") return true;
-  if (!host) return false;
-  try {
-    const name = host.includes("://") ? new URL(host).hostname : host.split("/")[0] ?? "";
-    return name === "occ.digithings.ai";
-  } catch {
-    return false;
-  }
-}
-
-function storedVisitorTheme(): EmbedTheme | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const picked = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return picked === "light" || picked === "dark" ? picked : null;
-  } catch {
-    return null;
-  }
-}
 
 const ACCENTS: readonly Accent[] = ["digithings", "digiquant", "digichat"];
 
@@ -321,7 +298,6 @@ function EmbedPageInner({
 
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
-  const themeSwitchable = embedAllowsThemeSwitch(host, tenantCfg.slug);
   // Parent postMessage > ?theme= URL pin > tenant registry (default dark).
   const effectiveTheme: EmbedTheme =
     parentTheme ?? urlTheme ?? (tenantCfg.theme === "light" ? "light" : "dark");
@@ -426,7 +402,6 @@ function EmbedPageInner({
     const el = document.documentElement;
     const desired = effectiveTheme;
     const apply = () => {
-      if (themeSwitchable && storedVisitorTheme()) return;
       if (el.getAttribute("data-theme") !== desired) {
         applyEmbedDocumentTheme(desired);
       }
@@ -435,7 +410,7 @@ function EmbedPageInner({
     const observer = new MutationObserver(apply);
     observer.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
     return () => observer.disconnect();
-  }, [effectiveTheme, themeSwitchable]);
+  }, [effectiveTheme]);
 
   // The embedding site can theme the widget to its own brand by passing
   // `?accent=#rrggbb` (+ optional `?accentForeground=`), the same override
@@ -1171,7 +1146,6 @@ function EmbedChat({
   const showModels =
     (stockClient.models.allowPicker === true || stockClient.features.modelPicker === true) &&
     stockClient.models.available.length > 0;
-  const themeSwitchable = embedAllowsThemeSwitch(host, tenantCfg.slug);
   const prefsApi = useMemo<EmbedChatPrefsApi>(
     () => ({
       prefs: chatPrefs,
@@ -1274,10 +1248,8 @@ function EmbedChat({
       openDensity: () => {
         setComposerMenu("density");
       },
-      themeLocked: !themeSwitchable,
-      openTheme: () => {
-        if (themeSwitchable) setComposerMenu("theme");
-      },
+      themeLocked: true,
+      openTheme: () => {},
       openThinking: () => {
         setComposerMenu("thinking");
       },
@@ -1342,7 +1314,6 @@ function EmbedChat({
       stockClient.mcp.servers,
       stockClient.features.view,
       stockClient.features.thinking,
-      themeSwitchable,
       stockClient.features.density,
       stockClient.features.effort,
       stockClient.gate.searchEngine,
