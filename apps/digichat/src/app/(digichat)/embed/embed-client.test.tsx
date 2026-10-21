@@ -47,17 +47,81 @@ const proofCodeLines = codeLinesOf(embedClientSrc).filter((line) =>
 );
 
 /**
- * The source of the expression that follows `providerLabel:`.
+ * The source with its comments removed.
  *
- * The statement ends at the first comma or semicolon outside brackets and
- * parentheses, so a call that spans several lines is captured whole and a
- * bare identifier stops at the end of its own line.
+ * A pin that reads a comment reads nothing: a comment can carry the marker
+ * (the pin would read the prose while the wiring says something else) and a
+ * word in prose can stand in for the wiring (the pin would pass on code that
+ * no longer names the backend). The comments become spaces, so the code keeps
+ * its place and the line of a site does not move.
  */
-function providerLabelExpression(source: string): string {
-  const marker = "providerLabel:";
-  const at = source.indexOf(marker);
-  if (at < 0) throw new Error("the source wires no provider label");
-  const rest = source.slice(at + marker.length);
+function codeOnly(source: string): string {
+  let out = "";
+  let i = 0;
+  let quote: string | null = null;
+  while (i < source.length) {
+    const ch = source.charAt(i);
+    const next = source.charAt(i + 1);
+    if (quote !== null) {
+      out += ch;
+      if (ch === "\\" && i + 1 < source.length) {
+        out += next;
+        i += 2;
+        continue;
+      }
+      if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      while (i < source.length && source.charAt(i) !== "\n") {
+        out += " ";
+        i += 1;
+      }
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      while (
+        i < source.length &&
+        !(source.charAt(i) === "*" && source.charAt(i + 1) === "/")
+      ) {
+        out += source.charAt(i) === "\n" ? "\n" : " ";
+        i += 1;
+      }
+      out += "  ";
+      i += 2;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+/**
+ * The expression that wires the provider label.
+ *
+ * The wiring is one property, so the expression is the whole statement: it
+ * ends at the first comma or semicolon outside brackets and parentheses, so
+ * a call that spans several lines is captured whole. The marker has to
+ * appear exactly once: a second site fails loudly instead of quietly
+ * re-targeting the pin.
+ */
+function providerLabelExpression(code: string): string {
+  const sites = [...code.matchAll(/providerLabel\s*:/g)];
+  if (sites.length !== 1) {
+    throw new Error(
+      `the source wires ${sites.length} provider labels, expected exactly one`,
+    );
+  }
+  const at = (sites[0].index ?? 0) + sites[0][0].length;
+  const rest = code.slice(at);
   let depth = 0;
   let quote: string | null = null;
   for (let i = 0; i < rest.length; i++) {
@@ -84,6 +148,16 @@ function providerLabelExpression(source: string): string {
     }
   }
   return rest.trim();
+}
+
+/** The expression without the whitespace that formatting may change. */
+function normalised(expression: string): string {
+  return expression
+    .replace(/\s+/g, " ")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(/,\)/g, ")")
+    .trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -580,16 +654,23 @@ describe("an expired trial proof is dropped and the page is asked for a new one"
 
 describe("the embed composer provider chip", () => {
   it("derives the label from the BYOK state and the serving backend, not from a literal", () => {
-    const wiring = providerLabelExpression(embedClientSrc);
-    // The shared helper owns the naming: the app has one vocabulary.
-    expect(wiring).toMatch(/^backendLabel\(/);
-    // The own-key provider wins while the session carries a key.
-    expect(wiring).toMatch(/byokIsSet\s*\?\s*byokProvider\s*:\s*null/);
-    // The backend that serves the chat is named too, so a Foundry tenant
-    // does not get the house backend's name.
-    expect(wiring).toMatch(/backendType/);
-    // No literal backend name: a copy of one drifts the moment the house
-    // backend changes.
-    expect(wiring).not.toMatch(/["'`]/);
+    const wiring = normalised(providerLabelExpression(codeOnly(embedClientSrc)));
+    // The whole wiring, pinned: the shared helper owns the naming, the
+    // own-key provider comes first and is not inverted, the backend that
+    // serves the chat comes second, and no literal names a backend.
+    expect(wiring).toBe(
+      "backendLabel(byokIsSet ? byokProvider : null, stockClient.backendType)",
+    );
+  });
+
+  it("reads the naming helper from its one home, not from a local copy", () => {
+    const code = codeOnly(embedClientSrc);
+    const helperImport =
+      /import\s*\{[^}]*\bbackendLabel\b[^}]*\}\s*from\s*["'](?:@\/lib\/|\.{1,2}\/)*provider-label["']/g;
+    // The helper is named twice: in the import and in the wiring. A local
+    // copy, a shadowed parameter or a destructured binding would name it a
+    // third time.
+    expect((code.match(/\bbackendLabel\b/g) ?? []).length).toBe(2);
+    expect(code.match(helperImport)).toHaveLength(1);
   });
 });
