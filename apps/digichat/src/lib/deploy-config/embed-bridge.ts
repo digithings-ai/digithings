@@ -84,7 +84,10 @@ export function clientConfigFromEmbedTenant(
             (embed.models?.allowPicker !== false && base.features.modelPicker),
         },
     tools: {
-      allowUserToggle: base.tools.allowUserToggle,
+      // An embed cannot turn toggling on over a base that locked it. Omitted
+      // embed means "don't tighten", which is why the second term defaults true.
+      allowUserToggle:
+        base.tools.allowUserToggle && (embed.tools?.allowUserToggle ?? true),
       catalog,
     },
     mcp: {
@@ -106,6 +109,9 @@ export function clientConfigFromEmbedTenant(
       showLanguageSelector: embed.showLanguageSelector,
       webSearch,
       ...(embed.searchEngine ? { searchEngine: embed.searchEngine } : {}),
+      ...(embed.lockSessionControls === true || base.gate.lockSessionControls === true
+        ? { lockSessionControls: true }
+        : {}),
     },
     backendType: embed.backendType ?? base.backendType,
   };
