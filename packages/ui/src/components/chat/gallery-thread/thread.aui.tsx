@@ -176,10 +176,10 @@ export type ThreadProps = {
   /** Disclosure mode for grouped tool-call runs. Default collapsed. */
   toolCallsMode?: GroupDisclosureMode | undefined;
   /**
-   * How much of the agent's work the user sees: `quiet` (one summary line),
-   * `balanced` (open while it runs, collapsed when it finishes) or `verbose`
-   * (stays open). The client's `features.view` picks the default; the user can
-   * change it per session.
+   * How much of the agent's work the user sees: `quiet` (the titles only,
+   * with the folded header as a live status line), `balanced` (open while it
+   * runs, collapsed when it finishes) or `verbose` (stays open). The client's
+   * `features.view` picks the default; the user can change it per session.
    */
   workVisibility?: WorkVisibility | undefined;
   /**

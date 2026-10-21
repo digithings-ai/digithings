@@ -9,7 +9,6 @@ import {
   isEffortCode,
   isSearchEngine,
   isThinkingCode,
-  isViewCode,
   parseSlashInput,
   type SlashDef,
   type SlashVisibility,
@@ -24,6 +23,7 @@ import {
 } from "@/lib/languages";
 import {
   isLegacyViewMode,
+  isViewMode,
   normalizeViewMode,
 } from "@/lib/view-modes";
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
@@ -200,8 +200,10 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       return;
     case "view": {
       const mode = arg.trim().toLowerCase();
-      // `compact` / `detailed` are the retired ids; they fold forward.
-      if (isViewCode(mode)) api.setView(mode);
+      // `hidden` / `compact` / `detailed` are the retired ids; they fold
+      // forward. The live ids come from the app's own contract
+      // (`@/lib/view-modes.ts`), the one that owns them.
+      if (isViewMode(mode)) api.setView(mode);
       else if (isLegacyViewMode(mode)) api.setView(normalizeViewMode(mode));
       else api.openView();
       return;
