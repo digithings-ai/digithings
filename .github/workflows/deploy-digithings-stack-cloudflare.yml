@@ -44,10 +44,11 @@
 # lane reads to CLOUDFLARE_WORKERS_API_TOKEN. No secret of that name exists
 # at any level, so wrangler was handed an empty token and the production
 # deploy failed on auth (run 39482995993). #6066 put the working name back
-# on main at 21:42 on 2026-10-20; develop never carried it, so a promotion of
-# develop would have put the broken name back. #6076 then added a preflight
-# that read the name that exists nowhere, which no deploy could ever pass,
-# and #6081 carried the broken name back to main. The lane was green on this
+# on main at 21:42 on 2026-10-20, and #6076 added a preflight that read a name
+# which exists nowhere, so no deploy could ever pass; #6081 then carried the
+# broken name back to main. #6087 put the working name back on develop and
+# #6097 put it back on main, so both branches read it now and the preflight
+# checks the same name the deploy exports. The lane was green on this
 # exact secret on 2026-10-13 (run 38385151415), and the other deploy lanes -
 # the cron deploy and the digiquant runner deploy - read the same secret name
 # and work with it. If a Workers token ever has to live under a different
@@ -74,14 +75,15 @@
 # this image never installs, and a production deploy must not inherit a
 # network-dependent resolution step it does not use.
 #
-# SUPERSEDES #6068 AND #6087. Main took a first version of this step directly
-# (#6068, eb6f2b9493, 2026-10-20 22:01) while develop was still missing it, and
-# that version runs the FULL generator inline. #6087 brought the same step to
-# develop on 2026-10-21, also inline and also with the full generator, and only
-# in the deploy job. This one is the scoped, local-action form, in EVERY job
-# that leads to the image build. Both touch this file, so the promotion of this
-# PR conflicts with them on main: take THIS version of the file when the
-# promotion lands.
+# SUPERSEDES #6068, #6087 AND #6097. Main took a first version of this step
+# directly (#6068, eb6f2b9493, 2026-10-20 22:01) while develop was still missing
+# it, and that version runs the FULL generator inline. #6087 brought the same
+# step to develop on 2026-10-21, also inline and also with the full generator,
+# and only in the deploy job; #6097 carried it to main as a hotfix, still inline
+# and still with the full generator. This one is the scoped, local-action form,
+# in EVERY job that leads to the image build. All three touch this file, so the
+# promotion of this PR conflicts with them on main: take THIS version of the
+# file when the promotion lands.
 #
 # Do not add `working-directory`: both Containers pin
 # `image_build_context = "../.."`, so the image build needs the repository
