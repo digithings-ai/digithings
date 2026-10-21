@@ -188,6 +188,7 @@ describe("deployment hide rules", () => {
     expect(html).toContain("folded tool result");
     expect(html).toContain("data-stock-product");
     expect(html).not.toContain("data-deployment");
+    expect(html).not.toContain("Northwind");
     expect(html).not.toContain("data-tenant");
     expect(html).not.toContain("tenant-marker");
     expect(document.body.innerHTML).toContain("data-deployment");
