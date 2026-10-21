@@ -1133,7 +1133,7 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-status-marker"] [data-slot="dot-matrix"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"] > [data-slot="dot-matrix"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root [data-slot="dot-matrix"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"] > [data-slot="dot-matrix"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"] [data-slot="dot-matrix"] {
   width: 0.75rem;
   height: 0.75rem;
 }

@@ -83,6 +83,13 @@ async function mount() {
       </AssistantRuntimeProvider>
     );
   };
+  // The real sheets, so the rows below are checked by computed transform.
+  const styles = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "styles");
+  const style = document.createElement("style");
+  style.textContent = ["chat-aui.css", "chat-digichat.css"]
+    .map((f) => readFileSync(join(styles, f), "utf8"))
+    .join("\n");
+  document.head.append(style);
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -93,8 +100,14 @@ async function mount() {
 }
 
 afterEach(() => {
+  document.head.replaceChildren();
   document.body.replaceChildren();
 });
+
+function turn(node: HTMLElement): string {
+  const grid = node.querySelector<SVGElement>('[data-slot="dot-matrix-grid"]')!;
+  return getComputedStyle(grid).transform;
+}
 
 function expectClosed(host: HTMLElement, slot: RowSlot, min = 1) {
   const triggers = [...host.querySelectorAll(`[data-slot="${slot}"]`)];
@@ -104,6 +117,7 @@ function expectClosed(host: HTMLElement, slot: RowSlot, min = 1) {
     expect(trigger.tagName).toBe("BUTTON");
     const node = chevron(trigger);
     expect(node.parentElement, slot).toBe(trigger);
+    expect(turn(node), slot).not.toContain("rotate(90deg)");
   }
   return triggers as HTMLElement[];
 }
@@ -120,10 +134,7 @@ async function openAll(host: HTMLElement, slot: RowSlot) {
     expect(trigger.getAttribute("aria-expanded"), slot).toBe("true");
     const node = chevron(trigger);
     expect(node.parentElement, slot).toBe(trigger);
-    const root = trigger.closest("[data-state], [data-open]");
-    const openByState =
-      root?.getAttribute("data-state") === "open" || root?.hasAttribute("data-open");
-    expect(openByState || trigger.getAttribute("aria-expanded") === "true", slot).toBe(true);
+    expect(turn(node), slot).toContain("rotate(90deg)");
   }
 }
 

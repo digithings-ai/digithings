@@ -42,6 +42,10 @@ describe("one loading row", () => {
     expect(block?.[1]).toContain("height: 0.75rem");
     const selectors = block?.[0] ?? "";
     expect(selectors).toContain('[data-slot="tool-fallback-trigger"] > [data-slot="dot-matrix"]');
+    // The reasoning glyph sits inside its icon wrapper, not on the trigger:
+    // a child combinator here would drop it to its 14px utility size.
+    expect(selectors).toContain('[data-slot="reasoning-trigger"] [data-slot="dot-matrix"]');
+    expect(selectors).not.toContain('[data-slot="reasoning-trigger"] > [data-slot="dot-matrix"]');
     expect(selectors).toContain('.aui-message-error-root [data-slot="dot-matrix"]');
   });
 
