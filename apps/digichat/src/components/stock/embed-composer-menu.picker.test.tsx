@@ -249,7 +249,14 @@ describe("EmbedComposerMenu exclusive pickers", () => {
       const cells = Array.from(row.children) as HTMLElement[];
       const label = cells.find((cell) => cell.textContent?.trim() === `/view ${level}`);
       expect(label).toBeDefined();
-      const description = cells.find((cell) => cell.querySelector(".truncate"));
+      // The description cell is the other cell that truncates. The label cell
+      // is excluded, so a label that grows a `truncate` of its own cannot
+      // make this test read the label as the description.
+      const description = cells.find(
+        (cell) => cell !== label && cell.querySelector(".truncate"),
+      );
+      expect(description).toBeDefined();
+      expect(description).not.toBe(label);
       expect(description?.textContent).toContain(wording);
     }
     unmount();

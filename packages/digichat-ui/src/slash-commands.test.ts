@@ -265,6 +265,11 @@ describe("view-level wording", () => {
     expect(VIEW_CHOICES).toEqual(
       VIEW_CODES.map((code) => ({ value: code, label: VIEW_LABELS[code] })),
     );
+    // The palette's /view command must read that list, not a list of its own.
+    // A hand-written list in the command def is a second copy of the wording
+    // inside the package that owns the wording, and nothing else would see
+    // it: the choice options are rendered by no surface today.
+    expect(SLASH_COMMANDS.find((c) => c.id === "view")?.choiceOptions).toBe(VIEW_CHOICES);
   });
 
   it("prints the wording the product prints today", () => {

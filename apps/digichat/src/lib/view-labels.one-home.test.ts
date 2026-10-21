@@ -28,9 +28,10 @@ function read(file: string): string {
  * (compact/detailed -> quiet/verbose) leave the composer menu's `/view` page
  * without a description (DIG-4665).
  *
- * The guard on the component's own file cannot see a copy that lives
- * somewhere else, so the rule is checked across the app: no app module holds
- * the wording, and no app module declares a view label map of its own. A
+ * The rule is held here, once, for the whole app: no app module holds the
+ * wording, no app module declares a view label map of its own, and no app
+ * module falls back on the shared map. The component's own file cannot see a
+ * copy that lives somewhere else, so the rule is not checked there too. A
  * module that needs the wording imports the shared map.
  */
 describe("the view-level wording has one home", () => {
@@ -48,8 +49,32 @@ describe("the view-level wording has one home", () => {
   });
 
   it("keeps a private view label map out of the app", () => {
+    // A map of the view wording, whatever it is called: `VIEW_LABELS`,
+    // `LEVEL_LABELS`, `VIEW_DESCRIPTIONS`. The names are matched in upper
+    // case, the way this codebase names a map constant.
     const copies = files.filter((file) =>
-      /(?:const|let|var|function)\s+\w*VIEW\w*LABELS?\b/.test(read(file)),
+      /(?:const|let|var|function)\s+\w*(?:VIEW|LEVEL)\w*(?:LABELS?|DESCRIPTIONS?)\b/.test(
+        read(file),
+      ),
+    );
+    expect(copies.map((file) => relative(appSrc, file))).toEqual([]);
+  });
+
+  it("keeps a blank-line fallback on the shared map out of the app", () => {
+    // `VIEW_LABELS[id] ?? ""` (or `|| ""`) turns a missing wording into an
+    // empty description column instead of a compile error. The fallback sat
+    // on the line that reads the map, so the line is what is checked, and it
+    // is checked in every app module: a helper around the lookup is the
+    // same rule.
+    const copies = files.filter((file) =>
+      read(file)
+        .split("\n")
+        .some(
+          (line) =>
+            /\bVIEW_LABELS\b/.test(line) &&
+            !/^\s*import\b/.test(line) &&
+            /\?\?|\|\|/.test(line),
+        ),
     );
     expect(copies.map((file) => relative(appSrc, file))).toEqual([]);
   });

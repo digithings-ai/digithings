@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { VIEW_CODES, VIEW_LABELS } from "@digithings/digichat-ui";
-import { normalizeViewPref } from "@digithings/ui/chat/stock";
+import { normalizeViewPref, PREFS_LEGACY_VIEW_MODE_ALIASES } from "@digithings/ui/chat/stock";
 
 import {
   DEFAULT_THINKING_MODE,
@@ -45,6 +45,10 @@ describe("view-modes", () => {
     for (const [retired, current] of Object.entries(LEGACY_VIEW_MODE_ALIASES)) {
       expect(normalizeViewPref(retired)).toBe(current);
     }
+    // The twin's alias map must be the same map, not only a map that folds
+    // the same way: a map that gains an entry of its own is a drift the
+    // host cannot see.
+    expect(PREFS_LEGACY_VIEW_MODE_ALIASES).toEqual(LEGACY_VIEW_MODE_ALIASES);
   });
 
   it("guards view and thinking mode values", () => {
