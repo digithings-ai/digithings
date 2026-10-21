@@ -849,13 +849,22 @@ class StatusTargetUrlTest(unittest.TestCase):
 
     def setUp(self):
         self._gh = _mod.gh
+        self._log = _mod.log
+        self._token_file = _mod.APP_TOKEN_FILE
         self._env = dict(os.environ)
         self.calls = []
         os.environ.pop("LOCAL_CI_TARGET_URL", None)
         os.environ.pop("CI_PIPELINE_URL", None)
+        os.environ.pop("CI_APP_TOKEN", None)
+        os.environ.pop("LOCAL_CI_APP_TOKEN_FILE", None)
+        # No app token on this host, and no row posted under another identity.
+        _mod.APP_TOKEN_FILE = os.path.join(tempfile.mkdtemp(), "app-token")
+        _mod.log = lambda m: None
 
     def tearDown(self):
         _mod.gh = self._gh
+        _mod.log = self._log
+        _mod.APP_TOKEN_FILE = self._token_file
         os.environ.clear()
         os.environ.update(self._env)
 
@@ -893,3 +902,101 @@ class StatusTargetUrlTest(unittest.TestCase):
         self._post()
         self.assertIsNone(self._target_arg())
         self.assertIn("context=local-ci", self.calls[0])
+
+
+class AppStatusRowTest(unittest.TestCase):
+    """DIG-4809: the same verdict goes out twice, once per identity.
+
+    The `local-ci` row is posted with the repository token. The `local-ci/app`
+    row is posted with the app's own installation token, so its creator is
+    digithings-ci[bot]. The token belongs in the child's environment and not in
+    its arguments, and with no token there is no app row at all: a row under
+    another identity would be worse than no row.
+    """
+
+    TOKEN = "ghs_123456_" + "z" * 30
+
+    def setUp(self):
+        self._sh = _mod.sh
+        self._log = _mod.log
+        self._token_file = _mod.APP_TOKEN_FILE
+        self._env = dict(os.environ)
+        self.calls = []
+        self.logs = []
+        self.tmp = tempfile.mkdtemp()
+        _mod.sh = self._fake_sh
+        _mod.log = lambda m: self.logs.append(m)
+        _mod.APP_TOKEN_FILE = os.path.join(self.tmp, "app-token")
+        for k in ("LOCAL_CI_APP_TOKEN_FILE", "CI_APP_TOKEN",
+                  "LOCAL_CI_TARGET_URL", "CI_PIPELINE_URL"):
+            os.environ.pop(k, None)
+
+    def tearDown(self):
+        _mod.sh = self._sh
+        _mod.log = self._log
+        _mod.APP_TOKEN_FILE = self._token_file
+        os.environ.clear()
+        os.environ.update(self._env)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _fake_sh(self, cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
+        self.calls.append({"cmd": list(cmd), "env": env})
+        return 0, ""
+
+    def _write_token(self, value):
+        with open(_mod.APP_TOKEN_FILE, "w") as f:
+            f.write(value + "\n")
+
+    def _arg(self, prefix):
+        out = [a.split("=", 1)[1] for call in self.calls
+               for a in call["cmd"] if a.startswith(prefix + "=")]
+        return out
+
+    def test_without_a_token_no_app_row_is_posted(self):
+        os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/400"
+        self.assertFalse(_mod.app_status("abc123", "success", "all gates passed"))
+        self.assertEqual(self.calls, [])
+        self.assertIn("app status: skipped, no app token", self.logs)
+
+    def test_an_empty_token_file_posts_no_row(self):
+        self._write_token("")
+        self.assertFalse(_mod.app_status("abc123", "success", "all gates passed"))
+        self.assertEqual(self.calls, [])
+
+    def test_the_app_row_is_posted_with_the_app_token(self):
+        self._write_token(self.TOKEN)
+        os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/400"
+        self.assertTrue(_mod.app_status("abc123", "success", "all gates passed"))
+        self.assertEqual(len(self.calls), 1)
+        call = self.calls[0]
+        self.assertIn("context=local-ci/app", call["cmd"])
+        self.assertIn("target_url=http://localhost:8000/repos/6/pipeline/400",
+                      call["cmd"])
+        self.assertEqual(call["env"]["GH_TOKEN"], self.TOKEN)
+        self.assertEqual(call["env"]["GITHUB_TOKEN"], self.TOKEN)
+
+    def test_the_token_is_never_in_the_arguments(self):
+        self._write_token(self.TOKEN)
+        _mod.app_status("abc123", "success", "all gates passed")
+        self.assertNotIn(self.TOKEN, " ".join(self.calls[0]["cmd"]))
+
+    def test_the_environment_token_is_the_fallback(self):
+        os.environ["CI_APP_TOKEN"] = self.TOKEN
+        self.assertTrue(_mod.app_status("abc123", "success", "all gates passed"))
+        self.assertEqual(self.calls[0]["env"]["GH_TOKEN"], self.TOKEN)
+
+    def test_both_rows_carry_the_same_verdict(self):
+        self._write_token(self.TOKEN)
+        os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/400"
+        _mod.status("abc123", "success", "all gates passed")
+        self.assertEqual(self._arg("context"), ["local-ci", "local-ci/app"])
+        self.assertEqual(self._arg("state"), ["success", "success"])
+        targets = self._arg("target_url")
+        self.assertEqual(len(targets), 2)
+        self.assertEqual(targets[0], targets[1])
+
+    def test_a_failing_verdict_is_posted_under_both_identities(self):
+        self._write_token(self.TOKEN)
+        _mod.status("abc123", "failure", "one gate failed")
+        self.assertEqual(self._arg("context"), ["local-ci", "local-ci/app"])
+        self.assertEqual(self._arg("state"), ["failure", "failure"])
