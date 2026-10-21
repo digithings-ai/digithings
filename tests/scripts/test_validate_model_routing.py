@@ -180,9 +180,9 @@ def test_repo_config_pins_deliberation_prefix_and_master_digest(
     monkeypatch.delenv("DIGI_CONFIG_PATH", raising=False)
     assert (
         mod.get_model_for_phase("portfolio/deliberation-AAPL")
-        == "deepseek/deepseek-v4-flash"
+        == "deepseek/deepseek-v4.1-flash-1017"
     )
-    assert mod.get_model_for_phase("master-digest") == "deepseek/deepseek-v4-flash"
+    assert mod.get_model_for_phase("master-digest") == "deepseek/deepseek-v4.1-flash-1017"
     assert (REPO_ROOT / "config" / "model_modes.yaml").is_file()
 
 

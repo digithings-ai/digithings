@@ -27,6 +27,13 @@ import {
   normalizeViewMode,
 } from "@/lib/view-modes";
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
+import {
+  applyDocumentTheme,
+  isPaletteId,
+  isThemePreference,
+  matchThemeStep,
+  readThemeState,
+} from "@digithings/ui/theme";
 import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
 
 export type SlashSubmitAction =
@@ -96,6 +103,7 @@ export function visibilityFromPrefs(api: EmbedChatPrefsApi): SlashVisibility {
     mcp: hasMcp,
     tools: hasTools,
     artifacts: api.hasArtifacts,
+    theme: api.themeLocked !== true,
   };
 }
 
@@ -135,6 +143,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
     if ((def.id === "models" || def.id === "effort") && vis.models === false) continue;
     if (def.id === "mcp" && vis.mcp === false) continue;
     if (def.id === "tools" && vis.tools === false) continue;
+    if (def.id === "theme" && vis.theme === false) continue;
 
     let description = def.hint;
     if (def.id === "websearch") {
@@ -145,6 +154,9 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = toggleHint(prefs.vault, "vault notes", "disabled this session");
     } else if (def.id === "view") {
       description = `View: ${prefs.view}`;
+    } else if (def.id === "theme") {
+      const state = readThemeState();
+      description = matchThemeStep(state.preference, state.palette, state.resolved).label;
     } else if (def.id === "thinking") {
       description = `Thinking: ${prefs.thinking}`;
     } else if (def.id === "lang") {
@@ -206,6 +218,35 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       if (isViewMode(mode)) api.setView(mode);
       else if (isLegacyViewMode(mode)) api.setView(normalizeViewMode(mode));
       else api.openView();
+      return;
+    }
+    case "theme": {
+      if (api.themeLocked) return;
+      const raw = arg.trim().toLowerCase();
+      if (!raw) {
+        api.openTheme?.();
+        return;
+      }
+      const state = readThemeState();
+      if (isThemePreference(raw)) {
+        applyDocumentTheme(raw, state.palette);
+        return;
+      }
+      if (raw === "default" || isPaletteId(raw)) {
+        applyDocumentTheme(state.preference, raw);
+        return;
+      }
+      // The picker rows read "/theme <palette> <mode>"; typing one applies it.
+      const [pal, mode, ...rest] = raw.split(/\s+/);
+      if (
+        rest.length === 0 &&
+        (pal === "default" || isPaletteId(pal)) &&
+        (mode === "dark" || mode === "light")
+      ) {
+        applyDocumentTheme(mode, pal);
+        return;
+      }
+      api.openTheme?.();
       return;
     }
     case "thinking": {

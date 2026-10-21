@@ -5,6 +5,9 @@ export {
   DirectionProvider,
   useDirection,
   type Direction,
+  type PaletteName,
+  type ResolvedTheme,
+  type ThemePreference,
 } from "./components/ThemeProvider";
 export { themeInitScript } from "./components/themeInit";
 export { MotionProvider, Reveal, Stagger, HeroEntrance, useMotionSafe, m, EASE } from "./motion/primitives";

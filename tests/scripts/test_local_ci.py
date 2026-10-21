@@ -28,6 +28,25 @@ _mod = importlib.util.module_from_spec(_spec)
 sys.modules["local_ci"] = _mod
 _spec.loader.exec_module(_mod)
 
+
+class _AllowedGuard:
+    """The launch guard, stubbed to allow the run (DIG-4796).
+
+    The real guard lives in scripts/local-ci/launch_guard.py and is tested in
+    test_launch_guard.py. The tests here cover the flow behind it, so the
+    guard is stubbed for the whole module: the runner asks the guard at every
+    entry point that does work, and a stub that is only in place for one test
+    would leave the others refused.
+    """
+
+    @staticmethod
+    def enforce(runner_path, ctx, facts=None):
+        return True
+
+
+_mod.launch_guard = _AllowedGuard
+
+
 # vm_stat sample shaped like the 09:20 CEST evidence on DIG-3783: free 3,635 +
 # speculative 10,206 + purgeable 7,206 pages read ~345MB while 991,764 inactive
 # pages (~15.5GB) sat reclaimable at 69% system-wide free.
@@ -196,10 +215,14 @@ class WorkerBuildTest(unittest.TestCase):
 
         return calls, rec
 
-    def test_build_all_green_runs_eight_steps(self):
+    def test_build_all_green_runs_one_step_per_app(self):
         calls, rec = self._rec()
         self.assertEqual(_mod.worker_build("/wt-4010", rec), [])
-        self.assertEqual(len(calls), 8)
+        # One `npm ci`, then one dry run per app. The count is read from the
+        # list rather than written down: a hard-coded number went stale when
+        # `twelvex-runner` joined the list (DIG-4753) and the suite was red on
+        # develop, so the number says what it means and the list says how many.
+        self.assertEqual(len(calls), 1 + len(_mod.WORKER_APPS))
         name0, cmd0, t0, cwd0 = calls[0]
         self.assertEqual(name0, "worker-build:npm-ci")
         self.assertEqual(cmd0, ["npm", "ci", "--no-audit", "--no-fund"])
@@ -222,7 +245,7 @@ class WorkerBuildTest(unittest.TestCase):
         calls, rec = self._rec(fails_on=("worker-build:dashboard-api",))
         self.assertEqual(_mod.worker_build("/wt-4010", rec),
                          ["worker-build:dashboard-api"])
-        self.assertEqual(len(calls), 8)
+        self.assertEqual(len(calls), 1 + len(_mod.WORKER_APPS))
 
     def test_build_npm_ci_failure_single_call(self):
         calls, rec = self._rec(npm_ci_ok=False)
@@ -290,7 +313,7 @@ class PrepareWorktreeTest(unittest.TestCase):
             os.mkdir(wt)
             if own:  # a worktree this runner created carries its sentinel
                 open(os.path.join(wt, ".local-ci-worktree"), "w").write(self.SHA)
-        def fake_sh(cmd, cwd=None, timeout=1800, out=None):
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
             calls.append(cmd)
             return 0, ""
         _mod.sh = fake_sh
@@ -365,7 +388,7 @@ class ReviewCoverageShallowTest(unittest.TestCase):
             _mod.WT = tmp
             _mod.ENV = {}
 
-            def fake_sh(cmd, cwd=None, timeout=1800, out=None):
+            def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
                 calls.append(cmd)
                 if cmd[:3] == ["git", "rev-parse", "--is-shallow-repository"]:
                     return (0, "true\n") if shallow else (0, "false\n")
@@ -604,7 +627,45 @@ class WatchdogTest(unittest.TestCase):
         self.assertTrue(self._alive(self.child))
 
 
-class ExplicitPrStateTest(unittest.TestCase):
+class NoRealNetwork:
+    """No test in this file may reach the network or the real token file.
+
+    The app row is posted with a real `gh` call whenever a token exists, and
+    the token file is exactly what the App migration will create on this host.
+    A test that reaches either one writes a row under another identity on the
+    real repository (DIG-4809).
+    """
+
+    def _isolate(self):
+        self._saved_sh = _mod.sh
+        self._saved_log = _mod.log
+        self._saved_token_file = _mod.APP_TOKEN_FILE
+        self._saved_env = dict(os.environ)
+        self._tmp = tempfile.mkdtemp()
+        self.sh_calls = []
+        self.log_lines = []
+        _mod.sh = self._fake_sh
+        _mod.log = self.log_lines.append
+        _mod.APP_TOKEN_FILE = os.path.join(self._tmp, "app-token")
+        for key in ("LOCAL_CI_APP_TOKEN_FILE", "CI_APP_TOKEN"):
+            os.environ.pop(key, None)
+
+    def _unisolate(self):
+        _mod.sh = self._saved_sh
+        _mod.log = self._saved_log
+        _mod.APP_TOKEN_FILE = self._saved_token_file
+        os.environ.clear()
+        os.environ.update(self._saved_env)
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _fake_sh(self, cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
+        """Stand in for the command runner: the `gh` calls are recorded, never
+        executed."""
+        self.sh_calls.append({"cmd": list(cmd), "env": env})
+        return 0, ""
+
+
+class ExplicitPrStateTest(NoRealNetwork, unittest.TestCase):
     """DIG-4812: an explicit --pr N run must evaluate a closed or a merged PR.
 
     `gh pr list --state open` cannot see a closed or a merged pull request, so
@@ -614,6 +675,7 @@ class ExplicitPrStateTest(unittest.TestCase):
     """
 
     def setUp(self):
+        self._isolate()
         self._gh = _mod.gh
         self._list_prs = _mod.list_prs
         self._acquire_lock = _mod.acquire_lock
@@ -647,6 +709,7 @@ class ExplicitPrStateTest(unittest.TestCase):
         sys.argv = self._argv
         os.environ.clear()
         os.environ.update(self._env)
+        self._unisolate()
 
     # --- fakes -------------------------------------------------------------
 
@@ -701,6 +764,10 @@ class ExplicitPrStateTest(unittest.TestCase):
         _mod.list_prs = lambda base: []
         _mod.acquire_lock = lambda: True
         _mod.watchdog = lambda: None
+        # The launch guard refuses a run that no trusted launcher started
+        # (DIG-4796). These tests drive the flow behind that check, so the
+        # guard is stubbed; test_launch_guard.py is where it is tested.
+        _mod.launch_guard = _AllowedGuard
         _mod.process = lambda pr, dry: (self.calls.append("process"), "success")[1]
         _mod.process_applied = lambda pr, dry: (self.calls.append("process_applied"), "success")[1]
         _mod.process_review = lambda pr, dry: (self.calls.append("process_review"), "success")[1]
@@ -831,3 +898,209 @@ class ExplicitPrStateTest(unittest.TestCase):
         self._run(pr["number"])
         self.assertIn("process_review", self.calls)
         self.assertNotIn("process", self.calls)
+
+
+class StatusTargetUrlTest(NoRealNetwork, unittest.TestCase):
+    """DIG-4794: the `local-ci` status must name the build that made it green.
+
+    A commit status is worth what its writer is worth - GitHub's own words: any
+    person or integration with write permissions can set the state of any status
+    check - and both repositories name `local-ci` as their required check. The
+    merge queue reads the build back from Woodpecker before it trusts the green,
+    so the status has to say which build it is talking about.
+    """
+
+    def setUp(self):
+        self._gh = _mod.gh
+        self.calls = []
+        self._isolate()
+        os.environ.pop("LOCAL_CI_TARGET_URL", None)
+        os.environ.pop("CI_PIPELINE_URL", None)
+
+    def tearDown(self):
+        _mod.gh = self._gh
+        self._unisolate()
+
+    def _post(self):
+        _mod.gh = lambda *a: self.calls.append(list(a))
+        _mod.status("abc123", "success", "all gates passed")
+
+    def _target_arg(self):
+        for arg in self.calls[0]:
+            if arg.startswith("target_url="):
+                return arg.split("=", 1)[1]
+        return None
+
+    def test_the_explicit_name_is_posted(self):
+        os.environ["LOCAL_CI_TARGET_URL"] = "http://localhost:8000/repos/6/pipeline/259"
+        self._post()
+        self.assertEqual(self._target_arg(), "http://localhost:8000/repos/6/pipeline/259")
+
+    def test_the_pipeline_url_is_used_when_no_name_is_given(self):
+        # `CI_PIPELINE_URL` is what Woodpecker injects into every step, so the
+        # worker inside the pipeline needs no configuration.
+        os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/260"
+        self._post()
+        self.assertEqual(self._target_arg(), "http://localhost:8000/repos/6/pipeline/260")
+
+    def test_the_explicit_name_wins_over_the_pipeline_url(self):
+        os.environ["LOCAL_CI_TARGET_URL"] = "http://localhost:8000/repos/6/pipeline/259"
+        os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/260"
+        self._post()
+        self.assertEqual(self._target_arg(), "http://localhost:8000/repos/6/pipeline/259")
+
+    def test_a_host_run_names_no_build(self):
+        # A run on the host has no build behind it, and says so: the queue then
+        # refuses the status and names the missing build as the reason.
+        self._post()
+        self.assertIsNone(self._target_arg())
+        self.assertIn("context=local-ci", self.calls[0])
+
+
+class AppStatusRowTest(NoRealNetwork, unittest.TestCase):
+    """DIG-4809: the same verdict goes out twice, once per identity.
+
+    The `local-ci` row is posted with the repository token. The `local-ci/app`
+    row is posted with the app's own installation token, so its creator is
+    digithings-ci[bot]. The token belongs in the child's environment and not in
+    its arguments, and with no token there is no app row at all: a row under
+    another identity would be worse than no row.
+    """
+
+    TOKEN = "ghs_123456_" + "z" * 30
+    OTHER_TOKEN = "ghs_999999_" + "q" * 30
+    NAMED_TOKEN = "ghs_777777_" + "r" * 30
+
+    def setUp(self):
+        self.calls = []
+        self._isolate()
+
+    def tearDown(self):
+        self._unisolate()
+
+    def _write_token(self, value, path=None):
+        with open(path or _mod.APP_TOKEN_FILE, "w") as f:
+            f.write(value + "\n")
+
+    def _fields(self, state="success", desc="all gates passed"):
+        return _mod.status_fields(state, desc)
+
+    def _arg(self, prefix):
+        return [a.split("=", 1)[1] for call in self.sh_calls
+                for a in call["cmd"] if a.startswith(prefix + "=")]
+
+    def _app_call(self):
+        """The app row's call: the one whose child carries the token."""
+        for call in self.sh_calls:
+            if call["env"] is not None:
+                return call
+        return None
+
+    def test_without_a_token_no_app_row_is_posted(self):
+        os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/400"
+        self.assertFalse(_mod.app_status("abc123", self._fields()))
+        self.assertEqual(self.sh_calls, [])
+        self.assertIn("app status: skipped, no app token", self.log_lines)
+
+    def test_an_empty_token_file_posts_no_row(self):
+        self._write_token("")
+        self.assertFalse(_mod.app_status("abc123", self._fields()))
+        self.assertEqual(self.sh_calls, [])
+
+    def test_a_whitespace_only_token_file_posts_no_row(self):
+        self._write_token("   \n")
+        self.assertFalse(_mod.app_status("abc123", self._fields()))
+        self.assertEqual(self.sh_calls, [])
+
+    def test_a_token_file_that_cannot_be_read_posts_no_row(self):
+        # A directory where the token file should be: the file cannot be read,
+        # so there is no token, so there is no row.
+        os.makedirs(_mod.APP_TOKEN_FILE, exist_ok=True)
+        self.assertFalse(_mod.app_status("abc123", self._fields()))
+        self.assertEqual(self.sh_calls, [])
+
+    def test_only_the_first_line_of_the_token_file_is_the_token(self):
+        self._write_token(self.TOKEN + "\nand a second line\n")
+        self.assertTrue(_mod.app_status("abc123", self._fields()))
+        self.assertEqual(self._app_call()["env"]["GH_TOKEN"], self.TOKEN)
+
+    def test_the_app_row_is_posted_with_the_app_token(self):
+        self._write_token(self.TOKEN)
+        os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/400"
+        self.assertTrue(_mod.app_status("abc123", self._fields()))
+        self.assertEqual(len(self.sh_calls), 1)
+        call = self.sh_calls[0]
+        self.assertIn("context=local-ci/app", call["cmd"])
+        self.assertIn("target_url=http://localhost:8000/repos/6/pipeline/400",
+                      call["cmd"])
+        self.assertEqual(call["env"]["GH_TOKEN"], self.TOKEN)
+        self.assertEqual(call["env"]["GITHUB_TOKEN"], self.TOKEN)
+
+    def test_the_token_is_never_in_the_arguments(self):
+        self._write_token(self.TOKEN)
+        _mod.app_status("abc123", self._fields())
+        self.assertNotIn(self.TOKEN, " ".join(self.sh_calls[0]["cmd"]))
+
+    def test_the_environment_token_is_the_fallback(self):
+        os.environ["CI_APP_TOKEN"] = self.TOKEN
+        self.assertTrue(_mod.app_status("abc123", self._fields()))
+        self.assertEqual(self.sh_calls[0]["env"]["GH_TOKEN"], self.TOKEN)
+
+    def test_the_token_file_wins_over_the_environment_token(self):
+        self._write_token(self.OTHER_TOKEN)
+        os.environ["CI_APP_TOKEN"] = self.TOKEN
+        self.assertTrue(_mod.app_status("abc123", self._fields()))
+        self.assertEqual(self.sh_calls[0]["env"]["GH_TOKEN"], self.OTHER_TOKEN)
+
+    def test_the_named_token_file_wins_over_the_default_file(self):
+        self._write_token(self.TOKEN)
+        named = os.path.join(self._tmp, "named-token")
+        self._write_token(self.NAMED_TOKEN, path=named)
+        os.environ["LOCAL_CI_APP_TOKEN_FILE"] = named
+        self.assertTrue(_mod.app_status("abc123", self._fields()))
+        self.assertEqual(self.sh_calls[0]["env"]["GH_TOKEN"], self.NAMED_TOKEN)
+
+    def test_the_named_token_file_wins_over_the_environment_token(self):
+        named = os.path.join(self._tmp, "named-token")
+        self._write_token(self.NAMED_TOKEN, path=named)
+        os.environ["LOCAL_CI_APP_TOKEN_FILE"] = named
+        os.environ["CI_APP_TOKEN"] = self.TOKEN
+        self.assertTrue(_mod.app_status("abc123", self._fields()))
+        self.assertEqual(self.sh_calls[0]["env"]["GH_TOKEN"], self.NAMED_TOKEN)
+
+    def test_the_repo_row_carries_no_app_token(self):
+        self._write_token(self.TOKEN)
+        before = dict(_mod.ENV)
+        _mod.status("abc123", "success", "all gates passed")
+        # The repo row goes out with the gate's own environment, and the gate's
+        # environment is not changed by the app row.
+        self.assertEqual(self.sh_calls[0]["env"], None)
+        self.assertEqual(dict(_mod.ENV), before)
+
+    def test_both_rows_carry_the_same_verdict(self):
+        self._write_token(self.TOKEN)
+        os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/400"
+        _mod.status("abc123", "success", "all gates passed")
+        self.assertEqual(self._arg("context"), ["local-ci", "local-ci/app"])
+        self.assertEqual(self._arg("state"), ["success", "success"])
+        self.assertEqual(self._arg("description"), ["all gates passed", "all gates passed"])
+        targets = self._arg("target_url")
+        self.assertEqual(len(targets), 2)
+        self.assertEqual(targets[0], targets[1])
+
+    def test_a_failing_verdict_is_posted_under_both_identities(self):
+        self._write_token(self.TOKEN)
+        _mod.status("abc123", "failure", "one gate failed")
+        self.assertEqual(self._arg("context"), ["local-ci", "local-ci/app"])
+        self.assertEqual(self._arg("state"), ["failure", "failure"])
+
+    def test_the_description_is_truncated_for_both_rows(self):
+        self._write_token(self.TOKEN)
+        _mod.status("abc123", "success", "x" * 200)
+        self.assertEqual(self._arg("description"), ["x" * 139, "x" * 139])
+
+    def test_a_failed_post_is_not_a_posted_row(self):
+        self._write_token(self.TOKEN)
+        _mod.sh = lambda *a, **kw: (1, "")
+        self.assertFalse(_mod.app_status("abc123", self._fields()))
+        self.assertIn("app status: failed (rc=1)", self.log_lines)

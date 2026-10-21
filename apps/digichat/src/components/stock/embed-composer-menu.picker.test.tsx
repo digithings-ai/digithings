@@ -273,6 +273,47 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
+  it("lists /theme in settings and paints the chosen palette", async () => {
+    const user = userEvent.setup();
+    // happy-dom's storage is not usable under every Node (a recent Node ships
+    // its own `localStorage` global that shadows it), so stub a Map-backed one.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
+    localStorage.setItem("dt-theme", "dark");
+    localStorage.removeItem("dt-palette");
+    document.documentElement.removeAttribute("data-palette");
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("menuitem", { name: /\/theme/ }));
+
+    const current = await screen.findByRole("menuitemradio", { name: /\/theme default dark/i });
+    expect(current).toHaveAttribute("aria-checked", "true");
+    const aura = screen.getByRole("menuitemradio", { name: /\/theme aura dark/i });
+    await user.click(aura);
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
+    expect(localStorage.getItem("dt-theme")).toBe("dark");
+    expect(localStorage.getItem("dt-palette")).toBe("aura");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    vi.unstubAllGlobals();
+  });
+
   it("shows the search-engine row on the main menu when the tenant allows web", async () => {
     const onClose = vi.fn();
     const { unmount } = render(

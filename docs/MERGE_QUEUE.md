@@ -80,11 +80,13 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 |---|---|
 | Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3), and a PR whose `baseRefName` is anything else is refused too. |
 | Required check | The names in `required_checks_by_repo` for this repo must each have **reported** and concluded `SUCCESS`. Both repos currently require `local-ci`: `digithings` because its branch protection names it, and `twelve-x` since 2026-10-19 because its Actions job `test` cannot start while billing is blocked (DIG-4454). `local-ci` arrives as a commit StatusContext, never as a workflow run, so the names in `status_context_checks` are exempt from the workflow-run evidence rule (DIG-3707) — see the cost stated below. |
+| CI provenance | The newest `local-ci` status on the head must name a Woodpecker build, and the queue must read that build back from the Woodpecker API: the same repo, the same commit sha, and the repo's own check step concluded `success`. A `local-ci` status without that URL, or whose build does not verify, is not a pass. Ships in **shadow** mode — see the section below. |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
 | Review | No outstanding `CHANGES_REQUESTED` review and no posted verdict of `changes_requested`. Review *evidence* is the row below: the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. |
 | Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. |
+| Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat that did not write the PR's code. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring seat, or that seat's own marker posted while its own run was still active, is dropped — the PR then waits for a review from another seat. See [Reviewer independence](#reviewer-independence). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
 | Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested` still scoped to the branch, blocks. |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
@@ -128,6 +130,106 @@ the queue**, so on that repo the queue is the only gate. What still stands betwe
 status and an unreviewed merge is the review row: a status clears the check gate but not
 review coverage. The exemption is time-boxed — revert `twelve-x` to `test` when the minutes
 reset.
+
+### The `local-ci` provenance gate (DIG-4794)
+
+The exemption above leaves one hole: `local-ci` is a commit status, so any writer with a
+token can type `success` into it. On `twelve-x`, where the queue is the only gate, that is
+the difference between a build and a claim. The provenance gate closes it by asking a
+question the status itself cannot answer: **which build is this?**
+
+The newest `local-ci` status on the PR head must carry a `target_url` that names a
+Woodpecker build. The queue then reads that build back from the Woodpecker API, read-only,
+and requires all of the following:
+
+| Requirement | What it proves |
+|---|---|
+| A `local-ci` status on the head, and it is the newest one | the receipt belongs to this commit, not to an older one |
+| A `target_url` is present and absolute | the status names a build at all |
+| The host is in `ci_provenance.hosts` | the build lives on the Woodpecker we run, not on a page anybody controls |
+| The path is a pipeline link (`/repos/<id>/pipeline/<n>`, `/api/repos/<id>/pipelines/<n>`, `/repo/<owner>/<name>/pipelines/<n>`) | the URL points at one build, not at an arbitrary page |
+| The build is in the Woodpecker repo the policy maps this GitHub repo to | the build is ours |
+| The API answers `200` for that pipeline | the build exists |
+| The build has finished (its status is not `created`, `pending`, `running`, `started`, `waiting`, `blocked` or `skipped`) | the verdict is a verdict |
+| The step the policy maps this repo to (`digithings-check`, `twelve-x-check`) is `success`, and it appears exactly once in the build | the build ran *this* repo's checks |
+| The build reports a `commit`, the PR head has a sha, and the two are equal | the build is about this code |
+
+Any one of them missing is a refusal with a named reason: the queue logs which one.
+
+The pipeline's **overall** status is deliberately not decisive. The launcher pipeline runs
+the two repos' checks side by side, so a failure in `twelve-x-check` must not refuse a
+`digithings` PR. The per-repo step is what decides; the pipeline status only says whether
+the run is over.
+
+The gate reads a token from `WOODPECKER_TOKEN` if it is in the environment, else from the
+`token_file` the policy names (a `KEY=value` file; only the named key is read, and the
+value is never logged). Without a token the build cannot be read, and that is itself a
+refusal with a reason — a missing token is not a pass. The launchd job's environment
+carries only `HOME` and `PATH`, so **no** `WOODPECKER_TOKEN` and no `MQ_CI_PROVENANCE`
+reach it today: `token_file` is where the queue finds the token, and changing the mode on
+the running host means editing `com.digithings.merge-queue.plist` and reloading the launchd
+job. That is a DevOps or Chris action, not a seat's.
+
+`ci_provenance.hosts` is a **deployment address**, not a rule. It lists the Woodpecker as
+this Mac serves it today, including the LAN address the DHCP lease handed out, because
+`CI_PIPELINE_URL` carries whatever host the Woodpecker was told about. A change of local
+IP means a change of that list, and the shadow log names the host it saw when it happens.
+
+Those addresses are plain HTTP on the LAN. The evidence channel is therefore only as
+trustworthy as the LAN: anything able to answer on that address could serve a green
+build that never ran. A TLS endpoint for the Woodpecker is the fix, and it is a deploy
+change outside this change — but the gate does not pretend the risk is not there.
+
+Three modes, in `ci_provenance.mode`, and `MQ_CI_PROVENANCE` in the environment overrides
+the file:
+
+- `off` — the gate reads nothing and refuses nothing.
+- `shadow` — the gate verifies as above and **logs** what it would have refused, on stderr
+  and in `~/.config/digithings/merge-queue/ci-provenance.log` (override with
+  `MQ_CI_PROVENANCE_LOG`). Each line reads
+  `<UTC timestamp> CI provenance (shadow): PR #<n> <repo> — would refuse '<check>': <reason>`,
+  the file is written `0600` and is rotated at 1 MB. The PR is still merged.
+- `enforce` — a refusal is a refusal.
+
+An unrecognised `MQ_CI_PROVENANCE` value is treated as `enforce`: the switch fails closed.
+An unrecognised `mode` **in the policy file** is a different thing: the file is read once
+per tick, so a typo there aborts the tick loudly rather than failing closed, and the
+traceback lands in the job's error log. A `ci_provenance` block with no `mode` means
+`shadow`, and no `ci_provenance` block at all means `off`, so an older policy file stays
+loadable.
+
+Each read has a timeout — 2 s in shadow, 5 s in enforce — and the queue reads at most one
+build per pull request per tick, with the reads and the token cached for the life of the
+process. The launchd job fires every 180 s and holds a lock, so a Woodpecker that does not
+answer must not be able to outlast the interval: that is the reason for the short timeouts.
+
+**It ships in `shadow`, and that is honest, not a setting to forget.** Woodpecker binds a
+pipeline to the commit it checked out, and the launcher pipeline today is the cron run of
+the launcher repo itself — its `commit` is the launcher's own sha, never a PR head. So the
+"same commit sha" requirement cannot pass for any PR until the CI runs **one build per PR
+head**. Until then, enforcing would refuse every PR in the org. The shadow log is how that
+is measured: if the reasons are all "the build ran another commit", the launcher is the
+next thing to change (DIG-4809).
+
+Enforce mode is a separate change, made once the shadow log is clean, and it is not only
+a matter of flipping a switch. Three things have to be true first: the CI runs one build
+per PR head, the worker image is rebuilt and pullable, and the launcher's lock-skip path
+stops reporting a skipped check as a success (below).
+
+Three more limits, stated so nobody reads more into the gate than it is:
+
+- The host runner (the launchd host run, currently disabled for `twelve-x`) has no
+  Woodpecker build, so it posts `local-ci` with **no** `target_url`. The queue refuses it
+  and names the missing build. A host run is not a build and is not treated as one.
+- The Woodpecker agent currently cannot pull the `local-ci-worker` image, so the launcher
+  pipeline fails before any check runs. That is a separate fault and is reported on the
+  issue, not fixed here. The image also bakes the worker in, so a rebuilt image is needed
+  before a status carries a build URL.
+- The launcher takes a lock so that one check runs at a time, and the step that loses the
+  lock **exits 0**, which Woodpecker records as `success`. A build in which the check never
+  ran therefore looks green to this gate. Fixing that is a launcher change in digiforge
+  and it is required before enforce mode is switched on; until then, a `success` step means
+  "the step did not fail", not "the check ran".
 
 **Required check names are per repo, and a name that matches nothing is called out
 separately.** The two repos in this org report different names for the same idea:
@@ -193,6 +295,141 @@ issue. If the gate reports that it cannot find the merge base, that is the workf
 `actions/checkout` `fetch-depth: 0`, not a content verdict — it still fails closed, and it
 still blocks. The rules and the approved allowlist are in
 [`VENDOR_CONTENT_BOUNDARY.md`](VENDOR_CONTENT_BOUNDARY.md).
+
+### Reviewer independence
+
+A review marker is a claim, and a claim can be self-issued. Two things must hold
+before a marker counts as review coverage, and the merge queue checks both in one
+gate (`scripts/merge_queue.py`, `_review_coverage`):
+
+1. **The marker names the head.** A marker that reviewed an older head says
+   nothing about the code the PR stands at now. Measured on
+   `digithings-ai/digithings` PR #5994 on 2026-10-21: the only marker on the PR was
+   a `changes requested` verdict naming head `22d4b3126`, while the head was
+   `15414f011d` — a stale verdict, on a stale head, counting as coverage.
+   The sha is compared as a **prefix** of the head, not at one fixed width: the
+   QA Lead's census of the open develop PRs on 2026-10-21 found markers naming
+   the head as 7, 8, 12 and 40 characters, and a check that wanted exactly 12
+   would read a valid 7-character marker as naming nothing at all. Fewer than
+   7 characters binds no head.
+2. **The marker comes from another seat.** The seat that *wrote the PR's code*
+   cannot be the seat whose review counts: not through its own comment, and not
+   through a subagent or same-session review it posted while its own run on that
+   ticket was still active. **Ownership is not authorship.** The seat a ticket is
+   assigned to is the seat asked to move the ticket along, not the seat that
+   wrote the code, and a reviewer that owns the ticket still reviews — reading
+   the assignee as the author refused the review of the very seat that owns the
+   ticket (the QA Lead's finding on #6145, 21 Oct 2026).
+
+**Who wrote the code.** The author is read from the branch, not from the ticket
+header:
+
+* the seat the commits declare — `Paperclip-Agent-Id: <uuid>` in a commit body,
+  and `Paperclip-Run-Id: <uuid>` resolved through the Paperclip API to the seat
+  that owned that run;
+* the seat whose run **on the PR's own ticket** was open when the PR's commits
+  were **written** — the commit's **author date**, which a rebase preserves. A
+  run that was about a different ticket says nothing about who wrote this PR —
+  the reviewer that works from its own review ticket is not the author of the PR
+  it reviews;
+* a merge commit is not one of the PR's own commits: merging `develop` into a
+  branch is branch maintenance, and the seat that ran the merge did not write the
+  code the PR carries.
+
+**The stamp is the author date, never the committer date.** A rebase rewrites
+every commit it replays: the author date and the message stay, the committer date
+becomes the rebasing seat's. Read from the committer date, the seat that rebased
+a branch became the PR's author, the real author's own review counted as coverage
+of the PR it wrote, and a rebase that landed outside every run window left the PR
+with no author and no way to merge (the QA Lead's finding on #6145, 21 Oct 2026).
+So the gate reads `authoredDate`, and a commit that carries no author date is
+left out — nothing is guessed from the committer date, which is exactly the date
+a rewrite moves.
+
+**The attribution is per commit.** A commit that falls inside exactly one seat's
+window was written by that seat, so that seat is an author — a seat that pushed
+one commit of a PR is an author even when the other seat pushed more of them.
+Only a commit that falls inside several windows is ambiguous, and there the seat
+the most commits fall into is the author; a tie leaves both as authors, because
+calling a seat an author costs that seat its own coverage and nobody else's.
+That is what keeps a reviewer woken on the ticket while the author pushes a fix
+a reviewer: it shares the window, it does not have the commit.
+
+Measured on the open develop PRs on 2026-10-21 (30 PRs, 21 of them naming a
+ticket): the rule names **exactly one** author seat for 20 of the 21, **no
+commit in the whole queue falls inside two windows**, and the seat it names
+agrees with the commit trailer wherever a trailer exists — no disagreement, no
+ambiguity. The old rule (the ticket's assignee) named the wrong seat whenever
+the assignee was not the author: on #6145 the assignee was the Code Reviewer
+while the code was written by the Repo, CI & Release Engineer.
+
+Two limits are known and measured, and both are the reason the gate ships in
+shadow: 9 of the 31 open develop PRs name no DIG ticket in their title or their
+branch (the QA Lead's census on 2026-10-21), so they carry neither run-window
+evidence nor a trailer — 6 of the 9 are drafts, and of the 3 that are not,
+#6105 carries a trailer while #6096 and #5441 do not, so those two would be
+refused as unverifiable once the gate enforces; and one PR (#5964) has a commit
+that falls outside every run window, so it has no author either. A PR with no
+author evidence at all is refused as **unverifiable** — the gate will not guess,
+and it will not fall back to the ticket's assignee. A seat that wrote a commit
+outside every window on the ticket is not named by that commit; it is named by
+the commits that fell inside one.
+
+**The last marker governs.** The queue has always read the last review marker
+on a PR, so the gate judges that one and no other. A stale last marker is a
+refusal, not a cue to look further back: the head only moves forward, so an
+earlier marker can only ever bind an older head, and the remedy for a stale
+last marker has to be a *new* review — posted by another seat — rather than an
+older one. Every other marker on the PR is dropped from the coverage evidence
+alongside the failing one, so no earlier review stands in for it.
+
+The reviewer declares itself in the comment, next to the marker it already posts:
+
+```html
+<!-- in-session-review -->
+<!-- digithings-review agent=<paperclip-agent-uuid> run=<paperclip-run-uuid> head=<40-char-head-sha> -->
+```
+
+The queue resolves `run` through the Paperclip API (`/api/heartbeat-runs/{run}`) to
+the seat that owned the run, and resolves the author seat from the code, as above.
+A marker whose declared seat and run disagree, whose run the API does not know,
+that carries neither a seat nor a run, or that names a different head, is
+**dropped** — dropped, not forgiven: the PR then fails the coverage gate and waits
+for a review from another seat. The refusal names the head the queue expected, so
+the PR says what it is waiting for.
+
+The author seat's own run window is a **second reason attached to that seat's own
+marker**, not a veto on the queue. A review from another seat posted while the
+author was still working is that seat's review, and it counts: a window that
+refuses other seats refuses every honest review (the QA Lead's finding on #6145,
+21 Oct 2026).
+
+A marker the gate could not judge at all is dropped on the same terms. That is
+the case when the Paperclip API cannot be read, or when the PR's authoring seat
+cannot be identified at all — a PR with no commit trailer and no commit that
+falls inside a run on its ticket, for instance. A partial judgement is not a
+judgement, so the queue concludes nothing about the marker and refuses the PR,
+naming the reason. It refuses only that: a PR covered by Bugbot or by a human
+approval still merges, because the marker was never what cleared it.
+
+**What this cannot prove.** Every seat pushes under one GitHub login, so GitHub
+cannot tell who typed a comment. The gate checks the marker's *declared*
+provenance against the Paperclip record — it cannot check the keystroke. Per-seat
+GitHub identity is the other half of the epic (DIG-4803); until it lands, this is
+an accountability record like the labels, except that the queue enforces it.
+
+**Rollout.** The gate ships in **shadow** mode (`review_independence.mode` in
+`scripts/merge_queue_policy.json`, overridable with `MQ_REVIEW_INDEPENDENCE`;
+`off` disables it, an unreadable value fails safe to `enforce`). Shadow measures:
+the queue logs what it *would* refuse to
+`~/.config/digithings/merge-queue/reviewer-independence.log` and merges anyway.
+Enforce drops the markers and refuses. The flip to enforce is a separate small
+change, once the shadow log shows the measurement is stable (DIG-4809).
+
+The log is a measurement, not an archive: it rotates at 1 MiB, it is readable by
+its owner only (`0600`), and it carries a line only when the measurement
+**changes** — one line per PR, not one per tick, so a refused PR does not write
+on every run.
 
 ## Running it
 

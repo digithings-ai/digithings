@@ -1,3 +1,20 @@
+/**
+ * Upper bound on the text repairPartialJson will scan. Tool arguments and
+ * results arrive from the model stream and nothing bounds their length, so
+ * the repair must never see an unbounded string: a long whitespace run used
+ * to cost a quadratic scan and froze the render thread (CodeQL
+ * js/polynomial-redos, alert 196, DIG-4818). Longer text is shown raw, never
+ * cut.
+ *
+ * The cap guards the repair path only. Valid JSON of any size still goes
+ * through JSON.parse and is pretty-printed as before; the one behaviour
+ * change above the cap is that partial (unparsable) JSON longer than the cap
+ * is shown raw instead of repaired and pretty-printed. The cap is defence in
+ * depth: the whitespace strip itself is linear now, but every regex in the
+ * repair stays bounded by this budget.
+ */
+export const MAX_REPAIR_INPUT_CHARS = 64 * 1024;
+
 /** Pretty-print tool args the same way results already use JSON.stringify(..., null, 2). */
 export function formatJsonDump(value: unknown): string {
   if (value === undefined) return "";
@@ -49,6 +66,10 @@ export function humanizeToolName(toolName: string, _argsText?: string): string {
 export function repairPartialJson(text: string): string | undefined {
   const src = text.trim();
   if (!src || (src[0] !== "{" && src[0] !== "[")) return undefined;
+  // Cap before any scan of the text: the repair below runs regexes over it.
+  // Defence in depth for those regexes, not the fix itself: the quadratic
+  // whitespace strip is gone (trimEnd below).
+  if (src.length > MAX_REPAIR_INPUT_CHARS) return undefined;
   const stack: string[] = [];
   let inString = false;
   let escaped = false;
@@ -72,7 +93,11 @@ export function repairPartialJson(text: string): string | undefined {
   }
   for (let i = 0; i < 4; i++) {
     const before = out;
-    out = out.replace(/\s+$/, "");
+    // trimEnd, not out.replace(/\s+$/, ""): the regex re-tries the anchor at
+    // every position of a whitespace run and costs quadratic time on a long
+    // run, which froze the render thread (CodeQL js/polynomial-redos, alert
+    // 196). Same result, one linear pass.
+    out = out.trimEnd();
     out = out.replace(/,$/, "");
     out = out.replace(/:$/, "");
     // dangling key with no value inside an object: {"a":1,"b"

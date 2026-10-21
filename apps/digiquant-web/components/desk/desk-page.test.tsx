@@ -84,7 +84,7 @@ describe("mounted desk pages", () => {
     const settings = renderToStaticMarkup(<DeskPage path="/settings" />);
     expect(settings).toContain("data-settings-page");
     expect(settings).toContain("Default desk");
-    expect(settings).toContain("deepseek/deepseek-v4-flash");
+    expect(settings).toContain("deepseek/deepseek-v4.1-flash-1017");
     expect(settings).not.toContain("Provider key");
     expect(settings).not.toContain("settings edge function is not configured");
 

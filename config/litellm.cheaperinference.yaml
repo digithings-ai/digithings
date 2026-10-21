@@ -16,9 +16,25 @@
 # :online / unmapped pins fail closed under CI-only house (#3660).
 
 model_list:
+  # DeepSeek V4.1 Flash 1017 checkpoint — the house DeepSeek flash model
+  # (Chris, 2026-10-21). The legacy flash slugs below (deepseek-v4.1-flash,
+  # deepseek-v4-flash, deepseek-v4-flash-0731) are kept as aliases that
+  # route to the same 1017 upstream, so configs outside this repo (worker
+  # vars, tenant configs) move to 1017 on the next LiteLLM deploy.
+  - model_name: deepseek/deepseek-v4.1-flash-1017
+    litellm_params: &ci_ds_v41_flash_1017
+      model: openai/deepseek-v4.1-flash-1017
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: openrouter/deepseek/deepseek-v4.1-flash-1017
+    litellm_params: *ci_ds_v41_flash_1017
+
   - model_name: deepseek/deepseek-v4.1-flash
     litellm_params: &ci_ds_v41_flash
-      model: openai/deepseek-v4.1-flash
+      model: openai/deepseek-v4.1-flash-1017  # legacy alias → 1017 (2026-10-21)
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:
@@ -84,7 +100,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4-flash
     litellm_params: &ci_ds_v4_flash
-      model: openai/deepseek-v4-flash
+      model: openai/deepseek-v4.1-flash-1017  # legacy alias → 1017 (2026-10-21)
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:
@@ -150,7 +166,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4-flash-0731
     litellm_params: &ci_ds_v4_flash_0731
-      model: openai/deepseek-v4-flash-0731
+      model: openai/deepseek-v4.1-flash-1017  # legacy alias → 1017 (2026-10-21)
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       configurable_clientside_auth_params:

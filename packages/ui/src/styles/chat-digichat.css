@@ -1358,6 +1358,16 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   -webkit-backdrop-filter: none;
 }
 
+/* App chrome clears --bg on the thread and the footer so those surfaces sit
+   on the canvas. Both command lists are positioned inside that footer, so
+   var(--bg) is transparent and the welcome paints through every list, not
+   only /theme. --term-bg is the canvas colour and is not cleared. Gallery
+   and embed keep the var(--bg) rule above. */
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .aui-composer-trigger-popover,
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .dc-composer-menu {
+  background: var(--term-bg);
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings] h2,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings] label,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings] button,

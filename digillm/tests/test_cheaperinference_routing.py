@@ -23,7 +23,7 @@ def _clear(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_ci_base_rewrites_mapped_house_slug(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_BASE", "https://api.cheaperinference.com/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "ci_live_test")
-    assert client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4-flash"
+    assert client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4.1-flash-1017"
     made: dict[str, Any] = {}
 
     def fake_openai(**kwargs: Any) -> MagicMock:
@@ -89,7 +89,7 @@ def test_ci_key_beats_openrouter_base_for_mapped_house_slug(
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-or-v1-test")
     monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
-    assert client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4-flash"
+    assert client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4.1-flash-1017"
     made: dict[str, Any] = {}
 
     def fake_openai(**kwargs: Any) -> MagicMock:
