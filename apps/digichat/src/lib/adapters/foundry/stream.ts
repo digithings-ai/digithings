@@ -363,6 +363,8 @@ interface OutputItemDoneEvent extends FoundryStreamEvent {
     server_label?: string;
     /** Provider call correlation id, shared by a call item and its output. */
     call_id?: string;
+    /** Output item id; `response.mcp_call_arguments.*` events name it as `item_id`. */
+    id?: string;
     /** reasoning: `{type, text}` parts — empty unless a summary is enabled. */
     summary?: unknown;
     status?: string;
@@ -636,6 +638,59 @@ function mcpErrorText(error: unknown): string | undefined {
 export interface FoundryMapState {
   /** Set once an `azure_ai_search_call_output` item has streamed this turn. */
   sawSearchOutput: boolean;
+  /**
+   * MCP call arguments streamed on `response.mcp_call_arguments.delta` /
+   * `.done`, keyed by output item id (the events' `item_id`). Foundry can
+   * stream an MCP call's input there and close the `mcp_call` item with
+   * `arguments` empty or `"{}"`, which left the row showing `{}` (the get_item
+   * display bug). The item's `.done` falls back to these and then drops them.
+   */
+  mcpArguments?: Map<string, StreamedMcpArguments>;
+}
+
+interface StreamedMcpArguments {
+  text: string;
+  /** Set by `.done`: a later delta for the same id starts a new buffer. */
+  closed: boolean;
+}
+
+/** Cap on one call's streamed arguments; the wire keeps far less anyway. */
+const MAX_STREAMED_MCP_ARGUMENTS = 64 * 1024;
+
+function hasKeys(value: Record<string, unknown> | null): value is Record<string, unknown> {
+  return value !== null && Object.keys(value).length > 0;
+}
+
+function recordMcpArgumentsDelta(state: FoundryMapState, itemId: string, delta: string): void {
+  const map = (state.mcpArguments ??= new Map());
+  const prior = map.get(itemId);
+  const entry = prior && !prior.closed ? prior : { text: "", closed: false };
+  if (entry.text.length + delta.length <= MAX_STREAMED_MCP_ARGUMENTS) entry.text += delta;
+  map.set(itemId, entry);
+}
+
+function recordMcpArgumentsDone(state: FoundryMapState, itemId: string, args: string): void {
+  const map = (state.mcpArguments ??= new Map());
+  const prior = map.get(itemId);
+  // A full `.done` replaces the fragments. An empty or `"{}"` one (the same
+  // shape that empties the item) must not throw away fragments that hold the
+  // real input.
+  if (hasKeys(parseJsonObject(args)) || !prior) {
+    map.set(itemId, { text: args.slice(0, MAX_STREAMED_MCP_ARGUMENTS), closed: true });
+  } else {
+    prior.closed = true;
+  }
+}
+
+/** Take (and forget) the arguments streamed for one MCP call item. */
+function takeStreamedMcpArguments(
+  state: FoundryMapState | undefined,
+  itemId: string | undefined,
+): Record<string, unknown> | null {
+  if (!state?.mcpArguments || !itemId) return null;
+  const entry = state.mcpArguments.get(itemId);
+  state.mcpArguments.delete(itemId);
+  return entry ? parseJsonObject(entry.text) : null;
 }
 
 function mapOutputItemDone(
@@ -690,7 +745,9 @@ function mapOutputItemDone(
   // auto-approve server-side (first-party agent, tenant-owned data).
   if (item?.type === "mcp_call") {
     const name = mcpToolName(item);
-    const args = parseJsonObject(item.arguments);
+    const ownArgs = parseJsonObject(item.arguments);
+    const streamedArgs = takeStreamedMcpArguments(state, item.id);
+    const args = hasKeys(ownArgs) ? ownArgs : (streamedArgs ?? ownArgs);
     // A failed MCP call carries the server's complaint on `error` (string or
     // object) and usually no output. Pass it through as the tool's result so
     // the failed row shows the MCP's own words under the arguments
@@ -872,6 +929,25 @@ export function mapFoundryEvent(
       // message/…_output add nothing a reader can act on either: the first is
       // the answer itself (already streaming as text), the second is the tail
       // of a search whose row is already open.
+      return null;
+    }
+    // An MCP call's input can stream separately from its item. Collect it so
+    // the item's `.done` can show it when the item itself carries none.
+    case "response.mcp_call_arguments.delta": {
+      const { item_id: itemId, delta } = event as { item_id?: unknown; delta?: unknown };
+      if (state && typeof itemId === "string" && typeof delta === "string") {
+        recordMcpArgumentsDelta(state, itemId, delta);
+      }
+      return null;
+    }
+    case "response.mcp_call_arguments.done": {
+      const { item_id: itemId, arguments: args } = event as {
+        item_id?: unknown;
+        arguments?: unknown;
+      };
+      if (state && typeof itemId === "string" && typeof args === "string") {
+        recordMcpArgumentsDone(state, itemId, args);
+      }
       return null;
     }
     case "response.output_item.done": {
