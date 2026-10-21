@@ -21,6 +21,8 @@ export type BrowserReplayInput = {
   placeholder?: string;
   accent?: ReplayAccent | null;
   view?: ReplayView;
+  /** App base path for the asset route; defaults to NEXT_PUBLIC_DIGICHAT_BASE_PATH. */
+  basePath?: string;
 };
 
 const VIEWS = new Set<ReplayView>(["quiet", "balanced", "verbose"]);
@@ -85,7 +87,10 @@ export async function inlineAssetUrls(
       }
       const bytes = new Uint8Array(await res.arrayBuffer());
       const mime = (res.headers.get("content-type") || mimeOf(absolute)).split(";")[0].trim();
-      replacements.set(raw, `data:${mime || "application/octet-stream"};base64,${bytesToBase64(bytes)}`);
+      replacements.set(
+        raw,
+        `data:${mime || "application/octet-stream"};base64,${bytesToBase64(bytes)}`,
+      );
     } catch {
       replacements.set(raw, "");
     }
@@ -99,13 +104,32 @@ export async function inlineAssetUrls(
 
 export async function downloadThreadReplay(input: BrowserReplayInput): Promise<void> {
   const doc = messagesToReplay(input.messages, chromeFromBrowser(input), new Date().toISOString());
-  const css = await resolveReplayCss(liveSheetText(), loadAssetRoute);
-  const html = buildReplayHtml(doc, `${css}\n${REPLAY_SHELL_CSS}`);
+  const live = liveSheetText();
+  // The asset route's bundle already ends with the replay shell CSS.
+  const css = cssLooksLikeChat(live)
+    ? `${await inlineAssetUrls(live)}\n${REPLAY_SHELL_CSS}`
+    : await loadAssetRoute(replayAssetsUrl(input.basePath ?? publicBasePath()));
+  const html = buildReplayHtml(doc, css);
   downloadTextFile(replayDownloadName(doc), html, "text/html;charset=utf-8");
 }
 
-async function loadAssetRoute(): Promise<string> {
-  const res = await fetch("/api/replay-assets", { credentials: "same-origin" });
+/** `/api/replay-assets` under the app's base path (digithings.ai serves digichat at /chat). */
+export function replayAssetsUrl(basePath: string | undefined): string {
+  const base = (basePath ?? "").trim().replace(/\/+$/, "");
+  return `${base}/api/replay-assets`;
+}
+
+function publicBasePath(): string {
+  try {
+    // Inlined by Next at build time, like the app's own base-path helper.
+    return process.env.NEXT_PUBLIC_DIGICHAT_BASE_PATH ?? "";
+  } catch {
+    return "";
+  }
+}
+
+async function loadAssetRoute(url: string): Promise<string> {
+  const res = await fetch(url, { credentials: "same-origin" });
   if (!res.ok) throw new Error("replay assets unavailable");
   return res.text();
 }

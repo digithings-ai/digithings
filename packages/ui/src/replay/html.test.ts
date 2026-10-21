@@ -80,6 +80,21 @@ describe("buildReplayHtml", () => {
     win.close();
   });
 
+  it("leaves Space on a focused summary or button to the browser", () => {
+    const win = boot(html);
+    const root = win.document.getElementById("replay");
+    const before = root?.getAttribute("data-mode");
+    const summary = win.document.querySelector("[data-slot='tool-fallback-trigger']");
+    const button = win.document.getElementById("replay-full");
+    for (const target of [summary, button]) {
+      if (!target) throw new Error("expected a control");
+      const event = new win.KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+      target.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(root?.getAttribute("data-mode")).toBe(before);
+    }
+  });
+
   it("never writes tokens into the file, including beside inlined fonts", () => {
     const poisoned = messagesToReplay(
       [

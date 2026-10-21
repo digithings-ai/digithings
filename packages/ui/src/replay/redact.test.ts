@@ -88,6 +88,46 @@ describe("redactString: header schemes and provider shapes", () => {
   });
 });
 
+describe("redactString: cookies, sessions, DSNs, and prose", () => {
+  it("replaces cookie and session values in a raw HTTP dump, keeping the labels", () => {
+    const raw = [
+      "> Cookie: session=cookie-plain-9f3c2a; csrftoken=csrf-plain-9f3c2a",
+      "< Set-Cookie: sid=sid-plain-9f3c2a; Path=/",
+      "> X-Digichat-Session: 8f14e45f-ceea-467a-9575-1cba2e2c9f11",
+    ].join("\n");
+    const out = redactString(raw);
+    for (const secret of [
+      "cookie-plain-9f3c2a",
+      "csrf-plain-9f3c2a",
+      "sid-plain-9f3c2a",
+      "8f14e45f-ceea",
+    ]) {
+      expect(out).not.toContain(secret);
+    }
+    expect(out).toContain("Cookie: [redacted]");
+    expect(out).toContain("Set-Cookie: [redacted]");
+  });
+
+  it("replaces the password in a DSN and keeps the host", () => {
+    const out = redactString('"dbUrl": "postgres://app:dsn-plain-9f3c2a@db.internal:5432/app"');
+    expect(out).not.toContain("dsn-plain-9f3c2a");
+    expect(out).toContain("postgres://app:[redacted]@db.internal:5432/app");
+  });
+
+  it("leaves prose that only mentions Authorization", () => {
+    const prose =
+      "Authorization: the request is allowed once the user signs in. After that the flow continues.";
+    expect(redactString(prose)).toBe(prose);
+  });
+
+  it("keeps the Authorization label and replaces the credential", () => {
+    expect(redactString("Authorization: Basic dXNlcjpwYXNzd29yZA==")).toBe(
+      "Authorization: [redacted]",
+    );
+    expect(redactString("authorization=abc123def456")).toBe("authorization=[redacted]");
+  });
+});
+
 describe("redactValue", () => {
   it("replaces keys that end in token, secret, password or key names", () => {
     const out = redactValue({
@@ -95,6 +135,8 @@ describe("redactValue", () => {
       authToken: "a-plain-9f3c2a",
       client_secret: "c-plain-9f3c2a",
       privateKey: "p-plain-9f3c2a",
+      secretKey: "s-plain-9f3c2a",
+      credentials: "cr-plain-9f3c2a",
       max_tokens: 4000,
     });
     expect(JSON.stringify(out)).not.toMatch(/plain-9f3c2a/);

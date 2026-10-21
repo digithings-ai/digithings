@@ -10,13 +10,12 @@ const SENSITIVE_KEY =
   /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|x-embed-token|x-embed-chat-token|x-invite-key|x-digichat-session|api[-_]?key|embed[-_]?(?:key|token)|invite[-_]?(?:key|token)|access[-_]?token|refresh[-_]?token|id[-_]?token|auth[-_]?secret|nextauth[-_]?secret|password|secret)$/i;
 
 /** `token`, `authToken`, `client_secret`, `privateKey`… (not `tokens` / `max_tokens`). */
-const SENSITIVE_KEY_SUFFIX = /(?:token|secret|password|passwd|api[-_]?key|private[-_]?key)$/i;
+const SENSITIVE_KEY_SUFFIX =
+  /(?:token|secret|secret[-_]?key|password|passwd|api[-_]?key|private[-_]?key|credentials?|session[-_]?id|cookie)$/i;
 
 const TOKEN_SHAPES: readonly RegExp[] = [
-  // A whole Authorization header value, whatever the scheme (Bearer, Basic,
-  // helpdesk-style `Token token=…`), up to the end of the quoted value or line.
-  // Separators use bounded runs so long inputs stay linear (CodeQL js/polynomial-redos).
-  /\b(?:proxy-)?authorization\b["']?[ \t]{0,8}[:=][ \t]{0,8}["']?[^"'\n\r,}]{1,2048}/gi,
+  // Separators and values use bounded runs so long inputs stay linear
+  // (CodeQL js/polynomial-redos). Authorization and Cookie are in LABELED below.
   /\bToken\s+token=[^\s"',}&]+/gi,
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b/g,
   /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
@@ -28,11 +27,25 @@ const TOKEN_SHAPES: readonly RegExp[] = [
   /\bsk-(?:ant-|or-|proj-)?[A-Za-z0-9_\-]{8,}\b/g,
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
   /\bBearer\s+[A-Za-z0-9\-._~+/]{8,}={0,2}/gi,
-  /(?:authorization|x-api-key|x-embed-token|x-embed-chat-token|x-invite-key|api[_-]?key|embed[_-]?(?:key|token)|invite[_-]?(?:key|token)|access[_-]?token|refresh[_-]?token|auth[_-]?secret|nextauth[_-]?secret|client[_-]?secret|private[_-]?key|password|passwd|(?<![A-Za-z0-9_?&-])token)["']?[ \t]{0,8}[:=][ \t]{0,8}["']?[^"'\s,}&]{6,}/gi,
+  /(?:x-api-key|x-embed-token|x-embed-chat-token|x-invite-key|api[_-]?key|embed[_-]?(?:key|token)|invite[_-]?(?:key|token)|access[_-]?token|refresh[_-]?token|auth[_-]?secret|nextauth[_-]?secret|client[_-]?secret|private[_-]?key|password|passwd|(?<![A-Za-z0-9_?&-])token)["']?[ \t]{0,8}[:=][ \t]{0,8}["']?[^"'\s,}&]{6,}/gi,
 ];
 
 const QUERY_SECRET =
   /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key)=)[^&#\s"']*/gi;
+
+/**
+ * Header-style labels whose value is replaced but whose label stays, so the
+ * transcript still reads. Authorization takes a scheme (Bearer, Basic, Token,
+ * …) and then a credential; without a scheme the value must contain a digit,
+ * so prose such as "Authorization: the user signs in" is left alone.
+ */
+const LABELED: readonly RegExp[] = [
+  /(\b(?:proxy-)?authorization["']?[ \t]{0,8}[:=][ \t]{0,8}["']?)(?:(?:bearer|basic|token|digest|apikey|negotiate)[ \t]{1,4}(?:token=)?[^\s"',}]{3,2048}|(?=[^\s"',}]{0,2048}\d)[A-Za-z0-9\-._~+/=:]{8,2048})/gi,
+  /(\b(?:set-cookie|cookie|x-digichat-session)["']?[ \t]{0,8}:[ \t]{0,8}["']?)[^"'\n\r]{1,4096}/gi,
+  /((?<![A-Za-z0-9_-])(?:session(?:[_-]?id)?|sid|csrftoken|connect\.sid)=)[^;\s"',&]{4,512}/gi,
+  // scheme://user:password@host (DSNs, URLs with userinfo).
+  /(\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s:/@"']{1,256}:)[^\s@/"']{1,256}(?=@)/gi,
+];
 
 export const REDACTED = "[redacted]";
 
@@ -41,6 +54,10 @@ export function redactString(value: string): string {
   for (const pattern of TOKEN_SHAPES) {
     pattern.lastIndex = 0;
     out = out.replace(pattern, REDACTED);
+  }
+  for (const pattern of LABELED) {
+    pattern.lastIndex = 0;
+    out = out.replace(pattern, `$1${REDACTED}`);
   }
   QUERY_SECRET.lastIndex = 0;
   return out.replace(QUERY_SECRET, `$1${REDACTED}`);

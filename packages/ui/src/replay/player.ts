@@ -274,8 +274,12 @@ export function replayPlayerScript(): string {
     });
   });
   window.addEventListener("keydown", function (event) {
-    var tag = event.target && event.target.tagName;
+    var target = event.target;
+    var tag = target && target.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    // Space and arrows on a focused control (a summary, button or link) keep
+    // their native meaning: Space opens a tool card, it does not start playback.
+    if (target && target.closest && target.closest("summary, button, a, [contenteditable]")) return;
     if (event.key === "ArrowRight") { event.preventDefault(); nextTurn(); }
     else if (event.key === "ArrowLeft") { event.preventDefault(); prevTurn(); }
     else if (event.key === " ") { event.preventDefault(); if (playBtn) playBtn.click(); }

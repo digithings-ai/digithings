@@ -16,13 +16,13 @@ vi.mock("@/lib/conversations-repo", () => ({
 }));
 
 vi.mock("@/lib/deploy-config/loader", () => ({
-  getPrimaryDeployment: vi.fn(),
+  getDigichatConfig: vi.fn(),
 }));
 
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getDb } from "@/db";
 import { getConversationMessages, tenantIdBySlug } from "@/lib/conversations-repo";
-import { getPrimaryDeployment } from "@/lib/deploy-config/loader";
+import { getDigichatConfig } from "@/lib/deploy-config/loader";
 
 const JWT =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
@@ -49,19 +49,25 @@ describe("GET /api/conversations/[id]/replay", () => {
     vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
     vi.mocked(getDb).mockReturnValue(db as never);
     vi.mocked(tenantIdBySlug).mockResolvedValue("tenant-1");
-    vi.mocked(getPrimaryDeployment).mockReturnValue(deployment as never);
+    vi.mocked(getDigichatConfig).mockReturnValue({ deployment } as never);
   });
 
   it("returns 401 before reading the conversation", async () => {
     vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
-    const res = await GET(new Request("http://localhost/api/conversations/conv-1/replay"), routeCtx);
+    const res = await GET(
+      new Request("http://localhost/api/conversations/conv-1/replay"),
+      routeCtx,
+    );
     expect(res.status).toBe(401);
     expect(getConversationMessages).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the conversation is missing", async () => {
     vi.mocked(getConversationMessages).mockResolvedValue(null);
-    const res = await GET(new Request("http://localhost/api/conversations/conv-1/replay"), routeCtx);
+    const res = await GET(
+      new Request("http://localhost/api/conversations/conv-1/replay"),
+      routeCtx,
+    );
     expect(res.status).toBe(404);
   });
 
@@ -101,7 +107,9 @@ describe("GET /api/conversations/[id]/replay", () => {
     );
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
-    expect(res.headers.get("content-disposition")).toBe('attachment; filename="acme-2026-10-21.html"');
+    expect(res.headers.get("content-disposition")).toBe(
+      'attachment; filename="acme-2026-10-21.html"',
+    );
     const html = await res.text();
     expect(html).toContain('data-theme="light"');
     expect(html).toContain('data-view="verbose"');
@@ -120,5 +128,48 @@ describe("GET /api/conversations/[id]/replay", () => {
       expect(html).not.toContain(secret);
     }
     expect(html).toContain("[redacted]");
+  });
+
+  it("reads the caller's own conversation and branding, never another tenant's", async () => {
+    vi.mocked(getConversationMessages).mockResolvedValue({ title: "Demo", messages: [] } as never);
+    vi.mocked(getDigichatConfig).mockReturnValue({
+      hosts: {
+        "other.example": {
+          ...deployment,
+          slug: "other",
+          chrome: {
+            ...deployment.chrome,
+            title: "Other desk",
+            welcome: { title: "Hello Other", body: [] },
+          },
+        },
+        "acme.example": deployment,
+      },
+    } as never);
+    const res = await GET(
+      new Request("http://localhost/api/conversations/conv-1/replay"),
+      routeCtx,
+    );
+    expect(getConversationMessages).toHaveBeenCalledWith(db, "conv-1", "tenant-1", "user-1");
+    const html = await res.text();
+    expect(html).toContain("Hello Acme");
+    expect(html).not.toContain("Other desk");
+  });
+
+  it("uses neutral branding when several hosts exist and none is the caller's", async () => {
+    vi.mocked(getConversationMessages).mockResolvedValue({ title: "Demo", messages: [] } as never);
+    vi.mocked(getDigichatConfig).mockReturnValue({
+      hosts: {
+        "one.example": { ...deployment, slug: "one" },
+        "two.example": { ...deployment, slug: "two" },
+      },
+    } as never);
+    const res = await GET(
+      new Request("http://localhost/api/conversations/conv-1/replay"),
+      routeCtx,
+    );
+    const html = await res.text();
+    expect(html).not.toContain("Hello Acme");
+    expect(res.headers.get("content-disposition")).toMatch(/filename="acme-/);
   });
 });

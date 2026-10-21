@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { cssLooksLikeChat, inlineAssetUrls, resolveReplayCss } from "./browser";
+import { cssLooksLikeChat, inlineAssetUrls, replayAssetsUrl, resolveReplayCss } from "./browser";
 
 describe("resolveReplayCss", () => {
   it("inlines the live sheet when it is the chat stylesheet", async () => {
     const inline = vi.fn(async (css: string) => `${css}/*inlined*/`);
     const bundled = vi.fn(async () => "bundled");
-    const css = await resolveReplayCss(".aui-user-message-content { color: red; }", bundled, inline);
+    const css = await resolveReplayCss(
+      ".aui-user-message-content { color: red; }",
+      bundled,
+      inline,
+    );
     expect(css).toContain("/*inlined*/");
     expect(bundled).not.toHaveBeenCalled();
   });
@@ -44,5 +48,14 @@ describe("cssLooksLikeChat", () => {
   it("recognises the user message and markdown hooks", () => {
     expect(cssLooksLikeChat(".aui-md { }")).toBe(true);
     expect(cssLooksLikeChat("body {}")).toBe(false);
+  });
+});
+
+describe("replayAssetsUrl", () => {
+  it("prefixes the app base path", () => {
+    expect(replayAssetsUrl("/chat")).toBe("/chat/api/replay-assets");
+    expect(replayAssetsUrl("/chat/")).toBe("/chat/api/replay-assets");
+    expect(replayAssetsUrl("")).toBe("/api/replay-assets");
+    expect(replayAssetsUrl(undefined)).toBe("/api/replay-assets");
   });
 });
