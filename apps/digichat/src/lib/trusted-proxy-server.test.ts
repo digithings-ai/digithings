@@ -159,6 +159,71 @@ describe("trusted-proxy server", () => {
       await closeServer(upstream);
     }
   });
+
+  it("destroys the upstream request when the client stops mid-answer", async () => {
+    let upstreamClosedEarly = false;
+    let markClosed: () => void = () => {};
+    const closed = new Promise<void>((resolve) => {
+      markClosed = resolve;
+    });
+    const upstream = http.createServer((req, upRes) => {
+      req.on("close", () => {
+        if (!upRes.writableFinished) {
+          upstreamClosedEarly = true;
+          markClosed();
+        }
+      });
+      upRes.writeHead(200, { "content-type": "text/event-stream" });
+      upRes.write("data: hello\n\n");
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = http.createServer((req, res) => {
+      proxyToUpstream(req, res, {
+        headers: forwardHeaders(req.headers, "127.0.0.1", "stamp"),
+        host: "127.0.0.1",
+        path: req.url ?? "/",
+        port: upstreamPort,
+      });
+    });
+    const proxyPort = await listen(proxy);
+    try {
+      const firstEvent = new Promise<string>((resolve, reject) => {
+        const client = http.request(
+          {
+            host: "127.0.0.1",
+            method: "POST",
+            path: "/api/chat",
+            port: proxyPort,
+          },
+          (res) => {
+            res.once("data", (chunk: Buffer) => {
+              resolve(chunk.toString("utf8"));
+              client.destroy();
+            });
+            res.on("error", () => {});
+          },
+        );
+        client.on("error", () => {});
+        client.on("timeout", () => reject(new Error("client timed out before the first event")));
+        client.setTimeout(1000);
+        client.end("{}");
+      });
+      await expect(firstEvent).resolves.toContain("hello");
+      await Promise.race([
+        closed,
+        new Promise((_, reject) => {
+          setTimeout(
+            () => reject(new Error("upstream request stayed open after a mid-answer stop")),
+            1000,
+          );
+        }),
+      ]);
+      expect(upstreamClosedEarly).toBe(true);
+    } finally {
+      await closeServer(proxy);
+      await closeServer(upstream);
+    }
+  });
 });
 
 describe("resolveDigichatVersion", () => {
