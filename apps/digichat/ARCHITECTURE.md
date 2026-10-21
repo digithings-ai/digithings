@@ -1117,13 +1117,16 @@ Web-search defaults (#3859, tool-only grounding — no synthesis-model pins):
 
 | surface | session pref | BFF forward |
 |---|---|---|
-| first-party chat (authenticated, null `embedConfig`) | on | when the browser asks AND `DIGICHAT_WEB_SEARCH=1` (deploy sets it) |
+| first-party chat (authenticated, null `embedConfig`) | deployment allow; stored opt-out is cleared on load | when the browser asks AND `DIGICHAT_WEB_SEARCH=1` (deploy sets it) |
 | tenant embeds with `webSearch: true` (digithings.ai, occ, local app/cli/modal) | on | when the browser asks AND the tenant allows |
 | datatap (`webSearch: false`) | off | never |
 
-Pref semantics: `readWebSearchPref` defaults on; the user opts out per surface via
-`/tools` or `/settings` (persisted as `"0"` in localStorage). Either side false —
-tenant gate or user pref — means the BFF does not send `X-Digi-Enable-Web-Search`,
+Pref semantics: `readWebSearchPref` defaults on; embed surfaces opt out via
+`/tools` or `/settings` (persisted as `"0"` in localStorage). Signed-in ChatShell
+has no `/tools` pane, so it does not read that key: on load it clears
+`digichat-web-search:auth` and follows the deployment allow (house:
+`NEXT_PUBLIC_DIGICHAT_WEB_SEARCH=1`). Either side false — tenant gate or, on an
+embed, the user pref — means the BFF does not send `X-Digi-Enable-Web-Search`,
 so the turn stays corpus-only.
 Disabled catalog ids travel
 as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp`, `/models`, `/effort`,
