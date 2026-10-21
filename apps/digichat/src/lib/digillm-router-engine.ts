@@ -42,13 +42,13 @@ type TableRoute = {
   label: string;
   description: string;
   exemplars: string[];
-  prefer: string[];
 };
 
-type CatalogModel = {
-  id: string;
-  prompt_usd_per_million: number | null;
-  tool_call: boolean;
+type PresetModels = {
+  auto: string;
+  reasoning: string;
+  fast: string;
+  light: string;
 };
 
 type RouterTable = {
@@ -56,10 +56,10 @@ type RouterTable = {
   weak: number;
   stopwords: string[];
   token_pattern: string;
-  light_select: string;
+  bind: string;
+  presets: PresetModels;
   rules: RouterRule[];
   routes: TableRoute[];
-  models: CatalogModel[];
 };
 
 export class DigillmRouterEngineError extends Error {
@@ -107,11 +107,10 @@ function loadTable(raw: RouterTable): {
   token: RegExp;
   rules: CompiledRule[];
   routes: WorkingRoute[];
-  prefer: Map<string, readonly string[]>;
-  catalog: Map<string, CatalogModel>;
+  presets: PresetModels;
 } {
-  if (raw.light_select !== "cheapest_tool_capable_non_gemini") {
-    throw new DigillmRouterEngineError("router_data.json light_select is not the supported policy");
+  if (raw.bind !== "catalog_presets") {
+    throw new DigillmRouterEngineError("router_data.json bind is not catalog_presets");
   }
   const rules: CompiledRule[] = raw.rules.map((rule) => {
     if (!isRuleOp(rule.op)) {
@@ -139,8 +138,6 @@ function loadTable(raw: RouterTable): {
     description: route.description,
     exemplars: [...route.exemplars],
   }));
-  const prefer = new Map(raw.routes.map((route) => [route.id, route.prefer]));
-  const catalog = new Map(raw.models.map((row) => [row.id, row]));
   return {
     dim: raw.dim,
     weak: raw.weak,
@@ -148,52 +145,25 @@ function loadTable(raw: RouterTable): {
     token: flagsToRegExp(raw.token_pattern, "i"),
     rules,
     routes,
-    prefer,
-    catalog,
+    presets: raw.presets,
   };
 }
 
 const TABLE = loadTable(routerData as RouterTable);
 
-export function isGeminiModel(modelId: string): boolean {
-  const segment = modelId.trim().split("/").pop()?.toLowerCase() ?? "";
-  return segment.startsWith("gemini");
-}
-
 function cleanAllow(allowed: readonly string[]): string[] {
   return allowed.map((item) => item.trim()).filter((item) => item.length > 0);
 }
 
-function priced(modelId: string): number | undefined {
-  const row = TABLE.catalog.get(modelId);
-  if (!row || row.tool_call !== true) return undefined;
-  const price = row.prompt_usd_per_million;
-  if (typeof price !== "number" || !Number.isFinite(price)) return undefined;
-  return price;
+function presetModel(routeId: string): string {
+  if (routeId === "reasoning") return TABLE.presets.reasoning;
+  if (routeId === "fast") return TABLE.presets.fast;
+  if (routeId === "light") return TABLE.presets.light;
+  return "";
 }
 
-function cheapestLight(allow: readonly string[], fallback: string): string | undefined {
-  if (allow.length > 0) {
-    const ranked: { price: number; index: number; modelId: string }[] = [];
-    allow.forEach((modelId, index) => {
-      if (isGeminiModel(modelId)) return;
-      const price = priced(modelId);
-      if (price === undefined) return;
-      ranked.push({ price, index, modelId });
-    });
-    if (ranked.length > 0) {
-      ranked.sort((left, right) => left.price - right.price || left.index - right.index);
-      return ranked[0]?.modelId;
-    }
-    const nonGemini = allow.find((modelId) => !isGeminiModel(modelId));
-    if (nonGemini) return nonGemini;
-    const fallbackId = fallback.trim();
-    if (fallbackId && allow.includes(fallbackId)) return fallbackId;
-    return allow[0];
-  }
-  const fallbackId = fallback.trim();
-  if (fallbackId && !isGeminiModel(fallbackId)) return fallbackId;
-  return undefined;
+function onAllowList(modelId: string, allowSet: ReadonlySet<string>): boolean {
+  return modelId.length > 0 && (allowSet.size === 0 || allowSet.has(modelId));
 }
 
 function bindModel(route: WorkingRoute, allow: readonly string[], fallback: string): string {
@@ -207,15 +177,12 @@ function bindModel(route: WorkingRoute, allow: readonly string[], fallback: stri
     }
     return pinned;
   }
-  if (route.id === "light") {
-    const chosen = cheapestLight(allow, fallback);
-    if (chosen) return chosen;
-  }
-  for (const candidate of TABLE.prefer.get(route.id) ?? []) {
-    if (allowSet.size === 0 || allowSet.has(candidate)) return candidate;
-  }
+  const preset = presetModel(route.id).trim();
+  if (onAllowList(preset, allowSet)) return preset;
+  const auto = TABLE.presets.auto.trim();
+  if (onAllowList(auto, allowSet)) return auto;
   const fallbackId = fallback.trim();
-  if (fallbackId && (allowSet.size === 0 || allowSet.has(fallbackId))) return fallbackId;
+  if (onAllowList(fallbackId, allowSet)) return fallbackId;
   if (allow.length > 0 && allow[0]) return allow[0];
   throw new DigillmRouterEngineError("router has no model to choose");
 }
@@ -420,16 +387,24 @@ export function decideDigillmRoute(input: DigillmRouterEngineInput): DigillmRout
     if (!found) throw new DigillmRouterEngineError("router hit a route that is not on offer");
     return checked(found.route.id, found.route.label, found.model, hit.reason, hit.confidence, allow);
   }
-  const fallbackId = input.fallback.trim();
+  const model = defaultModel(allow, input.fallback);
   const reason = input.text.trim()
     ? "No strong signal — using the deployment default."
     : "Empty question — using the deployment default.";
   for (const item of bound) {
-    if (item.model === fallbackId) {
-      return checked(item.route.id, item.route.label, item.model, reason, 0.4, allow);
+    if (item.model === model) {
+      return checked(item.route.id, item.route.label, model, reason, 0.4, allow);
     }
   }
-  const first = bound[0];
-  if (!first) throw new DigillmRouterEngineError("router has no routes");
-  return checked(first.route.id, first.route.label, first.model, reason, 0.35, allow);
+  return checked("auto", "Auto", model, reason, 0.4, allow);
+}
+
+function defaultModel(allow: readonly string[], fallback: string): string {
+  const allowSet = new Set(allow);
+  const auto = TABLE.presets.auto.trim();
+  if (onAllowList(auto, allowSet)) return auto;
+  const fallbackId = fallback.trim();
+  if (onAllowList(fallbackId, allowSet)) return fallbackId;
+  if (allow.length > 0 && allow[0]) return allow[0];
+  throw new DigillmRouterEngineError("router has no model to choose");
 }

@@ -20,7 +20,7 @@
       "name": "demo-reasoning-proof",
       "route_id": "reasoning",
       "label": "Reasoning",
-      "model": "z-ai/glm-5.3-flash",
+      "model": "deepseek/deepseek-v4.1-flash-1017",
       "reason": "Multi-step reasoning, math, or a long question.",
       "confidence": 0.88
     },
@@ -36,7 +36,7 @@
       "name": "code-fence",
       "route_id": "reasoning",
       "label": "Reasoning",
-      "model": "deepseek/deepseek-v4-pro",
+      "model": "deepseek/deepseek-v4.1-flash-1017",
       "reason": "Code or an error trace.",
       "confidence": 0.9
     },
@@ -58,8 +58,8 @@
     },
     {
       "name": "empty-question",
-      "route_id": "fast",
-      "label": "Fast",
+      "route_id": "reasoning",
+      "label": "Reasoning",
       "model": "deepseek/deepseek-v4.1-flash-1017",
       "reason": "Empty question \u2014 using the deployment default.",
       "confidence": 0.4
@@ -81,23 +81,39 @@
       "confidence": 0.92
     },
     {
-      "name": "gemini-not-chosen-when-dearer-tool-model-exists",
-      "route_id": "light",
-      "label": "Light",
-      "model": "minimax/minimax-m3",
-      "reason": "Short greeting or acknowledgment.",
-      "confidence": 0.92
-    },
-    {
-      "name": "empty-allowlist-stays-on-the-default",
-      "route_id": "light",
-      "label": "Light",
+      "name": "missing-preset-uses-auto",
+      "route_id": "reasoning",
+      "label": "Reasoning",
       "model": "deepseek/deepseek-v4.1-flash-1017",
+      "reason": "Multi-step reasoning, math, or a long question.",
+      "confidence": 0.88
+    },
+    {
+      "name": "catalog-presets-when-allowlisted",
+      "route_id": "fast",
+      "label": "Fast",
+      "model": "z-ai/glm-4.7-flash",
+      "reason": "Short factual lookup.",
+      "confidence": 0.86
+    },
+    {
+      "name": "catalog-reasoning-when-allowlisted",
+      "route_id": "reasoning",
+      "label": "Reasoning",
+      "model": "deepseek/deepseek-v4-pro",
+      "reason": "Multi-step reasoning, math, or a long question.",
+      "confidence": 0.88
+    },
+    {
+      "name": "empty-allowlist-uses-the-light-preset",
+      "route_id": "light",
+      "label": "Light",
+      "model": "openai/gpt-oss-120b",
       "reason": "Short greeting or acknowledgment.",
       "confidence": 0.92
     },
     {
-      "name": "same-price-follows-allowlist-order",
+      "name": "preset-absent-and-auto-absent-uses-the-first-allowlisted-model",
       "route_id": "light",
       "label": "Light",
       "model": "qwen/qwen3.8-flash",

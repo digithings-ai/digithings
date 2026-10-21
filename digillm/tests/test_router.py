@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from digillm.router import RouterRoute, route_query
+from digillm.router.data import router_table
 from digillm.router.decide import route_query as decide_route_query
 
 pytestmark = pytest.mark.unit
@@ -23,7 +24,7 @@ _ROUTER = _SRC / "digillm" / "router"
 ALLOWED = [
     "deepseek/deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-pro",
-    "google/gemini-3.1-flash-lite",
+    "z-ai/glm-4.7-flash",
     "openai/gpt-oss-120b",
 ]
 FALLBACK = "deepseek/deepseek-v4.1-flash-1017"
@@ -55,7 +56,7 @@ def test_categories_on_the_demo_allowlist() -> None:
     assert light.route_id == "light"
     assert light.model == "openai/gpt-oss-120b"
     assert fast.route_id == "fast"
-    assert fast.model == "deepseek/deepseek-v4.1-flash-1017"
+    assert fast.model == "z-ai/glm-4.7-flash"
     assert reasoning.route_id == "reasoning"
     assert reasoning.model == "deepseek/deepseek-v4-pro"
     assert code.route_id == "reasoning"
@@ -79,7 +80,7 @@ def test_only_allowlisted_models_are_returned() -> None:
     assert decision.reason == "Only one model is on the allowlist."
 
 
-def test_operator_pin_overrides_the_preference_list() -> None:
+def test_operator_pin_overrides_the_preset() -> None:
     decision = route_query(
         text="hi",
         allowed=ALLOWED,
@@ -114,44 +115,38 @@ def test_pin_outside_the_allowlist_is_refused() -> None:
         )
 
 
-def test_light_skips_a_cheaper_gemini_model() -> None:
-    decision = route_query(
-        text="thanks",
-        allowed=["google/gemini-3.1-flash-lite", "minimax/minimax-m3"],
+def test_a_missing_preset_uses_auto_instead_of_another_allowlisted_model() -> None:
+    allowed = [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "qwen/qwen3.8-flash",
+        "openai/gpt-oss-120b",
+    ]
+    reasoning = route_query(
+        text="Prove that the square root of 2 is irrational, step by step",
+        allowed=allowed,
         fallback=FALLBACK,
     )
-    assert decision.route_id == "light"
-    assert decision.model == "minimax/minimax-m3"
-
-
-def test_gemma_is_eligible_for_light() -> None:
-    decision = route_query(
-        text="hi",
-        allowed=["google/gemma-4-31b-it", "minimax/minimax-m3"],
+    fast = route_query(
+        text="What is the capital of France?",
+        allowed=allowed,
         fallback=FALLBACK,
     )
-    assert decision.model == "google/gemma-4-31b-it"
+    assert reasoning.route_id == "reasoning"
+    assert reasoning.model == FALLBACK
+    assert fast.route_id == "fast"
+    assert fast.model == FALLBACK
 
 
-def test_light_tie_breaks_on_allowlist_order() -> None:
-    first = route_query(
-        text="thanks",
-        allowed=["z-ai/glm-5.3-flash", "qwen/qwen3.8-flash"],
-        fallback=FALLBACK,
-    )
-    second = route_query(
-        text="thanks",
-        allowed=["qwen/qwen3.8-flash", "z-ai/glm-5.3-flash"],
-        fallback=FALLBACK,
-    )
-    assert first.model == "z-ai/glm-5.3-flash"
-    assert second.model == "qwen/qwen3.8-flash"
-
-
-def test_empty_allowlist_keeps_a_non_gemini_default() -> None:
+def test_empty_allowlist_uses_the_preset() -> None:
     decision = route_query(text="thanks", allowed=[], fallback=FALLBACK)
     assert decision.route_id == "light"
-    assert decision.model == FALLBACK
+    assert decision.model == "openai/gpt-oss-120b"
+
+
+def test_flash_1017_price_comes_from_the_picker_catalog() -> None:
+    row = next(item for item in router_table().models if item.id == FALLBACK)
+    assert row.prompt_usd_per_million == 0.075
+    assert row.output_usd_per_million == 0.3
 
 
 def test_embed_allowlist_splits_the_three_demo_prompts() -> None:
@@ -166,7 +161,11 @@ def test_embed_allowlist_splits_the_three_demo_prompts() -> None:
     assert light.reason == "Short greeting or acknowledgment."
     assert (fast.route_id, fast.model) == ("fast", "deepseek/deepseek-v4.1-flash-1017")
     assert fast.reason == "Short factual lookup."
-    assert (reasoning.route_id, reasoning.model) == ("reasoning", "z-ai/glm-5.3-flash")
+    # The embed list has neither the Fast preset nor the Reasoning preset.
+    assert (reasoning.route_id, reasoning.model) == (
+        "reasoning",
+        "deepseek/deepseek-v4.1-flash-1017",
+    )
     assert reasoning.reason == "Multi-step reasoning, math, or a long question."
 
 
@@ -185,8 +184,8 @@ def test_route_query_does_not_open_a_socket(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_package_source_does_not_call_a_provider() -> None:
-    # Model ids in the preference list contain the "openai/" slug. That is a
-    # catalog name, not the provider client. The scan is for a call or import.
+    # Preset ids contain the "openai/" slug. That is a catalog name, not the
+    # provider client. The scan is for a call or import.
     text = "\n".join(path.read_text() for path in _ROUTER.glob("*.py"))
     for banned in (
         "cheaperinference",

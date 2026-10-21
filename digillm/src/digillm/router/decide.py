@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from digillm.router.classify import centroid_route, rule_route
-from digillm.router.policy import bind_model, resolve_routes
+from digillm.router.policy import bind_model, default_model, resolve_routes
 from digillm.router.types import RouterDecision, RouterError, RouterRoute
 
 
@@ -47,17 +47,16 @@ def route_query(
         route, model = by_id[route_id]
         return _checked(route.id, route.label, model, reason, confidence, allow)
 
-    fallback_id = fallback.strip()
+    model = default_model(allow, fallback)
     reason = (
         "Empty question — using the deployment default."
         if not text.strip()
         else "No strong signal — using the deployment default."
     )
-    for route, model in bound:
-        if model == fallback_id:
+    for route, bound_model in bound:
+        if bound_model == model:
             return _checked(route.id, route.label, model, reason, 0.4, allow)
-    route, model = bound[0]
-    return _checked(route.id, route.label, model, reason, 0.35, allow)
+    return _checked("auto", "Auto", model, reason, 0.4, allow)
 
 
 def _checked(

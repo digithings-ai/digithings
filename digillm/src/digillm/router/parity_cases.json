@@ -46,7 +46,7 @@
       "text": "```python\ndef parse(data):\n    return data\n```",
       "allowed": [
         "deepseek/deepseek-v4.1-flash-1017",
-        "deepseek/deepseek-v4-pro",
+        "z-ai/glm-5.3-flash",
         "openai/gpt-oss-120b"
       ],
       "fallback": "deepseek/deepseek-v4.1-flash-1017"
@@ -104,19 +104,45 @@
       ]
     },
     {
-      "name": "gemini-not-chosen-when-dearer-tool-model-exists",
-      "text": "thanks",
-      "allowed": ["google/gemini-3.1-flash-lite", "minimax/minimax-m3"],
+      "name": "missing-preset-uses-auto",
+      "text": "Prove that the square root of 2 is irrational, step by step",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "qwen/qwen3.8-flash",
+        "openai/gpt-oss-120b"
+      ],
       "fallback": "deepseek/deepseek-v4.1-flash-1017"
     },
     {
-      "name": "empty-allowlist-stays-on-the-default",
+      "name": "catalog-presets-when-allowlisted",
+      "text": "What is the capital of France?",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4-pro",
+        "z-ai/glm-4.7-flash",
+        "openai/gpt-oss-120b"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "catalog-reasoning-when-allowlisted",
+      "text": "Prove that the square root of 2 is irrational, step by step",
+      "allowed": [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4-pro",
+        "z-ai/glm-4.7-flash",
+        "openai/gpt-oss-120b"
+      ],
+      "fallback": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "name": "empty-allowlist-uses-the-light-preset",
       "text": "thanks",
       "allowed": [],
       "fallback": "deepseek/deepseek-v4.1-flash-1017"
     },
     {
-      "name": "same-price-follows-allowlist-order",
+      "name": "preset-absent-and-auto-absent-uses-the-first-allowlisted-model",
       "text": "ok",
       "allowed": ["qwen/qwen3.8-flash", "z-ai/glm-5.3-flash"],
       "fallback": "deepseek/deepseek-v4.1-flash-1017"

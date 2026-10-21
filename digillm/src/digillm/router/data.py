@@ -1,9 +1,9 @@
 """The router table both implementations read.
 
 ``router_data.json`` is the only copy of the example phrases, the structural
-rules, and the catalog prices. This module loads it. The TypeScript port in
-digichat imports the same file. Neither copy of the scorer may restate those
-lists.
+rules, and the preset each category calls. This module loads it. The
+TypeScript port in digichat imports the same file. Neither copy of the
+scorer may restate those lists.
 """
 
 from __future__ import annotations
@@ -41,7 +41,17 @@ class RouterTableRoute(BaseModel):
     label: str
     description: str
     exemplars: list[str]
-    prefer: list[str] = Field(default_factory=list)
+
+
+class RouterPresetModels(BaseModel):
+    """Models the digichat picker resolved for its default catalog policy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    auto: str
+    reasoning: str
+    fast: str
+    light: str
 
 
 class RouterCatalogModel(BaseModel):
@@ -49,6 +59,7 @@ class RouterCatalogModel(BaseModel):
 
     id: str
     prompt_usd_per_million: float | None = None
+    output_usd_per_million: float | None = None
     tool_call: bool
 
 
@@ -59,7 +70,8 @@ class RouterTable(BaseModel):
     weak: float = Field(ge=0.0, le=1.0)
     stopwords: list[str]
     token_pattern: str
-    light_select: str
+    bind: Literal["catalog_presets"]
+    presets: RouterPresetModels
     price_note: str
     rules: list[RouterRule]
     routes: list[RouterTableRoute]
@@ -69,7 +81,4 @@ class RouterTable(BaseModel):
 @cache
 def router_table() -> RouterTable:
     raw = files("digillm.router").joinpath("router_data.json").read_text(encoding="utf-8")
-    table = RouterTable.model_validate(json.loads(raw))
-    if table.light_select != "cheapest_tool_capable_non_gemini":
-        raise RuntimeError("router_data.json light_select is not the supported policy")
-    return table
+    return RouterTable.model_validate(json.loads(raw))

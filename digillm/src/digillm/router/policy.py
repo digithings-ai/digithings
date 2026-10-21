@@ -1,36 +1,27 @@
 """Built-in categories and how they bind to a deployment's allowlist.
 
-Auto on an unconfigured digichat install is ``deepseek/deepseek-v4.1-flash-1017``.
-The router does not replace that default. It picks among Reasoning, Fast, and
-Light. Reasoning and Fast walk a preference list until an id the deployment
-allows. Light, unless an operator pins ``routes[].model``, is the cheapest
-tool-capable non-Gemini model on that allowlist. An id that is not allowed is
-never returned.
+Each category calls the model the digichat picker resolved for that preset
+(Reasoning, Fast, Light). Auto (``deepseek/deepseek-v4.1-flash-1017`` on the
+default catalog) is the fallback when that preset is not on the allowlist.
+An operator pin (``routes[].model``) wins. An id that is not allowed is never
+returned. Prices are recorded for the preset rows. They are not walked.
 """
 
 from __future__ import annotations
 
-from digillm.router.data import RouterCatalogModel, router_table
+from digillm.router.data import router_table
 from digillm.router.types import RouterError, RouterRoute
 
 
-def _preferences() -> dict[str, tuple[str, ...]]:
-    return {route.id: tuple(route.prefer) for route in router_table().routes}
-
-
-def _catalog() -> dict[str, RouterCatalogModel]:
-    return {row.id: row for row in router_table().models}
-
-
-def is_gemini(model_id: str) -> bool:
-    """True when the last path segment starts with ``gemini``.
-
-    ``google/gemini-3.1-flash-lite`` and a bare ``gemini-3.1-flash-lite`` are
-    Gemini. ``google/gemma-4-31b-it`` is not.
-    """
-
-    segment = model_id.strip().rsplit("/", 1)[-1].lower()
-    return segment.startswith("gemini")
+def _preset_model(route_id: str) -> str:
+    presets = router_table().presets
+    if route_id == "reasoning":
+        return presets.reasoning
+    if route_id == "fast":
+        return presets.fast
+    if route_id == "light":
+        return presets.light
+    return ""
 
 
 BUILTIN_ROUTES: tuple[RouterRoute, ...] = tuple(
@@ -80,50 +71,24 @@ def resolve_routes(overrides: list[RouterRoute] | None) -> list[RouterRoute]:
     return [by_id[route_id] for route_id in order] + extras
 
 
-def _priced(model_id: str) -> float | None:
-    row = _catalog().get(model_id)
-    if row is None or row.tool_call is not True:
-        return None
-    price = row.prompt_usd_per_million
-    if isinstance(price, bool) or not isinstance(price, int | float):
-        return None
-    return float(price)
+def _allowed(model_id: str, allow_set: set[str]) -> bool:
+    return bool(model_id) and (not allow_set or model_id in allow_set)
 
 
-def _cheapest_light(allow: list[str], fallback: str) -> str | None:
-    """Cheapest tool-capable non-Gemini id on ``allow``.
+def default_model(allowed: list[str], fallback: str) -> str:
+    """Auto when the deployment allows it, otherwise the caller's fallback."""
 
-    A non-empty allowlist walks priced rows first (lower prompt price, then
-    earlier in the allowlist). Unpriced ids, including the deployment default
-    when the catalog has no row, cannot win that walk. With no priced
-    candidate, the first non-Gemini id wins. An allowlist that is only Gemini
-    uses the fallback when it is on the list, otherwise the first id.
-
-    An empty allowlist is "no restriction". Light stays on the deployment
-    fallback when that id is not Gemini, so an unconfigured container does not
-    jump to the globally cheapest catalog row.
-    """
-
-    if allow:
-        priced = [
-            (price, index, model_id)
-            for index, model_id in enumerate(allow)
-            if not is_gemini(model_id) and (price := _priced(model_id)) is not None
-        ]
-        if priced:
-            priced.sort()
-            return priced[0][2]
-        for model_id in allow:
-            if not is_gemini(model_id):
-                return model_id
-        fallback_id = fallback.strip()
-        if fallback_id and fallback_id in set(allow):
-            return fallback_id
-        return allow[0]
+    allow = [item.strip() for item in allowed if item.strip()]
+    allow_set = set(allow)
+    auto = router_table().presets.auto.strip()
+    if _allowed(auto, allow_set):
+        return auto
     fallback_id = fallback.strip()
-    if fallback_id and not is_gemini(fallback_id):
+    if _allowed(fallback_id, allow_set):
         return fallback_id
-    return None
+    if allow:
+        return allow[0]
+    raise RouterError("router has no model to choose")
 
 
 def bind_model(
@@ -143,15 +108,14 @@ def bind_model(
                 f"router route {route.id} pins {pinned}, which is not on the allowlist"
             )
         return pinned
-    if route.id == "light" and router_table().light_select == "cheapest_tool_capable_non_gemini":
-        chosen = _cheapest_light(allow, fallback)
-        if chosen is not None:
-            return chosen
-    for candidate in _preferences().get(route.id, ()):
-        if not allow_set or candidate in allow_set:
-            return candidate
+    preset = _preset_model(route.id).strip()
+    if _allowed(preset, allow_set):
+        return preset
+    auto = router_table().presets.auto.strip()
+    if _allowed(auto, allow_set):
+        return auto
     fallback_id = fallback.strip()
-    if fallback_id and (not allow_set or fallback_id in allow_set):
+    if _allowed(fallback_id, allow_set):
         return fallback_id
     if allow:
         return allow[0]
