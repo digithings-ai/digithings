@@ -1,7 +1,7 @@
 /** Tagged product releases named in the repository changelogs: only versions with a
  *  pushed `<product>-vX.Y.Z` tag. digichat 2.4.0 is in the changelog but untagged;
- *  2.6.5 is the one-caret-and-themes release, tagged from the release
- *  commit on develop; 2.6.4 was the show-the-backend's-words release.
+ *  2.6.5 is the one-caret-and-themes release, tagged at its develop-to-main
+ *  promotion commit, as 2.6.0-2.6.4 were; 2.6.4 was the show-the-backend's-words release.
  *  digiquant itself ships on develop and has no product tag.
  *  Each href spans the previous tagged release of that product to this one, the same
  *  range the product changelog heading names. */

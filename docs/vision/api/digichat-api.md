@@ -100,7 +100,7 @@ auth: session
 
 ## Notes
 - Committed OpenAPI: docs/openapi/digichat.json (authored; path existence checked in tests/contracts).
-- Self-host: digichat builds from source — there is no published digichat image on GHCR yet (the publish workflow builds one per digichat-vX.Y.Z tag; none has been cut since digichat-v2.3.2). See infra/self-host/compose.ghcr.yml.
+- Self-host: the publish workflow builds a private GHCR image per digichat-vX.Y.Z tag, published from v2.6.4 on (2026-10-21); without a ghcr.io credential, digichat builds from source. See infra/self-host/compose.ghcr.yml.
 
 ## Stack
 Next.js, React, Vercel AI SDK, Auth.js, Postgres, Drizzle
