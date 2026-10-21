@@ -361,6 +361,11 @@ def test_the_digigraph_probe_never_leaves_loopback():
     # has to hold there and not only in the template.
     resolved = contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "18000"})[0]
     assert urlsplit(resolved).hostname == "127.0.0.1"
+    # The mutant that breaks the invariant: '8000@evil.com' is a legal userinfo
+    # string, so urlsplit reads the host as 'evil.com'. There is no URL at all
+    # for it, so there is nothing that can leave loopback.
+    with pytest.raises(contracts.InvalidPort):
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "8000@evil.com"})
 
 
 def test_the_digigraph_probe_follows_the_port_override_in_the_merged_catalogue():
@@ -490,3 +495,97 @@ def test_the_supabase_probes_follow_the_local_port_knob():
         url, reason = contracts.resolve(check, {})
         assert url == f"http://127.0.0.1:{contracts.DEFAULT_API_PORT}{path}"
         assert url.startswith("http://127.0.0.1:")
+
+
+# --- DIG-4905: a port knob carries a port, or the gate refuses it -----------
+#
+# The knob value is substituted into the port slot of a loopback URL and the
+# gate then opens that URL. A value that is not a port is therefore the one
+# thing that can move the probe off this machine: '8000@evil.com' is a legal
+# userinfo string, and urlsplit("http://127.0.0.1:8000@evil.com/healthz")
+# reports hostname 'evil.com'.
+
+#: Every builtin row whose URL carries a port knob, and the knob that carries
+#: it. The list is closed on purpose: a new templated row cannot be added
+#: without a guard for it (test_every_knob_row_is_guarded).
+PORT_KNOBS: tuple[tuple[str, str], ...] = (
+    ("supabase-rest", "DT_SUPABASE_PORT"),
+    ("supabase-auth", "DT_SUPABASE_PORT"),
+    ("digigraph", "DT_DIGIGRAPH_PORT"),
+    ("digichat", "DIGICHAT_PUBLISH_PORT"),
+    ("dashboard-api", "DT_DASHBOARD_API_PORT"),
+)
+
+#: Values that are not ports. The first one is the mutant that turns the
+#: probe into a request to another host; the rest are the shapes a number
+#: can take that a port cannot.
+NOT_A_PORT: tuple[str, ...] = (
+    "8000@evil.com",
+    "evil.com",
+    "8000/../evil.com",
+    "0",
+    "65536",
+    "+8000",
+    "8_000",
+    "not-a-port",
+    "8000 evil",
+    "٨٠٠٠",  # Arabic-Indic digits: int() reads them, a port may not carry them
+)
+
+
+@pytest.mark.parametrize(("name", "knob"), PORT_KNOBS)
+@pytest.mark.parametrize("value", NOT_A_PORT)
+def test_a_port_knob_that_is_not_a_port_is_refused(name, knob, value):
+    """A knob value that is not a port never becomes a URL.
+
+    The refusal is loud and it names the knob, so the operator sees which
+    variable to fix instead of a probe that quietly went somewhere else.
+    """
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == name)
+    with pytest.raises(contracts.InvalidPort) as caught:
+        contracts.resolve(check, {knob: value})
+    assert knob in str(caught.value)
+
+
+@pytest.mark.parametrize(("name", "knob"), PORT_KNOBS)
+def test_no_port_knob_value_can_produce_an_off_machine_url(name, knob):
+    """The property, stated on the URL the gate opens.
+
+    Either the value is refused, or the URL it produces still addresses the
+    loopback host. There is no third outcome.
+    """
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == name)
+    for value in (*NOT_A_PORT, "8000", "1", "65535"):
+        try:
+            url = contracts.resolve(check, {knob: value})[0]
+        except contracts.InvalidPort:
+            continue
+        assert urlsplit(url).hostname in ("127.0.0.1", "localhost"), url
+        assert urlsplit(url).username is None, url
+
+
+def test_every_knob_row_is_guarded():
+    """A knob nobody names is a knob nobody guards."""
+    templated = {c.name for c in contracts.BUILTIN_CHECKS if c.url and "${" in c.url}
+    assert templated == {name for name, _ in PORT_KNOBS}
+
+
+def test_a_port_knob_with_surrounding_whitespace_is_still_a_port():
+    """Whitespace is noise around a number, not a different number.
+
+    The Supabase port knob already strips (localstack.supabase_ports), so the
+    gate must agree with it rather than refuse a value the stack accepts.
+    """
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
+    url, reason = contracts.resolve(check, {"DT_DIGIGRAPH_PORT": " 18000 "})
+    assert reason is None
+    assert url == "http://127.0.0.1:18000/healthz"
+
+
+def test_the_dashboard_api_probe_never_leaves_loopback():
+    """The row that shipped with the same hole, guarded the same way."""
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "dashboard-api")
+    resolved = contracts.resolve(check, {"DT_DASHBOARD_API_PORT": "9999"})[0]
+    assert urlsplit(resolved).hostname == "127.0.0.1"
+    with pytest.raises(contracts.InvalidPort):
+        contracts.resolve(check, {"DT_DASHBOARD_API_PORT": "8000@evil.com"})

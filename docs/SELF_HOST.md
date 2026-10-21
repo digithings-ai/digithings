@@ -322,7 +322,7 @@ The digigraph probe follows the port the digigraph really serves, through `DT_DI
 DT_DIGIGRAPH_PORT=18000 make local-stack-health
 ```
 
-Three things about the knob. The gate reads the **process environment**, not the root `.env`, so export it or prefix the command as above. It takes a port number: a value that is not one makes the URL unparseable, and the probe fails rather than pointing anywhere else. And it is not the `DIGIGRAPH_PORT` in the root `.env` — that contract key ("the port the digigraph dev server binds to") is a different name, and nothing reads it today.
+Three things about the knob. The gate reads the **process environment**, not the root `.env`, so export it or prefix the command as above. It takes a port number: a value that is not one is refused and the check fails, so the probe never points anywhere else. The value is substituted into the port slot of a loopback URL, and a value that is not a port (`8000@evil.com`) would send the probe off the machine. And it is not the `DIGIGRAPH_PORT` in the root `.env` — that contract key ("the port the digigraph dev server binds to") is a different name, and nothing reads it today.
 
 The port digigraph actually listens on is set elsewhere, so the two have to agree: the host dev server takes `DG_PORT` (`scripts/run_local.sh`, default `18000`), and the no-Docker stack takes `PORT_GRAPH` (`scripts/run_stack_local.sh`, default `8000`, the same ports as compose).
 

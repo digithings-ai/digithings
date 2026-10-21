@@ -14,6 +14,13 @@ accepted because two S1 PRs are open and this leaf must not invent a third:
 
 * ``config/contract/services.yaml``  (PR #5352)
 * ``config/contract/contract.yaml``  (PR #5359)
+
+Every default URL here addresses the loopback host, and the only part of it
+that moves is the port, which an operator's knob carries. A knob value that
+is not a port number is refused (:class:`InvalidPort`) instead of being
+substituted: ``8000@evil.com`` is a legal userinfo string, so
+``urlsplit("http://127.0.0.1:8000@evil.com/healthz")`` reports the host as
+``evil.com`` and the probe would leave this machine.
 """
 
 from __future__ import annotations
@@ -35,8 +42,8 @@ except ImportError:  # imported as a plain module
 #: The Supabase API port the local stack probes. The whole Supabase port set
 #: moves with it (see localstack.supabase_ports), so one knob keeps the gate
 #: and the instance the CLI started on the same port. Only the PORT is
-#: templated - the host stays 127.0.0.1, so the gate can never point off this
-#: machine.
+#: templated - the host stays 127.0.0.1, and the substituted port is
+#: validated, so the gate can never point off this machine.
 _SUPABASE_API_PORT = "${%s:-%d}" % (PORT_ENV, DEFAULT_API_PORT)
 
 PROFILES: tuple[str, ...] = ("core", "quant", "chat", "trace", "all")
@@ -52,6 +59,27 @@ CONTRACT_PATHS: tuple[str, ...] = (
 PASSED = "passed"
 FAILED = "failed"
 SKIPPED = "skipped"
+
+#: A port number: ASCII digits, 1-65535. ``str.isdigit`` is not enough -- it
+#: accepts non-ASCII digits -- and ``int()`` is not enough either: it reads
+#: ``8_000`` and ``+8000`` as numbers a URL may not carry.
+_PORT_RE = re.compile(r"[0-9]{1,5}")
+
+#: The lowest port a probe may address.
+MIN_PORT = 1
+
+#: The highest port a probe may address.
+MAX_PORT = 65535
+
+
+class InvalidPort(ValueError):
+    """A port knob carried something that is not a port.
+
+    Raised instead of building a URL out of the value. The gate opens the URL
+    it resolves, so a knob value is the one thing that can move a probe off
+    this machine: ``urlsplit("http://127.0.0.1:8000@evil.com/healthz")``
+    reports the host as ``evil.com``.
+    """
 
 
 @dataclass(frozen=True)
@@ -155,8 +183,9 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
         # syntax is expanded by _expand_env() at resolve time, so an operator
         # who exports the knob moves the probe with the service. It takes a
         # port number: the gate reads the process environment, not the root
-        # .env, and a value that is not a port makes the URL unparseable
-        # rather than pointing it somewhere else.
+        # .env, and a value that is not a port is refused (InvalidPort)
+        # rather than substituted -- '8000@evil.com' would make the probe
+        # leave this machine.
         #
         # Only the PORT is templated, for the digichat reason: templating the
         # host would let this gate point off the developer's machine, and
@@ -206,7 +235,8 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
         # for a LAN bind, but a bind on 0.0.0.0 still answers on 127.0.0.1, and
         # test_builtin_urls_are_labelled_local_loopback requires a default that
         # is provably loopback. Templating the host would let this gate point off
-        # the developer's machine.
+        # the developer's machine. The substituted port is validated, so the
+        # knob cannot carry a host either.
         # The ${...:-default} syntax mirrors compose's own line and is expanded
         # by _expand_env() at resolve time, so the default follows the variable.
         source=(
@@ -238,7 +268,8 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
         # Only the PORT is templated, for the digichat reason: templating
         # the host would let this gate point off the developer's machine,
         # and test_builtin_urls_are_labelled_local_loopback requires a
-        # provably loopback default.
+        # provably loopback default. The substituted port is validated, so
+        # the knob cannot carry a host either.
         #
         # 8887 is the measured wrangler-dev port for dashboard-api (workerd
         # listening there, answering for this service). orchestrate.py passes
@@ -429,19 +460,75 @@ def select(checks: tuple[Check, ...], profile: str) -> tuple[Check, ...]:
 _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 
+def _is_port(value: str) -> bool:
+    """True when ``value`` is a port number and nothing else."""
+    if not _PORT_RE.fullmatch(value):
+        return False
+    return MIN_PORT <= int(value) <= MAX_PORT
+
+
+def _authority_span(url: str) -> tuple[int, int]:
+    """The character range of a URL template's authority (the host:port part).
+
+    ``(0, 0)`` when the template carries no ``scheme://`` prefix: a bare
+    ``host:port`` string is not a URL and has no authority to point at.
+    """
+    marker = url.find("://")
+    if marker < 0:
+        return (0, 0)
+    start = marker + 3
+    end = len(url)
+    for index in range(start, len(url)):
+        if url[index] in "/?#":
+            end = index
+            break
+    return (start, end)
+
+
+def _fills_the_port_slot(url: str, start: int) -> bool:
+    """True when the reference at ``start`` stands for the URL's port.
+
+    The port slot is the ``:`` that separates the host from the port inside
+    the authority. A reference behind a ``/`` is in the path and one that
+    follows ``://`` is the host -- neither of them is a port.
+    """
+    auth_start, auth_end = _authority_span(url)
+    if not (auth_start <= start < auth_end):
+        return False
+    if start == 0 or url[start - 1] != ":":
+        return False
+    # '://' is the scheme separator, not the port separator.
+    return start < 2 or url[start - 2] != "/"
+
+
 def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
     """Expand ``${VAR:-default}`` references in a built-in default URL.
 
     Only applied to the *default* URL. A ``requires`` value is returned exactly
     as configured (see :func:`resolve`), because a caller-configured local
     binding route is keyed on the exact path it supplies.
+
+    A reference that fills the port slot has to carry a port number. The
+    value lands in a URL the gate then opens, and a value that is not a port
+    is the one thing that can move that URL off this machine: ``8000@evil.com``
+    makes ``urlsplit(...).hostname`` read ``evil.com``. So such a value is
+    refused loudly (:class:`InvalidPort`) rather than substituted.
     """
     if url is None or "${" not in url:
         return url
 
     def sub(match: re.Match[str]) -> str:
         name, default = match.group(1), match.group(2)
-        return config.get(name) or (default or "")
+        # Surrounding whitespace is noise around a number, not a different
+        # number: the Supabase port knob already strips (localstack
+        # .supabase_ports), so the gate must agree with it.
+        value = (config.get(name) or default or "").strip()
+        if _fills_the_port_slot(url, match.start()) and not _is_port(value):
+            raise InvalidPort(
+                f"{name}={value!r} is not a port number; the probe stays on "
+                f"127.0.0.1 only when the knob carries a port"
+            )
+        return value
 
     return _ENV_REF.sub(sub, url)
 
