@@ -1106,7 +1106,8 @@ of the digichat client unlabelled.
 
 The wording is the one the product prints today: `quiet` shows the titles only,
 `balanced` opens the rows while they stream, `verbose` leaves everything open
-(the app CHANGELOG and `packages/ui` gallery-thread use the same words). The
+(the app CHANGELOG uses these words; the `packages/ui` gallery-thread describes
+the same three levels in its own words). The
 shared map's terser wording from #6079 was rendered nowhere, so moving the
 shipped copy into the package is not a user-visible change; the palette's
 choice options, which nothing renders today, inherit it when they do.

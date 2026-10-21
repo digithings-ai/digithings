@@ -33,6 +33,10 @@ function read(file: string): string {
  * module falls back on the shared map. The component's own file cannot see a
  * copy that lives somewhere else, so the rule is not checked there too. A
  * module that needs the wording imports the shared map.
+ *
+ * The scan covers the app sources under `apps/digichat/src`, test files
+ * excluded: the rule is about app modules, and the test files are where the
+ * wording is quoted on purpose.
  */
 describe("the view-level wording has one home", () => {
   const files = sourceFiles(appSrc);
@@ -50,10 +54,11 @@ describe("the view-level wording has one home", () => {
 
   it("keeps a private view label map out of the app", () => {
     // A map of the view wording, whatever it is called: `VIEW_LABELS`,
-    // `LEVEL_LABELS`, `VIEW_DESCRIPTIONS`. The names are matched in upper
-    // case, the way this codebase names a map constant.
+    // `LEVEL_LABELS`, `MY_VIEW_LABELS`, `VIEW_LABEL_TEXT`, `viewLabels`.
+    // The keyword must be a word of its own, so `OVERVIEW_LABELS` is not a
+    // view map.
     const copies = files.filter((file) =>
-      /(?:const|let|var|function)\s+\w*(?:VIEW|LEVEL)\w*(?:LABELS?|DESCRIPTIONS?)\b/.test(
+      /(?:const|let|var|function)\s+\w*(?<![A-Za-z])(?:VIEW|LEVEL)\w*(?:LABELS?|DESCRIPTIONS?)\w*/i.test(
         read(file),
       ),
     );
@@ -64,8 +69,9 @@ describe("the view-level wording has one home", () => {
     // `VIEW_LABELS[id] ?? ""` (or `|| ""`) turns a missing wording into an
     // empty description column instead of a compile error. The fallback sat
     // on the line that reads the map, so the line is what is checked, and it
-    // is checked in every app module: a helper around the lookup is the
-    // same rule.
+    // is checked in every app module. The rule keys on the shared map by
+    // name, so a module that imports it under another name is a rule this
+    // check does not see.
     const copies = files.filter((file) =>
       read(file)
         .split("\n")
