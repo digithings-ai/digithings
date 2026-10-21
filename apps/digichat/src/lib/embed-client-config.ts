@@ -103,7 +103,16 @@ export type EmbedTenantClientConfig = {
     allowUserServers?: boolean;
     allowAddForm?: boolean;
   };
-  models?: { default?: string; available?: string[]; allowPicker?: boolean };
+  models?: {
+    default?: string;
+    available?: string[];
+    allowPicker?: boolean;
+    picker?: {
+      presets: Array<{ id: string; label: string; description: string; model: string }>;
+      groups: Array<{ provider: string; models: Array<{ id: string; label: string }> }>;
+      showFullList: boolean;
+    };
+  };
   /**
    * Discriminator only — never project Foundry endpoints / digigraph URLs.
    * CliThread uses this to enable regenerate/edit when the BFF turn

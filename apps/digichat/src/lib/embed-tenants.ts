@@ -288,7 +288,29 @@ export type EmbedTenantConfig = {
       tools?: Array<{ id: string; label?: string }>;
     }>;
   };
-  models?: { default?: string; available?: string[]; allowPicker?: boolean };
+  models?: {
+    default?: string;
+    available?: string[];
+    allowPicker?: boolean;
+    catalog?: boolean;
+    /** OCC visitor picker. Off unless true. Other hosts ignore it. */
+    occPicker?: boolean;
+    priceCapUsdPerMillion?: number;
+    premiumCapUsdPerMillion?: number;
+    costPerWindow?: { usd: number; windowSeconds?: number };
+    presets?: Array<"auto" | "reasoning" | "fast" | "light" | "router">;
+    showFullList?: boolean;
+    minContextTokens?: number;
+    picker?: {
+      presets: Array<{ id: string; label: string; description: string; model: string }>;
+      groups: Array<{
+        provider: string;
+        models: Array<{ id: string; label: string }>;
+        premium?: boolean;
+      }>;
+      showFullList: boolean;
+    };
+  };
   /**
    * LLM spend policy for this embed. Independent of gateMode — digithings.ai
    * is `ungated` + `free_then_byok` so free-quota errors still open BYOK.
@@ -991,7 +1013,9 @@ function parseTenantTools(
   };
 }
 
-/** Optional `models` session picker list (model slugs only). */
+const MODEL_PRESET_IDS = ["auto", "reasoning", "fast", "light", "router"] as const;
+
+/** Optional `models` session picker. A catalog policy is resolved later; a raw list is kept as written. */
 function parseTenantModels(
   raw: unknown,
   hostKey: string,
@@ -1002,11 +1026,93 @@ function parseTenantModels(
   const available = Array.isArray(r.available)
     ? r.available.filter((m): m is string => typeof m === "string" && m.trim().length > 0).map((m) => m.trim())
     : [];
+  let presets: Array<(typeof MODEL_PRESET_IDS)[number]> | undefined;
+  if (r.presets !== undefined) {
+    if (!Array.isArray(r.presets) || r.presets.some((id) => typeof id !== "string")) {
+      throw new Error(`embed tenant "${hostKey}": models.presets must be a list of preset ids`);
+    }
+    presets = [];
+    for (const id of r.presets) {
+      if (!(MODEL_PRESET_IDS as readonly string[]).includes(id)) {
+        throw new Error(`embed tenant "${hostKey}": models.presets has unknown id ${id}`);
+      }
+      presets.push(id as (typeof MODEL_PRESET_IDS)[number]);
+    }
+  }
+  if (r.catalog !== undefined && typeof r.catalog !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.catalog must be a boolean`);
+  }
+  if (r.occPicker !== undefined && typeof r.occPicker !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.occPicker must be a boolean`);
+  }
+  if (
+    r.priceCapUsdPerMillion !== undefined &&
+    (typeof r.priceCapUsdPerMillion !== "number" ||
+      !Number.isFinite(r.priceCapUsdPerMillion) ||
+      r.priceCapUsdPerMillion <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.priceCapUsdPerMillion must be a positive number`);
+  }
+  if (
+    r.premiumCapUsdPerMillion !== undefined &&
+    (typeof r.premiumCapUsdPerMillion !== "number" ||
+      !Number.isFinite(r.premiumCapUsdPerMillion) ||
+      r.premiumCapUsdPerMillion <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.premiumCapUsdPerMillion must be a positive number`);
+  }
+  let costPerWindow: { usd: number; windowSeconds?: number } | undefined;
+  if (r.costPerWindow !== undefined) {
+    const cost = r.costPerWindow;
+    if (!cost || typeof cost !== "object" || Array.isArray(cost)) {
+      throw new Error(`embed tenant "${hostKey}": models.costPerWindow must be an object`);
+    }
+    const usd = (cost as { usd?: unknown }).usd;
+    const windowSeconds = (cost as { windowSeconds?: unknown }).windowSeconds;
+    if (typeof usd !== "number" || !Number.isFinite(usd) || usd <= 0) {
+      throw new Error(`embed tenant "${hostKey}": models.costPerWindow.usd must be a positive number`);
+    }
+    if (
+      windowSeconds !== undefined &&
+      (typeof windowSeconds !== "number" || !Number.isInteger(windowSeconds) || windowSeconds <= 0)
+    ) {
+      throw new Error(
+        `embed tenant "${hostKey}": models.costPerWindow.windowSeconds must be a positive integer`,
+      );
+    }
+    costPerWindow = {
+      usd,
+      ...(typeof windowSeconds === "number" ? { windowSeconds } : {}),
+    };
+  }
+  if (r.showFullList !== undefined && typeof r.showFullList !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.showFullList must be a boolean`);
+  }
+  if (
+    r.minContextTokens !== undefined &&
+    (typeof r.minContextTokens !== "number" ||
+      !Number.isInteger(r.minContextTokens) ||
+      r.minContextTokens <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.minContextTokens must be a positive integer`);
+  }
   return {
     models: {
       ...(typeof r.default === "string" && r.default.trim() ? { default: r.default.trim() } : {}),
       available,
       ...(typeof r.allowPicker === "boolean" ? { allowPicker: r.allowPicker } : {}),
+      ...(r.catalog === true ? { catalog: true } : {}),
+      ...(typeof r.occPicker === "boolean" ? { occPicker: r.occPicker } : {}),
+      ...(typeof r.priceCapUsdPerMillion === "number"
+        ? { priceCapUsdPerMillion: r.priceCapUsdPerMillion }
+        : {}),
+      ...(typeof r.premiumCapUsdPerMillion === "number"
+        ? { premiumCapUsdPerMillion: r.premiumCapUsdPerMillion }
+        : {}),
+      ...(costPerWindow ? { costPerWindow } : {}),
+      ...(presets ? { presets } : {}),
+      ...(typeof r.showFullList === "boolean" ? { showFullList: r.showFullList } : {}),
+      ...(typeof r.minContextTokens === "number" ? { minContextTokens: r.minContextTokens } : {}),
     },
   };
 }

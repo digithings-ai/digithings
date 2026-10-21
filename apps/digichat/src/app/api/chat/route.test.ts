@@ -10,9 +10,15 @@ vi.mock("@/lib/chat-route-context", () => ({
   resolveChatTenantContext: vi.fn(),
 }));
 
-vi.mock("@/lib/bff-rate-limit", () => ({
-  checkBffRateLimit: vi.fn(() => ({ allowed: true })),
-}));
+vi.mock("@/lib/bff-rate-limit", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/bff-rate-limit")>(
+    "@/lib/bff-rate-limit",
+  );
+  return {
+    ...actual,
+    checkBffRateLimit: vi.fn(() => ({ allowed: true })),
+  };
+});
 
 vi.mock("@/lib/embed-ip-rate-limit", () => ({
   checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true })),
@@ -100,6 +106,13 @@ import {
   resetDigichatConfigForTests,
   setDigichatConfigForTests,
 } from "@/lib/deploy-config/loader";
+import { catalogModelRate } from "@/lib/model-picker-catalog";
+import {
+  chargePremiumUsage,
+  premiumSpendIdentity,
+  premiumUserKey,
+  resetPremiumSpendForTests,
+} from "@/lib/premium-budget/budget";
 
 function catalogWithSearchVault() {
   return parseDigichatConfig({
@@ -130,8 +143,11 @@ describe("POST /api/chat", () => {
     });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
+    vi.mocked(clientIpForRateLimit).mockReset();
+    vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");
     resetEmbedTrialQuotaForTests();
     resetChatRunLocksForTests();
+    resetPremiumSpendForTests();
 vi.mocked(createFoundryStreamResponse).mockClear();
     vi.mocked(createAiSdkStreamResponse).mockClear();
     vi.mocked(createDigigraphTraceStreamResponse).mockClear();
@@ -352,8 +368,370 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(res.status).toBe(200);
       const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
         model?: string;
+        upstreamHeaders?: Record<string, string>;
       };
       expect(call?.model).toBe("deepseek/deepseek-v4.1-flash");
+      expect(call?.upstreamHeaders?.["X-Digi-House-Model"]).toBe("deepseek/deepseek-v4.1-flash");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  function catalogDeployment(costPerWindow?: { usd: number; windowSeconds: number }) {
+    return parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "local",
+        backend: { type: "digigraph" },
+        models: {
+          catalog: true,
+          ...(costPerWindow ? { costPerWindow } : {}),
+        },
+      },
+    });
+  }
+
+  it("falls back to Auto once the premium budget is spent", async () => {
+    const budget = { usd: 0.0125565, windowSeconds: 86400 };
+    setDigichatConfigForTests(catalogDeployment(budget));
+    const session = "sess-premium-spent";
+    const rate = catalogModelRate("z-ai/glm-5.3");
+    expect(rate).toBeTruthy();
+    const key = premiumUserKey(
+      mockAuthCtx.tenantSlug,
+      premiumSpendIdentity({ userId: mockAuthCtx.ownerUserSub, ip: "127.0.0.1" }),
+    );
+    const now = Date.now();
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-digichat-session": session,
+            "x-digi-model": "z-ai/glm-5.3",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        preface?: string;
+        onUsage?: unknown;
+        responseHeaders?: Record<string, string>;
+        upstreamHeaders?: Record<string, string>;
+      };
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
+      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
+      expect(call?.preface).toMatch(/premium budget/);
+      expect(call?.onUsage).toBeUndefined();
+      expect(call?.upstreamHeaders?.["X-Digi-House-Model"]).toBe(
+        "deepseek/deepseek-v4.1-flash-1017",
+      );
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("serves a premium OCC model with no budget fallback", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        hosts: {
+          "occ.digithings.ai": {
+            slug: "occ",
+            backend: { type: "digigraph" },
+            models: {
+              catalog: true,
+              occPicker: true,
+              presets: ["auto", "reasoning", "fast", "light"],
+              showFullList: true,
+            },
+          },
+        },
+      }),
+    );
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "occ",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "occ",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "digigraph" },
+        activityDetail: "labels",
+      },
+    } as EmbedChatTenantContext);
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-embed-host": "https://occ.digithings.ai",
+            "x-digi-model": "z-ai/glm-5.3",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        onUsage?: unknown;
+        responseHeaders?: Record<string, string>;
+      };
+      expect(call?.model).toBe("z-ai/glm-5.3");
+      expect(call?.onUsage).toBeUndefined();
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBeUndefined();
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("does not reset the premium window when the session header changes", async () => {
+    const budget = { usd: 0.0125565, windowSeconds: 86400 };
+    setDigichatConfigForTests(catalogDeployment(budget));
+    const rate = catalogModelRate("z-ai/glm-5.3");
+    expect(rate).toBeTruthy();
+    const key = premiumUserKey(
+      mockAuthCtx.tenantSlug,
+      premiumSpendIdentity({ userId: mockAuthCtx.ownerUserSub, ip: "127.0.0.1" }),
+    );
+    const now = Date.now();
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    const post = async (session?: string) => {
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+        "x-digichat-trace": "1",
+        "x-digi-model": "z-ai/glm-5.3",
+      };
+      if (session) headers["x-digichat-session"] = session;
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        preface?: string;
+        responseHeaders?: Record<string, string>;
+      };
+      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
+      expect(call?.preface).toMatch(/premium budget/);
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
+    };
+    try {
+      await post("sess-a");
+      await post("sess-b");
+      await post();
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("keeps rotating x-digichat-peer-ip values on one anonymous premium window", async () => {
+    delete process.env.DIGICHAT_PEER_STAMP;
+    process.env.DIGICHAT_TRUSTED_PROXIES = "203.0.113.7,198.51.100.8,192.0.2.10";
+    const actual = await vi.importActual<typeof import("@/lib/embed-ip-rate-limit")>(
+      "@/lib/embed-ip-rate-limit",
+    );
+    vi.mocked(clientIpForRateLimit).mockImplementation((req: Request) =>
+      actual.clientIpForRateLimit(req),
+    );
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "public",
+      ownerUserSub: "embed:anonymous",
+    });
+    const budget = { usd: 0.0125565, windowSeconds: 86400 };
+    setDigichatConfigForTests(catalogDeployment(budget));
+    const rate = catalogModelRate("z-ai/glm-5.3");
+    expect(rate).toBeTruthy();
+    const key = premiumUserKey(
+      "public",
+      premiumSpendIdentity({ userId: "embed:anonymous", ip: "unknown" }),
+    );
+    expect(key).toBe("public:anonymous");
+    const now = Date.now();
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    const peers = ["203.0.113.7", "198.51.100.8", "192.0.2.10"];
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      for (const peer of peers) {
+        const res = await POST(
+          new Request("http://localhost/api/chat", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-digichat-trace": "1",
+              "x-digi-model": "z-ai/glm-5.3",
+              "x-digichat-peer-ip": peer,
+              "x-forwarded-for": `${peer}, 10.0.0.1`,
+              "cf-connecting-ip": peer,
+            },
+            body: JSON.stringify({
+              messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+            }),
+          }),
+        );
+        expect(res.status).toBe(200);
+        const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+          model?: string;
+          responseHeaders?: Record<string, string>;
+        };
+        expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
+        expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
+      }
+    } finally {
+      delete process.env.DIGICHAT_TRUSTED_PROXIES;
+      delete process.env.DIGICHAT_PEER_STAMP;
+      resetDigichatConfigForTests();
+      vi.mocked(clientIpForRateLimit).mockReset();
+      vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(mockAuthCtx);
+    }
+  });
+
+  it("shows the Auto fallback notice on the non-trace path when no default is set", async () => {
+    const budget = { usd: 0.0125565, windowSeconds: 86400 };
+    const cfg = catalogDeployment(budget);
+    if (cfg.deployment?.models) delete cfg.deployment.models.default;
+    setDigichatConfigForTests(cfg);
+    const rate = catalogModelRate("z-ai/glm-5.3");
+    expect(rate).toBeTruthy();
+    const key = premiumUserKey(
+      mockAuthCtx.tenantSlug,
+      premiumSpendIdentity({ userId: mockAuthCtx.ownerUserSub, ip: "127.0.0.1" }),
+    );
+    const now = Date.now();
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    try {
+      process.env.DIGICHAT_TRACE_UI = "0";
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "0",
+            "x-digi-model": "z-ai/glm-5.3",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("X-Digi-Premium-Fallback")).toBe("auto");
+      const sent = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(sent?.headers?.["X-Digi-House-Model"]).toBe("deepseek/deepseek-v4.1-flash-1017");
+      const streamArg = vi.mocked(createUIMessageStreamResponse).mock.calls.at(-1)?.[0] as {
+        stream: ReadableStream<unknown>;
+      };
+      const reader = streamArg.stream.getReader();
+      const chunks: unknown[] = [];
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) break;
+        chunks.push(next.value);
+      }
+      expect(JSON.stringify(chunks)).toMatch(/premium budget/);
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("keeps a premium pick while the budget still has room", async () => {
+    setDigichatConfigForTests(
+      catalogDeployment({ usd: 0.0125565, windowSeconds: 86400 }),
+    );
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-digichat-session": "sess-premium-open",
+            "x-digi-model": "z-ai/glm-5.3",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        preface?: string;
+        onUsage?: unknown;
+        responseHeaders?: Record<string, string>;
+      };
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBeUndefined();
+      expect(call?.model).toBe("z-ai/glm-5.3");
+      expect(call?.preface).toBeUndefined();
+      expect(typeof call?.onUsage).toBe("function");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("does not meter a premium pick when the deployment has no budget", async () => {
+    setDigichatConfigForTests(catalogDeployment());
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-digichat-session": "sess-occ",
+            "x-digi-model": "google/gemini-3.8-flash",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        preface?: string;
+        onUsage?: unknown;
+        responseHeaders?: Record<string, string>;
+      };
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBeUndefined();
+      expect(call?.model).toBe("google/gemini-3.8-flash");
+      expect(call?.preface).toBeUndefined();
+      expect(call?.onUsage).toBeUndefined();
     } finally {
       resetDigichatConfigForTests();
     }

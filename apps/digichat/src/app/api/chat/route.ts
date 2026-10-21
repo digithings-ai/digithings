@@ -33,6 +33,13 @@ import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { createTurnGuard, guardrailPrepareStep } from "@/lib/guardrails/turn";
 import { resolveLanguageCode } from "@/lib/languages";
+import { premiumModelsHeader } from "@/lib/deploy-config/schema";
+import { catalogModelRate, premiumIdsFromGroups } from "@/lib/model-picker-catalog";
+import {
+  applyPremiumBudget,
+  premiumSpendIdentity,
+  premiumUserKey,
+} from "@/lib/premium-budget/budget";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getHeartbeatContext, licenseRefusal } from "@/lib/license/state";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
@@ -278,7 +285,7 @@ async function handleChat(
   const turnMode = turnModeParsed;
   const runId = req.headers.get("x-digi-run-id")?.trim() || null;
 
-  const responseHeaders = {
+  const responseHeaders: Record<string, string> = {
     "X-Digichat-Session": sessionId,
     "X-Request-Id": rid,
   };
@@ -571,12 +578,13 @@ async function handleChat(
   // House-path session model (non-BYOK, allowlisted). digigraph only binds it
   // when the slug is also on its own DIGI_SESSION_MODEL_ALLOWLIST.
   let houseSessionModel: string | undefined;
+  let routerModels: string | undefined;
   try {
-    const { allowlistModelId } = await import("@/lib/deploy-config");
+    const { resolveHouseModelSelection, routerModelsHeader } = await import("@/lib/deploy-config");
     if (byokKey) {
       if (requestedModel) modelId = requestedModel;
     } else if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
-      const allowed = allowlistModelId(dep.models, requestedModel);
+      const allowed = resolveHouseModelSelection(dep.models, requestedModel);
       if (requestedModel && allowed === undefined) {
         runLock.release();
         return new Response(
@@ -588,7 +596,10 @@ async function handleChat(
         );
       }
       if (allowed) modelId = allowed;
-      if (requestedModel && allowed) houseSessionModel = allowed;
+      if (requestedModel && allowed) {
+        houseSessionModel = allowed;
+        routerModels = routerModelsHeader(dep.models, allowed);
+      }
     } else if (configFailed && requestedModel) {
       // The deployment config could not be read, so we cannot prove the model
       // is allowed → fail closed rather than forward an unverified id.
@@ -614,6 +625,42 @@ async function handleChat(
         }),
         { status: 400, headers: { "content-type": "application/json" } },
       );
+    }
+  }
+
+  // Pin the curated default on the house header. digigraph ignores the body
+  // model, and the header was set only when the client sent X-Digi-Model.
+  if (!byokKey && !houseSessionModel && dep?.models?.available?.includes(modelId)) {
+    houseSessionModel = modelId;
+  }
+
+  let premiumNotice: string | undefined;
+  let chargePremium: ((usage?: { inputTokens: number; outputTokens: number }) => void) | undefined;
+  if (!byokKey && dep?.models) {
+    const premiumIds = premiumIdsFromGroups(dep.models.picker?.groups);
+    const applied = applyPremiumBudget({
+      modelId,
+      defaultModel: tenantDefaultModel,
+      premium: premiumIds.includes(modelId),
+      premiumIds,
+      rate: catalogModelRate(modelId),
+      budget: dep.models.costPerWindow,
+      userKey: premiumUserKey(
+        tenantSlug,
+        premiumSpendIdentity({
+          userId: ownerUserSub,
+          ip: clientIpForRateLimit(req),
+        }),
+      ),
+    });
+    if (applied.notice) {
+      modelId = applied.modelId;
+      houseSessionModel = applied.modelId;
+      routerModels = undefined;
+      premiumNotice = applied.notice;
+      responseHeaders["X-Digi-Premium-Fallback"] = "auto";
+    } else {
+      chargePremium = applied.charge;
     }
   }
 
@@ -872,6 +919,11 @@ async function handleChat(
   // BYOK: forward per-request key to digigraph; never log or persist.
   if (!byokKey && houseSessionModel) {
     upstreamHeaders["X-Digi-House-Model"] = houseSessionModel;
+    if (routerModels) upstreamHeaders["X-Digi-Router-Models"] = routerModels;
+  }
+  if (!byokKey && dep?.models) {
+    const premiumHeader = premiumModelsHeader(dep.models);
+    if (premiumHeader) upstreamHeaders["X-Digi-Premium-Models"] = premiumHeader;
   }
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;
@@ -905,6 +957,8 @@ async function handleChat(
           // tenant curates a list) or the curated default.
           model: byokKey ? undefined : modelId,
           signal: req.signal,
+          preface: premiumNotice,
+          onUsage: chargePremium,
           guard,
         }),
       );
@@ -914,10 +968,22 @@ async function handleChat(
     }
   }
 
+  if (chargePremium) chargePremium();
+
   if (guard.active) {
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         try {
+          if (premiumNotice) {
+            const textId = "premium-fallback";
+            writer.write({ type: "text-start", id: textId });
+            writer.write({
+              type: "text-delta",
+              id: textId,
+              delta: `${premiumNotice}\n\n`,
+            });
+            writer.write({ type: "text-end", id: textId });
+          }
           const result = streamText({
             model,
             messages: coreMessages,
@@ -972,13 +1038,30 @@ async function handleChat(
     experimental_transform: smoothStream({ chunking: "word" }),
   });
 
+  const modelStream = toUIMessageStream({
+    stream: result.stream,
+    sendSources: true,
+    sendReasoning: true,
+  });
+  const stream = premiumNotice
+    ? createUIMessageStream({
+        execute({ writer }) {
+          const textId = "premium-fallback";
+          writer.write({ type: "text-start", id: textId });
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta: `${premiumNotice}\n\n`,
+          });
+          writer.write({ type: "text-end", id: textId });
+          writer.merge(modelStream);
+        },
+      })
+    : modelStream;
+
   return finish(
     createUIMessageStreamResponse({
-      stream: toUIMessageStream({
-        stream: result.stream,
-        sendSources: true,
-        sendReasoning: true,
-      }),
+      stream,
       headers: responseHeaders,
     }),
   );

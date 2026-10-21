@@ -11,6 +11,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { load as loadYaml } from "js-yaml";
+import { DEFAULT_PREMIUM_WINDOW_SECONDS } from "@/lib/premium-budget/budget";
 // js-yaml v4 — default safe schema via load() with no schema override.
 import {
   parseDigichatConfig,
@@ -123,6 +124,33 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       ...(typeof cfg.models?.allowPicker === "boolean"
         ? { allowPicker: cfg.models.allowPicker }
         : {}),
+      ...(cfg.models?.catalog === true ? { catalog: true as const } : {}),
+      ...(typeof cfg.models?.occPicker === "boolean" ? { occPicker: cfg.models.occPicker } : {}),
+      ...(typeof cfg.models?.priceCapUsdPerMillion === "number"
+        ? { priceCapUsdPerMillion: cfg.models.priceCapUsdPerMillion }
+        : {}),
+      ...(typeof cfg.models?.premiumCapUsdPerMillion === "number"
+        ? { premiumCapUsdPerMillion: cfg.models.premiumCapUsdPerMillion }
+        : {}),
+      ...(cfg.models?.costPerWindow
+        ? {
+            costPerWindow: {
+              usd: cfg.models.costPerWindow.usd,
+              windowSeconds:
+                cfg.models.costPerWindow.windowSeconds ?? DEFAULT_PREMIUM_WINDOW_SECONDS,
+            },
+          }
+        : {}),
+      ...(cfg.models?.presets ? { presets: [...cfg.models.presets] } : {}),
+      ...(typeof cfg.models?.showFullList === "boolean"
+        ? { showFullList: cfg.models.showFullList }
+        : {}),
+      ...(typeof cfg.models?.minContextTokens === "number"
+        ? { minContextTokens: cfg.models.minContextTokens }
+        : {}),
+      // A resolved tenant carries its picker; without it a preset:<id> pick
+      // through the fallback deployment would be refused.
+      ...(cfg.models?.picker ? { picker: structuredClone(cfg.models.picker) } : {}),
     },
     cli: { enabled: false },
     backend: cfg.backend,
@@ -291,9 +319,25 @@ function resolveMcpServerTokens(
   return changed ? { ...dep, mcp: { ...dep.mcp!, servers: next } } : dep;
 }
 
+function openRouterConfigured(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): boolean {
+  const key = env["OPENROUTER_API_KEY"];
+  return typeof key === "string" && key.trim().length > 0;
+}
+
+/** Drop a resolved catalog so a second parse fills it again instead of refusing the list. */
+function unresolveCatalog(dep: DigichatDeployment): DigichatDeployment {
+  if (!dep.models?.catalog) return dep;
+  const models = { ...dep.models, available: [] };
+  delete models.picker;
+  return { ...dep, models };
+}
+
 function mergeEmbedTenantsOverlay(
   config: DigichatConfig | null,
   tenantsRaw: string | undefined,
+  openRouter: boolean,
 ): DigichatConfig {
   const registry = parseEmbedTenants(tenantsRaw);
   if (registry.size === 0) {
@@ -302,32 +346,52 @@ function mergeEmbedTenantsOverlay(
   }
 
   const hosts: Record<string, DigichatDeployment> = {
-    ...(config?.hosts ? structuredClone(config.hosts) : {}),
+    ...(config?.hosts
+      ? Object.fromEntries(
+          Object.entries(structuredClone(config.hosts)).map(([host, dep]) => [
+            host,
+            unresolveCatalog(dep),
+          ]),
+        )
+      : {}),
   };
 
   // Registry is host → config. New hosts hydrate fully. Existing YAML hosts
-  // keep chrome, but copy `requiredPlanTier` when YAML omitted it so a baked
-  // example file cannot drop the live DIGICHAT_EMBED_TENANTS Desk+ gate (#3662).
+  // keep chrome and token. `requiredPlanTier` is copied when YAML omitted it
+  // so a baked example cannot drop the live DIGICHAT_EMBED_TENANTS Desk+ gate
+  // (#3662). The registry `models` block is spread on top so a host that
+  // already exists in YAML still receives the picker and the premium meter.
+  // Registry model keys win.
   for (const [host, cfg] of registry) {
     if (!hosts[host]) {
       hosts[host] = embedTenantToDeployment(cfg);
       continue;
     }
-    if (cfg.requiredPlanTier && !hosts[host].gate.requiredPlanTier) {
-      hosts[host] = {
-        ...hosts[host],
-        gate: { ...hosts[host].gate, requiredPlanTier: cfg.requiredPlanTier },
+    let next = hosts[host];
+    if (cfg.requiredPlanTier && !next.gate.requiredPlanTier) {
+      next = {
+        ...next,
+        gate: { ...next.gate, requiredPlanTier: cfg.requiredPlanTier },
       };
     }
+    if (cfg.models) {
+      const fromRegistry = embedTenantToDeployment(cfg).models;
+      next = {
+        ...next,
+        models: { ...(next.models ?? { available: [] }), ...(fromRegistry ?? {}) },
+      };
+    }
+    hosts[host] = next;
   }
 
   return parseDigichatConfig(
     {
       version: 1,
-      ...(config?.deployment ? { deployment: config.deployment } : {}),
+      ...(config?.deployment ? { deployment: unresolveCatalog(config.deployment) } : {}),
       hosts,
     },
     "digichat config (tenants merge)",
+    { openRouterConfigured: openRouter },
   );
 }
 
@@ -415,7 +479,9 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
 
   if (contents != null && contents.trim()) {
     const parsed = parseYamlOrJson(contents, path);
-    fromFile = parseDigichatConfig(parsed, path);
+    fromFile = parseDigichatConfig(parsed, path, {
+      openRouterConfigured: openRouterConfigured(env),
+    });
   } else if (contents != null && !contents.trim()) {
     throw new Error(`${path}: empty file`);
   } else if (!allowMissing && opts.fileContents === undefined && !existsSync(path)) {
@@ -425,7 +491,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
   const tenantsRaw = env.DIGICHAT_EMBED_TENANTS;
   let merged: DigichatConfig;
   if (tenantsRaw?.trim()) {
-    merged = mergeEmbedTenantsOverlay(fromFile, tenantsRaw);
+    merged = mergeEmbedTenantsOverlay(fromFile, tenantsRaw, openRouterConfigured(env));
   } else if (fromFile) {
     merged = fromFile;
   } else {
@@ -463,6 +529,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
         },
       },
       "digichat config (dev default)",
+      { openRouterConfigured: openRouterConfigured(env) },
     );
   }
 
