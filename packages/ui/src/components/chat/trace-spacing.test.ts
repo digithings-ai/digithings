@@ -13,13 +13,13 @@ import {
 
 const SCALE_VAR: Record<string, string> = {
   "0rem": "0rem",
-  "0.125rem": "var(--space-1)",
-  "0.25rem": "var(--space-2)",
-  "0.375rem": "var(--space-3)",
-  "0.5rem": "var(--space-4)",
-  "0.625rem": "var(--space-5)",
-  "0.75rem": "var(--space-6)",
-  "1rem": "var(--space-7)",
+  "0.125rem": "var(--trace-space-1)",
+  "0.25rem": "var(--trace-space-2)",
+  "0.375rem": "var(--trace-space-3)",
+  "0.5rem": "var(--trace-space-4)",
+  "0.625rem": "var(--trace-space-5)",
+  "0.75rem": "var(--trace-space-6)",
+  "1rem": "var(--trace-space-7)",
 };
 
 const CSS_TOKEN: Record<keyof TraceSpacingTokens, string> = {

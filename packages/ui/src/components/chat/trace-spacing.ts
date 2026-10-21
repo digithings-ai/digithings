@@ -1,7 +1,7 @@
 /**
  * Canonical spacing for the digichat Worked chain.
  *
- * A short scale (`--space-1` … `--space-7`) is the only length source.
+ * A short scale (`--trace-space-1` … `--trace-space-7`, kept apart from the design tokens' `--space-*`) is the only length source.
  * Semantic tokens (`--trace-*`) are what the chain title, sibling groups,
  * items inside a group, the header-to-body gap and the body padding read.
  * Density reassigns those tokens. Rules in `chat-digichat.css` and
@@ -117,14 +117,13 @@ export function resolveTraceDensity(
   stored: string | null | undefined,
   deployed: string | null | undefined,
 ): TraceDensity {
-  return (
-    normalizeTraceDensity(stored) ??
-    normalizeTraceDensity(deployed) ??
-    DEFAULT_TRACE_DENSITY
-  );
+  return normalizeTraceDensity(stored) ?? normalizeTraceDensity(deployed) ?? DEFAULT_TRACE_DENSITY;
 }
 
-type DensityStorage = { getItem(key: string): string | null; setItem?(key: string, value: string): void };
+type DensityStorage = {
+  getItem(key: string): string | null;
+  setItem?(key: string, value: string): void;
+};
 
 function safeStorage(): DensityStorage | null {
   try {
