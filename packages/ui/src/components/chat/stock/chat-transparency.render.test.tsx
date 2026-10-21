@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { DigichatThread } from "../DigichatThread";
 import { BaseThread } from "../skins/base/thread";
 import { backendNoticeOf } from "./chat-notice";
-import { highlightJson } from "./json-view";
+import { highlightJson, tokenizeJson } from "./json-view";
 import { toolErrorText } from "./tool-fallback.aui";
 
 /**
@@ -198,6 +198,41 @@ describe("notice helpers", () => {
     expect(host.querySelector('[data-json="string"]')?.textContent).toBe('"b"');
     expect(host.querySelector('[data-json="number"]')?.textContent).toBe("1");
     act(() => root.unmount());
+  });
+
+  it("tokenizes keys, strings, escapes and scalars in one pass", () => {
+    expect(tokenizeJson('{"a" : "x\\"y", "n": -1.5e3, "t": true, "z": null, "w": "truex"}')).toEqual([
+      "{",
+      { kind: "key", text: '"a"', colon: " :" },
+      " ",
+      { kind: "string", text: '"x\\"y"' },
+      ", ",
+      { kind: "key", text: '"n"', colon: ":" },
+      " ",
+      { kind: "number", text: "-1.5e3" },
+      ", ",
+      { kind: "key", text: '"t"', colon: ":" },
+      " ",
+      { kind: "boolean", text: "true" },
+      ", ",
+      { kind: "key", text: '"z"', colon: ":" },
+      " ",
+      { kind: "null", text: "null" },
+      ", ",
+      { kind: "key", text: '"w"', colon: ":" },
+      " ",
+      { kind: "string", text: '"truex"' },
+      "}",
+    ]);
+    expect(tokenizeJson("nullable trueish")).toEqual(["nullable trueish"]);
+  });
+
+  it("scans a quote followed by long whitespace in linear time", () => {
+    const text = '"' + " ".repeat(100_000);
+    const started = performance.now();
+    const tokens = tokenizeJson(text);
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(tokens).toEqual([{ kind: "string", text }]);
   });
 
   it("scans an unterminated string in linear time and keeps every character", () => {
