@@ -1827,7 +1827,7 @@ part-driven vs chrome-driven is indexed in digiweb
 
 `/models` reads `models.default`. `/language` reads `chrome.defaultLanguage`. `/theme` mode reads `chrome.theme` for the no-JS paint; a stored `dt-theme` still follows the OS when absent, which is unchanged. Web search, digisearch, and digivault stay capability flags (`gate` / catalog), not new defaults.
 
-DataTap trial, OCC, and digithings.ai omit the new keys, so they stay on these defaults.
+The trial, OCC and digithings.ai configs omit the new keys, so they stay on these defaults.
 
 `chrome.skin` selects one of the 11 official assistant-ui catalog templates
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`

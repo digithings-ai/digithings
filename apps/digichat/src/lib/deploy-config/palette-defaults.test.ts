@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
@@ -13,8 +13,8 @@ const configDir = resolve(__dirname, "../../../config");
  * on, scrollbars always, no named palette.
  */
 const SHIPPED = [
-  "datatap-trial-foundry.yaml",
-  "datatap-trial-test.yaml",
+  // Every per-client config at the top of config/ (the trial configs today).
+  ...readdirSync(configDir).filter((name) => name.endsWith(".yaml")),
   "examples/occ-embed.yaml",
   "examples/digithings-ai-embed.yaml",
 ];
