@@ -105,6 +105,9 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
+/** The composer provider menu, the third consumer of the constant. */
+const providerMenu = "components/stock/embed-composer-menu.tsx";
+
 describe("the static composer provider chip", () => {
   it("derives the label from the shared house-backend constant, not from a literal", () => {
     const code = codeOnly(
@@ -149,5 +152,54 @@ describe("the static composer provider chip", () => {
     expect(toStockChatPrefsConfig(DEFAULT_CLIENT_CONFIG).providerLabel).toBe(
       HOUSE_BACKEND_ID,
     );
+  });
+});
+
+/**
+ * The house backend id has one home: `src/lib/provider-label.ts`.
+ *
+ * The composer provider menu lists the house backend as one provider choice
+ * among the own-key ones. It used to write the id inline, twice - as the row
+ * id and as the row label - while the chip read it from the constant, so the
+ * two named the same backend from two places of their own and could drift
+ * apart (DIG-4887).
+ *
+ * The behaviour test cannot see a private copy come back: a copy that
+ * carries today's id renders today's id. The picker test pins the rendered
+ * text, so a change of the value fails loudly - but it cannot tell a copy
+ * from the constant, because both render the same thing. So the source is
+ * pinned here instead, the way the provider label is pinned above.
+ */
+describe("the composer provider menu", () => {
+  it("reads the house backend id from the shared constant, not from a literal", () => {
+    const code = codeOnly(readFileSync(join(appSrc, providerMenu), "utf8"));
+    // The row id and the row label both come from the constant. A copy of
+    // the id - written inline, declared or shadowed - would name the literal
+    // instead.
+    expect(code).toMatch(/id:\s*HOUSE_BACKEND_ID\b/);
+    expect(code).toMatch(/label:\s*slashName\(HOUSE_BACKEND_ID\)/);
+    expect(code).not.toMatch(/["']cheaperinference["']/);
+  });
+
+  it("reads the house backend id from its one home", () => {
+    const code = codeOnly(readFileSync(join(appSrc, providerMenu), "utf8"));
+    // The constant is named three times: in the import, in the row id and
+    // in the row label. A copy of it - declared, destructured or shadowed -
+    // would name it a fourth time.
+    expect((code.match(/\bHOUSE_BACKEND_ID\b/g) ?? []).length).toBe(3);
+    expect(code.match(houseBackendImport)).toHaveLength(1);
+  });
+
+  it("keeps the house backend id in its one home", () => {
+    // The id itself is written in one place: the module that defines it.
+    // Every other app module reads it from there. The rule keys on the
+    // quoted value, so a module that merely mentions the id in prose - or
+    // in a longer string such as a base URL - is not a copy of it.
+    const quoted = new RegExp(`["']${HOUSE_BACKEND_ID}["']`);
+    const copies = sourceFiles(appSrc)
+      .filter((file) => codeOnly(readFileSync(file, "utf8")).match(quoted))
+      .map((file) => relative(appSrc, file))
+      .sort();
+    expect(copies).toEqual(["lib/provider-label.ts"]);
   });
 });

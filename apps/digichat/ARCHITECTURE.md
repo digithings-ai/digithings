@@ -782,11 +782,18 @@ surfaces, and keeps no copy of its own. The menu lists the house backend as
 one provider choice among the own-key ones, and both the row's id and its
 label come from that constant. Reason: the id used to be written inline in
 the menu, so the provider menu and the composer chip each named the house
-backend from a place of their own and could drift apart - the chip would
-name one backend while the menu offered another, and no test could see it.
-DIG-4597 introduced the constant for exactly this reason and left that copy
-as "the one to watch for drift"; DIG-4887 closed it. The value did not
-change, so the menu still lists `cheaperinference`.
+backend from a place of their own and could drift apart — the chip would
+name one backend while the menu offered another. DIG-4597 introduced the
+constant and made the surfaces read it, and it left that copy as "the one
+to watch for drift"; DIG-4887 closed it. The value did not change, so the
+menu still lists the house backend under the same name.
+
+The picker test pins the label the menu renders, so a change of the value
+fails loudly. What no test could see was the drift itself: the chip read
+the constant while the menu read a copy of the value as it stood that day.
+The invariant is now pinned from the source
+(`src/lib/route-client-config.source.test.ts`): the menu names
+`HOUSE_BACKEND_ID`, and the id is written in one module only.
 
 UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 (stock BYOK / paywall surfaces, and the app shell `ChatPanel` when `/key`
