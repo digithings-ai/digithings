@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -30,9 +31,16 @@ const hopByHopHeaders = [
 ];
 
 /**
- * Copy request headers while reserving x-digichat-peer-ip for this process.
- * The caller cannot choose that value: it is always overwritten with the TCP
- * peer address seen by the public listener.
+ * Same sentence as TRUSTED_PROXIES_UNSET_WARNING in embed-ip-rate-limit.ts.
+ * The mjs entrypoint cannot import that module.
+ */
+export const trustedProxiesUnsetWarning =
+  "DIGICHAT_TRUSTED_PROXIES is unset. The entrypoint stamps the socket peer. Per-client limits use that socket when it is the client. A shared ingress keeps the embed limit and trial quota on the visitor header from develop. Set DIGICHAT_TRUSTED_PROXIES to the container ingress or overlay peer the entrypoint logs, never Cloudflare's edge ranges. Spoofable headers are not guardrail or premium keys.";
+
+/**
+ * Copy request headers while reserving the peer headers for this process.
+ * The caller cannot choose those values: both are deleted, then the TCP
+ * peer and this process's stamp are written.
  */
 function withoutHopByHopHeaders(headers) {
   const forwarded = { ...headers };
@@ -42,11 +50,21 @@ function withoutHopByHopHeaders(headers) {
   return forwarded;
 }
 
-export function forwardHeaders(headers, peerIp) {
+export function forwardHeaders(headers, peerIp, stamp = process.env.DIGICHAT_PEER_STAMP) {
   const forwarded = withoutHopByHopHeaders(headers);
   delete forwarded["x-digichat-peer-ip"];
+  delete forwarded["x-digichat-peer-stamp"];
   forwarded["x-digichat-peer-ip"] = peerIp;
+  if (typeof stamp === "string" && stamp.trim()) {
+    forwarded["x-digichat-peer-stamp"] = stamp.trim();
+  }
   return forwarded;
+}
+
+function ensurePeerStamp() {
+  if (!process.env.DIGICHAT_PEER_STAMP?.trim()) {
+    process.env.DIGICHAT_PEER_STAMP = randomBytes(16).toString("hex");
+  }
 }
 
 const PACKAGE_JSON_BESIDE_SCRIPT = fileURLToPath(new URL("../package.json", import.meta.url));
@@ -147,24 +165,33 @@ function startZammadMcp() {
 }
 
 function start() {
+  ensurePeerStamp();
   const bakedVersion = resolveDigichatVersion();
   if (bakedVersion) process.env.DIGICHAT_VERSION = bakedVersion;
-  const capturePeer = Boolean(process.env.DIGICHAT_TRUSTED_PROXIES?.trim());
+  if (!process.env.DIGICHAT_TRUSTED_PROXIES?.trim()) {
+    console.warn(trustedProxiesUnsetWarning);
+  }
   const next = spawn(process.execPath, [nextServerPath()], {
     env: {
       ...process.env,
-      HOSTNAME: capturePeer ? upstreamHost : process.env.HOSTNAME,
-      PORT: String(capturePeer ? upstreamPort : publicPort),
+      HOSTNAME: upstreamHost,
+      PORT: String(upstreamPort),
     },
     stdio: "inherit",
   });
 
   next.on("exit", (code) => process.exit(code ?? 1));
   startZammadMcp();
-  if (!capturePeer) return;
 
+  let loggedPeer = false;
   const server = http.createServer((req, res) => {
     const peerIp = req.socket.remoteAddress ?? "";
+    if (!loggedPeer && peerIp && !process.env.DIGICHAT_TRUSTED_PROXIES?.trim()) {
+      loggedPeer = true;
+      console.warn(
+        `DIGICHAT_TRUSTED_PROXIES is unset. First socket peer is ${peerIp}. Set DIGICHAT_TRUSTED_PROXIES to that container ingress or overlay address, never Cloudflare's edge ranges.`,
+      );
+    }
     // /api/mcp/zammad* is served by the in-image zammad-mcp, not Next: keep the
     // method/headers/body and rewrite the path to the MCP endpoint.
     const isZammadMcp = (req.url ?? "").startsWith(zammadPrefix);

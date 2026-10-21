@@ -16,6 +16,7 @@ vi.mock("@/lib/bff-rate-limit", () => ({
 
 vi.mock("@/lib/embed-ip-rate-limit", () => ({
   checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true })),
+  clientIpForEmbedLimit: vi.fn(() => "127.0.0.1"),
   clientIpForRateLimit: vi.fn(() => "127.0.0.1"),
 }));
 
@@ -1598,8 +1599,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         headers: Record<string, string>,
         provider: () => Promise<Response>,
       ) {
-        const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
-        const ipSpy = vi.mocked(clientIpForRateLimit).mockReturnValue(ip);
+        const { clientIpForEmbedLimit } = await import("@/lib/embed-ip-rate-limit");
+        const ipSpy = vi.mocked(clientIpForEmbedLimit).mockReturnValue(ip);
         const fetchMock = vi.fn(async () => provider());
         vi.stubGlobal("fetch", fetchMock);
         const foundryBefore = vi.mocked(createFoundryStreamResponse).mock.calls.length;
@@ -1686,8 +1687,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         // cannot be resolved skips the per-IP quota entirely — admitted, uncounted,
         // and not bounded by the 100-turn cap. This is pre-existing behaviour of the
         // per-IP quota, unchanged by this leaf; the degraded path does not widen it.
-        const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
-        const ipSpy = vi.mocked(clientIpForRateLimit).mockReturnValue("unknown");
+        const { clientIpForEmbedLimit } = await import("@/lib/embed-ip-rate-limit");
+        const ipSpy = vi.mocked(clientIpForEmbedLimit).mockReturnValue("unknown");
         const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
         const fetchMock = vi.fn(async () => new Response("boom", { status: 500 }));
         vi.stubGlobal("fetch", fetchMock);
@@ -1994,8 +1995,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     });
 
     it("skips the quota entirely when the client IP is unknown, so a broken ingress fails open rather than collapsing every visitor into one bucket", async () => {
-      const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
-      const spy = vi.mocked(clientIpForRateLimit).mockReturnValue("unknown");
+      const { clientIpForEmbedLimit } = await import("@/lib/embed-ip-rate-limit");
+      const spy = vi.mocked(clientIpForEmbedLimit).mockReturnValue("unknown");
       try {
         // Even well past the server cap, every "unknown"-IP request succeeds —
         // the quota is never consulted for a non-identity IP (route.ts).

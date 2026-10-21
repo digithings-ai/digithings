@@ -39,6 +39,7 @@ import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import {
   checkEmbedIpRateLimit,
+  clientIpForEmbedLimit,
   clientIpForRateLimit,
 } from "@/lib/embed-ip-rate-limit";
 import {
@@ -472,14 +473,13 @@ async function handleChat(
 
     if (!quotaSatisfied) {
       try {
-        const ip = clientIpForRateLimit(req);
-        // "unknown" is what clientIpForRateLimit returns when no socket address
-        // was captured and forwarded headers are not from a configured trusted
-        // proxy. It is not an identity. Treating it as one would collapse
-        // every such visitor into a single shared quota bucket, permanently
-        // gating everyone after the first few turns. Skip the quota entirely
-        // in that case and fail open, consistent with this module's
-        // "best-effort, not an authorization boundary" philosophy
+        const ip = clientIpForEmbedLimit(req);
+        // "unknown" is what the embed limiter returns when no visitor address
+        // can be derived. It is not an identity. Treating it as one would
+        // collapse every such visitor into a single shared quota bucket.
+        // Skip the quota in that case and fail open. A shared ingress with
+        // DIGICHAT_TRUSTED_PROXIES unset still resolves through the develop
+        // visitor header, so this skip is not the steady state there.
         // (embed-turn-quota.ts).
         if (ip !== "unknown") {
           if (quotaServiceUnavailable) {
