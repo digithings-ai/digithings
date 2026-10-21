@@ -481,6 +481,27 @@ describe("DigichatThread", () => {
     unmount();
   });
 
+  it("shows no work block for a message that only carries a status part", async () => {
+    // The connection state is a status part, and the grouping puts it in the
+    // chain. Without the guard the chain header appeared before the model
+    // had said anything — right next to the loading row.
+    const { host, unmount } = await mount({
+      initialMessages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "data", name: "connection", data: { state: "connecting" } },
+          ],
+        },
+      ],
+    });
+    await act(async () => {});
+    expect(
+      host.querySelector('[data-slot="aui_work-chain-trigger"]'),
+    ).toBeNull();
+    unmount();
+  });
+
   it("accumulates two tool runs into one group when only a status part separates them", async () => {
     const { host, unmount } = await mount({
       initialMessages: TWO_TOOL_RUNS_MESSAGES,
