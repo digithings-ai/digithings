@@ -1162,10 +1162,9 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root {
   align-items: flex-start;
   gap: 0.45rem;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--ink-mute);
+  /* DIG-4459: boxed and red-tinted like other chat products; the shared
+     .aui-chat-notice rules below carry the box. */
+  color: var(--ink-soft);
   font-family: var(--font-mono);
   font-size: 0.7rem;
   line-height: 1.35;
@@ -1175,7 +1174,7 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
 /* The row is muted like the rest of the trace; the red cross and the retry
    action carry the failure. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root .aui-message-error-message {
-  color: inherit;
+  color: var(--danger);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root [data-slot="dot-matrix"] {
@@ -1690,10 +1689,15 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   font-size: 0.68rem;
   line-height: 1.45;
   color: var(--ink-soft);
-  max-height: 8.5rem;
+  /* DIG-4459: the JSON view sizes itself (long blocks cap at 18rem with a
+     "Show all" toggle); arguments are never cut. */
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"] {
+  max-height: 8.5rem;
 }
 
 /* Increment 7 — markdown / code. Hairline frames, no card wash. */
@@ -2285,3 +2289,57 @@ html:has(.aui-theme-stage) :focus-visible {
 [data-stock-product]:not([data-boot-reveal="true"]) .aui-composer-root {
   opacity: 0;
 }
+
+/* ── Chat notices (DIG-4459) ──────────────────────────────────────────────
+   One box for what the backend says outside the answer: the failed turn
+   (ErrorPrimitive.Root), a failed tool call (under its arguments) and a
+   status line. Error is red-tinted, status neutral; both mono like the
+   trace. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="error"] {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  color: var(--ink-soft);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="error"] .aui-chat-notice-title {
+  color: var(--danger);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="status"] {
+  border: 1px solid var(--hair);
+  background: color-mix(in oklab, var(--ink-mute) 6%, transparent);
+  color: var(--ink-mute);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice-detail {
+  color: var(--ink-soft);
+  font-size: 0.66rem;
+}
+
+/* Inside the tool box the notice is the last section: it keeps its tint but
+   sits flush with the frame instead of floating inside it. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-error"].aui-chat-notice {
+  flex-direction: row;
+  border-width: 1px 0 0 0;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-view[data-long="true"][data-expanded="false"] {
+  max-height: 18rem;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-key { color: color-mix(in oklab, var(--ink) 80%, #6aa9ff); }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-string { color: color-mix(in oklab, var(--ink-soft) 70%, #5fbf8a); }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-number { color: color-mix(in oklab, var(--ink-soft) 70%, #e0a84f); }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-literal { color: color-mix(in oklab, var(--ink-soft) 70%, #b48ef0); }

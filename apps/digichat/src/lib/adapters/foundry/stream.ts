@@ -260,13 +260,19 @@ export function extractToolInvocationFailure(
   return { toolName, errorText: sanitizeUpstreamMessage(detail) };
 }
 
-/** An upstream message, capped and stripped of anything that looks like a URL. */
-function sanitizeUpstreamMessage(message: string): string {
+/**
+ * An upstream message, stripped of anything that looks like a URL. Line
+ * breaks survive (a validation list or a traceback reads line by line) and
+ * the cap is generous: the chat shows the whole thing, folded when long
+ * (DIG-4459). The cap only stops a runaway payload.
+ */
+export function sanitizeUpstreamMessage(message: string): string {
   return message
     .replace(/https?:\/\/\S+/gi, "[link]")
-    .replace(/\s+/g, " ")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
     .trim()
-    .slice(0, 400);
+    .slice(0, 8000);
 }
 
 function numberOf(value: unknown): number | undefined {
@@ -606,6 +612,21 @@ function callIdOf(item: { call_id?: string }): string | undefined {
   return typeof item.call_id === "string" && item.call_id.trim() ? item.call_id.trim() : undefined;
 }
 
+/** The MCP server's error, as text the chat can show. */
+function mcpErrorText(error: unknown): string | undefined {
+  if (typeof error === "string") return error.trim() ? sanitizeUpstreamMessage(error) : undefined;
+  if (error && typeof error === "object") {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return sanitizeUpstreamMessage(message);
+    try {
+      return sanitizeUpstreamMessage(JSON.stringify(error, null, 2));
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Per-turn mapping state. Foundry emits a call's output as its own item, and
  * the message item carrying citation annotations is the turn's LAST event — a
@@ -670,7 +691,14 @@ function mapOutputItemDone(
   if (item?.type === "mcp_call") {
     const name = mcpToolName(item);
     const args = parseJsonObject(item.arguments);
-    const output = parseMcpResult(item.output);
+    // A failed MCP call carries the server's complaint on `error` (string or
+    // object) and usually no output. Pass it through as the tool's result so
+    // the failed row shows the MCP's own words under the arguments
+    // (DIG-4459), instead of the bare "Tool failed.".
+    const mcpError = mcpErrorText((item as { error?: unknown }).error);
+    const output =
+      parseMcpResult(item.output) ??
+      (item.status === "failed" && mcpError ? { error: mcpError } : undefined);
     const callId = callIdOf(item);
     return {
       type: "activity",
