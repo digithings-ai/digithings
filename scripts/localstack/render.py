@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping, Sequence
 
-from .contracts import Check, resolve
+from .contracts import Check, InvalidPort, resolve
 from .health import GateReport
 from .orchestrate import StepReport, step_rows
 from .preflight import PreflightReport
@@ -80,7 +80,13 @@ def render_url_table(checks: Sequence[Check], config: Mapping[str, str], profile
     for check in checks:
         if not check.in_profile(profile):
             continue
-        url, reason = resolve(check, config)
+        try:
+            url, reason = resolve(check, config)
+        except InvalidPort as exc:
+            # A knob that is not a port is not a row that is unconfigured: it
+            # is a row whose URL was refused, and the reason says so.
+            rows.append((check.name, "http", f"(invalid: {exc})", check.source))
+            continue
         rows.append(
             (
                 check.name,
