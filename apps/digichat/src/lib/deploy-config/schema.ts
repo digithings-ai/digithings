@@ -20,6 +20,14 @@ import {
 } from "@/lib/view-modes";
 import { HEX_COLOR } from "@/lib/hex-color";
 import { premiumIdsFromGroups, resolveModelCatalog } from "@/lib/model-picker-catalog";
+import { limitSupport } from "@/lib/limits/matrix";
+import {
+  applyUnsupportedPolicy,
+  collectLimitIssues,
+  costPerWindowIssue,
+  limitsDisagree,
+  LimitsSchema,
+} from "@/lib/limits/schema";
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
@@ -291,7 +299,10 @@ export const ModelsSchema = z
      * and MCP locks stay closed.
      */
     occPicker: z.boolean().optional(),
-    /** USD per million output tokens. Omit to use the catalog default. */
+    /**
+     * USD per million output tokens for the standard tier. The same number as
+     * `limits.models.standard.maxOutputUsdPerMillion` when both are set.
+     */
     priceCapUsdPerMillion: z.number().positive().optional(),
     /**
      * Manual Premium tier: above the standard cap, at or under this cap.
@@ -299,9 +310,9 @@ export const ModelsSchema = z
      */
     premiumCapUsdPerMillion: z.number().positive().optional(),
     /**
-     * Per-user premium spend, USD over a rolling window. Omit to leave
-     * premium picks unmetered. Fold into guardrails beside tokensPerMinute
-     * when #6182 lands; that block is not on this branch.
+     * Per-user premium spend, USD over a rolling window. The same gate as
+     * `limits.cost.usd` with `premiumOnly: true` and `onExceed: fallback-auto`.
+     * Omit to leave premium picks unmetered.
      */
     costPerWindow: z
       .object({
@@ -800,8 +811,15 @@ export const DeploymentSchema = z
     models: ModelsSchema.default({ available: [] }),
     cli: CliSchema.default({ enabled: false }),
     backend: BackendSchema,
-    /** Off unless a key is set. See ARCHITECTURE.md, Guardrails. */
+    /**
+     * Legacy alias of `limits.tokens.total.perMinute` and
+     * `limits.toolCalls.perTurn`. Omit both blocks and every gate is off.
+     */
     guardrails: GuardrailsSchema.optional(),
+    /**
+     * Canonical limits. Off unless a gate is set. See docs/digichat/LIMITS.md.
+     */
+    limits: LimitsSchema.optional(),
     tools: ToolsSchema.optional(),
     mcp: McpSchema.optional(),
     gate: GateSchema.default({ mode: "ungated", activityDetail: "labels" }),
@@ -812,22 +830,78 @@ export const DeploymentSchema = z
     token: z.string().min(1).optional(),
   })
   .strict()
-  .superRefine((deployment, ctx) => {
-    const alias =
-      deployment.backend.type === "foundry" ? deployment.backend.maxToolCalls : undefined;
+  .superRefine((dep, ctx) => {
+    const alias = dep.backend.type === "foundry" ? dep.backend.maxToolCalls : undefined;
     const issue = toolCallCapIssue(
-      deployment.backend.type,
-      deployment.guardrails?.maxToolCallsPerTurn ?? alias,
+      dep.backend.type,
+      dep.guardrails?.maxToolCallsPerTurn ?? alias,
     );
-    if (!issue) return;
-    ctx.addIssue({
-      code: "custom",
-      message: issue,
-      path:
-        deployment.guardrails?.maxToolCallsPerTurn != null
-          ? ["guardrails", "maxToolCallsPerTurn"]
-          : ["backend", "maxToolCalls"],
-    });
+    if (issue) {
+      ctx.addIssue({
+        code: "custom",
+        message: issue,
+        path:
+          dep.guardrails?.maxToolCallsPerTurn != null
+            ? ["guardrails", "maxToolCallsPerTurn"]
+            : ["backend", "maxToolCalls"],
+      });
+    }
+    if (dep.guardrails && dep.limits) {
+      const disagree = limitsDisagree(dep.guardrails, dep.limits);
+      if (disagree) {
+        ctx.addIssue({ code: "custom", message: disagree, path: ["limits"] });
+      }
+    }
+    for (const issue of collectLimitIssues(
+      dep.limits,
+      dep.backend.type,
+      dep.models?.priceCapUsdPerMillion,
+    )) {
+      ctx.addIssue({ code: "custom", message: issue.message, path: issue.path });
+    }
+    const budget = dep.models?.costPerWindow;
+    if (budget) {
+      const mode = dep.limits?.onUnsupported ?? "reject";
+      if (
+        mode !== "warn" &&
+        limitSupport(dep.backend.type, { kind: "cost", scope: "user" }) === "unsupported"
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: `models.costPerWindow is not enforceable on the ${dep.backend.type} backend`,
+          path: ["models", "costPerWindow"],
+        });
+      }
+      const disagree = costPerWindowIssue(dep.limits, budget);
+      if (disagree) {
+        ctx.addIssue({ code: "custom", message: disagree, path: ["models", "costPerWindow"] });
+      }
+      const cap = dep.limits?.models?.standard?.maxOutputUsdPerMillion ?? dep.models.priceCapUsdPerMillion;
+      if (cap == null && !dep.limits?.models?.premium?.ids?.length) {
+        ctx.addIssue({
+          code: "custom",
+          message: "models.costPerWindow needs models.priceCapUsdPerMillion or premium ids",
+          path: ["models", "costPerWindow"],
+        });
+      }
+    }
+  })
+  .transform((dep) => {
+    const warn = (dep.limits?.onUnsupported ?? "reject") === "warn";
+    let next = dep;
+    if (dep.limits && warn) {
+      next = { ...next, limits: applyUnsupportedPolicy(dep.limits, dep.backend.type).limits };
+    }
+    if (
+      warn &&
+      next.models?.costPerWindow &&
+      limitSupport(dep.backend.type, { kind: "cost", scope: "user" }) === "unsupported"
+    ) {
+      const models = { ...next.models };
+      delete models.costPerWindow;
+      next = { ...next, models };
+    }
+    return next;
   });
 
 export const DigichatConfigSchema = z
