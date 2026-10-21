@@ -51,6 +51,17 @@ typed confirmation before it writes anything. The container reads its
 registry at boot, so the recycle is part of the same change as the
 registry write: the two are one change, never two.
 
+An apply always reads the live KV copy, because the write replaces the
+whole document: a copy read earlier would drop every tenant another
+operator added since. ``--kv-from`` in an apply is therefore a staleness
+check, and the apply refuses when the copy does not name the same tenants
+as the live one.
+
+The KV copy holds credential references by name. Every tenant it carries
+must name one, and the copy must not drop a field the legacy copy
+carries: the Worker replaces the legacy entry for a tenant whose
+references resolve, so a dropped field stops being served.
+
 The OCC tenant carries no ``models`` section: its model picker stays
 closed (DIG-4486 refused the picker, DIG-4750 confirmed the refusal).
 Removing a ``models`` section from the OCC entry is a defect fix this
@@ -63,6 +74,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -186,6 +198,19 @@ KV_CONFIG_FILE = "wrangler.toml"
 DEFAULT_WORKER_DIR = "apps/digichat-cloudflare"
 DEFAULT_WRANGLER_CMD = "npx --yes wrangler@4.133.0"
 
+# A credential reference the Worker can resolve. The runtime resolves only
+# names of this shape (apps/digichat-cloudflare/src/tenants-kv.ts), so a name
+# of another shape is an unresolved reference, and an unresolved reference
+# keeps the legacy copy: the KV write would have no effect at all.
+CREDENTIAL_REF_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+# Fields the KV copy may leave out while the legacy copy carries them. The
+# KV copy replaces the legacy entry for a host, so a field that lives only
+# in the legacy copy stops being served when the KV copy is written.
+# `token` is the credential value: it must not live in the KV copy.
+# `models` is removed on purpose for the OCC tenant.
+KV_DROP_ALLOWED = frozenset(["token", OCC_MODELS_KEY])
+
 # The directory this script lives in. The containment guard resolves the
 # repository that OWNS this tool from here, never from the caller's
 # working directory.
@@ -235,6 +260,28 @@ def _read_json_file(path):
         return json.loads(raw)
     except ValueError as exc:
         raise RegistryRefusal("%s is not valid JSON: %s" % (path, exc))
+
+
+def _parse_json_document(text, source):
+    """Parse a JSON document, and name the failure when it does not parse.
+
+    A command may print a note before the document it prints. The note is
+    skipped, the document is read.
+    """
+    raw = text.strip()
+    if not raw:
+        raise RegistryRefusal("%s is empty" % source)
+    try:
+        return json.loads(raw)
+    except ValueError as exc:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end > start:
+            try:
+                return json.loads(raw[start : end + 1])
+            except ValueError:
+                pass
+        raise RegistryRefusal("%s is not valid JSON: %s" % (source, exc))
 
 
 def load_registry(document, source):
@@ -324,14 +371,90 @@ def _check_overlay_shape(host, value, path):
 
 
 def _check_retired_corpus(host, index):
-    """No tenant may route to the retired corpus, in any position of a list."""
-    if not isinstance(index, str):
+    """The corpus routing is a string, and never the retired corpus."""
+    if index is None:
         return
+    if not isinstance(index, str):
+        raise RegistryRefusal(
+            "tenant %r: digisearchIndex must be a string, not a %s" % (host, type(index).__name__)
+        )
     for part in index.split(","):
         if part.strip() == FORBIDDEN_INDEX:
             raise RegistryRefusal(
                 "tenant %r routes to the retired corpus %r" % (host, FORBIDDEN_INDEX)
             )
+
+
+def _check_credential_ref(host, name, path):
+    """A credential reference must name a secret the runtime can resolve."""
+    if not isinstance(name, str) or not name:
+        raise RegistryRefusal("tenant %r: %s must name a secret" % (host, path))
+    if not CREDENTIAL_REF_PATTERN.match(name):
+        raise RegistryRefusal(
+            "tenant %r: %s is not a secret name the runtime can resolve "
+            "(a capital letter, then capitals, digits and underscores). An "
+            "unresolved reference keeps the legacy copy, so the KV write "
+            "would have no effect." % (host, path)
+        )
+
+
+def _check_mcp_rows(host, mcp):
+    """The MCP rows of a KV entry: references by name, never values."""
+    if mcp is None:
+        return
+    if not isinstance(mcp, dict):
+        raise RegistryRefusal(
+            "KV registry entry %r: mcp must be an object, not a %s" % (host, type(mcp).__name__)
+        )
+    servers = mcp.get("servers")
+    if servers is None:
+        return
+    if not isinstance(servers, list):
+        raise RegistryRefusal(
+            "KV registry entry %r: mcp.servers must be a list, not a %s"
+            % (host, type(servers).__name__)
+        )
+    for server in servers:
+        if not isinstance(server, dict):
+            raise RegistryRefusal("KV registry entry %r: an mcp server row is not an object" % host)
+        # The runtime serves a row that carries a token as it is, so a value
+        # here would put a credential in a store that is not the secret
+        # store. The rule is the key, not the value: an empty value is a
+        # value too.
+        if "token" in server:
+            raise RegistryRefusal(
+                "KV registry entry %r carries an MCP credential value; the "
+                "KV copy must hold credential references by name only" % host
+            )
+        if "tokenEnv" in server:
+            _check_credential_ref(host, server.get("tokenEnv"), "mcp.servers[].tokenEnv")
+
+
+def _credential_refs(composed):
+    """The credential references the KV copy depends on. Names, never values.
+
+    The plan prints them, so the operator can check that every secret the
+    copy names exists in the Worker: a reference the Worker cannot resolve
+    keeps the legacy copy, and the KV write would have no effect.
+    """
+    refs = []
+    for host in sorted(composed):
+        entry = composed[host]
+        if not isinstance(entry, dict):
+            continue
+        token_env = entry.get("tokenEnv")
+        if isinstance(token_env, str):
+            refs.append("%s: %s" % (host, token_env))
+        mcp = entry.get("mcp")
+        if not isinstance(mcp, dict):
+            continue
+        servers = mcp.get("servers")
+        if not isinstance(servers, list):
+            continue
+        for server in servers:
+            if isinstance(server, dict) and isinstance(server.get("tokenEnv"), str):
+                refs.append("%s: mcp %s" % (host, server["tokenEnv"]))
+    return refs
 
 
 def _refuse_occ_models(host, source):
@@ -480,7 +603,7 @@ def compose_registry(live, overlay):
     return composed, report
 
 
-def compose_kv_registry(kv_live, overlay):
+def compose_kv_registry(kv_live, overlay, legacy=None):
     """Compose the Workers KV copy of the tenant registry.
 
     The KV copy holds credential references by name, never values, and it
@@ -491,11 +614,21 @@ def compose_kv_registry(kv_live, overlay):
     The KV copy keeps the tenants it already has: a tenant that lives only
     in the legacy secret stays there, and the overlay never adds a tenant
     to the KV copy.
+
+    ``legacy`` is the composed legacy registry. When it is given, the
+    compose refuses a KV copy that would drop a field the legacy copy
+    carries: the runtime replaces the legacy entry for a host, so a field
+    that lives only in the legacy copy would stop being served.
     """
     if not isinstance(kv_live, dict) or not kv_live:
         raise RegistryRefusal("the KV registry carries no tenant entries")
     if not isinstance(overlay, dict):
         raise RegistryRefusal("overlay must be a JSON object")
+    # Every overlay entry is an object, also for a tenant the KV copy does
+    # not have: a shape mistake is named, not raised as an AttributeError.
+    for host, entry in overlay.items():
+        if not isinstance(entry, dict):
+            raise RegistryRefusal("overlay entry %r is not an object" % host)
 
     composed = {}
     removed = []
@@ -509,12 +642,19 @@ def compose_kv_registry(kv_live, overlay):
                 "KV registry entry %r carries a token value; the KV copy must "
                 "hold credential references by name only" % host
             )
-        for server in (base_entry.get("mcp") or {}).get("servers") or []:
-            if isinstance(server, dict) and server.get("token"):
-                raise RegistryRefusal(
-                    "KV registry entry %r carries an MCP credential value; the "
-                    "KV copy must hold credential references by name only" % host
-                )
+        # Every KV host must carry a credential reference. The runtime
+        # replaces the legacy entry with the KV entry when the references
+        # resolve, so a KV entry without a reference serves a tenant that
+        # has no token, and the container refuses the whole registry: not
+        # only that tenant, every tenant.
+        if "tokenEnv" not in base_entry:
+            raise RegistryRefusal(
+                "KV registry entry %r carries no credential reference; add a "
+                "tokenEnv before writing the KV copy, or the tenant is served "
+                "without its token and the whole registry is refused" % host
+            )
+        _check_credential_ref(host, base_entry.get("tokenEnv"), "tokenEnv")
+        _check_mcp_rows(host, base_entry.get("mcp"))
         base_backend = base_entry.get("backend")
         if base_backend is not None and not isinstance(base_backend, dict):
             raise RegistryRefusal(
@@ -558,19 +698,41 @@ def compose_kv_registry(kv_live, overlay):
         if host == OCC_HOST and OCC_MODELS_KEY in merged:
             del merged[OCC_MODELS_KEY]
             removed.append("%s.%s" % (host, OCC_MODELS_KEY))
+        # Guard 5: the KV copy replaces the legacy entry for a host, so a
+        # field that lives only in the legacy copy stops being served the
+        # moment the KV copy is written. The plan would not show it, and the
+        # tenant would lose it without a word.
+        if isinstance(legacy, dict):
+            legacy_entry = legacy.get(host)
+            if isinstance(legacy_entry, dict):
+                dropped = sorted(set(legacy_entry) - set(merged) - KV_DROP_ALLOWED)
+                if dropped:
+                    raise RegistryRefusal(
+                        "the KV copy for %r would drop %s, which the legacy copy "
+                        "carries. The KV copy replaces the legacy entry for a "
+                        "tenant whose references resolve, so those fields would "
+                        "stop being served." % (host, ", ".join(dropped))
+                    )
         composed[host] = merged
 
     # Guard 4: corpus routing rules, as in the legacy compose.
     for host, entry in composed.items():
         backend = entry.get("backend") or {}
         _check_retired_corpus(host, backend.get("digisearchIndex"))
-    occ_overlay_backend = (overlay.get(OCC_HOST) or {}).get("backend") or {}
+    occ_overlay_entry = overlay.get(OCC_HOST) or {}
+    occ_overlay_backend = occ_overlay_entry.get("backend") or {}
+    if not isinstance(occ_overlay_backend, dict):
+        raise RegistryRefusal(
+            "overlay entry %r: backend must be an object, not a %s"
+            % (OCC_HOST, type(occ_overlay_backend).__name__)
+        )
     for key in sorted(set(occ_overlay_backend) & set(OCC_LOCKED_BACKEND_KEYS)):
         raise RegistryRefusal(
             "overlay entry %r may not set %s; the OCC tenant's corpus routing "
             "lives in the host secret store, not in the repository" % (OCC_HOST, key)
         )
-    occ_base_backend = (kv_live.get(OCC_HOST) or {}).get("backend") or {}
+    occ_base_entry = kv_live.get(OCC_HOST) or {}
+    occ_base_backend = occ_base_entry.get("backend") or {}
     if not occ_base_backend.get("digisearchIndex"):
         raise RegistryRefusal(
             "the KV registry does not route %r to a corpus; restore the KV "
@@ -584,6 +746,7 @@ def compose_kv_registry(kv_live, overlay):
         "hosts_only_in_overlay": sorted(set(overlay) - set(kv_live)),
         "changed_paths": [],
         "removed_paths": removed,
+        "credential_refs": _credential_refs(composed),
     }
     for host in sorted(composed):
         for path in _changed_paths(kv_live.get(host), composed.get(host)):
@@ -625,8 +788,9 @@ def render_plan(composed, report, live_source, overlay_source):
         lines.append("    (none)")
     lines.append("  composed registry fingerprint : sha256:%s" % fingerprint(composed))
     lines.append(
-        "  note: this is the legacy copy. The KV copy wins for a tenant whose "
-        "credential references resolve."
+        "  note: this is the legacy copy. For a tenant whose KV credential "
+        "references resolve, the KV copy is the one that is served; pass "
+        "--kv-from to plan the KV copy as well."
     )
     return "\n".join(lines)
 
@@ -658,9 +822,16 @@ def render_kv_plan(composed, report, kv_source, overlay_source, key, namespace_i
     if not removed:
         lines.append("    (none)")
     lines.append("  composed KV fingerprint : sha256:%s" % fingerprint(composed))
+    refs = report.get("credential_refs") or []
+    lines.append("  credential references the KV copy needs (names, not values):")
+    for ref in refs:
+        lines.append("    %s" % ref)
+    if not refs:
+        lines.append("    (none)")
     lines.append(
         "  note: for a tenant whose KV credential references resolve, this "
-        "copy wins over the legacy secret."
+        "copy wins over the legacy secret. A tenant whose references do not "
+        "resolve keeps the legacy copy, and the KV write has no effect for it."
     )
     return "\n".join(lines)
 
@@ -786,6 +957,25 @@ def _run(argv, cwd=None, stdin_text=None):
     return proc.returncode, proc.stdout
 
 
+def _run_read(argv, cwd=None):
+    """Run a command and keep stdout and stderr apart.
+
+    The live KV read parses stdout as JSON. A note from wrangler or from
+    npm (npm prints one the first time it installs the package) lands on
+    stderr, and the two streams must not mix here: the merged blob is not
+    a document.
+    """
+    proc = subprocess.run(
+        argv,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=False,
+    )
+    return proc.returncode, proc.stdout, proc.stderr
+
+
 def secret_put(worker, secret_name, payload, wrangler_cmd, worker_dir):
     """Write the Worker secret. The value goes on stdin, never in argv."""
     argv = list(wrangler_cmd) + ["secret", "put", secret_name, "--name", worker]
@@ -834,7 +1024,10 @@ def kv_namespace_id(worker_dir, binding=KV_BINDING):
 
 
 def kv_key_get(key, namespace_id, wrangler_cmd, worker_dir):
-    """Read the live KV copy of the registry. Read only."""
+    """Read the live KV copy of the registry. Read only.
+
+    Returns (code, stdout, stderr). The caller parses stdout.
+    """
     argv = list(wrangler_cmd) + [
         "kv",
         "key",
@@ -845,7 +1038,7 @@ def kv_key_get(key, namespace_id, wrangler_cmd, worker_dir):
         "--remote",
         "--text",
     ]
-    return _run(argv, cwd=worker_dir)
+    return _run_read(argv, cwd=worker_dir)
 
 
 def write_temp_json(document):
@@ -876,6 +1069,25 @@ def kv_key_put(key, namespace_id, document_path, wrangler_cmd, worker_dir):
         "--remote",
     ]
     return _run(argv, cwd=worker_dir)
+
+
+def _restore_kv_copy(key, namespace_id, document, wrangler_cmd, worker_dir):
+    """Put the previous KV document back. Best effort.
+
+    Used when the legacy secret write fails after the KV copy was written:
+    the two copies must never disagree about a tenant. Returns True when the
+    previous document is live again.
+    """
+    temp = None
+    try:
+        temp = write_temp_json(document)
+        code, _out = kv_key_put(key, namespace_id, temp, wrangler_cmd, worker_dir)
+    except OSError:
+        return False
+    finally:
+        if temp and os.path.exists(temp):
+            os.unlink(temp)
+    return code == 0
 
 
 def recycle_container(admin_key_file, reset_url):
@@ -1026,18 +1238,21 @@ def main(argv=None):
     # plan stays offline.
     kv_source = None
     kv_live = None
+    kv_from_document = None
     if args.kv_from:
-        kv_source = args.kv_from
         try:
-            kv_live = load_registry(_read_json_file(args.kv_from), args.kv_from)
+            kv_from_document = load_registry(_read_json_file(args.kv_from), args.kv_from)
         except RegistryRefusal as refusal:
             sys.stderr.write("REFUSED: %s\n" % refusal)
             return 2
-    elif args.command == "apply":
+    if args.command == "apply":
+        # The apply always reads the live KV copy. The write replaces the
+        # whole document, so a copy read earlier would drop every tenant
+        # another operator added since.
         if not namespace_id:
             sys.stderr.write("REFUSED: the KV namespace id is unknown; pass --kv-namespace-id.\n")
             return 2
-        code, out = kv_key_get(args.kv_key, namespace_id, wrangler_cmd, args.worker_dir)
+        code, out, _err = kv_key_get(args.kv_key, namespace_id, wrangler_cmd, args.worker_dir)
         if code != 0:
             sys.stderr.write(
                 "REFUSED: the live KV copy could not be read, so the copy that "
@@ -1046,19 +1261,35 @@ def main(argv=None):
             )
             return 2
         try:
-            kv_live = load_registry(json.loads(out), "the live KV copy")
-        except (ValueError, RegistryRefusal) as refusal:
+            kv_live = load_registry(
+                _parse_json_document(out, "the live KV copy"), "the live KV copy"
+            )
+        except RegistryRefusal as refusal:
             sys.stderr.write(
                 "REFUSED: the live KV copy is not a readable registry (%s). "
                 "Nothing was written.\n" % refusal
             )
             return 2
         kv_source = "the live KV key %s in the namespace %s" % (args.kv_key, namespace_id)
+        if kv_from_document is not None:
+            # The file is a copy of the live KV copy. A copy that names other
+            # tenants is stale, and writing it would drop them.
+            if sorted(kv_from_document) != sorted(kv_live):
+                sys.stderr.write(
+                    "REFUSED: the KV copy in %s does not match the live KV copy "
+                    "(%s). A stale copy would drop the tenants it does not name. "
+                    "Nothing was written.\n" % (args.kv_from, ", ".join(sorted(kv_live)))
+                )
+                return 2
+            kv_source = "%s (the copy in %s matches it)" % (kv_source, args.kv_from)
+    elif kv_from_document is not None:
+        kv_live = kv_from_document
+        kv_source = args.kv_from
 
     kv_composed = None
     if kv_live is not None:
         try:
-            kv_composed, kv_report = compose_kv_registry(kv_live, overlay)
+            kv_composed, kv_report = compose_kv_registry(kv_live, overlay, legacy=composed)
         except RegistryRefusal as refusal:
             sys.stderr.write("REFUSED: %s\n" % refusal)
             return 2
@@ -1067,8 +1298,19 @@ def main(argv=None):
                 kv_composed, kv_report, kv_source, overlay_source, args.kv_key, namespace_id
             )
         )
+    else:
+        print(
+            "digichat tenant registry: the KV copy was not composed. Pass "
+            "--kv-from <file> to plan it. For a tenant whose KV credential "
+            "references resolve, the KV copy is the one that is served, so a "
+            "plan without it does not show what the tenant sees."
+        )
 
-    if args.out and not args.plan_only:
+    if args.plan_only:
+        print("plan only: nothing was written and the container was not recycled")
+        return 0
+
+    if args.out:
         try:
             written = write_out(composed, args.out)
         except RegistryRefusal as refusal:
@@ -1076,7 +1318,7 @@ def main(argv=None):
             return 2
         print("composed registry written to %s (mode 0600)" % written)
 
-    if args.kv_out and kv_composed is not None and not args.plan_only:
+    if args.kv_out and kv_composed is not None:
         try:
             written = write_out(kv_composed, args.kv_out)
         except RegistryRefusal as refusal:
@@ -1156,6 +1398,22 @@ def main(argv=None):
             "the log; re-run the command in your own terminal to read the "
             "error.\n"
         )
+        # The KV copy is already live. Put the previous document back, so
+        # the two copies do not disagree about the OCC tenant.
+        restored = _restore_kv_copy(
+            args.kv_key, namespace_id, kv_live, wrangler_cmd, args.worker_dir
+        )
+        if restored:
+            sys.stderr.write(
+                "the previous KV copy was put back, so the live KV copy and the "
+                "legacy secret still agree.\n"
+            )
+        else:
+            sys.stderr.write(
+                "the previous KV copy was NOT put back, so the live KV copy and "
+                "the legacy secret now disagree. Restore the KV copy from the "
+                "host secret store before the next apply.\n"
+            )
         return 1
     print("the worker secret was written to the worker %s" % args.worker)
 
