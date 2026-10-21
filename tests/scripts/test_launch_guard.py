@@ -441,6 +441,16 @@ class DecisionTests(unittest.TestCase):
         self.assertFalse(allowed)
         self.assertIn("arguments", reason)
 
+    def test_a_job_that_does_not_run_a_python_interpreter_is_refused(self):
+        """The house jobs run the runner with a python interpreter."""
+        facts = _launchd_facts()
+        arguments = ["/usr/bin/ruby", os.path.realpath(_RUNNER)]
+        facts["installed_arguments"] = arguments
+        facts["launchd_job"]["arguments"] = arguments
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("python interpreter", reason)
+
     def test_the_post_merge_driver_next_to_the_runner_is_trusted(self):
         """The live post-merge job runs postmerge_ci.py, which drives the runner.
 
@@ -520,6 +530,22 @@ class DecisionTests(unittest.TestCase):
         allowed, reason = _guard.decide(facts)
         self.assertFalse(allowed)
         self.assertIn("worker entrypoint", reason)
+
+    def test_a_command_line_that_only_mentions_the_entrypoint_is_refused(self):
+        """The parent has to BE the entrypoint, not mention it on the way.
+
+        A command line that carries the path somewhere in it is some other
+        process that happens to know the name.
+        """
+        for argv in (
+            ["/bin/sh", "-c", "echo /opt/local-ci/worker_entrypoint.sh; python3 local_ci.py"],
+            ["/bin/sh -c 'echo /opt/local-ci/worker_entrypoint.sh'"],
+        ):
+            facts = _container_facts()
+            facts["ancestors"] = [{"pid": 1, "argv": argv}]
+            allowed, reason = _guard.decide(facts)
+            self.assertFalse(allowed, argv)
+            self.assertIn("worker entrypoint", reason)
 
     def test_the_container_without_a_credential_is_refused(self):
         facts = _container_facts(ci_token=False)

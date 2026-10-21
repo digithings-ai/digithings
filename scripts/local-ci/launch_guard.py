@@ -34,7 +34,11 @@ Everything else is refused: a hand-run from any shell, a seat's shell, a script
 a seat detached. The one thing the guard cannot see is a job a seat installs
 itself at the canonical plist path and reloads under a trusted label - that is
 the same-uid limit the paragraph below names, and the queue-side provenance
-check (DIG-4794) is what closes it. The decision reads kernel and launchd
+check (DIG-4794) is what closes it. It cannot see the runner, the driver or
+this module being replaced in place either: at the same uid those are the
+user's own files, and a check that lives inside the files it protects does not
+survive their replacement. That is the second half of the same limit, and it
+is closed by the same layer. The decision reads kernel and launchd
 facts only - the pid of this process, the process tree, launchd's own job
 table, the pid launchd reports for the job, the canonical plist, the
 container's entrypoint - never BASH_ENV, PAPERCLIP_*, ZDOTDIR, and never `gh`
@@ -45,13 +49,15 @@ a seat that puts a fake launchctl first on PATH cannot answer the guard's own
 question.
 
 What this is not: a proof. At the same uid a seat can copy the runner and run
-its own copy without this module, drive the container with its own token, or
-rewrite the daemon's plist and reload the job under the same label. What the
-guard does buy is that the cheap forgeries fail: an unset environment, a
-forged label, an orphaned process tree, a job loaded from somewhere else, a
-job that asks for one PR, a shadowed launchctl. The authoritative boundary is
-the queue-side provenance check (DIG-4794): only a `local-ci` status that
-carries the verified Woodpecker target_url counts.
+its own copy without this module, drive the container with its own token,
+rewrite the daemon's plist and reload the job under the same label, or replace
+the runner, the driver and this module in the checkout they live in - that one
+needs no cleverness at all, because the guard is only ever asked by the file it
+guards. What the guard does buy is that the cheap forgeries fail: an unset
+environment, a forged label, an orphaned process tree, a job loaded from
+somewhere else, a job that asks for one PR, a shadowed launchctl. The
+authoritative boundary is the queue-side provenance check (DIG-4794): only a
+`local-ci` status that carries the verified Woodpecker target_url counts.
 
 Usage:
   python3 scripts/local-ci/launch_guard.py --runner scripts/local-ci/local_ci.py
@@ -64,6 +70,7 @@ import json
 import os
 import plistlib
 import re
+import shlex
 import stat
 import subprocess
 import sys
@@ -85,8 +92,12 @@ TRUSTED_LAUNCHD_LABELS = (
 # it in the runner's own directory and imports it: postmerge_ci.py is what the
 # post-merge launchd job runs, and it calls local_ci.run_checks() in-process.
 # The driver has to be the file the installed plist names and the file has to
-# live next to the runner that is asking, so a seat cannot point a job at a
-# script of its own.
+# live next to the runner that is asking, so a job cannot be pointed at a
+# script from somewhere else. That is the whole of it: at the same uid the
+# driver, the runner and this module are the user's own files, and a seat that
+# can write this directory can replace any of them. No check that lives inside
+# those files survives that, which is why the control that closes it lives in
+# the queue (DIG-4794) and not here.
 TRUSTED_DRIVER_SCRIPTS = ("postmerge_ci.py",)
 
 # The CI container's runner directory and entrypoint (see Dockerfile.worker).
@@ -379,6 +390,27 @@ def collect_facts(runner_path):
 
 # ------------------------------------------------------------------ decision --
 
+def _runs_the_entrypoint(parent):
+    """True when the parent process is the worker's entrypoint script itself.
+
+    The entrypoint has to be one of the arguments of the parent's own command
+    line, not a substring of it: a command that mentions the path on the way
+    to something else is not the entrypoint. The ps fallback answers with a
+    single string - the whole command line - so that one is split before it is
+    compared.
+    """
+    argv = (parent or {}).get("argv") or []
+    if CONTAINER_ENTRYPOINT in argv:
+        return True
+    if len(argv) != 1:
+        return False
+    try:
+        parts = shlex.split(argv[0])
+    except ValueError:
+        parts = argv[0].split()
+    return CONTAINER_ENTRYPOINT in parts
+
+
 def _decide_container(facts):
     """The CI container: the worker entrypoint, under /opt/local-ci, with a token.
 
@@ -394,9 +426,7 @@ def _decide_container(facts):
                        "the CI container")
     ancestors = facts.get("ancestors") or []
     parent = ancestors[0] if ancestors else None
-    started_by_entrypoint = bool(parent) and any(
-        CONTAINER_ENTRYPOINT in argument for argument in (parent.get("argv") or []))
-    if not started_by_entrypoint:
+    if not _runs_the_entrypoint(parent):
         return False, ("inside a container, but the runner was not started by the "
                        "worker entrypoint")
     if not facts.get("ci_token"):
@@ -411,8 +441,13 @@ def _script_is_trusted(script, runner):
     The post-merge launchd job runs postmerge_ci.py, which imports the runner
     and calls its run_checks() in-process; that is the same launcher as far as
     the org is concerned. The driver has to live in the runner's own directory
-    and to be one of the known driver scripts, so a job cannot be pointed at
-    something a seat wrote.
+    and to be one of the known driver scripts, so a job cannot be pointed at a
+    script from elsewhere. It does not make the driver tamper-proof: a seat
+    that can write the runner's directory can replace the driver in place, or
+    replace the runner and never ask this module at all. The guard cannot see
+    that - those files are the user's own at the same uid - and the queue-side
+    provenance check (DIG-4794) is the layer that refuses a status it cannot
+    attribute.
     """
     if not script or not runner:
         return False

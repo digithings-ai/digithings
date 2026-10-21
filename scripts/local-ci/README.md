@@ -64,9 +64,11 @@ What each launcher has to show:
   exactly that - but the job runs under its own pid, and a process that is not
   the job's process is refused.
 - **the CI container**: the runner is under `/opt/local-ci`, its own parent is
-  `worker_entrypoint.sh`, and the environment carries the CI credential. The
-  container is the trust boundary: a seat that can `docker exec` into the
-  worker already has the CI host and is out of scope.
+  `worker_entrypoint.sh` (the path has to be one of that parent's own
+  arguments, not a mention of it somewhere in a command line), and the
+  environment carries the CI credential. The container is the trust boundary: a
+  seat that can `docker exec` into the worker already has the CI host and is
+  out of scope.
 
 The guard is asked at every entry point that does work - `main()`, the lock,
 the worktree and the checks - not only in `main()`. The post-merge launchd job
@@ -83,12 +85,15 @@ prints the decision and exits 0 (the run may proceed) or 78 (it is refused). It
 is a diagnostic: it runs no check and posts nothing.
 
 What the guard is not: a proof. At the same uid a seat can copy the runner and run
-its own copy, drive the container with its own token, or write the canonical
+its own copy, drive the container with its own token, write the canonical
 plist itself and reload the job under a trusted label - the canonical plist is
-user-writable, so its path proves where a job came from, not who wrote it.
-What the guard does buy is that the cheap forgeries fail: an unset environment,
-a forged label, an orphaned process tree, a job loaded from somewhere else, a
-job that asks for one PR, a shadowed `launchctl`. The
+user-writable, so its path proves where a job came from, not who wrote it - or
+replace the runner, the driver and the guard in the checkout they live in.
+That last one needs no cleverness: the guard is only ever asked by the file it
+guards, so a check that lives inside the files it protects does not survive
+their replacement. What the guard does buy is that the cheap forgeries fail: an
+unset environment, a forged label, an orphaned process tree, a job loaded from
+somewhere else, a job that asks for one PR, a shadowed `launchctl`. The
 queue-side provenance check (DIG-4794) is what makes a `local-ci` status count
 only when it comes from the pipeline.
 
