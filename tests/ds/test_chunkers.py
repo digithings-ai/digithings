@@ -367,13 +367,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     ARCHITECTURE.md now carries the multi-index fan-out paragraph and the
     trackers-ingest CC0-1.0 row, which added one chunk — fixture prose only;
     RecursiveChunker unchanged.
+    Re-recorded at count 135 for DIG-4657 (the per-index bge-m3 override prose in the
+    Vectorize section and the three env-table rows in ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 134
+    assert len(chunks) == 135
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -465,9 +468,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "ec4e79e9d9714f36",
         "16fc77c51656b28e",
         "2ec8256cb4695f07",
-        "16bea1bbfea529fc",
-        "00bffb9020b848f5",
-        "0813ccac568b8df8",
+        "c96c954db2aeb203",
+        "2cd3dabde6c16b58",
+        "e92e969e19149e44",
+        "093be204348ac4c4",
         "8c4f082527d91953",
         "ea4b9c63695d2f69",
         "367d6f1945838ddd",
@@ -498,9 +502,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "e35a024e63e94d4d",
         "e9faecf827139411",
         "625781730bb13b6b",
-        "b83a37a28a5a93eb",
-        "e5277d39f1b19a14",
-        "bccb4adcbacb44be",
+        "9f5ba1e6a4571e53",
+        "001c13b0286cffd2",
+        "5668e90c11bf9127",
         "05bb8905105bc94e",
         "d922a9899a8996a2",
         "166b840aa01714e1",

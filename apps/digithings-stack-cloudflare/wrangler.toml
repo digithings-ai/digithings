@@ -302,6 +302,14 @@ DIGISEARCH_INDEX = "digithings_docs"
 # Same 384 dims across models: ingest, backfill, and query must agree on
 # exactly this value or retrieval silently misses.
 DIGISEARCH_EMBEDDING_PROVIDER = "Xenova/paraphrase-multilingual-MiniLM-L12-v2"
+# Per-index bge-m3 override (DIG-4657): the indexes listed here are queried with
+# Cloudflare Workers AI @cf/baai/bge-m3 (1024 dims) instead of the global
+# 384-dim provider above. Every listed index must also be WRITTEN with bge-m3
+# (the corpus-index worker writes those with bge-m3) -- a 384-dim query vector
+# against a 1024-dim index matches nothing. Unset means every index keeps the
+# default provider. The list is forwarded to the digisearch container by
+# src/index.ts; digisearch reads it per query (search/_stub.py).
+DIGISEARCH_WORKERS_AI_INDEXES = "occ-tickets"
 # Folded digichat (#4689) non-secret defaults — same values as the standalone
 # digichat worker's [vars] (apps/digichat-cloudflare/wrangler.toml). Secrets
 # (above) land via `wrangler secret put`; nothing secret ships here.
