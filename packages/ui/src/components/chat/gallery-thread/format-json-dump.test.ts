@@ -43,37 +43,76 @@ describe("formatJsonDump", () => {
  * the repair cost quadratic time and froze the render thread.
  */
 describe("formatJsonDump on a long whitespace payload (DIG-4818)", () => {
-  it("repairs a 50000-space run inside the text in linear time", () => {
+  // The pre-fix code needed ~0.8-1.05 s for the 50000-space payload and
+  // ~1.4-1.9 s for the at-cap payload on this M5 Pro. A 500 ms bound sat
+  // only ~2-4x below that cost, so a machine ~2x faster would have let the
+  // bug through green; 100 ms is ~200x above the fixed cost (~0.2-0.5 ms
+  // measured) and ~8-19x below the old one. The issue asks for "under
+  // 500 ms"; this is stricter.
+  const TIME_BUDGET_MS = 100;
+
+  /** Fastest of three runs: a scheduler stall or a GC pause can only add time. */
+  function fastest(run: () => void): number {
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < 3; i++) {
+      const started = performance.now();
+      run();
+      best = Math.min(best, performance.now() - started);
+    }
+    return best;
+  }
+
+  it("runs the repair over a 50000-space run inside the text in linear time", () => {
     const payload = `{"a":${" ".repeat(50000)}tru}`;
-    const started = performance.now();
-    const out = formatJsonDump(payload);
-    const elapsed = performance.now() - started;
-    // The old regex needed ~875 ms for this payload on this machine.
-    expect(elapsed).toBeLessThan(500);
+    let out = "";
+    const elapsed = fastest(() => {
+      out = formatJsonDump(payload);
+    });
+    expect(elapsed).toBeLessThan(TIME_BUDGET_MS);
     // Nothing is cut: the text does not parse, so it is shown raw.
     expect(out).toBe(payload);
-  });
+    // The payload is under the cap, so the repair path really ran.
+    expect(repairPartialJson(payload)).toBeDefined();
+  }, 30_000);
 
   it("repairs a payload that is exactly at the cap", () => {
     const head = `{"a":1,`;
     const tail = `"b":`;
     const payload = head + " ".repeat(MAX_REPAIR_INPUT_CHARS - head.length - tail.length) + tail;
     expect(payload.length).toBe(MAX_REPAIR_INPUT_CHARS);
-    expect(formatJsonDump(payload)).toBe('{\n  "a": 1\n}');
-  });
+    // The cap is part of the fix, so its value is pinned: a silently lowered
+    // cap would render large tool args raw with no test noticing.
+    expect(MAX_REPAIR_INPUT_CHARS).toBe(64 * 1024);
+    let out = "";
+    const elapsed = fastest(() => {
+      out = formatJsonDump(payload);
+    });
+    expect(elapsed).toBeLessThan(TIME_BUDGET_MS);
+    expect(out).toBe('{\n  "a": 1\n}');
+  }, 30_000);
 
   it("does not repair past the cap and never cuts the text", () => {
     const head = `{"a":1,`;
     const tail = `"b":`;
     const payload = head + " ".repeat(MAX_REPAIR_INPUT_CHARS) + tail;
     expect(payload.length).toBeGreaterThan(MAX_REPAIR_INPUT_CHARS);
-    const started = performance.now();
-    const out = formatJsonDump(payload);
-    const elapsed = performance.now() - started;
-    expect(elapsed).toBeLessThan(500);
-    expect(out).toBe(payload);
+    // Content before timing: the cap is a deterministic guard and must not be
+    // masked by a machine-speed assertion.
+    expect(formatJsonDump(payload)).toBe(payload);
     expect(repairPartialJson(payload)).toBeUndefined();
-  });
+    const elapsed = fastest(() => {
+      formatJsonDump(payload);
+    });
+    expect(elapsed).toBeLessThan(TIME_BUDGET_MS);
+  }, 30_000);
+
+  it("still pretty-prints valid JSON larger than the cap", () => {
+    // The cap guards the repair path only. Valid JSON never reaches the
+    // repair, so a big tool result is still formatted instead of shown raw.
+    const big = JSON.stringify({ blob: "x".repeat(MAX_REPAIR_INPUT_CHARS * 2) });
+    expect(big.length).toBeGreaterThan(MAX_REPAIR_INPUT_CHARS);
+    expect(formatJsonDump(big)).toBe(JSON.stringify(JSON.parse(big), null, 2));
+  }, 30_000);
 });
 
 describe("formatToolDurationMs", () => {
