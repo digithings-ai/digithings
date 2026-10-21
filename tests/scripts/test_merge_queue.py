@@ -3652,6 +3652,55 @@ def test_a_forged_row_does_not_cancel_the_receipt(
     assert result.ok, result.reason
 
 
+def test_the_ci_apps_own_later_failure_cancels_its_earlier_success(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The CI's last word on the head is the word.
+
+    A green receipt from ten o'clock does not survive the app's own red row
+    from noon. The app is the CI: when it reports a failure on this head, the
+    check failed on this head, and an earlier green row cannot stand in for
+    it. This is the other side of the rule above - a forged row is the
+    forger's business, the app's own row is the queue's business.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [
+        _receipt_row(created_at="2026-10-21T10:00:00Z"),
+        _receipt_row(state="failure", created_at="2026-10-21T12:00:00Z"),
+    ]
+    result = mq.verify_trusted_receipt(
+        _pr(1), _receipt_policy(), DIGITHINGS_REPO, mode=mq.PROVENANCE_ENFORCE
+    )
+    assert result is not None
+    assert not result.ok, result.reason
+    assert f"the '{RECEIPT_CONTEXT}' receipt is failure" in result.reason
+
+
+def test_the_ci_apps_own_later_success_cancels_its_earlier_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The newest row of the app decides, in both directions.
+
+    The control for the test above: a failed run followed by a green one is a
+    head that passed, because the CI re-ran it and the newer row says so. If
+    the queue looked at the oldest row, or at any green row, this would fail.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [
+        _receipt_row(state="failure", created_at="2026-10-21T10:00:00Z"),
+        _receipt_row(created_at="2026-10-21T12:00:00Z"),
+    ]
+    result = mq.verify_trusted_receipt(
+        _pr(1), _receipt_policy(), DIGITHINGS_REPO, mode=mq.PROVENANCE_ENFORCE
+    )
+    assert result is not None
+    assert result.ok, result.reason
+
+
 def test_the_commit_statuses_that_cannot_be_read_are_a_refusal(
     monkeypatch: pytest.MonkeyPatch,
     woodpecker: dict[str, Any],

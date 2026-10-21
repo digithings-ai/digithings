@@ -1625,13 +1625,19 @@ def verify_trusted_receipt(
             False, f"no '{receipt.context}' receipt is reported on the head commit"
         )
 
-    trusted = [
-        row
-        for row in mine
-        if str(row.get("state") or "").strip().lower() == "success"
-        and _status_writer(row) in receipt.creators
-    ]
-    if not trusted:
+    trusted = [row for row in mine if _status_writer(row) in receipt.creators]
+    if trusted:
+        # The newest row the CI itself wrote is the CI's own verdict on the
+        # head, and it is the only one that counts. An earlier green row does
+        # not survive a later red one: the app is the CI, so its last word on
+        # this head is the word. A row somebody else wrote is left out
+        # entirely, which is what keeps a forged row from cancelling the
+        # receipt.
+        row = _newest_receipt_row(trusted)
+        state = str(row.get("state") or "").strip().lower() or "unknown"
+        if state != "success":
+            return Provenance(False, f"the '{receipt.context}' receipt is {state}")
+    else:
         successful = [
             row for row in mine if str(row.get("state") or "").strip().lower() == "success"
         ]
