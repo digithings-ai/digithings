@@ -378,6 +378,150 @@ def test_the_digigraph_probe_follows_the_port_override_in_the_merged_catalogue()
     assert url == "http://127.0.0.1:18000/healthz"
 
 
+# --- the digigraph port knob is a port, or it is refused (DIG-4911) ---------
+#
+# A value that is not a port does not make the templated URL unparseable: it
+# makes the URL point somewhere else. "8000@evil.com" expands to
+# "http://127.0.0.1:8000@evil.com/healthz", which parses, with "127.0.0.1:8000"
+# read as userinfo and the host read as "evil.com". So the value is validated
+# before it is templated, and a value that is not a port is refused.
+
+
+def _digigraph_check():
+    return next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "8000@evil.com",
+        "8000/@evil.com",
+        "8000#x",
+        "0",
+        "65536",
+        "-1",
+        "+8000",
+        " 8000",
+        "８０００",
+        "0x1F40",
+    ],
+)
+def test_the_digigraph_probe_refuses_a_value_that_is_not_a_port(value):
+    """Each of these is a value a raw expansion would have templated."""
+    check = _digigraph_check()
+    with pytest.raises(contracts.ConfigRefusal) as excinfo:
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": value})
+    message = str(excinfo.value)
+    # The operator has to learn which knob is wrong.
+    assert "DT_DIGIGRAPH_PORT" in message
+    # ... and that the value they exported is the one that is wrong.
+    assert value in message
+
+
+def test_the_refusal_is_a_refusal_and_not_a_fall_back_to_the_default():
+    """A refused knob must not become the default port behind the operator's back."""
+    check = _digigraph_check()
+    with pytest.raises(contracts.ConfigRefusal):
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "8000@evil.com"})
+    # The default is still what an unset knob gives - the refusal is about the
+    # value, not about the port the default happens to be.
+    assert contracts.resolve(check, {})[0] == "http://127.0.0.1:8000/healthz"
+
+
+def test_a_refusal_names_the_reason_and_the_range():
+    check = _digigraph_check()
+    with pytest.raises(contracts.ConfigRefusal) as excinfo:
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "65536"})
+    message = str(excinfo.value)
+    assert "DT_DIGIGRAPH_PORT" in message
+    assert "65536" in message
+    assert "1-65535" in message
+
+
+def test_a_refusal_says_what_a_port_looks_like():
+    check = _digigraph_check()
+    with pytest.raises(contracts.ConfigRefusal) as excinfo:
+        contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "8000@evil.com"})
+    assert "decimal digits" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("value", ["1", "18000", "65535"])
+def test_the_digigraph_probe_accepts_a_plain_port(value):
+    check = _digigraph_check()
+    url, reason = contracts.resolve(check, {"DT_DIGIGRAPH_PORT": value})
+    assert reason is None
+    assert url == f"http://127.0.0.1:{value}/healthz"
+    split = urlsplit(url)
+    assert split.hostname == "127.0.0.1"
+    assert split.port == int(value)
+
+
+@pytest.mark.parametrize("config", [{}, {"DT_DIGIGRAPH_PORT": ""}])
+def test_the_digigraph_probe_keeps_the_default_when_the_knob_is_unset_or_empty(config):
+    check = _digigraph_check()
+    url, reason = contracts.resolve(check, config)
+    assert reason is None
+    assert url == "http://127.0.0.1:8000/healthz"
+    assert urlsplit(url).hostname == "127.0.0.1"
+
+
+def test_the_resolved_url_is_refused_unless_it_is_loopback_on_that_port():
+    """The guard is on the URL the probe opens, not only on the value's shape.
+
+    A template that named a host other than 127.0.0.1 would carry a perfectly
+    valid port, so the digit check alone would let it through. The resolved
+    URL is parsed and refused unless it is the loopback probe on the port
+    that was validated.
+    """
+    off_machine = contracts.Check(
+        name="digigraph",
+        kind="http",
+        url="http://example.com:${DT_DIGIGRAPH_PORT:-8000}/healthz",
+        profiles=("core",),
+        source="test",
+    )
+    with pytest.raises(contracts.ConfigRefusal) as excinfo:
+        contracts.resolve(off_machine, {"DT_DIGIGRAPH_PORT": "8000"})
+    message = str(excinfo.value)
+    assert "127.0.0.1" in message
+    assert "example.com" in message
+
+
+def test_the_raw_expansion_would_have_pointed_off_the_machine():
+    """The control: what the code did before the refusal, and why it mattered.
+
+    Without the validation the raw value is templated into the URL and the
+    result parses - with the host reading "evil.com" and "127.0.0.1:8000"
+    read as userinfo. The probe would have left the machine.
+    """
+    naive = "http://127.0.0.1:8000@evil.com/healthz"
+    split = urlsplit(naive)
+    assert split.hostname == "evil.com"
+    assert split.username == "127.0.0.1"
+    # And the value the gate now refuses is exactly that one.
+    with pytest.raises(contracts.ConfigRefusal):
+        contracts.resolve(_digigraph_check(), {"DT_DIGIGRAPH_PORT": "8000@evil.com"})
+
+
+def test_the_port_knob_is_the_only_one_treated_as_a_port():
+    """The rule is declared, not inferred: one knob, one strict rule.
+
+    A knob that is not in STRICT_PORT_ENV keeps the plain expansion, so this
+    change does not alter how the other templated defaults behave.
+    """
+    assert contracts.STRICT_PORT_ENV == frozenset({"DT_DIGIGRAPH_PORT"})
+    other = contracts.Check(
+        name="probe",
+        kind="http",
+        url="http://127.0.0.1:${DT_OTHER_PORT:-4321}/x",
+        profiles=("core",),
+        source="test",
+    )
+    assert contracts.resolve(other, {"DT_OTHER_PORT": "4321"})[0] == (
+        "http://127.0.0.1:4321/x"
+    )
+
+
 def test_env_expansion_falls_back_to_the_declared_default():
     check = contracts.Check(
         name="probe",

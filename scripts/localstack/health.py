@@ -28,7 +28,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .contracts import FAILED, PASSED, SKIPPED, Check, resolve
+from .contracts import FAILED, PASSED, SKIPPED, Check, ConfigRefusal, resolve
 
 DEFAULT_TIMEOUT = 5.0
 
@@ -235,7 +235,13 @@ def run_check(
 ) -> Result:
     """Probe one check and classify the outcome."""
     config = config or {}
-    url, reason = resolve(check, config)
+    try:
+        url, reason = resolve(check, config)
+    except ConfigRefusal as exc:
+        # A refused knob is a FAILURE, not a skip. The probe cannot run, and a
+        # skip would let the gate report a check it never ran as a pass - the
+        # knob is wrong and the operator has to see it (DIG-4911).
+        return Result(check.name, FAILED, str(exc), None, 0)
     if url is None:
         return Result(check.name, SKIPPED, reason or "no url configured", None, 0)
 

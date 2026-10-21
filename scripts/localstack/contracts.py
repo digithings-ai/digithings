@@ -53,6 +53,38 @@ PASSED = "passed"
 FAILED = "failed"
 SKIPPED = "skipped"
 
+#: The host every built-in probe stays on.
+LOOPBACK_HOST = "127.0.0.1"
+
+#: A port is plain ASCII decimal digits, at most five of them, and its value
+#: is in 1-65535. No sign, no whitespace, no unicode digits: ``int()`` accepts
+#: all three ("+8000", " 8000" and the full-width "８０００" all parse), so the
+#: shape has to be pinned before the value is read as a number.
+_PORT_RE = re.compile(r"^[0-9]{1,5}$")
+
+#: The lowest and highest port a probe may be sent to.
+MIN_PORT = 1
+MAX_PORT = 65535
+
+#: Environment variables whose value must be a plain integer port.
+#:
+#: A value that is not a port does not make the templated URL unparseable - it
+#: makes the URL point somewhere else. "8000@evil.com" expands to
+#: "http://127.0.0.1:8000@evil.com/healthz", which parses: "127.0.0.1:8000"
+#: is userinfo and the host is "evil.com". "8000/@evil.com" and "8000#x" do
+#: the same. So these values are validated *before* they are templated, and a
+#: value that is not a port is refused: never templated, and never silently
+#: replaced by the default.
+STRICT_PORT_ENV: frozenset[str] = frozenset({"DT_DIGIGRAPH_PORT"})
+
+
+class ConfigRefusal(ValueError):
+    """A configuration value this gate refuses to use.
+
+    A refusal, not a fallback and not a skip: the operator sees which knob is
+    wrong, and the gate does not report a check it never ran as a pass.
+    """
+
 
 @dataclass(frozen=True)
 class Check:
@@ -153,10 +185,22 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
         # DT_DIGIGRAPH_PORT is the knob for the port digigraph actually serves;
         # the default follows the compose publish port. The ${...:-default}
         # syntax is expanded by _expand_env() at resolve time, so an operator
-        # who exports the knob moves the probe with the service. It takes a
-        # port number: the gate reads the process environment, not the root
-        # .env, and a value that is not a port makes the URL unparseable
-        # rather than pointing it somewhere else.
+        # who exports the knob moves the probe with the service. The gate reads
+        # the process environment, not the root .env.
+        #
+        # The value is validated as a plain integer port *before* it is
+        # templated (STRICT_PORT_ENV): ASCII digits only, 1-65535, and an
+        # empty value keeps the default. Anything else is refused
+        # (ConfigRefusal), never templated and never silently replaced by the
+        # default. The reason is that a value that is not a port does not make
+        # the URL unparseable - it makes the URL point somewhere else:
+        # "8000@evil.com" expands to
+        # "http://127.0.0.1:8000@evil.com/healthz", where "127.0.0.1:8000" is
+        # userinfo and the host is "evil.com" (same for "8000/@evil.com" and
+        # "8000#x"). The resolved URL is then parsed and refused unless it is
+        # still the loopback probe on the validated port, so the guarantee
+        # test_builtin_urls_are_labelled_local_loopback relies on holds on the
+        # URL the probe actually opens and not only on the template.
         #
         # Only the PORT is templated, for the digichat reason: templating the
         # host would let this gate point off the developer's machine, and
@@ -429,21 +473,82 @@ def select(checks: tuple[Check, ...], profile: str) -> tuple[Check, ...]:
 _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 
+def _port_value(name: str, raw: str | None, default: str) -> int:
+    """The port to template for ``name``, or refuse.
+
+    A port is ASCII decimal digits only, at most five of them, with a value
+    in 1-65535. An unset or empty value takes the declared default, which is
+    held to the same rule. Anything else is refused with the variable named:
+    never templated, and never silently replaced by the default, because a
+    value that is not a port does not make the URL unparseable - it makes the
+    URL point somewhere else.
+    """
+    candidate = raw if raw else default
+    if not _PORT_RE.match(candidate):
+        raise ConfigRefusal(
+            f"{name}={candidate!r} is not a port: expected {MIN_PORT}-{MAX_PORT} "
+            "written as plain decimal digits"
+        )
+    value = int(candidate)
+    if not MIN_PORT <= value <= MAX_PORT:
+        raise ConfigRefusal(
+            f"{name}={candidate!r} is not a port: outside {MIN_PORT}-{MAX_PORT}"
+        )
+    return value
+
+
+def _assert_loopback_port(url: str, name: str, port: int) -> None:
+    """Refuse a resolved URL that is not the loopback probe on ``port``.
+
+    Defence in depth. The value is validated before it is templated, so this
+    cannot fire on the shipped templates; it is here so that a change to a
+    template (a second host, another expansion, a different default) cannot
+    quietly move the probe off the machine. It also catches the shape the
+    digit check cannot see on its own: a URL that parses into a host other
+    than 127.0.0.1, or into a port other than the validated one.
+    """
+    split = urllib.parse.urlsplit(url)
+    try:
+        host = split.hostname
+        resolved_port = split.port
+    except ValueError:  # a netloc that does not carry a numeric port
+        host, resolved_port = None, None
+    if host != LOOPBACK_HOST or resolved_port != port:
+        raise ConfigRefusal(
+            f"{name} resolved to {url!r}: the probe must stay on "
+            f"http://{LOOPBACK_HOST}:{port}"
+        )
+
+
 def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
     """Expand ``${VAR:-default}`` references in a built-in default URL.
 
     Only applied to the *default* URL. A ``requires`` value is returned exactly
     as configured (see :func:`resolve`), because a caller-configured local
     binding route is keyed on the exact path it supplies.
+
+    A variable named in :data:`STRICT_PORT_ENV` is validated as a plain
+    integer port *before* it is templated, and the URL that comes out is
+    checked to still be the loopback probe on that port. A value that is not a
+    port raises :class:`ConfigRefusal`.
     """
     if url is None or "${" not in url:
         return url
 
+    ports: dict[str, int] = {}
+
     def sub(match: re.Match[str]) -> str:
         name, default = match.group(1), match.group(2)
+        if name in STRICT_PORT_ENV:
+            value = _port_value(name, config.get(name), default or "")
+            ports[name] = value
+            return str(value)
         return config.get(name) or (default or "")
 
-    return _ENV_REF.sub(sub, url)
+    expanded = _ENV_REF.sub(sub, url)
+    for name, port in ports.items():
+        _assert_loopback_port(expanded, name, port)
+    return expanded
 
 
 def _with_path(base: str, path: str) -> str:
@@ -468,6 +573,10 @@ def resolve(check: Check, config: dict[str, str]) -> tuple[str | None, str | Non
 
     Returns ``(url, skip_reason)``. Exactly one is ``None``. A check that needs
     configuration and has none is *skipped with a reason* -- never passed.
+
+    Raises :class:`ConfigRefusal` when a port knob carries a value that is not
+    a port. That is a refusal and not a skip: a skip would let the gate report
+    a check it never ran as a pass, so the caller turns it into a failure.
     """
     if check.requires:
         value = config.get(check.requires)

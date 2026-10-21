@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping, Sequence
 
-from .contracts import Check, resolve
+from .contracts import Check, ConfigRefusal, resolve
 from .health import GateReport
 from .orchestrate import StepReport, step_rows
 from .preflight import PreflightReport
@@ -80,12 +80,25 @@ def render_url_table(checks: Sequence[Check], config: Mapping[str, str], profile
     for check in checks:
         if not check.in_profile(profile):
             continue
-        url, reason = resolve(check, config)
+        refused = False
+        try:
+            url, reason = resolve(check, config)
+        except ConfigRefusal as exc:
+            # A refused knob has no URL to print: printing the default one
+            # would show a URL nobody can reach (DIG-4911).
+            url, reason = None, str(exc)
+            refused = True
+        if url:
+            shown = url
+        elif refused:
+            shown = f"(refused: {reason})"
+        else:
+            shown = f"(not configured: {reason})"
         rows.append(
             (
                 check.name,
                 "http" if check.kind == "http" else check.kind,
-                url or f"(not configured: {reason})",
+                shown,
                 check.source,
             )
         )

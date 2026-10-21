@@ -113,6 +113,50 @@ def test_a_dead_port_fails_rather_than_erroring():
     assert report.results[0].status == contracts.FAILED
 
 
+# --- a refused knob fails the gate and sends no request (DIG-4911) -----------
+
+
+def test_a_refused_port_fails_the_gate_and_names_the_knob(monkeypatch):
+    """A misconfigured port must be a failure, not a skip.
+
+    A skip would let the gate report a check it never ran as a pass, so the
+    refusal is a FAILED result that names the variable the operator exported.
+    """
+
+    def _no_network(*args, **kwargs):
+        raise AssertionError("the gate opened a connection for a refused knob")
+
+    monkeypatch.setattr(health.urllib.request, "urlopen", _no_network)
+
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
+    report = health.run_gate((check,), config={"DT_DIGIGRAPH_PORT": "8000@evil.com"})
+
+    assert not report.ok
+    assert _names(report.failed) == ("digigraph",)
+    assert _names(report.skipped) == ()
+    assert "DT_DIGIGRAPH_PORT" in report.results[0].detail
+
+
+def test_the_gate_still_probes_a_port_it_accepted(monkeypatch):
+    """The control: an accepted port still reaches the probe.
+
+    Without this, a refusal that also swallowed every valid port would pass
+    the test above.
+    """
+    seen = []
+
+    def _record(request, *args, **kwargs):
+        seen.append(request.full_url)
+        raise AssertionError("the fake transport is the only thing that answers")
+
+    monkeypatch.setattr(health.urllib.request, "urlopen", _record)
+
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
+    health.run_gate((check,), config={"DT_DIGIGRAPH_PORT": "18000"})
+
+    assert seen == ["http://127.0.0.1:18000/healthz"]
+
+
 def test_gate_fails_when_any_single_check_fails():
     base, stop = _serve({"/healthz": (200, {"ok": True})})
     try:
