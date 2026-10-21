@@ -1028,6 +1028,19 @@ env:
     - DIGISEARCH_URL
   wrangler_values:
     digithings-stack: http://127.0.0.1:8002
+- name: DIGISEARCH_WORKERS_AI_INDEXES
+  description: Comma-separated digisearch index names queried with Cloudflare Workers AI bge-m3
+    (1024 dims) instead of the global 384-dim provider. Every listed index must be written with
+    bge-m3 too, or the query vector does not match the stored vectors.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: occ-tickets
 - name: DIGITRACE_INTERNAL_URL
   description: digitrace base URL as called by digichat.
   secret: false
