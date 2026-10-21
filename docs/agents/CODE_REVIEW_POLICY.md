@@ -41,7 +41,14 @@ Post that marker in a comment of its own. Do not paste this block into a comment
 - **`scope=` must carry a full 40-character lowercase sha.** `_on_pr_history()` applies a blocking verdict only while that sha is the PR head or still in the PR's commits, and it compares the whole string, so a 7-character prefix is read and then never matches. A blocking verdict with no sha, with an uppercase sha, or with a sha that a force-push or rebase removed silently stops applying. Post a new verdict after the fix.
 - **The newest readable verdict wins.** A later `verdict=approved` clears an earlier block. The parser filters on no author and no association, so anyone who can comment on the PR can clear it — an approved marker is not evidence that a review happened. Check the comment thread before you merge.
 
-`verdict=` is not emitted by the marker producer yet (DIG-2281). Until it is, the gate only fires on a marker posted by hand — post it in a comment of its own.
+The producer is first-party: `scripts/post_review_verdict.py` in this repo. It
+posts the marker in a comment of its own and submits the blocking review, so
+nothing is hand-written. Run it from the `/review` command (step 5).
+
+The marker namespace stays `opencode-power-pack:code-review` on purpose: the
+live consumer, `_MARKER_RE` in `scripts/merge_queue.py`, parses that namespace
+and nothing else. Do not "clean it up" — renaming the namespace silently
+disables the gate.
 
 ## Blocking verdicts
 
@@ -107,18 +114,32 @@ Tool-driven reviews post a marker:
 <!-- opencode-power-pack:code-review scope=<owner>/<repo>#<pr>@<head-sha> kind=<summary|finding-key> -->
 ```
 
-The producer is third-party: [`waybarrios/opencode-power-pack`](https://github.com/waybarrios/opencode-power-pack),
-file `skills/code-review/SKILL.md`, distributed as the `opencode-power-pack`
-plugin / npm `@waybarrios/opencode-power-pack`. It matches the **exact** marker
-plus the authenticated author to decide whether to `PATCH` an existing summary
-or `POST` a new one.
+The producer is first-party: `scripts/post_review_verdict.py` in this repo. It
+matches the **exact** marker plus the authenticated author to decide whether to
+`PATCH` an existing comment or `POST` a new one, and it submits the blocking
+review in the same run.
 
-Do **not** hand-author the summary marker, and do not add fields to it. A
-hand-written marker with an extra field would not match, and the tool would
-`POST` a duplicate summary comment. A new field — `verdict=` included — has to be
-added upstream in that `SKILL.md`, not here (DIG-2281). The skill also never
-submits a review, so a tool review on its own leaves no verdict the gate can see:
-either post a `verdict=` marker in a comment of its own (see
+Do **not** hand-author the marker, and do not add fields to it. A hand-written
+marker with an extra field would not match, and the producer would `POST` a
+duplicate comment. A new field has to be added to
+`scripts/post_review_verdict.py` and to the parser in
+`scripts/merge_queue.py` together, so the two cannot drift. The producer also
+never submits an approving review: it posts an `approved` marker so the queue's
+newest-verdict-wins rule can lift a block, but an approval is a human or
+in-session-review act. A blocking verdict is posted as a marker **and** as a
+`CHANGES_REQUESTED` review — a marker alone leaves the review decision
+unchanged, and a review alone leaves the queue blind.
+
+The namespace `opencode-power-pack:code-review` is load-bearing. The live
+consumer, `_MARKER_RE` in `scripts/merge_queue.py`, parses that namespace and
+nothing else, so the marker keeps the third-party name even though the
+producer is ours. Do not "clean it up" — renaming it silently disables the
+gate. The third-party skill
+([`waybarrios/opencode-power-pack`](https://github.com/waybarrios/opencode-power-pack),
+`skills/code-review/SKILL.md`) still posts the summary marker
+`<!-- opencode-power-pack:code-review scope=<owner>/<repo>#<pr>@<head-sha> kind=<summary|finding-key> -->`;
+it carries no `verdict=`, so a tool review from that skill alone leaves no
+verdict the gate can see. Post a `verdict=` marker in a comment of its own (see
 [Posted verdicts](#posted-verdicts-merge-queue-gate)) or submit a
 `CHANGES_REQUESTED` review.
 

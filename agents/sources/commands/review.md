@@ -127,7 +127,30 @@ labelled as one.
    gh pr comment <N> --body-file /path/to/findings.md
    ```
 
-5. **Label it** so `ci-review-coverage.yml` can see it:
+5. **Post the verdict**, so the merge queue can see it. A findings comment is
+   the evidence; the queue reads a marker. Post it with the first-party
+   producer, which writes the marker in a comment of its own and submits the
+   blocking review — nothing here is hand-written:
+
+   ```bash
+   python3 scripts/post_review_verdict.py \
+     --repo <owner>/<name> --pr <N> \
+     --head-sha <full-40-char-head-sha> \
+     --verdict changes_requested \
+     --body-file /path/to/findings.md
+   ```
+
+   Use `changes_requested` when a finding blocks approval, `approved` when
+   nothing survived. Two rules the producer enforces for you: it refuses a
+   short head sha (the queue compares the whole 40-character string, so a
+   7-character prefix posts a verdict that never matches), and it never
+   submits an approving review — an approval is a human or in-session-review
+   act, and a tool that auto-approves hands the queue a pass nobody earned.
+   Run it from the digithings checkout; `--repo` names the PR's repository, so
+   a twelve-x pull request is posted the same way. See
+   [CODE_REVIEW_POLICY.md § Posted verdicts](docs/agents/CODE_REVIEW_POLICY.md).
+
+6. **Label it** so `ci-review-coverage.yml` can see it:
 
    ```bash
    gh pr edit <N> --add-label "reviewed:agent"
@@ -137,7 +160,7 @@ labelled as one.
    looks for a comment carrying the marker and refuses the label without one. That
    is deliberate: it makes the claim cost a real review instead of a click.
 
-6. **Fix what you found**, or say why not. A review that reports and walks away has
+7. **Fix what you found**, or say why not. A review that reports and walks away has
    done half a job. If a finding is real and cheap, fix it on the same branch before
    merge — that is the whole reason review belongs at the task PR rather than at the
    promotion. After the fixes land, the PR is green. If the follow-up was large,
