@@ -14,6 +14,9 @@ secret-staleness, invite-key rollout, answer-check, cron dispatch, secret sync.
 Also posts `Every commit reaching main was reviewed` (main's required context,
 same logic ci-review-coverage.yml runs via scripts/check_review_coverage.py) for
 same-repo develop->main promotion PRs (DIG-3743). Nothing else posts that name.
+An explicit --pr N run resolves the pull request in any state: a closed or a
+merged one still gets a verdict that names it and its state, never a silent
+skip (DIG-4812).
 Usage: local_ci.py [--pr N] [--dry-run]"""
 import json
 import os
@@ -736,6 +739,27 @@ def list_prs(base):
     except ValueError: return []
 
 
+def get_pr(number):
+    """The pull request with this number, in whatever state it is in.
+
+    `gh pr list --state open` cannot see a closed or a merged pull request, so
+    an explicit --pr N run on one iterated an empty list: it evaluated
+    nothing, reported nothing, and looked like it had done the work (DIG-4812,
+    PR #6087). `gh pr view` resolves a pull request in any state.
+    """
+    o = gh("pr", "view", str(number), "-R", REPO, "--json",
+           "number,state,headRefOid,headRefName,baseRefName,title,"
+           "isCrossRepository,updatedAt,mergedAt,closedAt")
+    try: pr = json.loads(o or "null")
+    except ValueError: return None
+    return pr if isinstance(pr, dict) else None
+
+
+def pr_state(pr):
+    """The pull request's state as GitHub reports it: OPEN, CLOSED or MERGED."""
+    return (pr.get("state") or "").upper()
+
+
 # --- review-applied (DIG-3842): required `review-applied` context on develop ---
 
 def applied_status(sha, state, desc):
@@ -1090,6 +1114,80 @@ def wt_is_ours(path):
     return os.path.realpath(MAIN) in target
 
 
+def not_open_verdict(pr, dry):
+    """The verdict for a pull request that is no longer open.
+
+    A closed or a merged pull request has nothing left to gate, but the run
+    must say so out loud: silence is what made the missing verdict on #6087
+    invisible until the deploy lane broke again (DIG-4812). The verdict names
+    the pull request and its state.
+
+    A head that was gated while the pull request was open keeps the verdict
+    it earned. Overwriting that row would make a merged commit look red, and
+    the merge queue reads the row. A head that carries only a `pending` row
+    (a run that died mid-flight) earned nothing, so it gets a terminal
+    verdict here instead of staying pending forever.
+
+    A fork head is not a commit of this repository: no status can be posted
+    for it, so the run reports the fact and posts nothing.
+    """
+    n = pr.get("number"); sha = pr.get("headRefOid") or ""
+    st = pr_state(pr) or "UNKNOWN"
+    when = pr.get("mergedAt") or pr.get("closedAt") or "no date"
+    fork = bool(pr.get("isCrossRepository"))
+    st0, desc0 = (None, None)
+    if sha and not fork:
+        st0, desc0 = ci_status(sha)
+    if st0 in ("success", "failure", "error"):
+        verdict = f"PR #{n} is {st.lower()}; local-ci verdict on {sha[:12]} kept: {st0} ({desc0})"
+    elif fork:
+        verdict = f"PR #{n} is {st.lower()}; {FORK_DESC}"
+    else:
+        desc = f"local-ci skipped: PR #{n} is {st.lower()}; nothing to gate"
+        verdict = f"PR #{n} is {st.lower()}; {desc}"
+        if not dry and sha:
+            status(sha, "failure", desc)
+    log(f"PR #{n} {sha[:12]} {st} ({when}): {verdict}")
+    print(f"local-ci: {verdict}")
+    return st0 if st0 in ("success", "failure", "error") else "failure"
+
+
+def explicit_run(only, dry):
+    """Run the gate for one named pull request, whatever state it is in.
+
+    The pull request is resolved with `gh pr view`, so a closed or a merged
+    one is still evaluated and the run still ends with a verdict naming it
+    (DIG-4812).
+    """
+    pr = get_pr(only)
+    if not pr:
+        log(f"PR #{only} not found in {REPO} (or gh could not resolve it)")
+        print(f"local-ci: PR #{only} not found in {REPO} (or gh could not resolve it)")
+        return None
+    n = pr.get("number", only)
+    st = pr_state(pr)
+    if st and st != "OPEN":
+        return not_open_verdict(pr, dry)
+    if pr.get("isCrossRepository"):
+        log(f"PR #{n} is a fork pull request: {FORK_DESC}")
+        print(f"local-ci: PR #{n} is a fork pull request: {FORK_DESC}")
+        return None
+    base = pr.get("baseRefName")
+    if base == "main":
+        if is_promotion_pr(pr):
+            return process_review(pr, dry)
+        log(f"PR #{n} is not a promotion pull request: out of scope for local-ci")
+        print(f"local-ci: PR #{n} is not a promotion pull request: out of scope for local-ci")
+        return None
+    if base != "develop":
+        log(f"PR #{n} has base {base}: out of scope for local-ci")
+        print(f"local-ci: PR #{n} has base {base}: out of scope for local-ci")
+        return None
+    st = process(pr, dry)
+    process_applied(pr, dry)
+    return st
+
+
 def main():
     dry = "--dry-run" in sys.argv
     if os.environ.get("LOCAL_CI_WT") and os.path.isdir(WT) and not wt_is_ours(WT):
@@ -1107,16 +1205,11 @@ def main():
         watchdog()
         if not acquire_lock(): return
     try:
+        if only is not None:
+            explicit_run(only, dry)
+            return
         prs = list_prs("develop")
         main_prs = list_prs("main")
-        if only is not None:
-            for p in [p for p in prs if not p["isCrossRepository"] and p["number"] == only]:
-                process(p, dry)
-                process_applied(p, dry)
-            for p in [p for p in main_prs if not p["isCrossRepository"] and p["number"] == only]:
-                if is_promotion_pr(p):
-                    process_review(p, dry)
-            return
         reason = skip_reason()
         if reason is not None:
             log(f"skip: {reason}")

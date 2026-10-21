@@ -3,6 +3,7 @@
 `/usr/bin/python3 -m unittest test_local_ci -v`."""
 import ast
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -12,6 +13,7 @@ import sys
 import tempfile
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS = os.path.abspath(os.path.join(_HERE, "..", "..", "scripts", "local-ci"))
@@ -600,3 +602,232 @@ class WatchdogTest(unittest.TestCase):
         self.assertFalse(_mod.watchdog())
         self.assertIsNone(_mod.read_child_state())
         self.assertTrue(self._alive(self.child))
+
+
+class ExplicitPrStateTest(unittest.TestCase):
+    """DIG-4812: an explicit --pr N run must evaluate a closed or a merged PR.
+
+    `gh pr list --state open` cannot see a closed or a merged pull request, so
+    the explicit path iterated an empty list: the run evaluated nothing,
+    reported nothing, and looked like it had done the work. That is how PR
+    #6087 lost its verdict unnoticed until the deploy lane broke again.
+    """
+
+    def setUp(self):
+        self._gh = _mod.gh
+        self._list_prs = _mod.list_prs
+        self._acquire_lock = _mod.acquire_lock
+        self._watchdog = _mod.watchdog
+        self._process = _mod.process
+        self._process_applied = _mod.process_applied
+        self._process_review = _mod.process_review
+        self._log = _mod.log
+        self._argv = list(sys.argv)
+        self._env = dict(os.environ)
+        # The published runner refuses to start on a checkout that is not a git
+        # repository. Point it at this repository so the guard is not the test.
+        os.environ["LOCAL_CI_MAIN"] = os.path.abspath(os.path.join(_HERE, "..", ".."))
+        os.environ.pop("LOCAL_CI_WT", None)
+        self.statuses = {}   # sha -> list of status rows
+        self.posts = []      # (sha, state, context, description)
+        self.calls = []      # the run legs that were called
+        self.logs = []       # the lines the run logged
+        self.out = ""        # what the run printed
+        self.pr = None       # what `gh pr view` resolves to
+
+    def tearDown(self):
+        _mod.gh = self._gh
+        _mod.list_prs = self._list_prs
+        _mod.acquire_lock = self._acquire_lock
+        _mod.watchdog = self._watchdog
+        _mod.process = self._process
+        _mod.process_applied = self._process_applied
+        _mod.process_review = self._process_review
+        _mod.log = self._log
+        sys.argv = self._argv
+        os.environ.clear()
+        os.environ.update(self._env)
+
+    # --- fakes -------------------------------------------------------------
+
+    def _fake_gh(self, *a):
+        """Stand in for the gh wrapper: resolve a PR in any state, serve status
+        rows, record status posts."""
+        argv = list(a)
+        if argv[0:2] == ["pr", "view"]:
+            if self.pr is None:
+                return None       # gh exits non-zero on a number that does not exist
+            return json.dumps(self.pr)
+        if "-X" in argv and "POST" in argv:
+            url = [x for x in argv if x.startswith("repos/") and "/statuses/" in x][0]
+            sha = url.split("/statuses/")[1]
+            fields = {}
+            for x in argv:
+                if "=" not in x:
+                    continue
+                k, v = x.split("=", 1)
+                if k in ("state", "context", "description"):
+                    fields[k] = v
+            self.posts.append((sha, fields.get("state"), fields.get("context"),
+                               fields.get("description")))
+            return "{}"
+        url = [x for x in argv if x.startswith("repos/") and "/statuses" in x]
+        if url:
+            sha = url[0].split("/commits/")[1].split("/statuses")[0]
+            return json.dumps(self.statuses.get(sha, []))
+        return "[]"
+
+    def _row(self, state, desc, age_secs=0, context=None):
+        ts = datetime.now(timezone.utc) - timedelta(seconds=age_secs)
+        return {"context": context or _mod.CTX, "state": state, "description": desc,
+                "created_at": ts.strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+    def _pr(self, number=6087, state="CLOSED", base="develop", cross=False,
+            sha="cb8010dfd6dd5638dc12d8ee3b187a1cbba79e76"):
+        return {"number": number, "state": state, "headRefOid": sha,
+                "headRefName": "fix/deploy-lane-on-develop", "baseRefName": base,
+                "title": "fix(deploy): make the merge-to-main deploy lane work from develop",
+                "isCrossRepository": cross, "updatedAt": "2026-10-20T23:35:10Z",
+                "mergedAt": "2026-10-20T23:35:10Z" if state == "MERGED" else None,
+                "closedAt": "2026-10-20T23:35:10Z"}
+
+    def _run(self, number):
+        """Run main() for one named PR, with the open PR lists empty.
+
+        The empty lists are the bug: the explicit path used to find the PR
+        there and there only.
+        """
+        _mod.gh = self._fake_gh
+        _mod.list_prs = lambda base: []
+        _mod.acquire_lock = lambda: True
+        _mod.watchdog = lambda: None
+        _mod.process = lambda pr, dry: (self.calls.append("process"), "success")[1]
+        _mod.process_applied = lambda pr, dry: (self.calls.append("process_applied"), "success")[1]
+        _mod.process_review = lambda pr, dry: (self.calls.append("process_review"), "success")[1]
+        _mod.log = lambda m: self.logs.append(m)
+        sys.argv = ["local_ci.py", "--pr", str(number)]
+        stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            _mod.main()
+        finally:
+            self.out = sys.stdout.getvalue()
+            sys.stdout = stdout
+
+    # --- the bug: a closed or a merged PR must still get a verdict ----------
+
+    def test_a_closed_pr_ends_with_a_verdict_that_names_it(self):
+        pr = self._pr(state="CLOSED")
+        self.pr = pr
+        self._run(pr["number"])
+        self.assertEqual(len(self.posts), 1,
+                         "a closed PR must get a verdict, never a silent skip")
+        sha, state, context, desc = self.posts[0]
+        self.assertEqual(sha, pr["headRefOid"])
+        self.assertEqual(context, _mod.CTX)
+        self.assertEqual(state, "failure")
+        self.assertIn(str(pr["number"]), desc)
+        self.assertIn("closed", desc)
+        self.assertTrue(desc.startswith(_mod.SKIP_PREFIX),
+                        "a skip is re-checkable when the PR comes back")
+
+    def test_a_merged_pr_ends_with_a_verdict_that_names_it(self):
+        pr = self._pr(state="MERGED")
+        self.pr = pr
+        self._run(pr["number"])
+        self.assertEqual(len(self.posts), 1,
+                         "a merged PR must get a verdict, never a silent skip")
+        _sha, _state, _context, desc = self.posts[0]
+        self.assertIn(str(pr["number"]), desc)
+        self.assertIn("merged", desc)
+
+    def test_the_run_logs_the_pr_and_its_state(self):
+        pr = self._pr(state="CLOSED")
+        self.pr = pr
+        self._run(pr["number"])
+        self.assertTrue(any(str(pr["number"]) in m and "CLOSED" in m for m in self.logs),
+                        "the log must name the PR and its state")
+        self.assertIn(str(pr["number"]), self.out,
+                      "a manual run must say what it did")
+
+    def test_an_earned_verdict_is_not_overwritten(self):
+        """#6087's head already carries the green row it earned while it was
+        open. A closed notice must not repaint that commit red."""
+        pr = self._pr(state="MERGED")
+        self.pr = pr
+        self.statuses[pr["headRefOid"]] = [
+            self._row("success", "static gates passed (pytest/audits not gated, see DIG-3605) (1m)")]
+        self._run(pr["number"])
+        self.assertEqual(self.posts, [], "an earned verdict must never be overwritten")
+        self.assertTrue(any(str(pr["number"]) in m and "MERGED" in m for m in self.logs),
+                        "the run must still say that the PR is merged")
+
+    def test_a_pr_number_that_does_not_exist_is_reported(self):
+        self.pr = None
+        self._run(999999)
+        self.assertEqual(self.posts, [], "no PR, no head, nothing to post")
+        self.assertTrue(any("999999" in m and "not found" in m for m in self.logs))
+
+    # --- the verdict must be terminal, and only an earned one is kept -------
+
+    def test_a_pending_row_is_not_an_earned_verdict(self):
+        """A run that died mid-flight leaves a `pending` row behind. That is not
+        a verdict, and the head must not stay pending for ever."""
+        pr = self._pr(state="CLOSED")
+        self.pr = pr
+        self.statuses[pr["headRefOid"]] = [
+            self._row("pending", "local-ci running on Chris's Mac")]
+        self._run(pr["number"])
+        self.assertEqual(len(self.posts), 1,
+                         "a pending row is not a verdict: the head needs a terminal one")
+        _sha, state, context, desc = self.posts[0]
+        self.assertEqual(state, "failure")
+        self.assertEqual(context, _mod.CTX)
+        self.assertIn(str(pr["number"]), desc)
+
+    def test_a_red_verdict_is_kept(self):
+        """A head that was gated and failed keeps that verdict: the closed
+        notice must not repaint it green or say anything else about it."""
+        pr = self._pr(state="MERGED")
+        self.pr = pr
+        self.statuses[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: gitleaks (2m)")]
+        self._run(pr["number"])
+        self.assertEqual(self.posts, [], "an earned verdict must never be overwritten")
+        self.assertTrue(any("kept: failure" in m for m in self.logs),
+                        "the run must say which verdict it kept")
+
+    def test_a_closed_fork_pr_posts_nothing(self):
+        """A fork head is not a commit of this repository: no status can be
+        posted for it, so the run must not claim it posted one."""
+        pr = self._pr(state="CLOSED", cross=True)
+        self.pr = pr
+        self._run(pr["number"])
+        self.assertEqual(self.posts, [], "a fork head has no status in this repository")
+        self.assertTrue(any(str(pr["number"]) in m for m in self.logs),
+                        "the run must still name the PR")
+
+    def test_an_open_fork_pr_posts_nothing(self):
+        pr = self._pr(state="OPEN", cross=True)
+        self.pr = pr
+        self._run(pr["number"])
+        self.assertEqual(self.posts, [], "fork code never runs on this Mac")
+        self.assertNotIn("process", self.calls)
+
+    # --- the behaviour that must not change --------------------------------
+
+    def test_an_open_pr_still_runs_the_gate(self):
+        pr = self._pr(state="OPEN")
+        self.pr = pr
+        self._run(pr["number"])
+        self.assertIn("process", self.calls)
+        self.assertIn("process_applied", self.calls)
+        self.assertEqual(self.posts, [], "the gate posts its own verdict")
+
+    def test_a_promotion_pr_into_main_still_gets_the_review_coverage(self):
+        pr = self._pr(state="OPEN", base="main", sha="b84c114e0000000000000000000000000000000")
+        pr["title"] = "chore: promote develop to main"
+        self.pr = pr
+        self._run(pr["number"])
+        self.assertIn("process_review", self.calls)
+        self.assertNotIn("process", self.calls)
