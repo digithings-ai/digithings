@@ -468,7 +468,11 @@ context ≥ 64k), one real function-tool call, one strict `json_schema` call. Mo
 claims are not trusted (#987 mistral-small: page said tools, every endpoint 404'd). It is a
 paid-call gate that needs `OPENROUTER_API_KEY`, and **no CI workflow runs it** (there is no
 `validate-digiquant-pools.yml`): run it with
-`OPENROUTER_API_KEY=… python3 scripts/validate_digiquant_pools.py`.
+`OPENROUTER_API_KEY=… python3 scripts/validate_digiquant_pools.py`. The script calls
+OpenRouter with the raw pooled slug, so it only checks OpenRouter-served ids: the CI-only
+house slug `deepseek/deepseek-v4.1-flash-1017` has no OpenRouter id (`config/litellm.yaml`)
+and 404s there — check that slug on the house upstream instead (bare id
+`deepseek-v4.1-flash-1017`); the five-call probe on 1017 is recorded in PR #6107.
 
 
 When the scheduled research pipeline fails (`research baseline`, `research delta`, or `research monthly`), the workflow opens or appends to a deduped tracking issue titled `research-{baseline,delta,monthly}-failure` with `ci:failure` label. Each comment lists the failing step, the last successful run timestamp, the run URL, and the last 200 log lines.

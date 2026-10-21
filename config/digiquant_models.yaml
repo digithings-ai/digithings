@@ -36,7 +36,10 @@
 # Endpoint capability (tools + strict json_schema + context floor) is checked by
 # scripts/validate_digiquant_pools.py - a manual, paid-call gate (it needs
 # OPENROUTER_API_KEY). No CI workflow runs it: there is no
-# .github/workflows/validate-digiquant-pools.yml.
+# .github/workflows/validate-digiquant-pools.yml. The script calls OpenRouter with
+# the raw pooled slug, so it only covers OpenRouter-served ids: a CI-only slug
+# (deepseek/deepseek-v4.1-flash-1017) has no OpenRouter id (config/litellm.yaml)
+# and is checked on the house upstream instead.
 #
 # Tool-only grounding (#3859): a requested web_search must succeed or raise;
 # no synthesis fallback, no env gate.

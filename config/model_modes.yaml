@@ -41,7 +41,8 @@ phase_models:
   # #1559/#1622: pin Phase-7 master-digest. First pinned to deepseek-chat when the
   # ``reasoning`` pool hash landed on deepseek-r1, whose chain-of-thought output is not
   # reliably strict JSON (2026-07-18 delta digest JSONDecodeError → prior digest carried).
-  # Repointed to deepseek-v4-flash (#1622): 1M-token context removes the 64k synthesis
-  # ceiling entirely (the #1559 input budget stays as a cost bound), at half the price.
+  # Repointed to deepseek-v4-flash (#1622) and to deepseek-v4.1-flash-1017 (2026-10-21,
+  # DIG-4782): 1M-token context removes the 64k synthesis ceiling entirely (the #1559
+  # input budget stays as a cost bound), at half the price.
   # Kept as a pin (not a pool hash) so digest routing stays deterministic.
   master-digest: deepseek/deepseek-v4.1-flash-1017

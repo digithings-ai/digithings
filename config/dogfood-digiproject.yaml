@@ -21,7 +21,7 @@ agents:
   enabled:
     - research
   # llm_mode is access/cost policy. The public embed picker (#3829) defaults to
-  # Cheaper Inference cheap slugs (deepseek-v4-flash), so `free` would refuse them.
+  # Cheaper Inference cheap slugs (deepseek-v4.1-flash-1017), so `free` would refuse them.
   # OpenRouter retired openai/gpt-oss-20b:free (404 → paid openai/gpt-oss-20b).
   llm_mode: test
   llm:
