@@ -58,6 +58,7 @@ export {
   createDefaultEmbedChatPrefs,
   chromePrefsFromDeploy,
   persistDensity,
+  useStoredDensityAfterMount,
   disabledCatalogIds,
   catalogToolsFromClient,
   extraOffFromCatalog,

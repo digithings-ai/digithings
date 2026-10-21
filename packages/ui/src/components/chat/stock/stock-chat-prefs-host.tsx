@@ -18,6 +18,7 @@ import {
   createDefaultEmbedChatPrefs,
   chromePrefsFromDeploy,
   persistDensity,
+  useStoredDensityAfterMount,
   disabledCatalogIds,
   extraOffFromCatalog,
   type CatalogToolRow,
@@ -133,14 +134,20 @@ export function useStockChatPrefs({
     extra: extraOffFromCatalog(catalogTools),
     view: config.view,
     thinking: config.thinking,
-    ...chromePrefsFromDeploy({
-      density: config.density,
-      effort: config.effort,
-      searchEngine: config.searchEngine,
-      toolbar: config.toolbar,
-      scrollbars: config.scrollbars,
-    }),
+    // No storage on the first render: the server cannot read dt-density, so
+    // the stored choice is applied after mount (useStoredDensityAfterMount).
+    ...chromePrefsFromDeploy(
+      {
+        density: config.density,
+        effort: config.effort,
+        searchEngine: config.searchEngine,
+        toolbar: config.toolbar,
+        scrollbars: config.scrollbars,
+      },
+      null,
+    ),
   }));
+  useStoredDensityAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();

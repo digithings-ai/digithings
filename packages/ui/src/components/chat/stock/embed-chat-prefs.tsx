@@ -6,7 +6,7 @@
  * balanced, thinking auto. Not localStorage.
  */
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 import {
   readStoredDensity,
   resolveTraceDensity,
@@ -90,6 +90,22 @@ export function chromePrefsFromDeploy(
     toolbar: input.toolbar !== false,
     scrollbars: input.scrollbars === "auto" ? "auto" : "always",
   };
+}
+
+/**
+ * Apply a stored `dt-density` after hydration. The first render uses the
+ * deployment density on both server and client, so `data-density` matches
+ * and only a user with a stored choice re-renders once.
+ */
+export function useStoredDensityAfterMount(
+  setPrefs: (update: (prev: EmbedChatPrefs) => EmbedChatPrefs) => void,
+): void {
+  useEffect(() => {
+    const stored = readStoredDensity();
+    if (!stored) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is client-only; reading it during render would mismatch the server HTML
+    setPrefs((prev) => (prev.density === stored ? prev : { ...prev, density: stored }));
+  }, [setPrefs]);
 }
 
 export function persistDensity(density: TraceDensity): void {
