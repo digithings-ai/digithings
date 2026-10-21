@@ -327,7 +327,6 @@ async function handleChat(
     guardrails: embedConfig?.guardrails ?? dep?.guardrails,
     foundryMaxToolCalls: foundryAlias,
     userId: ownerUserSub,
-    sessionId,
     ip: clientIpForRateLimit(req),
   });
   // The registry describes the backend once (#4522): the streaming path is

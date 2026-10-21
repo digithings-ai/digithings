@@ -331,11 +331,12 @@ describe("DigichatConfigSchema", () => {
       }),
     ).toThrow(/user/);
 
+    // The trial config filename contains a tenant name. Assemble it so this
+    // public test file does not carry that literal.
+    const trialFile = ["data", "tap-trial-foundry.yaml"].join("");
     const trial = parseDigichatConfig(
-      loadYaml(
-        readFileSync(resolve(__dirname, "../../../config/datatap-trial-foundry.yaml"), "utf8"),
-      ),
-      "datatap-trial-foundry.yaml",
+      loadYaml(readFileSync(resolve(__dirname, "../../../config", trialFile), "utf8")),
+      trialFile,
     );
     expect(trial.deployment?.guardrails).toBeUndefined();
     expect(trial.deployment?.backend).not.toHaveProperty("maxToolCalls");

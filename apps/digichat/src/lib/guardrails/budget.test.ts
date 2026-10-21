@@ -4,6 +4,8 @@ import {
   capToolPayload,
   estimateTokens,
   guardrailIdentity,
+  RESERVATION_TTL_MS,
+  TOKEN_WINDOW_MS,
   tokensInWindow,
   truncateToTokens,
   waitForRoomMs,
@@ -75,11 +77,56 @@ describe("token budget decisions", () => {
     expect(capToolPayload("ok", 10)).toBe("ok");
   });
 
-  it("keys a person by user id, then session, then IP", () => {
-    expect(guardrailIdentity({ userId: "user:1", sessionId: "s", ip: "1.1.1.1" })).toBe("user:1");
-    expect(guardrailIdentity({ userId: "embed:anonymous", sessionId: "s", ip: "1.1.1.1" })).toBe("s");
-    expect(guardrailIdentity({ userId: "embed:anonymous", ip: "1.1.1.1" })).toBe("1.1.1.1");
+  it("keys a person by user id, and anonymous traffic by server-derived IP", () => {
+    expect(guardrailIdentity({ userId: "user:1", ip: "1.1.1.1" })).toBe("user:1");
+    expect(guardrailIdentity({ userId: "embed:anonymous", ip: "203.0.113.9" })).toBe("203.0.113.9");
     expect(guardrailIdentity({ userId: "embed:anonymous", ip: "unknown" })).toBe("anonymous");
+    expect(guardrailIdentity({ ip: "unknown" })).toBe("anonymous");
+  });
+});
+
+describe("guardrail store", () => {
+  it("drops an expired reservation and an empty bucket", () => {
+    const store = new MemoryGuardrailStore();
+    store.reserve("tpm:user:public:203.0.113.9", "hold", 40, 1_000);
+    expect(store.read("tpm:user:public:203.0.113.9", 1_000).reserved).toBe(40);
+    expect(store.bucketCount()).toBe(1);
+    const later = 1_000 + RESERVATION_TTL_MS;
+    expect(store.read("tpm:user:public:203.0.113.9", later).reserved).toBe(0);
+    expect(store.bucketCount()).toBe(0);
+  });
+
+  it("drops a bucket once its spend has left the window", () => {
+    const store = new MemoryGuardrailStore();
+    store.commit("tpm:dep:trial", "spent", 20, 0);
+    expect(store.bucketCount()).toBe(1);
+    store.read("other", TOKEN_WINDOW_MS + 1);
+    expect(store.bucketCount()).toBe(0);
+  });
+
+  it("does not give an anonymous caller a fresh bucket per client session", () => {
+    const store = new MemoryGuardrailStore();
+    const first = createTurnGuard({
+      slug: "public",
+      guardrails: { tokensPerMinute: { user: 1000 } },
+      userId: "embed:anonymous",
+      ip: "203.0.113.9",
+      store,
+      now: () => 1_000,
+    });
+    first.recordUsage({ totalTokens: 15 });
+    const second = createTurnGuard({
+      slug: "public",
+      guardrails: { tokensPerMinute: { user: 1000 } },
+      userId: "embed:anonymous",
+      ip: "203.0.113.9",
+      store,
+      now: () => 1_000,
+    });
+    second.recordUsage({ totalTokens: 5 });
+    const snap = store.read("tpm:user:public:203.0.113.9", 1_000);
+    expect(snap.events.map((event) => event.tokens).sort((a, b) => a - b)).toEqual([5, 15]);
+    expect(store.bucketCount()).toBe(1);
   });
 });
 
@@ -142,12 +189,12 @@ describe("createTurnGuard", () => {
 
   it("nudges an answer between the thresholds without pausing", async () => {
     const store = new MemoryGuardrailStore();
-    store.commit("tpm:user:public:s1", "seed", 750, 0);
+    store.commit("tpm:user:public:203.0.113.9", "seed", 750, 0);
     const guard = createTurnGuard({
       slug: "public",
       guardrails: { tokensPerMinute: { user: 1000 } },
-      sessionId: "s1",
       userId: "embed:anonymous",
+      ip: "203.0.113.9",
       store,
       now: () => 1_000,
     });

@@ -9,7 +9,7 @@
  * create a namespace or a Durable Object.
  */
 
-import { TOKEN_WINDOW_MS, type SpendEvent } from "./budget";
+import { RESERVATION_TTL_MS, TOKEN_WINDOW_MS, type SpendEvent } from "./budget";
 
 export type GuardrailSnapshot = {
   events: SpendEvent[];
@@ -19,43 +19,54 @@ export type GuardrailSnapshot = {
 export interface GuardrailStore {
   readonly kind: "memory" | "shared";
   read(key: string, now: number): GuardrailSnapshot;
-  reserve(key: string, reservationId: string, tokens: number): void;
+  /** `at` is when the hold started. It expires after RESERVATION_TTL_MS. */
+  reserve(key: string, reservationId: string, tokens: number, at: number): void;
   commit(key: string, reservationId: string, tokens: number, at: number): void;
-  release(key: string, reservationId: string): void;
+  release(key: string, reservationId: string, at?: number): void;
 }
+
+type Hold = { tokens: number; at: number };
 
 type Bucket = {
   events: SpendEvent[];
-  reserved: Map<string, number>;
+  reserved: Map<string, Hold>;
 };
 
 export class MemoryGuardrailStore implements GuardrailStore {
   readonly kind = "memory" as const;
   private readonly buckets = new Map<string, Bucket>();
 
+  /** Live keys after expired spend and empty buckets have been dropped. */
+  bucketCount(): number {
+    return this.buckets.size;
+  }
+
   read(key: string, now: number): GuardrailSnapshot {
+    this.evict(now);
     const bucket = this.buckets.get(key);
     if (!bucket) return { events: [], reserved: 0 };
-    this.prune(bucket, now);
     let reserved = 0;
-    for (const tokens of bucket.reserved.values()) reserved += tokens;
+    for (const hold of bucket.reserved.values()) reserved += hold.tokens;
     return { events: bucket.events.map((event) => ({ ...event })), reserved };
   }
 
-  reserve(key: string, reservationId: string, tokens: number): void {
+  reserve(key: string, reservationId: string, tokens: number, at: number): void {
+    this.evict(at);
     if (tokens <= 0) return;
-    this.bucket(key).reserved.set(reservationId, tokens);
+    this.bucket(key).reserved.set(reservationId, { tokens, at });
   }
 
   commit(key: string, reservationId: string, tokens: number, at: number): void {
+    this.evict(at);
     const bucket = this.bucket(key);
     bucket.reserved.delete(reservationId);
     if (tokens > 0) bucket.events.push({ at, tokens });
-    this.prune(bucket, at);
+    this.evict(at);
   }
 
-  release(key: string, reservationId: string): void {
+  release(key: string, reservationId: string, at = Date.now()): void {
     this.buckets.get(key)?.reserved.delete(reservationId);
+    this.evict(at);
   }
 
   clear(): void {
@@ -71,9 +82,18 @@ export class MemoryGuardrailStore implements GuardrailStore {
     return bucket;
   }
 
-  private prune(bucket: Bucket, now: number): void {
-    const cutoff = now - TOKEN_WINDOW_MS;
-    bucket.events = bucket.events.filter((event) => event.at > cutoff);
+  private evict(now: number): void {
+    const eventCutoff = now - TOKEN_WINDOW_MS;
+    const holdCutoff = now - RESERVATION_TTL_MS;
+    for (const [key, bucket] of this.buckets) {
+      bucket.events = bucket.events.filter((event) => event.at > eventCutoff);
+      for (const [id, hold] of bucket.reserved) {
+        if (hold.at <= holdCutoff) bucket.reserved.delete(id);
+      }
+      if (bucket.events.length === 0 && bucket.reserved.size === 0) {
+        this.buckets.delete(key);
+      }
+    }
   }
 }
 

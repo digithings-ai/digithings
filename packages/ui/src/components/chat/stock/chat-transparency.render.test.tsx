@@ -75,7 +75,7 @@ const TOOL_CAP_TURN: ThreadMessageLike[] = [
       {
         type: "tool-call",
         toolCallId: "t1",
-        toolName: "datatap__list_tables",
+        toolName: "fixture__list_tables",
         args: { schema: "public" },
         argsText: '{"schema":"public"}',
         result: { tables: ["orders"] },

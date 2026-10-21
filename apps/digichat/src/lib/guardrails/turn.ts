@@ -112,7 +112,7 @@ export function createTurnGuard(opts: {
   guardrails?: GuardrailsConfig | null;
   foundryMaxToolCalls?: number;
   userId?: string | null;
-  sessionId?: string | null;
+  /** Server-derived client IP. A client session id is not a budget key. */
   ip?: string | null;
   store?: GuardrailStore;
   now?: () => number;
@@ -171,7 +171,7 @@ export function createTurnGuard(opts: {
     if (reservation) settle(reservation.tokens, now());
     if (tokens <= 0 || scopes.length === 0) return;
     const id = crypto.randomUUID();
-    for (const scope of scopes) store.reserve(scope.key, id, tokens);
+    for (const scope of scopes) store.reserve(scope.key, id, tokens, now());
     reservation = { id, tokens };
   };
 

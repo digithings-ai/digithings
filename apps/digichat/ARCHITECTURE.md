@@ -1067,7 +1067,7 @@ guardrails:                      # omit the block and every guard is off
   pauseAt: 0.9                   # optional; default 0.9; must be above answerAt
   tokensPerMinute:
     deployment: 100000           # optional; match an upstream TPM
-    user: 80000                  # optional; per user, else session, else IP
+    user: 80000                  # optional; per user id, else server-derived IP
 ```
 
 The numbers in that block are the shape. No shipped yaml sets them. The
@@ -1077,15 +1077,19 @@ public digithings.ai example only comments a per-user value of 80000.
 on a Foundry backend is the same setting; the shared key wins when both are
 set. `tokensPerMinute.deployment` is the deployment's own limit (an Azure TPM,
 for example), shared by every turn on that deployment. `tokensPerMinute.user`
-is the per-person limit for a public chat: a real user id, otherwise the
-session id, otherwise the client IP. `embed:anonymous` is not a person and
-`unknown` is not an address, so anonymous traffic with a session id is keyed
-by that session — a bot that mints a new session per request is not collapsed
-onto one IP.
+is the per-person limit for a public chat. A real user id is the key.
+Anonymous traffic (`embed:anonymous`) uses the server-derived client IP from
+`clientIpForRateLimit`, the same address the embed per-IP limiter trusts. The
+client session header is not a key: the caller can mint a new one per request
+and would otherwise get a fresh bucket. `unknown` is not an address, so
+visitors with no user id and no address share one `anonymous` bucket.
 
 The counter is a rolling 60 seconds of reported usage, plus an estimate of the
 next round (about 4 characters per token) held as a reservation so concurrent
-turns on one instance share the window. Under `answerAt` the turn proceeds.
+turns on one instance share the window. A reservation that is never settled
+expires after 120 seconds, and a bucket with no spend and no hold is dropped,
+so an abandoned turn does not keep a key for the life of the process. Under
+`answerAt` the turn proceeds.
 Between the thresholds the model is asked to answer with what it already has.
 At `pauseAt`, or when the next round would exceed the limit, the turn waits on
 the same connection-status waiter as a mid-stream rate limit (#6110), shows
@@ -1115,7 +1119,7 @@ before the upstream fetch and again when they observe another round.
 Digigraph's tool loop runs upstream, so a cap there is a notice plus a wrap-up
 on the next round the adapter can see; it does not abort the upstream call.
 
-The DataTap trial yaml leaves a proposed cap of 5 (4 is the other candidate)
+The trial yaml leaves a proposed cap of 5 (4 is the other candidate)
 and a deployment TPM commented out until the Azure number for gpt-5.6-terra in
 westeurope is confirmed. The public digithings.ai example comments a per-user
 limit of 80000 and does not enable it. OCC and the trial do not carry that

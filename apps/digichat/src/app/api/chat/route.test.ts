@@ -83,7 +83,8 @@ import { requireDigiChatAuth } from "@/lib/request-auth";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import type { EmbedChatTenantContext } from "@/lib/embed-chat-tenant";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
-import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
+import { checkEmbedIpRateLimit, clientIpForRateLimit } from "@/lib/embed-ip-rate-limit";
+import { activeGuardrailStore, resetGuardrailStoreForTests } from "@/lib/guardrails/store";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
@@ -1190,7 +1191,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         backend: {
           type: "foundry",
           projectEndpoint: "https://x/",
-          agentName: "datatap-trial",
+          agentName: "fixture-agent",
           maxToolCalls: 5,
         },
         activityDetail: "full",
@@ -1230,7 +1231,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         backend: {
           type: "foundry",
           projectEndpoint: "https://x/",
-          agentName: "datatap-trial",
+          agentName: "fixture-agent",
           maxToolCalls: 9,
         },
         guardrails: { maxToolCallsPerTurn: 4 },
@@ -1258,6 +1259,98 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.maxToolCalls).toBe(4);
     expect(call?.guard?.active).toBe(true);
     expect(call?.guard?.toolCap).toBe(4);
+  });
+
+  it("keys anonymous token spend by the server-derived IP, not the client session", async () => {
+    vi.mocked(clientIpForRateLimit).mockReturnValue("203.0.113.9");
+    resetGuardrailStoreForTests();
+    const session = "client-chosen-session";
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "public",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "public",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://x/",
+          agentName: "fixture-agent",
+        },
+        guardrails: { tokensPerMinute: { user: 80_000 } },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-embed-host": "https://public.digithings.ai",
+            "x-digichat-session": session,
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+        guard?: { recordUsage: (usage: { totalTokens: number }) => void };
+      };
+      call?.guard?.recordUsage({ totalTokens: 10 });
+      const spent = (key: string) =>
+        activeGuardrailStore()
+          .read(key, Date.now())
+          .events.reduce((sum, event) => sum + event.tokens, 0);
+      expect(spent("tpm:user:public:203.0.113.9")).toBe(10);
+      expect(spent(`tpm:user:public:${session}`)).toBe(0);
+      expect(spent("tpm:user:public:anonymous")).toBe(0);
+    } finally {
+      resetGuardrailStoreForTests();
+      vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");
+    }
+  });
+
+  it("stops tools from the trace-off stream when the guard says the cap is spent", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "local",
+          backend: { type: "digigraph" },
+          guardrails: { maxToolCallsPerTurn: 1 },
+        },
+      }),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        prepareStep?: (step: {
+          steps: { toolCalls?: unknown[] }[];
+          messages: { role: string; content: unknown }[];
+        }) => Promise<{ toolChoice?: string } | undefined>;
+      };
+      const prepared = await call.prepareStep?.({
+        steps: [{ toolCalls: [{}] }],
+        messages: [{ role: "user", content: "hi" }],
+      });
+      expect(prepared?.toolChoice).toBe("none");
+    } finally {
+      resetDigichatConfigForTests();
+    }
   });
 
   it("returns 400 when OpenRouter BYOK missing model", async () => {

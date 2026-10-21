@@ -1775,8 +1775,8 @@ function mcpEvent(
 describe("FoundryToolCallCounter", () => {
   it("counts a start and its done once, and ignores search output", () => {
     const counter = new FoundryToolCallCounter();
-    expect(counter.observe(mcpEvent("added", "c1", "datatap__list"))).toBe("new");
-    expect(counter.observe(mcpEvent("done", "c1", "datatap__list"))).toBe("known");
+    expect(counter.observe(mcpEvent("added", "c1", "fixture__list"))).toBe("new");
+    expect(counter.observe(mcpEvent("done", "c1", "fixture__list"))).toBe("known");
     expect(
       counter.observe({
         type: "response.output_item.done",
@@ -1805,11 +1805,11 @@ describe("FoundryToolCallCounter", () => {
     expect(
       counter.observe({
         type: "response.output_item.added",
-        item: { type: "mcp_call", name: "datatap__get" },
+        item: { type: "mcp_call", name: "fixture__get" },
       } as FoundryStreamEvent),
     ).toBe("new");
-    expect(counter.observe(mcpEvent("done", "late", "datatap__get"))).toBe("known");
-    expect(counter.observe(mcpEvent("done", "only", "datatap__other"))).toBe("new");
+    expect(counter.observe(mcpEvent("done", "late", "fixture__get"))).toBe("known");
+    expect(counter.observe(mcpEvent("done", "only", "fixture__other"))).toBe("new");
     expect(counter.count).toBe(2);
   });
 });
@@ -1830,13 +1830,12 @@ describe("createFoundryStreamResponse tool-call cap", () => {
           const signal = options?.signal;
           return {
             async *[Symbol.asyncIterator]() {
-              for (const event of events) {
-                if (signal?.aborted) {
-                  const err = new Error("aborted");
-                  err.name = "AbortError";
-                  throw err;
-                }
-                yield event;
+              try {
+                for (const event of events) yield event;
+              } finally {
+                // A real SDK abort rejects without setting `name` to
+                // AbortError. Closing the iterator must surface that shape.
+                if (signal?.aborted) throw new Error("request aborted");
               }
             },
           };
@@ -1863,7 +1862,7 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     const out = await drain(
       await createFoundryStreamResponse({
         projectEndpoint: "https://proj.example.com",
-        agentName: "datatap-trial",
+        agentName: "fixture-agent",
         messages: [userMessage("how many tables?")],
         conversationId: "conv_cap",
         responseHeaders: {},
@@ -1873,7 +1872,7 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     );
     expect(calls).toHaveLength(1);
     expect(bodyOf(calls[0])).toEqual({
-      agent_reference: { name: "datatap-trial", type: "agent_reference" },
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
     });
     expect(out).toContain("tool_a");
     expect(out).toContain("tool_b");
@@ -1901,7 +1900,7 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     const out = await drain(
       await createFoundryStreamResponse({
         projectEndpoint: "https://proj.example.com",
-        agentName: "datatap-trial",
+        agentName: "fixture-agent",
         messages: [userMessage("how many tables?")],
         conversationId: "conv_cap",
         responseHeaders: {},
@@ -1913,11 +1912,11 @@ describe("createFoundryStreamResponse tool-call cap", () => {
 
     expect(calls).toHaveLength(2);
     expect(bodyOf(calls[0])).toEqual({
-      agent_reference: { name: "datatap-trial", type: "agent_reference" },
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
       max_tool_calls: 2,
     });
     expect(bodyOf(calls[1])).toEqual({
-      agent_reference: { name: "datatap-trial", type: "agent_reference" },
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
       max_tool_calls: 2,
       tool_choice: "none",
     });
@@ -1948,7 +1947,7 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     const out = await drain(
       await createFoundryStreamResponse({
         projectEndpoint: "https://proj.example.com",
-        agentName: "datatap-trial",
+        agentName: "fixture-agent",
         messages: [userMessage("hi")],
         conversationId: "conv_cap",
         responseHeaders: {},
@@ -2005,7 +2004,7 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     const out = await drain(
       await createFoundryStreamResponse({
         projectEndpoint: "https://proj.example.com",
-        agentName: "datatap-trial",
+        agentName: "fixture-agent",
         messages: [userMessage("hi")],
         conversationId: "conv_cap",
         responseHeaders: {},
@@ -2018,12 +2017,12 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     // First create sends max_tool_calls and is refused. The retry omits it.
     expect(bodyOf(calls[0])).toMatchObject({ max_tool_calls: 1 });
     expect(bodyOf(calls[1])).toEqual({
-      agent_reference: { name: "datatap-trial", type: "agent_reference" },
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
     });
     // The follow-up tries tool_choice, is not sent because the override was
     // already refused, and carries the bracketed instruction instead.
     expect(bodyOf(calls[2])).toEqual({
-      agent_reference: { name: "datatap-trial", type: "agent_reference" },
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
     });
     expect((calls[2] as [{ input?: string }])[0].input).toContain("Do not call any tools");
     expect(out).toContain("tool_a");

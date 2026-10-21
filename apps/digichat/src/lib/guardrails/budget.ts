@@ -7,6 +7,11 @@
  */
 
 export const TOKEN_WINDOW_MS = 60_000;
+/**
+ * A reservation that is never settled stops counting after this. It covers the
+ * 90s pause, then frees the budget if the turn died between reserve and settle.
+ */
+export const RESERVATION_TTL_MS = 120_000;
 export const DEFAULT_ANSWER_AT = 0.7;
 export const DEFAULT_PAUSE_AT = 0.9;
 export const GUARDRAIL_PAUSE_NOTICE = "Pausing for the token limit, resuming shortly";
@@ -127,16 +132,18 @@ export function capToolPayload(value: unknown, maxTokens: number): unknown {
 }
 
 /**
- * Session or user id, then client IP. `embed:anonymous` is not a person, and
- * `unknown` is not an address (see clientIpForRateLimit).
+ * A real user id, otherwise the server-derived client IP. The chat session
+ * header is chosen by the client, so it is not a budget key: a new id per
+ * request would be a fresh bucket. `embed:anonymous` is not a person, and
+ * `unknown` is not an address (see clientIpForRateLimit). Callers with neither
+ * share one `anonymous` bucket.
  */
 export function guardrailIdentity(opts: {
   userId?: string | null;
-  sessionId?: string | null;
   ip?: string | null;
 }): string {
-  const user = opts.userId && opts.userId !== "embed:anonymous" ? opts.userId : undefined;
-  const session = opts.sessionId?.trim() || undefined;
-  const ip = opts.ip && opts.ip !== "unknown" ? opts.ip : undefined;
-  return user ?? session ?? ip ?? "anonymous";
+  const user = opts.userId && opts.userId !== "embed:anonymous" ? opts.userId.trim() : "";
+  if (user) return user;
+  const ip = opts.ip && opts.ip !== "unknown" ? opts.ip.trim() : "";
+  return ip || "anonymous";
 }

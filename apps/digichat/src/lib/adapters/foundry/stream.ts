@@ -173,7 +173,7 @@ export interface OpenAIResponsesClientLike {
 /**
  * A tool invocation item, not its output and not a list/approval side event.
  *
- * `mcp_call` is the DataTap shape. `*_call` covers built-in tools
+ * `mcp_call` is the hosted MCP shape. `*_call` covers built-in tools
  * (`file_search_call`, `azure_ai_search_call`, …). Outputs end in `_output`
  * and must not count as a second call.
  */
@@ -259,12 +259,6 @@ function normalizeMaxToolCalls(value: number | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (!Number.isInteger(value) || value < 1 || value > 100) return undefined;
   return value;
-}
-
-function isAbortError(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) return false;
-  const name = (err as { name?: unknown }).name;
-  return name === "AbortError" || name === "APIUserAbortError";
 }
 
 /**
@@ -1651,7 +1645,10 @@ export async function createFoundryStreamResponse(opts: {
             if (outcome === "cap") break resumeLoop;
           } catch (err) {
             if (opts.signal?.aborted) throw err;
-            if (hitToolCap && isAbortError(err)) break resumeLoop;
+            // The cap abort is ours. SDK abort errors do not set `name`, so
+            // matching AbortError / APIUserAbortError misses them and the
+            // turn becomes the generic outage line. The flag is enough.
+            if (hitToolCap) break resumeLoop;
             if (!isRateLimitFailure(err)) throw err;
             const delay = rateLimitResumeDelayMs(err, resume, resumeSchedule);
             if (delay === null) {

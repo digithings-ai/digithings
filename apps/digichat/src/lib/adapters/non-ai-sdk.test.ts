@@ -12,6 +12,7 @@ import { createAgUiStreamResponse } from "@/lib/adapters/ag-ui/stream";
 import { createA2aStreamResponse } from "@/lib/adapters/a2a/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import type { UIMessage } from "ai";
+import type { TurnGuard } from "@/lib/guardrails/turn";
 
 const USER_MESSAGE: UIMessage = {
   id: "u1",
@@ -391,5 +392,81 @@ describe("non-AI-SDK credential handling (#4543)", () => {
     expect(payload.error).toBe("backend_unavailable");
     expect(payload.message).toContain("DIGICHAT_BACKEND_MISSING_KEY");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("non-AI-SDK guardrail instruction", () => {
+  function answeringGuard(released: { value: boolean }): TurnGuard {
+    return {
+      active: true,
+      async beforeRound() {
+        return { action: "answer", instruction: "WRAP NOW" };
+      },
+      recordUsage() {},
+      release() {
+        released.value = true;
+      },
+      capToolPayload(value) {
+        return value;
+      },
+      noteToolCap() {},
+    };
+  }
+
+  async function sentBody(fetchMock: ReturnType<typeof stubUpstream>): Promise<string> {
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    return String(init?.body ?? "");
+  }
+
+  it("appends the wrap-up instruction on a langgraph run and releases the reservation", async () => {
+    const fetchMock = stubUpstream("\n\n");
+    const released = { value: false };
+    const res = await createNonAiSdkStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      guard: answeringGuard(released),
+    });
+    await bodyOf(res);
+    const sent = JSON.parse(await sentBody(fetchMock)) as {
+      input: { messages: { content: string }[] };
+    };
+    expect(sent.input.messages.map((message) => message.content)).toContain("WRAP NOW");
+    expect(released.value).toBe(true);
+  });
+
+  it("appends the wrap-up instruction on an ag-ui run and releases the reservation", async () => {
+    const fetchMock = stubUpstream("\n\n");
+    const released = { value: false };
+    const res = await createNonAiSdkStreamResponse({
+      backend: { type: "ag-ui", url: "https://agui.example.com/run" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      guard: answeringGuard(released),
+    });
+    await bodyOf(res);
+    const sent = JSON.parse(await sentBody(fetchMock)) as { messages: { content: string }[] };
+    expect(sent.messages.map((message) => message.content)).toContain("WRAP NOW");
+    expect(released.value).toBe(true);
+  });
+
+  it("appends the wrap-up instruction on an a2a run and releases the reservation", async () => {
+    const fetchMock = stubUpstream("\n\n");
+    const released = { value: false };
+    const res = await createNonAiSdkStreamResponse({
+      backend: { type: "a2a", baseUrl: "https://a2a.example.com" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      guard: answeringGuard(released),
+    });
+    await bodyOf(res);
+    const sent = JSON.parse(await sentBody(fetchMock)) as {
+      params: { message: { parts: { text: string }[] } };
+    };
+    expect(sent.params.message.parts.map((part) => part.text)).toContain("WRAP NOW");
+    expect(released.value).toBe(true);
   });
 });

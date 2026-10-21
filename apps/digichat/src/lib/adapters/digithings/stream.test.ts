@@ -1,5 +1,6 @@
 import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
+import { createTurnGuard, type TurnGuard } from "@/lib/guardrails/turn";
 import {
   DIGIGRAPH_UNAVAILABLE_MESSAGE,
   HOSTED_WEB_SEARCH_SCOPE,
@@ -1830,4 +1831,90 @@ it("does not retry a corpus license denial by dropping corpus headers", async ()
   expect(seen).toHaveLength(1);
   expect(seen[0]?.corpus).toBe("docs");
   expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+});
+
+it("appends a guardrail wrap-up instruction to the digigraph request and releases", async () => {
+  let sent: { messages?: { role: string; content: string }[] } | null = null;
+  let released = false;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    sent = JSON.parse(String(init?.body)) as { messages?: { role: string; content: string }[] };
+    return new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    );
+  });
+  const guard: TurnGuard = {
+    active: true,
+    async beforeRound() {
+      return { action: "answer", instruction: "Answer with what you have." };
+    },
+    recordUsage() {},
+    release() {
+      released = true;
+    },
+    capToolPayload(value) {
+      return value;
+    },
+    noteToolCap() {},
+  };
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    guard,
+  });
+  await new Response(res.body).text();
+
+  expect(sent?.messages?.some((message) => message.content === "Answer with what you have.")).toBe(
+    true,
+  );
+  expect(released).toBe(true);
+});
+
+it("writes a tool-call limit notice when a digigraph trace hits the cap", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "tool_call",
+                  payload: { tool: "fixture_search", query: "hello", status: "started" },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Done." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+  const guard = createTurnGuard({
+    slug: "public",
+    guardrails: { maxToolCallsPerTurn: 1 },
+  });
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    guard,
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).toContain("tool-call-limit");
+  expect(body).toContain("Tool-call limit reached (1 this turn)");
 });
