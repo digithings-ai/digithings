@@ -49,6 +49,8 @@ export function clientConfigFromEmbedTenant(
       accent: embed.accent,
       attribution: embed.attribution,
       defaultLanguage: embed.defaultLanguage ?? base.chrome.defaultLanguage,
+      toolbar: embed.toolbar ?? base.chrome.toolbar,
+      scrollbars: embed.scrollbars ?? base.chrome.scrollbars,
     },
     persistence: "none",
     auth: "anonymous",
@@ -58,6 +60,8 @@ export function clientConfigFromEmbedTenant(
       pageContext: embed.pageContext ?? base.features.pageContext,
       view: embed.view ?? base.features.view,
       thinking: embed.thinking ?? base.features.thinking,
+      density: embed.density ?? base.features.density,
+      effort: embed.effort ?? base.features.effort,
       // Feature parity (#4532): omitted keys keep the app defaults.
       dictation: embed.dictation ?? base.features.dictation,
       speech: embed.speech ?? base.features.speech,
@@ -101,6 +105,7 @@ export function clientConfigFromEmbedTenant(
       showByok: embed.showByok,
       showLanguageSelector: embed.showLanguageSelector,
       webSearch,
+      ...(embed.searchEngine ? { searchEngine: embed.searchEngine } : {}),
     },
     backendType: embed.backendType ?? base.backendType,
   };

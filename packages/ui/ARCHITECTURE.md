@@ -291,6 +291,20 @@ folded once the answer starts — with closed rows inside it, and the work
 content not mounted while the rows stay closed. (`showDetails` is set by every
 level and read by no renderer yet; it is not part of the contract.)
 
+**Spacing.** The chain's vertical rhythm is the `--trace-space-1` … `--trace-space-7` scale
+and the `--trace-*` tokens, declared once on `.digichat-thread, .digichat-launcher` in
+`src/styles/chat-aui.css` (the skin, `chat-digichat.css`, only reads them). The scale is
+separate from the design tokens' `--space-*` names; `trace-spacing.source.test.ts` keeps it so. The Worked
+title, the gap between sibling groups, the gap inside a group, and the
+reasoning header-to-body step all read those tokens. Sibling groups share
+`--trace-group-gap`; a tool group and a reasoning group do not carry their
+own margins. The chain header's marker-to-label gap stays `0.45rem` so it
+still matches the pre-response loader. `data-density` (`compact`, `default`,
+`airy`) reassigns the tokens. The palette stores the user's choice in
+`dt-density`; a deployment `features.density` applies when that key is absent.
+The tool-call group mark is a pixel `{ }` on that same 5×5 cube grid as the
+reasoning bulb; the bulb itself is unchanged.
+
 **Reason.** The quiet contract was once a single `summaryOnly` branch inside
 the `group-chainOfThought` case, which read as if it covered only the
 combined case. It did not: because the tree nests, that branch was the

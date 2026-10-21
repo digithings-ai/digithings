@@ -13,6 +13,10 @@ import {
 } from "@/lib/languages";
 import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@digithings/ui/chat/skins";
 import {
+  DEFAULT_TRACE_DENSITY,
+} from "@digithings/ui/chat/trace-spacing";
+import { isPaletteId } from "@digithings/ui/theme";
+import {
   DEFAULT_THINKING_MODE,
   DEFAULT_VIEW_MODE,
   LEGACY_VIEW_MODE_ALIASES,
@@ -28,6 +32,18 @@ export const ChromeModeSchema = z.enum(["app", "embed", "modal", "sidebar"]);
 export const PersistenceSchema = z.enum(["none", "memory", "server"]);
 export const AuthModeSchema = z.enum(["anonymous", "session"]);
 export const ThemeSchema = z.enum(["dark", "light"]);
+export const ScrollbarSchema = z.enum(["always", "auto"]);
+export const EffortSchema = z.enum(["low", "medium", "high"]);
+export const DensitySchema = z.enum(["compact", "default", "airy"]);
+export const SEARCH_ENGINES = [
+  "auto",
+  "internal",
+  "exa",
+  "tavily",
+  "parallel",
+  "firecrawl",
+  "tinyfish",
+] as const;
 export const ThreadSkinSchema = z.enum(THREAD_SKINS);
 const ThreadSkinInputSchema = z.preprocess(
   (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
@@ -147,6 +163,20 @@ export const ChromeSchema = z
     mode: ChromeModeSchema.default("embed"),
     theme: ThemeSchema.default("light"),
     /**
+     * Named palette. Omitted means the digichat skin palette. A user's
+     * `dt-palette` choice still wins in the browser.
+     */
+    palette: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .refine((value) => value === "default" || isPaletteId(value), "unknown palette")
+      .optional(),
+    /** Composer model/tools row. Default on. */
+    toolbar: z.boolean().default(true),
+    /** `always` reserves the gutter; `auto` shows bars on scroll. */
+    scrollbars: ScrollbarSchema.default("always"),
+    /**
      * Which Thread to mount (11 official catalog ids + first-party `digichat`).
      * Overlay: `DIGICHAT_CHROME_SKIN`. Catalog default remains `base`.
      * First-party hosts default omitted `skin` to `digichat` in the tenants
@@ -213,6 +243,10 @@ export const FeaturesSchema = z.preprocess(
       view: ViewModeSchema.default(DEFAULT_VIEW_MODE),
       /** Reasoning-only override on top of `view`. */
       thinking: ThinkingModeSchema.default(DEFAULT_THINKING_MODE),
+      /** Worked-chain rhythm. `default` is the fixed spacing. */
+      density: DensitySchema.default(DEFAULT_TRACE_DENSITY),
+      /** Model effort for this deployment. The palette can override it for the session. */
+      effort: EffortSchema.default("medium"),
       sources: z.boolean().default(true),
       /**
        * Legacy alias for `models.allowPicker` (#4532). Kept for config
@@ -547,9 +581,7 @@ export const GateSchema = z
     /** Default web_search engine for this tenant (projected to the browser as
      * a fallback when the user picks nothing). Engine NAME only — never keys.
      * Unknown values fail closed at deploy-config load (#4724). */
-    searchEngine: z
-      .enum(["auto", "internal", "exa", "tavily", "parallel", "firecrawl", "tinyfish"])
-      .optional(),
+    searchEngine: z.enum(SEARCH_ENGINES).optional(),
     /**
      * Minimum Desk+ plan for this embed. Server-only (#3662 HMAC X-Embed-Plan-Proof).
      * Never projected to the browser.
@@ -566,6 +598,8 @@ export const DeploymentSchema = z
       mode: "embed",
       theme: "light",
       skin: DEFAULT_THREAD_SKIN,
+      toolbar: true,
+      scrollbars: "always",
       defaultLanguage: DEFAULT_LANGUAGE_CODE,
       transcript: { userAlign: "right" },
     }),
@@ -577,6 +611,8 @@ export const DeploymentSchema = z
       speech: false,
       view: DEFAULT_VIEW_MODE,
       thinking: DEFAULT_THINKING_MODE,
+      density: DEFAULT_TRACE_DENSITY,
+      effort: "medium",
       sources: true,
       modelPicker: false,
       branchPicker: true,

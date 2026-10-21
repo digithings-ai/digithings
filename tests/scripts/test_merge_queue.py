@@ -3479,11 +3479,16 @@ class _FakePaperclip:
         self._tickets = tickets or {}
         self._runs = runs or {}
         self._issue_runs = issue_runs or {}
+        #: Every run id the gate asked the API about, in order. The gate must
+        #: never ask about a value that cannot be a run id: the API has no
+        #: answer for one, and the failed read reads as a broken API.
+        self.asked_runs: list[str] = []
 
     def ticket(self, key: str) -> dict[str, Any] | None:
         return self._tickets.get(key)
 
     def run(self, run_id: str) -> dict[str, Any] | None:
+        self.asked_runs.append(run_id)
         return self._runs.get(run_id)
 
     def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
@@ -4320,6 +4325,289 @@ def test_a_marker_whose_seat_does_not_match_its_run_is_not_review_coverage(
     assert OTHER_AGENT[:8] in reason
 
 
+def test_a_marker_quoted_in_prose_is_not_a_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sentence that quotes the marker is prose about it, not the claim.
+
+    This is the comment that put the transport failures in the shadow log on
+    21 Oct 2026: a review comment that explained which marker the gate wants
+    and quoted it with placeholder values. Read as a claim, the gate asked the
+    Paperclip API about `…`, the read failed on a healthy API, and the gate
+    reported a broken API instead of the fact about the comment it held.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOprose_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n\n"
+            "The reviewer-independence gate wants a "
+            "`<!-- digithings-review agent=… run=… head=… -->` marker from a seat "
+            "that is not the author's. This comment cannot carry it.\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    # The comment carries no provenance at all, so the PR waits for a real
+    # review — and it waits with the truth: the gate judged the comment it
+    # held, and nothing was asked of the API.
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "carries neither a seat nor a run" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_marker_with_placeholder_values_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A placeholder is not a record, so it is never sent to the API.
+
+    The review template ships the marker with `<your Paperclip agent id>` and
+    friends. A seat that posts a marker with values it could not fill in posts
+    a claim the queue can never resolve — and the queue used to ask the API
+    about it, which turned a fact about the comment into a failed read and the
+    failed read into a broken API (DIG-4809, 21 Oct 2026).
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOplaceholder_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            "<!-- digithings-review agent=… run=… head=… -->\n\n"
+            "## Verdict: approve\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "not a run id" in reason
+    assert "not a commit SHA" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_marker_naming_a_seat_that_is_not_one_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A seat id is a uuid. A value that is not one is not checked against a run."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOseat_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            f"<!-- digithings-review agent=… run={REVIEWER_RUN} "
+            "head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "not a seat id" in reason
+    # The run is a real run id, so the run is read — the seat that claimed it
+    # is the one thing the gate could not check.
+    assert prov.asked_runs == [REVIEWER_RUN]
+
+
+def test_a_marker_naming_a_seat_and_no_run_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A seat that is not a seat id names no seat the queue could check."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOseatonly_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            "<!-- digithings-review agent=… -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "not a seat id" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_uuid_shaped_placeholder_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A uuid shape the Paperclip API would refuse is never sent to it.
+
+    The API answers 400 for an id that is not a uuid it accepts, and a 400
+    read as a failed read is a transport failure — the queue then stops every
+    merge on a healthy API. So the shape is checked here, against the rule the
+    API itself applies (measured on 21 Oct 2026: version 1 to 5 and variant 8,
+    9, a or b are accepted, everything else answers 400).
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOsha_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            "<!-- digithings-review agent=11111111-1111-4111-8111-111111111111 "
+            "run=00000000-0000-0000-0000-000000000000 "
+            "head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "not a run id" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_marker_beside_the_in_session_marker_still_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The two markers may share a line: the line carries nothing but markers."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOsameline_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            f"<!-- in-session-review --> <!-- digithings-review agent={REVIEWER_AGENT} "
+            f"run={REVIEWER_RUN} head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert prov.asked_runs == [REVIEWER_RUN]
+
+
+def test_a_marker_in_a_bullet_still_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A list bullet in front of the marker is formatting, not prose."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDObullet_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            f"- <!-- digithings-review agent={REVIEWER_AGENT} run={REVIEWER_RUN} "
+            "head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert prov.asked_runs == [REVIEWER_RUN]
+
+
+def test_a_marker_in_a_quoted_reply_is_not_a_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A quoted reply carries someone else's words, so it is not the seat's claim."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOquote_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            f"> <!-- digithings-review agent={REVIEWER_AGENT} run={REVIEWER_RUN} "
+            "head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "carries neither a seat nor a run" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_run_that_carries_no_seat_is_not_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run the API knows but that names no seat proves nobody reviewed.
+
+    The marker claims a seat and a run, and neither can be checked, so the
+    gate cannot say who reviewed: that is a missing signal, not a clearance.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[{"runId": REVIEWER_RUN}])
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "carries no seat" in reason
+
+
+def test_a_marker_with_text_after_it_on_its_line_is_not_a_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The marker stands alone: a line that carries more than the marker is prose."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOtrailing_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            f"<!-- digithings-review agent={REVIEWER_AGENT} run={REVIEWER_RUN} "
+            "head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --> Reviewed.\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "carries neither a seat nor a run" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_marker_on_a_line_of_its_own_still_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The rule tightens the reader, not the claim: a real marker still counts."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert prov.asked_runs == [REVIEWER_RUN]
+
+
 def test_a_ticket_the_api_does_not_know_is_not_a_crash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -4391,6 +4679,112 @@ def test_a_404_from_the_api_is_an_answer_and_not_a_failure(
     assert reader.ticket("DIG-0000") is None
     assert reader.run("00000000-0000-4000-8000-000000000000") is None
     assert reader.issue_runs("issue-0000") == []
+
+
+def test_a_400_from_the_api_is_an_answer_and_not_a_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 400 is the server refusing the address, so there is no record under it.
+
+    The live API answers 400 for a heartbeat run id that is not a uuid it
+    accepts. Read as a failed read, that answer became a transport failure,
+    and a transport failure stops every merge in the queue — over a bad id in
+    a comment, on a healthy API (DIG-4809, 21 Oct 2026).
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+
+    def _urlopen(request: Any, timeout: int | None = None) -> Any:
+        raise urllib.error.HTTPError(
+            str(request.full_url), 400, "Bad Request", {}, None
+        )
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    assert reader.ticket("DIG-0000") is None
+    assert reader.run("00000000-0000-0000-0000-000000000000") is None
+    assert reader.issue_runs("issue-0000") == []
+
+
+def test_a_commit_whose_run_trailer_is_not_a_run_id_refuses_the_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A trailer the API would refuse leaves the author unknown, so the gate refuses.
+
+    The commit names a run that is not a run id. The seat that wrote the
+    commit cannot be resolved, and an unknown seat may be the seat that
+    posted the review the gate is about to count. Dropping the trailer
+    silently would let that seat review itself; the gate refuses instead.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the work",
+                "authoredDate": COMMIT_AT,
+                "committedDate": COMMIT_AT,
+                "messageBody": (
+                    f"Paperclip-Agent-Id: {AUTHOR_AGENT}\n"
+                    "Paperclip-Run-Id: 00000000-0000-0000-0000-000000000000\n"
+                ),
+            }
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "authoring seat could not be identified" in reason
+    assert "names a run id that is not one" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_commit_whose_seat_trailer_is_not_a_seat_id_refuses_the_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The seat trailer is the author's name: a broken one leaves the author unknown."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the work",
+                "authoredDate": COMMIT_AT,
+                "committedDate": COMMIT_AT,
+                "messageBody": (
+                    "Paperclip-Agent-Id: 00000000-0000-0000-0000-000000000000\n"
+                ),
+            }
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "authoring seat could not be identified" in reason
+    assert "names a seat id that is not one" in reason
+
+
+def test_a_marker_naming_a_seat_in_another_case_is_the_same_seat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A uuid is a uuid in any case: the gate compares one spelling of it.
+
+    The API accepts an uppercase uuid, so an uppercase marker names a real
+    seat. Refusing it would refuse an honest review for a spelling.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT.upper(), run=REVIEWER_RUN.upper())]
+    )
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert prov.asked_runs == [REVIEWER_RUN.lower()]
 
 
 def test_a_refused_connection_is_not_read_as_a_missing_record(

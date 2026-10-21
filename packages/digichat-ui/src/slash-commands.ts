@@ -3,6 +3,12 @@
  * Client-only actions never leave the browser. Catalog tools use one public
  * name with two gestures: empty = session toggle, remainder = force this send.
  */
+import {
+  TRACE_DENSITIES,
+  TRACE_DENSITY_LABELS,
+  type TraceDensity,
+} from "@digithings/ui/chat/trace-spacing";
+
 export const LANG_CODES = ["en", "nl", "it", "es", "fr"] as const;
 export type LangCode = (typeof LANG_CODES)[number];
 
@@ -24,6 +30,7 @@ export type SlashId =
   | "effort"
   | "search-engine"
   | "view"
+  | "density"
   | "theme"
   | "thinking"
   | "sessions"
@@ -122,6 +129,9 @@ export function isViewCode(value: string): value is ViewCode {
   return (VIEW_CODES as readonly string[]).includes(value.trim().toLowerCase());
 }
 
+export const DENSITY_CHOICES: readonly { value: TraceDensity; label: string }[] =
+  TRACE_DENSITIES.map((code) => ({ value: code, label: TRACE_DENSITY_LABELS[code] }));
+
 export const THINKING_CODES = ["auto", "collapsed", "open"] as const;
 export type ThinkingCode = (typeof THINKING_CODES)[number];
 export const THINKING_CHOICES: readonly { value: ThinkingCode; label: string }[] =
@@ -214,6 +224,15 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     needsArg: false,
     hint: "quiet / balanced / verbose",
     choiceOptions: VIEW_CHOICES,
+    kind: "client",
+    category: "setup",
+  },
+  {
+    id: "density",
+    names: ["/density"],
+    needsArg: false,
+    hint: "compact / default / airy",
+    choiceOptions: DENSITY_CHOICES,
     kind: "client",
     category: "setup",
   },
@@ -371,7 +390,7 @@ export type SlashVisibility = {
   tools?: boolean;
   /** Artifact list for this session. Hide where there is no artifact surface. */
   artifacts?: boolean;
-  /** Colour theme. Hidden on a tenant-pinned embed (`themeLocked`). */
+  /** Colour theme. Hidden only when a host sets `themeLocked`; tenant embeds own the pick (`setTheme`). */
   theme?: boolean;
 };
 

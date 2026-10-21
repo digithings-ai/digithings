@@ -125,6 +125,59 @@
   --foreground: var(--term-ink);
 }
 
+/*
+  Trace spacing. The scale is the only length source. Semantic tokens are
+  what the Worked chain reads. `default` is the fixed rhythm; `compact` and
+  `airy` reassign the tokens. chat-digichat.css uses the same names.
+*/
+.digichat-thread,
+.digichat-launcher {
+  --trace-space-1: 0.125rem;
+  --trace-space-2: 0.25rem;
+  --trace-space-3: 0.375rem;
+  --trace-space-4: 0.5rem;
+  --trace-space-5: 0.625rem;
+  --trace-space-6: 0.75rem;
+  --trace-space-7: 1rem;
+  --trace-title-gap: var(--trace-space-5);
+  --trace-group-gap: var(--trace-space-4);
+  --trace-within-gap: var(--trace-space-2);
+  --trace-header-gap: var(--trace-space-2);
+  --trace-body-pad: var(--trace-space-1);
+  --trace-body-indent: var(--trace-space-6);
+  --trace-chain-gap: var(--trace-space-6);
+}
+
+.digichat-thread[data-density="compact"] {
+  --trace-title-gap: var(--trace-space-3);
+  --trace-group-gap: var(--trace-space-2);
+  --trace-within-gap: var(--trace-space-1);
+  --trace-header-gap: 0rem;
+  --trace-body-pad: 0rem;
+  --trace-body-indent: var(--trace-space-5);
+  --trace-chain-gap: var(--trace-space-4);
+}
+
+.digichat-thread[data-density="default"] {
+  --trace-title-gap: var(--trace-space-5);
+  --trace-group-gap: var(--trace-space-4);
+  --trace-within-gap: var(--trace-space-2);
+  --trace-header-gap: var(--trace-space-2);
+  --trace-body-pad: var(--trace-space-1);
+  --trace-body-indent: var(--trace-space-6);
+  --trace-chain-gap: var(--trace-space-6);
+}
+
+.digichat-thread[data-density="airy"] {
+  --trace-title-gap: var(--trace-space-7);
+  --trace-group-gap: var(--trace-space-6);
+  --trace-within-gap: var(--trace-space-4);
+  --trace-header-gap: var(--trace-space-4);
+  --trace-body-pad: var(--trace-space-3);
+  --trace-body-indent: var(--trace-space-7);
+  --trace-chain-gap: var(--trace-space-7);
+}
+
 .digichat-thread [data-role="user"],
 .digichat-thread .chat-msg--user,
 .digichat-thread .chat-msg--assistant,
@@ -583,19 +636,19 @@
 .digichat-launcher [data-slot="tool-group-content"] > div {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--trace-within-gap, 0.25rem);
 }
 
 .digichat-thread [data-slot="aui_tool-chain"],
 .digichat-launcher [data-slot="aui_tool-chain"] {
-  margin-bottom: 1rem;
+  margin-bottom: var(--trace-chain-gap, 0.75rem);
 }
 
 .digichat-thread [data-slot="tool-fallback-root"],
 .digichat-launcher [data-slot="tool-fallback-root"] {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: var(--trace-header-gap, 0.25rem);
 }
 
 .digichat-thread [data-slot="tool-fallback-content"] > div,
@@ -616,8 +669,9 @@
 .digichat-launcher [data-slot="tool-fallback-error"] {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.75rem 0.8rem;
+  gap: var(--trace-header-gap, 0.25rem);
+  padding-block: calc(var(--trace-body-pad, 0.125rem) + var(--trace-space-4, 0.5rem));
+  padding-inline: calc(var(--trace-body-pad, 0.125rem) + var(--trace-space-5, 0.625rem));
 }
 
 .digichat-thread [data-slot="tool-fallback-result"],
@@ -643,7 +697,7 @@
 }
 
 .digichat-thread [data-slot="aui_tool-fallback"] + [data-slot="aui_tool-fallback"] {
-  margin-top: 0.45rem;
+  margin-top: var(--trace-within-gap, 0.25rem);
 }
 
 .digichat-thread [data-slot="aui_thread-viewport"],
@@ -794,9 +848,27 @@
 
 .digichat-thread [data-slot="aui_work-chain-content"],
 .digichat-launcher [data-slot="aui_work-chain-content"] {
-  padding-left: 0.25rem;
-  /* A little air between the chain header and the rows inside it. */
-  padding-top: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--trace-group-gap, 0.5rem);
+  padding-left: var(--trace-space-2, 0.25rem);
+  /* Air between the Worked title and the first row. One gap for every sibling. */
+  padding-top: var(--trace-title-gap, 0.625rem);
+}
+
+/* A folded chain keeps its panel mounted with [hidden]; the flex display above
+   must not override it, or the collapsed chain reserves its padding and its
+   triggers stay in the tab order. */
+.digichat-thread [data-slot="aui_work-chain-content"][hidden],
+.digichat-launcher [data-slot="aui_work-chain-content"][hidden] {
+  display: none;
+}
+
+.digichat-thread [data-slot="reasoning-root"],
+.digichat-thread [data-slot="tool-group-root"],
+.digichat-launcher [data-slot="reasoning-root"],
+.digichat-launcher [data-slot="tool-group-root"] {
+  margin: 0;
 }
 
 .digichat-thread [data-slot="tool-group-trigger"],
@@ -849,15 +921,15 @@
 
 .digichat-thread [data-slot="tool-group-root"][data-variant="ghost"] [data-slot="tool-group-content"] > div,
 .digichat-launcher [data-slot="tool-group-root"][data-variant="ghost"] [data-slot="tool-group-content"] > div {
-  margin-top: 0.75rem;
+  margin-top: var(--trace-header-gap, 0.25rem);
 }
 
 /* Chain-of-thought runs (and the tool groups nested inside them) get a light
    rhythm so consecutive blocks never sit flush against each other. */
 .digichat-thread [data-slot="aui_chain-of-thought"],
 .digichat-launcher [data-slot="aui_chain-of-thought"] {
-  margin-top: 0.75rem;
-  margin-bottom: 0.75rem;
+  margin-top: var(--trace-chain-gap, 0.75rem);
+  margin-bottom: var(--trace-chain-gap, 0.75rem);
 }
 
 /* The pre-response loader sits flush in the message. The chain that replaces

@@ -1987,6 +1987,12 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
 # reviewed head. A marker with no provenance is a missing signal, not a
 # clearance: it cannot be shown to come from another seat, so it does not count.
 #
+# Two rules keep the claim honest. The marker stands alone on its own line, so
+# a sentence that quotes the marker is prose about it and not the claim. And a
+# value that cannot be a record — a placeholder, a typo — is refused by name,
+# never sent to the API: the API answers questions about records, and a value
+# that is not one has no answer to give.
+#
 # The `<!-- in-session-review -->` marker stays exactly as it is. It is what
 # `scripts/check_review_coverage.py` matches, and putting the provenance in a
 # second marker keeps every other consumer of that literal working — including
@@ -2001,7 +2007,40 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
 
 REVIEW_PROVENANCE_MARKER = "digithings-review"
 
-_PROVENANCE_RE = re.compile(r"<!--\s*digithings-review\b(?P<fields>[^>]*?)\s*-->")
+# The provenance marker is a claim, and a claim is a line of its own: nothing
+# but the marker (and the in-session marker beside it) may share the line. A
+# marker quoted inside a sentence is prose about the marker, not the claim.
+# The queue used to read it as the claim — a review comment that explained the
+# marker ("the gate wants a `<!-- digithings-review agent=… run=… head=… -->`
+# marker") handed the queue placeholder values as if they were a seat and a
+# run. The queue then asked the Paperclip API about `…`, the read failed on a
+# healthy API, and the gate reported a transport failure instead of the fact
+# about the marker it had in hand (DIG-4809, 21 Oct 2026).
+#
+# A blockquote is not a claim either: a quoted reply carries someone else's
+# words, so a marker inside one says nothing about the seat that replied.
+_PROVENANCE_RE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?"
+    r"(?:<!--[ \t]*in-session-review[ \t]*-->[ \t]*)?"
+    r"<!--\s*digithings-review\b(?P<fields>[^>]*?)\s*-->"
+    r"(?:[ \t]*<!--[ \t]*in-session-review[ \t]*-->)?[ \t\r]*$",
+    re.MULTILINE,
+)
+
+#: A seat id and a run id are Paperclip uuids, and the Paperclip API accepts
+#: only the RFC 4122 shapes it accepts: version 1 to 5, variant 8, 9, a or b.
+#: A value outside that shape is refused by the server with a 400, and a 400
+#: read as a failed read is a transport failure — so the queue checks the shape
+#: itself and never sends a value the server would refuse (DIG-4809, 21 Oct
+#: 2026, measured against the live API: `11111111-1111-1111-1111-…` answers
+#: 400, `11111111-1111-4111-8111-…` answers 404 for a run nobody has).
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}"
+    r"-[0-9a-fA-F]{12}$"
+)
+
+#: A head sha, at any length git accepts as an abbreviation.
+_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 _VERDICT_LINE_RE = re.compile(r"^[ \t]*Review verdict:", re.MULTILINE)
 _ISSUE_KEY_RE = re.compile(r"\bDIG-(?P<number>\d+)\b", re.IGNORECASE)
 _AGENT_TRAILER_RE = re.compile(
@@ -2025,6 +2064,18 @@ class _PaperclipMissing(_PaperclipUnavailable):
     that names no issue, or a run id nobody has ever heard of, is something
     the gate has to judge. It is kept apart from `_PaperclipUnavailable` so a
     missing record is never read as "the API is down".
+    """
+
+
+class _AuthorUnidentified(RuntimeError):
+    """A commit names a run the API would refuse, so its seat is unknown.
+
+    A commit trailer that carries something which is not a run id cannot be
+    resolved to the seat that wrote the commit. That seat is then an author
+    the gate does not know about, and a seat it does not know about can post
+    the review the gate is about to count as independent. The gate refuses
+    rather than guesses: an author it cannot name is not an author it can
+    clear.
     """
 
 
@@ -2183,15 +2234,22 @@ class ReviewerProvenance:
                 ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
             except urllib.error.HTTPError as exc:
-                if exc.code == 404:
+                if exc.code in (400, 404):
                     # A fact, not a failure: the API answered, and the answer is
                     # "no such record". A ticket key that names no issue, or a run
                     # id nobody has ever heard of, is exactly what the gate has to
-                    # judge — it must not be read as "the API is down". The same
-                    # holds for any other 4xx: the API answered, and its answer
-                    # does not change when we ask again.
+                    # judge — it must not be read as "the API is down".
+                    #
+                    # A 400 is the server refusing the address: an id that is not
+                    # a shape it accepts. There is no record under that address
+                    # either, so it is the same fact as the 404. Reading it as a
+                    # failed read would turn a bad id in a comment into a
+                    # transport failure, and a transport failure stops every
+                    # merge in the queue on a healthy API (DIG-4809, 21 Oct 2026).
                     raise _PaperclipMissing(f"Paperclip has no {path}") from exc
                 if exc.code < 500:
+                    # 401 and 403 are the credential talking, not the record: the
+                    # queue cannot read anything, so it says so.
                     raise _PaperclipUnavailable(
                         f"Paperclip answered {exc.code} for {path}"
                     ) from exc
@@ -2332,8 +2390,10 @@ def _review_markers(comments: list[Any]) -> list[ReviewMarker]:
             ReviewMarker(
                 comment_id=str(comment.get("id") or ""),
                 at=str(comment.get("createdAt") or ""),
-                agent=str(fields.get("agent") or ""),
-                run=str(fields.get("run") or ""),
+                # A uuid is the same uuid whatever case it is written in, and
+                # the API accepts either, so the gate compares one spelling.
+                agent=str(fields.get("agent") or "").lower(),
+                run=str(fields.get("run") or "").lower(),
                 head=str(fields.get("head") or _scope_head(body)),
             )
         )
@@ -2437,10 +2497,21 @@ def _author_context(
             continue
         body = str(commit.get("messageBody") or commit.get("message") or "")
         for match in _AGENT_TRAILER_RE.finditer(body):
-            authors.add(match.group("agent"))
+            agent = match.group("agent")
+            if not _UUID_RE.match(agent):
+                # The trailer names something the API would refuse, so the seat
+                # that wrote this commit is unknown. An unknown seat can be the
+                # author of the very review the gate is about to count, so the
+                # gate refuses instead of dropping the seat silently
+                # (DIG-4809, 21 Oct 2026).
+                raise _AuthorUnidentified("a commit names a seat id that is not one")
+            authors.add(agent.lower())
         for match in _RUN_TRAILER_RE.finditer(body):
-            run = prov.run(match.group("run"))
-            seat = str((run or {}).get("agentId") or "")
+            run_id = match.group("run")
+            if not _UUID_RE.match(run_id):
+                raise _AuthorUnidentified("a commit names a run id that is not one")
+            run = prov.run(run_id.lower())
+            seat = str((run or {}).get("agentId") or "").lower()
             if seat:
                 authors.add(seat)
     key = _ticket_key(pr)
@@ -2450,7 +2521,7 @@ def _author_context(
         stamps = _author_dates(pr)
         counts: dict[str, int] = {}
         for run in prov.issue_runs(issue_id):
-            seat = str(run.get("agentId") or "")
+            seat = str(run.get("agentId") or "").lower()
             if not seat:
                 continue
             if str(run.get("contextIssueId") or "") != issue_id:
@@ -2556,6 +2627,11 @@ def _marker_problems(
 
     An empty problem list means the marker counts: it names the head the PR
     stands at, and it came from a seat that is not the author.
+
+    A value that cannot be a record — a placeholder, a typo, a quoted example —
+    is judged by name and never sent to the API. The API answers questions
+    about records; a value that is not one has no answer, and asking turns the
+    fact the gate holds into a failed read (DIG-4809, 21 Oct 2026).
     """
     problems: list[str] = []
     if not marker.head:
@@ -2563,29 +2639,64 @@ def _marker_problems(
             f"names no head SHA, so it says nothing about the head `{head[:12]}` "
             "this PR stands at"
         )
+    elif not _SHA_RE.match(marker.head):
+        problems.append(
+            f"names head `{marker.head[:12]}`, which is not a commit SHA, "
+            f"so it says nothing about the head `{head[:12]}` this PR stands at"
+        )
     elif not _head_binds(marker.head, head):
         problems.append(
             f"names head `{marker.head[:12]}` while this PR stands at `{head[:12]}`"
         )
     reviewer = ""
     if marker.run:
-        run = prov.run(marker.run)
-        if run is None:
+        if not _UUID_RE.match(marker.run):
+            # A value that is not a run id is not a record the API could ever
+            # know, so it is never sent. Asking anyway turns a fact about the
+            # marker into a failed read — and a failed read is a transport
+            # failure, which stops every merge in the queue on a healthy API.
             problems.append(
-                f"names run `{marker.run[:8]}`, which the Paperclip API does not know"
+                f"names run `{marker.run[:12]}`, which is not a run id, "
+                "so no run was checked"
             )
         else:
-            reviewer = str(run.get("agentId") or "")
-            if marker.agent and reviewer and marker.agent != reviewer:
+            run = prov.run(marker.run)
+            if run is None:
                 problems.append(
-                    f"names seat `{marker.agent[:8]}` while run `{marker.run[:8]}` "
-                    f"belongs to seat `{reviewer[:8]}`"
+                    f"names run `{marker.run[:8]}`, which the Paperclip API does not know"
                 )
+            else:
+                reviewer = str(run.get("agentId") or "").lower()
+                if not reviewer:
+                    # The run is known, but it names no seat. The marker claims
+                    # a seat and a run, and neither of them can be checked, so
+                    # the gate cannot say who reviewed: that is a missing
+                    # signal, not a clearance.
+                    problems.append(
+                        "names a run that carries no seat, so the queue cannot say "
+                        "who reviewed"
+                    )
+                elif marker.agent and not _UUID_RE.match(marker.agent):
+                    problems.append(
+                        f"names seat `{marker.agent[:12]}`, which is not a seat id, "
+                        f"so it cannot be checked against run `{marker.run[:8]}`"
+                    )
+                elif marker.agent and marker.agent != reviewer:
+                    problems.append(
+                        f"names seat `{marker.agent[:8]}` while run `{marker.run[:8]}` "
+                        f"belongs to seat `{reviewer[:8]}`"
+                    )
     elif marker.agent:
-        reviewer = marker.agent
-        problems.append(
-            f"names seat `{marker.agent[:8]}` but no run to check that seat against"
-        )
+        if not _UUID_RE.match(marker.agent):
+            problems.append(
+                f"names seat `{marker.agent[:12]}`, which is not a seat id, "
+                "so it names no seat the queue could check"
+            )
+        else:
+            reviewer = marker.agent
+            problems.append(
+                f"names seat `{marker.agent[:8]}` but no run to check that seat against"
+            )
     else:
         problems.append("carries neither a seat nor a run")
     if reviewer and reviewer in authors:
@@ -2659,6 +2770,17 @@ def _reviewer_independence(
         return Independence(
             disqualified=every_marker,
             unverifiable=f"the review seats could not be checked: {exc}",
+        )
+    except _AuthorUnidentified as exc:
+        # The commit names an author the gate cannot resolve. The seat that
+        # wrote it may be the seat that posted the review, so the gate cannot
+        # show the review to come from another seat and says so.
+        return Independence(
+            disqualified=every_marker,
+            unverifiable=(
+                f"the PR's authoring seat could not be identified: {exc}, so no "
+                "review on it can be shown to come from a different seat"
+            ),
         )
     if not authors:
         return Independence(
