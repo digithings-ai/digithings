@@ -640,7 +640,31 @@ const AssistantWorkingIndicator: FC = () => {
     }
     return text;
   });
+  // Latest connection state wins. A turn that hits the model's rate limit after
+  // text has already streamed (DC-18) waits mid-message; without this the
+  // countdown only showed on an empty message.
+  const waitingMidMessage = useAuiState((s) => {
+    let state: string | undefined;
+    for (const part of s.message.parts) {
+      if (part.type !== "data" || part.name !== "connection") continue;
+      const next = (part.data as { state?: string } | undefined)?.state;
+      if (typeof next === "string") state = next;
+    }
+    return state === "warming_up";
+  });
   const wakePhase = useDigichatWarmupPhase();
+  if (!isEmpty && waitingMidMessage && warmingUpMessage) {
+    return (
+      <span
+        data-slot="aui_assistant-message-indicator"
+        className="text-muted-foreground inline-flex items-center gap-2 align-middle"
+        role="status"
+      >
+        <DotMatrix state="connecting" aria-hidden />
+        <span className="text-sm">{warmingUpMessage}</span>
+      </span>
+    );
+  }
   if (isEmpty) {
     return (
       <span
