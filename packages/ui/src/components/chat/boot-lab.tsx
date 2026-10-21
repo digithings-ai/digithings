@@ -460,7 +460,7 @@ function ToolChainRow({
     >
       <DotMatrix
         state={failed ? "error" : done ? "success" : "tool"}
-        label={failed ? "Error" : done ? "Ok" : "Running"}
+        decorative
         className="aui-tool-fallback-trigger-icon !size-3 shrink-0"
       />
       <span
@@ -496,7 +496,7 @@ function ReasoningRow({
       >
         <DotMatrix
           state={active ? "thinking" : "thought"}
-          label={active ? "Reasoning" : "Thought"}
+          decorative
           className="!size-3"
         />
       </span>
@@ -513,7 +513,7 @@ function ReasoningRow({
       <span data-slot="reasoning-trigger-chevron">
         <DotMatrix
           state="expand"
-          label="Toggle reasoning"
+          decorative
           className="size-3"
         />
       </span>

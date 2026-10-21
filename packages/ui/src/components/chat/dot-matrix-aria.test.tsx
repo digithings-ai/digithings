@@ -15,4 +15,20 @@ describe("DotMatrix accessible name", () => {
     expect(html).toContain('role="img"');
     expect(html).toContain('aria-label="newChat"');
   });
+
+  // DIG-4669: the label used to live twice — once as the aria-label and once
+  // in an sr-only span inside the img role. The role makes its children
+  // presentational, so the second copy was never announced and only gave the
+  // next maintainer a second place to change the name.
+  it("carries the name in one place only", () => {
+    const html = renderToStaticMarkup(<DotMatrix state="success" label="Ok" />);
+    expect(html).not.toContain("sr-only");
+  });
+
+  it("hides a decorative glyph from the accessibility tree", () => {
+    const html = renderToStaticMarkup(<DotMatrix state="expand" decorative />);
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).not.toContain('role="img"');
+    expect(html).not.toContain("aria-label");
+  });
 });

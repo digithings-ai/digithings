@@ -19,10 +19,13 @@ describe("stock ToolFallback source guard", () => {
     expect(source).not.toContain("https://term.gloom.sh");
   });
 
-  it("names the status icon through the shared DotMatrix (DIG-3449)", () => {
+  it("uses the shared DotMatrix as a decorative status glyph (DIG-3449, DIG-4669)", () => {
     expect(source).toMatch(/from ["']\.\.\/DotMatrix["']/);
     expect(source).toMatch(/<DotMatrix/);
-    expect(source).toMatch(/label=\{label\}/);
+    // The trigger's visible text already names the status, so the glyph must
+    // not carry a second name of its own (DIG-4669).
+    expect(source).toMatch(/<DotMatrix[\s\S]{0,120}?decorative/);
+    expect(source).not.toMatch(/label=\{label\}/);
     expect(source).not.toMatch(/LoaderIcon/);
     expect(source).not.toMatch(/CheckIcon/);
     expect(source).not.toMatch(/XCircleIcon/);

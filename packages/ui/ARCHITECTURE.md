@@ -549,3 +549,57 @@ renders the element, so a `pointer-events: auto` in another rule cannot
 satisfy it and a duplicated block cannot carry a stale value. Full rule and
 the pinned test:
 [MIGRATION.md § Overlay scrollbar pointer contract](MIGRATION.md).
+
+## DotMatrix — one name per control (DIG-4669)
+
+`DotMatrix` (`packages/ui/src/components/chat/DotMatrix.tsx`, exported as
+`@digithings/ui/chat/dot-matrix`) is the 5x5 dot-matrix status glyph the chat
+family draws where it used to draw lucide icons. It has **two modes**, and
+they are mutually exclusive:
+
+| Mode | Markup | Used when |
+| --- | --- | --- |
+| named | `role="img"` + `aria-label={label ?? state}` | the glyph is the only content of its control (an icon-only button) |
+| decorative | `aria-hidden="true"`, no role, no name | the control already has visible text that names it |
+
+`decorative` is its own prop, and the type **refuses a label on it** — a
+decorative glyph has no name to carry.
+
+### Decision note: the glyph inside a labelled control is decorative
+
+**Decision.** A control that has visible text is named by that text. Every
+glyph inside it is decorative, the disclosure chevron included: the trigger
+already carries `aria-expanded`, so the chevron adds a second label and
+nothing else. A named glyph is reserved for the icon-only control, where the
+glyph is the only thing that can name it.
+
+**Reason.** The accessible name of a control is computed from its contents, so
+a named glyph inside a labelled control is concatenated with the visible text.
+PR #6034 replaced name-less lucide glyphs with `DotMatrix` instances that all
+carry a label, and the reasoning toggle started reading "Reasoning Reasoning
+(5s) Toggle reasoning" while the tool group read "Tools running 3 tool calls
+Toggle tools". The label also sat in the DOM twice: `role="img"` has
+presentational children, so the `sr-only` copy of the label never reached the
+accessibility tree and only duplicated the string. The name now has one home,
+the `aria-label`.
+
+The trade-off is explicit. The tool group's "Tools running" state was carried
+by the glyph's name, and the name now carries only the visible text ("3 tool
+calls"). The running state moved to the glyph's animation — the `loading`
+trail, which is where it lived before #6034, when the group drew a spinning
+`LoaderIcon` — and the rows inside the group still announce themselves
+("Running tool: …").
+
+**The exception.** `stock/chat-notice.tsx` keeps its named glyph: the visible
+notice text does not carry the tone and the tone is painted in colour alone,
+so the glyph's name ("Error", "Status") is the only non-colour signal. The
+rule is "the glyph is decorative when the control already says what the glyph
+would say", not "glyphs are hidden".
+
+**Out of scope.** `skins/base/ui/dot-matrix.tsx` is a second and different
+component: it renders `role="status"` — a live region, without presentational
+children — so its `sr-only` child *is* its name. It was not changed.
+
+Pinned by `packages/ui/src/components/chat/disclosure-trigger-aria.test.tsx`
+(the computed accessible name of every disclosure trigger) and
+`packages/ui/src/components/chat/dot-matrix-aria.test.tsx` (the two modes).

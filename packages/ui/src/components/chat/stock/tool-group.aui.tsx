@@ -124,15 +124,15 @@ function ToolGroupTrigger({
       {...props}
     >
       {/* The slot is always filled — the loading trail while the tools run,
-          the quiet corner dots when they are done — so the label and the
-          arrow keep their place. */}
+          the full grid when they are done — so the label and the arrow keep
+          their place. */}
       <span data-slot="tool-group-trigger-loader" className="aui-tool-group-trigger-loader inline-flex shrink-0">
-        {/* A full grid, the same weight as the reasoning glyph: solid, still,
-            and the same size in both states, so the label never shifts. The
-            chain header carries the running state. */}
+        {/* The same weight as the reasoning glyph, and the same size in both
+            states, so the label never shifts. The running state lives in the
+            trail, not in the name: the trigger is named by its text. */}
         <DotMatrix
-          state="tools"
-          label={active ? "Tools running" : "Tools"}
+          state={active ? "loading" : "tools"}
+          decorative
           className="!size-3 shrink-0"
         />
       </span>
@@ -157,7 +157,7 @@ function ToolGroupTrigger({
           "group-data-panel-open/trigger:rotate-0",
         )}
       >
-        <DotMatrix state="expand" label="Toggle tools" className="!size-3 shrink-0" />
+        <DotMatrix state="expand" decorative className="!size-3 shrink-0" />
       </span>
     </CollapsibleTrigger>
   );

@@ -184,7 +184,7 @@ function ReasoningTrigger({
     >
       <DotMatrix
         state={active ? "thinking" : "thought"}
-        label="Reasoning"
+        decorative
         className="aui-reasoning-trigger-icon size-4 shrink-0"
       />
       <span
@@ -199,7 +199,7 @@ function ReasoningTrigger({
         data-slot="reasoning-trigger-chevron"
         className="aui-reasoning-trigger-chevron mt-0.5 inline-flex shrink-0"
       >
-        <DotMatrix state="expand" label="Toggle reasoning" className="size-4" />
+        <DotMatrix state="expand" decorative className="size-4" />
       </span>
     </CollapsibleTrigger>
   );
