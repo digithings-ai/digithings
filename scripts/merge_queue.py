@@ -182,6 +182,9 @@ _READ_CACHE: dict[str, tuple[int, Any]] = {}
 _HOST_CACHE: dict[tuple[Any, ...], tuple[tuple[str, ...], str]] = {}
 #: The log index, by the path it is written to.
 _INDEX_CACHE: dict[str, dict[str, Any]] = {}
+#: The lines the provenance log holds, by the path it is written to, with the
+#: size of the file they were read from.
+_LOG_CACHE: dict[str, tuple[int, set[str]]] = {}
 
 EXIT_OK = 0
 EXIT_OPERATIONAL = 1
@@ -692,7 +695,14 @@ def _value_from_text(text: str, key: str) -> str:
         if not line or line.startswith("#") or "=" not in line:
             continue
         name, _, value = line.partition("=")
-        if name.strip() == key:
+        name = name.strip()
+        words = name.split(None, 1)
+        if words and words[0] == "export":
+            # `export KEY=value` is the same line in a different dialect. A file
+            # that uses it says the value under a name the key does not match,
+            # so the key would never be found.
+            name = words[1].strip() if len(words) > 1 else ""
+        if name == key:
             return value.strip().strip("'\"")
     return ""
 
@@ -707,7 +717,7 @@ def _token_from_file(path: str, key: str) -> str:
     """
     try:
         text = Path(path).expanduser().read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return ""
     return _value_from_text(text, key)
 
@@ -743,6 +753,28 @@ def _host_of_url(value: str) -> str:
     return f"{host}:{port}" if port else host
 
 
+def _redacted_url(value: str) -> str:
+    """An URL without its credentials.
+
+    The status writer chose the URL, so it may carry a user name and a password
+    or a token in its query. The gate compares the host, and the host is all
+    that anybody reading the log needs: the log outlives the tick and the
+    launchd error log is kept, so a credential that was written into it stays
+    there.
+    """
+    text = (value or "").strip()
+    try:
+        parsed = urllib.parse.urlparse(text)
+    except ValueError:
+        return text
+    if not parsed.scheme:
+        return text
+    host = _host_of_url(text)
+    if not host:
+        return text
+    return urllib.parse.urlunparse((parsed.scheme, host, parsed.path, "", "", ""))
+
+
 def _allowed_hosts(prov: CiProvenance) -> tuple[tuple[str, ...], str]:
     """The hosts a build link may name, and why the deployment is unknown.
 
@@ -766,9 +798,10 @@ def _allowed_hosts(prov: CiProvenance) -> tuple[tuple[str, ...], str]:
         path = Path(path_str).expanduser()
         try:
             text = path.read_text(encoding="utf-8")
-        except OSError as exc:
+        except (OSError, UnicodeDecodeError) as exc:
             problems.append(
-                f"{path_str} could not be read ({exc.strerror or type(exc).__name__})"
+                f"{path_str} could not be read "
+                f"({getattr(exc, 'strerror', None) or type(exc).__name__})"
             )
             continue
         for key in prov.host_url_keys:
@@ -905,12 +938,22 @@ def _resolve_woodpecker_repo_id(
 ) -> tuple[str, str]:
     """The numeric id of a Woodpecker repository, and why it is not known.
 
-    The name is resolved against the Woodpecker API, because a repository that
-    was recreated carries a new id: a number written down in the policy then
-    points at a different repository, or at nothing, and the gate reads the
-    wrong build. The number in the policy is the fallback for an API that
-    cannot be read, which is the safe direction - a stale number refuses a
-    pull request, it does not merge one.
+    The name is the authority and it is resolved against the Woodpecker API on
+    every check, because a repository that was recreated carries a new id: a
+    number written down in the policy then points at a different repository, or
+    at nothing, and the gate reads the wrong build.
+
+    The number in the policy is used only when the policy names no repository
+    by name, because then there is nothing to resolve. It is never a
+    substitute for a name that could not be resolved. A number that cannot be
+    confirmed names a repository the gate does not know, and the build of an
+    unknown repository says nothing about this pull request - so the gate
+    refuses instead of reading it. The lookup adds no new way for the tick to
+    fail: the build behind the status is read from the same API, so an API
+    that cannot answer the lookup cannot answer that either.
+
+    The lookup is refused on a redirect for the same reason the build read is:
+    the token must not travel to a host the allow-list never named.
     """
     if name:
         url = f"{base_url}/api/repos/lookup/{name}"
@@ -919,9 +962,14 @@ def _resolve_woodpecker_repo_id(
             resolved = str(payload.get("id") or "").strip()
             if resolved:
                 return resolved, ""
+        if status == 0:
+            problem = "the Woodpecker API could not be read"
+        else:
+            problem = f"the Woodpecker API answered HTTP {status}"
+        return "", f"the Woodpecker repository {name} could not be resolved ({problem})"
     if static_id:
         return static_id, ""
-    return "", f"the Woodpecker repository {name or 'named by the policy'} could not be resolved"
+    return "", "the policy names no Woodpecker repository"
 
 
 def verify_ci_provenance(
@@ -1042,34 +1090,33 @@ def verify_ci_provenance(
         if active == PROVENANCE_SHADOW
         else PROVENANCE_READ_TIMEOUT
     )
-    expected_id = ""
-    if kind == "id":
-        expected_id, resolve_problem = _resolve_woodpecker_repo_id(
-            expected_name,
-            static_id,
-            f"{scheme}://{parsed.netloc}",
-            token,
-            timeout,
+    base = f"{scheme}://{host}"
+    expected_id, resolve_problem = _resolve_woodpecker_repo_id(
+        expected_name,
+        static_id,
+        base,
+        token,
+        timeout,
+    )
+    if not expected_id:
+        return Provenance(
+            False,
+            "the Woodpecker repository for "
+            f"{repo or 'this repository'} could not be resolved: {resolve_problem}",
+            target_url=target,
         )
-        if not expected_id:
-            return Provenance(
-                False,
-                "the Woodpecker repository for "
-                f"{repo or 'this repository'} could not be resolved: {resolve_problem}",
-                target_url=target,
-            )
-        if named_repo != expected_id:
-            return Provenance(
-                False,
-                f"the target_url names the Woodpecker repository {named_repo!r}, "
-                f"not {expected_id!r}",
-                target_url=target,
-            )
+    if kind == "id" and named_repo != expected_id:
+        return Provenance(
+            False,
+            f"the target_url names the Woodpecker repository {named_repo!r}, "
+            f"not {expected_id!r}",
+            target_url=target,
+        )
 
-    api_url = f"{scheme}://{parsed.netloc}/api/repos/{expected_id}/pipelines/{number}"
+    api_url = f"{base}/api/repos/{expected_id}/pipelines/{number}"
     status, payload = _woodpecker_read(api_url, token, timeout=timeout)
     build = f"{expected_id}#{number}"
-    detail = f"build {build} at {target}"
+    detail = f"build {build} at {_redacted_url(target)}"
     if status == 0:
         return Provenance(
             False,
@@ -1260,17 +1307,54 @@ def _flush_provenance_index() -> None:
             pass
 
 
-def _log_has_lines(path: Path) -> bool:
-    """Whether the log still holds lines.
+def _log_lines(path: Path) -> set[str]:
+    """The lines the log holds, without their timestamps.
 
-    A log that was rotated away, or emptied, makes the index a memory of
-    nothing: the refusals it remembers are not in the file any more, so they
-    are written again.
+    The index says which refusals the log already carries, and that claim is
+    only true while the log carries them: a log that was rotated away, or
+    emptied, or edited, no longer holds what the index remembers. So the log
+    is read once per run and a refusal is looked for in it, rather than
+    trusting the index on its own.
+
+    The lines are held without their timestamps. When the refusal was first
+    seen is the index's business; the line itself is what has to be there.
+
+    The file is only read again when its size says it changed, so an operator
+    who empties the log between two ticks sees the refusals written again.
+    """
+    key = str(path)
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = -1
+    cached = _LOG_CACHE.get(key)
+    if cached is not None and cached[0] == size:
+        return cached[1]
+    lines: set[str] = set()
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    for raw in text.splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        _, _, rest = raw.partition(" ")
+        lines.add(rest if rest else raw)
+    _LOG_CACHE[key] = (size, lines)
+    return lines
+
+
+def _index_count(entry: Mapping[str, Any]) -> int:
+    """How often a refusal was seen.
+
+    A count that is not a number is a count of one. The index is a convenience
+    and a corrupted one must not stop the tick.
     """
     try:
-        return path.stat().st_size > 0
-    except OSError:
-        return False
+        return int(entry.get("count") or 1)
+    except (TypeError, ValueError):
+        return 1
 
 
 def _log_provenance(
@@ -1305,17 +1389,23 @@ def _log_provenance(
         line += f" — {detail}"
     print(line, file=sys.stderr)
     path = Path(os.environ.get(PROVENANCE_LOG_ENV) or PROVENANCE_LOG_PATH)
-    key = f"{repo or '?'}|{pr.get('number', 0)}|{required}|{reason}"
+    # The mode is part of the key: a refusal in shadow mode and the same
+    # refusal in enforce mode are two different lines, and the switch to
+    # enforce is exactly the moment the log has to start carrying the new ones.
+    key = f"{mode}|{repo or '?'}|{pr.get('number', 0)}|{required}|{reason}"
     index = _provenance_index()
     stamp = datetime.now(timezone.utc).isoformat()
     entry = index.get(key)
-    if entry is not None and _log_has_lines(path):
-        entry["count"] = int(entry.get("count") or 1) + 1
+    if entry is not None and line in _log_lines(path):
+        entry["count"] = _index_count(entry) + 1
         entry["last_seen"] = stamp
         return
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        _rotate_provenance_log(path)
+        if _rotate_provenance_log(path):
+            # The file was replaced, so what it held is in the rotated file now
+            # and the lines this run read are no longer the ones in it.
+            _LOG_CACHE.pop(str(path), None)
         handle = os.fdopen(
             os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a",
             encoding="utf-8",
@@ -1325,14 +1415,16 @@ def _log_provenance(
         os.chmod(path, 0o600)
     except OSError:
         # The log is a convenience, never a gate. A queue that cannot write it
-        # must still refuse, and must still say why on stderr.
-        pass
+        # must still refuse, and must still say why on stderr. The index must
+        # not remember a line the log does not hold, so nothing is recorded.
+        return
+    _log_lines(path).add(line)
     index[key] = {"count": 1, "first_seen": stamp, "last_seen": stamp, "reason": reason}
     _prune_index(index)
     _flush_provenance_index()
 
 
-def _rotate_provenance_log(path: Path) -> None:
+def _rotate_provenance_log(path: Path) -> bool:
     """Keep the provenance log to one file of one size.
 
     The log grows by one line per pull request per tick, so an uncapped file
@@ -1341,13 +1433,14 @@ def _rotate_provenance_log(path: Path) -> None:
     """
     try:
         if path.stat().st_size < PROVENANCE_LOG_MAX_BYTES:
-            return
+            return False
     except OSError:
-        return
+        return False
     try:
         path.replace(path.with_name(path.name + ".1"))
     except OSError:
-        pass
+        return False
+    return True
 
 
 def _gate_ci_provenance(
