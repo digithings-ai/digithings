@@ -1724,8 +1724,8 @@ html:has([data-thread-skin="digichat"][data-scrollbars="auto"])
   display: flex;
   flex-direction: column;
   gap: var(--trace-header-gap, 0.25rem);
-  padding-block: calc(var(--trace-body-pad, 0.125rem) + var(--space-4, 0.5rem));
-  padding-inline: calc(var(--trace-body-pad, 0.125rem) + var(--space-5, 0.625rem));
+  padding-block: calc(var(--trace-body-pad, 0.125rem) + var(--trace-space-4, 0.5rem));
+  padding-inline: calc(var(--trace-body-pad, 0.125rem) + var(--trace-space-5, 0.625rem));
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-result"],

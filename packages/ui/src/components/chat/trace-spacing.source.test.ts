@@ -21,26 +21,41 @@ describe("worked chain spacing tokens", () => {
   it("defines the scale and the default semantic tokens on the thread", () => {
     const block = aui.match(/\.digichat-thread,\n\.digichat-launcher \{([\s\S]*?)\n\}/);
     const body = block?.[1] ?? "";
-    expect(body).toContain("--space-1: 0.125rem");
-    expect(body).toContain("--space-2: 0.25rem");
-    expect(body).toContain("--space-3: 0.375rem");
-    expect(body).toContain("--space-4: 0.5rem");
-    expect(body).toContain("--space-5: 0.625rem");
-    expect(body).toContain("--space-6: 0.75rem");
-    expect(body).toContain("--space-7: 1rem");
-    expect(body).toContain("--trace-title-gap: var(--space-5)");
-    expect(body).toContain("--trace-group-gap: var(--space-4)");
-    expect(body).toContain("--trace-within-gap: var(--space-2)");
-    expect(body).toContain("--trace-header-gap: var(--space-2)");
-    expect(body).toContain("--trace-body-pad: var(--space-1)");
-    expect(body).toContain("--trace-body-indent: var(--space-6)");
-    expect(body).toContain("--trace-chain-gap: var(--space-6)");
+    expect(body).toContain("--trace-space-1: 0.125rem");
+    expect(body).toContain("--trace-space-2: 0.25rem");
+    expect(body).toContain("--trace-space-3: 0.375rem");
+    expect(body).toContain("--trace-space-4: 0.5rem");
+    expect(body).toContain("--trace-space-5: 0.625rem");
+    expect(body).toContain("--trace-space-6: 0.75rem");
+    expect(body).toContain("--trace-space-7: 1rem");
+    expect(body).toContain("--trace-title-gap: var(--trace-space-5)");
+    expect(body).toContain("--trace-group-gap: var(--trace-space-4)");
+    expect(body).toContain("--trace-within-gap: var(--trace-space-2)");
+    expect(body).toContain("--trace-header-gap: var(--trace-space-2)");
+    expect(body).toContain("--trace-body-pad: var(--trace-space-1)");
+    expect(body).toContain("--trace-body-indent: var(--trace-space-6)");
+    expect(body).toContain("--trace-chain-gap: var(--trace-space-6)");
   });
 
   it("puts the title gap and one sibling gap on the chain content", () => {
     expect(aui).toContain("gap: var(--trace-group-gap, 0.5rem)");
     expect(aui).toContain("padding-top: var(--trace-title-gap, 0.625rem)");
     expect(aui).not.toContain("padding-top: 0.3rem");
+  });
+
+  it("lays the chain content out as a column and hides it when folded", () => {
+    const chain = aui.match(
+      /\.digichat-thread \[data-slot="aui_work-chain-content"\],\n\.digichat-launcher \[data-slot="aui_work-chain-content"\] \{([\s\S]*?)\n\}/,
+    );
+    expect(chain?.[1] ?? "").toContain("display: flex");
+    expect(chain?.[1] ?? "").toContain("flex-direction: column");
+    expect(aui).toMatch(
+      /\[data-slot="aui_work-chain-content"\]\[hidden\] \{\n  display: none;\n\}/,
+    );
+  });
+
+  it("keeps its scale out of the design tokens' --space-* names", () => {
+    expect(aui).not.toMatch(/(^|[^-a-z])--space-\d/m);
   });
 
   it("gives reasoning and tool groups the same sibling margin", () => {

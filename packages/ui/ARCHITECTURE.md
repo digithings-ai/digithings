@@ -291,7 +291,7 @@ folded once the answer starts — with closed rows inside it, and the work
 content not mounted while the rows stay closed. (`showDetails` is set by every
 level and read by no renderer yet; it is not part of the contract.)
 
-**Spacing.** The chain's vertical rhythm is the `--space-1` … `--space-7` scale
+**Spacing.** The chain's vertical rhythm is the `--trace-space-1` … `--trace-space-7` scale
 and the `--trace-*` tokens on `.digichat-thread` (`chat-aui.css`). The Worked
 title, the gap between sibling groups, the gap inside a group, and the
 reasoning header-to-body step all read those tokens. Sibling groups share
