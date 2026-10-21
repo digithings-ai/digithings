@@ -17,6 +17,8 @@ same-repo develop->main promotion PRs (DIG-3743). Nothing else posts that name.
 An explicit --pr N run resolves the pull request in any state: a closed or a
 merged one still gets a verdict that names it and its state, never a silent
 skip (DIG-4812).
+A run that no trusted launcher started is refused before anything happens:
+the launchd daemon or the CI container only (launch_guard.py, DIG-4796).
 Usage: local_ci.py [--pr N] [--dry-run]"""
 import json
 import os
@@ -37,6 +39,10 @@ try:
     import pr_template
 except ImportError:  # fail closed in run_checks, never crash the tick
     pr_template = None
+try:
+    import launch_guard
+except ImportError:  # fail closed in main: a run without the guard does not run at all
+    launch_guard = None
 HOME = os.path.expanduser("~")
 REPO = "digithings-ai/digithings"
 MAIN = os.environ.get("LOCAL_CI_MAIN") or f"{HOME}/Code/digithings"
@@ -1189,6 +1195,15 @@ def explicit_run(only, dry):
 
 
 def main():
+    # The launch guard runs first, before any side effect: a run that no trusted
+    # launcher started (a hand-run from any shell, a seat's shell, a detached
+    # script) is refused with exit 78 and never reaches the lock, the watchdog
+    # or GitHub (DIG-4796).
+    if launch_guard is None:
+        sys.stderr.write("local_ci: the launch_guard module is missing; refusing to "
+                         "run rather than run unguarded (DIG-4796)\n")
+        sys.exit(78)
+    launch_guard.enforce(__file__, "local-ci")
     dry = "--dry-run" in sys.argv
     if os.environ.get("LOCAL_CI_WT") and os.path.isdir(WT) and not wt_is_ours(WT):
         sys.exit(f"local_ci: LOCAL_CI_WT={WT} exists and is not a worktree of {MAIN}; "
