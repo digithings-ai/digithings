@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
@@ -356,6 +357,25 @@ def test_the_digigraph_probe_never_leaves_loopback():
     check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
     assert check.url.startswith("http://127.0.0.1:")
     assert "DIGIGRAPH_HOST" not in check.url
+    # The resolved URL is the one the probe actually opens, so the invariant
+    # has to hold there and not only in the template.
+    resolved = contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "18000"})[0]
+    assert urlsplit(resolved).hostname == "127.0.0.1"
+
+
+def test_the_digigraph_probe_follows_the_port_override_in_the_merged_catalogue():
+    """The knob has to survive the contract merge, not only the built-ins.
+
+    The gate runs the merged catalogue, and the merge takes the contract row
+    over the built-in one (``url=override.url or builtin.url``). A contract
+    row that grew a ``port`` key would silently drop the knob, so the merged
+    catalogue is what the test reads.
+    """
+    checks, _origin = contracts.load_checks(REPO_ROOT)
+    check = next(c for c in checks if c.name == "digigraph")
+    url, reason = contracts.resolve(check, {"DT_DIGIGRAPH_PORT": "18000"})
+    assert reason is None
+    assert url == "http://127.0.0.1:18000/healthz"
 
 
 def test_env_expansion_falls_back_to_the_declared_default():
