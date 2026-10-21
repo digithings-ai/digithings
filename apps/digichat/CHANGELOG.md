@@ -13,6 +13,8 @@ light or dark.
 * **digichat:** the work chain, reasoning, tool group and every tool row share one caret, the square pixel chevron of the user-message mark, which turns down when its own row opens and nowhere else ([#6132](https://github.com/digithings-ai/digithings/pull/6132))
 * **chat:** the disclosure triggers announce their label once ([#6140](https://github.com/digithings-ai/digithings/pull/6140))
 * **ui:** the JSON view's whitespace repair runs in one linear pass; a partial or unparsable payload over 65,536 characters is shown raw instead of repaired ([#6135](https://github.com/digithings-ai/digithings/pull/6135))
+* **digichat:** the DataTap trial's starter questions ask about the Enron sample data the trial agent can reach ([#6179](https://github.com/digithings-ai/digithings/pull/6179))
+* **ui:** the theme provider follows every painter, and a pinned embed sets its own `theme-color` ([#6164](https://github.com/digithings-ai/digithings/pull/6164))
 * **chat:** the JSON view that renders tool arguments and results tokenizes in one pass, with no regular expression over strings ([#6129](https://github.com/digithings-ai/digithings/pull/6129))
 * **digichat:** the view-level wording has one home, so the session-preferences refusal no longer names retired command ids ([#6050](https://github.com/digithings-ai/digithings/pull/6050))
 
