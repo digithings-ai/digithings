@@ -31,7 +31,34 @@ function grid(host: HTMLElement) {
 }
 
 describe("stock tool-group caret", () => {
-  it("turns with its own row in a non-digichat skin", async () => {
+  it("carries its own turn, with no chat stylesheet loaded", async () => {
+    // Stock hosts (the baseline catalog, third-party hosts) load no chat
+    // sheet, so the turn rides on Tailwind utilities their build scans.
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        <ToolGroupRoot>
+          <ToolGroupTrigger count={2} />
+          <ToolGroupContent>tools</ToolGroupContent>
+        </ToolGroupRoot>,
+      );
+    });
+    const { trigger } = grid(host);
+    const caret = trigger.querySelector<HTMLElement>(':scope > [data-slot="disclosure-chevron"]')!;
+    const classes = caret.className.split(/\s+/);
+    expect(classes).toContain(
+      "[[aria-expanded=true]>&_[data-slot=dot-matrix-grid]]:[transform:rotate(90deg)]",
+    );
+    expect(classes).toContain(
+      "[[data-panel-open]>&_[data-slot=dot-matrix-grid]]:[transform:rotate(90deg)]",
+    );
+    await act(async () => root.unmount());
+  });
+
+
+  it("turns with its own row where chat-aui.css is loaded, outside the DigiChat scope", async () => {
     const style = document.createElement("style");
     style.textContent = css;
     document.head.append(style);

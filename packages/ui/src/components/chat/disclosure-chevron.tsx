@@ -17,11 +17,24 @@ import { DotMatrix } from "./DotMatrix";
  * (Radix). An open ancestor — the work chain's `data-open` — does not
  * rotate the closed rows inside it.
  */
+/**
+ * The turn as Tailwind utilities, so it holds in every host that scans this
+ * package (stock skins and the baseline catalog load no chat stylesheet). The
+ * DigiChat sheets repeat the same rotate with their own transition.
+ */
+export const TURN = [
+  "aui-disclosure-chevron",
+  "[&_[data-slot=dot-matrix-grid]]:transition-transform",
+  "motion-reduce:[&_[data-slot=dot-matrix-grid]]:transition-none",
+  "[[aria-expanded=true]>&_[data-slot=dot-matrix-grid]]:[transform:rotate(90deg)]",
+  "[[data-panel-open]>&_[data-slot=dot-matrix-grid]]:[transform:rotate(90deg)]",
+].join(" ");
+
 export function DisclosureChevron() {
   return (
     <span
       data-slot="disclosure-chevron"
-      className="aui-disclosure-chevron"
+      className={TURN}
       style={{
         position: "relative",
         display: "inline-flex",
