@@ -300,6 +300,8 @@ own margins. The chain header's marker-to-label gap stays `0.45rem` so it
 still matches the pre-response loader. `data-density` (`compact`, `default`,
 `airy`) reassigns the tokens. The palette stores the user's choice in
 `dt-density`; a deployment `features.density` applies when that key is absent.
+The tool-call group mark is a pixel `{ }` on that same 5×5 cube grid as the
+reasoning bulb; the bulb itself is unchanged.
 
 **Reason.** The quiet contract was once a single `summaryOnly` branch inside
 the `group-chainOfThought` case, which read as if it covered only the
