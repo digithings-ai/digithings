@@ -38,7 +38,12 @@ export async function exchangeDigikeyApiKey(
   return parseTokenPayload(data);
 }
 
-/** Per-attempt abort window for a single digikey token request. */
+/**
+ * Per-attempt abort cap for a single digikey token request. It is a cap, not
+ * a fixed window: the window an attempt actually gets is
+ * `min(cap, budget left)`, so a late attempt in a mixed failure pattern can
+ * get less.
+ */
 export const DIGIKEY_BFF_ATTEMPT_TIMEOUT_MS = 30_000;
 
 /** Backoff waited before each attempt, in ms. The first attempt has no delay. */
@@ -110,7 +115,8 @@ export async function exchangeDigikeyBffSession(
         }),
       });
     } catch {
-      continue; // network error / timeout while waking
+      // Network error / timeout while waking: the attempt produced no
+      // response, so the guard below skips it and the next attempt starts.
     } finally {
       clearTimeout(t);
     }
