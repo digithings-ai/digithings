@@ -10,10 +10,11 @@ launcher the org controls.
 Two launchers are trusted:
 
   * the launchd daemon (`ai.digithings.local-ci`, `ai.digithings.twelvex-ci`).
-    launchd starts it with ppid 1, sets XPC_SERVICE_NAME to the job label, and
-    the loaded job's arguments are exactly the interpreter and the runner file
-    that is running now - no extra arguments, so a job that asks for one PR is
-    not the daemon and is refused;
+    launchd starts it with ppid 1, sets XPC_SERVICE_NAME to the job label,
+    loads it from the plist scripts/local-ci/install.sh writes, and the loaded
+    job's arguments are exactly the interpreter and the runner file that is
+    running now - no extra arguments, so a job that asks for one PR is not the
+    daemon and is refused;
 
   * the CI container (the Woodpecker worker), which runs the runner from
     /opt/local-ci under /opt/local-ci/worker_entrypoint.sh with the CI
@@ -68,7 +69,7 @@ LOG_NAME = "launch-guard.jsonl"
 def _proc_cmdline(pid):
     """The argv of a pid from /proc, or None when /proc does not have it."""
     try:
-        with open("/proc/%d/cmdline" % pid, "rb") as fh:
+        with open(f"/proc/{pid}/cmdline", "rb") as fh:
             raw = fh.read()
     except OSError:
         return None
@@ -79,7 +80,7 @@ def _proc_cmdline(pid):
 def _proc_ppid(pid):
     """The parent pid of a pid from /proc, or None."""
     try:
-        with open("/proc/%d/stat" % pid, "rb") as fh:
+        with open(f"/proc/{pid}/stat", "rb") as fh:
             raw = fh.read().decode("utf-8", "replace")
     except OSError:
         return None
@@ -100,7 +101,8 @@ def _proc_ppid(pid):
 def _ps(args):
     """Run ps and return its stdout, or None when ps could not answer."""
     try:
-        proc = subprocess.run(["ps"] + args, capture_output=True, text=True, timeout=10)
+        proc = subprocess.run(["ps"] + args, capture_output=True, text=True, timeout=10,
+                              check=False)
     except (OSError, subprocess.SubprocessError):
         return None
     if proc.returncode != 0:
@@ -169,14 +171,24 @@ def parse_launchctl_print(text):
     return job
 
 
+def canonical_plist_path(label):
+    """Where the house tooling installs a launchd job's plist.
+
+    scripts/local-ci/install.sh writes it and dt-daemon-liveness bootstraps
+    from it, so a job loaded from anywhere else was not installed by the org.
+    """
+    return os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents",
+                        f"{label}.plist")
+
+
 def launchctl_job(label, uid=None):
     """The loaded job's facts, or None when the job is not loaded."""
     if uid is None:
         uid = os.getuid()
     try:
         proc = subprocess.run(
-            ["launchctl", "print", "gui/%d/%s" % (uid, label)],
-            capture_output=True, text=True, timeout=15,
+            ["launchctl", "print", f"gui/{uid}/{label}"],
+            capture_output=True, text=True, timeout=15, check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -210,8 +222,8 @@ def _decide_container(facts):
     """The CI container: the worker entrypoint, under /opt/local-ci, with a token."""
     runner = facts.get("runner") or ""
     if not runner.startswith(CONTAINER_RUNNER_ROOT + os.sep):
-        return False, ("the runner is not under %s, so this is not the CI container"
-                       % CONTAINER_RUNNER_ROOT)
+        return False, (f"the runner is not under {CONTAINER_RUNNER_ROOT}, so this is not "
+                       "the CI container")
     for ancestor in facts.get("ancestors") or []:
         for argument in ancestor.get("argv") or []:
             if CONTAINER_ENTRYPOINT in argument:
@@ -225,26 +237,31 @@ def _decide_container(facts):
 def _decide_launchd(facts, label):
     """The launchd daemon: ppid 1, the trusted label, and the job that matches."""
     if facts.get("ppid") != 1:
-        return False, ("the launchd job %s claims this run, but the parent pid is %s "
-                       "and not launchd" % (label, facts.get("ppid")))
+        return False, (f"the launchd job {label} claims this run, but the parent pid is "
+                       f"{facts.get('ppid')} and not launchd")
     job = facts.get("launchd_job")
     if not job:
-        return False, "the launchd job %s is not loaded" % label
+        return False, f"the launchd job {label} is not loaded"
+    expected_plist = canonical_plist_path(label)
+    if job.get("path") != expected_plist:
+        return False, (f"the launchd job {label} was loaded from "
+                       f"{job.get('path') or 'an unknown path'} and not from the canonical "
+                       f"{expected_plist}; reinstall it with scripts/local-ci/install.sh")
     arguments = job.get("arguments") or []
     if len(arguments) != 2:
-        return False, ("the launchd job %s runs %d arguments; the daemon runs the "
-                       "runner with none" % (label, len(arguments)))
+        return False, (f"the launchd job {label} runs {len(arguments)} arguments; the "
+                       "daemon runs the runner with none")
     program, runner_argument = arguments
     if not os.path.basename(program).startswith("python"):
-        return False, "the launchd job %s does not run a python interpreter" % label
+        return False, f"the launchd job {label} does not run a python interpreter"
     try:
         same = os.path.realpath(runner_argument) == facts.get("runner")
     except OSError:
         same = False
     if not same:
-        return False, ("the launchd job %s runs a different file than the runner that "
-                       "is running now" % label)
-    return True, "the launchd daemon %s started this run" % label
+        return False, (f"the launchd job {label} runs a different file than the runner "
+                       "that is running now")
+    return True, f"the launchd daemon {label} started this run"
 
 
 def decide(facts):
@@ -254,8 +271,8 @@ def decide(facts):
     label = facts.get("xpc_service_name")
     if label:
         if label not in TRUSTED_LAUNCHD_LABELS:
-            return False, ("XPC_SERVICE_NAME is %r, which is not a trusted runner job"
-                           % label)
+            return False, (f"XPC_SERVICE_NAME is {label!r}, which is not a trusted "
+                           "runner job")
         return _decide_launchd(facts, label)
     return False, ("the runner was not started by a trusted launcher: no launchd job "
                    "and no CI container")
@@ -311,7 +328,7 @@ def enforce(runner_path, ctx, facts=None):
     if allowed:
         return True
     name = os.path.basename(facts.get("runner") or runner_path or "the runner")
-    sys.stderr.write("launch_guard: refusing to run %s: %s\n" % (name, reason))
+    sys.stderr.write(f"launch_guard: refusing to run {name}: {reason}\n")
     sys.stderr.write("launch_guard: the runner runs from its launchd job or from the "
                      "CI container only (DIG-4796).\n")
     sys.exit(EX_CONFIG)
@@ -339,7 +356,7 @@ def _parse_args(argv):
         if argument in ("-h", "--help"):
             sys.stdout.write((__doc__ or "") + "\n")
             raise SystemExit(0)
-        raise SystemExit("launch_guard: unknown argument %r" % argument)
+        raise SystemExit(f"launch_guard: unknown argument {argument!r}")
     return options
 
 
@@ -362,7 +379,7 @@ def main(argv=None):
     if allowed:
         return 0
     name = os.path.basename(facts.get("runner") or options["runner"] or "the runner")
-    sys.stderr.write("launch_guard: refusing to run %s: %s\n" % (name, reason))
+    sys.stderr.write(f"launch_guard: refusing to run {name}: {reason}\n")
     sys.stderr.write("launch_guard: the runner runs from its launchd job or from the "
                      "CI container only (DIG-4796).\n")
     return EX_CONFIG

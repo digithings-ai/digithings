@@ -134,6 +134,23 @@ class DecisionTests(unittest.TestCase):
         self.assertFalse(allowed)
         self.assertIn("not loaded", reason)
 
+    def test_a_launchd_job_loaded_from_another_plist_is_refused(self):
+        """The label is not enough: the job has to be the one install.sh wrote."""
+        facts = _launchd_facts()
+        facts["launchd_job"]["path"] = "/tmp/seat/ai.digithings.local-ci.plist"
+        allowed, reason = _guard.decide(facts)
+        self.assertFalse(allowed)
+        self.assertIn("canonical", reason)
+
+    def test_the_canonical_plist_is_the_one_the_installer_writes(self):
+        expected = os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents",
+                                "ai.digithings.local-ci.plist")
+        self.assertEqual(_guard.canonical_plist_path("ai.digithings.local-ci"), expected)
+        self.assertEqual(
+            _guard.canonical_plist_path("ai.digithings.twelvex-ci"),
+            os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents",
+                         "ai.digithings.twelvex-ci.plist"))
+
     def test_the_ci_container_is_allowed(self):
         allowed, reason = _guard.decide(_container_facts())
         self.assertTrue(allowed, reason)
