@@ -10,12 +10,37 @@
 import {
   PALETTE_STORAGE_KEY,
   THEME_CHANGE_EVENT,
+  applyDocumentTheme,
   isPaletteId,
   readPaintedTheme,
   readThemeState,
   themeColorFor,
+  type ThemePreference,
   type ThemeState,
 } from "@digithings/ui/theme";
+
+/**
+ * `/theme light|dark|auto`: change the mode and keep the painted palette. A
+ * palette the deployment painted is not the user's choice, so it is not
+ * written to `dt-palette` (that would freeze the deployment default).
+ */
+export function applyThemeModeKeepingPalette(preference: ThemePreference): void {
+  const state = readEffectiveThemeState();
+  let storedPalette: string | null = null;
+  try {
+    storedPalette = localStorage.getItem(PALETTE_STORAGE_KEY);
+  } catch {
+    /* no storage */
+  }
+  applyDocumentTheme(preference, state.palette);
+  if (storedPalette == null) {
+    try {
+      localStorage.removeItem(PALETTE_STORAGE_KEY);
+    } catch {
+      /* no storage */
+    }
+  }
+}
 
 export function readEffectiveThemeState(): ThemeState {
   const state = readThemeState();
@@ -31,6 +56,9 @@ export function readEffectiveThemeState(): ThemeState {
 /** Paint a deployment palette only when this browser has no palette choice. */
 export function applyDeployedPalette(palette: string | null | undefined): void {
   if (typeof document === "undefined") return;
+  // A pinned embed owns its document (the pin removes data-palette and sets
+  // the embed canvas theme-color); a deployment default must not repaint it.
+  if (document.documentElement.getAttribute("data-theme-pin") === "1") return;
   try {
     if (localStorage.getItem(PALETTE_STORAGE_KEY) != null) return;
   } catch {

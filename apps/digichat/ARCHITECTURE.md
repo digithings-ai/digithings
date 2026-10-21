@@ -1816,7 +1816,7 @@ part-driven vs chrome-driven is indexed in digiweb
 | `features.attachments` | bool | Default **true** (composer attach). Product / DataTap / dashboard YAML set false. |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |
-| `features.density` | `compact \| default \| airy` | Worked-chain rhythm. Default `default` (the fixed spacing). A browser `dt-density` choice wins over this for that user. |
+| `features.density` | `compact \| default \| airy` | Worked-chain rhythm. Default `default` (the fixed spacing). A browser `dt-density` choice wins over this for that user. Unlike the other embed prefs (session-only), `/density` persists in localStorage, so a choice made in an embed on the digithings.ai origin also applies to the app there. |
 | `features.effort` | `low \| medium \| high` | Seeds `/effort`. Default `medium`. A palette choice overrides it for the session; `/new` returns to this value. |
 | `features.view` | `quiet \| balanced \| verbose` | Already the chain disclosure. Seeds `/view`. Session choice wins until `/new`. |
 | `features.thinking` | `auto \| collapsed \| open` | Seeds `/thinking`. Session choice wins until `/new`. |

@@ -45,6 +45,23 @@ describe("deployment palette default", () => {
     expect(readEffectiveThemeState().palette).toBe("aura");
   });
 
+  it("leaves a pinned embed document alone", () => {
+    const meta = document.createElement("meta");
+    meta.setAttribute("name", "theme-color");
+    meta.setAttribute("content", "#121417");
+    document.head.append(meta);
+    document.documentElement.setAttribute("data-theme-pin", "1");
+    const changed = vi.fn();
+    window.addEventListener(THEME_CHANGE_EVENT, changed);
+    applyDeployedPalette("dracula");
+    window.removeEventListener(THEME_CHANGE_EVENT, changed);
+    document.documentElement.removeAttribute("data-theme-pin");
+    expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
+    expect(meta.getAttribute("content")).toBe("#121417");
+    expect(changed).not.toHaveBeenCalled();
+    meta.remove();
+  });
+
   it("ignores an unknown or default deployment palette", () => {
     applyDeployedPalette("not-a-palette");
     applyDeployedPalette("default");

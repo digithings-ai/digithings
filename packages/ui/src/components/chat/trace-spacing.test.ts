@@ -7,7 +7,9 @@ import {
   TRACE_DENSITIES,
   TRACE_SPACING,
   TRACE_SPACE_SCALE,
+  readStoredDensity,
   resolveTraceDensity,
+  writeStoredDensity,
   type TraceSpacingTokens,
 } from "./trace-spacing";
 
@@ -31,6 +33,41 @@ const CSS_TOKEN: Record<keyof TraceSpacingTokens, string> = {
   bodyIndent: "--trace-body-indent",
   chainGap: "--trace-chain-gap",
 };
+
+describe("stored density", () => {
+  function memory() {
+    const map = new Map<string, string>();
+    return {
+      map,
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => void map.set(k, v),
+    };
+  }
+
+  it("round-trips a choice through dt-density", () => {
+    const store = memory();
+    writeStoredDensity("airy", store);
+    expect(store.map.get("dt-density")).toBe("airy");
+    expect(readStoredDensity(store)).toBe("airy");
+  });
+
+  it("reads nothing for a missing or unknown value, and survives a throwing store", () => {
+    const store = memory();
+    expect(readStoredDensity(store)).toBeNull();
+    store.map.set("dt-density", "huge");
+    expect(readStoredDensity(store)).toBeNull();
+    const broken = {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+    };
+    expect(() => writeStoredDensity("compact", broken)).not.toThrow();
+    expect(readStoredDensity(broken)).toBeNull();
+  });
+});
 
 describe("resolveTraceDensity", () => {
   it("prefers a stored choice, then the deployment, then the builtin default", () => {

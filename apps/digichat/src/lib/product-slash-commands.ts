@@ -34,7 +34,7 @@ import {
   isViewMode,
   normalizeViewMode,
 } from "@/lib/view-modes";
-import { readEffectiveThemeState } from "@/lib/palette-prefs";
+import { applyThemeModeKeepingPalette, readEffectiveThemeState } from "@/lib/palette-prefs";
 import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
 
 export type SlashSubmitAction =
@@ -240,7 +240,7 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       // picker and the row description already show (not storage alone).
       const state = readEffectiveThemeState();
       if (isThemePreference(raw)) {
-        applyDocumentTheme(raw, state.palette);
+        applyThemeModeKeepingPalette(raw);
         return;
       }
       if (raw === "default" || isPaletteId(raw)) {
