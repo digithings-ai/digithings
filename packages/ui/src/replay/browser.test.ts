@@ -126,4 +126,22 @@ describe("downloadThreadSnapshot (end to end)", () => {
       /^Cookie: (session=)?\[redacted\]$/,
     );
   });
+
+  it("shows an error and does not download when the page has no thread", async () => {
+    vi.resetModules();
+    const saved: Array<{ name: string; body: string }> = [];
+    vi.doMock("../components/chat/transcript", () => ({
+      downloadTextFile: (name: string, body: string) => void saved.push({ name, body }),
+    }));
+    const { downloadThreadSnapshot } = await import("./browser");
+    const doc = document.implementation.createHTMLDocument("chat");
+    doc.body.innerHTML = "<p>Nothing open</p>";
+    await expect(downloadThreadSnapshot(doc, "2026-10-21T15:04:00.000Z")).rejects.toThrow(
+      /no open thread/i,
+    );
+    expect(saved).toHaveLength(0);
+    expect(doc.querySelector("[role='alert']")?.textContent).toMatch(/no open thread/i);
+    expect(doc.body.textContent).toContain("Nothing open");
+    vi.doUnmock("../components/chat/transcript");
+  });
 });

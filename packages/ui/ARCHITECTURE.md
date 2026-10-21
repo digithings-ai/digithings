@@ -707,14 +707,20 @@ control that keeps its name from its glyph),
 
 `/export` downloads the thread as markdown. `/export html` downloads the
 active thread as one file (`packages/ui/src/replay/`), not the memory
-sidebar or any other thread. The file is that thread's rendered DOM:
+sidebar or any other thread. Ancestors of that thread are attribute-only
+wrappers, so deployment rules scoped to `[data-stock-product]` still match,
+and a node the live page has computed as `display: none` or `visibility:
+hidden` is left out. A closed disclosure panel stays. A page with no thread
+root shows an error instead of saving a file, and a refresh meta is removed
+wherever it sits. The file is that thread's rendered DOM:
 styles and same-origin images are inlined, the composer is removed, and
 work-chain, reasoning, tool, and source disclosures become `<details>` so
 they still open offline. Closed panels stay mounted (`keepMounted`) so a
 folded tool call is still in the file. `redact-dom.ts` redacts text and
 attribute values on the cloned DOM before serialization (tool JSON by key,
 everything else with the `redact.ts` patterns, including a standalone 48-hex
-invite key). It is pattern-based, so an unlabeled secret of unknown shape can
+invite key, a `session` JSON key, and a `Signature` query value). It is
+pattern-based, so an unlabeled secret of unknown shape can
 still get through. The filename is
 `<deployment>-<YYYY-MM-DD-HHMM>-<question-slug>.html` (UTC, latest question,
 id-like words dropped).

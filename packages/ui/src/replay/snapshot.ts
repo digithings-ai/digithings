@@ -106,23 +106,99 @@ export function activeThreadRoot(root: ParentNode): HTMLElement | null {
   return pool[pool.length - 1] ?? null;
 }
 
-/** A document that holds only the active thread, with the live page's theme. */
+/**
+ * A document that holds only the active thread, with the live page's theme.
+ * Ancestors are attribute-only wrappers so rules scoped to `[data-stock-product]`
+ * still match. A node the live page has computed as `display: none` or
+ * `visibility: hidden` is left out. A closed disclosure panel stays, so a
+ * folded tool call is still in the file. The open page is not changed.
+ */
 export function snapshotSource(doc: Document): HTMLElement | null {
   const thread = activeThreadRoot(doc);
   if (!thread) return null;
   const html = doc.createElement("html");
-  const live = doc.documentElement;
-  const lang = live.getAttribute("lang");
-  if (lang) html.setAttribute("lang", lang);
-  const theme = live.getAttribute("data-theme");
-  if (theme) html.setAttribute("data-theme", theme);
-  if (live.className) html.className = live.className;
+  copyShellAttributes(doc.documentElement, html);
   const deployment = deploymentText(doc);
   if (deployment) html.setAttribute("data-deployment", deployment);
-  const body = doc.createElement("body");
-  body.append(thread.cloneNode(true));
-  html.append(body);
+  html.append(threadShell(doc, thread));
   return html;
+}
+
+function threadShell(doc: Document, thread: HTMLElement): HTMLElement {
+  const body = doc.createElement("body");
+  if (doc.body) copyShellAttributes(doc.body, body);
+  const ancestors: HTMLElement[] = [];
+  for (
+    let cursor = thread.parentElement;
+    cursor && cursor !== doc.body && cursor !== doc.documentElement;
+    cursor = cursor.parentElement
+  ) {
+    ancestors.push(cursor);
+  }
+  ancestors.reverse();
+  let parent: HTMLElement = body;
+  for (const ancestor of ancestors) {
+    const wrap = doc.createElement(ancestor.tagName.toLowerCase());
+    copyShellAttributes(ancestor, wrap);
+    parent.append(wrap);
+    parent = wrap;
+  }
+  parent.append(cloneWithoutHidden(thread));
+  return body;
+}
+
+/**
+ * Read computed style on the live thread first, then clone. Dropping the
+ * live nodes would change the open chat.
+ */
+function cloneWithoutHidden(live: HTMLElement): HTMLElement {
+  const liveNodes = [live, ...live.querySelectorAll("*")];
+  const hidden = new Set<number>();
+  for (let i = 1; i < liveNodes.length; i += 1) {
+    if (suppressed(liveNodes[i]!)) hidden.add(i);
+  }
+  const clone = live.cloneNode(true) as HTMLElement;
+  if (hidden.size === 0) return clone;
+  const cloneNodes = [clone, ...clone.querySelectorAll("*")];
+  for (const index of [...hidden].sort((a, b) => b - a)) {
+    const node = cloneNodes[index];
+    if (node && clone.contains(node)) node.remove();
+  }
+  return clone;
+}
+
+function suppressed(el: Element): boolean {
+  // A closed panel is `display: none` only so the disclosure can open offline.
+  // Deployment hide rules do not use the hidden attribute.
+  if (insideClosedPanel(el)) return false;
+  const view = el.ownerDocument.defaultView;
+  if (!view) return false;
+  const style = view.getComputedStyle(el);
+  return style.display === "none" || style.visibility === "hidden";
+}
+
+function insideClosedPanel(el: Element): boolean {
+  for (let cursor: Element | null = el; cursor; cursor = cursor.parentElement) {
+    if (isClosedPanel(cursor)) return true;
+  }
+  return false;
+}
+
+function isClosedPanel(el: Element): boolean {
+  const hidden = el instanceof HTMLElement ? el.hidden : el.hasAttribute("hidden");
+  if (!hidden) return false;
+  const slot = el.getAttribute("data-slot") ?? "";
+  if (slot.endsWith("-content") || slot === "collapsible-content") return true;
+  const id = el.getAttribute("id");
+  if (!id) return false;
+  return el.ownerDocument.querySelector(`[aria-controls="${cssEscape(id)}"]`) !== null;
+}
+
+function copyShellAttributes(from: Element, to: Element): void {
+  for (const attr of from.attributes) {
+    if (attr.name.toLowerCase().startsWith("on")) continue;
+    to.setAttribute(attr.name, attr.value);
+  }
 }
 
 function isOpenThread(el: HTMLElement): boolean {
@@ -140,6 +216,7 @@ export function escapeStyleText(css: string): string {
 
 /** Mutates `root` into a read-only snapshot of itself. */
 export function transformSnapshotDom(root: HTMLElement): void {
+  stripRefreshMeta(root);
   root.querySelectorAll(REMOVE).forEach((node) => node.remove());
   root.querySelectorAll("[data-nextjs-dialog-overlay], [data-nextjs-toast]").forEach((node) => {
     node.remove();
@@ -153,10 +230,11 @@ export function serializeSnapshot(root: HTMLElement, css: string): string {
   // Redact text and attribute values before the page CSS goes in, so the
   // inlined fonts and the stylesheet are never rewritten.
   redactSnapshotDom(root);
+  stripRefreshMeta(root);
   const head = ensureHead(root);
   head.querySelectorAll("style, link, base").forEach((node) => node.remove());
   head
-    .querySelectorAll("meta[http-equiv='Content-Security-Policy' i], meta[http-equiv='refresh' i]")
+    .querySelectorAll("meta[http-equiv='Content-Security-Policy' i]")
     .forEach((node) => node.remove());
   if (!head.querySelector("meta[charset]")) {
     const meta = doc.createElement("meta");
@@ -178,6 +256,16 @@ export function serializeSnapshot(root: HTMLElement, css: string): string {
   }
   const html = root.tagName === "HTML" ? root.outerHTML : `<html>${root.outerHTML}</html>`;
   return `<!DOCTYPE html>\n${html}`;
+}
+
+/** A refresh meta navigates the file. It is removed wherever it sits. */
+function stripRefreshMeta(root: ParentNode): void {
+  for (const node of [...root.querySelectorAll("meta")]) {
+    if ((node.getAttribute("http-equiv") ?? "").toLowerCase() === "refresh") node.remove();
+  }
+  for (const template of [...root.querySelectorAll("template")]) {
+    if (template instanceof HTMLTemplateElement) stripRefreshMeta(template.content);
+  }
 }
 
 function ensureHead(root: HTMLElement): HTMLElement {

@@ -149,6 +149,77 @@ describe("active thread only", () => {
   });
 });
 
+describe("deployment hide rules", () => {
+  it("drops sources and a hidden model picker, and keeps the stock scope", () => {
+    document.head.innerHTML = [
+      "<style>",
+      '[data-stock-product] [data-message-part-type^="source"],',
+      "[data-stock-product] a[data-source],",
+      "[data-stock-product] [data-deploy-model-picker] { display: none !important; }",
+      "</style>",
+    ].join("");
+    document.body.innerHTML = [
+      '<div data-stock-product data-deployment="Northwind" data-thread-skin="digichat">',
+      '<aside class="dc-thread-list">Other client positions</aside>',
+      '<div class="aui-thread-root">',
+      '<div class="aui-user-message-content">What is the overnight book?</div>',
+      '<div data-message-part-type="source-url">Hidden source body</div>',
+      '<a data-source href="https://example.com/src">source link text</a>',
+      "<div data-deploy-model-picker>picker-model-name</div>",
+      '<div style="visibility: hidden">covered picker note</div>',
+      '<div data-slot="aui_work-chain">',
+      '<button data-slot="aui_work-chain-trigger" aria-expanded="false" aria-controls="chain">',
+      "Worked",
+      "</button>",
+      '<div id="chain" data-slot="aui_work-chain-content" hidden>folded tool result</div>',
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+    const shell = snapshotSource(document);
+    expect(shell).not.toBeNull();
+    expect(
+      shell!.querySelector(".aui-thread-root")?.closest("[data-stock-product]"),
+    ).not.toBeNull();
+    expect(document.body.textContent).toContain("Hidden source body");
+    transformSnapshotDom(shell!);
+    const html = serializeSnapshot(shell!, "");
+    expect(html).toContain("What is the overnight book?");
+    expect(html).toContain("folded tool result");
+    expect(html).toContain("data-stock-product");
+    expect(html).not.toContain("Hidden source body");
+    expect(html).not.toContain("source link text");
+    expect(html).not.toContain("picker-model-name");
+    expect(html).not.toContain("covered picker note");
+    expect(html).not.toContain("Other client positions");
+  });
+});
+
+describe("refresh meta", () => {
+  it("strips a refresh meta in the thread and inside a template", () => {
+    document.body.innerHTML =
+      '<div class="aui-thread-root"><div class="aui-user-message-content">book</div></div>';
+    const thread = document.querySelector(".aui-thread-root");
+    expect(thread).not.toBeNull();
+    const meta = document.createElement("meta");
+    meta.setAttribute("http-equiv", "Refresh");
+    meta.setAttribute("content", "0;url=https://evil.example/body");
+    thread!.append(meta);
+    const template = document.createElement("template");
+    const nested = document.createElement("meta");
+    nested.setAttribute("http-equiv", "refresh");
+    nested.setAttribute("content", "0;url=https://evil.example/tpl");
+    template.content.append(nested);
+    thread!.append(template);
+    const shell = snapshotSource(document);
+    expect(shell).not.toBeNull();
+    transformSnapshotDom(shell!);
+    const html = serializeSnapshot(shell!, "");
+    expect(html.toLowerCase()).not.toContain("evil.example");
+    expect(html.toLowerCase()).not.toMatch(/http-equiv=["']refresh/);
+  });
+});
+
 describe("snapshot stylesheet", () => {
   it("escapes style breakout and puts a strict csp first", () => {
     document.body.innerHTML = [

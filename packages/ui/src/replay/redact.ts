@@ -7,7 +7,7 @@
  */
 
 const SENSITIVE_KEY =
-  /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|x-embed-token|x-embed-chat-token|x-invite-key|x-digichat-session|api[-_]?key|embed[-_]?(?:key|token)|invite[-_]?(?:key|token)|access[-_]?token|refresh[-_]?token|id[-_]?token|auth[-_]?secret|nextauth[-_]?secret|password|secret)$/i;
+  /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|x-embed-token|x-embed-chat-token|x-invite-key|x-digichat-session|api[-_]?key|embed[-_]?(?:key|token)|invite[-_]?(?:key|token)|access[-_]?token|refresh[-_]?token|id[-_]?token|auth[-_]?secret|nextauth[-_]?secret|password|secret|session)$/i;
 
 /** `token`, `authToken`, `client_secret`, `privateKey`… (not `tokens` / `max_tokens`). */
 const SENSITIVE_KEY_SUFFIX =
@@ -34,7 +34,7 @@ const TOKEN_SHAPES: readonly RegExp[] = [
 ];
 
 const QUERY_SECRET =
-  /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key|x-amz-signature|x-amz-credential|x-amz-security-token|awsaccesskeyid|x-goog-signature|x-goog-credential|sig)=)[^&#\s"']*/gi;
+  /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key|x-amz-signature|x-amz-credential|x-amz-security-token|awsaccesskeyid|x-goog-signature|x-goog-credential|signature|sig)=)[^&#\s"']*/gi;
 
 /**
  * Header-style labels whose value is replaced but whose label stays, so the

@@ -144,13 +144,32 @@ export async function inlineDomAssets(
   }
 }
 
+export const MISSING_THREAD_MESSAGE = "No open thread to export.";
+
+/** A failure the open page can show. The same slot is updated, not stacked. */
+export function showSnapshotError(doc: Document, message: string): void {
+  const host = doc.body ?? doc.documentElement;
+  if (!host) return;
+  let banner = host.querySelector<HTMLElement>("[data-slot='snapshot-export-error']");
+  if (!banner) {
+    banner = doc.createElement("div");
+    banner.setAttribute("role", "alert");
+    banner.setAttribute("data-slot", "snapshot-export-error");
+    host.prepend(banner);
+  }
+  banner.textContent = message;
+}
+
 export async function downloadThreadSnapshot(
   doc: Document | null = typeof document === "undefined" ? null : document,
   exportedAt = new Date().toISOString(),
 ): Promise<void> {
-  if (!doc?.documentElement) return;
+  if (!doc?.documentElement) throw new Error(MISSING_THREAD_MESSAGE);
   const shell = snapshotSource(doc);
-  if (!shell) return;
+  if (!shell) {
+    showSnapshotError(doc, MISSING_THREAD_MESSAGE);
+    throw new Error(MISSING_THREAD_MESSAGE);
+  }
   const question = questionText(shell);
   const css = await inlineAssetUrls(liveSheetText(doc));
   transformSnapshotDom(shell);

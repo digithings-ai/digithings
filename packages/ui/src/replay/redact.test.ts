@@ -171,6 +171,19 @@ describe("redactValue", () => {
     expect(out.max_tokens).toBe(4000);
   });
 
+  it("replaces a session key and leaves sessions alone", () => {
+    const out = redactValue({ session: "sess-plain-9f3c2a", sessions: "keep-me" });
+    expect(out.session).toBe(REDACTED);
+    expect(out.sessions).toBe("keep-me");
+  });
+
+  it("replaces a Signature query value", () => {
+    const url = redactString("https://files.example/o?Signature=sig-plain-9f3c2a&ok=1");
+    expect(url).not.toContain("sig-plain-9f3c2a");
+    expect(url).toContain("?Signature=[redacted]");
+    expect(url).toContain("ok=1");
+  });
+
   it("replaces sensitive object keys entirely", () => {
     const out = redactValue({
       authorization: `Bearer ${JWT}`,

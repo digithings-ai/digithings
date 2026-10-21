@@ -43,7 +43,10 @@ import {
   type EmbedChatPrefsApi,
 } from "../stock/embed-chat-prefs";
 import { DigichatComposerToolbar } from "./digichat-composer-toolbar";
-import { downloadThreadSnapshot } from "../../../replay/browser";
+import {
+  downloadThreadSnapshot,
+  showSnapshotError,
+} from "../../../replay/browser";
 
 /**
  * Product slash-command wiring injected by the host (WS4). Structural mirror
@@ -207,6 +210,8 @@ export function DigichatSkin({
       },
       exportHtml: () => {
         void downloadThreadSnapshot().catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : "HTML export failed.";
+          if (typeof document !== "undefined") showSnapshotError(document, message);
           console.error("html export failed", error);
         });
       },
