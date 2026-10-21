@@ -1096,10 +1096,22 @@ description right). No Tools / Session / Actions / Setup folders and no per-row
 Lucide icons. `/help` is a no-op placeholder — the list itself is the help; it
 must not dump into the composer.
 
-Each catalog tool has **one public name and two gestures**: empty Enter toggles the
-session pref (same as `/settings`); a remainder forces that tool for this send.
-`/digisearch RS256 JWT` and `/digivault notes` set `X-Digi-Force-Tool`. `/websearch query`
-sets a send-only web-search header. `/search`, `/vault`, and `/docs` are not public names.
+The composer holds one palette. A pane command (`/language `, `/theme `, `/tools `,
+`/models `, `/mcp `, and the other submenu commands) opens that pane and only that
+pane; typing, including a second `/`, filters the open pane. Backspacing out of the
+trailing space returns to the command list. Choosing an option writes the full
+sequence (`/language English`) and then runs it. The slash popover and the menu
+are never both open.
+
+Tools are not slash commands. `/digisearch`, `/digivault`, `/websearch`, `/zammad`,
+and other catalog or MCP ids are not in the palette. Enabling or disabling a tool
+happens in `/tools`, which lists every tool and MCP server for the host. A Foundry
+host (`backend.type: foundry`) shows that list read-only, labelled "Managed by the
+agent", from the config catalog — the page does not call the agent to discover
+tools. A host with `gate.lockSessionControls` (OCC) or `tools.allowUserToggle: false`
+lists the same rows but does not toggle them. `/search`, `/vault`, and `/docs` are
+not public names. The BFF `X-Digi-Force-Tool` allowlist is unchanged; the palette
+no longer sends it.
 
 Web-search defaults (#3859, tool-only grounding — no synthesis-model pins):
 
@@ -1110,11 +1122,10 @@ Web-search defaults (#3859, tool-only grounding — no synthesis-model pins):
 | datatap (`webSearch: false`) | off | never |
 
 Pref semantics: `readWebSearchPref` defaults on; the user opts out per surface via
-`/websearch` empty-Enter, `/settings`, or the composer menu (persisted as `"0"` in
-localStorage). Either side false — tenant gate or user pref — means the BFF does not
-send `X-Digi-Enable-Web-Search`, so the turn stays corpus-only.
-Menu pick inserts `/digisearch ` (trailing space) and does not fire immediately.
-Extra YAML/MCP catalog ids (`/datatap`) use the same pattern. Disabled catalog ids travel
+`/tools` or `/settings` (persisted as `"0"` in localStorage). Either side false —
+tenant gate or user pref — means the BFF does not send `X-Digi-Enable-Web-Search`,
+so the turn stays corpus-only.
+Disabled catalog ids travel
 as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp`, `/models`, `/effort`,
 `/search-engine`, `/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
 `/mcp` starts on the operator/session MCP list (status: Active / Disabled / Needs auth).
@@ -1261,9 +1272,11 @@ digichat-side semantics below as a live gate today.
 The `DIGICHAT_EMBED_TENANTS` env registry accepts the same operator-only fields on a tenant's
 `mcp.servers` entry (`token`/`tokenEnv`/`authHeader`), merged through the same loader and stripped
 by the same browser projections. `/tools` lists every
-connected catalog + MCP tool as On/Off (each is also a slash command). `/mcp` lists MCP
-tools with status Active / Disabled / Needs auth; Enter opens the session JSON and field
-editors (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**
+connected catalog + MCP tool. Where the host allows it, each row is On/Off.
+A Foundry host shows the same rows read-only ("Managed by the agent"). A locked
+host (`lockSessionControls`) lists them and does not toggle. `/mcp` lists MCP
+servers with status Active / Disabled / Needs auth; Enter opens the session JSON and field
+editors when the host allows editing (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**
 opens a popup → `POST /api/mcp/oauth/start` (PKCE, SSRF via `isAllowedMcpServerUrl`) → AS →
 `GET /api/mcp/oauth/callback` which `postMessage`s the token into `mcpCustom`. Start uses
 the operator YAML URL when the id matches; a client `url` is accepted only when

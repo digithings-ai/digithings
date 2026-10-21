@@ -193,3 +193,23 @@ export type StockComposerMenuKind =
   | "thinking"
   | "provider"
   | "help";
+
+const STOCK_COMPOSER_MENU_KINDS: readonly StockComposerMenuKind[] = [
+  "settings",
+  "models",
+  "mcp",
+  "tools",
+  "language",
+  "effort",
+  "search-engine",
+  "view",
+  "density",
+  "theme",
+  "thinking",
+  "provider",
+  "help",
+];
+
+export function isStockComposerMenuKind(value: string): value is StockComposerMenuKind {
+  return (STOCK_COMPOSER_MENU_KINDS as readonly string[]).includes(value);
+}

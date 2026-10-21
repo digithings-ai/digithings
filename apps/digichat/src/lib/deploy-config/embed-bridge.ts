@@ -84,7 +84,7 @@ export function clientConfigFromEmbedTenant(
             (embed.models?.allowPicker !== false && base.features.modelPicker),
         },
     tools: {
-      allowUserToggle: base.tools.allowUserToggle,
+      allowUserToggle: embed.tools?.allowUserToggle ?? base.tools.allowUserToggle,
       catalog,
     },
     mcp: {
@@ -106,6 +106,9 @@ export function clientConfigFromEmbedTenant(
       showLanguageSelector: embed.showLanguageSelector,
       webSearch,
       ...(embed.searchEngine ? { searchEngine: embed.searchEngine } : {}),
+      ...(embed.lockSessionControls === true || base.gate.lockSessionControls === true
+        ? { lockSessionControls: true }
+        : {}),
     },
     backendType: embed.backendType ?? base.backendType,
   };
