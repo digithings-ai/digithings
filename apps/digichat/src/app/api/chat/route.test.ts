@@ -441,6 +441,65 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     }
   });
 
+  it("serves a premium OCC model with no budget fallback", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        hosts: {
+          "occ.digithings.ai": {
+            slug: "occ",
+            backend: { type: "digigraph" },
+            models: {
+              catalog: true,
+              occPicker: true,
+              presets: ["auto", "reasoning", "fast", "light"],
+              showFullList: true,
+            },
+          },
+        },
+      }),
+    );
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "occ",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "occ",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "digigraph" },
+        activityDetail: "labels",
+      },
+    } as EmbedChatTenantContext);
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-embed-host": "https://occ.digithings.ai",
+            "x-digi-model": "z-ai/glm-5.3",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        responseHeaders?: Record<string, string>;
+      };
+      expect(call?.model).toBe("z-ai/glm-5.3");
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBeUndefined();
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("does not reset the premium window when the session header changes", async () => {
     const budget = { usd: 0.0125565, windowSeconds: 86400 };
     setDigichatConfigForTests(catalogDeployment(budget));

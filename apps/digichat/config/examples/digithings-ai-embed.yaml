@@ -52,8 +52,8 @@ hosts:
       priceCapUsdPerMillion: 2
       # Premium sits above that cap and at or under $2.50 (GLM 5.3, Gemini
       # 3.8 Flash). Manual picks only. costPerWindow is three typical turns
-      # of the pricier one, GLM 5.3, per rolling day ($0.0125565). OCC sets
-      # the same window because its picker is on.
+      # of the pricier one, GLM 5.3, per rolling day ($0.0125565). OCC does
+      # not set this window.
       costPerWindow:
         usd: 0.0125565
         windowSeconds: 86400

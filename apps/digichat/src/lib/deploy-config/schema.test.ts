@@ -545,7 +545,10 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.models.allowPicker).toBe(true);
     expect(occHost?.models.picker?.presets[0]?.id).toBe("auto");
     expect(occHost?.models.occPicker).toBe(true);
-    expect(occHost?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
+    expect(occHost?.models.costPerWindow).toBeUndefined();
+    expect(occHost?.models.available).toContain("z-ai/glm-5.3");
+    expect(occHost?.models.available).toContain("google/gemini-3.8-flash");
+    expect(occHost?.guardrails?.tokensPerMinute).toBeUndefined();
     expect(occHost?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
       "z-ai/glm-5.3-flash",
     );

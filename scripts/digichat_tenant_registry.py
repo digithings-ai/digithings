@@ -64,10 +64,12 @@ references resolve, so a dropped field stops being served.
 
 The OCC tenant may carry a catalog ``models`` policy. Chris signed off
 on 21 Oct 2026, 19:19 Rome: "Yes, enable the model picker on OCC for
-2.6.6, I sign off on overriding the DIG-4488 lock". ``models.occPicker``
-turns the visitor picker on. A raw ``models.available`` id list is still
-refused on the way in and stripped from a live copy. Tool and MCP locks
-are not part of that sign-off.
+2.6.6, I sign off on overriding the DIG-4488 lock". He confirmed on
+21 Oct 2026, 22:50 Rome: "Yes, I confirm no Counsel ruling is needed
+for the OCC model picker". ``models.occPicker`` turns the visitor picker
+on. OCC sets no premium meter and no token budget (22:51 Rome). A raw
+``models.available`` id list is still refused on the way in and stripped
+from a live copy. Tool and MCP locks are not part of that sign-off.
 """
 
 import argparse
