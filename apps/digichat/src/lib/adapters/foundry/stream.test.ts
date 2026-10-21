@@ -98,16 +98,47 @@ describe("FoundryToolLeakFilter", () => {
     });
 
     it("a legitimate reply that starts like the leak token but diverges is not truncated", () => {
-      // "(remote work example)" never matches the leak grammar past "(remote" —
-      // isRemoteFunctionsLeakPrefix requires the token to continue with
-      // "_functions" (or close immediately), so " work example)" flushes the
-      // held "(remote" ahead of itself. flush() at the end is a null-op here;
-      // the real assertion is that push() already returned everything.
+      // "(remote work example)" never matches the leak grammar past "(remote":
+      // the call scanner requires "_functions" (or the end of the chunk), so
+      // " work example)" flushes the held "(remote" ahead of itself.
       const filter = new FoundryToolLeakFilter();
       expect(filter.push("(remote")).toBeNull();
       expect(filter.push(" work example)")).toBe("(remote work example)");
       expect(filter.flush()).toBeNull();
     });
+  });
+
+  it("drops back-to-back remote_functions calls in one chunk", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = (query: string) => `remote_functions.azure_ai_search({"query":"${query}"})`;
+    expect(filter.push(`${call("Acme")} ${call("Bob")}`)).toBe(" ");
+    expect(filter.flush()).toBeNull();
+    const glued = new FoundryToolLeakFilter();
+    expect(glued.push(call("Acme") + call("Bob"))).toBeNull();
+    expect(glued.flush()).toBeNull();
+  });
+
+  it("drops a remote_functions call that shares a chunk with answer text", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    expect(filter.push(`Let me look that up. ${call}`)).toBe("Let me look that up. ");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("drops a remote_functions call inside a code fence", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    const out = filter.push("```\n" + call + "\n```");
+    expect(out).toBe("```\n\n```");
+    expect(out).not.toContain("remote_functions");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("holds a remote_functions call split across chunks, then drops it", () => {
+    const filter = new FoundryToolLeakFilter();
+    expect(filter.push("Result: remote_functions.azu")).toBe("Result: ");
+    expect(filter.push('re_ai_search({"query":"Acme"}) done')).toBe(" done");
+    expect(filter.flush()).toBeNull();
   });
 });
 

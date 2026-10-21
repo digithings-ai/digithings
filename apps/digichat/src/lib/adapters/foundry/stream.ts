@@ -700,25 +700,9 @@ export class FoundryToolLeakFilter {
     const cleaned = stripFoundryCitationMarkers(delta);
     if (!cleaned && !this.buf) return null;
 
-    const candidate = this.buf + cleaned;
-    const scanned = scanToolLeak(candidate);
-    if (scanned.action === "hold") {
-      this.buf = candidate;
-      return null;
-    }
-    if (scanned.action === "drop") {
-      this.buf = "";
-      return scanned.rest ? scanned.rest : null;
-    }
-
-    if (this.buf) {
-      // Held bytes were not a leak after all — flush them ahead of this delta.
-      const flushed = this.buf;
-      this.buf = "";
-      return flushed + cleaned;
-    }
-
-    return cleaned || null;
+    const drained = drainLeaks(this.buf + cleaned);
+    this.buf = drained.hold;
+    return drained.emit || null;
   }
 
   /**
@@ -739,40 +723,89 @@ export class FoundryToolLeakFilter {
     if (!this.buf) return null;
     const held = this.buf;
     this.buf = "";
-    const scanned = scanToolLeak(held);
-    if (scanned.action === "drop") return scanned.rest ? scanned.rest : null;
-    if (scanned.action === "hold" && abandonedToolLeak(held)) return null;
-    return held;
+    const drained = drainLeaks(held);
+    if (!drained.hold) return drained.emit || null;
+    if (abandonedToolLeak(drained.hold)) return drained.emit || null;
+    return drained.emit + drained.hold || null;
   }
 }
 
 const REMOTE_SEARCH_STATUS = "(remote search in progress)";
 
 /**
- * The whole buffer is a Foundry tool-call leak, a still-growing prefix of
- * one, or ordinary text. `drop.rest` is answer text that followed a call.
+ * Emit text with every raw `remote_functions` call removed. A call is
+ * recognized at a word boundary anywhere in the buffer, not only at the
+ * start. After one call is dropped, the remainder is scanned again, so
+ * back-to-back calls go too. An unfinished call is held from its start.
  */
-function scanToolLeak(raw: string): { action: "hold" } | { action: "drop"; rest: string } | { action: "pass" } {
-  let start = 0;
-  while (start < raw.length && /\s/.test(raw[start]!)) start++;
-  const body = raw.slice(start);
+function drainLeaks(raw: string): { emit: string; hold: string } {
+  let emit = "";
+  let rest = raw;
+  while (rest) {
+    const leak = findRemoteFunctionsLeak(rest);
+    if (leak?.kind === "drop") {
+      if (leak.end <= leak.start) break;
+      emit += rest.slice(0, leak.start);
+      rest = rest.slice(leak.end);
+      continue;
+    }
+    if (leak?.kind === "hold") {
+      emit += rest.slice(0, leak.start);
+      return { emit, hold: rest.slice(leak.start) };
+    }
+    const status = takeLeadingStatus(rest);
+    if (status?.kind === "drop") {
+      emit += status.keep;
+      rest = status.rest;
+      continue;
+    }
+    if (status?.kind === "hold") return { emit, hold: rest };
+    return { emit: emit + rest, hold: "" };
+  }
+  return { emit, hold: "" };
+}
+
+/** `(remote search in progress)` only when it leads the remaining text. */
+function takeLeadingStatus(
+  text: string,
+): { kind: "drop"; keep: string; rest: string } | { kind: "hold" } | null {
+  let i = 0;
+  while (i < text.length && /\s/.test(text[i]!)) i++;
+  const body = text.slice(i);
   const trimmed = body.trimEnd();
-  if (!trimmed) return { action: "pass" };
-
+  if (!trimmed) return null;
   if (trimmed.startsWith(REMOTE_SEARCH_STATUS)) {
-    const rest = trimmed.slice(REMOTE_SEARCH_STATUS.length) + body.slice(trimmed.length);
-    return { action: "drop", rest };
+    const after = trimmed.slice(REMOTE_SEARCH_STATUS.length) + body.slice(trimmed.length);
+    return { kind: "drop", keep: text.slice(0, i), rest: after };
   }
-  if (REMOTE_SEARCH_STATUS.startsWith(trimmed)) return { action: "hold" };
+  if (REMOTE_SEARCH_STATUS.startsWith(trimmed)) return { kind: "hold" };
+  return null;
+}
 
-  const call = scanRemoteFunctionsCall(trimmed);
-  if (call?.kind === "prefix") return { action: "hold" };
-  if (call?.kind === "complete") {
-    const rest = trimmed.slice(call.end) + body.slice(trimmed.length);
-    return { action: "drop", rest: rest.trim() ? rest : "" };
+/**
+ * The first `remote_functions` call at a word boundary. `(` immediately
+ * before the name is part of the call. A name glued to another word is not.
+ */
+function findRemoteFunctionsLeak(
+  text: string,
+): { kind: "drop"; start: number; end: number } | { kind: "hold"; start: number } | null {
+  const needle = "remote";
+  let from = 0;
+  while (from < text.length) {
+    const i = text.indexOf(needle, from);
+    if (i < 0) return null;
+    const prev = i === 0 ? "" : text[i - 1]!;
+    if (prev && /[\w]/.test(prev)) {
+      from = i + needle.length;
+      continue;
+    }
+    const start = prev === "(" ? i - 1 : i;
+    const call = scanRemoteFunctionsCall(text.slice(start));
+    if (call?.kind === "complete") return { kind: "drop", start, end: start + call.end };
+    if (call?.kind === "prefix") return { kind: "hold", start };
+    from = i + needle.length;
   }
-  if (isRemoteFunctionsLeakPrefix(trimmed)) return { action: "hold" };
-  return { action: "pass" };
+  return null;
 }
 
 /** True when a held prefix is already the leak and will not become a sentence. */
@@ -848,13 +881,6 @@ function scanRemoteFunctionsCall(
     i++;
   }
   return { kind: "complete", end: i };
-}
-
-function isRemoteFunctionsLeakPrefix(text: string): boolean {
-  const t = text.trim();
-  if (!t) return false;
-  // Incomplete or complete `(remote_functions.azure_ai_search)` with no whitespace.
-  return /^\(?remote(_functions(\.[\w]+)*)?\)?$/.test(t);
 }
 
 /** Provider call correlation id shared by a call item and its output item. */
