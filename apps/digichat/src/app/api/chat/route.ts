@@ -481,13 +481,14 @@ async function handleChat(
     if (!quotaSatisfied) {
       try {
         const ip = clientIpForEmbedLimit(req);
-        // "unknown" is develop's key when no visitor header parses. The trial
-        // quota skips it and admits the visitor uncounted, so header-less
-        // traffic does not share one trial bucket. The embed limiter still
-        // records embed_ip:unknown, which is develop's collapse for that
-        // case. With DIGICHAT_TRUSTED_PROXIES unset, cf-connecting-ip then
-        // the leftmost X-Forwarded-For hop are the keys and the stamp is
-        // ignored (embed-turn-quota.ts).
+        // "unknown" is develop's key when no visitor header is present. The
+        // trial quota skips it and admits the visitor uncounted, so
+        // header-less traffic does not share one trial bucket. The embed
+        // limiter still records embed_ip:unknown, which is develop's
+        // collapse for that case. With DIGICHAT_TRUSTED_PROXIES unset the
+        // key is the raw trimmed cf-connecting-ip, then the raw trimmed
+        // first X-Forwarded-For hop, and the stamp is ignored. A non-IP
+        // value stays the key (embed-turn-quota.ts).
         if (ip !== "unknown") {
           if (quotaServiceUnavailable) {
             // Degraded path: the tenant's quota service could not answer, so the
@@ -996,8 +997,10 @@ async function handleChat(
                 signal: req.signal,
                 steps: step.steps,
                 messages: step.messages,
-                instructions:
-                  typeof step.instructions === "string" ? step.instructions : undefined,
+                initialInstructions:
+                  typeof step.initialInstructions === "string"
+                    ? step.initialInstructions
+                    : undefined,
               }),
             onFinish: (event) => {
               guard.recordUsage(event.usage);

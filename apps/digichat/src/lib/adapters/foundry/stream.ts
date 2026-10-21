@@ -683,9 +683,11 @@ export function stripFoundryCitationMarkers(text: string): string {
 /**
  * Foundry occasionally streams the azure_ai_search *tool invocation itself*
  * as `response.output_text.delta` fragments — observed live as the entire
- * assistant answer: `(remote` + `_functions` + `.azure` + `_ai` + `_search` + `)`.
- * Buffer those identifier fragments and drop the completed token so visitors
- * never see the internal tool name as a reply.
+ * assistant answer: `(remote` + `_functions` + `.azure` + `_ai` + `_search` + `)`,
+ * `remote_functions.azure_ai_search({...})`, or `(remote search in progress)`.
+ * Buffer those fragments and drop the completed token so visitors never see
+ * raw tool-call syntax as a reply. An ambiguous prefix such as `(remote` is
+ * still flushed at stream end, so a real sentence is not eaten.
  */
 export class FoundryToolLeakFilter {
   private buf = "";
@@ -699,13 +701,14 @@ export class FoundryToolLeakFilter {
     if (!cleaned && !this.buf) return null;
 
     const candidate = this.buf + cleaned;
-    // Still (or newly) matching the tool-leak token — hold until complete or broken.
-    if (isRemoteFunctionsLeakPrefix(candidate)) {
+    const scanned = scanToolLeak(candidate);
+    if (scanned.action === "hold") {
       this.buf = candidate;
-      if (/^\(?remote_functions(\.[\w]+)*\)$/.test(candidate.trim())) {
-        this.buf = "";
-      }
       return null;
+    }
+    if (scanned.action === "drop") {
+      this.buf = "";
+      return scanned.rest ? scanned.rest : null;
     }
 
     if (this.buf) {
@@ -726,14 +729,125 @@ export class FoundryToolLeakFilter {
    * `push` only ever resolves a held prefix by flushing it AHEAD OF a later
    * delta, and a stream that ends here never sends one.
    *
-   * @returns the held text, or `null` if nothing was buffered.
+   * A completed tool call, an open `remote_functions.…(` argument list, and
+   * `(remote search…` past the ambiguous `(remote` prefix are not flushed:
+   * those are the leak, and the stream ended on them.
+   *
+   * @returns the held text, or `null` if nothing was buffered or it was a leak.
    */
   flush(): string | null {
     if (!this.buf) return null;
-    const flushed = this.buf;
+    const held = this.buf;
     this.buf = "";
-    return flushed;
+    const scanned = scanToolLeak(held);
+    if (scanned.action === "drop") return scanned.rest ? scanned.rest : null;
+    if (scanned.action === "hold" && abandonedToolLeak(held)) return null;
+    return held;
   }
+}
+
+const REMOTE_SEARCH_STATUS = "(remote search in progress)";
+
+/**
+ * The whole buffer is a Foundry tool-call leak, a still-growing prefix of
+ * one, or ordinary text. `drop.rest` is answer text that followed a call.
+ */
+function scanToolLeak(raw: string): { action: "hold" } | { action: "drop"; rest: string } | { action: "pass" } {
+  let start = 0;
+  while (start < raw.length && /\s/.test(raw[start]!)) start++;
+  const body = raw.slice(start);
+  const trimmed = body.trimEnd();
+  if (!trimmed) return { action: "pass" };
+
+  if (trimmed.startsWith(REMOTE_SEARCH_STATUS)) {
+    const rest = trimmed.slice(REMOTE_SEARCH_STATUS.length) + body.slice(trimmed.length);
+    return { action: "drop", rest };
+  }
+  if (REMOTE_SEARCH_STATUS.startsWith(trimmed)) return { action: "hold" };
+
+  const call = scanRemoteFunctionsCall(trimmed);
+  if (call?.kind === "prefix") return { action: "hold" };
+  if (call?.kind === "complete") {
+    const rest = trimmed.slice(call.end) + body.slice(trimmed.length);
+    return { action: "drop", rest: rest.trim() ? rest : "" };
+  }
+  if (isRemoteFunctionsLeakPrefix(trimmed)) return { action: "hold" };
+  return { action: "pass" };
+}
+
+/** True when a held prefix is already the leak and will not become a sentence. */
+function abandonedToolLeak(raw: string): boolean {
+  const t = raw.trim();
+  if (REMOTE_SEARCH_STATUS.startsWith(t) && t.length > "(remote".length) return true;
+  return /^\(?remote_functions(?:\.[\w]+)+\(/.test(t);
+}
+
+/**
+ * `remote_functions.<name>` with an optional wrapper and an optional
+ * argument list. A prefix is held. A finished call is dropped. Text that
+ * is not this shape returns null so the caller can pass it through.
+ */
+function scanRemoteFunctionsCall(
+  t: string,
+): { kind: "prefix" } | { kind: "complete"; end: number } | null {
+  let i = 0;
+  let wrapped = false;
+  if (t[i] === "(") {
+    wrapped = true;
+    i++;
+  }
+  const head = "remote_functions";
+  const from = t.slice(i);
+  if (!from.startsWith(head)) {
+    if (from.length > 0 && head.startsWith(from)) return { kind: "prefix" };
+    return null;
+  }
+  i += head.length;
+  while (i < t.length && t[i] === ".") {
+    const seg = i + 1;
+    i++;
+    while (i < t.length && /[\w]/.test(t[i]!)) i++;
+    if (i === seg) return i === t.length ? { kind: "prefix" } : null;
+  }
+  if (i >= t.length) return { kind: "prefix" };
+  if (t[i] === ")") {
+    // Bare token `(remote_functions.azure_ai_search)` or the same token
+    // closed with only a paren. Text after it is the answer.
+    const end = i + 1;
+    if (wrapped || end === t.length || /\s/.test(t[end] ?? "")) return { kind: "complete", end };
+    return null;
+  }
+  if (t[i] !== "(") return null;
+  i++;
+  let depth = 1;
+  let quote: string | null = null;
+  while (i < t.length && depth > 0) {
+    const c = t[i]!;
+    if (quote) {
+      if (c === "\\") {
+        i += 2;
+        continue;
+      }
+      if (c === quote) quote = null;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      quote = c;
+      i++;
+      continue;
+    }
+    if (c === "(" || c === "{" || c === "[") depth++;
+    else if (c === ")" || c === "}" || c === "]") depth--;
+    i++;
+  }
+  if (depth > 0 || quote) return i >= t.length ? { kind: "prefix" } : null;
+  if (wrapped) {
+    if (i >= t.length) return { kind: "prefix" };
+    if (t[i] !== ")") return null;
+    i++;
+  }
+  return { kind: "complete", end: i };
 }
 
 function isRemoteFunctionsLeakPrefix(text: string): boolean {

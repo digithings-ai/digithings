@@ -186,25 +186,24 @@ export function clientIpForRateLimit(req: Request): string {
 
 /**
  * develop's `clientIpForRateLimit` when `DIGICHAT_TRUSTED_PROXIES` is unset.
- * The stamped socket is not a key. `cf-connecting-ip` wins, then the leftmost
- * `X-Forwarded-For` hop. No visitor header is `"unknown"`. A value `parseIp`
- * rejects is not a key (develop returned the raw text).
+ * The stamped socket is not a key. The raw trimmed `cf-connecting-ip` wins,
+ * then the raw trimmed first `X-Forwarded-For` hop, else `"unknown"`.
+ * `parseIp` does not run: a non-IP value is still the key.
  */
 function developVisitorIp(req: Request): string {
-  const cf = acceptedIp(req.headers.get("cf-connecting-ip"));
+  const cf = req.headers.get("cf-connecting-ip")?.trim();
   if (cf) return cf;
-  const first = req.headers.get("x-forwarded-for")?.split(",")[0];
-  return acceptedIp(first) ?? "unknown";
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
 /**
  * IP for the embed per-IP limiter and the embed trial quota.
  *
- * Allowlist unset: `developVisitorIp`. A header-less request is `"unknown"`.
- * `checkEmbedIpRateLimit` then keys `embed_ip:unknown`, which is develop's
- * collapse for that case. The trial quota skips `"unknown"` and does not
- * count those visitors together. `cf-connecting-ip` and a leftmost
- * `X-Forwarded-For` hop stay per visitor.
+ * Allowlist unset: `developVisitorIp`, the raw trimmed header. A header-less
+ * request is `"unknown"`. `checkEmbedIpRateLimit` then keys
+ * `embed_ip:unknown`, which is develop's collapse for that case. The trial
+ * quota skips `"unknown"` and does not count those visitors together. A
+ * non-IP `cf-connecting-ip` or first `X-Forwarded-For` hop is its own key.
  *
  * Allowlist set: same as `clientIpForRateLimit`. A stamped trusted peer with
  * no visitor header is that peer, which is also what develop returns.

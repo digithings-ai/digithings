@@ -70,6 +70,33 @@ describe("FoundryToolLeakFilter", () => {
       expect(filter.flush()).toBeNull();
     });
 
+    it("does not emit remote_functions.azure_ai_search({...}) as answer text", () => {
+      const filter = new FoundryToolLeakFilter();
+      const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+      expect(filter.push(call)).toBeNull();
+      expect(filter.flush()).toBeNull();
+      const fragmented = new FoundryToolLeakFilter();
+      for (const part of ["remote_functions.azure_ai_search(", '{"query":"Acme"})']) {
+        expect(fragmented.push(part)).toBeNull();
+      }
+      expect(fragmented.flush()).toBeNull();
+      const withAnswer = new FoundryToolLeakFilter();
+      expect(withAnswer.push(`${call}\n\nAcme is the customer.`)).toBe("\n\nAcme is the customer.");
+    });
+
+    it("does not emit (remote search in progress) as answer text", () => {
+      const filter = new FoundryToolLeakFilter();
+      expect(filter.push("(remote search in progress)")).toBeNull();
+      expect(filter.flush()).toBeNull();
+      const fragmented = new FoundryToolLeakFilter();
+      expect(fragmented.push("(remote")).toBeNull();
+      expect(fragmented.push(" search in progress)")).toBeNull();
+      expect(fragmented.flush()).toBeNull();
+      const cutOff = new FoundryToolLeakFilter();
+      expect(cutOff.push("(remote search")).toBeNull();
+      expect(cutOff.flush()).toBeNull();
+    });
+
     it("a legitimate reply that starts like the leak token but diverges is not truncated", () => {
       // "(remote work example)" never matches the leak grammar past "(remote" —
       // isRemoteFunctionsLeakPrefix requires the token to continue with
@@ -507,6 +534,30 @@ describe("createFoundryStreamResponse", () => {
 
     expect(out).toContain('"delta":"See the "');
     expect(out).toContain('"delta":"(remote"');
+  });
+
+  it("does not stream a raw azure_ai_search tool call or the remote-search placeholder as the answer", async () => {
+    const { client } = fakeClient([
+      { type: "response.output_text.delta", delta: "remote_functions.azure" },
+      { type: "response.output_text.delta", delta: '_ai_search({"query":"Acme"})' },
+      { type: "response.output_text.delta", delta: "(remote search in progress)" },
+      { type: "response.output_text.delta", delta: "Acme is the customer." },
+      { type: "response.completed" },
+    ]);
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("who is Acme?")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+    expect(out).not.toContain("remote_functions");
+    expect(out).not.toContain("azure_ai_search");
+    expect(out).not.toContain("remote search in progress");
+    expect(out).toContain("Acme is the customer.");
   });
 
   it("flushes a held leak-prefix when the stream exhausts naturally, not just on a done break", async () => {

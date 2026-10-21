@@ -312,6 +312,31 @@ describe("checkEmbedIpRateLimit", () => {
     expect(checkEmbedIpRateLimit(reqB).allowed).toBe(true);
   });
 
+  it("develop parity: a non-IP cf-connecting-ip is the embed and trial key", () => {
+    process.env.DIGICHAT_PEER_STAMP = STAMP;
+    const req = stamped("10.0.0.9", {
+      "cf-connecting-ip": "  not-an-ip  ",
+      "x-forwarded-for": "203.0.113.5:4433",
+    });
+    expect(clientIpForEmbedLimit(req)).toBe("not-an-ip");
+    expect(clientIpForRateLimit(req)).toBe("10.0.0.9");
+    expect(checkEmbedIpRateLimit(req).allowed).toBe(true);
+  });
+
+  it("develop parity: a non-IP X-Forwarded-For hop is the embed and trial key", () => {
+    process.env.DIGICHAT_PEER_STAMP = STAMP;
+    const port = stamped("10.0.0.9", { "x-forwarded-for": "203.0.113.5:4433, 10.0.0.1" });
+    const token = stamped("10.0.0.9", { "x-forwarded-for": "not-an-ip, 10.0.0.1" });
+    expect(clientIpForEmbedLimit(port)).toBe("203.0.113.5:4433");
+    expect(clientIpForEmbedLimit(token)).toBe("not-an-ip");
+    expect(clientIpForRateLimit(port)).toBe("10.0.0.9");
+    for (let i = 0; i < EMBED_IP_MAX; i++) {
+      expect(checkEmbedIpRateLimit(port).allowed).toBe(true);
+    }
+    expect(checkEmbedIpRateLimit(port).allowed).toBe(false);
+    expect(checkEmbedIpRateLimit(token).allowed).toBe(true);
+  });
+
   it("keeps the per-IP default below the shared bucket default (regression: caught in review, #1251)", () => {
     // If EMBED_IP_MAX >= SHARED_BUCKET_MAX, a single visitor hits the *shared*
     // embed:anonymous bucket's ceiling before ever tripping this per-IP one —

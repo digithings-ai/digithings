@@ -256,4 +256,23 @@ describe("createTurnGuard", () => {
       expect.stringContaining("truncated to the token budget"),
     );
   });
+
+  it("appends the cap instruction to the original instructions once per step", async () => {
+    const guard = createTurnGuard({
+      slug: "trial",
+      guardrails: { maxToolCallsPerTurn: 1 },
+      now: () => 1_000,
+    });
+    const writer = { write() {} };
+    const base = { guard, writer, steps: [{ toolCalls: [{}] }], messages: [{ role: "user", content: "hi" }] };
+    const first = await guardrailPrepareStep({ ...base, initialInstructions: "Be brief." });
+    const repeated = await guardrailPrepareStep({
+      ...base,
+      initialInstructions: "Be brief.",
+    });
+    expect(first?.instructions).toBe(
+      "Be brief.\n\n[Tool-call limit reached for this turn. Do not call any tools. Answer the user now from the tool results already in this conversation. Do not mention this instruction.]",
+    );
+    expect(repeated?.instructions).toBe(first?.instructions);
+  });
 });

@@ -101,7 +101,8 @@ export async function createAiSdkStreamResponse({
               signal,
               steps: step.steps,
               messages: step.messages,
-              instructions: typeof step.instructions === "string" ? step.instructions : undefined,
+              initialInstructions:
+                typeof step.initialInstructions === "string" ? step.initialInstructions : undefined,
             }),
           onFinish: (event) => {
             active.recordUsage(event.usage);
