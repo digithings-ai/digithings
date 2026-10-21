@@ -140,38 +140,59 @@ if [ "$IMAGE" = "digichat" ]; then
   # with a non-2xx as "http_<status>", and that is a real fault. This is the
   # same contract the CI lane holds in
   # .github/workflows/publish-digichat-image.yml.
-  api_response="$(curl --silent --show-error --max-time 60 --write-out '\n%{http_code}' "$base/api/health" || true)"
+  curl_rc=0
+  api_response="$(curl --silent --show-error --max-time 60 --write-out '\n%{http_code}' "$base/api/health")" || curl_rc=$?
   api_status="$(printf '%s\n' "$api_response" | tail -n1)"
   api_body="$(printf '%s\n' "$api_response" | sed '$d')"
+  if [ "$curl_rc" -ne 0 ]; then
+    echo "ERROR: the request to /api/health did not complete (curl exited $curl_rc) — a timeout or a refused connection, not an answer from the image." >&2
+    exit 1
+  fi
   case "$api_status" in
     200|503) ;;
     *) echo "ERROR: /api/health answered '$api_status', not 200 or 503." >&2; exit 1 ;;
   esac
   [ -n "$api_body" ] || { echo "ERROR: /api/health answered '$api_status' with no body — the route did not answer." >&2; exit 1; }
-  reported="$(node -e "const b=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(String(b.version === undefined ? '' : b.version));" <<< "$api_body" 2>/dev/null || true)"
-  [ -n "$reported" ] || { echo "ERROR: /api/health returned no version (status $api_status) — the body is not the health route's JSON." >&2; exit 1; }
+  reported="$(node -e 'const fs = require("fs");
+let raw = "";
+try { raw = fs.readFileSync(0, "utf8"); } catch (e) { raw = ""; }
+let body = null;
+try { body = JSON.parse(raw); } catch (e) { body = null; }
+if (body === null || typeof body !== "object") { process.stdout.write("NOTJSON"); }
+else if (body.version === undefined || body.version === null) { process.stdout.write("NOVERSION"); }
+else { process.stdout.write(String(body.version)); }' <<< "$api_body" 2>/dev/null || true)"
+  case "$reported" in
+    NOTJSON) echo "ERROR: /api/health answered '$api_status' with a body that is not JSON — the route did not answer." >&2; exit 1 ;;
+    NOVERSION) echo "ERROR: /api/health answered '$api_status' with JSON that carries no version." >&2; exit 1 ;;
+  esac
   [ "$reported" = "$VERSION" ] || { echo "ERROR: serves version '$reported', built '$VERSION'." >&2; exit 1; }
-  unexpected="$(node -e "
-    const b = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-    const checks = b.checks || {};
-    const ecosystem = ['digraph', 'digiquant', 'digitrace', 'digisearch'];
-    const bad = [];
-    if ((checks.service || 'missing') !== 'ok') bad.push('service=' + (checks.service || 'missing'));
-    const database = checks.database || 'missing';
-    if (database !== 'ok' && database !== 'skipped') bad.push('database=' + database);
-    for (const key of Object.keys(checks)) {
-      if (key === 'service' || key === 'database') continue;
-      const value = checks[key];
-      if (value === 'ok' || value === 'skipped') continue;
-      // Only 'unreachable' is the degradation this probe tolerates: the route
-      // records a fetch that never completed that way, and an upstream that
-      // answered with a non-2xx as http_<status>.
-      if (ecosystem.indexOf(key) !== -1 && value === 'unreachable') continue;
-      bad.push(key + '=' + value);
-    }
-    process.stdout.write(bad.length ? 'BAD:' + bad.join(',') : 'CLEAN');
-  " <<< "$api_body" 2>/dev/null || true)"
-  [ "$unexpected" = "CLEAN" ] || { echo "ERROR: /api/health reports checks that are not only the unreachable ecosystem services ($unexpected)." >&2; exit 1; }
+  checks_verdict="$(node -e 'const fs = require("fs");
+let raw = "";
+try { raw = fs.readFileSync(0, "utf8"); } catch (e) { raw = ""; }
+let body = null;
+try { body = JSON.parse(raw); } catch (e) { body = null; }
+const checks = body && typeof body === "object" && body.checks && typeof body.checks === "object" ? body.checks : {};
+const ecosystem = ["digraph", "digiquant", "digitrace", "digisearch"];
+const bad = [];
+const tolerated = [];
+if ((checks.service || "missing") !== "ok") bad.push("service=" + (checks.service || "missing"));
+const database = checks.database || "missing";
+if (database !== "ok" && database !== "skipped") bad.push("database=" + database);
+for (const key of Object.keys(checks)) {
+  if (key === "service" || key === "database") continue;
+  const value = checks[key];
+  if (value === "ok" || value === "skipped") continue;
+  // Only "unreachable" is the degradation this probe tolerates: the route
+  // records a fetch that never completed that way, and an upstream that
+  // answered with a non-2xx as http_<status>.
+  if (ecosystem.indexOf(key) !== -1 && value === "unreachable") { tolerated.push(key + "=" + value); continue; }
+  bad.push(key + "=" + value);
+}
+process.stdout.write(bad.length ? "BAD:" + bad.join(",") : "CLEAN " + (tolerated.length ? tolerated.join(",") : "none"));' <<< "$api_body" 2>/dev/null || true)"
+  verdict="${checks_verdict%% *}"
+  tolerated="${checks_verdict#* }"
+  [ "$verdict" = "CLEAN" ] || { echo "ERROR: /api/health reports checks that are not only the unreachable ecosystem services (${checks_verdict:-no verdict})." >&2; exit 1; }
+  echo "Probe: /api/health answered '$api_status' (version $reported); tolerated: ${tolerated:-none}."
 else
   for _ in $(seq 60); do
     status=$(docker inspect -f '{{.State.Health.Status}}' "$probe_container")

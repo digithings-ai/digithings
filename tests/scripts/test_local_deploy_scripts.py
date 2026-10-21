@@ -8,7 +8,9 @@ embeds a secret. No network, Docker or Cloudflare credential is needed.
 
 from __future__ import annotations
 
+import json
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -166,12 +168,30 @@ def test_publish_image_packages_the_digichat_inputs_before_it_builds() -> None:
 
 
 def _no_comments(script: str) -> str:
-    """Strip ``#`` to end of line, so prose in a comment block cannot satisfy an assertion.
+    """Strip shell comments, so prose in a comment block cannot satisfy an assertion.
 
     The trap the workflow test closes, for this script: moving a guard into the
     comment block above it leaves the assertions green and the lane unguarded.
+    A ``#`` inside a quoted literal is left alone: stripping it would change
+    the text under test without changing what the script does.
     """
-    return re.sub(r"#.*$", "", script, flags=re.M)
+    stripped: list[str] = []
+    for line in script.splitlines():
+        quote = ""
+        cut = len(line)
+        for index, char in enumerate(line):
+            if quote:
+                if char == quote:
+                    quote = ""
+                continue
+            if char in "'\"":
+                quote = char
+                continue
+            if char == "#" and (index == 0 or line[index - 1].isspace()):
+                cut = index
+                break
+        stripped.append(line[:cut])
+    return "\n".join(stripped)
 
 
 def _refuses(guards: str, marker: str) -> bool:
@@ -189,6 +209,30 @@ def _refuses(guards: str, marker: str) -> bool:
     return False
 
 
+_PROBE_PROGRAMS = re.compile(r"node -e '(.*?)' <<< \"\$api_body\"", re.S)
+
+
+def _probe_programs(script: str) -> list[str]:
+    """The programs the probe runs on the health body, in file order."""
+    programs = _PROBE_PROGRAMS.findall(script)
+    assert len(programs) >= 2, (
+        "the probe must read the health body through node: one program for the "
+        "version it serves, one for the checks it reports"
+    )
+    return programs
+
+
+def _probe_output(program: str, body: str) -> str:
+    result = subprocess.run(
+        ["node", "-e", program],
+        input=body,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout
+
+
 def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
     """The rehearsal has to fail where the CI lane fails.
 
@@ -198,11 +242,17 @@ def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
     a 200 - a standalone container has no ecosystem services to reach, so 503
     is the expected answer - so the local probe has to do the same.
 
-    The assertions are on the executable text, with the comments stripped: a
-    substring check that a comment can satisfy proves nothing, and the whole
-    checks block can be deleted behind one.
+    The text assertions run against the executable text, with the comments
+    stripped: a substring check that a comment can satisfy proves nothing. The
+    verdict is then pinned behaviourally: the probe's own node programs are
+    driven with the bodies the health route can produce, so widening the
+    tolerated set, dropping a requirement or moving the sentinel into a
+    payload value all fail here.
     """
-    body = _no_comments(read("publish_image.sh"))
+    if shutil.which("node") is None:
+        pytest.skip("node is needed to drive the probe's own programs")
+    script = read("publish_image.sh")
+    body = _no_comments(script)
     assert 'docker run --detach --rm --publish 127.0.0.1::3000 "$NAME"' in body, (
         "the digichat probe must boot the image bare, the way the CI probe does"
     )
@@ -221,15 +271,9 @@ def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
     assert "200|503)" in body, (
         "the probe must accept only 200 and 503: any other status is a fault"
     )
-    # The four ecosystem services, and only when the fetch never completed.
-    for service in ("digraph", "digiquant", "digitrace", "digisearch"):
-        assert service in body, (
-            f"the probe must name {service} as a service a standalone container "
-            "cannot reach, so its failure reads as a degradation and not a fault"
-        )
-    assert "unreachable" in body, (
-        "the tolerated failure is the one the route records when the fetch never "
-        "completed; an upstream that answered http_<status> is a real fault"
+    assert "curl_rc" in body, (
+        "a transfer that never completed is not an answer: the probe has to "
+        "tell a timeout apart from a status the image served"
     )
     # The version is still the contract: it is what catches a stale layer.
     assert '[ "$reported" = "$VERSION" ]' in body, (
@@ -243,3 +287,68 @@ def test_the_local_publish_probe_holds_the_ci_probe_contract() -> None:
     assert _refuses(
         body, "not only the unreachable ecosystem services"
     ), "a diagnostic without an exit behind it reports success and the publish goes on"
+    assert _refuses(
+        body, "serves version"
+    ), "a wrong version without an exit behind it publishes the wrong image"
+
+    version_program, checks_program = _probe_programs(script)[:2]
+
+    # A bare container: the four ecosystem services cannot be reached, so the
+    # route answers 503 with four "unreachable" and the probe has to accept it.
+    bare = {
+        "version": "2.6.4",
+        "checks": {
+            "service": "ok",
+            "database": "skipped",
+            "digraph": "unreachable",
+            "digisearch": "unreachable",
+            "digiquant": "unreachable",
+            "digitrace": "unreachable",
+        },
+    }
+    assert _probe_output(version_program, json.dumps(bare)) == "2.6.4"
+    assert _probe_output(checks_program, json.dumps(bare)).startswith("CLEAN"), (
+        "the bare-container degradation is what the probe has to tolerate"
+    )
+
+    # An upstream that ANSWERED is a fault, not a degradation.
+    answered = {
+        "version": "2.6.4",
+        "checks": {"service": "ok", "database": "skipped", "digraph": "http_500"},
+    }
+    assert _probe_output(checks_program, json.dumps(answered)).startswith("BAD:"), (
+        "a service that answered http_<status> must not be tolerated"
+    )
+
+    # A broken service, a broken database, a missing service and a missing
+    # checks block are all faults.
+    for checks in (
+        {"service": "error", "database": "skipped"},
+        {"service": "ok", "database": "error"},
+        {"database": "skipped"},
+    ):
+        payload = json.dumps({"version": "2.6.4", "checks": checks})
+        assert _probe_output(checks_program, payload).startswith("BAD:"), (
+            f"the probe must refuse {checks}"
+        )
+    assert _probe_output(checks_program, json.dumps({"version": "2.6.4"})).startswith(
+        "BAD:"
+    ), "a body with no checks at all must be refused"
+
+    # A check whose key collides with the old success sentinel must not pass.
+    collides = {
+        "version": "2.6.4",
+        "checks": {"service": "ok", "database": "skipped", "ok": "error"},
+    }
+    assert _probe_output(checks_program, json.dumps(collides)).startswith("BAD:"), (
+        "the success sentinel must not be a value the payload can produce"
+    )
+
+    # The version program reports the version in the body, so the shell can
+    # refuse an image that serves the wrong one.
+    assert _probe_output(version_program, json.dumps({"version": "2.5.0"})) == "2.5.0"
+    assert _probe_output(version_program, "<html>gateway error</html>") == "NOTJSON", (
+        "a body that is not JSON has to be told apart from a JSON body without "
+        "a version"
+    )
+    assert _probe_output(version_program, json.dumps({"status": "ok"})) == "NOVERSION"
