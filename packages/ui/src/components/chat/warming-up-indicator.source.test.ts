@@ -6,9 +6,9 @@ import { describe, expect, it } from "vitest";
 /**
  * Pins the warming-up indicator contract (#4753): while the digichat BFF
  * retries a booting upstream it replaces the `connecting` data-connection
- * part with `warming_up`, and the thread indicators must render warming copy
- * for that state — never the unavailable error, which stays reserved for
- * real (non-boot) failures.
+ * part with `warming_up` and sends the line to show with it; the thread
+ * indicators render that message — never the unavailable error, which stays
+ * reserved for real (non-boot) failures — and never a copy of their own.
  */
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -17,23 +17,18 @@ function read(rel: string): string {
 }
 
 describe("warming-up indicator", () => {
-  it("gallery thread renders warming copy for the warming_up connection state", () => {
-    const thread = read("gallery-thread/thread.aui.tsx");
-    expect(thread).toMatch(/warming_up/);
-    expect(thread).toMatch(/Warming up…/);
-    // Warming wins over connecting when both states are somehow present.
-    const warmingIdx = thread.indexOf("warming_up");
-    const connectingIdx = thread.indexOf("Connecting…");
-    expect(warmingIdx).toBeGreaterThan(-1);
-    expect(connectingIdx).toBeGreaterThan(-1);
-    expect(warmingIdx).toBeLessThan(connectingIdx);
+  it("both skins read the server's status message, with no fallback copy", () => {
+    for (const rel of ["gallery-thread/thread.aui.tsx", "skins/base/thread.tsx"]) {
+      const thread = read(rel);
+      expect(thread).toMatch(/connectionStatusText/);
+      // DIG-4459: no client-side default line for any connection state.
+      expect(thread).not.toMatch(/Warming up…/);
+      expect(thread).not.toMatch(/Connecting…|"Connecting"|\?\? "Connecting"/);
+    }
   });
 
-  it("base skin swaps its empty-message copy while the upstream boots", () => {
-    const thread = read("skins/base/thread.tsx");
-    expect(thread).toMatch(/warming_up/);
-    expect(thread).toMatch(/Warming up…/);
-    // The plain "Connecting" copy stays for normal (non-boot) waits.
-    expect(thread).toContain("Connecting");
+  it("the BFF names the boot wait itself", () => {
+    const stream = read("../../../../../apps/digichat/src/lib/adapters/digithings/stream.ts");
+    expect(stream).toMatch(/state: "warming_up", message: "Waking up services…"/);
   });
 });

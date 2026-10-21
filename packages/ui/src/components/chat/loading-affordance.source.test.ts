@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
  * Pins the one-loading-affordance rule.
  *
  * Before the agent answers, the chat shows a single loading row: the dot
- * matrix on its own, with the phase text only when we know it (waking up
- * services, connecting, warming up). The moment anything real arrives —
+ * matrix on its own, with status text only when the server sent a status
+ * message (waking up services, waiting for capacity). The moment anything real arrives —
  * reasoning, a tool call, the answer — the work block takes over and the
  * loading row is gone. The two must never stack: a "Working" block above a
  * second animation below reads as two things happening at once.
@@ -37,14 +37,18 @@ describe("one loading affordance per turn", () => {
     // A status part is not work: the chain header must not appear while the
     // only thing in the group is the connection state.
     expect(thread).toMatch(/const holdsWork = part\.indices\.some/);
-    expect(thread).toMatch(/if \(!holdsWork\) return null;/);
+    expect(thread).toMatch(/if \(!holdsWork\) return <>\{children\}<\/>;/);
   });
 
-  it("keeps the phase copy for the pre-response phase", () => {
-    const thread = read("gallery-thread/thread.aui.tsx");
-    expect(thread).toMatch(/Waking up services…/);
-    expect(thread).toMatch(/Connecting…/);
-    expect(thread).toMatch(/Warming up…/);
+  it("shows status text only when the server sent one", () => {
+    // DIG-4459: a bare wait is the animation alone. The text comes from the
+    // connection part's message (or the warm-up probe), never a client
+    // default.
+    for (const rel of ["gallery-thread/thread.aui.tsx", "skins/base/thread.tsx"]) {
+      const thread = read(rel);
+      expect(thread).toMatch(/connectionStatusText\(s\.message\.parts\)/);
+      expect(thread).not.toMatch(/Connecting…|"Connecting"|Warming up…/);
+    }
   });
 
   it("the work block is the only animation once the agent works", () => {

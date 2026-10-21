@@ -59,7 +59,10 @@ import {
 import { isPlanTierSatisfied, normalizeEmbedHost } from "@/lib/embed-tenants";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
-import { verifyTrialProof } from "@/lib/trial-proof";
+import {
+  inspectTrialProof,
+  TRIAL_PROOF_EXPIRED_HEADER,
+} from "@/lib/trial-proof";
 import {
   acquireChatRunLock,
   releaseChatRunLockOnResponseEnd,
@@ -99,7 +102,93 @@ function jsonError(
   });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
+  const trialProof = inspectRequestTrialProof(req);
+  const res = await handleChat(req, trialProof);
+  if (!trialProof.expired) return res;
+  // The signal rides on the Response the route returns: the chat response is
+  // a stream, so there is no error path to hang it on, and the client reads
+  // the header off whatever response it actually receives.
+  return withExpiredTrialProofHeader(res);
+}
+
+/**
+ * Add the expired-proof signal to a response the route is about to return.
+ * The header is set on the response itself where that is allowed, and on a
+ * copy otherwise (a response whose headers are immutable).
+ */
+function withExpiredTrialProofHeader(res: Response): Response {
+  try {
+    res.headers.set(TRIAL_PROOF_EXPIRED_HEADER, "1");
+    return res;
+  } catch {
+    const headers = new Headers(res.headers);
+    headers.set(TRIAL_PROOF_EXPIRED_HEADER, "1");
+    return new Response(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers,
+    });
+  }
+}
+
+/**
+ * The trial proof the client presented, resolved once per request.
+ *
+ * Both flags are host-scoped: a proof only counts for the embed host it
+ * names. A valid proof for another host buys nothing (the same trust chain
+ * as before), and an expired proof for another host is not this client's
+ * proof to drop.
+ */
+type RequestTrialProof = {
+  /** The host an authentic presented proof binds; null when there is none. */
+  host: string | null;
+  /** Authentic, unexpired, and for this request's embed host. */
+  accepted: boolean;
+  /** Authentic, expired, and for this request's embed host. */
+  expired: boolean;
+};
+
+function inspectRequestTrialProof(req: Request): RequestTrialProof {
+  const token = req.headers.get("x-embed-trial-proof")?.trim();
+  const secret = process.env.DIGICHAT_TRIAL_PROOF_SECRET?.trim();
+  if (!token || !secret) {
+    return { host: null, accepted: false, expired: false };
+  }
+
+  const inspection = inspectTrialProof(token, secret);
+  if (inspection.ok) {
+    return {
+      host: inspection.host,
+      accepted: matchesEmbedHost(req, inspection.host),
+      expired: false,
+    };
+  }
+  if (inspection.reason === "expired") {
+    return {
+      host: inspection.host,
+      accepted: false,
+      expired: matchesEmbedHost(req, inspection.host),
+    };
+  }
+  // Malformed or wrongly signed: invalid, not expired. The client must not
+  // treat these as re-mintable.
+  return { host: null, accepted: false, expired: false };
+}
+
+/** True when the proof's host is the embed host this request came from. */
+function matchesEmbedHost(req: Request, proofHost: string): boolean {
+  const embedHost = normalizeEmbedHost(req.headers.get("x-embed-host"));
+  const normalizedProofHost = normalizeEmbedHost(proofHost);
+  return Boolean(
+    embedHost && normalizedProofHost && normalizedProofHost === embedHost,
+  );
+}
+
+async function handleChat(
+  req: Request,
+  trialProof: RequestTrialProof,
+): Promise<Response> {
   // Revoked/expired license refuses before auth: a revoked deployment
   // refuses even an authenticated caller, and the check is cheaper.
   const refusal = licenseRefusal();
@@ -362,78 +451,11 @@ export async function POST(req: Request) {
       // budget, so once a proof is accepted the per-IP quota below is not
       // consulted at all. No proof, no bypass: an absent, malformed, expired,
       // wrongly-signed or wrong-host proof leaves the gate exactly as it was.
-      const proofToken = req.headers.get("x-embed-trial-proof")?.trim();
-      const proofSecret = process.env.DIGICHAT_TRIAL_PROOF_SECRET?.trim();
-      if (proofToken && proofSecret) {
-        const proofHost = verifyTrialProof(proofToken, proofSecret);
-        const embedHost = normalizeEmbedHost(req.headers.get("x-embed-host"));
-        if (
-          proofHost &&
-          embedHost &&
-          normalizeEmbedHost(proofHost) === embedHost
-        ) {
-          quotaSatisfied = true;
-        }
-      }
-    }
-
-    if (!quotaSatisfied) {
-      try {
-        // An allowlisted internal monitor (DIG-613) holds a server-side secret
-        // and is exempt from the per-IP free-turn budget, so an hourly check can
-        // run every hour without spending the window's 3 turns in the first hour
-        // and then reporting 402 for the next 24. The secret is not
-        // X-Embed-Token — that one is a publishable key served in the embedding
-        // page (DIG-619), so a bypass keyed on it would be public. Fails open:
-        // no allowlist configured means this is false and the quota below runs
-        // exactly as before. Scope is this gate only — every other check in this
-        // route, and tenant resolution itself, is unchanged.
-        if (isAllowlistedMonitorToken(req.headers.get(EMBED_MONITOR_TOKEN_HEADER))) {
-          quotaSatisfied = true;
-        }
-      } catch (e) {
-        // Fails CLOSED for the bypass: the assignment above never ran, so
-        // quotaSatisfied stays false and the per-IP quota below applies to this
-        // caller exactly as it did before the monitor check existed. Do not set
-        // quotaSatisfied here to "reconcile" this log with the wording it replaced
-        // ("failing open") — that would turn a safe fallback into a real quota
-        // bypass (DIG-1165).
-        console.warn(
-          "[trial-gate] monitor allowlist error, falling back to the per-IP cap:",
-          e,
-        );
-      }
-    }
-
-    if (!quotaSatisfied) {
-      // A trial proof is a server-signed token (lib/trial-proof.ts) that this
-      // server mints for an embed host, so a visitor who has completed the
-      // trial form can be let through the free-turn cap without a client-
-      // asserted header. Unlike x-embed-trial-unlock below — which the client
-      // asserts and anyone can send — a proof cannot be forged: the signature
-      // covers host|exp and only this server holds DIGICHAT_TRIAL_PROOF_SECRET,
-      // so only it can produce a token that verifies. A raw client-asserted
-      // X-Embed-Trial-Proof value is NEVER trusted.
-      // The proof binds host|exp|sig only — no tenant, no nonce — so the gate
-      // compares the VERIFIED host itself and a valid proof for another host
-      // buys nothing. The proof's host is the canonical bare registry host
-      // while the browser sends the embed origin as a URL, so compare the
-      // canonical forms. A sanctioned bypass must not spend the visitor's
-      // budget, so once a proof is accepted the per-IP quota below is not
-      // consulted at all. No proof, no bypass: an absent, malformed, expired,
-      // wrongly-signed or wrong-host proof leaves the gate exactly as it was.
-      const proofToken = req.headers.get("x-embed-trial-proof")?.trim();
-      const proofSecret = process.env.DIGICHAT_TRIAL_PROOF_SECRET?.trim();
-      if (proofToken && proofSecret) {
-        const proofHost = verifyTrialProof(proofToken, proofSecret);
-        const embedHost = normalizeEmbedHost(req.headers.get("x-embed-host"));
-        if (
-          proofHost &&
-          embedHost &&
-          normalizeEmbedHost(proofHost) === embedHost
-        ) {
-          quotaSatisfied = true;
-        }
+      // The verdict itself - verified host, expiry, and the host comparison -
+      // is resolved once per request in inspectRequestTrialProof, so the gate
+      // and the expiry signal can never disagree.
+      if (trialProof.accepted) {
+        quotaSatisfied = true;
       }
     }
 

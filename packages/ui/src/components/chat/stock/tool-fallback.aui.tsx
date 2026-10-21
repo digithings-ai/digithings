@@ -23,28 +23,12 @@ import { toolRowTitle } from "./tool-display";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { readGloomberbAttribution } from "@digithings/ui";
+import { ChatNoticeContent, chatNoticeRootProps } from "./chat-notice";
+import { JsonView } from "./json-view";
 
 const ANIMATION_DURATION = 200;
 
 const pressable = "active:scale-[0.98]";
-
-function formatJsonDump(value: unknown): string {
-  if (value === undefined) return "";
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) return value;
-    try {
-      return JSON.stringify(JSON.parse(trimmed), null, 2);
-    } catch {
-      return value;
-    }
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
 
 export const formatToolDuration = (ms: number) => {
   if (!Number.isFinite(ms) || ms < 0) return "0ms";
@@ -273,15 +257,23 @@ function ToolFallbackArgs({
 }) {
   if (!argsText) return null;
 
+  // DIG-4459: the full arguments, pretty-printed and highlighted. While the
+  // call streams the text may be partial JSON; formatJsonDump repairs it for
+  // display and falls back to the raw text, never a cut-off copy.
   return (
     <div
       data-slot="tool-fallback-args"
       className={cn("aui-tool-fallback-args", className)}
       {...props}
     >
-      <pre className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-        {formatJsonDump(argsText)}
-      </pre>
+      <p className="aui-tool-fallback-args-header text-muted-foreground text-xs font-medium">
+        Arguments:
+      </p>
+      <JsonView
+        value={argsText}
+        slot="tool-fallback-args-json"
+        className="aui-tool-fallback-args-value mt-1"
+      />
     </div>
   );
 }
@@ -304,9 +296,11 @@ function ToolFallbackResult({
       <p className="aui-tool-fallback-result-header text-muted-foreground text-xs font-medium">
         Result:
       </p>
-      <pre className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-        {formatJsonDump(result)}
-      </pre>
+      <JsonView
+        value={result}
+        slot="tool-fallback-result-json"
+        className="aui-tool-fallback-result-content mt-1"
+      />
     </div>
   );
 }
@@ -346,6 +340,28 @@ function ToolFallbackAttribution({
   );
 }
 
+/** The tool's own error, whole: a string as-is, anything else as JSON. */
+export function toolErrorText(error: unknown): string | null {
+  if (error === undefined || error === null || error === "") return null;
+  if (typeof error === "string") {
+    const trimmed = error.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === "object") return JSON.stringify(parsed, null, 2);
+    } catch {
+      /* plain text */
+    }
+    return error;
+  }
+  if (error instanceof Error) return error.stack ?? error.message;
+  try {
+    return JSON.stringify(error, null, 2);
+  } catch {
+    return String(error);
+  }
+}
+
 function ToolFallbackError({
   status,
   className,
@@ -355,30 +371,34 @@ function ToolFallbackError({
 }) {
   if (status?.type !== "incomplete") return null;
 
-  const error = status.error;
-  const errorText = error
-    ? typeof error === "string"
-      ? error
-      : JSON.stringify(error)
-    : null;
-
+  const errorText = toolErrorText(status.error);
   if (!errorText) return null;
 
   const isCancelled = status.reason === "cancelled";
-  const headerText = isCancelled ? "Cancelled reason:" : "Error:";
+  // First line is the headline; the full text (traceback, payload) follows,
+  // folded when it is long. The arguments stay visible above this box.
+  const [firstLine = errorText, ...rest] = errorText.split("\n");
+  const hasMore = rest.some((line) => line.trim());
+  const tone = isCancelled ? "status" : "error";
 
   return (
     <div
+      {...chatNoticeRootProps(tone, cn("aui-tool-fallback-error", className))}
       data-slot="tool-fallback-error"
-      className={cn("aui-tool-fallback-error", className)}
       {...props}
     >
-      <p className="aui-tool-fallback-error-header text-muted-foreground font-semibold">
-        {headerText}
-      </p>
-      <p className="aui-tool-fallback-error-reason text-muted-foreground">
-        {errorText}
-      </p>
+      <ChatNoticeContent
+        tone={tone}
+        title={
+          <>
+            <span className="aui-tool-fallback-error-header">
+              {isCancelled ? "Cancelled: " : "Error: "}
+            </span>
+            <span className="aui-tool-fallback-error-reason">{firstLine}</span>
+          </>
+        }
+        detail={hasMore ? rest.join("\n") : undefined}
+      />
     </div>
   );
 }
@@ -777,11 +797,12 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
         status={effectiveStatus}
       />
       <ToolFallbackContent>
-        <ToolFallbackError status={effectiveStatus} />
         <ToolFallbackArgs
           argsText={argsText}
           className={cn(isCancelled && "opacity-60")}
         />
+        {/* DIG-4459: the error goes under the arguments, never instead of them. */}
+        <ToolFallbackError status={effectiveStatus} />
         {shouldRenderApproval && (
           <ToolFallbackApproval
             addResult={addResult}
