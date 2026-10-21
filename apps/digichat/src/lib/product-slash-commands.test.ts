@@ -33,6 +33,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setSearchEngine: vi.fn(),
     setToolbar: vi.fn(),
     setScrollbars: vi.fn(),
+    setDensity: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -59,6 +60,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openEffort: vi.fn(),
     openSearchEngine: vi.fn(),
     openView: vi.fn(),
+    openDensity: vi.fn(),
     openThinking: vi.fn(),
     openLanguage: vi.fn(),
     openSessions: vi.fn(),
@@ -337,6 +339,17 @@ describe("executeSlashDef", () => {
     expect(a.setView).toHaveBeenLastCalledWith("quiet");
     executeSlashDef(def, "nonsense", a);
     expect(a.openView).toHaveBeenCalledOnce();
+  });
+
+  it("sets /density from the three rhythms and opens the page otherwise", () => {
+    const a = api();
+    const def = { id: "density" as const, names: ["/density"], needsArg: false, hint: "" };
+    executeSlashDef(def, "compact", a);
+    expect(a.setDensity).toHaveBeenCalledWith("compact");
+    executeSlashDef(def, "Airy", a);
+    expect(a.setDensity).toHaveBeenLastCalledWith("airy");
+    executeSlashDef(def, "roomy", a);
+    expect(a.openDensity).toHaveBeenCalledOnce();
   });
 
   it("exposes extra MCP servers as slash tools", () => {

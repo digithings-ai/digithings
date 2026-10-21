@@ -46,7 +46,12 @@ import {
   toolsMenuSummary,
   type SessionMcpConfig,
 } from "@/components/stock/embed-mcp-flow";
-import { buildProductSlashCommands, languageSelectOptions } from "@/lib/product-slash-commands";
+import {
+  applyThemePick,
+  buildProductSlashCommands,
+  currentThemeState,
+  languageSelectOptions,
+} from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
 import {
   byokRequiresModel,
@@ -69,12 +74,8 @@ import {
 } from "@/components/stock/embed-provider-flow";
 import { listenMcpOAuthResult, startMcpOAuth } from "@/components/stock/embed-mcp-oauth";
 import { THINKING_MODES, VIEW_MODES } from "@/lib/view-modes";
-import {
-  applyDocumentTheme,
-  matchThemeStep,
-  readThemeState,
-  themeCycle,
-} from "@digithings/ui/theme";
+import { TRACE_DENSITIES, TRACE_DENSITY_LABELS } from "@digithings/ui/chat/trace-spacing";
+import { matchThemeStep, themeCycle } from "@digithings/ui/theme";
 
 export type ComposerMenuKind =
   | "settings"
@@ -85,6 +86,7 @@ export type ComposerMenuKind =
   | "effort"
   | "search-engine"
   | "view"
+  | "density"
   | "theme"
   | "thinking"
   | "provider"
@@ -97,6 +99,7 @@ type MenuView =
   | "effort"
   | "search-engine"
   | "view"
+  | "density"
   | "theme"
   | "thinking"
   | "tools"
@@ -143,6 +146,7 @@ const MENU_PARENT: Record<MenuView, MenuView | null> = {
   effort: "main",
   "search-engine": "main",
   view: "main",
+  density: "main",
   theme: "main",
   thinking: "main",
   tools: "main",
@@ -200,6 +204,7 @@ function initialView(kind: ComposerMenuKind): MenuView {
   if (kind === "effort") return "effort";
   if (kind === "search-engine") return "search-engine";
   if (kind === "view") return "view";
+  if (kind === "density") return "density";
   if (kind === "theme") return "theme";
   if (kind === "thinking") return "thinking";
   if (kind === "tools") return "tools";
@@ -438,6 +443,7 @@ export function EmbedComposerMenu({
       tools: "tools",
       language: "language",
       view: "view",
+      density: "density",
       theme: "theme",
       thinking: "thinking",
       effort: "effort",
@@ -587,8 +593,24 @@ export function EmbedComposerMenu({
     [api, onClose],
   );
 
+  const densityRows = useMemo(
+    (): MenuRow[] =>
+      TRACE_DENSITIES.map((id) => ({
+        id,
+        label: slashName(`density ${id}`),
+        value: TRACE_DENSITY_LABELS[id],
+        checked: api.prefs.density === id,
+        exclusive: true,
+        activate: () => {
+          api.setDensity(id);
+          onClose();
+        },
+      })),
+    [api, onClose],
+  );
+
   const themeRows = useMemo((): MenuRow[] => {
-    const state = readThemeState();
+    const state = currentThemeState(api);
     const current = matchThemeStep(state.preference, state.palette, state.resolved);
     return themeCycle().map((step) => ({
       id: step.id,
@@ -597,11 +619,19 @@ export function EmbedComposerMenu({
       checked: current.id === step.id,
       exclusive: true,
       activate: () => {
-        applyDocumentTheme(step.mode, step.palette);
+        if (api.setTheme && current.id === step.id) {
+          // On a host that owns the theme (an embed), the checked row drops
+          // the visitor's pick, so the chat follows the parent / tenant again.
+          applyThemePick(api, "auto", step.palette);
+        } else {
+          // Document theme (the app): any row, the checked one included,
+          // pins that mode and palette, as before 2.6.6.
+          applyThemePick(api, step.mode, step.palette);
+        }
         onClose();
       },
     }));
-  }, [onClose]);
+  }, [api, onClose]);
 
   const thinkingRows = useMemo(
     (): MenuRow[] =>
@@ -899,7 +929,9 @@ export function EmbedComposerMenu({
           ? effortRows
           : view === "view"
             ? viewRows
-            : view === "thinking"
+            : view === "density"
+              ? densityRows
+              : view === "thinking"
               ? thinkingRows
               : view === "theme"
                 ? themeRows
@@ -929,7 +961,9 @@ export function EmbedComposerMenu({
           ? "/effort"
           : view === "view"
             ? "/view"
-            : view === "theme"
+            : view === "density"
+              ? "/density"
+              : view === "theme"
               ? "/theme"
               : view === "thinking"
                 ? "/thinking"

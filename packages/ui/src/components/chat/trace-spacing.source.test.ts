@@ -49,13 +49,18 @@ describe("worked chain spacing tokens", () => {
     );
     expect(chain?.[1] ?? "").toContain("display: flex");
     expect(chain?.[1] ?? "").toContain("flex-direction: column");
-    expect(aui).toMatch(
-      /\[data-slot="aui_work-chain-content"\]\[hidden\] \{\n  display: none;\n\}/,
+    // The flex display above would otherwise beat the UA `[hidden]` rule, so
+    // both hosts (thread and launcher) need their own hidden rule.
+    const hidden = aui.match(
+      /\.digichat-thread \[data-slot="aui_work-chain-content"\]\[hidden\],\n\.digichat-launcher \[data-slot="aui_work-chain-content"\]\[hidden\] \{([\s\S]*?)\n\}/,
     );
+    expect(hidden?.[1] ?? "").toContain("display: none");
   });
 
   it("keeps its scale out of the design tokens' --space-* names", () => {
-    expect(aui).not.toMatch(/(^|[^-a-z])--space-\d/m);
+    for (const sheet of [aui, skin]) {
+      expect(sheet).not.toMatch(/(^|[^-a-z])--space-\d/m);
+    }
   });
 
   it("gives reasoning and tool groups the same sibling margin", () => {

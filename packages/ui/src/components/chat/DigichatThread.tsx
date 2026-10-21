@@ -47,6 +47,8 @@ export type DigichatThreadProps = {
   composerToolbar?: ReactNode;
   /** `always` reserves a scrollbar gutter; `auto` shows bars only on scroll. */
   scrollbars?: "always" | "auto";
+  /** Worked-chain rhythm. `default` is the fixed spacing. */
+  density?: "compact" | "default" | "airy";
 };
 
 export function DigichatThread({
@@ -66,6 +68,7 @@ export function DigichatThread({
   workVisibility,
   composerToolbar,
   scrollbars,
+  density = "default",
 }: DigichatThreadProps) {
   return (
     <Thread
@@ -85,6 +88,7 @@ export function DigichatThread({
       workVisibility={workVisibility}
       composerToolbar={composerToolbar}
       scrollbars={scrollbars}
+      density={density}
     />
   );
 }

@@ -1383,8 +1383,21 @@ whenever the parent theme toggles — no iframe reload. The embed accepts theme
 messages from the same first-party allowlist as seed (`parseThemeMessage` in
 `src/lib/embed-theme-messages.ts`) and applies them via the existing
 `[data-theme]` + `.dark`/`.light` path (MutationObserver still defends against
-OS/`ThemeProvider` overrides). Priority: parent postMessage > URL `?theme=` >
-tenant registry theme.
+OS/`ThemeProvider` overrides). Priority: visitor `/theme` pick > parent
+postMessage > URL `?theme=` > tenant registry theme (`resolveEmbedTheme`).
+
+**`/theme` on embeds (2.6.6).** Every tenant embed lists `/theme` in the command
+palette; the #6122 model/tool/session locks are unchanged. A pick is cosmetic and
+lasts for the tab: it is stored in sessionStorage under
+`dc-embed-theme:<tenant slug>` (`embedUserThemeKey`; in memory when
+sessionStorage cannot be written) and never in the platform `dt-theme` /
+`dt-palette` keys. It sets `data-theme`, `data-palette`, and `theme-color` on the
+embed document. `/theme auto` drops the pick, so the embed returns to the
+parent / `?theme=` / tenant theme; in the picker, choosing the checked row does
+the same (in the full app the checked row still pins that mode). The api part is
+`embedThemePrefs`. Without a pick, an embed hosted by
+digithings.ai follows the parent site's theme; a standalone embed starts on the
+tenant theme.
 
 **postMessage parent-error.** After `READY_TIMEOUT_MS` (30s) without
 `digichat:ready`, `ChatEmbedShell` posts
@@ -1835,6 +1848,18 @@ part-driven vs chrome-driven is indexed in digiweb
 | `features.attachments` | bool | Default **true** (composer attach). Product / DataTap / dashboard YAML set false. |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |
+| `features.density` | `compact \| default \| airy` | Worked-chain rhythm. Default `default` (the fixed spacing). A browser `dt-density` choice wins over this for that user. Unlike the other embed prefs (session-only), `/density` persists in localStorage, so a choice can carry between same-origin surfaces (browsers that partition third-party iframe storage keep an embedded chat separate). |
+| `features.effort` | `low \| medium \| high` | Seeds `/effort`. Default `medium`. A palette choice overrides it for the session; `/new` returns to this value. |
+| `features.view` | `quiet \| balanced \| verbose` | Already the chain disclosure. Seeds `/view`. Session choice wins until `/new`. |
+| `features.thinking` | `auto \| collapsed \| open` | Seeds `/thinking`. Session choice wins until `/new`. |
+| `chrome.palette` | `default` or a palette id | Deployment palette for `mode: app`. Omitted means the digichat skin palette. A stored `dt-palette` choice wins and is not overwritten; picking the "default" palette removes `dt-palette`, so the deployment palette paints again on the next load (an explicit "no palette" choice is a follow-up). Not available on embeds: the embed pins its own theme, and the tenant registry refuses `palette`. Does not change `data-theme`. |
+| `chrome.toolbar` | bool, default `true` | Seeds `/toolbar`. |
+| `chrome.scrollbars` | `always \| auto`, default `always` | Seeds `/scrollbar`. |
+| `gate.searchEngine` | `auto \| internal \| exa \| tavily \| parallel \| firecrawl \| tinyfish` | Seeds `/search-engine`. Omitted means auto. Engine name only. |
+
+`/models` reads `models.default`. `/language` reads `chrome.defaultLanguage`. `/theme` mode reads `chrome.theme` for the no-JS paint; a stored `dt-theme` still follows the OS when absent, which is unchanged. Web search, digisearch, and digivault stay capability flags (`gate` / catalog), not new defaults.
+
+The trial, OCC and digithings.ai configs omit the new keys, so they stay on these defaults.
 
 `chrome.skin` selects one of the 11 official assistant-ui catalog templates
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`

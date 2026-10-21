@@ -128,15 +128,12 @@ function ToolGroupTrigger({
       aria-busy={active || undefined}
       {...props}
     >
-      {/* The slot is always filled — a full grid, solid and still, the same
-          weight as the reasoning glyph — so the label and the arrow keep
-          their place. */}
+      {/* Pixel braces, the same 5×5 grid and the same box as the reasoning
+          bulb, still in both states so the label does not shift. */}
       <span data-slot="tool-group-trigger-loader" className="aui-tool-group-trigger-loader inline-flex shrink-0">
-        {/* A full grid, the same weight as the reasoning glyph: solid, still,
-            and the same size in both states, so the label never shifts. The
-            chain header carries the running state. The trigger is named by
-            its text, so the glyph carries no name of its own, and the running
-            state is exposed on the trigger as aria-busy. */}
+        {/* The chain header carries the running state. The trigger is named
+            by its text, so the glyph carries no name of its own, and the
+            running state is exposed on the trigger as aria-busy. */}
         <DotMatrix state="tools" decorative className="!size-3 shrink-0" />
       </span>
       <span

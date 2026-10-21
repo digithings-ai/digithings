@@ -32,7 +32,9 @@ DIGICHAT_CHROME_SKIN=digichat
 Mode and palette are a platform setting (`dt-theme`, `dt-palette`), not a
 catalog skin. `/theme` is one entry in the existing slash list. The 11 vendored
 catalog skins stay as shipped. A pinned embed theme wins over the stored
-mode, and the pin removes `data-palette` from that document.
+mode, and the pin removes `data-palette` from that document. On an embed, a
+visitor's `/theme` pick then sets the mode and palette for that tab only
+(sessionStorage per tenant; see `apps/digichat/ARCHITECTURE.md`).
 
 ## Catalog templates (untouched)
 
