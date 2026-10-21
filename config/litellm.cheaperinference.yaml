@@ -149,30 +149,6 @@ model_list:
   - model_name: openrouter/deepseek/deepseek-v4-flash-release
     litellm_params: *ci_ds_v4_flash_release
 
-  - model_name: deepseek/deepseek-v4-pro
-    litellm_params: &ci_ds_v4_pro
-      model: openai/deepseek-v4-pro
-      api_base: os.environ/CHEAPERINFERENCE_API_BASE
-      api_key: os.environ/CHEAPERINFERENCE_API_KEY
-      configurable_clientside_auth_params:
-        - api_key
-        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
-  - model_name: openrouter/deepseek/deepseek-v4-pro
-    litellm_params: *ci_ds_v4_pro
-
-  - model_name: google/gemini-3.7-flash
-    litellm_params: &ci_gem_37_flash
-      model: openai/gemini-3.7-flash
-      api_base: os.environ/CHEAPERINFERENCE_API_BASE
-      api_key: os.environ/CHEAPERINFERENCE_API_KEY
-      allowed_openai_params:
-        - reasoning_effort
-      configurable_clientside_auth_params:
-        - api_key
-        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
-  - model_name: openrouter/google/gemini-3.7-flash
-    litellm_params: *ci_gem_37_flash
-
   - model_name: google/gemini-3.1-flash-lite
     litellm_params: &ci_gem_31_flash_lite
       model: openai/gemini-3.1-flash-lite
