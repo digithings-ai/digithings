@@ -4658,7 +4658,7 @@ def test_a_spent_budget_names_the_attempts_it_made(
     with pytest.raises(mq._PaperclipUnavailable) as excinfo:
         reader.ticket("DIG-4795")
     assert len(calls) == 1
-    assert "(after 1 attempts)" in str(excinfo.value)
+    assert "(after 1 attempt)" in str(excinfo.value)
 
 
 def test_a_refusal_from_the_api_is_not_retried(

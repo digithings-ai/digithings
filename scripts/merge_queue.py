@@ -2068,10 +2068,16 @@ class Independence:
 #:
 #: The read is a GET, so it is safe to try again: a second attempt asks the
 #: same question, and a question that was not answered is not an answer. The
-#: budget bounds one read, so a slow answer costs at most that much. It is a
-#: budget per path and not per tick: the gate reads a ticket, a run and a pull
-#: request's runs, so a control plane that does not answer costs that much
-#: again for each of them.
+#: budget bounds the attempts of one read: the pause before the second attempt
+#: and the attempt itself both happen inside it, so one path costs the budget
+#: once and not once per attempt. It is a budget per path and not per tick:
+#: the gate reads a ticket, a run and a pull request's runs, so a control plane
+#: that does not answer costs that much again for each of them.
+#:
+#: The timeout is the socket timeout of one request. That is what covers the
+#: case that was measured: a control plane that thinks for half a minute
+#: before it answers. A server that answers slowly instead of late is a
+#: different shape, and a socket timeout does not bound it.
 #:
 #: The four numbers are the fix, and the suite pins them: a timeout below the
 #: slowest answer measured turns a slow API back into a refusal, a budget
@@ -2212,7 +2218,8 @@ class ReviewerProvenance:
             detail = f"Paperclip answered {failure.code} for {path}"
         else:
             detail = f"Paperclip could not be read for {path}: {failure}"
-        raise _PaperclipUnavailable(f"{detail} (after {attempts} attempts)") from failure
+        plural = "attempt" if attempts == 1 else "attempts"
+        raise _PaperclipUnavailable(f"{detail} (after {attempts} {plural})") from failure
 
     def ticket(self, key: str) -> dict[str, Any] | None:
         """The Paperclip issue behind a ticket key, or None when there is none."""
