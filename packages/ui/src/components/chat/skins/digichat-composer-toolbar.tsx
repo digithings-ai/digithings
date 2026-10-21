@@ -17,9 +17,11 @@ import { DigichatContextMeter } from "./digichat-context-meter";
  * chip rather than a wrong one.
  */
 export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi }) {
-  const rawModel = prefs.prefs.model.trim();
+  const sessionModel = prefs.prefs.model.trim();
   // Routing names, not presentation: the backend sees the full model id.
-  const modelLabel = rawModel || "auto";
+  // The meter may use a window the session did not select.
+  const modelLabel = sessionModel || "auto";
+  const meterModel = sessionModel || prefs.meterModel?.trim() || "";
   const providerLabel = prefs.providerLabel?.trim() ?? "";
   // The backend is named whenever the host named one — a Foundry tenant is
   // served by Azure AI Foundry, not by the house model provider. It is a
@@ -137,7 +139,7 @@ export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi })
       ))}
       <span className="aui-composer-meta-spacer" aria-hidden />
       <DigichatContextMeter
-        model={rawModel}
+        model={meterModel}
         toolCount={mcpToolTotal + prefs.catalogTools.length}
       />
     </div>

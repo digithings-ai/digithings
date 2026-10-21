@@ -166,6 +166,11 @@ export type EmbedChatPrefsApi = {
    */
   providerLabel?: string;
   showModels: boolean;
+  /**
+   * Model id used only to size the context meter. Not the session model:
+   * an empty session model still sends no X-Digi-Model.
+   */
+  meterModel?: string;
   hasDigisearch: boolean;
   hasVault: boolean;
   hasSessions: boolean;

@@ -12,6 +12,7 @@ import {
   takePendingForceTool,
 } from "./use-embed-digi-chat";
 import { ACTIVITY_PART_TYPE } from "@/lib/chat-activity";
+import { contextMeterModel, sessionModelSeed } from "@/lib/session-model-seed";
 import {
   resetLiveTrialUnlockedForTests,
   writeTrialUnlocked,
@@ -795,6 +796,29 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     expect(setMessages).not.toHaveBeenCalled();
     expect(sendMessage).not.toHaveBeenCalled();
     unmount();
+  });
+});
+
+describe("useEmbedDigiChat prepareSendMessagesRequest — house model header", () => {
+  it("sends no X-Digi-Model on a default house turn", async () => {
+    const sessionModel = sessionModelSeed({ available: [] });
+    const meterModel = contextMeterModel({ slug: "digithings", sessionModel });
+    expect(sessionModel).toBe("");
+    expect(meterModel).toBe("deepseek/deepseek-v4.1-flash-1017");
+    const { headers } = await callPrepareSendMessagesRequest({
+      embedHost: "https://digithings.ai",
+      getSelectedModel: () => sessionModel.trim() || undefined,
+    });
+    expect(headers.has("X-Digi-Model")).toBe(false);
+  });
+
+  it("sends X-Digi-Model once the user picks a model", async () => {
+    const picked = "z-ai/glm-5.3-flash";
+    const { headers } = await callPrepareSendMessagesRequest({
+      embedHost: "https://digithings.ai",
+      getSelectedModel: () => picked,
+    });
+    expect(headers.get("X-Digi-Model")).toBe(picked);
   });
 });
 

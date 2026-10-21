@@ -140,6 +140,20 @@ describe("DigichatComposerToolbar provider chip (#4597)", () => {
     expect((row?.textContent ?? "").trim().startsWith("/")).toBe(false);
   });
 
+  it("sizes the context meter without labeling that window as the selected model", () => {
+    render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          showModels: true,
+          prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" },
+          meterModel: "deepseek/deepseek-v4.1-flash-1017",
+        })}
+      />,
+    );
+    expect(screen.getByLabelText("Open models").textContent).toBe("auto");
+    expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
+  });
+
   it("gates the provider chip on its own preference, not the model chip's", () => {
     render(
       <DigichatComposerToolbar

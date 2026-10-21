@@ -2,12 +2,12 @@ import { DEPLOY_DEFAULT_MODELS } from "./deploy-config/deploy-models";
 
 /**
  * Product hosts for digithings.ai. Their live tenant publishes
- * `models.available: []`, so the session model stays empty and the context
- * meter (which needs a known window) renders nothing. OCC omits `models`
- * and inherits the deploy catalog, which is why that host shows the meter.
- * These slugs seed the same catalog default unless `showContextMeter` is false.
- * A true flag on any other slug does nothing: the seed must not put the
- * house catalog on a tenant the bridge keeps off it.
+ * `models.available: []`, so the session model stays empty. The context
+ * meter still needs a known window: `contextMeterModel` supplies the
+ * catalog default for these slugs and does not write the session model.
+ * OCC omits `models` and inherits the deploy catalog, so its session
+ * model is that default and the meter follows it. A true flag on any
+ * other slug does nothing.
  */
 const HOUSE_CONTEXT_METER_SLUGS = new Set(["digithings", "digithings-ai"]);
 
@@ -20,25 +20,38 @@ export function contextMeterEnabled(
 }
 
 /**
- * Model id written into the composer on first paint.
+ * Model id written into the session on first paint, and the only id that
+ * may leave as X-Digi-Model.
  *
  * A non-empty `available` list wins: the curated default, else the first
- * entry. An empty list seeds the catalog default only when the context
- * meter is enabled for this host. The picker stays closed — that decision
- * is `showModelPicker`, which still requires a non-empty list.
+ * entry. An empty list stays empty. The context meter sizes itself from
+ * `contextMeterModel` instead, so showing the bar does not pick a model.
  */
 export function sessionModelSeed(input: {
-  slug?: string;
   available: readonly string[];
   defaultModel?: string;
-  showContextMeter?: boolean;
 }): string {
   const named = input.defaultModel?.trim() || "";
   if (input.available.length > 0) {
     return named || input.available[0] || "";
   }
+  return "";
+}
+
+/**
+ * Model id for the context meter only. A selected session model sizes the
+ * bar. With none, the house slugs use the catalog default's window. That
+ * id is not the session model and is not sent on the turn.
+ */
+export function contextMeterModel(input: {
+  slug?: string;
+  showContextMeter?: boolean;
+  sessionModel?: string;
+}): string {
+  const selected = input.sessionModel?.trim() || "";
+  if (selected) return selected;
   if (!contextMeterEnabled(input.showContextMeter, input.slug)) return "";
-  return named || DEPLOY_DEFAULT_MODELS.default;
+  return DEPLOY_DEFAULT_MODELS.default;
 }
 
 /** Model chip in the composer footer. A known window for the meter is not a picker. */

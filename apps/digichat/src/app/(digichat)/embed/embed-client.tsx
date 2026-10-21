@@ -46,7 +46,7 @@ import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/emb
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
-import { sessionModelSeed, showModelPicker } from "@/lib/session-model-seed";
+import { contextMeterModel, sessionModelSeed, showModelPicker } from "@/lib/session-model-seed";
 import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
   useBYOKKey,
@@ -554,14 +554,12 @@ function EmbedChat({
     ...DEFAULT_EMBED_CHAT_PREFS,
     // Start on the tenant's curated default so the first turn uses the model
     // the picker shows as selected (v4.1-flash on OCC) instead of falling
-    // through to the digigraph operator default. A host with an empty list
-    // still seeds a known window when the context meter is on for it, so the
-    // existing bar can render. The picker stays closed until a list is published.
+    // through to the digigraph operator default. An empty list leaves the
+    // session model unset: the meter reads its window separately, and the
+    // turn sends no X-Digi-Model until the user picks one.
     model: sessionModelSeed({
-      slug: tenantCfg.slug,
       available: stockClient.models.available,
       defaultModel: stockClient.models.default,
-      showContextMeter: tenantCfg.showContextMeter,
     }),
     language: tenantLanguage,
     view: stockClient.features.view,
@@ -1258,6 +1256,12 @@ function EmbedChat({
         stockClient.backendType,
       ),
       showModels,
+      // Window for the bar only. Not the session model, so it is not X-Digi-Model.
+      meterModel: contextMeterModel({
+        slug: tenantCfg.slug,
+        showContextMeter: tenantCfg.showContextMeter,
+        sessionModel: chatPrefs.model,
+      }),
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
@@ -1364,6 +1368,8 @@ function EmbedChat({
       byokIsSet,
       byokProvider,
       showModels,
+      tenantCfg.slug,
+      tenantCfg.showContextMeter,
       catalog,
       catalogTools,
       gate.host,

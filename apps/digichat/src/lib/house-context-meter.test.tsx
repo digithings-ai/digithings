@@ -9,7 +9,7 @@ import { parseDigichatConfig } from "./deploy-config/schema";
 import { deploymentToEmbedTenant } from "./deploy-config/loader";
 import { toEmbedClientConfig } from "./embed-client-config";
 import { clientConfigFromEmbedTenant } from "./deploy-config/embed-bridge";
-import { sessionModelSeed, showModelPicker } from "./session-model-seed";
+import { contextMeterModel, sessionModelSeed, showModelPicker } from "./session-model-seed";
 
 vi.mock("@assistant-ui/react", () => ({
   useAuiState: (selector: (state: unknown) => unknown) =>
@@ -40,12 +40,17 @@ describe("house host context meter", () => {
     const tenant = deploymentToEmbedTenant(host!);
     const client = clientConfigFromEmbedTenant(toEmbedClientConfig(tenant));
     const model = sessionModelSeed({
-      slug: client.slug,
       available: client.models.available,
       defaultModel: client.models.default,
-      showContextMeter: tenant.showContextMeter,
     });
     expect(model).toBe(FLASH);
+    expect(
+      contextMeterModel({
+        slug: client.slug,
+        showContextMeter: tenant.showContextMeter,
+        sessionModel: model,
+      }),
+    ).toBe(FLASH);
     expect(client.models.available).toEqual([FLASH, "openai/gpt-oss-120b", "z-ai/glm-5.3-flash"]);
     paint(model);
     expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
@@ -64,11 +69,15 @@ describe("house host context meter", () => {
     });
     expect(client.models.available).toEqual([]);
     const model = sessionModelSeed({
-      slug: client.slug,
       available: client.models.available,
       defaultModel: client.models.default,
     });
-    expect(model).toBe(FLASH);
+    expect(model).toBe("");
+    const meterModel = contextMeterModel({
+      slug: client.slug,
+      sessionModel: model,
+    });
+    expect(meterModel).toBe(FLASH);
     expect(
       showModelPicker({
         allowPicker: client.models.allowPicker,
@@ -76,7 +85,7 @@ describe("house host context meter", () => {
         available: client.models.available,
       }),
     ).toBe(false);
-    paint(model);
+    paint(meterModel);
     expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
   });
 
@@ -90,11 +99,13 @@ describe("house host context meter", () => {
     const trialClient = clientConfigFromEmbedTenant(
       toEmbedClientConfig(deploymentToEmbedTenant(trial)),
     );
-    const trialModel = sessionModelSeed({
+    const trialModel = contextMeterModel({
       slug: trialClient.slug,
-      available: trialClient.models.available,
-      defaultModel: trialClient.models.default,
       showContextMeter: true,
+      sessionModel: sessionModelSeed({
+        available: trialClient.models.available,
+        defaultModel: trialClient.models.default,
+      }),
     });
     expect(trialClient.backendType).toBe("foundry");
     expect(trialClient.models.available).toEqual([]);
@@ -113,11 +124,13 @@ describe("house host context meter", () => {
       toEmbedClientConfig(deploymentToEmbedTenant(occ)),
     );
     expect(
-      sessionModelSeed({
+      contextMeterModel({
         slug: occYamlClient.slug,
-        available: occYamlClient.models.available,
-        defaultModel: occYamlClient.models.default,
         showContextMeter: occYamlClient.gate.showContextMeter,
+        sessionModel: sessionModelSeed({
+          available: occYamlClient.models.available,
+          defaultModel: occYamlClient.models.default,
+        }),
       }),
     ).toBe("");
   });
@@ -143,7 +156,6 @@ describe("house host context meter", () => {
     ).toBe(false);
     expect(
       sessionModelSeed({
-        slug: client.slug,
         available: client.models.available,
         defaultModel: client.models.default,
       }),
