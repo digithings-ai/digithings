@@ -140,6 +140,51 @@ describe("DigichatComposerToolbar provider chip (#4597)", () => {
     expect((row?.textContent ?? "").trim().startsWith("/")).toBe(false);
   });
 
+  it("sizes the context meter without labeling that window as the selected model", () => {
+    render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          showModels: true,
+          showContextMeter: true,
+          prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" },
+          meterModel: "deepseek/deepseek-v4.1-flash-1017",
+        })}
+      />,
+    );
+    expect(screen.getByLabelText("Open models").textContent).toBe("auto");
+    expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
+  });
+
+  it("hides the context meter unless the host enabled it", () => {
+    const { container } = render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          meterModel: "deepseek/deepseek-v4.1-flash-1017",
+        })}
+      />,
+    );
+    expect(container.querySelector(".aui-context-meter")).toBeNull();
+  });
+
+  it("sizes the bar to the turn model, not the session model", () => {
+    render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          showContextMeter: true,
+          prefs: {
+            ...DEFAULT_EMBED_CHAT_PREFS,
+            model: "deepseek/deepseek-v4.1-flash-1017",
+          },
+          meterModel: "z-ai/glm-4.7-flash",
+        })}
+      />,
+    );
+    expect(screen.getByLabelText("Open models").textContent).toBe(
+      "deepseek/deepseek-v4.1-flash-1017",
+    );
+    expect(screen.getByRole("img", { name: "Context 0 / 200.0k tokens" })).toBeTruthy();
+  });
+
   it("gates the provider chip on its own preference, not the model chip's", () => {
     render(
       <DigichatComposerToolbar

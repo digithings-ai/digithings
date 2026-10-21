@@ -965,6 +965,72 @@ describe("parseEmbedTenants", () => {
     ).toThrow(/showLanguageSelector must be a boolean/);
   });
 
+  it("accepts showContextMeter on the house slugs and rejects it elsewhere", () => {
+    const on = parseEmbedTenants(
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          showContextMeter: true,
+        },
+      }),
+    );
+    expect(on.get("digithings.ai")?.showContextMeter).toBe(true);
+    const off = parseEmbedTenants(
+      JSON.stringify({
+        "www.digithings.ai": {
+          slug: "digithings-ai",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+          showContextMeter: false,
+        },
+      }),
+    );
+    expect(off.get("www.digithings.ai")?.showContextMeter).toBe(false);
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "example.com": {
+            slug: "example",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            token: "t",
+            showContextMeter: true,
+          },
+        }),
+      ),
+    ).toThrow(
+      /showContextMeter is only valid for slugs digithings and digithings-ai, not "example"/,
+    );
+    expect(() =>
+      parseEmbedTenants(
+        JSON.stringify({
+          "digithings.ai": {
+            slug: "digithings",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            token: "t",
+            showContextMeter: "yes",
+          },
+        }),
+      ),
+    ).toThrow(/showContextMeter must be a boolean/);
+    const unset = parseEmbedTenants(
+      JSON.stringify({
+        "example.com": {
+          slug: "example",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          token: "t",
+        },
+      }),
+    );
+    expect(unset.get("example.com")?.showContextMeter).toBeUndefined();
+  });
+
   it("leaves showLanguageSelector undefined when unset", () => {
     const registry = parseEmbedTenants(
       JSON.stringify({

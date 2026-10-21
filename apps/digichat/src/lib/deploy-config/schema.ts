@@ -650,6 +650,11 @@ export const GateSchema = z
     lockedContact: z.string().optional(),
     showByok: z.boolean().optional(),
     showLanguageSelector: z.boolean().optional(),
+    /**
+     * Gates the composer context meter. Only the house slugs may set it.
+     * The live house publishes no models, so this release shows no bar.
+     */
+    showContextMeter: z.boolean().optional(),
     lockSessionControls: z.boolean().optional(),
     /** Legacy embed field — also implies tools.catalog web_search when true */
     webSearch: z.boolean().optional(),

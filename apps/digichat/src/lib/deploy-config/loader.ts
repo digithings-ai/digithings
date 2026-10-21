@@ -171,6 +171,9 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       lockedContact: cfg.lockedContact,
       showByok: cfg.showByok,
       showLanguageSelector: cfg.showLanguageSelector,
+      ...(typeof cfg.showContextMeter === "boolean"
+        ? { showContextMeter: cfg.showContextMeter }
+        : {}),
       lockSessionControls: cfg.lockSessionControls,
       webSearch: cfg.webSearch,
       ...(cfg.searchEngine ? { searchEngine: cfg.searchEngine } : {}),
@@ -201,6 +204,9 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     activityDetail: dep.gate.activityDetail,
     showByok: dep.gate.showByok,
     showLanguageSelector: dep.gate.showLanguageSelector,
+    ...(typeof dep.gate.showContextMeter === "boolean"
+      ? { showContextMeter: dep.gate.showContextMeter }
+      : {}),
     lockSessionControls: dep.gate.lockSessionControls,
     attachments: dep.features.attachments === true,
     // Feature parity (#4532): the reverse direction must carry the same flags,

@@ -481,6 +481,47 @@ def test_the_legacy_compose_refuses_an_overlay_that_sets_a_raw_model_list():
     assert "available" in str(refusal.value)
 
 
+def test_the_legacy_compose_refuses_show_context_meter_off_the_house_slugs():
+    overlay = {"digiquant.io": {"showContextMeter": True}}
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_registry(LIVE, overlay)
+    assert "showContextMeter" in str(refusal.value)
+
+
+def test_an_overlay_that_renames_the_house_slug_cannot_set_the_meter():
+    overlay = {"digithings.ai": {"slug": "example", "showContextMeter": True}}
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_registry(LIVE, overlay)
+    assert "example" in str(refusal.value)
+
+
+def test_the_legacy_compose_accepts_show_context_meter_on_the_live_house_slug():
+    overlay = {"digithings.ai": {"showContextMeter": False}}
+    composed, _report = registry.compose_registry(LIVE, overlay)
+    assert composed["digithings.ai"]["showContextMeter"] is False
+    assert composed["digithings.ai"]["slug"] == "digithings"
+
+
+def test_the_kv_compose_refuses_show_context_meter_off_the_house_slugs():
+    overlay = {"occ.digithings.ai": {"showContextMeter": True}}
+    with pytest.raises(registry.RegistryRefusal) as refusal:
+        registry.compose_kv_registry(KV_LIVE, overlay)
+    assert "showContextMeter" in str(refusal.value)
+
+
+def test_the_kv_compose_accepts_show_context_meter_when_the_overlay_slug_is_house():
+    base = json.loads(json.dumps(KV_LIVE))
+    base["digithings.ai"] = {
+        "slug": "other",
+        "gateMode": "ungated",
+        "tokenEnv": "HOUSE_INVITE_KEY",
+        "backend": {"type": "digigraph"},
+    }
+    overlay = {"digithings.ai": {"slug": "digithings", "showContextMeter": True}}
+    composed, _report = registry.compose_kv_registry(base, overlay)
+    assert composed["digithings.ai"]["showContextMeter"] is True
+
+
 def test_the_legacy_compose_strips_a_raw_model_list_and_drops_an_empty_section():
     """A live copy that carries only a raw id list loses the section."""
     broken = json.loads(json.dumps(LIVE))

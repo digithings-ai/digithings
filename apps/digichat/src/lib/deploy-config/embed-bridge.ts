@@ -111,6 +111,9 @@ export function clientConfigFromEmbedTenant(
       lockedContact: embed.lockedContact,
       showByok: embed.showByok,
       showLanguageSelector: embed.showLanguageSelector,
+      ...(typeof embed.showContextMeter === "boolean"
+        ? { showContextMeter: embed.showContextMeter }
+        : {}),
       webSearch,
       ...(embed.searchEngine ? { searchEngine: embed.searchEngine } : {}),
       ...(embed.lockSessionControls === true || base.gate.lockSessionControls === true
