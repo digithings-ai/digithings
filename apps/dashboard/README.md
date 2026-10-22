@@ -320,6 +320,27 @@ days. Why the *cause* of a freeze is not detectable here: Pages' deployment list
 build log, production branch and watch-path config are visible only in the
 Cloudflare dashboard.
 
+### Recorded TUI frame preview (D9 — DIG-2698)
+
+The dashboard shell renders the **recorded** terminal frames committed under
+`fixtures/tui-frames/` (OpenTUI `captureCharFrame()` output, shown as Geist
+Mono text by `components/tui-frame-preview.tsx`). Recorded frames only — no
+live socket in 1.0 (ADR D7) — so the surface needs no service, no entitlement
+and no CSP change. A recorded frame is a snapshot of a terminal, so every
+record carries the moment it was taken and the block labels it with that
+moment. The block ships collapsed; opening it shows the frame.
+
+Frames are written by the exporter of their TUI
+(`clients/digiquant-tui/src/export-frame.ts`), which renders the desk through
+the OpenTUI harness, waits for the desk's own reads to settle, crops the main
+desk pane and refuses to write a frame that still says `loading…` or
+`could not be reached`. `fixtures/tui-frames/manifest.json` lists the committed
+frames and the screenshots that belong to them, and
+`lib/tui-frames-manifest.test.ts` fails the suite when the directory and the
+manifest drift apart.
+
+Kill the block with `NEXT_PUBLIC_DIGI_TUI_PREVIEW=0`.
+
 ## Settings workspace (T3)
 
 `/settings` is a tabbed workspace — **Profile | Pipeline | Keys | Brokers | Notifications | Billing | About**.

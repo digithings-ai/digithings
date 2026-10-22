@@ -26,7 +26,7 @@ So the lane being absent is not a missing workflow to restore. It is the absence
 |---|---|
 | prod image | `datatapchatregistry.azurecr.io/digichat:v2.3.2` (digest `sha256:c5708729fea2…`) |
 | prod revision | `digichat--0000007`, created 2026-09-21, still the only revision |
-| `develop` version | `2.6.7` |
+| `develop` version | `2.6.8` |
 | commits behind prod on `apps/digichat` | **67** |
 | last push to the ACR | **2026-09-21** — nothing since, not even a 2.4.0 image |
 
@@ -390,7 +390,7 @@ Measured with `docker manifest inspect` against `ghcr.io/digithings-ai/digichat`
 
 **`v2.6.5` was published the same day, four hours later.** The `digichat-v2.6.5` tag was cut on `main` after the 2.6.5 promotion (PR #6174, merge commit `5a810b1127050c9cd5de8ea6aa6d3e5025dd2660`), and the tag push run (39609493331, started 2026-10-21T13:36:36Z, conclusion `success`) built and probed the release image and pushed `ghcr.io/digithings-ai/digichat:v2.6.5` and `:latest` at 2026-10-21T13:39:20Z — manifest digest `sha256:1e593f7e29877b70a6a0f8b06c705b219af85860187be651b8331098f05885fc`. `latest` moved with it, so `v2.6.4` now carries the `v2.6.4` tag alone.
 
-**`v2.6.6` and `v2.6.7` were published the next evening, eighty-six minutes apart.** The `digichat-v2.6.6` tag was cut on `main` after the 2.6.6 promotion (PR #6221, merge commit `802772651a0be9794e509b6dffcbc074765f329e`), and the tag push run (39687744116, started 2026-10-21T22:36:45Z, conclusion `success`) built and probed the release image and pushed `ghcr.io/digithings-ai/digichat:v2.6.6` at 2026-10-21T22:39:26Z — manifest digest `sha256:77d9ba03b05a6f8e87051390c2ac0b2d8e9bb41649f0b61b00e99b4315831b31`. The `digichat-v2.6.7` tag was cut after the 2.6.7 promotion (PR #6226, merge commit `eef1ee72c20f9dddf097033fcaa48fd7a054a0e6`), and its tag push run (39696882711, started 2026-10-21T23:59:16Z, conclusion `success`) pushed `ghcr.io/digithings-ai/digichat:v2.6.7` and `:latest` at 2026-10-22T00:02:01Z — manifest digest `sha256:8c468adacf8077c5620c4d63d46ccbeb4f7e72382bf74bdfcd23ba23ed3c2404`. Each run's head sha is the commit its tag names, so both digests are bound to the tree that produced them.
+**`v2.6.6` and `v2.6.7` were published the next evening, eighty-two minutes apart.** The `digichat-v2.6.6` tag was cut on `main` after the 2.6.6 promotion (PR #6221, merge commit `802772651a0be9794e509b6dffcbc074765f329e`), and the tag push run (39687744116, started 2026-10-21T22:36:45Z, conclusion `success`) built and probed the release image and pushed `ghcr.io/digithings-ai/digichat:v2.6.6` at 2026-10-21T22:39:26Z — manifest digest `sha256:77d9ba03b05a6f8e87051390c2ac0b2d8e9bb41649f0b61b00e99b4315831b31`. The `digichat-v2.6.7` tag was cut after the 2.6.7 promotion (PR #6226, merge commit `eef1ee72c20f9dddf097033fcaa48fd7a054a0e6`), and its tag push run (39696882711, started 2026-10-21T23:59:16Z, conclusion `success`) pushed `ghcr.io/digithings-ai/digichat:v2.6.7` and `:latest` at 2026-10-22T00:02:01Z — manifest digest `sha256:8c468adacf8077c5620c4d63d46ccbeb4f7e72382bf74bdfcd23ba23ed3c2404`. Each run's head sha is the commit its tag names, so both digests are bound to the tree that produced them.
 
 **Before that run, no digichat image had ever been published to GHCR for any `v2.4.x`, `v2.5.x` or `v2.6.x` tag**: `v2.4.0`, `v2.5.0`, `v2.5.1`, `v2.6.0`, `v2.6.1`, `v2.6.2` and `v2.6.3` all answer `manifest unknown`, byte-identical to the control. Three different causes, all measured:
 
