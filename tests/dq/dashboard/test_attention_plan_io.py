@@ -21,7 +21,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "077_attention_plan_doc_type.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "engine" / "077_attention_plan_doc_type.sql"
 RUN = date(2026, 8, 25)
 
 
@@ -62,7 +62,7 @@ def test_migration_077_registers_attention_plan_doc_type() -> None:
     assert "COMMIT;" not in raw.upper()
     assert "'Attention Plan'" in raw
     assert "'Beliefs'" in raw
-    assert sorted(MIGRATIONS_DIR.glob("077_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("077_*.sql")) == [MIGRATION_PATH]
 
 
 def test_payload_includes_refresh_reasons_and_profile_pin() -> None:
