@@ -3,8 +3,8 @@
 > **Historical — every step below is void (2026-10-09).** The tracing decision is now "Cloudflare hybrid with MLflow"; self-hosted Langfuse with ClickHouse/Redis is dropped. The decision is recorded in [ADR-0036](../adr/0036-digitrace-cloudflare-native-tracing.md); the design review is [`docs/reviews/digitrace-tracing-architecture-review.md`](../reviews/digitrace-tracing-architecture-review.md). Retiring `apps/digitrace-langfuse/`, its Dockerfiles and this runbook is acceptance criterion AC2 and AC3 of ADR-0036 §13, owned by DIG-5136 (Repo, CI & Release Engineer). **Do not deploy from this runbook. Nothing below is a live instruction.** The runbook becomes a tombstone when DIG-5136 lands.
 
 Historical: stand-up self-hosted **Langfuse** for digitrace on Cloudflare Containers
-([#4930](https://github.com/digithings-ai/digithings/issues/4930)). — *never executed; the plan
-is dropped.*
+([#4930](https://github.com/digithings-ai/digithings/issues/4930)). **Never executed; the plan
+is dropped.**
 
 App package: [`apps/digitrace-langfuse/`](../../apps/digitrace-langfuse/).  
 Lab memo: [`docs/plans/digitrace-langfuse-swap-2026-10-01.md`](../plans/digitrace-langfuse-swap-2026-10-01.md).

@@ -152,15 +152,135 @@ without editing it: `LOCAL_CI_MAIN` (the checkout the checks run against) and
 `install.sh` writes the launchd plist for a checkout and starts it:
 
 ```
-scripts/local-ci/install.sh ~/Code/digithings
+scripts/local-ci/install.sh --self-update ~/Code/digithings-ci
 ```
 
+The checkout is the runner's own: the daemon runs the code in it and checks
+the pull requests against it. A dedicated clone on `develop` is the checkout to
+point it at - not a working tree, not a linked worktree (see "The producer"
+below).
+
 `--dry-run` prints the rendered plist and touches nothing: no write, no bootout.
+
+## The producer
+
+Two launchers can post the pre-merge receipt: the launchd daemon on this Mac
+and the CI container's worker. The daemon is the one that runs here, and it
+runs from a dedicated clone of this repository on `develop` - not from a
+seat's shell, and not from a linked worktree of somebody's checkout:
+
+```
+git clone --branch develop git@github.com:digithings-ai/digithings.git ~/Code/digithings-ci
+scripts/local-ci/install.sh --self-update ~/Code/digithings-ci
+```
+
+`install.sh` refuses a linked worktree (`.git` is a file) unless
+`--allow-worktree` is passed: a linked worktree is a checkout somebody else
+works in, and a daemon that moved it would move their work with it.
+
+`--self-update` is the operator's word that the runner may keep that checkout
+on `origin/develop` by itself. It is refused unless the checkout is a dedicated
+clone: its own `.git` directory (so not a linked worktree), on `develop`, a
+clean tree, and no commits of its own on top of `origin/develop`. A working
+tree that is clean and carries no local commits is not caught by a separate
+test, so point the daemon at a dedicated clone and not at the tree you work
+in. The install records the word in
+`~/.config/digithings/state/local-ci-runner.json`:
+
+```json
+{"main": "/Users/<you>/Code/digithings-ci", "self_update": true}
+```
+
+Without that mark the runner never moves the checkout: `LOCAL_CI_MAIN`
+defaults to a plain working tree, and a runner that fast-forwards somebody's
+working tree moves their files with it. The mark is written by `install.sh`,
+with `self_update` true only for a real clone on `develop`.
+
+The refresh fast-forwards the checkout and does nothing else: it never touches
+a linked worktree, it only ever moves the `develop` branch of the marked
+checkout, and it leaves the checkout alone when the update would not be a
+fast-forward (a local commit, or dirty files the incoming commits touch). The
+incoming commit is checked before the switch: the runner it carries must
+compile and it must still carry the launch guard, because the next tick
+executes whatever landed on `develop` and a broken runner would stop the only
+pre-merge producer. The guard has to keep the interface the runner calls
+(`enforce(runner_path, ...)`), because a guard that cannot be called stops the
+runner the same way. A daemon running an old commit produces old receipts, so
+the runner refreshes the code that posts them.
+
+The seat-shaped install (`install.sh --allow-worktree`) is a temporary measure
+for the window in which the daemon is not running. It does produce receipts,
+but it depends on a seat's timing and it leaves the queue to whoever acts: it
+is not a receipt policy. It does not refresh either, because a linked
+worktree is never refreshed and the mark it gets says so: the runner keeps
+posting receipts from the commit it was installed on, and the log says so. A
+refusal of that kind is structural, so the log line repeats at most once every
+fifteen minutes.
+
+Two things keep a receipt from being lost when a run dies (DIG-5135):
+
+- **the claim ledger**: a run takes the claim on a head before it posts the
+  `pending` row, and releases it when the verdict is posted. A run that dies
+  leaves the claim behind, and the next tick reads it, sees that the holder is
+  gone, and queues the head again. A `pending` row is a claim, never a verdict.
+  A holder that is alive keeps its head: an old `pending` row never takes a
+  running head away, and a head whose claim is held is neither queued nor
+  skipped, and its claim is released by the run that took it, not by the
+  queue. Two things do take a live claim away, and both are the sign that the
+  run is no longer the run the queue waits for: a claim held for longer than
+  eight hours - longer than the slowest gate run the code's own step timeouts
+  allow, about 4.75 h - and a pid the kernel has handed to another process
+  since the claim was written. A holder that has exited and is only waiting to
+  be reaped is not a living holder either, and its head is queued again. A
+  `pending` row with no ledger entry - posted by a runner that predates the
+  ledger, or by the CI container, which keeps its own state directory - is
+  given six hours before it is treated as lost, which is longer than the
+  longest gate run, so a container that is still gating a head is not overtaken
+  while it works. A claim is released by the run that took it: a run that was
+  taken over never deletes the claim of the run that replaced it.
+- **the fair order**: the queue is by arrival, oldest first, so the pull
+  request that arrived first is served first. It used to be newest first,
+  which meant a PR that arrived early waited behind every later arrival and
+  could wait for days for a required check. The order is by arrival and not by
+  last activity: a PR that is commented on is not pushed back to the end. The
+  `review-applied` lane is served in the same order, so a pull request that
+  waits for its review verdict does not wait behind every later arrival.
+- **one run per head**: an explicit `--pr N` run is a run like any other and
+  does not start on a head another run is checking, because two runs on one
+  head post two `local-ci` rows on the required check.
+- **a preview changes nothing**: a dry run reads the claim ledger and never
+  writes to it, so `--dry-run` cannot spend a claim.
+- **a row that says the post failed is not a verdict**: a head whose only row
+  says `error` carries no receipt, so it is queued again and its claim is
+  released. The `local-ci/app` row is a second context, not the required
+  check: a refused app row is logged and the head keeps the receipt it
+  earned on `local-ci`.
 
 ## Invariants this script is built around
 
 - **A skip is never silence.** A memory or disk guard that forces a skip posts
   `failure` on the queued PRs, so merges block loudly instead of passing quietly.
+- **A lost run is not a lost receipt.** The claim ledger names the holder of
+  every head being checked, so a run that dies leaves a head that is queued
+  again instead of a PR that waits for ever (DIG-5135).
+- **The first arrival goes first.** The queue is by arrival and oldest first,
+  so a PR that arrived early is not overtaken by every later arrival
+  (DIG-5135).
+- **A running head is not taken away.** A claim held by a living run is left
+  alone, whatever age its `pending` row carries, unless the claim has outlived
+  the worst case of a gate run (eight hours, deliberately longer than the life
+  of the tick lock, so a tick that took over a stale lock still leaves a live
+  head alone) or its pid now belongs to another process
+  (DIG-5135).
+- **The refresh is never retried on every tick.** A refresh that fails - no
+  network, a commit that does not fast-forward, an incoming runner that does
+  not compile - consumes its window like a success does, because the refresh
+  runs inside the tick lock and a fetch that always fails would otherwise hold
+  the lock on every tick (DIG-5135).
+- **The runner only moves the checkout it was given.** The refresh
+  fast-forwards the checkout that `install.sh` marked as the runner's own, and
+  only that one; it never touches a working tree that belongs to somebody
+  else, and it checks the incoming runner before it switches (DIG-5135).
 - **Fork code never executes here.** Fork PRs get a `failure` naming the re-push
   path a maintainer must use.
 - **Fails closed on a missing input.** If the review record or the PR body cannot
