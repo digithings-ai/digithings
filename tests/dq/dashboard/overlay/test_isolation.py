@@ -87,7 +87,7 @@ def test_house_ledger_date_scope_ignores_overlay_commits() -> None:
 def test_house_executor_never_fills_overlay_intents() -> None:
     overlay = str(uuid4())
     chain = _Chain()
-    house_order = chain.order(symbol="AAPL", action="OPEN", quantity="10")
+    house_order = chain.order(symbol="AAPL", action="add", quantity="10")
     overlay_order = str(uuid4())
     chain.orders.append(
         {
@@ -104,6 +104,9 @@ def test_house_executor_never_fills_overlay_intents() -> None:
     client = chain.client()
     result = _run(client, marks={"AAPL": "100.00", "TSLA": "200.00"})
     filled_symbols = {f.symbol for f in result.fills}
-    assert "AAPL" in filled_symbols or house_order
+    filled_order_ids = {str(f.order_intent_id) for f in result.fills}
+    # The house order is filled, and the fill names the intent the chain created.
+    assert "AAPL" in filled_symbols
+    assert house_order in filled_order_ids
     assert "TSLA" not in filled_symbols
-    assert overlay_order not in {str(f.order_intent_id) for f in result.fills}
+    assert overlay_order not in filled_order_ids
