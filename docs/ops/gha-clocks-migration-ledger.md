@@ -44,7 +44,7 @@ turns "port, then disable" into one invariant.
 | `openwiki-update.yml` | `openwiki-update` | `0 8 * * MON` |
 | `token-canary.yml` | `token-canary` | `41 6 * * *` |
 | `secret-staleness-check.yml` | `secret-staleness` | `17 6 1 * *` |
-| `datatap-answer-check.yml` | *retired 2026-10-18* | *(no clock)* |
+| `datatap-answer-check.yml` | `datatap-answer-check` (disabled 2026-10-18) | *(no clock)* |
 | `production-deploy-gate-watchdog.yml` | `production-deploy-gate-watchdog` | `17,47 * * * *` |
 | `pipeline-checkpoint-archive.yml` | `checkpoint-archive` | `30 13 * * *` |
 | `pipeline-market-data-refresh.yml` | `market-data-refresh-morning` | `0 13 * * *` |

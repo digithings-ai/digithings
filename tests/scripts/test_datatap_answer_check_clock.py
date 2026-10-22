@@ -14,10 +14,21 @@ one clock the repo actually owns.
 The check ran on that clock until 2026-10-18. Chris retired it: the client
 manages their own infrastructure, so we do not probe them on a schedule. The
 workflow file stays — a human can still start it by hand, with no credential —
-but the clock is gone (DIG-4435). These pins therefore assert the *absence* of
-the clock: no ``wd()`` row in ``jobs.ts`` names the job, no ``[triggers] crons``
-entry in ``wrangler.toml`` carries its cron, and the workflow keeps its
-``workflow_dispatch``-only shape.
+but the clock is gone (DIG-4435).
+
+These pins therefore assert that the clock cannot dispatch anything:
+
+* no ``[triggers] crons`` entry in ``wrangler.toml`` carries its cron, so the
+  next deploy leaves the Worker without the trigger;
+* the ``wd()`` row in ``jobs.ts`` that names the job is **disabled**, so the
+  tick stays quiet (and the row leaves ``uniqueEnabledCrons()``, which is the
+  set the deploy contract compares to ``wrangler.toml``);
+* the retired cron is carried by no enabled row — the deployed Worker still
+  holds the ``17 * * * *`` trigger until the next deploy, and a deployed cron
+  that no job row claims at all is an ``unrecognised_cron`` violation, which
+  would red local-ci and deadlock the merge that has to remove the clock.
+
+The workflow keeps its ``workflow_dispatch``-only shape.
 
 The second half of this file pins the step's *behaviour*: the S1 guard that
 recovers a recipe's real exit code from make's. The DIG-1131 review deleted
@@ -104,19 +115,64 @@ def test_the_workflow_introduces_no_secret_and_no_repo_variable() -> None:
     assert "vars." not in body
 
 
-def test_the_clock_row_is_gone_from_the_cron_worker() -> None:
-    """Retired 2026-10-18 (Chris). No row may dispatch the check on a clock again."""
+def _jobs_code() -> str:
+    """jobs.ts with `//` comments stripped, so a pin counts rows, not prose.
+
+    The tombstone comment quotes the retired cron on purpose; a pin that read
+    the raw file would count that quote as a second claimant. No string
+    literal in jobs.ts contains `//`, so stripping comment lines cannot eat
+    code.
+    """
     text = JOBS_SOURCE.read_text(encoding="utf-8")
-    assert not re.search(
-        rf'wd\(\s*"{re.escape(JOB_ID)}"',
-        text,
-    ), f'jobs.ts still carries a wd("{JOB_ID}", …) row: the retired check would keep dispatching'
+    return re.sub(r"//[^\n]*", "", text)
+
+
+def _retired_row() -> str:
+    """The `wd("datatap-answer-check", …)` call in jobs.ts, or "" when absent."""
+    match = re.search(
+        rf'wd\(\s*"{re.escape(JOB_ID)}".*?\)\s*,',
+        _jobs_code(),
+        flags=re.DOTALL,
+    )
+    return match.group(0) if match else ""
+
+
+def test_the_clock_row_is_disabled_in_the_cron_worker() -> None:
+    """Retired 2026-10-18 (Chris). The row may stay, but it may not dispatch.
+
+    The row is a tombstone, not a deletion. The deployed Worker still carries
+    the `17 * * * *` trigger until the next digithings-cron deploy, and the
+    deployed-trigger contract fails a deployed cron that no job row claims —
+    deleting the row would red local-ci and deadlock the merge. A disabled row
+    still claims its cron, and the tick stays quiet.
+    """
+    row = _retired_row()
+    assert row, f'jobs.ts carries no wd("{JOB_ID}", …) row at all: the retired check lost its tombstone'
+    assert "enabled: false" in row, (
+        f'jobs.ts still enables wd("{JOB_ID}", …): the retired check would keep dispatching'
+    )
+    assert f'"{CRON}"' in row, f"the tombstone row no longer carries the retired cron"
 
 
 def test_no_clock_row_targets_this_workflow() -> None:
-    """No Worker row may dispatch this workflow file any more."""
-    text = JOBS_SOURCE.read_text(encoding="utf-8")
-    assert "datatap-answer-check.yml" not in text
+    """No enabled Worker row may dispatch this workflow file any more."""
+    text = _jobs_code()
+    assert text.count("datatap-answer-check.yml") == 1, (
+        "more than one jobs.ts row names datatap-answer-check.yml: an enabled row "
+        "would still dispatch the retired check"
+    )
+    assert "enabled: false" in _retired_row(), "the only row naming the workflow is enabled"
+
+
+def test_the_retired_cron_is_carried_by_no_enabled_row() -> None:
+    """The retired cron may only be claimed by the disabled tombstone row."""
+    text = _jobs_code()
+    claims = text.count('"' + CRON + '"')
+    assert claims == 1, (
+        f'the retired cron "{CRON}" is claimed by {claims} rows; '
+        "an enabled claim would keep dispatching it"
+    )
+    assert '"' + CRON + '"' in _retired_row()
 
 
 def test_the_cron_is_not_in_the_wrangler_trigger() -> None:
@@ -147,7 +203,8 @@ def test_no_two_clocks_share_an_exact_cron_string() -> None:
     `17 9 * * MON`, `17 12 * * MON-FRI`) and CTO condition D8.5 accepted it,
     since two jobs on one minute share a runner rather than delaying each
     other. The retired check's own minute-17 clock is gone (DIG-4435), so
-    `CRON` here is pinned as absent from `jobs.ts` and `wrangler.toml`.
+    `CRON` here is pinned as claimed only by the disabled tombstone row and
+    absent from `wrangler.toml`.
 
     A test that fails on ratified behaviour trains people to ignore it, so this
     pins the invariant the repo can actually keep — the same exact string
