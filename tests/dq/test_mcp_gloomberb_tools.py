@@ -40,6 +40,11 @@ from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
 from digiquant import mcp_server  # noqa: E402
+from tests.dq.data.gloomberb_prediction_fixtures import (  # noqa: E402
+    gamma_events,
+    kalshi_events,
+    kxfed_markets,
+)
 
 DIGIFETCH_TOOLS = {
     "digifetch_quote",
@@ -254,81 +259,15 @@ def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any, **kwargs: Any) 
 def _sweep_handler(request: httpx.Request) -> httpx.Response:
     host = request.url.host
     if host == "gamma-api.polymarket.com" and request.url.path == "/events":
-        return httpx.Response(
-            200,
-            json=[
-                {
-                    "id": "1001",
-                    "title": "Fed December decision",
-                    "slug": "fed-december-decision",
-                    "tags": [{"label": "Macro"}],
-                    "markets": [
-                        {
-                            "question": "25bp hike in December?",
-                            "outcomes": '["Yes", "No"]',
-                            "outcomePrices": '["0.25", "0.75"]',
-                            "volume": "1234.5",
-                            "liquidity": "567.8",
-                            "endDate": "2026-12-16T00:00:00Z",
-                        }
-                    ],
-                }
-            ],
-        )
+        return httpx.Response(200, json=gamma_events())
     if host == "api.elections.kalshi.com" and request.url.path == "/trade-api/v2/events":
-        return httpx.Response(
-            200,
-            json={
-                "events": [
-                    {
-                        "event_ticker": "FED-26",
-                        "title": "Fed December decision",
-                        "category": "Economics",
-                        "markets": [
-                            {
-                                "ticker": "FED-26-Y1",
-                                "yes_bid": 24,
-                                "yes_ask": 26,
-                                "last_price": 25,
-                                "volume": 1000,
-                                "open_interest": 500,
-                                "close_time": "2026-12-16T00:00:00Z",
-                                "status": "open",
-                            }
-                        ],
-                    }
-                ]
-            },
-        )
+        return httpx.Response(200, json=kalshi_events())
     if host == "api.elections.kalshi.com" and request.url.path == "/trade-api/v2/markets":
         # Live KXFED ladder shape for the rate-path composition (cents wire).
         return httpx.Response(
             200,
             json={
-                "markets": [
-                    {
-                        "ticker": "KXFED-26DEC-450",
-                        "event_ticker": "KXFED-26DEC",
-                        "floor_strike": 4.5,
-                        "strike_type": "greater",
-                        "yes_bid": 90,
-                        "yes_ask": 92,
-                        "last_price": 91,
-                        "close_time": "2026-12-16T00:00:00Z",
-                        "status": "open",
-                    },
-                    {
-                        "ticker": "KXFED-26DEC-475",
-                        "event_ticker": "KXFED-26DEC",
-                        "floor_strike": 4.75,
-                        "strike_type": "greater",
-                        "yes_bid": 40,
-                        "yes_ask": 42,
-                        "last_price": 41,
-                        "close_time": "2026-12-16T00:00:00Z",
-                        "status": "open",
-                    },
-                ],
+                "markets": kxfed_markets()[:2],
                 "cursor": "",
             },
         )
