@@ -8,6 +8,7 @@
 
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 import {
+  matchesMobileDensityViewport,
   readStoredDensity,
   resolveTraceDensity,
   writeStoredDensity,
@@ -94,18 +95,24 @@ export function chromePrefsFromDeploy(
 }
 
 /**
- * Apply a stored `dt-density` after hydration. The first render uses the
- * deployment density on both server and client, so `data-density` matches
- * and only a user with a stored choice re-renders once.
+ * Apply a stored `dt-density` after hydration, and the mobile default when the
+ * user has never chosen one. The first render uses the deployment density on
+ * both server and client, so `data-density` matches; afterwards a stored choice
+ * (or an airy mobile default) re-renders once.
+ *
+ * Order is stored user choice > mobile default (airy) > deployment default >
+ * "default" — see `resolveTraceDensity`.
  */
 export function useStoredDensityAfterMount(
   setPrefs: (update: (prev: EmbedChatPrefs) => EmbedChatPrefs) => void,
 ): void {
   useEffect(() => {
-    const stored = readStoredDensity();
-    if (!stored) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is client-only; reading it during render would mismatch the server HTML
-    setPrefs((prev) => (prev.density === stored ? prev : { ...prev, density: stored }));
+    const mobile = matchesMobileDensityViewport();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- storage and matchMedia are client-only; reading them during render would mismatch the server HTML
+    setPrefs((prev) => {
+      const next = resolveTraceDensity(readStoredDensity(), prev.density, { mobile });
+      return prev.density === next ? prev : { ...prev, density: next };
+    });
   }, [setPrefs]);
 }
 

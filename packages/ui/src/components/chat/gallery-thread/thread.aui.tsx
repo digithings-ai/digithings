@@ -548,7 +548,8 @@ const ThreadRoot: FC<{
         // resolves there and ignores `.digichat-thread`'s own `--card`.
         ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "0",
-        ["--composer-padding" as string]: "8px",
+        // `--composer-padding` is a density token (chat-aui.css), so it is not
+        // pinned inline here — an inline value would win over the mode.
       }}
     >
       {/* The footer (composer + credit) sits outside the scroll viewport so
@@ -576,7 +577,7 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="mb-4 flex flex-col gap-y-6 empty:hidden"
+            className="mb-4 flex flex-col empty:hidden"
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
