@@ -53,7 +53,6 @@ import {
   languageSelectOptions,
 } from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
-import { providerIdOf } from "@/lib/model-picker-catalog";
 import {
   byokRequiresModel,
   validateBYOKKey,
@@ -133,7 +132,66 @@ export type MenuRow = {
   branch?: "mid" | "last";
   /** Collapsible provider header: whether its children are shown. */
   expanded?: boolean;
+  /**
+   * /models path tree: the rails of the enclosing folders (`│  ` or three
+   * spaces each), drawn before the branch glyph of a nested row.
+   */
+  treePrefix?: string;
 };
+
+/** One node of the /models path tree: a folder (an id segment) or a leaf (a model id). */
+export type ModelPathNode =
+  | { kind: "folder"; name: string; path: string; children: ModelPathNode[] }
+  | { kind: "leaf"; name: string; id: string };
+
+/**
+ * The /models tree. Each raw model id is split on `/` like a file path:
+ * every segment but the last is a folder, the last is the leaf label. Deeper
+ * ids nest deeper; an id without a slash is a top-level leaf, with no
+ * invented folder. At every level folders come first, then leaves, each
+ * sorted alphabetically (like the /tools list: folders, then files).
+ */
+export function buildModelPathTree(ids: readonly string[]): ModelPathNode[] {
+  const root: ModelPathNode[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const parts = id.split("/").filter((part) => part.length > 0);
+    if (!parts.length) continue;
+    let level = root;
+    let path = "";
+    for (const part of parts.slice(0, -1)) {
+      path = path ? `${path}/${part}` : part;
+      let folder = level.find(
+        (node): node is Extract<ModelPathNode, { kind: "folder" }> =>
+          node.kind === "folder" && node.path === path,
+      );
+      if (!folder) {
+        folder = { kind: "folder", name: part, path, children: [] };
+        level.push(folder);
+      }
+      level = folder.children;
+    }
+    level.push({ kind: "leaf", name: parts[parts.length - 1]!, id });
+  }
+  const sort = (nodes: ModelPathNode[]): ModelPathNode[] => {
+    nodes.sort((a, b) =>
+      a.kind !== b.kind ? (a.kind === "folder" ? -1 : 1) : a.name.localeCompare(b.name),
+    );
+    for (const node of nodes) if (node.kind === "folder") sort(node.children);
+    return nodes;
+  };
+  return sort(root);
+}
+
+/** Folder paths that hold an id (`a/b/c` -> `a`, `a/b`). */
+export function modelFolderAncestors(id: string): string[] {
+  const parts = id.split("/").filter((part) => part.length > 0);
+  const out: string[] = [];
+  for (let i = 1; i < parts.length; i++) out.push(parts.slice(0, i).join("/"));
+  return out;
+}
 
 /** The /tools tree branch glyph for a row under a service. */
 export function treeBranchGlyph(branch: MenuRow["branch"]): string {
@@ -605,12 +663,16 @@ export function EmbedComposerMenu({
           : undefined) ??
         autoPreset?.model ??
         (defaultModel?.includes("/") ? defaultModel : "");
-      const currentProvider = currentModel ? providerIdOf(currentModel) : "";
-      const opened = expandedProviders ?? (currentProvider ? { [currentProvider]: true } : {});
-      const toggleProvider = (provider: string) => {
+      // Default: the folders holding the current model are open.
+      const defaultOpen: Record<string, boolean> = {};
+      for (const path of currentModel ? modelFolderAncestors(currentModel) : []) {
+        defaultOpen[path] = true;
+      }
+      const opened = expandedProviders ?? defaultOpen;
+      const toggleProvider = (path: string) => {
         setExpandedProviders((prev) => {
-          const base = prev ?? (currentProvider ? { [currentProvider]: true } : {});
-          return { ...base, [provider]: base[provider] !== true };
+          const base = prev ?? defaultOpen;
+          return { ...base, [path]: base[path] !== true };
         });
       };
       const presetRows: MenuRow[] = picker.presets.map((preset) => {
@@ -640,43 +702,62 @@ export function EmbedComposerMenu({
       // Provider groups as a /tools-style tree: a /provider row whose children
       // are the raw model ids. Activating the header collapses or expands it.
       const filtering = Boolean(api.paletteQuery?.trim());
+      const leafRow = (
+        node: Extract<ModelPathNode, { kind: "leaf" }>,
+        branch: MenuRow["branch"],
+        treePrefix: string,
+      ): MenuRow => ({
+        id: node.id,
+        // The row reads the last path segment. The selected value, the API
+        // id and the toolbar name stay the full id.
+        label: node.name,
+        value: "",
+        checked: selected === node.id,
+        exclusive: true,
+        branch,
+        treePrefix,
+        insert: optionDraft("/models", node.id),
+        token: node.id,
+        // `gpt` finds `openai/gpt-6-luna`: the filter matches prefixes.
+        aliases: node.name !== node.id ? [node.name] : [],
+        activate: () => {
+          commitExclusive(() => {
+            api.setModel(node.id);
+            onPickSessionModel?.(node.id);
+          });
+        },
+      });
+      const treeRows = (nodes: ModelPathNode[], depth: number, rails: string): MenuRow[] =>
+        nodes.flatMap((node, index): MenuRow[] => {
+          const last = index === nodes.length - 1;
+          // Top level has no glyph (like a /tools service or a bare id).
+          const branch: MenuRow["branch"] = depth === 0 ? undefined : last ? "last" : "mid";
+          const prefix = depth === 0 ? "" : rails;
+          if (node.kind === "leaf") return [leafRow(node, branch, prefix)];
+          // A typed filter searches every folder at every depth.
+          const open = filtering || opened[node.path] === true;
+          const header: MenuRow = {
+            id: `folder:${node.path}`,
+            label: `/${node.name}`,
+            value: "",
+            expanded: open,
+            branch,
+            treePrefix: prefix,
+            token: node.path,
+            activate: () => {
+              toggleProvider(node.path);
+            },
+          };
+          if (!open) return [header];
+          const childRails = depth === 0 ? "" : `${rails}${last ? "   " : "│  "}`;
+          return [header, ...treeRows(node.children, depth + 1, childRails)];
+        });
       const groupRows: MenuRow[] = picker.showFullList
-        ? picker.groups.flatMap((group) => {
-            // A typed filter searches every provider, collapsed or not.
-            const open = filtering || opened[group.provider] === true;
-            const header: MenuRow = {
-              id: `provider:${group.provider}`,
-              label: `/${group.provider}`,
-              value: "",
-              expanded: open,
-              token: group.provider,
-              activate: () => {
-                toggleProvider(group.provider);
-              },
-            };
-            if (!open) return [header];
-            return [
-              header,
-              ...group.models.map((model, index) => ({
-                id: model.id,
-                label: model.id,
-                value: "",
-                checked: selected === model.id,
-                exclusive: true,
-                branch: (index === group.models.length - 1 ? "last" : "mid") as MenuRow["branch"],
-                insert: optionDraft("/models", model.id),
-                token: model.id,
-                // `gpt` finds `openai/gpt-6-luna`: the filter matches prefixes.
-                aliases: model.id.includes("/") ? [model.id.slice(model.id.indexOf("/") + 1)] : [],
-                activate: () => {
-                  commitExclusive(() => {
-                    api.setModel(model.id);
-                    onPickSessionModel?.(model.id);
-                  });
-                },
-              })),
-            ];
-          })
+        ? treeRows(
+            buildModelPathTree(picker.groups.flatMap((group) => group.models.map((m) => m.id))),
+            0,
+            "",
+          )
         : [];
       if (presetRows.length || groupRows.length) return [...presetRows, ...groupRows];
     }
@@ -1939,10 +2020,10 @@ export function EmbedComposerMenu({
                     {row.branch ? (
                       <span
                         data-slot="tools-tree-branch"
-                        className="text-muted-foreground shrink-0 ps-3 font-mono"
+                        className="text-muted-foreground shrink-0 ps-3 font-mono whitespace-pre"
                         aria-hidden
                       >
-                        {treeBranchGlyph(row.branch)}
+                        {(row.treePrefix ?? "") + treeBranchGlyph(row.branch)}
                       </span>
                     ) : null}
                     <span

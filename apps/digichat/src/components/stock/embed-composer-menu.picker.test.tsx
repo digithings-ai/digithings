@@ -4,7 +4,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { EmbedComposerMenu, cursorOnCurrentRow, type MenuRow } from "./embed-composer-menu";
+import {
+  EmbedComposerMenu,
+  cursorOnCurrentRow,
+  buildModelPathTree,
+  type MenuRow,
+} from "./embed-composer-menu";
 import { VIEW_MODES } from "@/lib/view-modes";
 import { VIEW_LABELS } from "@digithings/digichat-ui";
 import {
@@ -467,7 +472,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(radios.map((row) => row.textContent)).toEqual([
       expect.stringContaining("Default"),
       expect.stringContaining("Reasoning"),
-      expect.stringContaining("alpha/flash"),
+      "└─flash",
     ]);
     expect(screen.queryByText(/our default/)).toBeNull();
     expect(screen.queryByText(/Best reasoning/)).toBeNull();
@@ -478,19 +483,81 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe(
       "true",
     );
-    expect(screen.queryByText("beta/think")).toBeNull();
+    expect(screen.queryByText("think")).toBeNull();
     await userEvent.click(screen.getByRole("menuitem", { name: "/beta" }));
     expect(screen.getByRole("menuitem", { name: "/beta" }).getAttribute("aria-expanded")).toBe(
       "true",
     );
-    expect(screen.getByText("beta/think")).not.toBeNull();
+    expect(screen.getByText("think")).not.toBeNull();
+    // The row reads `think` under /beta; the pick is still the full id.
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /think/ }));
+    expect(setModel).toHaveBeenLastCalledWith("beta/think");
     await userEvent.click(screen.getByRole("menuitem", { name: "/alpha" }));
     expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe(
       "false",
     );
-    expect(screen.queryByText("alpha/flash")).toBeNull();
+    expect(screen.queryByText("flash")).toBeNull();
     await userEvent.click(screen.getByRole("menuitemradio", { name: /Reasoning/ }));
     expect(setModel).toHaveBeenCalledWith("preset:reasoning");
+    unmount();
+  });
+
+  it("builds the /models tree from id path segments, folders first, sorted at every level", () => {
+    const tree = buildModelPathTree([
+      "zeta/b-model",
+      "alpha/sub/deep-2",
+      "bare-model",
+      "alpha/flat",
+      "alpha/sub/deep-1",
+      "another-bare",
+      "zeta/a-model",
+      "alpha/flat",
+    ]);
+    const show = (nodes: ReturnType<typeof buildModelPathTree>): unknown[] =>
+      nodes.map((node) =>
+        node.kind === "folder" ? { [`/${node.name}`]: show(node.children) } : node.name,
+      );
+    expect(show(tree)).toEqual([
+      { "/alpha": [{ "/sub": ["deep-1", "deep-2"] }, "flat"] },
+      { "/zeta": ["a-model", "b-model"] },
+      // No slash: listed as-is at the top level, after the folders, no folder invented.
+      "another-bare",
+      "bare-model",
+    ]);
+    const deep = (tree[0] as { children: { children: { id: string }[] }[] }).children[0]!
+      .children[0]!;
+    expect(deep.id).toBe("alpha/sub/deep-1");
+  });
+
+  it("nests deeper ids, lists bare ids at the top, and picks the full id", async () => {
+    const setModel = vi.fn();
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "alpha/sub/deep" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/sub/deep", label: "Deep" }, { id: "alpha/top", label: "Top" }] },
+        { provider: "bare", models: [{ id: "bare-model", label: "Bare" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha/sub/deep"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    // The folders holding the current model open by default, at every depth.
+    await screen.findByRole("menuitem", { name: "/alpha" });
+    const rows = [...document.querySelectorAll('[id^="dc-menu-"]')];
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "Default",
+      "/alpha",
+      "├─/sub",
+      "│  └─deep",
+      "└─top",
+      "bare-model",
+    ]);
+    expect(screen.getByRole("menuitem", { name: "/sub" }).getAttribute("aria-expanded")).toBe("true");
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /deep/ }));
+    expect(setModel).toHaveBeenLastCalledWith("alpha/sub/deep");
     unmount();
   });
 
@@ -514,7 +581,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     // by the part of the id after the provider.
     const radios = await screen.findAllByRole("menuitemradio");
     expect(radios.map((row) => row.textContent?.trim())).toEqual([
-      expect.stringContaining("beta/think"),
+      "└─think",
     ]);
     unmount();
   });
@@ -541,8 +608,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
       expect.stringContaining("Reasoning"),
       expect.stringContaining("Fast"),
       expect.stringContaining("Light"),
-      expect.stringContaining("deepseek/deepseek-v4.1-flash"),
-      expect.stringContaining("deepseek/deepseek-v4.1-flash-1017"),
+      "├─deepseek-v4.1-flash",
+      "└─deepseek-v4.1-flash-1017",
     ]);
     // No descriptions or subtitles anywhere.
     expect(screen.queryByText("Manual selection")).toBeNull();
@@ -568,11 +635,12 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const branches = document.querySelectorAll('[data-slot="tools-tree-branch"]');
     expect([...branches].map((node) => node.textContent)).toEqual(["├─", "└─"]);
     await userEvent.click(screen.getByRole("menuitem", { name: "/google" }));
-    expect(screen.getByText("google/gemini-3.5-flash-lite")).not.toBeNull();
-    expect(screen.getByText("google/gemini-3.8-flash")).not.toBeNull();
-    expect(screen.queryByText("deepseek/deepseek-v4-pro")).toBeNull();
-    expect(screen.queryByText("z-ai/glm-4.7-flash")).toBeNull();
-    expect(screen.queryByText("openai/gpt-5.6-luna")).toBeNull();
+    expect(screen.getByText("gemini-3.5-flash-lite")).not.toBeNull();
+    expect(screen.getByText("gemini-3.8-flash")).not.toBeNull();
+    expect(screen.queryByText("google/gemini-3.8-flash")).toBeNull();
+    expect(screen.queryByText("deepseek-v4-pro")).toBeNull();
+    expect(screen.queryByText("glm-4.7-flash")).toBeNull();
+    expect(screen.queryByText("gpt-5.6-luna")).toBeNull();
     unmount();
   });
 
