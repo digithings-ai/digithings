@@ -9,16 +9,14 @@ Covers:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import (
-    Any,  # score:allow untyped any — scored-lint: heterogeneous FakeSupabase fixture dicts
-)
 
 import polars as pl
 import pytest
 from digiquant.data.prices.correlation import pairwise_return_correlations
 from digiquant.research.data.queries import get_return_correlations
+
+from tests.fixtures.fake_supabase import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -40,70 +38,6 @@ def _close_rows(series: dict[str, list[float]], start: date) -> list[dict]:
 def _corr_map(frame: pl.DataFrame) -> dict[tuple[str, str], float]:
     """Convert the output frame to a {(a,b): corr} dict for easy assertion."""
     return {(r["a"], r["b"]): r["corr"] for r in frame.to_dicts()}
-
-
-# ── FakeSupabaseClient (mirrors the research/test_supabase_io version, minimal) ─
-
-
-@dataclass
-class _FakeResponse:
-    data: list[dict[str, Any]]
-
-
-@dataclass
-class _FakeQuery:
-    table_name: str
-    canned: list[dict[str, Any]] = field(default_factory=list)
-    _filters: list[tuple[str, str, Any]] = field(default_factory=list)
-    _order: tuple[str, bool] | None = None
-    _limit: int | None = None
-
-    def select(self, _cols: str) -> "_FakeQuery":
-        return self
-
-    def lte(self, col: str, val: Any) -> "_FakeQuery":
-        self._filters.append(("lte", col, val))
-        return self
-
-    def gte(self, col: str, val: Any) -> "_FakeQuery":
-        self._filters.append(("gte", col, val))
-        return self
-
-    def in_(self, col: str, vals: list[Any]) -> "_FakeQuery":
-        self._filters.append(("in_", col, list(vals)))
-        return self
-
-    def order(self, col: str, desc: bool = False) -> "_FakeQuery":
-        self._order = (col, desc)
-        return self
-
-    def limit(self, n: int) -> "_FakeQuery":
-        self._limit = n
-        return self
-
-    def execute(self) -> _FakeResponse:
-        rows = list(self.canned)
-        for op, col, val in self._filters:
-            if op == "lte":
-                rows = [r for r in rows if str(r.get(col, "")) <= str(val)]
-            elif op == "gte":
-                rows = [r for r in rows if str(r.get(col, "")) >= str(val)]
-            elif op == "in_":
-                rows = [r for r in rows if r.get(col) in val]
-        if self._order is not None:
-            col, desc = self._order
-            rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
-        if self._limit is not None:
-            rows = rows[: self._limit]
-        return _FakeResponse(data=rows)
-
-
-@dataclass
-class FakeSupabaseClient:
-    canned_reads: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
-
-    def table(self, name: str) -> _FakeQuery:
-        return _FakeQuery(table_name=name, canned=list(self.canned_reads.get(name, [])))
 
 
 # ── pairwise_return_correlations — pure function ───────────────────────────────
