@@ -7,6 +7,7 @@ import MobileAppBar from '@/components/mobile-app-bar';
 import CommandPalette from '@/components/command-palette';
 import DigichatPopup from '@/components/digichat-popup';
 import DigichatLivePreview from '@/components/digichat-live-preview';
+import TuiRecordedFrames from '@/components/tui-recorded-frames';
 import FxHubOnlyGuard from '@/components/fx-hub-only-guard';
 import DbUnavailable from '@/components/db-unavailable';
 import { deskShellEnabled } from '@/components/desk/panes/brief';
@@ -43,6 +44,8 @@ export default function AppFrame({ children }: { children: ReactNode }) {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-h-screen">
         <MobileAppBar />
         <CommandPalette />
+        {/* D9 recorded TUI frame preview (DIG-2698); no-ops when env off. */}
+        <TuiRecordedFrames />
         <div className="flex min-h-0 flex-1 flex-col">
           {gated ? <DbUnavailable /> : <FxHubOnlyGuard>{children}</FxHubOnlyGuard>}
         </div>

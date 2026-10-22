@@ -59,6 +59,14 @@ describe('DigichatLivePreview', () => {
     const origin = new URL(iframe!.getAttribute('src')!).origin;
     expect(DASHBOARD_DIGICHAT_FRAME_SRC).toContain(origin);
     expect(DIGICHAT_POPUP_FRAME_ORIGINS).toContain(origin);
+    // Desktop-only: the 300px iframe squeezed <main> to 90px on a 390px
+    // phone (measured 22 Oct 2026). Pinned so the phone column cannot
+    // regress silently. The inline-style assertion matters too: an inline
+    // `display:block` beats Tailwind's `hidden`, and happy-dom does no
+    // layout, so the class name alone would not prove the outcome.
+    expect(section!.className).toContain('hidden');
+    expect(section!.className).toContain('md:block');
+    expect(section!.getAttribute('style')).toBeNull();
   });
 
   it('renders upgrade and no iframe for baseline tiers (#3662)', () => {
@@ -67,9 +75,13 @@ describe('DigichatLivePreview', () => {
         createElement(DigichatLivePreview, { tier: 'brief', config: CFG }),
       );
     });
-    expect(
-      container.querySelector('[data-digichat-live-preview="upgrade"]'),
-    ).not.toBeNull();
+    const upgrade = container.querySelector(
+      '[data-digichat-live-preview="upgrade"]',
+    );
+    expect(upgrade).not.toBeNull();
+    expect(upgrade!.className).toContain('hidden');
+    expect(upgrade!.className).toContain('md:block');
+    expect(upgrade!.getAttribute('style')).toBeNull();
     expect(container.querySelector('iframe')).toBeNull();
     expect(container.textContent).toContain(DIGICHAT_UPGRADE_TITLE);
   });
