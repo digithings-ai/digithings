@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import re
 from pathlib import Path
 
 import pytest
@@ -483,3 +485,203 @@ class TestRegressionsFromReview:
         assert guard.REASONING_ID_PATTERN.search("o4-mini")
         assert guard.MODEL_ID_PATTERN.search("GPT-5.6 Luna")
         assert guard.MODEL_ID_PATTERN.search("zai-org/GLM-5.3-Flash")
+
+
+class TestSourceDiscovery:
+    """Which files the guard reads, which trees it refuses to walk, and how.
+
+    The guard's runtime has to be a property of the source tree, not of the
+    working tree it happens to sit in. In a CI worktree `node_modules` and
+    `.venv` live inside the repo, so a walk that descends into them costs
+    181k metadata round-trips — cheap on an idle Mac, minutes on a busy one.
+    That is what turned this guard into a 600-second step timeout in the
+    post-merge run (DIG-4726), so the pruning is pinned here instead of being
+    left to the shape of whatever tree the check happens to run in.
+
+    Two pins, because one alone leaves the other open. The *answer* is
+    pinned: the pruned walk has to see exactly the files the flat walk saw, or
+    the guard has quietly changed what it guards. The *mechanism* is pinned
+    too, and it has to be a separate test — a flat walk and a pruned walk
+    return the same files, so an answer-only oracle cannot tell them apart
+    and a revert to the old walk would keep this class green.
+    """
+
+    #: The skip set the old flat walk applied, written out here on purpose.
+    #: `guard.SKIP_DIR_PARTS` is read by both sides of the comparison below,
+    #: so a change to it would move the oracle and the guard together and the
+    #: test would still pass. This snapshot does not move with it: when the
+    #: skip set changes, this test fails until someone updates it on purpose.
+    OLD_SKIP_DIR_PARTS = frozenset(
+        {
+            ".git",
+            ".mypy_cache",
+            ".next",
+            ".pytest_cache",
+            ".ruff_cache",
+            ".venv",
+            "__pycache__",
+            "build",
+            "dist",
+            "node_modules",
+            "site-packages",
+            "venv",
+        }
+    )
+
+    def test_the_walk_stops_at_a_skipped_directory(self) -> None:
+        # The dot rule and the skip rule are two different rules, so the input
+        # has to tell them apart: `.cache` is dot-prefixed and is not in the
+        # skip set, `.venv` is in both. Drop either rule and this fails.
+        assert guard._pruned_dirnames(
+            [
+                "src",
+                "node_modules",
+                ".venv",
+                "build",
+                "dist",
+                ".git",
+                "__pycache__",
+                ".cache",
+                "site-packages",
+                "venv",
+            ]
+        ) == ["src"]
+
+    def test_the_pruned_walk_sees_the_same_files_as_the_flat_one(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        root = _fake_root(tmp_path)
+        sources = [
+            "app/m.py",
+            "app/nested/deep/m.ts",
+            "packages/ui/src/skin.tsx",
+            # A source file at the root, so the fixture's walk order (root
+            # files first, then the subdirectories) differs from its sorted
+            # order. Without it the walk order and the sorted order agree by
+            # accident and the order assertion below proves nothing.
+            "zroot.py",
+            "node_modules/some-pkg/index.js",
+            ".venv/lib/python3.12/site-packages/pkg/mod.py",
+            "build/out.js",
+            "app/.hidden/secret.py",
+            "app/.dotfile.py",
+            "app/notes.md",
+        ]
+        for rel in sources:
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("X = 1\n", encoding="utf-8")
+
+        def flat(root: Path) -> list[Path]:
+            """The old walk, kept here as the reference the pruned walk must match."""
+            out: list[Path] = []
+            for path in sorted(root.rglob("*")):
+                if not path.is_file() or path.suffix not in guard.SOURCE_SUFFIXES:
+                    continue
+                parts = path.relative_to(root).parts
+                if any(part.startswith(".") for part in parts):
+                    continue
+                if self.OLD_SKIP_DIR_PARTS & set(parts):
+                    continue
+                out.append(path)
+            return out
+
+        monkeypatch.setattr(guard, "REPO_ROOT", root)
+        # The discovery rules are what changed, so they are what is compared:
+        # the same files, in the same order. A list, not a set — the order is
+        # part of the claim.
+        assert sorted(guard._iter_candidate_files()) == flat(root)
+        # And the guard still hands the files over sorted, so two runs over the
+        # same tree report the same files in the same order.
+        found = list(guard.iter_source_files())
+        assert found == sorted(found)
+
+    def test_the_walk_never_enters_a_skipped_tree(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The mechanism, which the answer-only oracle above cannot see: a
+        # directory that holds no first-party source is never entered. This
+        # records every directory the walk opens and holds it to that promise,
+        # so a flat walk that answers the same question the slow way is red.
+        root = _fake_root(tmp_path)
+        (root / "app").mkdir()
+        (root / "app" / "m.py").write_text("X = 1\n", encoding="utf-8")
+        vendor = root / "node_modules" / "some-pkg"
+        vendor.mkdir(parents=True)
+        (vendor / "index.js").write_text("const x = 1;\n", encoding="utf-8")
+        (root / ".venv" / "lib").mkdir(parents=True)
+        (root / ".venv" / "lib" / "mod.py").write_text("X = 1\n", encoding="utf-8")
+        monkeypatch.setattr(guard, "REPO_ROOT", root)
+
+        opened: list[str] = []
+        real_scandir = os.scandir
+
+        def recording_scandir(path=".", *args, **kwargs):
+            opened.append(os.path.abspath(os.fspath(path)))
+            return real_scandir(path, *args, **kwargs)
+
+        monkeypatch.setattr(os, "scandir", recording_scandir)
+        try:
+            list(guard.iter_source_files())
+        finally:
+            monkeypatch.setattr(os, "scandir", real_scandir)
+
+        assert opened, "the walk opened no directory at all, so it proved nothing"
+        root_resolved = root.resolve()
+        entered: list[Path] = []
+        for path in opened:
+            resolved = Path(path).resolve()
+            if resolved != root_resolved and root_resolved not in resolved.parents:
+                # The patch is on `os.scandir`, so anything else on the machine
+                # that asks for a directory while it is in place lands here
+                # too. Only the directories under the repo root are the
+                # walk's business.
+                continue
+            entered.append(resolved)
+        assert entered, "the walk opened no directory under the repo root"
+        for path in entered:
+            parts = path.relative_to(root_resolved).parts
+            assert not any(part.startswith(".") for part in parts), (
+                f"the walk entered the dot-directory {path}"
+            )
+            assert not (self.OLD_SKIP_DIR_PARTS & set(parts)), (
+                f"the walk entered the skipped tree {path}"
+            )
+        # The walk has to have reached the first-party source, or the promise
+        # above would be an empty one.
+        assert root_resolved / "app" in entered
+
+    def test_a_literal_under_node_modules_is_not_read(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        # Third-party code is not ours to configure, and a guard that reported
+        # it would report every install of every dependency.
+        root = _fake_root(tmp_path)
+        (root / "app").mkdir()
+        (root / "app" / "m.py").write_text('X = "anthropic"\n', encoding="utf-8")
+        vendor = root / "node_modules" / "some-pkg"
+        vendor.mkdir(parents=True)
+        (vendor / "index.js").write_text('const m = "gpt-4o-mini";\n', encoding="utf-8")
+        monkeypatch.setattr(guard, "REPO_ROOT", root)
+        monkeypatch.setattr(guard, "KNOWN_REMAINING", {})
+        assert guard.main() == 0
+        # The count is the real pin: one production source, so the vendor file
+        # was never counted as one. (Failures go to stderr, so the stdout line
+        # is the only place the count shows up.)
+        counted = re.search(r"OK \((\d+) production sources", capsys.readouterr().out)
+        assert counted and counted.group(1) == "1"
+
+    def test_a_literal_next_to_a_skipped_tree_is_still_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        # The other half: pruning must not hide a real source that happens to
+        # sit beside a directory the walk refuses to enter.
+        root = _fake_root(tmp_path)
+        (root / "app").mkdir()
+        (root / "app" / "m.py").write_text('X = "gpt-4o-mini"\n', encoding="utf-8")
+        (root / "node_modules" / "some-pkg").mkdir(parents=True)
+        (root / "node_modules" / "some-pkg" / "index.js").write_text("const x = 1;\n", encoding="utf-8")
+        monkeypatch.setattr(guard, "REPO_ROOT", root)
+        monkeypatch.setattr(guard, "KNOWN_REMAINING", {})
+        assert guard.main() == 1
+        assert "app/m.py" in capsys.readouterr().err
