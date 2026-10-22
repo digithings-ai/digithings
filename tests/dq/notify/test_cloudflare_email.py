@@ -502,7 +502,8 @@ def test_migration_133_grants_the_claim_delete_and_keeps_the_log_append_only() -
     assert "reject_notification_log_mutation" in canonical
     offenders = [
         f"{path.name}: {line.strip()}"
-        for path in sorted(root.rglob("*.sql"))
+        for layer in ("engine", "prod")
+        for path in sorted((root / layer).glob("*.sql"))
         for line in path.read_text().splitlines()
         if line.strip().startswith("GRANT") and "notification_log" in line and "DELETE" in line
     ]

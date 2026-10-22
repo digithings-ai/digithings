@@ -51,6 +51,20 @@ POLICY_HEAD_RE = re.compile(
 ROLE_RE = re.compile(r"\bTO\s+([a-z_]+(?:\s*,\s*[a-z_]+)*)", re.IGNORECASE)
 
 
+def _applied_migrations() -> list[pathlib.Path]:
+    """The applied chain (#5854 layers): ``engine/`` then ``prod/``.
+
+    The ``cutover/`` layer is staged, not applied. The generator does not read
+    it, so this independent oracle must not read it either: the two have to
+    look at the same set of files or the oracle checks something else.
+    """
+    return [
+        path
+        for layer in ("engine", "prod")
+        for path in sorted((MIGRATIONS_DIR / layer).glob("*.sql"))
+    ]
+
+
 def _select_policies() -> list[tuple[str, str, list[str]]]:
     """Every SELECT policy as ``(policy_name, table, roles)``, parsed independently.
 
@@ -60,7 +74,7 @@ def _select_policies() -> list[tuple[str, str, list[str]]]:
     authenticated policy is correctly ported.
     """
     out = []
-    for path in sorted(MIGRATIONS_DIR.rglob("*.sql")):
+    for path in _applied_migrations():
         sql = _strip(path.read_text(encoding="utf-8"))
         for m in POLICY_HEAD_RE.finditer(sql):
             head = m.group("head")
@@ -87,7 +101,7 @@ def _independent_pg_policies() -> dict[str, set[str]]:
         r"(?P<head>[^;]*?)\bUSING\s*\(",
         re.IGNORECASE | re.DOTALL,
     )
-    for path in sorted(MIGRATIONS_DIR.rglob("*.sql")):
+    for path in _applied_migrations():
         sql = _strip(path.read_text(encoding="utf-8"))
         for m in policy_re.finditer(sql):
             tbl, head = m.group(2).lower(), m.group("head")

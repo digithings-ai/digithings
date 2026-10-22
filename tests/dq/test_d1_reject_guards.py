@@ -30,7 +30,14 @@ EXPECTED_GUARD_FUNCTIONS = 19
 # so a parsing regression in one does not silently agree with the other.
 # --------------------------------------------------------------------------
 def _migrations() -> list[pathlib.Path]:
-    files = sorted(MIGRATIONS_DIR.rglob("*.sql"))
+    # The applied chain (#5854 layers): ``engine/`` then ``prod/``. The
+    # ``cutover/`` layer is staged, not applied, so the generator does not read
+    # it and neither does this independent re-derivation.
+    files = [
+        path
+        for layer in ("engine", "prod")
+        for path in sorted((MIGRATIONS_DIR / layer).glob("*.sql"))
+    ]
     assert files, f"no migrations found under {MIGRATIONS_DIR}"
     return files
 
