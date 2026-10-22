@@ -351,17 +351,27 @@ class PrepareWorktreeTest(unittest.TestCase):
         import io
         calls = []
         seq = list(heads)
-        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
         tmp = tempfile.mkdtemp()
         wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        def make_wt():
+            os.makedirs(wt, exist_ok=True)
+            # a linked worktree of MAIN names a gitdir under MAIN's worktrees dir
+            owner = common if own else os.path.join(tmp, "other")
+            os.makedirs(os.path.join(owner, "worktrees"), exist_ok=True)
+            with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+                fh.write(f"gitdir: {os.path.join(owner, 'worktrees', 'wt')}\n")
         if wt_exists:
-            os.mkdir(wt)
-            if own:  # a worktree this runner created carries its sentinel
-                open(os.path.join(wt, ".local-ci-worktree"), "w").write(self.SHA)
+            make_wt()
         def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
             calls.append(cmd)
             if cmd[:3] == ["git", "worktree", "add"]:
-                os.makedirs(wt, exist_ok=True)  # git creates the worktree
+                make_wt()  # git creates the worktree
+            elif cmd[:3] == ["git", "worktree", "remove"]:
+                shutil.rmtree(wt, ignore_errors=True)
+            elif cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
             return 0, ""
         _mod.sh = fake_sh
         _mod.wt_head = lambda: seq.pop(0) if seq else None
@@ -396,7 +406,7 @@ class PrepareWorktreeTest(unittest.TestCase):
         (ok, _), calls, text = self._run([None, self.SHA, self.SHA])
         self.assertTrue(ok)
         self.assertIn("rebuilding", text)
-        self.assertTrue(any(c[:3] == ["git", "worktree", "prune"] for c in calls))
+        self.assertTrue(any(c[:3] == ["git", "worktree", "remove"] for c in calls))
         self.assertTrue(any(c[:3] == ["git", "worktree", "add"] for c in calls))
 
     def test_a_directory_we_did_not_create_is_never_deleted(self):
@@ -404,7 +414,7 @@ class PrepareWorktreeTest(unittest.TestCase):
         (ok, why), calls, _ = self._run([None, self.SHA], own=False)
         self.assertFalse(ok)
         self.assertIn("not a worktree this runner created", why)
-        self.assertFalse(any(c[:3] == ["git", "worktree", "prune"] for c in calls))
+        self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in calls))
         self.assertFalse(any(c[:3] == ["git", "worktree", "add"] for c in calls))
 
     def test_missing_worktree_added(self):
@@ -424,46 +434,63 @@ class WorktreeSelfHealTest(unittest.TestCase):
     The post-merge run on develop tip 9581532dc712 spent 900 s inside
     `git checkout` and then failed the check, on a worktree that checks out in
     under a second, and the check named one opaque step. A checkout that does
-    not land is retried once on a fresh worktree, the lock is released before
-    the prune (a locked worktree is not pruned), and the reason carries the rc
-    and both HEADs.
+    not land is retried, the reason carries the rc and both HEADs, and a work
+    the runner does not own is never destroyed.
     """
 
     SHA = "a" * 40
     STALE = "b" * 40
 
-    def _run(self, checkouts, own=True):
-        """checkouts: what each `git checkout` does - "land", "stall" or "wrong"."""
+    def _run(self, checkouts, own=True, add_rc=0, remove_rc=0):
+        """checkouts: what each `git checkout` does - "land", "stall", "wrong" or "err"."""
         calls = []
         state = {"head": self.STALE, "outs": list(checkouts)}
         tmp = tempfile.mkdtemp()
         wt = os.path.join(tmp, "wt")
-        os.mkdir(wt)
-        if own:
-            open(os.path.join(wt, ".local-ci-worktree"), "w").write(self.SHA)
+        common = os.path.join(tmp, "common")
+        def make_wt():
+            os.makedirs(wt, exist_ok=True)
+            owner = common if own else os.path.join(tmp, "other")
+            os.makedirs(os.path.join(owner, "worktrees"), exist_ok=True)
+            with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+                fh.write(f"gitdir: {os.path.join(owner, 'worktrees', 'wt')}\n")
+        make_wt()
         def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
             calls.append((cmd, timeout))
-            if cmd[:3] == ["git", "worktree", "add"]:
-                os.makedirs(wt, exist_ok=True)  # git creates the worktree
-            elif cmd[:2] == ["git", "checkout"]:
+            if cmd[:2] == ["git", "checkout"]:
                 outcome = state["outs"].pop(0) if state["outs"] else "land"
                 if outcome == "land":
                     state["head"] = self.SHA
-                elif outcome == "wrong":
-                    state["head"] = self.STALE
-                return (124 if outcome == "stall" else 0), ""
+                    return 0, ""
+                if outcome == "stall":
+                    return 124, ""
+                if outcome == "wrong":
+                    return 0, ""  # rc 0 but the HEAD did not move
+                return 1, ""
+            if cmd[:3] == ["git", "worktree", "add"]:
+                if add_rc != 0:
+                    return add_rc, ""
+                make_wt()  # git creates the worktree and checks the commit out
+                state["head"] = self.SHA
+                return 0, ""
+            if cmd[:3] == ["git", "worktree", "remove"]:
+                if remove_rc != 0:
+                    return remove_rc, ""
+                shutil.rmtree(wt, ignore_errors=True)
+                return 0, ""
+            if cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
             return 0, ""
-        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log, _mod.wt_is_ours)
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
         _mod.sh = fake_sh
         _mod.wt_head = lambda: state["head"]
         _mod.WT = wt
         _mod.log = lambda m: None
-        _mod.wt_is_ours = lambda path: own
         try:
             buf = io.StringIO()
             res = _mod.prepare_wt(7, self.SHA, "develop", buf)
         finally:
-            _mod.sh, _mod.wt_head, _mod.WT, _mod.log, _mod.wt_is_ours = saved
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log = saved
             shutil.rmtree(tmp, ignore_errors=True)
         return res, calls, buf.getvalue()
 
@@ -473,25 +500,46 @@ class WorktreeSelfHealTest(unittest.TestCase):
     def _checkouts(self, calls):
         return [c for c, _ in calls if c[:2] == ["git", "checkout"]]
 
-    def test_a_stalled_checkout_is_retried_on_a_fresh_worktree(self):
+    def test_a_stalled_checkout_is_retried_in_place(self):
+        """A stall is git fetching a blob over a slow network. A rebuild fetches
+        it all again, so the second attempt stays where it is."""
         (ok, why), calls, text = self._run(["stall", "land"])
         self.assertTrue(ok, why)
         self.assertEqual(why, "")
-        self.assertIn("rebuilding", text)
-        self.assertEqual(len(self._checkouts(calls)), 2, "the retry is bounded to one")
-        self.assertTrue(any(c[:3] == ["git", "worktree", "prune"] for c in self._cmds(calls)))
+        self.assertEqual(len(self._checkouts(calls)), 2)
+        self.assertIn("retrying in place", text)
+        self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in self._cmds(calls)))
+
+    def test_a_stall_that_does_not_clear_is_reported_as_a_stall(self):
+        (ok, why), calls, text = self._run(["stall", "stall"])
+        self.assertFalse(ok)
+        self.assertIn("stalled", why)
+        self.assertIn("no gate ran", text)
+        self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in self._cmds(calls)),
+                         "a stall must not throw the worktree away")
+
+    def test_a_broken_worktree_is_rebuilt_and_the_checkout_is_not_repeated(self):
+        """`git worktree add --detach -f` checks the commit out itself."""
+        (ok, why), calls, _ = self._run(["wrong"])
+        self.assertTrue(ok, why)
+        self.assertEqual(len(self._checkouts(calls)), 1, "the rebuild already lands the commit")
         self.assertTrue(any(c[:3] == ["git", "worktree", "add"] for c in self._cmds(calls)))
 
-    def test_a_silently_failed_checkout_is_retried_too(self):
-        """The 17 Oct incident: the checkout returned 0 and the HEAD stayed stale."""
-        (ok, why), calls, _ = self._run(["wrong", "land"])
+    def test_a_failed_checkout_is_rebuilt(self):
+        (ok, why), calls, _ = self._run(["err"])
         self.assertTrue(ok, why)
-        self.assertEqual(len(self._checkouts(calls)), 2)
+        self.assertTrue(any(c[:3] == ["git", "worktree", "remove"] for c in self._cmds(calls)))
+        self.assertTrue(any(c[:3] == ["git", "worktree", "add"] for c in self._cmds(calls)))
+
+    def test_a_failed_rebuild_is_reported(self):
+        (ok, why), _, text = self._run(["err"], add_rc=1)
+        self.assertFalse(ok)
+        self.assertIn("the worktree add failed", why)
+        self.assertIn("no gate ran", text)
 
     def test_the_retry_is_bounded(self):
         (ok, why), calls, _ = self._run(["stall", "stall"])
         self.assertFalse(ok)
-        self.assertIn("the rebuilt worktree also failed", why)
         self.assertEqual(len(self._checkouts(calls)), 2, "a wedged git must not loop")
 
     def test_the_failure_carries_the_evidence(self):
@@ -501,28 +549,209 @@ class WorktreeSelfHealTest(unittest.TestCase):
         self.assertIn(self.SHA[:12], why)
         self.assertIn("no gate ran", text)
 
-    def test_the_lock_is_released_before_the_prune(self):
-        """git does not prune a locked worktree: the admin dir survives and the
-        next add fails on a path that already exists."""
-        _, calls, _ = self._run(["stall", "land"])
+    def test_the_lock_is_released_before_the_remove(self):
+        """git does not remove a locked worktree: the lock has to go first."""
+        _, calls, _ = self._run(["err"])
         cmds = self._cmds(calls)
         unlock = next(i for i, c in enumerate(cmds) if c[:3] == ["git", "worktree", "unlock"])
-        prune = next(i for i, c in enumerate(cmds) if c[:3] == ["git", "worktree", "prune"])
-        self.assertLess(unlock, prune, "the unlock has to come before the prune")
+        remove = next(i for i, c in enumerate(cmds) if c[:3] == ["git", "worktree", "remove"])
+        self.assertLess(unlock, remove, "the unlock has to come before the remove")
+
+    def test_the_remove_is_scoped_to_this_worktree(self):
+        """`git worktree prune` is repository-wide: it would take the admin entry
+        of an operator's worktree on an unmounted volume with it."""
+        _, calls, _ = self._run(["err"])
+        self.assertFalse(any(c[:3] == ["git", "worktree", "prune"] for c in self._cmds(calls)))
+        self.assertTrue(any(c[:3] == ["git", "worktree", "remove"] for c in self._cmds(calls)))
 
     def test_a_worktree_we_did_not_create_is_never_rebuilt(self):
-        (ok, why), calls, _ = self._run(["stall"], own=False)
+        (ok, why), calls, _ = self._run(["err"], own=False)
         self.assertFalse(ok)
-        self.assertIn("did not create", why)
-        self.assertFalse(any(c[:3] == ["git", "worktree", "prune"] for c in self._cmds(calls)))
+        self.assertIn("not a worktree this runner created", why)
+        self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in self._cmds(calls)))
         self.assertFalse(any(c[:3] == ["git", "worktree", "add"] for c in self._cmds(calls)))
 
-    def test_the_checkout_budget_is_bounded(self):
-        self.assertLessEqual(_mod.WT_CHECKOUT_TIMEOUT, 300)
-        _, calls, _ = self._run(["stall", "land"])
+    def test_the_budgets_are_pinned(self):
+        self.assertEqual(_mod.WT_CHECKOUT_TIMEOUT, 300)
+        self.assertEqual(_mod.WT_REBUILD_TIMEOUT, 600)
+        self.assertEqual(_mod.WT_META_TIMEOUT, 60)
+
+    def test_every_step_of_the_rebuild_has_its_own_budget(self):
+        """The defaults are 1800 s: the rebuild path must not inherit them."""
+        _, calls, _ = self._run(["err"])
         for cmd, timeout in calls:
+            if cmd[:3] in (["git", "worktree", "remove"], ["git", "worktree", "unlock"],
+                           ["git", "worktree", "add"]) or cmd[:2] == ["git", "checkout"]:
+                self.assertLessEqual(timeout, _mod.WT_REBUILD_TIMEOUT, f"{cmd} has no budget")
+
+    def test_the_caches_survive_a_rebuild(self):
+        """A rebuild that drops node_modules and .venv costs a full npm ci and
+        uv sync, which turns a stall into an hour-long check."""
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        os.makedirs(os.path.join(common, "worktrees"), exist_ok=True)
+        os.makedirs(wt, exist_ok=True)
+        with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+            fh.write(f"gitdir: {os.path.join(common, 'worktrees', 'wt')}\n")
+        for name in ("node_modules", ".venv"):
+            os.makedirs(os.path.join(wt, name), exist_ok=True)
+            with open(os.path.join(wt, name, "marker"), "w", encoding="utf-8") as fh:
+                fh.write(name)
+        state = {"head": self.STALE}
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
             if cmd[:2] == ["git", "checkout"]:
-                self.assertEqual(timeout, _mod.WT_CHECKOUT_TIMEOUT)
+                return 1, ""
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(wt, exist_ok=True)
+                with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+                    fh.write(f"gitdir: {os.path.join(common, 'worktrees', 'wt')}\n")
+                state["head"] = self.SHA
+                return 0, ""
+            if cmd[:3] == ["git", "worktree", "remove"]:
+                shutil.rmtree(wt, ignore_errors=True)
+                return 0, ""
+            if cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
+            return 0, ""
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        _mod.sh = fake_sh
+        _mod.wt_head = lambda: state["head"]
+        _mod.WT = wt
+        _mod.log = lambda m: None
+        try:
+            buf = io.StringIO()
+            ok, why = _mod.prepare_wt(7, self.SHA, "develop", buf)
+            self.assertTrue(ok, why)
+            for name in ("node_modules", ".venv"):
+                self.assertTrue(os.path.isfile(os.path.join(wt, name, "marker")),
+                                f"{name} did not survive the rebuild")
+        finally:
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_worktree_keeps_the_mark_that_makes_it_ours(self):
+        """With LOCAL_CI_WT set the marker is the only thing that says the
+        directory belongs to the runner; without it a later stall cannot heal."""
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        os.makedirs(os.path.join(common, "worktrees"), exist_ok=True)
+        os.makedirs(wt, exist_ok=True)
+        with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+            fh.write(f"gitdir: {os.path.join(common, 'worktrees', 'wt')}\n")
+        state = {"head": self.SHA}
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(wt, exist_ok=True)
+                with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+                    fh.write(f"gitdir: {os.path.join(common, 'worktrees', 'wt')}\n")
+                return 0, ""
+            if cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
+            return 0, ""
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        _mod.sh = fake_sh
+        _mod.wt_head = lambda: state["head"]
+        _mod.WT = wt
+        _mod.log = lambda m: None
+        try:
+            buf = io.StringIO()
+            ok, why = _mod.prepare_wt(7, self.SHA, "develop", buf)
+            self.assertTrue(ok, why)
+            self.assertTrue(os.path.isfile(os.path.join(wt, ".local-ci-worktree")))
+        finally:
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_a_real_directory_that_is_not_a_worktree_is_never_rebuilt(self):
+        """The sentinel file alone must not authorise a rebuild: the runner
+        writes it into whatever directory LOCAL_CI_WT names (DIG-5285)."""
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        os.makedirs(wt, exist_ok=True)
+        os.makedirs(common, exist_ok=True)
+        with open(os.path.join(wt, ".local-ci-worktree"), "w", encoding="utf-8") as fh:
+            fh.write(self.SHA)
+        calls = []
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            calls.append(cmd)
+            if cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
+            return 0, ""
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        _mod.sh = fake_sh
+        _mod.wt_head = lambda: self.STALE
+        _mod.WT = wt
+        _mod.log = lambda m: None
+        try:
+            buf = io.StringIO()
+            ok, why = _mod.prepare_wt(7, self.SHA, "develop", buf)
+            self.assertFalse(ok)
+            self.assertIn("not a worktree this runner created", why)
+            self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in calls))
+            self.assertTrue(os.path.isdir(wt), "the directory has to survive")
+        finally:
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_a_worktree_with_uncommitted_changes_is_not_removed(self):
+        """That is somebody's work, not checkout material (DIG-4490)."""
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        os.makedirs(wt, exist_ok=True)
+        os.makedirs(os.path.join(common, "worktrees"), exist_ok=True)
+        with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+            fh.write(f"gitdir: {os.path.join(common, 'worktrees', 'wt')}\n")
+        calls = []
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            calls.append(cmd)
+            if cmd[:2] == ["git", "checkout"]:
+                return 1, ""  # the checkout failed, so the rebuild is considered
+            if cmd[:2] == ["git", "status"]:
+                return 0, " M file.py\n"
+            if cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
+            return 0, ""
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        _mod.sh = fake_sh
+        _mod.wt_head = lambda: self.STALE
+        _mod.WT = wt
+        _mod.log = lambda m: None
+        try:
+            buf = io.StringIO()
+            ok, why = _mod.prepare_wt(7, self.SHA, "develop", buf)
+            self.assertFalse(ok)
+            self.assertIn("uncommitted changes", why)
+            self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in calls))
+            self.assertTrue(os.path.isdir(wt), "the directory has to survive")
+        finally:
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_gates_do_not_run_when_the_worktree_fails(self):
+        """The reason is in the status description, so a failed check says why."""
+        ran = []
+        tmp = tempfile.mkdtemp()
+        saved = (_mod.prepare_wt, _mod.run_checks, _mod.log, _mod.ci_status, _mod.LOGD)
+        _mod.prepare_wt = lambda n, sha, base, out: (False, "git stalled in the worktree checkout")
+        _mod.run_checks = lambda pr, out: ran.append(1) or []
+        _mod.log = lambda m: None
+        _mod.ci_status = lambda sha: ("pending", "")
+        _mod.LOGD = tmp
+        try:
+            st = _mod.process({"number": 999999, "headRefOid": "a" * 40,
+                               "baseRefName": "develop"}, True)
+        finally:
+            (_mod.prepare_wt, _mod.run_checks, _mod.log, _mod.ci_status, _mod.LOGD) = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(ran, [], "run_checks must not be called when the worktree failed")
+        self.assertEqual(st, "failure")
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn("fails = run_checks(pr, out) if ok_wt else", src)
+        self.assertIn('f"worktree checkout ({why})"', src)
 
     def test_the_rebuild_leaves_the_worktree_marked_as_ours(self):
         """With LOCAL_CI_WT set the sentinel is the only thing that says the
