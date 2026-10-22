@@ -1,5 +1,5 @@
 version: 1
-# House is the digichat default. OCC, the DataTap trial, local, and Docker
+# House is the digichat default. OCC, the Foundry trial, local, and Docker
 # are overlays (`extends: defaults`). A container with no config file loads
 # this document, so a deployment with no overrides looks like digithings.ai.
 #
@@ -81,7 +81,7 @@ deployment: &house
   # the model to finish; pauseAt waits out the window. Both are the
   # guardrail defaults.
   # The 80000-token minute is per visitor, and it belongs to house because
-  # house is public. OCC clears it. The DataTap trial replaces it with one
+  # house is public. OCC clears it. The Foundry trial replaces it with one
   # shared allowance. Anonymous traffic is keyed by the server-derived
   # client IP.
   # rateLimit is the chat request limiter (per visitor, and per IP for an

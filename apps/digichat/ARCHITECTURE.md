@@ -1174,7 +1174,7 @@ guardrails:                      # omit the block and every guard is off
 House (`defaults.yaml`) sets `maxToolCallsPerTurn: 5`, `answerAt: 0.7`,
 `pauseAt: 0.9`, `rateLimit: true`, and a per-visitor `tokensPerMinute.user` of
 80000. OCC sets `rateLimit: false` and clears the per-visitor minute. The
-tool-call cap and the answer guard stay. The DataTap trial clears the
+tool-call cap and the answer guard stay. The Foundry trial clears the
 per-visitor minute and keeps the request limiter. Its shared deployment TPM
 stays unset (TODO) until the Azure number for gpt-5.6-terra in westeurope is
 known. A visitor's own key (`X-BYOK-Key`) skips the per-visitor minute and the
@@ -1247,7 +1247,7 @@ refused at config load.
 defaults.yaml sets the tool-call cap to 5, the answer guard to 0.7 / 0.9,
 `rateLimit: true`, and a per-visitor minute of 80000 because house is public.
 OCC sets `rateLimit: false` and clears that minute. Local clears the minute
-and keeps the request limiter, the cap, and the answer guard. The DataTap
+and keeps the request limiter, the cap, and the answer guard. The Foundry
 trial clears the per-visitor minute and keeps the request limiter. Its shared
 deployment TPM stays unset (TODO) until the Azure number for gpt-5.6-terra in
 westeurope is known. A visitor's own key skips the per-visitor minute and the
@@ -2018,7 +2018,7 @@ Canonical operator config is a Zod-validated YAML file:
 - Path: `DIGICHAT_CONFIG_PATH` (default `/app/config/digichat.yaml`)
 - Loader: `src/lib/deploy-config/` (`loadDigichatConfig` / `getDigichatConfig`)
 - Examples: `apps/digichat/config/examples/*.yaml` (incl. `skins/<id>.yaml` and `local-cli.yaml`)
-- House: `apps/digichat/config/defaults.yaml`. OCC, the DataTap trial, local, and Docker are `extends: defaults` overlays. Objects merge, arrays replace, `embedHosts` unions, `null` deletes a key, and a different `backend.type` replaces the backend. A missing config file loads this document, so a deployment with no overrides looks like digithings.ai (`gate.webSearch: true`, `gate.showContextMeter: true`, per-visitor `guardrails.tokensPerMinute.user: 80000`, `guardrails.rateLimit: true`, `maxToolCallsPerTurn: 5`, `answerAt: 0.7`, `pauseAt: 0.9`). The per-visitor minute and the request limiter are house because house is public. OCC sets `guardrails.rateLimit: false`, clears that minute, the premium cost meter, and the context meter, and inherits the catalog picker. The DataTap trial clears the per-visitor minute, keeps the request limiter, and keeps one shared `tokensPerMinute.deployment` allowance. TODO: the Azure number is not in this repo, so that allowance stays unset. The tool-call cap and the answer guard stay on every overlay. A visitor's own key skips the per-visitor minute and the request limiter. `prompt` and `tokenEnv` stay server-side.
+- House: `apps/digichat/config/defaults.yaml`. OCC, the Foundry trial, local, and Docker are `extends: defaults` overlays. Objects merge, arrays replace, `embedHosts` unions, `null` deletes a key, and a different `backend.type` replaces the backend. A missing config file loads this document, so a deployment with no overrides looks like digithings.ai (`gate.webSearch: true`, `gate.showContextMeter: true`, per-visitor `guardrails.tokensPerMinute.user: 80000`, `guardrails.rateLimit: true`, `maxToolCallsPerTurn: 5`, `answerAt: 0.7`, `pauseAt: 0.9`). The per-visitor minute and the request limiter are house because house is public. OCC sets `guardrails.rateLimit: false`, clears that minute, the premium cost meter, and the context meter, and inherits the catalog picker. The Foundry trial clears the per-visitor minute, keeps the request limiter, and keeps one shared `tokensPerMinute.deployment` allowance. TODO: the Azure number is not in this repo, so that allowance stays unset. The tool-call cap and the answer guard stay on every overlay. A visitor's own key skips the per-visitor minute and the request limiter. `prompt` and `tokenEnv` stay server-side.
 - Startup: `src/instrumentation.ts` calls `initDigichatConfigAtStartup()` (fail closed)
 
 **Unrendered templates are refused at load (#6023).** The shipped templates

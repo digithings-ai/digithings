@@ -105,10 +105,6 @@
       "count": 2,
       "ticket": "DIG-3689"
     },
-    "apps/digichat/embed-hosts.txt": {
-      "count": 7,
-      "ticket": "DIG-3689"
-    },
     "apps/digichat/scripts/trusted-proxy-server.mjs": {
       "count": 18,
       "ticket": "DIG-2912"

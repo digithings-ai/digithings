@@ -110,7 +110,7 @@ describe("ToolCatalogBar", () => {
     // datatap shape: gate.webSearch false and no web_search catalog entry —
     // the tenant AND-gate denies, so no toggle renders and nothing sends.
     stubMapStorage();
-    // datatap shape: gate.webSearch false and no web_search catalog entry.
+    // Trial shape: gate.webSearch false and no web_search catalog entry.
     const denyConfig = {
       ...catalogConfig,
       slug: "datatap",

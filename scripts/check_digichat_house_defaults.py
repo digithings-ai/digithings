@@ -2,7 +2,7 @@
 """Fail when house drifts from defaults.yaml or a picker id leaves the catalog.
 
 House is ``apps/digichat/config/defaults.yaml``. The digithings.ai example is an
-``extends: defaults`` pointer. OCC and the DataTap trial leave
+``extends: defaults`` pointer. OCC and the Foundry trial leave
 ``gate.showContextMeter`` unset. Model ids on the house surfaces below must be
 rows in ``model-picker-catalog.json``. ``config/litellm.yaml`` is exempt
 (DIG-4982).
@@ -24,7 +24,6 @@ DEFAULTS = REPO / "apps/digichat/config/defaults.yaml"
 CATALOG = REPO / "apps/digichat/config/model-picker-catalog.json"
 EXAMPLE = REPO / "apps/digichat/config/examples/digithings-ai-embed.yaml"
 OCC = REPO / "apps/digichat/config/examples/occ-embed.yaml"
-DATATAP = REPO / "apps/digichat/config/datatap-trial-foundry.yaml"
 DEPLOY = REPO / "apps/digichat/config/digichat-deploy-models.json"
 WRANGLER = REPO / "apps/digithings-stack-cloudflare/wrangler.toml"
 DIGIPROJECT = REPO / "docs/projects/digithings/digiproject.yaml"
@@ -47,6 +46,13 @@ HOUSE_HOSTS = [
 ]
 GRAPH_TOOLS = ["digisearch", "digivault_search_notes", "digivault_get_note"]
 PROMPT_MARK = "Web search is on."
+
+
+def trial_overlay() -> Path:
+    matches = sorted((REPO / "apps/digichat/config").glob("*-trial-foundry.yaml"))
+    if len(matches) != 1:
+        raise SystemExit(f"expected one foundry trial overlay, found {len(matches)}")
+    return matches[0]
 
 
 def fail(problems: list[str]) -> int:
@@ -90,7 +96,8 @@ def main() -> int:
     if example.get("extends") != "defaults" or "hosts" in example or "deployment" in example:
         problems.append("digithings-ai-embed.yaml must be an extends: defaults pointer")
 
-    for label, path in (("occ", OCC), ("datatap", DATATAP)):
+    trial = trial_overlay()
+    for label, path in (("occ", OCC), ("trial", trial)):
         overlay = yaml.safe_load(path.read_text(encoding="utf-8"))
         blob = json.dumps(overlay)
         if '"showContextMeter": true' in blob or "showContextMeter: true" in path.read_text(
@@ -108,15 +115,15 @@ def main() -> int:
         if inherited in occ_guard:
             problems.append(f"occ overlay must inherit {inherited} from defaults")
 
-    trial_text = DATATAP.read_text(encoding="utf-8")
+    trial_text = trial.read_text(encoding="utf-8")
     if "TODO" not in trial_text:
-        problems.append("datatap trial must leave the shared TPM as a TODO")
-    trial = yaml.safe_load(trial_text)
-    trial_guard = ((trial.get("deployment") or {}).get("guardrails") or {})
+        problems.append("foundry trial must leave the shared TPM as a TODO")
+    trial_doc = yaml.safe_load(trial_text)
+    trial_guard = ((trial_doc.get("deployment") or {}).get("guardrails") or {})
     if trial_guard.get("tokensPerMinute") is not None:
-        problems.append("datatap trial must leave tokensPerMinute unset")
+        problems.append("foundry trial must leave tokensPerMinute unset")
     if "rateLimit" in trial_guard:
-        problems.append("datatap trial must inherit the request limiter")
+        problems.append("foundry trial must inherit the request limiter")
 
     catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
     catalog_ids = {row["id"] for row in catalog["models"]}

@@ -1,5 +1,5 @@
 # Production parents for the house embed. One hostname per line.
-# DataTap trial hosts live on config/datatap-trial-foundry.yaml (embedHosts).
+# Foundry trial hosts live on that overlay's embedHosts list.
 # Loopback is on config/overrides/docker.yaml. No secrets.
 digithings.ai
 www.digithings.ai
