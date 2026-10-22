@@ -132,6 +132,15 @@ export type MenuRow = {
   branch?: "mid" | "last";
 };
 
+/**
+ * A tool's name as `/tools` shows it: a trailing note in parentheses, such as
+ * "(help docs)", is dropped, so the page lists tool names only.
+ */
+export function bareToolLabel(label: string): string {
+  const bare = label.replace(/\s*\([^()]*\)\s*$/, "").trim();
+  return bare || label.trim();
+}
+
 /** The /tools tree branch glyph for a row under a service. */
 export function treeBranchGlyph(branch: MenuRow["branch"]): string {
   if (branch === "last") return "└─";
@@ -917,7 +926,7 @@ export function EmbedComposerMenu({
           : "mid";
       const subs = configured.flatMap((sub, i): MenuRow[] => {
         const subOn = agent || (on && api.extraToolOn(sub.id));
-        const subLabel = sub.label?.trim() || sub.id;
+        const subLabel = bareToolLabel(sub.label?.trim() || sub.id);
         const groupName = sub.group?.trim() ?? "";
         const opensGroup = groupName !== "" && groupName !== (configured[i - 1]?.group?.trim() ?? "");
         const heading: MenuRow[] = opensGroup
@@ -955,10 +964,10 @@ export function EmbedComposerMenu({
         : (t.builtinTools ?? []).map(
             (sub, i): MenuRow => ({
               id: `${t.id}::${sub.id}`,
-              label: sub.label,
+              label: bareToolLabel(sub.label),
               branch: branchAt(i),
               value: state,
-              token: sub.label,
+              token: bareToolLabel(sub.label),
               activate: () => {},
             }),
           );
@@ -972,16 +981,16 @@ export function EmbedComposerMenu({
     if (agent && mcpConfigs.length === 0) {
       return toolRows.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: bareToolLabel(t.label),
         value: "On",
-        insert: optionDraft("/mcp", t.label),
-        token: t.label,
+        insert: optionDraft("/mcp", bareToolLabel(t.label)),
+        token: bareToolLabel(t.label),
         activate: () => {},
       }));
     }
     const rows: MenuRow[] = mcpConfigs.map((s) => {
       const status = mcpStatus(s, api.extraToolOn(s.id));
-      const label = s.label || s.id;
+      const label = bareToolLabel(s.label || s.id);
       return {
         id: s.id,
         label,

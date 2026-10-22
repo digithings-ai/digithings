@@ -284,6 +284,40 @@ describe("/tools tree", () => {
     expect(switches.every((row) => row.getAttribute("aria-checked") === "true")).toBe(true);
   });
 
+  it("shows tool names only, without a note in parentheses", () => {
+    const api = prefs({
+      toolControl: "locked",
+      mcpServers: [
+        {
+          id: "search",
+          label: "Help search (help docs)",
+          tools: [
+            { id: "search_help", label: "search_help (help docs)" },
+            { id: "search_older", label: "search_older (past tickets)" },
+          ],
+        },
+      ],
+    });
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="tools" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(toolsTree()).toMatchInlineSnapshot(`
+      "/search                      On
+        ├─ search_help             On
+        └─ search_older            On"
+    `);
+    unmount();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="mcp" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(screen.getByRole("menuitem", { name: /Help search/ })).toBeTruthy();
+    expect(document.body.textContent ?? "").not.toMatch(/\(help docs\)|\(past tickets\)/);
+  });
+
   it("toggles a configured tool, and a built-in tool follows its service", async () => {
     const user = userEvent.setup();
     const api = prefs({ toolControl: "toggle", hasDigisearch: true, mcpServers: servers });
