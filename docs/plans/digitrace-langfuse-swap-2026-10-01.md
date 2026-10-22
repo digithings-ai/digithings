@@ -1,8 +1,8 @@
 # digitrace / Langfuse swap memo (2026-10-01)
 
-> **Superseded (2026-10-09).** The tracing decision is now "Cloudflare hybrid with MLflow"; self-hosted Langfuse with ClickHouse/Redis is dropped. The decision is recorded in [ADR-0036](../adr/0036-digitrace-cloudflare-native-tracing.md); the design review is [`docs/reviews/digitrace-tracing-architecture-review.md`](../reviews/digitrace-tracing-architecture-review.md). Retiring `apps/digitrace-langfuse/` and the Langfuse runbook is a named acceptance criterion of DIG-2655. Do not deploy from this memo.
+> **Historical — every step below is void (2026-10-09).** The tracing decision is now "Cloudflare hybrid with MLflow"; self-hosted Langfuse with ClickHouse/Redis is dropped. The decision is recorded in [ADR-0036](../adr/0036-digitrace-cloudflare-native-tracing.md); the design review is [`docs/reviews/digitrace-tracing-architecture-review.md`](../reviews/digitrace-tracing-architecture-review.md). Retiring `apps/digitrace-langfuse/` and the Langfuse runbook is acceptance criterion AC2 and AC3 of ADR-0036 §13, owned by DIG-5136. **Do not deploy from this memo.**
 
-> **Phase 1 implement:** [`docs/ops/digitrace-langfuse.md`](../ops/digitrace-langfuse.md) + [`apps/digitrace-langfuse/`](../../apps/digitrace-langfuse/) (#4930).
+> **Phase 1 implement (historical, void):** [`docs/ops/digitrace-langfuse.md`](../ops/digitrace-langfuse.md) + [`apps/digitrace-langfuse/`](../../apps/digitrace-langfuse/) (#4930).
 
 
 **Author:** Lab (for One → Chris Human Gate)  
@@ -11,7 +11,11 @@
 
 ---
 
-## One-line ask for Chris
+## One-line ask for Chris (historical, void)
+
+**Void — never approved as written.** The ask below was to stand up self-hosted Langfuse with
+ClickHouse and Redis. Chris decided the opposite on 2026-10-09 ("no new paid services"); the
+live decision and the live checklist are ADR-0036 and ADR-0036 §15.
 
 **Approve phased swap:** rename `digismith` → `digitrace`, stand up self-hosted Langfuse on Cloudflare (Postgres/R2 + external ClickHouse/Redis), dual-export beside LangSmith, wire digigraph LangGraph spans, then cut LangSmith for digiquant-baseline / OpenWiki / house-run — including digiquant-runner Task 7 secret remap.
 
@@ -74,7 +78,10 @@ Today’s path: `digigraph → digillm → digismith.trace` (LLM/tool only). dig
 
 ---
 
-## Phased CHR plan (Board files after HG; Lab does not implement)
+## Phased CHR plan (Board files after HG; Lab does not implement) — historical, void
+
+**Void.** The phases below describe the dropped Langfuse plan. The live plan is the ADR-0036
+migration path (ADR-0036 §14) and the leaves DIG-2656 to DIG-2663, DIG-5136 and DIG-5141.
 
 ### Phase 0 — Rename + neutral facade — **M**
 - AC: package/imports/docs/CI/OpenWiki/CF identifiers → digitrace; backend-neutral API; compat aliases; `LANGSMITH_*` still works.

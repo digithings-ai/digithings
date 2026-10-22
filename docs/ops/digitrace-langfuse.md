@@ -1,16 +1,15 @@
 # digitrace Langfuse (Phase 1) — operator runbook
 
-> **Superseded (2026-10-09).** The tracing decision is now "Cloudflare hybrid with MLflow"; self-hosted Langfuse with ClickHouse/Redis is dropped. The decision is recorded in [ADR-0036](../adr/0036-digitrace-cloudflare-native-tracing.md); the design review is [`docs/reviews/digitrace-tracing-architecture-review.md`](../reviews/digitrace-tracing-architecture-review.md). Retiring `apps/digitrace-langfuse/`, its Dockerfiles and this runbook is a named acceptance criterion of DIG-2655. Do not deploy from this runbook.
+> **Historical — every step below is void (2026-10-09).** The tracing decision is now "Cloudflare hybrid with MLflow"; self-hosted Langfuse with ClickHouse/Redis is dropped. The decision is recorded in [ADR-0036](../adr/0036-digitrace-cloudflare-native-tracing.md); the design review is [`docs/reviews/digitrace-tracing-architecture-review.md`](../reviews/digitrace-tracing-architecture-review.md). Retiring `apps/digitrace-langfuse/`, its Dockerfiles and this runbook is acceptance criterion AC2 and AC3 of ADR-0036 §13, owned by DIG-5136 (Repo, CI & Release Engineer). **Do not deploy from this runbook. Nothing below is a live instruction.** The runbook becomes a tombstone when DIG-5136 lands.
 
-Stand-up self-hosted **Langfuse** for digitrace on Cloudflare Containers
-([#4930](https://github.com/digithings-ai/digithings/issues/4930)).
+Historical: stand-up self-hosted **Langfuse** for digitrace on Cloudflare Containers
+([#4930](https://github.com/digithings-ai/digithings/issues/4930)). — *never executed; the plan
+is dropped.*
 
 App package: [`apps/digitrace-langfuse/`](../../apps/digitrace-langfuse/).  
 Lab memo: [`docs/plans/digitrace-langfuse-swap-2026-10-01.md`](../plans/digitrace-langfuse-swap-2026-10-01.md).
 
-**Status:** code/config landed in-repo. Live deploy, secret values, R2 create,
-ClickHouse/Redis provision, custom domain, and UI+OTLP smoke are **human /
-Platform** follow-ups.
+**Status:** retired by ADR-0036; the code is still in the tree pending the removal leaf (DIG-5136).
 
 ## Architecture (Phase 1)
 
@@ -42,7 +41,10 @@ deploy ticket (do not invent credentials here).
 Local laptop only: [`apps/digitrace-langfuse/docker-compose.local.yml`](../../apps/digitrace-langfuse/docker-compose.local.yml)
 (CH + Redis). Labelled **local-dev**, not production.
 
-## Hostname (HUMAN GATE)
+## Hostname (HUMAN GATE) — historical, void
+
+**Void.** The plan below is dropped (ADR-0036). No DNS is created, no route is uncommented.
+The ingest host that replaces it is published on DIG-2657.
 
 Preferred: **`trace.digithings.ai`**. Alternate: `langfuse.digithings.ai`.
 
@@ -183,7 +185,10 @@ curl -s http://127.0.0.1:8003/v1/status
 
 Do **not** point `LANGSMITH_ENDPOINT` at Langfuse (no LangSmith API shim).
 
-## Deferred to human / Platform
+## Deferred to human / Platform — historical, void
+
+**Void.** These steps belonged to the dropped Langfuse plan. The live checklist is
+ADR-0036 §15 "What stays a human step".
 
 - [ ] Create R2 bucket `digitrace-langfuse-events` + S3 API token
 - [ ] Create Postgres database `langfuse` on house Postgres; store `DATABASE_URL`

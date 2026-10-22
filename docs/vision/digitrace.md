@@ -11,18 +11,24 @@ tags:
 
 > Observability for the digithings ecosystem — tracing, metrics, and status, without the overhead.
 
-**What it is:** digitrace is the observability layer for digithings. It provides a thin, side-effect-free wrapper around LangSmith for agent tracing and a public `/v1/status` endpoint that reports ecosystem health without leaking secrets. The Prometheus metrics helper itself lives in digibase (`install_metrics`); digitrace's role is to drive consistent adoption of that helper across services alongside tracing.
+**What it is:** digitrace is the observability layer for digithings. It is the tracing path every
+service uses: a thin, side-effect-free emit wrapper that sends OTLP over HTTP into a
+Cloudflare-native ingest pipeline, plus a public `/v1/status` endpoint that reports ecosystem
+health without leaking secrets. The Prometheus metrics helper itself lives in digibase
+(`install_metrics`); digitrace's role is to drive consistent adoption of that helper across
+services alongside tracing.
 
 **Design principle:** digitrace should be invisible when working and loud when something breaks.
 
 **The platform target (decided 2026-10-09):** the LangSmith wrapper is being cut and the tracing
 surface replaced by a Cloudflare-native pipeline — see
-[ADR-0036](../../docs/adr/0036-digitrace-cloudflare-native-tracing.md). Sources emit OTel over HTTP
+[ADR-0036](../adr/0036-digitrace-cloudflare-native-tracing.md). Sources emit OTel over HTTP
 into a `digitrace-ingest` Worker; a Queue feeds a consumer that writes an R2 archive (the system of
 record), a Supabase `public` index with per-table RLS, and Workers Analytics Engine aggregates; the
 dashboard reads through `dashboard-api`; `digitrace replay` loads a window from the archive into
-MLflow 3.6+ for the deep analysis, on the Mac or on a scale-to-zero Cloudflare Container. The
-analysis path is read-only through a `digitrace.mcp_server` MCP server.
+MLflow 3.10+ (with the `genai` extra) for the deep analysis, on the Mac or on a scale-to-zero
+Cloudflare Container. A read-only `digitrace.mcp_server` MCP server is in scope and is owned by
+DIG-5141; it is not built yet.
 
 **This supersedes the earlier zero-dependency principle.** The line "zero dependencies beyond
 FastAPI and Pydantic" and the claim that digitrace needs no database, no background worker and no
@@ -41,7 +47,7 @@ built (DIG-2656 to DIG-2663) and is not yet in production.
 **12-month roadmap:**
 - Roll the digibase `install_metrics` helper out to every service so each exposes a `/metrics` endpoint with consistent labels
 - X-Request-ID correlation ID propagation across all services (digigraph, digisearch, digiquant, digikey, digiclaw) — enables tracing a request through the full stack
-- PII redaction middleware before any data reaches the trace store
+- PII redaction and a hash-and-length span payload before any data reaches the trace store
 - Structured logging throughout (digisearch currently has zero structured logging)
 - Grafana dashboard for operational visibility
 
