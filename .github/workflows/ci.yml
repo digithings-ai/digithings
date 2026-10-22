@@ -89,9 +89,14 @@ jobs:
             bun_suites:
               - 'digivoice/tui/**'
               - 'clients/digichat-tui/**'
+              - 'clients/digiquant-tui/**'
+              - 'clients/digivoice-tui/**'
+              - 'clients/digichat-devkit/**'
               - 'packages/surface-config/**'
               - 'packages/hero-banner/**'
+              - 'clients/**'
               - '.github/workflows/test-bun-suites.yml'
+              - '.github/workflows/test-clients-tui.yml'
             digiquant:
               - 'digiquant/**'
               - 'tests/dq/**'

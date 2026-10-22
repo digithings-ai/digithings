@@ -6,9 +6,12 @@ memory is critically low or the disk guard pauses worktrees. Logs: ~/.config/dig
 Never prints secrets.
 A swap/disk-guard skip posts `failure` on the queued PRs, never silence, so merges block
 loudly (DIG-3660 must-fix 5). Fork code never executes on this Mac: fork PRs get a `failure`
-naming the maintainer re-push path. Static gates only: PR title, PR template,
+naming the maintainer re-push path. Static gates only, plus two path-gated lanes:
+PR title, PR template,
 gitleaks, PII scan, R0 client-literal scan,
-guard scripts, actionlint, uv sync, ruff, mypy, doc checks, worker dry-run build (path-gated). NOT gated (DIG-3605 owns the
+guard scripts, actionlint, uv sync, ruff, mypy, doc checks, worker dry-run build (path-gated)
+and the bun suites under `bun_suites` in scripts/ci_paths.yaml (path-gated, DIG-5203).
+NOT gated (DIG-3605 owns the
 rest): per-package pytest suites, compose-validate, npm/pip audit, token-canary,
 secret-staleness, invite-key rollout, answer-check, cron dispatch, secret sync.
 Also posts `Every commit reaching main was reviewed` (main's required context,
@@ -176,6 +179,29 @@ WORKER_GATE_PATTERNS = tuple(f"apps/{a}/**" for a in WORKER_APPS) + (
 )
 # A dry-run that has not finished in 5 minutes is wedged, not slow (DIG-4453).
 WORKER_DRY_RUN_TIMEOUT = 300
+# Bun suites (DIG-5203). The packages below declare `"test": "bun test"`, and the
+# only lanes that ran them were the GitHub workflows test-bun-suites.yml and
+# test-clients-tui.yml (DIG-2940 / DIG-2072). Both are retired with Actions
+# (DIG-3604 / DIG-4454), so the required `local-ci` check said nothing about a
+# clients/** or packages/** change: #6271 (head 3c551ad0af) carried a green
+# receipt while digichat-tui's suite (70 pass, 1 fail) only ever ran by hand.
+# The suite list is read from scripts/ci_paths.yaml `bun_suites`, the file that
+# already carried the paths for the retired lane, so the gate cannot drift from
+# the list of suites the repository believes it has; BUN_SUITE_DIRS is the
+# fallback for a checkout where the block is missing or empty.
+BUN_SUITE_DIRS = ("clients/digichat-tui", "clients/digiquant-tui", "clients/digivoice-tui",
+                  "clients/digichat-devkit", "packages/surface-config", "packages/hero-banner",
+                  # The pre-move digivoice TUI: clients/digivoice-tui is the live
+                  # client (#5548), this is the legacy tree the retired lane also
+                  # ran. Kept so the gate never drops a suite the lane covered.
+                  "digivoice/tui")
+# The bun the suites were written against. An unpinned tool changing behaviour
+# under a green build is the #1701/#1705/#1711 failure mode the retired lanes
+# pinned 1.4.2 for; the host's bun is checked against this before any suite runs,
+# and a bump is its own PR.
+BUN_PIN = "1.4.2"
+BUN_INSTALL_TIMEOUT = 600
+BUN_TEST_TIMEOUT = 300
 os.makedirs(LOGD, exist_ok=True)
 # --- VPN proxy (DIG-4453) ------------------------------------------------------
 # Measured 2026-10-19: `npm exec -- wrangler deploy --dry-run` never returns when
@@ -710,16 +736,18 @@ def gitleaks_log_opts(base, sha, out):
     return "--no-walk --no-merges " + " ".join(shas)
 
 
-def parse_workers_patterns(text):
-    """Parse the `workers:` path-filter block out of scripts/ci_paths.yaml text.
+def parse_ci_paths_block(text, key):
+    """Parse one `key:` path-filter block out of scripts/ci_paths.yaml text.
 
     Returns the `- <pattern>` entries in order, or [] when the block is absent.
+    The block ends at the next top-level key, so a key's entries can never leak
+    into the next key's list.
     """
     out = []
     in_block = False
     for line in (text or "").splitlines():
         if not line.startswith((" ", "\t")):
-            if line.startswith("workers:"):
+            if line.startswith(f"{key}:"):
                 in_block = True
             elif in_block:
                 break
@@ -733,6 +761,11 @@ def parse_workers_patterns(text):
                 if pat:
                     out.append(pat)
     return out
+
+
+def parse_workers_patterns(text):
+    """Parse the `workers:` path-filter block out of scripts/ci_paths.yaml text."""
+    return parse_ci_paths_block(text, "workers")
 
 
 def glob_to_regex(pat):
@@ -760,7 +793,7 @@ def glob_to_regex(pat):
     return re.compile("^" + "".join(b) + "$")
 
 
-def worker_gate_hit(files, patterns):
+def path_gate_hit(files, patterns):
     """First (pattern, path) hit of changed files against gate patterns, else None.
 
     Pattern-major: the first pattern (in ci_paths.yaml order) matching any file wins.
@@ -771,6 +804,11 @@ def worker_gate_hit(files, patterns):
             if rx.match(f):
                 return p, f
     return None
+
+
+# The worker dry-run gate was the first caller of this matcher; the name is kept
+# because the local suite and the post-merge driver reference it (DIG-5203).
+worker_gate_hit = path_gate_hit
 
 
 def worker_patterns(wt):
@@ -817,6 +855,197 @@ def worker_gate(pr, wt):
     if files is None:
         return None, None
     return len(files), worker_gate_hit(files, worker_patterns(wt))
+
+
+def bun_suite_patterns(wt):
+    """Gate patterns for the bun suites: the live ci_paths.yaml `bun_suites` block,
+    falling back to one `<dir>/**` glob per BUN_SUITE_DIRS when it is missing or empty."""
+    try:
+        with open(os.path.join(wt, "scripts", "ci_paths.yaml")) as f:
+            pats = parse_ci_paths_block(f.read(), "bun_suites")
+    except OSError:
+        pats = []
+    return pats or [f"{d}/**" for d in BUN_SUITE_DIRS]
+
+
+def bun_suite_dirs(patterns):
+    """Suite directories named by the gate patterns, in list order.
+
+    A suite entry is `<root>/<name>/**`: exactly two segments, no wildcard. Any
+    other entry (`clients/**`, a file, a glob) can still fire the gate but never
+    becomes a suite, so a broad trigger cannot make the gate run `bun test` in a
+    directory that is not a package.
+    """
+    out = []
+    for p in patterns:
+        d = p[:-3] if p.endswith("/**") else ""
+        if not d or "*" in d or "?" in d or len(d.split("/")) != 2:
+            continue
+        if d not in out:
+            out.append(d)
+    return out
+
+
+def bun_test_packages(wt, roots=("clients", "packages")):
+    """Directories under `roots/*` whose manifest declares `"test": "bun test"`.
+
+    Read from the tree, not only from the list, because a new client written
+    with a bun suite has to be gated the moment it lands. The retired lane kept
+    a `client-coverage` job for exactly this; a hand-maintained list reopens the
+    hole as soon as somebody adds a client and forgets the list. `apps/*` is
+    deliberately not scanned: its suites are vitest and belong to the web lane.
+    """
+    found = []
+    for root in roots:
+        base = os.path.join(wt, root)
+        try:
+            names = sorted(os.listdir(base))
+        except OSError:
+            continue
+        for n in names:
+            try:
+                with open(os.path.join(base, n, "package.json")) as f:
+                    pkg = json.load(f)
+            except (OSError, ValueError):
+                continue
+            if (pkg.get("scripts") or {}).get("test") == "bun test":
+                found.append(f"{root}/{n}")
+    return found
+
+
+def bun_suites_to_run(wt):
+    """Every suite the gate runs: the ones named in `bun_suites`, then any
+    bun-suite package the list has not caught up with yet, in that order."""
+    out = bun_suite_dirs(bun_suite_patterns(wt))
+    for d in bun_test_packages(wt):
+        if d not in out:
+            out.append(d)
+    return out
+
+
+def short_suite_name(d):
+    """Receipt name of a suite: `clients/digichat-tui` -> `digichat-tui`."""
+    for root in ("clients/", "packages/"):
+        if d.startswith(root):
+            return d[len(root):]
+    return d
+
+
+def bun_gate(pr, wt):
+    """Path gate for the bun suites. Returns (n_files, (pattern, path)) on a hit,
+    (n_files, None) on a miss, (None, None) when the file list is unusable."""
+    raw = gh("api", f"repos/{REPO}/pulls/{pr['number']}/files", "--paginate", "--slurp")
+    try:
+        files = changed_file_names(json.loads(raw or ""))
+    except ValueError:
+        files = None
+    if files is None:
+        return None, None
+    return len(files), path_gate_hit(files, bun_suite_patterns(wt))
+
+
+def bun_bin():
+    """Absolute path of the bun the suites run with, or None when the host has none.
+
+    bun is installed under the user's home (`~/.local/bin`, `~/.bun/bin`), which
+    the launchd job's PATH does not carry, so the gate resolves it once here. A
+    missing binary is then a named failure ("bun-suites: bun not found") instead
+    of seven identical suite failures that read like broken tests (DIG-5203).
+    """
+    found = shutil.which("bun", path=ENV.get("PATH", ""))
+    if found:
+        return found
+    for p in (f"{HOME}/.bun/bin/bun", f"{HOME}/.local/bin/bun",
+              "/opt/homebrew/bin/bun", "/usr/local/bin/bun"):
+        if os.access(p, os.X_OK):
+            return p
+    return None
+
+
+def root_workspace_globs(wt):
+    """The root package.json's `workspaces` globs, or [] when it cannot be read."""
+    try:
+        with open(os.path.join(wt, "package.json")) as f:
+            ws = json.load(f).get("workspaces")
+    except (OSError, ValueError):
+        return []
+    if isinstance(ws, dict):
+        ws = ws.get("packages")
+    return [g for g in ws or [] if isinstance(g, str)]
+
+
+def is_root_workspace(d, globs):
+    """True when the root npm install owns `d` (`packages/*`, `apps/*`).
+
+    Those packages are workspaces of the root package.json, so their
+    dependencies come from the root `npm ci`. `bun install` inside one of them
+    walks up to the repo root and installs the whole monorepo (and writes a root
+    bun.lock) — the retired lane exempted surface-config and hero-banner for
+    exactly that reason. The clients and digivoice/tui are not workspaces: they
+    are standalone bun packages with their own lockfile.
+    """
+    return any(glob_to_regex(g).match(d) for g in globs)
+
+
+def run_bun_suites(wt, step, out, fails):
+    """Run every bun suite that `bun_suites` names, plus any the tree adds.
+
+    Called only when a PR touched a `bun_suites` path. Every suite runs even
+    after an earlier one failed (the retired lanes used fail-fast: false for the
+    same reason): one red suite must not hide another suite's verdict. Returns
+    the receipt names of the suites that reached their test run, so the status
+    line can name them (DIG-5203).
+
+    `fails` is the caller's gate list: `step` records a failed install or test
+    there, and the checks below record a suite that could not start at all.
+    """
+    ran = []
+    bun = bun_bin()
+    if bun is None:
+        fails.append("bun-suites: bun not found")
+        out.write("bun-suites FAIL: no bun on this host, so no suite ran\n")
+        return ran
+    rc, ver = sh([bun, "--version"], cwd=wt, timeout=60, out=out, name="bun-version")
+    ver = (ver or "").strip()
+    if rc != 0 or ver != BUN_PIN:
+        fails.append(f"bun-version {'unreadable' if rc != 0 else ver} != {BUN_PIN}")
+        out.write(f"bun-version FAIL: {ver or 'unreadable'} != {BUN_PIN}; no suite ran. "
+                  "Bump BUN_PIN in its own PR.\n")
+        return ran
+    workspaces = root_workspace_globs(wt)
+    for d in bun_suites_to_run(wt):
+        name = short_suite_name(d)
+        try:
+            with open(os.path.join(wt, d, "package.json")) as f:
+                pkg = json.load(f)
+        except (OSError, ValueError) as exc:
+            fails.append(f"bun:{name} (manifest unreadable)")
+            out.write(f"bun FAIL: {d}/package.json unreadable ({exc}); the suite did not run\n")
+            continue
+        if (pkg.get("scripts") or {}).get("test") != "bun test":
+            fails.append(f"bun:{name} (no bun test script)")
+            out.write(f'bun FAIL: {d} no longer declares `"test": "bun test"`\n')
+            continue
+        if is_root_workspace(d, workspaces):
+            install = False
+        else:
+            # A standalone bun package installs from its committed lockfile:
+            # --frozen-lockfile fails when the lockfile is stale rather than
+            # re-resolving silently, the same shape every other lane uses. With
+            # no lockfile at all there is nothing to install from, so the suite
+            # fails here instead of testing whatever is lying around.
+            if not os.path.exists(os.path.join(wt, d, "bun.lock")):
+                fails.append(f"bun-install:{name} (no bun.lock)")
+                out.write(f"bun-install FAIL: {d} is not a root workspace and commits no "
+                          "bun.lock, so --frozen-lockfile cannot install it\n")
+                continue
+            install = True
+        if install and not step(f"bun-install:{name}", [bun, "install", "--frozen-lockfile"],
+                                BUN_INSTALL_TIMEOUT, os.path.join(wt, d)):
+            continue
+        ran.append(name)
+        step(f"bun:{name}", [bun, "run", "test"], BUN_TEST_TIMEOUT, os.path.join(wt, d))
+    return ran
 
 
 def worker_build(wt, step):
@@ -885,8 +1114,38 @@ def prepare_wt(n, sha, base, out):
     return True, ""
 
 
-def run_checks(pr, out):
-    """Run every gate on the PR. Returns the list of failed gate names."""
+def success_desc(mins, bun=None):
+    """The success description: the verdict, then what the bun gate did (DIG-5203).
+
+    A commit status description is capped at 140 characters (`status_fields`
+    keeps 139), so the suite names are dropped before they can be cut in half:
+    a receipt that names three suites and half of a fourth is worse than one
+    that names none, and the run log always names every suite in full.
+
+    "gates passed" rather than GATED_NOTE when the suites ran: the receipt is no
+    longer a static-only receipt, and claiming it was would be the same false
+    green this gate exists to remove. When no `bun_suites` path changed, the
+    static note stays and the receipt says so: `bun: none` is the skip made
+    visible, not a silence.
+    """
+    tail = f" ({mins:.0f}m)"
+    ran = (bun or {}).get("ran") or []
+    if not ran:
+        return f"{GATED_NOTE}; bun: none{tail}"
+    head = f"gates passed; bun {len(ran)}/{len(ran)}: {', '.join(ran)}"
+    if len(head + tail) > 139:
+        head = f"gates passed; bun {len(ran)}/{len(ran)} (suites in the log)"
+    return head + tail
+
+
+def run_checks(pr, out, summary=None):
+    """Run every gate on the PR. Returns the list of failed gate names.
+
+    `summary` is filled with what the receipt needs but the verdict does not
+    (today: which bun suites ran, DIG-5203). It is an optional dict rather than
+    part of the return value because the post-merge driver calls this function
+    in-process and reads a plain list of failures.
+    """
     _guard()
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
     fails = []
@@ -943,6 +1202,22 @@ def run_checks(pr, out):
     elif hit is not None:
         out.write(f"\n===== worker-build\ngate hit: {hit[0]} <- {hit[1]}\n")
         worker_build(WT, step)
+    # Bun suites (DIG-5203): the required check has to prove a clients/** or
+    # packages/** change, not report green over a suite nobody ran. The paths
+    # come from the same `bun_suites` block the retired lane used, and a hit
+    # runs every suite in it (the lane ran the whole matrix for the same reason:
+    # these packages import each other, so a surface-config edit is a change to
+    # every client that reads it).
+    ran_bun = []
+    n_bun, bun_hit = bun_gate(pr, WT)
+    if n_bun is None:
+        out.write("\n===== bun-suites\nchanged-files fetch failed; failing closed\n")
+        fails.append("bun-suites: changed-files fetch failed")
+    elif bun_hit is not None:
+        out.write(f"\n===== bun-suites\ngate hit: {bun_hit[0]} <- {bun_hit[1]}\n")
+        ran_bun = run_bun_suites(WT, step, out, fails)
+    if summary is not None:
+        summary["bun"] = {"hit": bun_hit[0] if bun_hit else None, "ran": ran_bun}
     return fails
 
 def process(pr, dry):
@@ -961,12 +1236,17 @@ def process(pr, dry):
         write_claim(sha, n)
         status(sha, "pending", "local-ci running on Chris's Mac")
     t0 = time.time()
+    summary = {}
     with open(logf, "w") as out:
         ok_wt, why = prepare_wt(n, sha, pr["baseRefName"], out)
-        fails = run_checks(pr, out) if ok_wt else [f"worktree checkout ({why})"]
+        fails = run_checks(pr, out, summary) if ok_wt else [f"worktree checkout ({why})"]
     mins = (time.time() - t0) / 60
+    # A failure names the failed gates (`bun:digichat-tui` for a red suite), which
+    # is the actionable part; the log names every suite that ran. The success
+    # line names the suites so a PR with no bun path says `bun: none` instead of
+    # reading like the suites passed (DIG-5203).
     if fails: st, desc = "failure", f"local-ci failed: {', '.join(fails)} ({mins:.0f}m)"
-    else: st, desc = "success", f"{GATED_NOTE} ({mins:.0f}m)"
+    else: st, desc = "success", success_desc(mins, summary.get("bun"))
     log(f"PR #{n} {sha[:12]} {st}: {desc} log={logf}")
     if not dry and status(sha, st, desc):
         # The verdict is in, so the claim is spent. When the verdict could not

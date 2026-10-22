@@ -298,6 +298,224 @@ class WorkerBuildTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+class BunSuiteGateTest(unittest.TestCase):
+    """The bun suites run in local-ci, and the receipt says which ones (DIG-5203).
+
+    Before this gate the required `local-ci` check ran no bun test at all: the
+    suites only ever ran in the GitHub lanes retired with Actions, so a
+    clients/** PR carried a green receipt that proved nothing (#6271, where
+    digichat-tui's 71 tests only ran by hand). The receipt must name the suites
+    that ran, and say `bun: none` when none did, so a skipped suite is visible.
+    """
+
+    def _suite(self, root, rel, deps=False, lock=True, test_script="bun test"):
+        d = os.path.join(root, rel)
+        os.makedirs(d, exist_ok=True)
+        pkg = {"name": rel.replace("/", "-"), "scripts": {"test": test_script}}
+        if deps:
+            pkg["devDependencies"] = {"@opentui/react": "0.5.14"}
+        with open(os.path.join(d, "package.json"), "w") as f:
+            json.dump(pkg, f)
+        if lock:
+            with open(os.path.join(d, "bun.lock"), "w") as f:
+                f.write("# lock\n")
+        return d
+
+    def _wt(self, suites):
+        root = tempfile.mkdtemp(prefix="wt-bun-")
+        self.addCleanup(shutil.rmtree, root, True)
+        os.makedirs(os.path.join(root, "scripts"))
+        globs = "".join(f"  - {s}/**\n" for s in suites)
+        with open(os.path.join(root, "scripts", "ci_paths.yaml"), "w") as f:
+            f.write(f"bun_suites:\n{globs}\nworkers:\n  - apps/x/**\n")
+        # `packages/*` are workspaces of the root package.json; the clients are
+        # standalone bun packages with their own lockfile (the repo's own split).
+        with open(os.path.join(root, "package.json"), "w") as f:
+            json.dump({"workspaces": ["apps/*", "packages/*"]}, f)
+        for s in suites:
+            workspace = s.startswith("packages/")
+            self._suite(root, s, deps=not workspace, lock=not workspace)
+        return root
+
+    def _step(self, calls, fails, fail_on=()):
+        def step(name, cmd, timeout=1800, cwd=None):
+            calls.append((name, cmd, timeout, cwd))
+            if name in fail_on:
+                fails.append(name)
+                return False
+            return True
+        return step
+
+    def _real_ci_paths(self):
+        return open(os.path.join(_SCRIPTS, "..", "ci_paths.yaml")).read()
+
+    def test_real_ci_paths_names_every_suite(self):
+        dirs = _mod.bun_suite_dirs(_mod.parse_ci_paths_block(self._real_ci_paths(), "bun_suites"))
+        for suite in ("clients/digichat-tui", "clients/digiquant-tui", "clients/digivoice-tui",
+                      "clients/digichat-devkit", "packages/surface-config",
+                      "packages/hero-banner"):
+            self.assertIn(suite, dirs)
+
+    def test_non_suite_entries_fire_the_gate_but_name_no_suite(self):
+        pats = ["clients/a/**", ".github/workflows/test-bun-suites.yml", "packages/*/b"]
+        self.assertEqual(_mod.bun_suite_dirs(pats), ["clients/a"])
+
+    def test_suite_patterns_fall_back_when_the_block_is_absent(self):
+        root = tempfile.mkdtemp(prefix="wt-nocipaths-")
+        self.addCleanup(shutil.rmtree, root, True)
+        self.assertEqual(_mod.bun_suite_patterns(root),
+                         [f"{d}/**" for d in _mod.BUN_SUITE_DIRS])
+
+    def test_gate_hits_a_client_path_only(self):
+        root = self._wt(["clients/digichat-tui", "packages/surface-config"])
+        pats = _mod.bun_suite_patterns(root)
+        self.assertEqual(
+            _mod.path_gate_hit(["clients/digichat-tui/src/read.ts"], pats),
+            ("clients/digichat-tui/**", "clients/digichat-tui/src/read.ts"))
+        self.assertIsNone(_mod.path_gate_hit(["apps/digichat/src/a.ts"], pats))
+
+    def test_gate_fails_closed_when_the_file_list_cannot_be_read(self):
+        saved = _mod.gh
+        try:
+            _mod.gh = lambda *a: None
+            self.assertEqual(_mod.bun_gate({"number": 7}, "/nonexistent-wt"), (None, None))
+        finally:
+            _mod.gh = saved
+
+    def test_standalone_suites_install_and_workspace_packages_do_not(self):
+        root = self._wt(["clients/digichat-tui", "packages/hero-banner"])
+        calls, fails = [], []
+        ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        self.assertEqual(ran, ["digichat-tui", "hero-banner"])
+        self.assertEqual(fails, [])
+        names = [c[0] for c in calls]
+        # `packages/*` is a workspace of the root package.json: `bun install`
+        # there walks up and installs the whole monorepo (the retired lane
+        # exempted it for that reason), so only the client is installed.
+        self.assertEqual(names, ["bun-install:digichat-tui", "bun:digichat-tui",
+                                 "bun:hero-banner"])
+        test = calls[1]
+        self.assertEqual(test[1][1:], ["run", "test"])
+        self.assertEqual(test[2], _mod.BUN_TEST_TIMEOUT)
+        self.assertEqual(test[3], os.path.join(root, "clients", "digichat-tui"))
+
+    def test_one_red_suite_does_not_hide_the_others(self):
+        root = self._wt(["clients/digichat-tui", "clients/digiquant-tui"])
+        calls, fails = [], []
+        ran = _mod.run_bun_suites(root, self._step(calls, fails, fail_on=("bun:digichat-tui",)),
+                                  io.StringIO(), fails)
+        self.assertEqual(ran, ["digichat-tui", "digiquant-tui"])
+        self.assertEqual(fails, ["bun:digichat-tui"])
+        self.assertIn("bun:digiquant-tui", [c[0] for c in calls])
+
+    def test_a_standalone_suite_without_a_lockfile_fails_before_it_runs(self):
+        root = self._wt(["clients/digichat-tui"])
+        os.remove(os.path.join(root, "clients", "digichat-tui", "bun.lock"))
+        calls, fails = [], []
+        ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        self.assertEqual(ran, [])
+        self.assertEqual(fails, ["bun-install:digichat-tui (no bun.lock)"])
+        self.assertEqual(calls, [])
+
+    def test_only_root_workspace_globs_are_exempt_from_install(self):
+        globs = ["apps/*", "packages/*"]
+        self.assertTrue(_mod.is_root_workspace("packages/hero-banner", globs))
+        self.assertTrue(_mod.is_root_workspace("apps/corpus-index", globs))
+        self.assertFalse(_mod.is_root_workspace("clients/digichat-tui", globs))
+        self.assertFalse(_mod.is_root_workspace("packages", globs))
+        self.assertEqual(_mod.root_workspace_globs("/nonexistent-wt"), [])
+
+    def test_a_new_client_with_a_bun_suite_is_gated_without_a_list_edit(self):
+        """The list is not the only source: a client that lands with a bun suite
+        runs on its first PR, so nobody has to remember to add it (DIG-5203)."""
+        root = self._wt(["clients/digichat-tui"])
+        self._suite(root, "clients/new-tui", deps=True)
+        self.assertIn("clients/new-tui", _mod.bun_suites_to_run(root))
+        calls, fails = [], []
+        ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        self.assertEqual(ran, ["digichat-tui", "new-tui"])
+        self.assertEqual(fails, [])
+
+    def test_a_client_with_a_vitest_suite_is_not_a_bun_suite(self):
+        """`apps/*` and any client on vitest belong to the web lane, not here."""
+        root = self._wt(["clients/digichat-tui"])
+        self._suite(root, "clients/web-tui", deps=True, test_script="vitest run")
+        self.assertEqual(_mod.bun_test_packages(root), ["clients/digichat-tui"])
+        calls, fails = [], []
+        ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        self.assertEqual(ran, ["digichat-tui"])
+
+    def test_clients_glob_fires_the_gate_but_names_no_suite(self):
+        root = tempfile.mkdtemp(prefix="wt-bun-clients-")
+        self.addCleanup(shutil.rmtree, root, True)
+        os.makedirs(os.path.join(root, "scripts"))
+        with open(os.path.join(root, "scripts", "ci_paths.yaml"), "w") as f:
+            f.write("bun_suites:\n  - clients/**\n  - packages/hero-banner/**\n")
+        with open(os.path.join(root, "package.json"), "w") as f:
+            json.dump({"workspaces": ["apps/*", "packages/*"]}, f)
+        pats = _mod.bun_suite_patterns(root)
+        self.assertEqual(_mod.bun_suite_dirs(pats), ["packages/hero-banner"])
+        self.assertEqual(
+            _mod.path_gate_hit(["clients/brand-new-tui/src/a.ts"], pats),
+            ("clients/**", "clients/brand-new-tui/src/a.ts"))
+
+    def test_discovery_does_not_duplicate_or_reorder_listed_suites(self):
+        root = self._wt(["clients/digichat-tui", "packages/hero-banner"])
+        self.assertEqual(_mod.bun_suites_to_run(root),
+                         ["clients/digichat-tui", "packages/hero-banner"])
+
+    def test_no_bun_on_the_host_names_the_gate_not_the_suites(self):
+        root = self._wt(["clients/digichat-tui"])
+        saved = _mod.bun_bin
+        _mod.bun_bin = lambda: None
+        try:
+            calls, fails = [], []
+            ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        finally:
+            _mod.bun_bin = saved
+        self.assertEqual(ran, [])
+        self.assertEqual(fails, ["bun-suites: bun not found"])
+        self.assertEqual(calls, [])
+
+    def test_a_bun_that_is_not_the_pinned_version_runs_no_suite(self):
+        """#1701/#1705/#1711: an unpinned tool changing under a green build."""
+        root = self._wt(["clients/digichat-tui"])
+        saved = (_mod.bun_bin, _mod.sh)
+        _mod.bun_bin = lambda: "/fake/bun"
+        _mod.sh = lambda *a, **k: (0, "1.9.9\n")
+        try:
+            calls, fails = [], []
+            ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        finally:
+            _mod.bun_bin, _mod.sh = saved
+        self.assertEqual(ran, [])
+        self.assertEqual(fails, [f"bun-version 1.9.9 != {_mod.BUN_PIN}"])
+        self.assertEqual(calls, [])
+
+    def test_receipt_names_every_suite_that_ran(self):
+        ran = ["digichat-tui", "digiquant-tui", "digivoice-tui"]
+        desc = _mod.success_desc(8, {"ran": ran})
+        for name in ran:
+            self.assertIn(name, desc)
+        self.assertLessEqual(len(desc), 139)
+
+    def test_receipt_says_none_when_no_suite_path_changed(self):
+        desc = _mod.success_desc(3, {"hit": None, "ran": []})
+        self.assertIn("bun: none", desc)
+        self.assertIn(_mod.GATED_NOTE, desc)
+
+    def test_receipt_drops_names_rather_than_cutting_them_in_half(self):
+        ran = [f"suite-{i}" * 4 for i in range(12)]
+        desc = _mod.success_desc(9, {"ran": ran})
+        self.assertLessEqual(len(desc), 139)
+        self.assertIn("suites in the log", desc)
+
+    def test_run_checks_wires_the_gate_and_the_summary(self):
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn("run_bun_suites(WT, step, out, fails)", src)
+        self.assertIn('summary["bun"]', src)
+
+
 class StaticGateWiringTest(unittest.TestCase):
     """The R0 client-literal scan runs in the local-ci static gates (DIG-4043)."""
 
@@ -410,7 +628,7 @@ class PrepareWorktreeTest(unittest.TestCase):
 
     def test_process_does_not_run_gates_on_bad_checkout(self):
         src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
-        self.assertIn("run_checks(pr, out) if ok_wt else", src)
+        self.assertIn("run_checks(pr, out, summary) if ok_wt else", src)
         self.assertIn("run_review_coverage(pr, out) if ok_wt else", src)
 
 class ReviewCoverageShallowTest(unittest.TestCase):
@@ -1821,7 +2039,7 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
 
         _mod.status = fake_status
         _mod.prepare_wt = lambda n, sha, base, out: (True, "")
-        _mod.run_checks = lambda pr, out: []
+        _mod.run_checks = lambda pr, out, summary=None: []
         _mod.process(pr, False)
         return seen
 
@@ -2034,7 +2252,7 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         _mod.app_status = lambda sha, fields: False
         self.addCleanup(setattr, _mod, "app_status", self._app_status)
         _mod.prepare_wt = lambda n, sha, base, out: (True, "")
-        _mod.run_checks = lambda pr, out: []
+        _mod.run_checks = lambda pr, out, summary=None: []
         _mod.process(pr, False)
         self.assertFalse(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
                          "a refused app row must not keep a head in the queue for ever")
