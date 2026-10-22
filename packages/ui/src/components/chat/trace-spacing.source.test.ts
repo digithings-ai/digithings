@@ -112,4 +112,16 @@ describe("worked chain spacing tokens", () => {
     );
     expect(row?.[1]).toContain("gap: 0.45rem");
   });
+
+  it("collapses an empty assistant footer so assistant -> user is the message gap", () => {
+    const rule = skin.match(
+      /\[data-slot="aui_assistant-message-footer"\]:not\(:has\(> \*\)\) \{([\s\S]*?)\}/,
+    );
+    expect(rule?.[1]).toContain("min-height: 0");
+    expect(rule?.[1]).toContain("padding-top: 0");
+    // The turn-to-turn gap is the density token, not a utility.
+    expect(skin).toMatch(
+      /\[data-slot="aui_message-group"\] \{\s*gap: var\(--density-gap-4/,
+    );
+  });
 });
