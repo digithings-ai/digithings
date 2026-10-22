@@ -19,6 +19,16 @@ from digiquant.brokers.luxalgo_mirror import (
     summarize_mirror,
 )
 
+from tests.dq.brokers.luxalgo_mirror_cases import (
+    AccountExpectation,
+    FillExpectation,
+    assert_account_snapshot,
+    assert_enrichment_appends_read_only,
+    assert_fills_map_with_fetched_at_fallback,
+    assert_missing_symbol_raises,
+    assert_summary_counts,
+)
+
 pytestmark = pytest.mark.unit
 
 
@@ -93,11 +103,14 @@ class TestSnapshotToContracts:
     def test_account_snapshot_exact_decimals_and_utc(self) -> None:
         account = _golden_snapshot()["accounts"][0]
         snap, _, _ = snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
-        assert snap.account_id == "alpaca-acct-1"
-        assert snap.equity == Decimal("100000.5")
-        assert snap.cash == Decimal("25000")
-        assert snap.currency == "USD"
-        assert snap.as_of == datetime(2026, 9, 30, 15, 30, tzinfo=UTC)
+        assert_account_snapshot(
+            snap,
+            fetched_at=_golden_snapshot()["fetchedAt"],
+            account_id="alpaca-acct-1",
+            equity=Decimal("100000.5"),
+            currency="USD",
+            cash=Decimal("25000"),
+        )
 
     def test_positions_keep_signed_short_and_decimals(self) -> None:
         account = _golden_snapshot()["accounts"][0]
@@ -113,16 +126,22 @@ class TestSnapshotToContracts:
         account = _golden_snapshot()["accounts"][0]
         fetched_at = _golden_snapshot()["fetchedAt"]
         _, _, fills = snapshot_to_contracts(account, fetched_at=fetched_at)
-        assert len(fills) == 3
-        assert fills[0].symbol == "AAPL"
-        assert fills[0].quantity == Decimal("10")
-        assert fills[0].price == Decimal("100")
-        assert fills[0].fee == Decimal("0.5")
-        assert fills[0].executed_at == datetime(2026, 9, 30, 14, 0, tzinfo=UTC)
-        # Missing executedAt falls back to the snapshot fetchedAt, never naive.
-        assert fills[2].symbol == "MSFT"
-        assert fills[2].executed_at == datetime(2026, 9, 30, 15, 30, tzinfo=UTC)
-        assert fills[2].executed_at.tzinfo is not None
+        assert_fills_map_with_fetched_at_fallback(
+            fills,
+            fetched_at=fetched_at,
+            count=3,
+            expected=[
+                FillExpectation(
+                    index=0,
+                    symbol="AAPL",
+                    quantity=Decimal("10"),
+                    price=Decimal("100"),
+                    fee=Decimal("0.5"),
+                    executed_at=datetime(2026, 9, 30, 14, 0, tzinfo=UTC),
+                ),
+                FillExpectation(index=2, symbol="MSFT", falls_back_to_fetched_at=True),
+            ],
+        )
 
     def test_empty_window_preserved_as_empty_list(self) -> None:
         account = _golden_snapshot()["accounts"][1]
@@ -139,47 +158,48 @@ class TestSnapshotToContracts:
         account["positions"] = [
             {"quantity": 10.0, "marketValue": 1050.0, "averageEntryPrice": 100.0},
         ]
-        with pytest.raises(ValueError, match="symbol"):
-            snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
+        assert_missing_symbol_raises(
+            snapshot_to_contracts, account, _golden_snapshot()["fetchedAt"]
+        )
 
     def test_position_none_symbol_raises(self) -> None:
         account = dict(_golden_snapshot()["accounts"][0])
         account["positions"] = [
             {"symbol": None, "quantity": 10.0, "marketValue": 1050.0, "averageEntryPrice": 100.0},
         ]
-        with pytest.raises(ValueError, match="symbol"):
-            snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
+        assert_missing_symbol_raises(
+            snapshot_to_contracts, account, _golden_snapshot()["fetchedAt"]
+        )
 
     def test_trade_missing_symbol_raises(self) -> None:
         account = dict(_golden_snapshot()["accounts"][0])
         account["trades"] = [
             {"side": "buy", "quantity": 5.0, "price": 300.1},
         ]
-        with pytest.raises(ValueError, match="symbol"):
-            snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
+        assert_missing_symbol_raises(
+            snapshot_to_contracts, account, _golden_snapshot()["fetchedAt"]
+        )
 
 
 class TestSummarizeMirror:
     def test_equity_by_account_and_position_count(self) -> None:
         summary = summarize_mirror(_golden_snapshot())
-        assert summary["broker"] == "alpaca"
-        assert summary["total_positions"] == 2
-        by_id = {row["account_id"]: row for row in summary["accounts"]}
-        assert by_id["alpaca-acct-1"]["equity"] == "100000.5"
-        assert by_id["alpaca-acct-1"]["position_count"] == 2
-        assert by_id["alpaca-acct-2"]["currency"] == "EUR"
-        assert by_id["alpaca-acct-2"]["position_count"] == 0
+        assert_summary_counts(
+            summary,
+            broker="alpaca",
+            total_positions=2,
+            accounts=[
+                AccountExpectation(account_id="alpaca-acct-1", position_count=2, equity="100000.5"),
+                AccountExpectation(account_id="alpaca-acct-2", position_count=0, currency="EUR"),
+            ],
+        )
 
 
 class TestEnrichBriefing:
     def test_enrichment_appends_read_only_section_without_mutating(self) -> None:
         briefing = {"date": "2026-09-30", "body": "Market rallied.", "regime_label": "risk-on"}
+        original = dict(briefing)
         enriched = enrich_briefing_with_mirror(briefing, _golden_snapshot())
-        assert enriched["date"] == "2026-09-30"
-        assert enriched["regime_label"] == "risk-on"
-        assert "Market rallied." in enriched["body"]
-        assert "alpaca-acct-1" in enriched["body"]
-        assert "read-only" in enriched["body"].lower()
-        # Input mapping is untouched; nothing is written into positions.
-        assert briefing["body"] == "Market rallied."
-        assert "positions" not in enriched
+        assert_enrichment_appends_read_only(
+            enriched, briefing, original, account_id="alpaca-acct-1"
+        )
