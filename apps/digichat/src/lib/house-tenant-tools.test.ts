@@ -15,6 +15,9 @@ function houseTenant() {
   const row = overlay.DIGICHAT_EMBED_TENANTS["digithings.ai"];
   const live = {
     "digithings.ai": {
+      slug: "digithings",
+      gateMode: "ungated",
+      webSearch: true,
       ...row,
       token: "test-only",
       backend: { type: "digigraph", digisearchIndex: "digithings_docs", vaultPathPrefix: "clients/digithings" },
@@ -26,7 +29,7 @@ function houseTenant() {
 }
 
 describe("house chat /tools", () => {
-  it("lists DigiSearch and DigiVault, and no web search", () => {
+  it("lists web search, DigiSearch and DigiVault", () => {
     const tenant = houseTenant();
     const catalog = tenant.tools?.catalog ?? [];
     const rows = connectedTools({
@@ -37,7 +40,7 @@ describe("house chat /tools", () => {
       mcpServers: [],
       mcpCustom: [],
     });
-    expect(rows.map((r) => r.slash)).toEqual(["digisearch", "digivault"]);
-    expect(rows.map((r) => r.label)).toEqual(["DigiSearch", "DigiVault"]);
+    expect(rows.map((r) => r.slash)).toEqual(["digisearch", "digivault", "websearch"]);
+    expect(rows.map((r) => r.label)).toEqual(["DigiSearch", "DigiVault", "Web search"]);
   });
 });
