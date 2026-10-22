@@ -1,9 +1,62 @@
 /**
- * Paths digichat owns on digithings.ai (Pages owns /chat and marketing).
+ * Paths digichat owns on digithings.ai (Pages owns the marketing site and the
+ * invite-gated OCC shell at /chat/occ).
  * digithings + OCC (and future tenants) share one Container — tenant selection
  * is via /embed?host=… / X-Embed-Host, not separate Container instances.
+ *
+ * DIG-5121: the app itself is the canonical digichat surface and is served
+ * under /chat (ADR 0018, GitHub #1252). The Container is BUILT with that base
+ * path baked in, so the Worker maps every public path onto the path the
+ * Container actually serves — see `containerPathFor`.
+ */
+import { isOccShellPath } from "./occ-gate";
+
+/**
+ * The base path the digichat app is built and served under inside the Container.
+ *
+ * Next bakes `basePath` at BUILD time (apps/digichat/next.config.ts reads
+ * DIGICHAT_BASE_PATH), so this is the same value the image is built with
+ * (infra/docker/Dockerfile.digichat-cloudflare). The contract test pins the two
+ * together so the edge and the image cannot drift apart.
+ *
+ * /chat, not /digichat: the app's surface is the ROOT route
+ * (apps/digichat/src/app/(digichat)/page.tsx) and there is no src/app/chat
+ * directory, so a /chat base path does not nest into /chat/chat.
+ */
+export const CONTAINER_BASE_PATH = "/chat";
+
+/**
+ * The asset prefix the image is built with (DIGICHAT_ASSET_PREFIX).
+ * Static assets are served from /_dtchat/* — outside the base path, because
+ * Next maps the asset prefix back onto the base path internally.
+ */
+export const CONTAINER_ASSET_PREFIX = "/_dtchat";
+
+/**
+ * The container-local MCP prefix the in-container trusted proxy answers before
+ * Next sees the request (apps/digichat/scripts/trusted-proxy-server.mjs). It
+ * lives inside the Container, not under the public base path, so it is never
+ * moved.
+ */
+export const CONTAINER_LOCAL_PREFIX = "/api/mcp/zammad";
+
+/**
+ * True for the canonical /chat surface: the app itself, minus the invite-gated
+ * OCC shell, which stays a Pages surface behind the gate.
+ */
+export function isChatSurfacePath(pathname: string): boolean {
+  if (isOccShellPath(pathname)) return false;
+  return pathname === CONTAINER_BASE_PATH || pathname.startsWith(`${CONTAINER_BASE_PATH}/`);
+}
+
+/**
+ * True for the public paths this Worker forwards to the digichat Container.
+ *
+ * The canonical /chat surface is proxied (DIG-5121) except for the
+ * invite-gated OCC shell, which stays a Pages surface behind the gate.
  */
 export function shouldProxyToDigiChat(pathname: string): boolean {
+  if (isChatSurfacePath(pathname)) return true;
   return (
     pathname === "/embed" ||
     pathname.startsWith("/embed/") ||
@@ -17,6 +70,35 @@ export function shouldProxyToDigiChat(pathname: string): boolean {
     pathname === "/healthz" ||
     pathname.startsWith("/_dtchat/")
   );
+}
+
+/**
+ * The path the Container serves for a given public path.
+ *
+ * The Container is built with `basePath: /chat`, and Next answers ONLY under
+ * that prefix, so a request that reaches the Container has to carry the base
+ * path exactly once:
+ *
+ *   - a path already under /chat is passed through unchanged;
+ *   - static assets keep the asset prefix they are served from (/_dtchat/*),
+ *     because Next rewrites the asset prefix back onto the base path itself;
+ *   - the container-local MCP prefix is answered by the in-container trusted
+ *     proxy before Next sees it, so it is never moved;
+ *   - every other path — the legacy compatibility routes (/embed, /api/chat*,
+ *     /api/embed*, /api/byok*, /api/plan-proof*, /api/health, /healthz) — is
+ *     moved under the base path, so it keeps working after the move.
+ */
+export function containerPathFor(pathname: string): string {
+  if (pathname === CONTAINER_BASE_PATH || pathname.startsWith(`${CONTAINER_BASE_PATH}/`)) {
+    return pathname;
+  }
+  if (pathname === CONTAINER_ASSET_PREFIX || pathname.startsWith(`${CONTAINER_ASSET_PREFIX}/`)) {
+    return pathname;
+  }
+  if (pathname === CONTAINER_LOCAL_PREFIX || pathname.startsWith(`${CONTAINER_LOCAL_PREFIX}/`)) {
+    return pathname;
+  }
+  return `${CONTAINER_BASE_PATH}${pathname}`;
 }
 
 /** Every shared Container id starts here. */

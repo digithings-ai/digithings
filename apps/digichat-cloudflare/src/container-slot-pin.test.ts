@@ -62,8 +62,11 @@ describe("the proxy call site", () => {
   it("routes the container call through the bounded retry", () => {
     expect(indexSource).toMatch(/import \{ fetchContainerWithRetry \} from "\.\/container-retry";/);
     // Wrapped only so a failed page/frame load renders as HTML (frame-safe-error.ts).
+    // The request that reaches the container is the one that carries the app's
+    // base path (DIG-5121), so the variable name is not pinned — the wiring is:
+    // the same request goes into the retry and into the frame-safe wrapper.
     expect(indexSource).toMatch(
-      /return frameSafeErrorResponse\(\s*request,\s*await fetchContainerWithRetry\(request, \(req\) => container\.fetch\(req\)\),\s*\);/,
+      /return frameSafeErrorResponse\(\s*(\w+),\s*await fetchContainerWithRetry\(\1, \(req\) => container\.fetch\(req\)\),\s*\);/,
     );
   });
 

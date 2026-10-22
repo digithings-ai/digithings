@@ -20,12 +20,21 @@ enabled = true
 # taking OCC down.
 #
 # OCC is in active use, so this deploy re-asserts the CURRENT live route set
-# (verified live: all eight routes resolve to digithings-digichat) and changes
-# nothing about traffic. The /api/mcp/zammad* route below is additive and
-# secret-gated (stage 1 of moving the OCC helpdesk MCP off the shared base
-# stack); nothing consumes it yet. To complete the cutover later: remove these
-# seven from here, keep them on apps/digithings-stack-cloudflare/wrangler.toml,
-# and deploy the stack first.
+# (verified live: all eight routes resolve to digithings-digichat). The
+# /api/mcp/zammad* route below is additive and secret-gated (stage 1 of moving
+# the OCC helpdesk MCP off the shared base stack); nothing consumes it yet. To
+# complete the cutover later: remove these seven from here, keep them on
+# apps/digithings-stack-cloudflare/wrangler.toml, and deploy the stack first.
+#
+# DIG-5121 (2026-10-22): this deploy is no longer traffic-neutral. The route
+# set now ALSO claims digithings.ai/chat*, so the canonical /chat path stops
+# being the Pages marketing shell and becomes the digichat app — the Container
+# is built with DIGICHAT_BASE_PATH=/chat, so the app answers under /chat and
+# the legacy paths below keep working through the Worker (see
+# src/paths.ts: containerPathFor). The seven routes below stay as the
+# compatibility window ADR 0018 describes and are removed only after the
+# cutover is verified live. The OCC shell (/chat/occ*) stays a Pages shell
+# behind the invite gate.
 #
 # To roll back: this exact route list IS the rollback shape.
 [[routes]]
@@ -86,6 +95,19 @@ zone_name = "digithings.ai"
 # Valid ?token= or the occ_invite cookie passes through to Pages.
 [[routes]]
 pattern = "digithings.ai/chat/occ*"
+zone_name = "digithings.ai"
+
+# DIG-5121: the canonical digichat surface. The app is served under /chat by
+# the Container, so without this route the path never reaches this Worker and
+# Pages keeps answering it. The trailing `*` (not `/chat/*`) claims the bare
+# /chat too, so the canonical URL is served directly instead of bouncing off
+# the Pages trailing-slash redirect — the same shape as the /embed* and
+# /api/chat* routes above.
+#
+# The more specific /chat/occ* pattern above wins for the OCC shell, and this
+# Worker gates that path itself (src/occ-gate.ts) so it stays a Pages shell.
+[[routes]]
+pattern = "digithings.ai/chat*"
 zone_name = "digithings.ai"
 
 [[containers]]

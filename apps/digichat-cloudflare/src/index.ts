@@ -1,15 +1,18 @@
 /**
  * digithings digichat — Worker fronting one Cloudflare Container.
- * Proxies /embed, digichat APIs, and /_dtchat assets to the digichat Node image.
+ * Proxies /chat (the app), /embed, digichat APIs, and /_dtchat assets to the
+ * digichat Node image.
  *
  * Website paths (different chats, same Container):
- *   digithings.ai/chat      → Pages iframe → /embed?host=digithings.ai
+ *   digithings.ai/chat      → the digichat app (DIG-5121; built with basePath /chat)
  *   digithings.ai/chat/occ  → Pages iframe → /embed?host=occ.digithings.ai
  */
 import { Container, getContainer } from "@cloudflare/containers";
 import { env } from "cloudflare:workers";
 import {
+  CONTAINER_LOCAL_PREFIX,
   DIGICHAT_CONTAINER_REV_VAR,
+  containerPathFor,
   digichatContainerRev,
   sharedDigichatContainerId,
   shouldProxyToDigiChat,
@@ -31,7 +34,7 @@ const workerVars = env as unknown as Env;
  * OCC helpdesk MCP: the secret-gated edge path served by the in-container
  * zammad-mcp (python) through the trusted proxy, not by Next.
  */
-const ZAMMAD_MCP_PREFIX = "/api/mcp/zammad";
+const ZAMMAD_MCP_PREFIX = CONTAINER_LOCAL_PREFIX;
 
 /**
  * Worker-owned, secret-gated recovery lever for the shared Container. Handled
@@ -217,7 +220,7 @@ export default {
       }
     } else if (!shouldProxyToDigiChat(url.pathname)) {
       return new Response(
-        "digichat Worker: path not routed. Marketing /chat shells are on Pages.",
+        "digichat Worker: path not routed. The digichat app is at /chat; marketing is on Pages.",
         { status: 404 },
       );
     }
@@ -226,14 +229,33 @@ export default {
     // instance keeps its boot env, so a forgotten bump silently serves the old
     // image. See paths.ts. Same `containerId` the reset lever above destroys.
     const container = getContainer(workerEnv.DIGICHAT, containerId);
-    // The container slot is shared, and a rollout can leave the previous
+    // The Container slot is shared, and a rollout can leave the previous
     // instance draining while this one starts. A busy slot comes back as a
     // retryable 503 instead of a hard failure (DIG-4487).
     // A failed page/frame load is always served as inline HTML (never a
     // download on phones); API callers keep the original answer.
+    //
+    // The path the Container sees carries the app's base path (DIG-5121): the
+    // image is built with `basePath: /chat`, so the legacy compatibility
+    // routes are moved under it and the canonical /chat paths are passed
+    // through unchanged.
+    const containerRequest = withContainerPath(request, url.pathname);
     return frameSafeErrorResponse(
-      request,
-      await fetchContainerWithRetry(request, (req) => container.fetch(req)),
+      containerRequest,
+      await fetchContainerWithRetry(containerRequest, (req) => container.fetch(req)),
     );
   },
 };
+
+/**
+ * The request the Container serves: same method, headers, body and query, with
+ * the path moved onto the Container's base path (see `containerPathFor`).
+ *
+ * The URL is rewritten, not the path string alone, so the query string and
+ * every header the edge set (host, cookies, the client IP) survive.
+ */
+function withContainerPath(request: Request, pathname: string): Request {
+  const target = new URL(request.url);
+  target.pathname = containerPathFor(pathname);
+  return new Request(target.toString(), request);
+}
