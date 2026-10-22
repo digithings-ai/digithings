@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -29,6 +30,7 @@ from digiquant.data.prices.calendar_sync import (
     parse_end_spec,
     upsert_trading_calendar,
 )
+from digiquant.data.prices.fetchers import parse_watchlist
 from digiquant.data.prices.ticker_venues import (
     ALLOWED_VENUES,
     CORE_TICKER_VENUES,
@@ -469,94 +471,36 @@ def test_upsert_empty_rows_is_noop() -> None:
 # Tickers that the daily backfill pipeline writes price_history rows for.  Pulled
 # from digiquant/src/digiquant/research/config/watchlist.md, excluding the spread-pair and
 # macro-indicator sections (those are derived/relative, not directly fetched).
-WATCHLIST_PRICE_TICKERS: tuple[str, ...] = (
-    # US equities — market cap
-    "SPY",
-    "QQQ",
-    "DIA",
-    "IWB",
-    "VTI",
-    "MDY",
-    "IJH",
-    "IWM",
-    "IJR",
-    # Sector
-    "XLK",
-    "XLF",
-    "XLE",
-    "XLV",
-    "XLI",
-    "XLRE",
-    "XLU",
-    "XLY",
-    "XLP",
-    "XLB",
-    "XLC",
-    # Intl developed
-    "EFA",
-    "VEA",
-    "VGK",
-    "EWJ",
-    "EWG",
-    "EWU",
-    "EWA",
-    # EM
-    "EEM",
-    "VWO",
-    "FXI",
-    "ASHR",
-    "EWZ",
-    "EWT",
-    "EWY",
-    "INDA",
-    # Crypto spot pairs
-    "BTC-USD",
-    "ETH-USD",
-    "SOL-USD",
-    "XRP-USD",
-    "BNB-USD",
-    "BITO",
-    "TRX-USD",
-    "DOGE-USD",
-    "ADA-USD",
-    "AVAX-USD",
-    "LINK-USD",
-    "DOT-USD",
-    "BCH-USD",
-    "LTC-USD",
-    "NEAR-USD",
-    "ATOM-USD",
-    "XMR-USD",
-    "SUI20947-USD",
-    # Crypto ETFs
-    "IBIT",
-    "FBTC",
-    "ETHA",
-    "FETH",
-    "GBTC",
-    # Commodities
-    "GLD",
-    "IAU",
-    "SLV",
-    "DBO",
-    "USO",
-    "BNO",
-    "PDBC",
-    "DJP",
-    "CPER",
-    # Fixed income / cash
-    "BIL",
-    "SHV",
-    "SHY",
-    "IEF",
-    "TLT",
-    "AGG",
-    "HYG",
-    "LQD",
-    "TIP",
-    "EMB",
-    # Macro tradeable
-    "UUP",
+REPO_ROOT = Path(__file__).resolve().parents[3]
+WATCHLIST_MD = (
+    REPO_ROOT / "digiquant" / "src" / "digiquant" / "research" / "config" / "watchlist.md"
+)
+
+
+def _watchlist_section_tickers(title_fragment: str) -> set[str]:
+    """Tickers listed under the watchlist section whose title contains *title_fragment*."""
+    out: set[str] = set()
+    in_section = False
+    for line in WATCHLIST_MD.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            in_section = title_fragment in line[3:].lower()
+            continue
+        if not in_section or not line.startswith("|"):
+            continue
+        cell = line.split("|")[1].strip()
+        if cell and not set(cell) <= set("-: "):
+            out.add(cell)
+    return out
+
+
+# The sector sub-industry ETFs are listed in the research watchlist but are not
+# priced by the daily backfill and carry no venue mapping, so they are out of
+# the priced universe.  Every other watchlist ticker is priced.
+_RESEARCH_ONLY_ETFS = _watchlist_section_tickers("sector sub-industry") & set(
+    parse_watchlist(WATCHLIST_MD)
+)
+WATCHLIST_PRICE_TICKERS: tuple[str, ...] = tuple(
+    ticker for ticker in parse_watchlist(WATCHLIST_MD) if ticker not in _RESEARCH_ONLY_ETFS
 )
 
 
@@ -565,6 +509,14 @@ def test_ticker_venue_mapping_covers_all_core_tickers() -> None:
     """Every ticker the backfill writes must have an authoritative venue."""
     missing = [t for t in WATCHLIST_PRICE_TICKERS if venue_for(t) is None]
     assert missing == [], f"unmapped tickers: {missing}"
+
+
+@pytest.mark.unit
+def test_watchlist_price_tickers_come_from_the_research_watchlist() -> None:
+    """The priced universe is the sealed watchlist universe minus the research-only ETFs."""
+    seal = set(parse_watchlist(WATCHLIST_MD))
+    assert _RESEARCH_ONLY_ETFS, "the research-only watchlist section must not be empty"
+    assert set(WATCHLIST_PRICE_TICKERS) | _RESEARCH_ONLY_ETFS == seal
 
 
 @pytest.mark.unit
