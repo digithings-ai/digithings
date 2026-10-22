@@ -105,6 +105,21 @@ describe("redactSnapshotDom", () => {
     expect(html).toContain(REDACTED);
   });
 
+  it("redacts a secret whose value holds a closing parenthesis or a backtick", () => {
+    const body = root(
+      [
+        '<a href="https://files.example/o?token=tok)plain-9f3c2a&ok=1">file</a>',
+        "<p><code>session=sess`plain-9f3c2a</code></p>",
+      ].join(""),
+    );
+    redactSnapshotDom(body);
+    const html = body.innerHTML;
+    expect(html).not.toContain("plain-9f3c2a");
+    expect(html).not.toContain("tok)");
+    expect(html).not.toContain("sess`");
+    expect(html).toContain(REDACTED);
+  });
+
   it("leaves CSS text alone", () => {
     const body = root(
       `<style>.a{background:url("data:font/woff2;base64,${"cd".repeat(24)}")}</style>`,

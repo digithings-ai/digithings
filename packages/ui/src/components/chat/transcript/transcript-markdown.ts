@@ -7,7 +7,7 @@
  * because callers only pass user/assistant text turns.
  */
 
-import { redactString } from "../../../replay/redact";
+import { REDACTED, redactString } from "../../../replay/redact";
 import { stripFoundryCitationMarkers } from "./activity-view";
 
 export type TranscriptSource = {
@@ -100,13 +100,21 @@ export function downloadMarkdown(filename: string, text: string): void {
 /** Plain-text export — same serializer output with fence delimiters stripped. */
 export function downloadPlainText(filename: string, markdown: string): void {
   const name = filename.endsWith(".txt") ? filename : `${filename}.txt`;
-  downloadTextFile(name, markdownToPlainText(markdown), "text/plain;charset=utf-8");
+  downloadTextFile(
+    name,
+    markdownToPlainText(redactString(markdown)),
+    "text/plain;charset=utf-8",
+  );
 }
 
 /** Minimal HTML export — pre-wrapped markdown, no renderer dependency. */
 export function downloadHtml(filename: string, markdown: string, title = "digichat transcript"): void {
   const name = filename.endsWith(".html") ? filename : `${filename}.html`;
-  downloadTextFile(name, markdownToHtmlDocument(markdown, title), "text/html;charset=utf-8");
+  downloadTextFile(
+    name,
+    markdownToHtmlDocument(redactString(markdown), redactString(title)),
+    "text/html;charset=utf-8",
+  );
 }
 
 function tryParentCopyPostMessage(text: string): boolean {
@@ -159,16 +167,21 @@ export function showSelectableTextareaFallback(text: string): void {
  *
  * Order: clipboard → `.md` download → optional parent `digichat:copy` postMessage →
  * selectable textarea. Never a silent no-op when `document` exists.
+ *
+ * The payload is redacted once, up front: every branch below hands the same
+ * redacted text to the clipboard, the download, the parent frame and the
+ * textarea fallback, so no branch can carry a secret out of the app.
  */
 export async function copyMarkdownWithFallback(
   text: string,
   opts?: { filename?: string },
 ): Promise<CopyMarkdownResult> {
   const filename = opts?.filename ?? "digichat.md";
+  const safe = redactString(text);
 
   if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(safe);
       return "clipboard";
     } catch {
       /* blocked in cross-origin iframes — continue */
@@ -177,19 +190,19 @@ export async function copyMarkdownWithFallback(
 
   if (typeof document !== "undefined") {
     try {
-      downloadMarkdown(filename, text);
-      tryParentCopyPostMessage(text);
+      downloadMarkdown(filename, safe);
+      tryParentCopyPostMessage(safe);
       return "download";
     } catch {
       /* fall through */
     }
   }
 
-  if (tryParentCopyPostMessage(text)) {
+  if (tryParentCopyPostMessage(safe)) {
     return "postMessage";
   }
 
-  showSelectableTextareaFallback(text);
+  showSelectableTextareaFallback(safe);
   return "textarea";
 }
 
@@ -205,6 +218,19 @@ export const MAILTO_MAX_ENCODED_LEN = 1800;
 export const MAILTO_TRUNCATION_NOTE = "…(truncated — download .md for full thread)";
 
 export type TruncateForMailtoResult = { text: string; truncated: boolean };
+
+/**
+ * Drop a redaction marker that the cut split in half (`[redac`).
+ *
+ * The cut backs up to the start of the marker instead, so the body never
+ * shows half a marker — the truncation note already says the body is cut.
+ */
+function dropSplitMarker(prefix: string): string {
+  for (let len = 1; len < REDACTED.length; len += 1) {
+    if (prefix.endsWith(REDACTED.slice(0, len))) return prefix.slice(0, -len);
+  }
+  return prefix;
+}
 
 /**
  * Cut `body` so `encodeURIComponent(text)` fits `maxEncoded` chars.
@@ -237,17 +263,26 @@ export function truncateForMailto(
       hi = mid - 1;
     }
   }
-  return { text: `${body.slice(0, lo).trimEnd()}${note}`, truncated: true };
+  return { text: `${dropSplitMarker(body.slice(0, lo).trimEnd())}${note}`, truncated: true };
 }
 
-/** `mailto:` URL with a short subject and a truncation-safe body. No network. */
+/**
+ * `mailto:` URL with a short subject and a truncation-safe body. No network.
+ *
+ * The body is redacted before the cut: a secret that straddles the URL
+ * budget would otherwise leave its head behind in the body, and the
+ * redaction marker counts toward the budget like any other character.
+ */
 export function buildMailtoUrl(
   subject: string,
   body: string,
   opts?: { maxEncoded?: number },
 ): string {
-  const { text } = truncateForMailto(body, opts?.maxEncoded ?? MAILTO_MAX_ENCODED_LEN);
-  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+  const { text } = truncateForMailto(
+    redactString(body),
+    opts?.maxEncoded ?? MAILTO_MAX_ENCODED_LEN,
+  );
+  return `mailto:?subject=${encodeURIComponent(redactString(subject))}&body=${encodeURIComponent(text)}`;
 }
 
 /** Last-assistant mailto — mirrors the per-turn copy payload. */
@@ -352,6 +387,9 @@ export function printTranscriptWithFallback(
 /**
  * Lightweight markdown → plain text for `.txt` export. Strips fence
  * delimiter lines only; prose (including code content) is kept as-is.
+ *
+ * A pure serializer: it does not redact. `downloadPlainText` redacts before
+ * it writes, so a caller that writes the result itself must redact too.
  */
 export function markdownToPlainText(markdown: string): string {
   return markdown
@@ -372,6 +410,9 @@ function escapeHtml(text: string): string {
 /**
  * Minimal HTML document for `.html` export — the markdown pre-wrapped in
  * `<pre>`. Deliberately no GFM renderer dependency.
+ *
+ * A pure serializer: it does not redact. `downloadHtml` redacts before it
+ * writes, so a caller that writes the result itself must redact too.
  */
 export function markdownToHtmlDocument(markdown: string, title = "digichat transcript"): string {
   const safeTitle = escapeHtml(title);
