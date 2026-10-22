@@ -6,11 +6,23 @@ of every candidate run. The snapshot is a TOASTed jsonb document of tens of
 kilobytes, so the read detoasted the whole document for every row and starved
 the API connection pool (DIG-4762).
 
-This is the one-off cleanup of the rows that already exist. It rewrites every
-snapshot with the same transform the paperclip trigger applies to new writes
-(paperclip migration 0308, function
-`paperclip_slim_heartbeat_run_context_snapshot`), in batches, and reports the
-TOAST footprint and the scheduler query plan before and after.
+This is the one-off cleanup of the rows that already exist. The paperclip
+trigger (migration 0308, function `paperclip_slim_heartbeat_run_context_snapshot`)
+slims every new snapshot: it keeps every key of the snapshot and replaces the
+body of every comment of the top-level `executionContinuation` with a SHA-256
+`bodyDigest`. The trigger only touches new writes, so the rows that were
+written before it keep the shape they were written with.
+
+This script does not implement that transform a second time. It runs the
+trigger itself: it builds a session-local copy of the table, attaches the
+trigger function to that copy, and lets the trigger compute the new value. A
+row written by this script and a row written by the trigger therefore have the
+same shape, because it is the same function that shaped them. When the database
+does not carry the trigger yet, the script falls back to a pinned copy of the
+migration's function and says so in its output. When the database does carry
+the trigger, the script checks that the pinned copy and the installed function
+agree on live rows before it writes anything, and refuses to write when they
+do not.
 
 It is idempotent: a row whose snapshot is already slim is left untouched, so a
 second run rewrites nothing and reports zero updated rows.
@@ -25,13 +37,6 @@ Usage:
 The password is never a command line argument. It is read from an environment
 variable, so it lands neither in the shell history nor in the process list.
 
-`--drop-continuation` additionally removes the top-level `executionContinuation`
-and `paperclipContinuationSummary` copies. The paperclip trigger keeps them on
-purpose: the resume path reads `previousRun.context.executionContinuation.messages`
-to compute the resume delta. Dropping them does not crash the resume, it makes
-the resume fall back to a full bootstrap instead of a provider-conversation
-resume. That is why it is opt-in and not the default.
-
 See docs/ops/heartbeat-runs-retention.md for the retention policy that follows
 this cleanup.
 """
@@ -39,6 +44,7 @@ this cleanup.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -53,31 +59,96 @@ DEFAULT_PASSWORD_ENV = "PGPASSWORD"
 RUNS_TABLE = "heartbeat_runs"
 EVENTS_TABLE = "heartbeat_run_events"
 
-# The rendered prompt is rebuilt at dispatch time. Storing it a second time in
-# the snapshot of the run is what made the snapshot tens of kilobytes.
-TOP_LEVEL_MARKDOWN_KEYS = (
-    "paperclipTaskMarkdown",
-    "paperclipTaskMarkdownCompact",
-    "paperclipTaskMarkdownAssignment",
-    "paperclipTaskMarkdownAssignmentCompact",
-    "paperclipWakeComment",
-    "paperclipFreshSessionHandoffMarkdown",
+# The trigger function of paperclip migration 0308. It is the authority for the
+# shape of a slim snapshot: this script runs it, it does not restate it.
+TRIGGER_FUNCTION_NAME = "paperclip_slim_heartbeat_run_context_snapshot"
+
+# The pinned copy of that function, kept in this file so the script can run
+# against a database that does not carry the trigger yet, and so the drift
+# check has something to compare the installed trigger against.
+PINNED_FUNCTION_NAME = "paperclip_slim_heartbeat_run_context_snapshot_pinned"
+PINNED_TRIGGER_SOURCE = (
+    "digithings-ai/paperclip@1c918d30b, "
+    "packages/db/src/migrations/0308_heartbeat_run_context_columns.sql"
 )
 
-# The wake payload keeps the small proof fields that the merge and the external
-# chat presentation read. It drops the copies of the issue, of the comments and
-# of the continuation, because the snapshot already holds them.
-WAKE_DROP_KEYS = ("executionContinuation", "continuationSummary")
-
-# The top-level copies are NOT dropped by the paperclip trigger: the resume
-# path reads them. They are the largest single top-level key, so the cleanup
-# can drop them with `--drop-continuation`.
-TOP_LEVEL_CONTINUATION_KEYS = ("executionContinuation", "paperclipContinuationSummary")
+# The session-local copies of the runs table that carry the trigger. The script
+# writes the rows through them, so the trigger computes the new value.
+PROBE_TABLE = "paperclip_slim_probe"
+DRIFT_PROBE_TABLE = "paperclip_slim_probe_pinned"
 
 # The columns the paperclip migration 0308 adds. When they are present the
 # cleanup keeps them in sync, so the rows stay correct even before the trigger
 # is installed.
 ID_COLUMNS = ("context_issue_id", "context_task_id")
+
+# A live table is written while this script runs. PostgreSQL answers a write
+# that ran into a concurrent change with one of these SQLSTATEs, and the
+# batch is safe to run again, so the batch is retried a few times before the
+# run gives up.
+BATCH_ATTEMPTS = 3
+RETRYABLE_SQLSTATES = frozenset({"40001", "40P01", "55P03", "XX000"})
+
+# The function of migration 0308, verbatim. The pinned copy is what the script
+# compares the installed trigger against, and what it runs when the database
+# does not carry the trigger yet.
+PINNED_TRIGGER_TEMPLATE = """CREATE OR REPLACE FUNCTION pg_temp.{function_name}() RETURNS trigger LANGUAGE plpgsql AS $paperclip$
+DECLARE
+  slim_snapshot jsonb;
+  slim_continuation jsonb;
+  slim_messages jsonb;
+BEGIN
+  -- A snapshot that is not a JSON object has no ids and no envelope. The
+  -- mirrored ids are cleared, because a stale id makes a run look like it
+  -- belongs to an issue that the snapshot does not name.
+  IF NEW.context_snapshot IS NULL OR jsonb_typeof(NEW.context_snapshot) <> 'object' THEN
+    NEW.context_issue_id := NULL;
+    NEW.context_task_id := NULL;
+    RETURN NEW;
+  END IF;
+
+  -- The wake payload and the rendered prompt are not touched. Production code
+  -- reads the issue work mode, the continuation summary, and the rendered
+  -- wake comments from the stored snapshot.
+  slim_snapshot := NEW.context_snapshot;
+
+  -- The continuation envelope repeats the body of every comment of the issue.
+  -- The bodies live in the comment table, and the envelope needs them only to
+  -- find out whether a comment changed. A digest of the body answers that
+  -- question and keeps the stored snapshot small.
+  IF jsonb_typeof(slim_snapshot -> 'executionContinuation') = 'object' THEN
+    slim_continuation := slim_snapshot -> 'executionContinuation';
+    IF jsonb_typeof(slim_continuation -> 'messages') = 'array' THEN
+      SELECT coalesce(jsonb_agg(
+        CASE
+          WHEN jsonb_typeof(element.message) = 'object'
+            AND jsonb_typeof(element.message -> 'body') = 'string'
+          THEN
+            (element.message - 'body'::text)
+            || jsonb_build_object(
+              'bodyDigest',
+              encode(sha256(convert_to(element.message ->> 'body', 'UTF8')), 'hex')
+            )
+          ELSE element.message
+        END
+      ), '[]'::jsonb)
+      INTO slim_messages
+      FROM jsonb_array_elements(slim_continuation -> 'messages') AS element(message);
+      slim_continuation := (slim_continuation - 'messages'::text)
+        || jsonb_build_object('messages', slim_messages);
+      slim_snapshot := (slim_snapshot - 'executionContinuation'::text)
+        || jsonb_build_object('executionContinuation', slim_continuation);
+    END IF;
+  END IF;
+
+  NEW.context_snapshot := slim_snapshot;
+  -- The ids keep the text form of the snapshot. The read paths that used the
+  -- snapshot read the same text, so the mirrored value is the same value.
+  NEW.context_issue_id := slim_snapshot ->> 'issueId';
+  NEW.context_task_id := slim_snapshot ->> 'taskId';
+  RETURN NEW;
+END;
+$paperclip$;"""
 
 
 # --------------------------------------------------------------------------
@@ -85,140 +156,150 @@ ID_COLUMNS = ("context_issue_id", "context_task_id")
 # --------------------------------------------------------------------------
 
 
-def slim_snapshot(snapshot: Any, *, drop_continuation: bool = False) -> Any:
-    """The reference transform, in Python.
+def slim_snapshot(snapshot: Any) -> Any:
+    """The reference shape of the paperclip trigger, in Python.
 
-    The SQL function built by `build_slim_function_sql` must agree with this
-    exactly. `verify_transform` checks that on live rows before anything is
-    written, so the two can never drift apart silently.
+    The trigger is the authority. `verify_transform` checks this against the
+    trigger itself, on live rows, before anything is written, so the two can
+    never drift apart silently.
     """
     if not isinstance(snapshot, dict):
         return snapshot
-    dropped = set(TOP_LEVEL_MARKDOWN_KEYS)
-    if drop_continuation:
-        dropped |= set(TOP_LEVEL_CONTINUATION_KEYS)
-    slim = {key: value for key, value in snapshot.items() if key not in dropped}
-    wake = slim.get("paperclipWake")
-    if isinstance(wake, dict):
-        slim_wake = {key: value for key, value in wake.items() if key not in WAKE_DROP_KEYS}
-        issue = slim_wake.get("issue")
-        if isinstance(issue, dict) and isinstance(issue.get("id"), str):
-            slim_wake["issue"] = {"id": issue["id"]}
-        slim["paperclipWake"] = slim_wake
+    continuation = snapshot.get("executionContinuation")
+    if not isinstance(continuation, dict):
+        return snapshot
+    messages = continuation.get("messages")
+    if not isinstance(messages, list):
+        return snapshot
+    slimmed = []
+    for element in messages:
+        if isinstance(element, dict) and isinstance(element.get("body"), str):
+            digest = hashlib.sha256(element["body"].encode("utf-8")).hexdigest()
+            bodyless = {key: value for key, value in element.items() if key != "body"}
+            slimmed.append({**bodyless, "bodyDigest": digest})
+        else:
+            slimmed.append(element)
+    slim = dict(snapshot)
+    slim["executionContinuation"] = {
+        **{key: value for key, value in continuation.items() if key != "messages"},
+        "messages": slimmed,
+    }
     return slim
 
 
-def build_slim_function_sql(*, drop_continuation: bool = False) -> str:
-    """The SQL twin of `slim_snapshot`, as a session-local function.
+def build_pinned_trigger_sql(function_name: str = PINNED_FUNCTION_NAME) -> str:
+    """The pinned copy of the paperclip trigger function.
 
-    `pg_temp` keeps the function out of the database: it lives for this session
-    only and disappears with it, so the cleanup leaves nothing behind in the
-    schema.
+    The body is the one of migration 0308 at the commit named in
+    `PINNED_TRIGGER_SOURCE`, unchanged. It is installed in `pg_temp`, which
+    keeps it out of the database: it lives for this session only and
+    disappears with it, so the cleanup leaves nothing behind in the schema.
     """
-    top_level = list(TOP_LEVEL_MARKDOWN_KEYS)
-    if drop_continuation:
-        top_level += list(TOP_LEVEL_CONTINUATION_KEYS)
-    drops = "\n".join(f"    - '{key}'::text" for key in top_level)
+    return PINNED_TRIGGER_TEMPLATE.replace("{function_name}", function_name)
+
+
+def build_probe_sql(table: str) -> str:
+    """The session-local copy of the runs table that carries the trigger.
+
+    The copy is made with `CREATE TABLE AS`, so it has the columns of the real
+    table and none of its constraints: the script fills the snapshot and lets
+    the trigger write the mirrored ids.
+
+    The copy carries one column of its own, `original_snapshot`: the value
+    the row had when the batch was loaded. The write compares it with the row
+    it is about to write, so a row that the instance wrote in the meantime is
+    left alone.
+    """
     return f"""
-CREATE OR REPLACE FUNCTION pg_temp.paperclip_slim_snapshot(snap jsonb)
-RETURNS jsonb
-LANGUAGE plpgsql
-AS $paperclip$
-DECLARE
-  slim_snapshot jsonb;
-  slim_wake jsonb;
-BEGIN
-  IF snap IS NULL THEN
-    RETURN NULL;
-  END IF;
+CREATE TEMP TABLE IF NOT EXISTS pg_temp.{table} AS
+    SELECT * FROM {RUNS_TABLE} WITH NO DATA;
+ALTER TABLE pg_temp.{table}
+    ADD COLUMN IF NOT EXISTS context_issue_id text,
+    ADD COLUMN IF NOT EXISTS context_task_id text,
+    ADD COLUMN IF NOT EXISTS original_snapshot jsonb;
+""".strip()
 
-  slim_snapshot := snap
-{drops};
 
-  -- The parentheses matter. In PL/pgSQL the arrow binds weaker than the minus
-  -- sign, so an unparenthesized arrow would swallow the keys.
-  IF jsonb_typeof(slim_snapshot -> 'paperclipWake') = 'object' THEN
-    slim_wake := (slim_snapshot -> 'paperclipWake')
-      - 'executionContinuation'::text
-      - 'continuationSummary'::text;
-    IF jsonb_typeof(slim_wake -> 'issue') = 'object'
-      AND jsonb_typeof(slim_wake -> 'issue' -> 'id') = 'string' THEN
-      slim_wake := jsonb_set(slim_wake, '{{issue}}', jsonb_build_object('id', slim_wake -> 'issue' -> 'id'));
-    END IF;
-    slim_snapshot := jsonb_set(slim_snapshot, '{{paperclipWake}}', slim_wake);
-  END IF;
+def build_probe_trigger_sql(table: str, function_ref: str) -> str:
+    """Attach the trigger function to the session-local copy of the table."""
+    return f"""
+DROP TRIGGER IF EXISTS paperclip_slim_probe_trg ON pg_temp.{table};
+CREATE TRIGGER paperclip_slim_probe_trg
+    BEFORE INSERT ON pg_temp.{table}
+    FOR EACH ROW EXECUTE FUNCTION {function_ref}();
+""".strip()
 
-  RETURN slim_snapshot;
-END;
-$paperclip$;
+
+
+def build_batch_load_sql() -> str:
+    """Load one batch into the session-local copy of the runs table.
+
+    The load is a statement of its own, and it has to be. An `UPDATE` that
+    reads its new value from a data-modifying CTE runs that CTE again when a
+    row of the target table was updated concurrently, and PostgreSQL refuses
+    to write inside that re-check: "ModifyTable should not be called during
+    EvalPlanQual". The table of a live instance is written while this script
+    runs, so that is not a rare thing. A plain load has no such problem: it
+    reads the rows under one snapshot and the trigger shapes them.
+    """
+    return f"""
+INSERT INTO pg_temp.{PROBE_TABLE} (id, context_snapshot, original_snapshot)
+SELECT id, context_snapshot, context_snapshot
+  FROM {RUNS_TABLE}
+ WHERE id > %(cursor)s
+   AND created_at < %(cutoff)s::timestamptz
+ ORDER BY id
+ LIMIT %(batch_size)s
 """.strip()
 
 
 def build_batch_update_sql(*, set_id_columns: bool) -> str:
     """The batched, idempotent rewrite of one batch of runs.
 
-    The batch is materialised once, so every row is detoasted once and the
-    transform is computed once. The `IS DISTINCT FROM` guard is what makes the
+    The probe holds the value the trigger computed and the value the row had
+    when the batch was loaded. The `IS DISTINCT FROM` guard is what makes the
     cleanup idempotent: a row that is already slim is not written, so it does
-    not leave a dead tuple behind either.
+    not leave a dead tuple behind either. The second guard skips a row that
+    the instance wrote between the load and the write: that row carries a
+    fresher snapshot than the batch was built from, and overwriting it would
+    lose what the instance wrote.
     """
-    set_clause = "context_snapshot = s.slim"
+    set_clause = "context_snapshot = p.context_snapshot"
     if set_id_columns:
         set_clause += (
-            ",\n       context_issue_id = nullif(s.slim ->> 'issueId', '')"
-            ",\n       context_task_id = nullif(s.slim ->> 'taskId', '')"
+            ",\n       context_issue_id = p.context_issue_id"
+            ",\n       context_task_id = p.context_task_id"
         )
     return f"""
-WITH batch AS MATERIALIZED (
-  SELECT id, context_snapshot
-    FROM {RUNS_TABLE}
-   WHERE id > %(cursor)s
-     AND created_at < %(cutoff)s::timestamptz
-   ORDER BY id
-   LIMIT %(batch_size)s
-), slimmed AS MATERIALIZED (
-  SELECT id,
-         context_snapshot AS original,
-         pg_temp.paperclip_slim_snapshot(context_snapshot) AS slim
-    FROM batch
-), upd AS (
+WITH upd AS (
   UPDATE {RUNS_TABLE} AS r
      SET {set_clause}
-    FROM slimmed AS s
-   WHERE r.id = s.id
-     AND s.slim IS DISTINCT FROM s.original
+    FROM pg_temp.{PROBE_TABLE} AS p
+   WHERE r.id = p.id
+     AND p.context_snapshot IS DISTINCT FROM r.context_snapshot
+     AND r.context_snapshot IS NOT DISTINCT FROM p.original_snapshot
   RETURNING r.id
 )
-SELECT (SELECT count(*) FROM batch) AS scanned,
+SELECT (SELECT count(*) FROM pg_temp.{PROBE_TABLE}) AS scanned,
        (SELECT count(*) FROM upd) AS updated,
        -- `max()` is not defined for uuid, so the cursor is the last id by order
-       (SELECT id FROM batch ORDER BY id DESC LIMIT 1) AS last_id
+       (SELECT id FROM pg_temp.{PROBE_TABLE} ORDER BY id DESC LIMIT 1) AS last_id
 """.strip()
 
 
 def build_batch_dry_run_sql() -> str:
     """The same batch, counted instead of written."""
     return f"""
-WITH batch AS MATERIALIZED (
-  SELECT id, context_snapshot
-    FROM {RUNS_TABLE}
-   WHERE id > %(cursor)s
-     AND created_at < %(cutoff)s::timestamptz
-   ORDER BY id
-   LIMIT %(batch_size)s
-), slimmed AS MATERIALIZED (
-  SELECT id,
-         context_snapshot AS original,
-         pg_temp.paperclip_slim_snapshot(context_snapshot) AS slim
-    FROM batch
-)
-SELECT count(*) AS scanned,
-       count(*) FILTER (WHERE slim IS DISTINCT FROM original) AS updated,
-       coalesce(sum(pg_column_size(original)), 0) AS original_bytes,
-       coalesce(sum(pg_column_size(slim)), 0) AS slim_bytes,
+SELECT (SELECT count(*) FROM pg_temp.{PROBE_TABLE}) AS scanned,
+       count(*) FILTER (
+           WHERE p.context_snapshot IS DISTINCT FROM b.context_snapshot
+       ) AS updated,
+       coalesce(sum(pg_column_size(b.context_snapshot)), 0) AS original_bytes,
+       coalesce(sum(pg_column_size(p.context_snapshot)), 0) AS slim_bytes,
        -- `max()` is not defined for uuid, so the cursor is the last id by order
-       (SELECT id FROM batch ORDER BY id DESC LIMIT 1) AS last_id
-FROM slimmed
+       (SELECT id FROM pg_temp.{PROBE_TABLE} ORDER BY id DESC LIMIT 1) AS last_id
+  FROM pg_temp.{PROBE_TABLE} p
+  JOIN {RUNS_TABLE} b ON b.id = p.id
 """.strip()
 
 
@@ -234,8 +315,8 @@ def resolve_connection(args: argparse.Namespace, env: dict[str, str]) -> tuple[s
     conninfo = f"host={args.host} port={args.port} dbname={args.dbname}"
     if args.user:
         conninfo += f" user={args.user}"
-    password = env.get(args.password_env, "")
-    return conninfo, ({"password": password} if password else {})
+    secret = env.get(args.password_env, "")
+    return conninfo, ({"password": secret} if secret else {})
 
 
 def redact_dsn(dsn: str) -> str:
@@ -457,42 +538,167 @@ def capture_scheduler_plan(conn: Any, params: dict[str, Any], *, use_id_columns:
         return [str(row[0]) for row in cur.fetchall()]
 
 
-def verify_transform(conn: Any, *, drop_continuation: bool, sample_size: int) -> int:
-    """Check the SQL function against the Python reference on live rows.
+def find_installed_trigger(conn: Any) -> str | None:
+    """The qualified name of the trigger function, when the database has it.
 
-    Returns the number of rows compared. A mismatch raises: the cleanup must
-    not run on a transform the script and the paperclip trigger disagree about.
+    The schema is not guessed, the catalog is asked. The session-local
+    schemas are left out, so the pinned copy of this script is never mistaken
+    for the trigger of the database.
     """
-    if sample_size <= 0:
-        return 0
-    bound = uuid.UUID(int=uuid.uuid4().int)
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT context_snapshot,
-                   pg_temp.paperclip_slim_snapshot(context_snapshot) AS slim
+            SELECT n.nspname || '.' || p.proname
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+             WHERE p.proname = %(name)s
+               AND p.prorettype = 'trigger'::regtype
+               AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+               AND n.nspname NOT LIKE 'pg_toast%%'
+               AND n.nspname NOT LIKE 'pg_temp%%'
+             ORDER BY (n.nspname = 'public') DESC, n.nspname
+             LIMIT 1
+            """,
+            {"name": TRIGGER_FUNCTION_NAME},
+        )
+        row = cur.fetchone()
+    return str(row[0]) if row else None
+
+
+def sample_rows(conn: Any, sample_size: int) -> list[tuple[str, Any]]:
+    """Live rows to check the transform on.
+
+    The rows that carry a continuation with messages come first: they are the
+    rows the transform does something to. The rest of the sample is filled
+    with arbitrary rows, so the check also covers the shapes the transform
+    leaves alone.
+    """
+    rows: list[tuple[str, Any]] = []
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, context_snapshot
               FROM heartbeat_runs
-             WHERE id >= %(bound)s AND context_snapshot IS NOT NULL
+             WHERE context_snapshot IS NOT NULL
+               AND jsonb_typeof(context_snapshot -> 'executionContinuation' -> 'messages') = 'array'
+             ORDER BY id DESC
+             LIMIT %(limit)s
+            """,
+            {"limit": sample_size},
+        )
+        rows = [(str(row[0]), row[1]) for row in cur.fetchall()]
+        if len(rows) >= sample_size:
+            return rows
+        bound = uuid.UUID(int=uuid.uuid4().int)
+        cur.execute(
+            """
+            SELECT id, context_snapshot
+              FROM heartbeat_runs
+             WHERE id >= %(bound)s
+               AND context_snapshot IS NOT NULL
              ORDER BY id
              LIMIT %(limit)s
             """,
-            {"bound": bound, "limit": sample_size},
+            {"bound": bound, "limit": sample_size - len(rows)},
         )
-        rows = cur.fetchall()
+        rows += [(str(row[0]), row[1]) for row in cur.fetchall()]
+    return rows
+
+
+def build_trigger_output_sql(table: str) -> str:
+    """The value the trigger gives to a set of rows.
+
+    The rows go through the session-local copy of the table that carries the
+    trigger, so this is the trigger's own answer and not a copy of it.
+    """
+    return f"""
+WITH sample AS MATERIALIZED (
+  SELECT elem ->> 'id' AS id,
+         elem -> 'context_snapshot' AS context_snapshot
+    FROM jsonb_array_elements(%(rows)s::jsonb) AS elem
+), probe AS MATERIALIZED (
+  INSERT INTO pg_temp.{table} (id, context_snapshot)
+  SELECT id::uuid, context_snapshot FROM sample
+  RETURNING id, context_snapshot
+)
+SELECT s.id,
+       s.context_snapshot AS original,
+       p.context_snapshot AS transformed
+  FROM sample s
+  JOIN probe p ON p.id::text = s.id
+""".strip()
+
+
+def trigger_output(conn: Any, table: str, payload: str) -> dict[str, Any]:
+    """The transformed snapshot of every row of the payload, keyed by row id."""
+    with conn.cursor() as cur:
+        cur.execute(build_trigger_output_sql(table), {"rows": payload})
+        return {str(row[0]): row[2] for row in cur.fetchall()}
+
+
+def verify_transform(
+    conn: Any, *, sample_size: int, installed_function: str | None
+) -> dict[str, Any]:
+    """Check the trigger against the Python reference on live rows.
+
+    The trigger is the authority: the script runs it, so a row written here
+    and a row written by the database have the same shape. The Python
+    reference is the readable copy of it, and the two must agree on every
+    sampled row before anything is written. When the database carries the
+    trigger, the pinned copy of migration 0308 is compared with it as well, so
+    a trigger that moved on without this script is caught here and not on the
+    next write.
+
+    A mismatch raises: the cleanup must not run on a transform the script and
+    the paperclip trigger disagree about.
+    """
+    report: dict[str, Any] = {
+        "compared": 0,
+        "installed_trigger": installed_function,
+        "drift_checked": False,
+    }
+    if sample_size <= 0:
+        return report
+    rows = sample_rows(conn, sample_size)
+    if not rows:
+        return report
+    payload = json.dumps(
+        [{"id": row_id, "context_snapshot": snapshot} for row_id, snapshot in rows],
+        default=str,
+    )
+    produced = trigger_output(conn, PROBE_TABLE, payload)
     compared = 0
-    for original, slim in rows:
-        expected = slim_snapshot(original, drop_continuation=drop_continuation)
-        if expected != slim:
+    for row_id, original in rows:
+        expected = slim_snapshot(original)
+        transformed = produced.get(row_id)
+        if transformed is None:
             raise RuntimeError(
-                "the SQL transform and the Python reference disagree; refusing to write"
+                f"the trigger produced no value for row {row_id}; refusing to write"
+            )
+        if expected != transformed:
+            raise RuntimeError(
+                f"the trigger and the Python reference disagree on row {row_id}; "
+                "refusing to write"
             )
         compared += 1
-    return compared
+    report["compared"] = compared
+
+    if installed_function is not None:
+        pinned = trigger_output(conn, DRIFT_PROBE_TABLE, payload)
+        for row_id, _original in rows:
+            if pinned.get(row_id) != produced.get(row_id):
+                raise RuntimeError(
+                    "the installed trigger and the pinned copy of migration 0308 "
+                    f"disagree on row {row_id}; refusing to write"
+                )
+        report["drift_checked"] = True
+    return report
 
 
 def run_cleanup(
     conn: Any,
     *,
+    load_sql: str,
     update_sql: str,
     dry_run_sql: str,
     dry_run: bool,
@@ -519,21 +725,51 @@ def run_cleanup(
             "cutoff": cutoff,
             "batch_size": batch_size,
         }
+        batch_scanned = 0
+        batch_updated = 0
+        last_id = None
+        # A live table is written while this script runs, and PostgreSQL
+        # answers a write that ran into a concurrent change with a retryable
+        # error. The batch is safe to run again: it only writes rows whose
+        # value the trigger computed and whose value the instance has not
+        # touched since the batch was loaded.
+        for attempt in range(1, BATCH_ATTEMPTS + 1):
+            try:
+                with conn.cursor() as cur:
+                    # The probe holds one batch. It is emptied first, so a
+                    # batch that is run again does not count its rows twice.
+                    cur.execute(f"TRUNCATE pg_temp.{PROBE_TABLE}")
+                    cur.execute(load_sql, params)
+                    if dry_run:
+                        cur.execute(dry_run_sql)
+                        row = cur.fetchone()
+                        batch_scanned = int(row[0])
+                        batch_updated = int(row[1])
+                        original_bytes += int(row[2])
+                        slim_bytes += int(row[3])
+                        last_id = row[4]
+                    else:
+                        cur.execute(update_sql)
+                        row = cur.fetchone()
+                        batch_scanned = int(row[0])
+                        batch_updated = int(row[1])
+                        last_id = row[2]
+                break
+            except Exception as exc:
+                # The error is re-raised unless it is one of the retryable
+                # SQLSTATEs, so a real failure is never swallowed.
+                sqlstate = getattr(exc, "sqlstate", None)
+                if attempt >= BATCH_ATTEMPTS or sqlstate not in RETRYABLE_SQLSTATES:
+                    raise
+                print(
+                    f"  batch {batches + 1}: {exc}; retrying ({attempt}/{BATCH_ATTEMPTS})",
+                    flush=True,
+                )
+                time.sleep(1.0)
+        # The probe holds the transformed rows of the batch. It is emptied
+        # here, so the session does not keep a copy of every row it touched.
         with conn.cursor() as cur:
-            if dry_run:
-                cur.execute(dry_run_sql, params)
-                row = cur.fetchone()
-                batch_scanned = int(row[0])
-                batch_updated = int(row[1])
-                original_bytes += int(row[2])
-                slim_bytes += int(row[3])
-                last_id = row[4]
-            else:
-                cur.execute(update_sql, params)
-                row = cur.fetchone()
-                batch_scanned = int(row[0])
-                batch_updated = int(row[1])
-                last_id = row[2]
+            cur.execute(f"TRUNCATE pg_temp.{PROBE_TABLE}")
         batches += 1
         scanned += batch_scanned
         updated += batch_updated
@@ -610,17 +846,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=0.0,
         help="only touch runs older than this many days (0 means every run)",
     )
-    parser.add_argument(
-        "--drop-continuation",
-        action="store_true",
-        help="also drop the top-level executionContinuation copies (breaks the resume delta)",
-    )
     parser.add_argument("--dry-run", action="store_true", help="count, do not write")
     parser.add_argument(
         "--verify-sample",
         type=int,
         default=25,
-        help="rows to compare against the Python reference before writing (0 skips)",
+        help="live rows to check the trigger against the Python reference on before "
+        "writing (0 skips the check)",
     )
     parser.add_argument("--vacuum", action="store_true", help="VACUUM (ANALYZE) afterwards")
     parser.add_argument(
@@ -647,10 +879,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print("paperclip heartbeat_runs snapshot cleanup (DIG-4821)")
     print(f"  target: {redact_dsn(conninfo)}")
-    if args.drop_continuation:
-        print("  transform: markdown keys + wake copies + top-level continuation copies")
-    else:
-        print("  transform: markdown keys + wake copies (the paperclip trigger transform)")
+    print("  transform: the paperclip trigger, run on a copy of the table")
     if args.dry_run:
         print("  mode: dry run, nothing is written")
 
@@ -658,12 +887,45 @@ def main(argv: list[str] | None = None) -> int:
         with psycopg.connect(conninfo, autocommit=True, **connect_kwargs) as conn:
             with conn.cursor() as cur:
                 cur.execute(f"SET statement_timeout = '{args.statement_timeout_ms}ms'")
-                cur.execute(build_slim_function_sql(drop_continuation=args.drop_continuation))
+                # The pinned copy of the migration function lives in the session
+                # only. It is the writer when the database does not carry the
+                # trigger yet, and it is the reference the installed trigger is
+                # compared against.
+                cur.execute(build_pinned_trigger_sql())
+                cur.execute(build_probe_sql(PROBE_TABLE))
+                cur.execute(build_probe_sql(DRIFT_PROBE_TABLE))
 
-            compared = verify_transform(
-                conn, drop_continuation=args.drop_continuation, sample_size=args.verify_sample
+            installed = find_installed_trigger(conn)
+            active_function = installed or f"pg_temp.{PINNED_FUNCTION_NAME}"
+            with conn.cursor() as cur:
+                cur.execute(build_probe_trigger_sql(PROBE_TABLE, active_function))
+                cur.execute(
+                    build_probe_trigger_sql(DRIFT_PROBE_TABLE, f"pg_temp.{PINNED_FUNCTION_NAME}")
+                )
+
+            if installed:
+                print(f"  trigger: {installed}, the installed trigger shapes the rows")
+            else:
+                print(
+                    "  trigger: not installed in this database, using the pinned copy of "
+                    f"{PINNED_TRIGGER_SOURCE}"
+                )
+
+            verification = verify_transform(
+                conn, sample_size=args.verify_sample, installed_function=installed
             )
-            print(f"  verified the SQL transform against the Python reference on {compared} rows")
+            drift_note = (
+                ", and the pinned copy against the installed trigger"
+                if verification["drift_checked"]
+                else ""
+            )
+            print(
+                "  verified the trigger against the Python reference on "
+                f"{verification['compared']} rows{drift_note}"
+            )
+            with conn.cursor() as cur:
+                cur.execute(f"TRUNCATE pg_temp.{PROBE_TABLE}")
+                cur.execute(f"TRUNCATE pg_temp.{DRIFT_PROBE_TABLE}")
 
             id_columns = read_id_columns(conn)
             has_id_columns = bool(id_columns)
@@ -699,6 +961,7 @@ def main(argv: list[str] | None = None) -> int:
             cutoff = resolve_cutoff(args.older_than_days)
             result = run_cleanup(
                 conn,
+                load_sql=build_batch_load_sql(),
                 update_sql=build_batch_update_sql(set_id_columns=has_id_columns),
                 dry_run_sql=build_batch_dry_run_sql(),
                 dry_run=args.dry_run,
@@ -731,10 +994,14 @@ def main(argv: list[str] | None = None) -> int:
             report = {
                 "target": redact_dsn(conninfo),
                 "dry_run": bool(args.dry_run),
-                "drop_continuation": bool(args.drop_continuation),
                 "older_than_days": args.older_than_days,
                 "batch_size": args.batch_size,
-                "verified_rows": compared,
+                "trigger": {
+                    "installed": verification["installed_trigger"],
+                    "pinned_source": PINNED_TRIGGER_SOURCE,
+                    "verified_rows": verification["compared"],
+                    "drift_checked": verification["drift_checked"],
+                },
                 "cleanup": result,
                 "vacuum": vacuum_statement,
                 "before": {"sizes": before_sizes, "payload": before_payload},
