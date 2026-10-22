@@ -741,3 +741,32 @@ only where `data-aria-hidden` is set, `inert` on the page shell,
 cannot be resolved, it shows an error and does not save the thread.
 Markdown `/export`, a bare `/export`, and Export as Markdown run the
 same string redactor before the file is saved.
+
+## Chat export redaction
+
+Every digichat export path runs its payload through the shared redactor
+(`packages/ui/src/replay/redact.ts`) before the payload leaves the page:
+the clipboard copy (and its fallback textarea, its parent-window post
+message, and its markdown download), the `mailto:` subject and body, the
+`.txt` export, and the minimal-HTML export. The replay HTML snapshot export
+is a different path: it redacts the cloned DOM (`redact-dom.ts`), not a
+string.
+
+The mailto body is redacted *before* the URL budget is applied, so the
+`[redacted]` marker counts toward the budget and a cut that lands inside a
+secret cannot leave a fragment of it in the URL. A cut that lands inside the
+marker drops the partial marker instead of writing out half of it. The
+serializers themselves (`markdownToPlainText`, `markdownToHtmlDocument`) are
+pure and do not redact: the download helpers redact before they call them, so
+a caller that writes the serializer output itself must redact first.
+
+The redactor is pattern-based, so an unlabeled secret of unknown shape can
+still get through. Two delimiters end a secret value only when the value
+does not continue after them: a `)` inside a query secret belongs to the
+secret when the value continues after it (`?token=abc)def` redacts the whole
+value), and the same holds for a backtick inside a session value. A `)` that
+closes a link (`?token=abc)`) and a backtick that closes a code span
+(`session=abc``) stay outside the value, so the surrounding prose keeps its
+delimiters. A secret whose value *ends* in one of those two characters
+leaves that last character outside the match, because the character is
+ambiguous.

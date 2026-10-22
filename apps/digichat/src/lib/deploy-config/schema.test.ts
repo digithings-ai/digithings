@@ -192,9 +192,7 @@ describe("DigichatConfigSchema", () => {
   });
 
   it("fails closed on missing deployment and hosts", () => {
-    expect(() => parseDigichatConfig({ version: 1 })).toThrow(
-      /deployment or at least one hosts/,
-    );
+    expect(() => parseDigichatConfig({ version: 1 })).toThrow(/deployment or at least one hosts/);
   });
 
   it("fails closed on invalid chrome.mode", () => {
@@ -453,9 +451,7 @@ describe("DigichatConfigSchema", () => {
       "openai/gpt-oss-120b",
       "z-ai/glm-5.3-flash",
     ]);
-    expect(cfg.deployment?.models.available.some((id) => id.endsWith(":free"))).toBe(
-      false,
-    );
+    expect(cfg.deployment?.models.available.some((id) => id.endsWith(":free"))).toBe(false);
   });
 
   it("pins product embed YAML to digichat skin + digigraph tool catalog", () => {
@@ -472,10 +468,7 @@ describe("DigichatConfigSchema", () => {
       vaultPathPrefix: "clients/digithings",
     });
     expect(dt?.tools?.allowUserToggle).toBe(true);
-    expect(dt?.tools?.catalog.map((t) => t.id)).toEqual([
-      "digisearch",
-      "digivault",
-    ]);
+    expect(dt?.tools?.catalog.map((t) => t.id)).toEqual(["digisearch", "digivault"]);
     expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
     expect(dt?.models.allowPicker).toBe(true);
@@ -492,10 +485,9 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.models.available).toContain("google/gemini-3.8-flash");
     expect(dt?.models.available).not.toContain("qwen/qwen3.8-max");
     expect(dt?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
-    expect(dt?.models.picker?.groups.find((group) => group.premium)?.models.map((model) => model.id)).toEqual([
-      "google/gemini-3.8-flash",
-      "z-ai/glm-5.3",
-    ]);
+    expect(
+      dt?.models.picker?.groups.find((group) => group.premium)?.models.map((model) => model.id),
+    ).toEqual(["google/gemini-3.8-flash", "z-ai/glm-5.3"]);
     expect(dt?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
       "z-ai/glm-5.3-flash",
     );
@@ -556,11 +548,7 @@ describe("DigichatConfigSchema", () => {
     );
     expect(occHost?.chrome.theme).toBe("light");
     expect(occHost?.mcp?.allowUserServers).toBe(false);
-    expect(occHost?.mcp?.servers.map((s) => s.id)).toEqual([
-      "zammad",
-      "digisearch",
-      "digivault",
-    ]);
+    expect(occHost?.mcp?.servers.map((s) => s.id)).toEqual(["zammad", "digisearch", "digivault"]);
     expect(occHost?.mcp?.servers[0]?.tokenEnv).toBe("ZAMMAD_API_TOKEN");
     expect(occHost?.mcp?.servers[0]?.authHeader).toBe("Authorization");
     expect(allowedForceTools(occHost)).toEqual(["zammad", "digisearch", "digivault"]);
@@ -590,7 +578,8 @@ describe("DigichatConfigSchema", () => {
     expect(host?.models.default).toBeUndefined();
     expect(host?.features.modelPicker).toBe(false);
     expect(host?.gate.lockSessionControls).toBe(true);
-    expect(host?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
+    // OCC never carries a premium meter, locked or open (2.6.8).
+    expect(host?.models.costPerWindow).toBeUndefined();
 
     const open = parseDigichatConfig({
       version: 1,
@@ -605,10 +594,11 @@ describe("DigichatConfigSchema", () => {
     const opened = open.hosts?.["occ.digithings.ai"];
     expect(opened?.features.modelPicker).toBe(true);
     expect(opened?.models.available).toContain("z-ai/glm-5.3");
-    expect(
-      opened?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model,
-    ).toBe("z-ai/glm-5.3-flash");
-    expect(opened?.models.costPerWindow?.windowSeconds).toBe(86400);
+    expect(opened?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
+      "z-ai/glm-5.3-flash",
+    );
+    // OCC carries no premium meter, even when a row writes one (2.6.8).
+    expect(opened?.models.costPerWindow).toBeUndefined();
   });
 
   it("parses operator MCP servers on the DataTap example without leaking URLs", () => {
