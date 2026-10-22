@@ -53,6 +53,7 @@ import {
   languageSelectOptions,
 } from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
+import { providerIdOf } from "@/lib/model-picker-catalog";
 import {
   byokRequiresModel,
   validateBYOKKey,
@@ -130,6 +131,8 @@ export type MenuRow = {
    * `└─`, like a file listing under its folder.
    */
   branch?: "mid" | "last";
+  /** Collapsible provider header: whether its children are shown. */
+  expanded?: boolean;
 };
 
 /** The /tools tree branch glyph for a row under a service. */
@@ -140,10 +143,12 @@ export function treeBranchGlyph(branch: MenuRow["branch"]): string {
 }
 
 export type ComposerModelPicker = {
-  presets: readonly { id: string; label: string; description: string; model: string }[];
+  presets: readonly { id: string; label: string; model: string }[];
   groups: readonly {
+    /** Backend provider id: the model id prefix before the first "/". */
     provider: string;
-    models: readonly { id: string; label: string }[];
+    models: readonly { id: string; label: string; premium?: boolean }[];
+    /** A hand-written group can still be manual-only. The catalog never sets it. */
     premium?: boolean;
   }[];
   showFullList: boolean;
@@ -459,6 +464,8 @@ export function EmbedComposerMenu({
   const keyFormId = useId();
   const openKey = `${kind}\0${providerSeed ?? ""}\0${mcpSeed ?? ""}`;
   const [appliedOpen, setAppliedOpen] = useState("");
+  /** Provider headers the visitor opened or closed; null means the default. */
+  const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean> | null>(null);
 
   useEffect(() => {
     mcpDraftRef.current = mcpDraft;
@@ -505,6 +512,7 @@ export function EmbedComposerMenu({
     setMcpError(null);
     setMcpSuggestIndex(-1);
     setMcpIdDropdownOpen(false);
+    setExpandedProviders(null);
   }
 
   const commitExclusive = useCallback(
@@ -587,6 +595,24 @@ export function EmbedComposerMenu({
     // provider's own models. The catalog picker is the house list.
     if (picker && !providerActive) {
       const selected = api.prefs.model;
+      const autoPreset = picker.presets.find((preset) => preset.id === "auto");
+      const selectedPreset = picker.presets.find((preset) => `preset:${preset.id}` === selected);
+      // The row to open by default: the selected model, or the Auto default.
+      const currentModel =
+        selectedPreset?.model ??
+        (selected && selected !== "auto" && !selected.startsWith("preset:")
+          ? selected
+          : undefined) ??
+        autoPreset?.model ??
+        (defaultModel?.includes("/") ? defaultModel : "");
+      const currentProvider = currentModel ? providerIdOf(currentModel) : "";
+      const opened = expandedProviders ?? (currentProvider ? { [currentProvider]: true } : {});
+      const toggleProvider = (provider: string) => {
+        setExpandedProviders((prev) => {
+          const base = prev ?? (currentProvider ? { [currentProvider]: true } : {});
+          return { ...base, [provider]: base[provider] !== true };
+        });
+      };
       const presetRows: MenuRow[] = picker.presets.map((preset) => {
         const token = `preset:${preset.id}`;
         const checked =
@@ -596,11 +622,12 @@ export function EmbedComposerMenu({
         return {
           id: token,
           label: preset.label,
-          value: preset.description,
+          value: "",
           checked,
           exclusive: true,
           insert: optionDraft("/models", preset.label),
           token: preset.label,
+          aliases: [preset.id],
           activate: () => {
             const next = preset.id === "auto" ? "" : token;
             commitExclusive(() => {
@@ -610,31 +637,42 @@ export function EmbedComposerMenu({
           },
         };
       });
+      // Provider groups as a /tools-style tree: a /provider row whose children
+      // are the raw model ids. Activating the header collapses or expands it.
       const groupRows: MenuRow[] = picker.showFullList
-        ? picker.groups.flatMap((group) => [
-            {
-              id: `heading:${group.provider}`,
-              label: group.provider,
-              value: group.premium ? "Manual selection" : "",
-              heading: true,
-              activate: () => {},
-            },
-            ...group.models.map((model) => ({
-              id: model.id,
-              label: model.label,
+        ? picker.groups.flatMap((group) => {
+            const open = opened[group.provider] === true;
+            const header: MenuRow = {
+              id: `provider:${group.provider}`,
+              label: `/${group.provider}`,
               value: "",
-              checked: selected === model.id,
-              exclusive: true,
-              insert: optionDraft("/models", model.label),
-              token: model.label,
+              expanded: open,
+              token: group.provider,
               activate: () => {
-                commitExclusive(() => {
-                  api.setModel(model.id);
-                  onPickSessionModel?.(model.id);
-                });
+                toggleProvider(group.provider);
               },
-            })),
-          ])
+            };
+            if (!open) return [header];
+            return [
+              header,
+              ...group.models.map((model, index) => ({
+                id: model.id,
+                label: model.id,
+                value: "",
+                checked: selected === model.id,
+                exclusive: true,
+                branch: (index === group.models.length - 1 ? "last" : "mid") as MenuRow["branch"],
+                insert: optionDraft("/models", model.id),
+                token: model.id,
+                activate: () => {
+                  commitExclusive(() => {
+                    api.setModel(model.id);
+                    onPickSessionModel?.(model.id);
+                  });
+                },
+              })),
+            ];
+          })
         : [];
       if (presetRows.length || groupRows.length) return [...presetRows, ...groupRows];
     }
@@ -692,7 +730,16 @@ export function EmbedComposerMenu({
         },
       })),
     ];
-  }, [available, api, commitExclusive, defaultModel, onPickSessionModel, picker, providerActive]);
+  }, [
+    available,
+    api,
+    commitExclusive,
+    defaultModel,
+    expandedProviders,
+    onPickSessionModel,
+    picker,
+    providerActive,
+  ]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
@@ -1864,6 +1911,7 @@ export function EmbedComposerMenu({
                     type="button"
                     role={toggle ? "menuitemcheckbox" : exclusive ? "menuitemradio" : "menuitem"}
                     aria-checked={typeof row.checked === "boolean" ? row.checked : undefined}
+                    aria-expanded={typeof row.expanded === "boolean" ? row.expanded : undefined}
                     data-cursor={index === cursor ? "true" : undefined}
                     className={MENU_ROW_CLASS}
                     ref={(node) => {
@@ -1895,7 +1943,7 @@ export function EmbedComposerMenu({
                     ) : null}
                     <span
                       className={
-                        view === "tools"
+                        view === "tools" || view === "models"
                           ? "min-w-0 flex-1 font-mono font-medium break-words [overflow-wrap:anywhere]"
                           : "min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]"
                       }

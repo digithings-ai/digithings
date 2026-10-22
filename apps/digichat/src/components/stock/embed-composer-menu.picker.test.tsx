@@ -444,47 +444,57 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
-  it("puts presets above provider groups and selects a preset token", async () => {
+  it("puts modes above provider groups and selects a preset token", async () => {
     const onClose = vi.fn();
     const setModel = vi.fn();
     const picker = {
       showFullList: true,
       presets: [
-        {
-          id: "auto",
-          label: "Auto",
-          description: "DeepSeek V4.1 Flash 1017, our default.",
-          model: "alpha",
-        },
-        {
-          id: "reasoning",
-          label: "Reasoning",
-          description: "Best reasoning in this list.",
-          model: "beta",
-        },
+        { id: "auto", label: "Default", model: "alpha/flash" },
+        { id: "reasoning", label: "Reasoning", model: "beta/think" },
       ],
-      groups: [{ provider: "DeepSeek", models: [{ id: "alpha", label: "Flash" }] }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/flash", label: "Alpha Flash" }] },
+        { provider: "beta", models: [{ id: "beta/think", label: "Beta Think" }] },
+      ],
     };
     const { unmount } = render(
       <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
-        <EmbedComposerMenu kind="models" picker={picker} models={["alpha"]} onClose={onClose} />
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha/flash"]} onClose={onClose} />
       </EmbedChatPrefsProvider>,
     );
     const radios = await screen.findAllByRole("menuitemradio");
     expect(radios.map((row) => row.textContent)).toEqual([
-      expect.stringContaining("Auto"),
+      expect.stringContaining("Default"),
       expect.stringContaining("Reasoning"),
-      expect.stringContaining("Flash"),
+      expect.stringContaining("alpha/flash"),
     ]);
-    expect(screen.queryByRole("menuitem", { name: "DeepSeek" })).toBeNull();
-    expect(screen.getByText("DeepSeek")).not.toBeNull();
-    expect(screen.getByText("Best reasoning in this list.")).not.toBeNull();
+    expect(screen.queryByText(/our default/)).toBeNull();
+    expect(screen.queryByText(/Best reasoning/)).toBeNull();
+    // Header rows are ordinary selectable rows, not headings.
+    const header = screen.getByRole("menuitem", { name: "/beta" });
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    // Only the provider holding the current model starts open.
+    expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+    expect(screen.queryByText("beta/think")).toBeNull();
+    await userEvent.click(screen.getByRole("menuitem", { name: "/beta" }));
+    expect(screen.getByRole("menuitem", { name: "/beta" }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+    expect(screen.getByText("beta/think")).not.toBeNull();
+    await userEvent.click(screen.getByRole("menuitem", { name: "/alpha" }));
+    expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(screen.queryByText("alpha/flash")).toBeNull();
     await userEvent.click(screen.getByRole("menuitemradio", { name: /Reasoning/ }));
     expect(setModel).toHaveBeenCalledWith("preset:reasoning");
     unmount();
   });
 
-  it("renders the newest-generation catalog and omits superseded models", async () => {
+  it("renders the modes first, then a /provider tree of raw ids", async () => {
     const onClose = vi.fn();
     const resolved = resolveModelCatalog(
       { presets: ["auto", "reasoning", "fast", "light"], showFullList: true },
@@ -500,20 +510,44 @@ describe("EmbedComposerMenu exclusive pickers", () => {
         />
       </EmbedChatPrefsProvider>,
     );
-    expect(await screen.findByRole("menuitemradio", { name: /Auto/ })).not.toBeNull();
-    expect(screen.getByText("GLM 5.3 Flash. Best reasoning in this list.")).not.toBeNull();
-    expect(screen.getByText("Gemini 3.5 Flash Lite. Fastest model in this list.")).not.toBeNull();
-    expect(screen.getByText("GPT-OSS 120B. Lowest price in this list.")).not.toBeNull();
-    expect(screen.getByText("Qwen 3.8 Flash")).not.toBeNull();
-    expect(screen.getByText("Premium")).not.toBeNull();
-    expect(screen.getByText("Manual selection")).not.toBeNull();
-    expect(screen.getByText("GLM 5.3")).not.toBeNull();
-    expect(screen.getByText("Gemini 3.8 Flash")).not.toBeNull();
-    expect(screen.getByText("Qwen 3.8 27B")).not.toBeNull();
-    expect(screen.queryByText("DeepSeek V4 Pro")).toBeNull();
-    expect(screen.queryByText("GLM 4.7 Flash")).toBeNull();
-    expect(screen.queryByText("GPT-5.6 Luna")).toBeNull();
-    expect(screen.queryByText("Gemini 3.1 Flash Lite")).toBeNull();
+    const radios = await screen.findAllByRole("menuitemradio");
+    expect(radios.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Default"),
+      expect.stringContaining("Reasoning"),
+      expect.stringContaining("Fast"),
+      expect.stringContaining("Light"),
+      expect.stringContaining("deepseek/deepseek-v4.1-flash"),
+      expect.stringContaining("deepseek/deepseek-v4.1-flash-1017"),
+    ]);
+    // No descriptions or subtitles anywhere.
+    expect(screen.queryByText("Manual selection")).toBeNull();
+    expect(screen.queryByText("Premium")).toBeNull();
+    expect(screen.queryByText(/Best reasoning in this list/)).toBeNull();
+    // One header per provider, sorted by id, with the current one open.
+    const headers = await screen.findAllByRole("menuitem", { name: /^\// });
+    expect(headers.map((row) => row.textContent)).toEqual([
+      "/deepseek",
+      "/google",
+      "/minimax",
+      "/openai",
+      "/qwen",
+      "/xiaomi",
+      "/z-ai",
+    ]);
+    expect(headers[0]?.getAttribute("aria-expanded")).toBe("true");
+    expect(headers[1]?.getAttribute("aria-expanded")).toBe("false");
+    // Children are the raw ids under ├─ / └─, never the catalog label.
+    expect(screen.queryByText("GLM 5.3")).toBeNull();
+    expect(screen.queryByText("Gemini 3.8 Flash")).toBeNull();
+    expect(screen.queryByText("Qwen 3.8 27B")).toBeNull();
+    const branches = document.querySelectorAll('[data-slot="tools-tree-branch"]');
+    expect([...branches].map((node) => node.textContent)).toEqual(["├─", "└─"]);
+    await userEvent.click(screen.getByRole("menuitem", { name: "/google" }));
+    expect(screen.getByText("google/gemini-3.5-flash-lite")).not.toBeNull();
+    expect(screen.getByText("google/gemini-3.8-flash")).not.toBeNull();
+    expect(screen.queryByText("deepseek/deepseek-v4-pro")).toBeNull();
+    expect(screen.queryByText("z-ai/glm-4.7-flash")).toBeNull();
+    expect(screen.queryByText("openai/gpt-5.6-luna")).toBeNull();
     unmount();
   });
 

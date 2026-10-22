@@ -264,13 +264,13 @@ writes nothing at all: no file, no KV key, no secret, no recycle. If the
 secret write fails after the KV write, the apply puts the previous KV copy
 back, so the two copies never disagree about a tenant.
 
-The OCC tenant may carry a catalog policy (`catalog`, price cap, presets,
-`showFullList`, `default`, `allowPicker`) and must not carry a raw
+The OCC tenant sets `models.occPicker` and must not carry a raw
 `models.available` id list. DIG-4750 refused an open id list; the curated
-catalog is the picker. An overlay that sets `models.available` for that host
-is refused. Compose strips `available` from a live copy and removes the
-section only when nothing else remains. With the catalog policy set, the embed
-shows presets and the price-capped list, and the visitor's pick is allowlisted.
+catalog is the picker. The model list, caps and presets are the product
+defaults the app resolves (the catalog plus `PRODUCT_PICKER_PRESETS`), so an
+overlay does not restate them; a policy it does write is kept. An overlay that
+sets `models.available` for that host is refused. Compose strips `available`
+from a live copy and removes the section only when nothing else remains.
 
 The container reads its environment at boot, so a registry change needs the
 container recycle the script performs. A digichat release that carries
@@ -283,14 +283,15 @@ rotation runbook.
 
 ### The OCC-only overlay
 
-`DIG-4488-occ-tenant-overlay.json` carries the OCC tenant alone. It sets the
-catalog policy and no raw model id list. The overlay does not touch the
-`digithings.ai` tenant.
+`DIG-4488-occ-tenant-overlay.json` carries the OCC tenant alone and only turns
+its model picker on (`models.occPicker`). It sets no model policy and no raw
+model id list, so OCC inherits the same product defaults as the house chat.
+The overlay does not touch the `digithings.ai` tenant.
 
 The overlay pins `slug`, `gateMode`, `webSearch`, the `backend` type, and the
-catalog policy. Corpus routing stays on the live copy. A live entry that
-already matches those four fields still changes in `models` when the live copy
-has no catalog policy, or when it still carries a raw `available` list.
+picker switch. Corpus routing stays on the live copy. A live entry that
+already matches those fields still changes in `models` when the live copy has
+no picker switch.
 
 The staged overlay `DIG-3556-staged-prod-tenant-config.json` carries both
 tenants and the same catalog policy on each. It also sends the `digithings.ai`

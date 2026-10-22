@@ -243,16 +243,25 @@ const ModelPickerPresetSchema = z
   .object({
     id: z.string().min(1),
     label: z.string().min(1),
-    description: z.string(),
     model: z.string().min(1),
   })
   .strict();
 
 const ModelPickerGroupSchema = z
   .object({
+    /** Backend provider id: the model id prefix before the first "/". */
     provider: z.string().min(1),
-    models: z.array(z.object({ id: z.string().min(1), label: z.string().min(1) }).strict()),
-    /** Manual Premium group. Presets and the router never select these ids. */
+    models: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          label: z.string().min(1),
+          /** Above the standard cap, at or under the premium cap. */
+          premium: z.boolean().optional(),
+        })
+        .strict(),
+    ),
+    /** A hand-written group can still be manual-only. The catalog never sets it. */
     premium: z.boolean().optional(),
   })
   .strict();
@@ -346,10 +355,10 @@ export type ModelOffer = {
   showFullList?: boolean;
   minContextTokens?: number;
   picker?: {
-    presets: Array<{ id: string; label: string; description: string; model: string }>;
+    presets: Array<{ id: string; label: string; model: string }>;
     groups: Array<{
       provider: string;
-      models: Array<{ id: string; label: string }>;
+      models: Array<{ id: string; label: string; premium?: boolean }>;
       premium?: boolean;
     }>;
     showFullList: boolean;
