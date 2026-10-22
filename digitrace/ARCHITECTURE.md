@@ -37,7 +37,8 @@ The hosting target is now the ADR-0036 pipeline:
 
 ```
 apps → OTLP/HTTP → digitrace-ingest Worker → Queue → consumer
-     → R2 digitrace-archive (system of record, OTLP-JSON per tenant per day)
+     → R2 digitrace-archive (system of record; OTLP-JSON NDJSON, one object per batch,
+       key `tenant=<slug>/date=<YYYY-MM-DD>/<source>/<uuid>.ndjson`)
      → Supabase core / public (digitrace_traces, digitrace_spans_index, digitrace_scores,
        digitrace_sessions) with per-table RLS on workspace_id
      → Workers Analytics Engine (tokens, cost, latency per tenant and model)

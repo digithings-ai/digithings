@@ -97,7 +97,13 @@ flowchart LR
   span/trace row either way. The security consequence is recorded in §5.
 - **Cloudflare destination names:** one per source Worker — `digitrace-digichat` and
   `digitrace-digiquant-runner`. Each destination carries the two fixed headers above.
-- **Format.** Cloudflare exports OTLP/HTTP **JSON**, never protobuf.
+- **Format.** The ingest Worker accepts **both** OTLP/HTTP encodings: **JSON** from the
+  Cloudflare destinations, which never send protobuf, and **protobuf** from the Python and
+  GitHub Actions sources, because `digibase.otel` exports OTLP/HTTP protobuf.
+- **Contract names.** `DIGI_OTEL_ENDPOINT` and `DIGI_OTEL_HEADERS` are the names: one
+  plumbing (`digibase.otel`), and the names the live digiquant-runner workflows already
+  forward. `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` and `LANGFUSE_OTLP_ENDPOINT` are **retired**
+  (DIG-5136): leaving them in a workflow points a live workflow at a dropped service.
 - **`persist = false`** on `[observability.traces]`. Consequence, decided on purpose: the
   Cloudflare dashboard keeps no traces of its own, so the stored-trace billing that
   starts on 1 December 2026 does not apply to us.
@@ -190,8 +196,9 @@ dropped rather than repaired.
   digithings service already has. What changes is the platform behind it, not the
   library's shape.
 - `digitrace.config` loses the `langsmith` and `langfuse-otlp` backend modes, the
-  `digitrace[langsmith]` extra and its own `_OTLP_ENDPOINT_ENVS` duplicate of
-  `digibase.otel`. The endpoint plumbing is `digibase.otel` only: one copy.
+  `digitrace[langsmith]` and `digitrace[tracing]` extras (both pull in the LangSmith SDK)
+  and its own `_OTLP_ENDPOINT_ENVS` duplicate of `digibase.otel`. The endpoint plumbing is
+  `digibase.otel` only: one copy.
 
 ### 7. What a span may carry
 
@@ -286,14 +293,15 @@ This ADR is done when all of the following hold. Each item names its owner.
 | AC2 | `apps/digitrace-langfuse/` and its two Dockerfiles are deleted, with the CI, contract, secret and runner surface cleaned in the same change | Repo, CI & Release Engineer | **DIG-5136** |
 | AC3 | `docs/ops/digitrace-langfuse.md` is a tombstone pointing at this ADR, not a runbook | Repo, CI & Release Engineer | **DIG-5136** |
 | AC4 | the 2026-10-01 plan memo carries a superseding banner | CTO | this PR |
-| AC5 | the `digitrace` architecture document, the vision document and the openwiki page no longer state that digitrace has no database, no worker and no queue | CTO | this PR (the openwiki page is listed as superseded; it is not edited here, because its claim sidecars make an edit risky) |
+| AC5 | the architecture document and the vision document no longer state that digitrace has no database, no worker and no queue | CTO | this PR, for those two documents. The openwiki page repeats the same sentence; it is listed as superseded in this ADR and is corrected in the next openwiki run, because editing a page with claim sidecars is not safe here |
 | AC6 | a read-only `digitrace.mcp_server` exists with `get_trace`, `search_traces`, `get_cost_summary` | R&D Engineer | **DIG-5141** |
 | AC7 | the index tables live in `public` with per-table RLS, named `digitrace_*` | Backend Engineer, Core Services | **DIG-2658** |
 | AC8 | the LangSmith leg is removed from the code and `LANGSMITH_API_KEY` is unset | DevOps Lead, then Chris for the secret | **DIG-2663** |
 
-AC2, AC3, AC6, AC7 and AC8 are owned by other tickets and are **not** closed by this
-ADR. This ADR is accepted when AC1 lands; the rest stay open on their tickets, and the
-retirement in AC2 and AC3 is the retirement of the Langfuse app, nothing else.
+AC2, AC3, AC5 (the openwiki page), AC6, AC7 and AC8 are owned by other tickets or other
+runs and are **not** closed by this ADR. This ADR is accepted when AC1 lands; the rest stay
+open on their tickets, and the retirement in AC2 and AC3 is the retirement of the Langfuse
+app, nothing else.
 
 ### 14. The migration path
 
@@ -305,11 +313,14 @@ retirement in AC2 and AC3 is the retirement of the Langfuse app, nothing else.
 5. **DIG-2661** — the dashboard Traces tab; **DIG-2662** — `digitrace replay` and MLflow.
 6. **DIG-2663** — seven days of parity against LangSmith and the AI Gateway logs. Chris
    approves the cut. The cut unsets `LANGSMITH_API_KEY` (a production secret) and removes
-   the LangSmith leg, the `digitrace[langsmith]` extra and the `langsmith` mode of
-   `export_backend()`. GitHub #4932 stays closed (it was closed on 2026-10-22 as
-   not-planned); #4933 is reworked and epic #4928 is updated.
+   the LangSmith leg, the `digitrace[langsmith]` and `digitrace[tracing]` extras and the
+   `langsmith` mode of `export_backend()`. GitHub #4932 stays closed (it was closed on
+   2026-10-22 as not-planned); #4933 is reworked and epic #4928 is updated.
 7. **DIG-5136** — the Langfuse app removal (AC2 and AC3), which does not wait for the
-   cut because Langfuse was never live.
+   cut because Langfuse was never live. The cut list on that leaf also takes
+   `scripts/smoke_digitrace_langfuse_otlp.sh`, `scripts/deploy/langfuse.sh`, the
+   `scripts/deploy/workers.tsv` entry and the `config/self-host/parity-baseline.json`
+   reference to the dropped service.
 
 ### 15. What stays a human step
 
@@ -377,5 +388,8 @@ Prepared, not performed. Each item is a production action.
 - Related ADRs: ADR-0021 (Supabase project topology) — conformed to, with the one
   exception in §4.
 - Review: [`docs/reviews/digitrace-tracing-architecture-review.md`](../reviews/digitrace-tracing-architecture-review.md)
-  (DIG-2664). The must-fix items M2, M4, M5 and M7 are answered in §4, §5, §13 and §10
-  respectively.
+  (DIG-2664). The must-fix items are answered as follows: **M2** (the ADR-0021 question) in
+  §4; **M4** (the architecture and vision documents must be superseded, not only the old
+  tickets) in the header, the Supersedes list and AC5; **M5** (the Langfuse retirement as a
+  named acceptance criterion) in §13; **M6** (RLS is not the tenant boundary on the
+  service-role path) in §5; **M7** (the read-only MCP server) in §10.
