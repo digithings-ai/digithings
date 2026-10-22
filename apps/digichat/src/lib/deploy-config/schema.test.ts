@@ -608,7 +608,8 @@ describe("DigichatConfigSchema", () => {
     expect(
       opened?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model,
     ).toBe("z-ai/glm-5.3-flash");
-    expect(opened?.models.costPerWindow?.windowSeconds).toBe(86400);
+    // OCC carries no premium meter, even when a row writes one (2.6.8).
+    expect(opened?.models.costPerWindow).toBeUndefined();
   });
 
   it("parses operator MCP servers on the DataTap example without leaking URLs", () => {

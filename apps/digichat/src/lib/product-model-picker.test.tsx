@@ -239,4 +239,91 @@ describe("product chats open with the model picker", () => {
     expect(dep.models.costPerWindow?.usd).toBe(0.01);
     expect(toolbarFor(dep).picker).toBe(true);
   });
+  it("keeps the house window when the row writes a catalog policy without one", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      hosts: {
+        "digithings.ai": {
+          slug: "digithings",
+          backend: { type: "digigraph" },
+          models: { catalog: true },
+        },
+      },
+    });
+    const dep = cfg.hosts!["digithings.ai"]!;
+    expect(dep.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
+    expect(dep.models.allowPicker).toBe(true);
+    expect(dep.features.modelPicker).toBe(true);
+  });
+
+  it("strips a meter and a TPM limit an OCC row writes; keeps the tool-call cap", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      hosts: {
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          guardrails: { maxToolCallsPerTurn: 8, tokensPerMinute: { user: 1000 } },
+          models: { catalog: true, costPerWindow: { usd: 0.01 } },
+        },
+      },
+    });
+    const dep = cfg.hosts!["occ.digithings.ai"]!;
+    expect(dep.models.costPerWindow).toBeUndefined();
+    expect(dep.guardrails?.tokensPerMinute).toBeUndefined();
+    expect(dep.guardrails?.maxToolCallsPerTurn).toBe(8);
+    expect(toolbarFor(dep).picker).toBe(true);
+  });
+
+  it("grants nothing to a customer host that reuses a product slug", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      hosts: {
+        "acme.example": { slug: "occ", backend: { type: "digigraph" } },
+        "beta.example": { slug: "digithings", backend: { type: "digigraph" } },
+        "plain.example": { slug: "plain", backend: { type: "digigraph" } },
+      },
+    });
+    for (const host of ["acme.example", "beta.example", "plain.example"]) {
+      const dep = cfg.hosts![host]!;
+      expect(toolbarFor(dep).picker).toBe(false);
+      expect(dep.models.catalog).toBeUndefined();
+      expect(dep.models.costPerWindow).toBeUndefined();
+    }
+  });
+
+  it("keeps a Foundry backend on a product host closed", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      hosts: {
+        "digithings.ai": {
+          slug: "digithings",
+          backend: {
+            type: "foundry",
+            projectEndpoint: "https://trial.example/api/projects/p",
+            agentName: "agent",
+          },
+        },
+      },
+    });
+    const dep = cfg.hosts!["digithings.ai"]!;
+    expect(dep.models.catalog).toBeUndefined();
+    expect(toolbarFor(dep).picker).toBe(false);
+  });
+
+  it("leaves a hand-written list without a picker grant", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      hosts: {
+        "digithings.ai": {
+          slug: "digithings",
+          backend: { type: "digigraph" },
+          models: { available: ["vendor/model-a"] },
+        },
+      },
+    });
+    const dep = cfg.hosts!["digithings.ai"]!;
+    expect(dep.models.available).toEqual(["vendor/model-a"]);
+    expect(dep.models.allowPicker).toBeUndefined();
+  });
 });

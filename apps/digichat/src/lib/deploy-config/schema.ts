@@ -918,13 +918,16 @@ function isOccHost(host: string | undefined, slug: string | undefined): boolean 
 }
 
 const HOUSE_EMBED_HOSTS: ReadonlySet<string> = new Set(["digithings.ai", "www.digithings.ai"]);
-const HOUSE_SLUGS: ReadonlySet<string> = new Set(["digithings", "digithings-ai"]);
 
-function isHouseHost(host: string | undefined, slug: string | undefined): boolean {
-  return (
-    (host !== undefined && HOUSE_EMBED_HOSTS.has(host)) ||
-    (slug !== undefined && HOUSE_SLUGS.has(slug))
-  );
+/**
+ * The two product chats are named by their host key, never by slug: a
+ * customer row may carry any slug, and these rules grant a picker.
+ */
+function productChat(host: string, dep: DigichatDeployment): "occ" | "house" | null {
+  if (dep.backend?.type === "foundry") return null;
+  if (host === OCC_EMBED_HOST) return "occ";
+  if (HOUSE_EMBED_HOSTS.has(host)) return "house";
+  return null;
 }
 
 /** Presets both product chats open with. The router stays off (2.6.6). */
@@ -932,7 +935,7 @@ const PRODUCT_PICKER_PRESETS = ["auto", "reasoning", "fast", "light"] as const;
 
 /**
  * digithings.ai premium allowance per visitor: three typical turns of the
- * manual Premium group per rolling day (#6193). The house meters, OCC does not.
+ * manual Premium group per rolling day (#6193). A written window wins.
  */
 const HOUSE_PREMIUM_WINDOW = { usd: 0.0125565, windowSeconds: 86_400 } as const;
 
@@ -941,23 +944,45 @@ const HOUSE_PREMIUM_WINDOW = { usd: 0.0125565, windowSeconds: 86_400 } as const;
  * model policy used to fall back to "no list, no picker" after #6193, which
  * hid the model chip on digithings.ai and OCC. Both now open with the catalog
  * picker unless the row turns it off (`allowPicker: false`, or
- * `occPicker: false` on OCC) or writes its own list or catalog policy.
+ * `occPicker: false` on OCC). A hand-written list is left alone.
+ *
+ * The house always keeps a premium window. OCC never carries one: Chris,
+ * 21 Oct 2026 22:51 Rome, "OCC has no token limits and no premium meter".
  */
-function withProductPickerDefaults(models: CatalogModels, house: boolean): CatalogModels {
+function withProductPickerDefaults(models: CatalogModels, kind: "occ" | "house"): CatalogModels {
   const base: NonNullable<CatalogModels> = models ?? { available: [] };
-  if (base.allowPicker === false) return base;
-  if (base.catalog === true || (base.available?.length ?? 0) > 0 || base.picker) {
-    return base.allowPicker === undefined ? { ...base, allowPicker: true } : base;
+  const limits = (next: NonNullable<CatalogModels>): NonNullable<CatalogModels> => {
+    if (kind === "house") {
+      return next.costPerWindow ? next : { ...next, costPerWindow: { ...HOUSE_PREMIUM_WINDOW } };
+    }
+    if (!next.costPerWindow) return next;
+    const open = { ...next };
+    delete open.costPerWindow;
+    return open;
+  };
+  if (base.allowPicker === false) return limits(base);
+  if ((base.available?.length ?? 0) > 0 && base.catalog !== true) return limits(base);
+  if (base.catalog === true) {
+    return limits(base.allowPicker === undefined ? { ...base, allowPicker: true } : base);
   }
-  return {
+  return limits({
     ...base,
     available: [],
     allowPicker: true,
     catalog: true,
     showFullList: base.showFullList ?? true,
     presets: base.presets ?? [...PRODUCT_PICKER_PRESETS],
-    ...(house && !base.costPerWindow ? { costPerWindow: { ...HOUSE_PREMIUM_WINDOW } } : {}),
-  };
+  });
+}
+
+/** OCC has no token-per-minute limit. The tool-call cap and answer guard stay. */
+function withoutTpm(
+  guardrails: DigichatDeployment["guardrails"],
+): DigichatDeployment["guardrails"] {
+  if (!guardrails?.tokensPerMinute) return guardrails;
+  const next = { ...guardrails };
+  delete next.tokensPerMinute;
+  return next;
 }
 
 /** OCC with `occPicker: false` keeps the operator model: no list, no picker. */
@@ -1020,9 +1045,15 @@ function applyCatalogConfig(
   const hosts = config.hosts
     ? Object.fromEntries(
         Object.entries(config.hosts).map(([host, dep]) => {
-          // Chris signed off the OCC picker (21 Oct 2026, 19:19 Rome), so it is
-          // on unless the row says `occPicker: false`.
-          if (isOccHost(host, dep.slug) && dep.models?.occPicker === false) {
+          // Chris signed off the OCC picker (21 Oct 2026, 19:19 Rome), so the
+          // OCC host is on unless its row says `occPicker: false`. Another row
+          // that only shares the slug keeps the old rule: locked unless true.
+          const kind = productChat(host, dep);
+          const occLocked =
+            kind === "occ"
+              ? dep.models?.occPicker === false
+              : isOccHost(host, dep.slug) && dep.models?.occPicker !== true;
+          if (occLocked) {
             return [
               host,
               {
@@ -1032,16 +1063,27 @@ function applyCatalogConfig(
               },
             ];
           }
-          const occ = isOccHost(host, dep.slug);
-          const house = !occ && isHouseHost(host, dep.slug) && dep.backend?.type !== "foundry";
           const models = applyModelCatalog(
-            occ || house ? withProductPickerDefaults(dep.models, house) : dep.models,
+            kind ? withProductPickerDefaults(dep.models, kind) : dep.models,
             `${ctx} hosts.${host}`,
             openRouterConfigured,
           );
-          if (occ) {
-            const open = models?.allowPicker !== false;
-            return [host, { ...dep, features: { ...dep.features, modelPicker: open }, models }];
+          if (kind) {
+            const open = models?.allowPicker === true;
+            return [
+              host,
+              {
+                ...dep,
+                features: { ...dep.features, modelPicker: open },
+                ...(kind === "occ" ? { guardrails: withoutTpm(dep.guardrails) } : {}),
+                models,
+              },
+            ];
+          }
+          if (isOccHost(host, dep.slug)) {
+            // A non-product row that only shares the OCC slug keeps the
+            // pre-2.6.8 rule: its own occPicker opens the picker.
+            return [host, { ...dep, features: { ...dep.features, modelPicker: true }, models }];
           }
           return [host, { ...dep, models }];
         }),
