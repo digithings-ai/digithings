@@ -69,7 +69,13 @@ could only be met by an attestation, and the launchd wrapper stamped `qa` on eve
 without QA doing anything. PRs #5489 and #5277 had already shown the cost (merged attested
 with zero reviews and zero comments). The review that counts is an artifact on the PR: a
 review pass by the board's reviewer seats that left its findings there, with those comments
-resolved or addressed (Chris's 2026-10-15 definition). No formal approval is required. QA is
+resolved or addressed (Chris's 2026-10-15 definition). No formal approval is required
+— but the pass must come from a seat that did not write the code, and the authoring
+lane's own write-up does not stand in for it. Since DIG-5220 (22 Oct 2026) the queue
+enforces that: a `reviewed:agent` label counts only when the findings comment carries a
+`digithings-review` marker that resolves against the Paperclip record to another seat and
+names the current head. A marker naming the author seat, a placeholder marker, or no
+marker at all is dropped, and the PR waits for another seat's pass. QA is
 not in the review path, and a `qa/gate` commit status is ignored in both directions.
 
 ## What may be merged
@@ -85,9 +91,9 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
-| Review | No outstanding `CHANGES_REQUESTED` review, and no review verdict blocks the head the PR stands at. A verdict is read from the `opencode-power-pack:code-review` marker or from a `Review verdict:` line, whichever is newer; the marker wins inside one comment. The ordering rule is [The verdict rule](#the-verdict-rule). Review *evidence* is the row below: the non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. |
-| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. |
-| Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat that did not write the PR's code. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring seat, or that seat's own marker posted while its own run was still active, is dropped — the PR then waits for a review from another seat. See [Reviewer independence](#reviewer-independence). |
+| Review | No outstanding `CHANGES_REQUESTED` review, and no review verdict blocks the head the PR stands at. A verdict is read from the `opencode-power-pack:code-review` marker or from a `Review verdict:` line, whichever is newer; the marker wins inside one comment. The ordering rule is [The verdict rule](#the-verdict-rule). Review *evidence* is the row below: the formal non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. A marker-verified pass from a seat that did not write the code is still required, and since DIG-5220 it is enforced. |
+| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. An in-session review counts only when the reviewer-independence gate accepts its marker as another seat's: the authoring lane's own write-up is not review coverage, and neither is a write-up whose marker is missing, placeholder, or names an older head. |
+| Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat that did not write the PR's code. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring seat, or that seat's own marker posted while its own run was still active, is dropped — the PR then waits for a review from another seat. The gate is **enforced** in the shipped policy since DIG-5220 (22 Oct 2026). See [Reviewer independence](#reviewer-independence). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
 | Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **whatever it is scoped to**. A block belongs to the seat that posted it: that seat's later approve clears it, and only when the approve names the head the PR stands at — another seat's approve clears nothing, and a new commit, a rebase or a merge from `develop` does not spend a block (DIG-4878). A marker verdict names that head by its own `scope=`; the provenance marker's `head=` is the fallback for a marker with no `scope=` and never a second binding for one that has it. See [The verdict rule](#the-verdict-rule). |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
@@ -173,8 +179,10 @@ queue cannot tell your block from another seat's.
 written once:
 
 - A **marker verdict names the head through its own `scope=`** and through nothing else.
-  The provenance marker's `head=` is the fallback for a marker that carries no `scope=`,
-  and it is never a second binding for one that does. An approve whose `scope=` names a
+  The provenance marker's `head=` is the fallback for a marker that carries no `scope=`
+  field, and it is never a second binding for one that does. A `scope=` the sha pattern
+  does not read (uppercase, short, no `@`, empty) binds nothing and does not fall back.
+  An approve whose `scope=` names a
   stale head says nothing about the head the PR stands at, and must not clear a block
   because the provenance marker names the newer head. That was the hole the review on
   `#6177` found on 2026-10-21: the seat's approve named the stale commit in its own
@@ -614,13 +622,28 @@ provenance against the Paperclip record — it cannot check the keystroke. Per-s
 GitHub identity is the other half of the epic (DIG-4803); until it lands, this is
 an accountability record like the labels, except that the queue enforces it.
 
-**Rollout.** The gate ships in **shadow** mode (`review_independence.mode` in
-`scripts/merge_queue_policy.json`, overridable with `MQ_REVIEW_INDEPENDENCE`;
-`off` disables it, an unreadable value fails safe to `enforce`). Shadow measures:
-the queue logs what it *would* refuse to
-`~/.config/digithings/merge-queue/reviewer-independence.log` and merges anyway.
-Enforce drops the markers and refuses. The flip to enforce is a separate small
-change, once the shadow log shows the measurement is stable (DIG-4809).
+**Rollout.** The gate shipped in **shadow** for the DIG-4809 window and is
+**enforced** since DIG-5220 (22 Oct 2026). The mode is
+`review_independence.mode` in `scripts/merge_queue_policy.json`, overridable with
+`MQ_REVIEW_INDEPENDENCE`; `off` disables it, an unreadable value fails safe to
+`enforce`. Since DIG-5220 both working modes refuse a marker the gate dropped.
+`shadow` additionally writes the measurement — the refusal, and what the row
+would have said with every comment counted — to
+`~/.config/digithings/merge-queue/reviewer-independence.log`; `enforce` decides
+without that file. Shadow used to merge what it had just measured, and that is
+what turned the measurement into two real merges: **#6277** (22 Oct) counted the
+authoring seat's own third-pass write-up as the review on head `723b48de`, and
+**#6197** (21 Oct) counted the author's fix write-up — with a placeholder
+provenance marker — while three seat blocks stood. In both cases the write-up was
+the authoring lane's, and no other seat had reviewed the head that merged.
+
+**The positive shape.** A non-author seat's pass clears the coverage gate when its
+comment carries the two house markers with real values — `agent` and `run` are
+Paperclip ids the API resolves to that seat, and `head` names the head the PR
+stands at now. An in-session review that says nothing about a later commit does
+not clear a newer head; a marker whose seat cannot be checked does not clear
+anything. That is the whole evidence needed: the verdict gate separately refuses a
+head the reviewing seat still has `changes requested` on.
 
 The log is a measurement, not an archive: it rotates at 1 MiB, it is readable by
 its owner only (`0600`), and it carries a line only when the measurement

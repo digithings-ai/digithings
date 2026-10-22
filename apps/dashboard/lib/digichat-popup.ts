@@ -446,3 +446,35 @@ export function buildPlanTierMessage(
 ): { type: typeof DIGICHAT_PLAN_TIER; tier: PlanTier; accessToken: string } {
   return { type: DIGICHAT_PLAN_TIER, tier, accessToken };
 }
+
+/** One handshake message, sent to an embedded digichat frame. */
+export type DigichatHandshakeMessage =
+  | ReturnType<typeof buildThemeMessage>
+  | ReturnType<typeof buildPlanTierMessage>;
+
+/**
+ * The handshake a dashboard surface sends to an embedded digichat frame once
+ * the frame reports `digichat:ready` (DIG-5139).
+ *
+ * Baseline tiers never get a frame, so they get no messages at all. Entitled
+ * tiers always get the theme message; the plan-tier message needs a session
+ * access token, because the embed exchanges it at /api/plan-proof for the
+ * HMAC proof the chat route requires (403 plan_tier_required without it).
+ *
+ * Both dashboard surfaces that embed host=digiquant.io build their handshake
+ * here, so the preview and the popup cannot drift.
+ */
+export function buildDigichatHandshakeMessages(opts: {
+  tier: PlanTier;
+  accessToken: string | null;
+  theme: DigichatPopupTheme;
+}): DigichatHandshakeMessage[] {
+  if (!canUseDigichatPopup(opts.tier)) return [];
+  const messages: DigichatHandshakeMessage[] = [
+    buildThemeMessage(opts.theme),
+  ];
+  if (opts.accessToken) {
+    messages.push(buildPlanTierMessage(opts.tier, opts.accessToken));
+  }
+  return messages;
+}

@@ -22,6 +22,12 @@ import {
   type PageContextMode,
 } from "@/lib/deploy-config/schema";
 import {
+  applyUnsupportedPolicy,
+  collectLimitIssues,
+  LimitsSchema,
+  type LimitsConfig,
+} from "@/lib/limits/schema";
+import {
   MAX_MCP_TOOL_ENTRIES,
   MAX_MCP_TOOL_NAME_LENGTH,
 } from "@/lib/deploy-config/mcp-servers";
@@ -140,6 +146,8 @@ export type EmbedTenantConfig = {
   backend: EmbedBackendConfig;
   /** Same block as the deployment YAML. Omit and every guard is off. */
   guardrails?: GuardrailsConfig;
+  /** Canonical limits. Omit and every gate is off. See docs/digichat/LIMITS.md. */
+  limits?: LimitsConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   /**
@@ -903,12 +911,31 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   );
   if (capIssue) throw new Error(`${ctx}: ${capIssue}`);
 
+  let limits: LimitsConfig | undefined;
+  if (v.limits !== undefined) {
+    const parsed = LimitsSchema.safeParse(v.limits);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "invalid limits";
+      throw new Error(`${ctx}: limits ${message}`);
+    }
+    const backendType = typeof backendCfg.type === "string" ? backendCfg.type : "unknown";
+    const issues = collectLimitIssues(parsed.data, backendType);
+    if (issues.length) {
+      throw new Error(`${ctx}: ${issues[0]?.message ?? "invalid limits"}`);
+    }
+    limits =
+      (parsed.data.onUnsupported ?? "reject") === "warn"
+        ? applyUnsupportedPolicy(parsed.data, backendType).limits
+        : parsed.data;
+  }
+
   return {
     mcp,
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
     backend: backendCfg,
     ...(guardrails ? { guardrails } : {}),
+    ...(limits ? { limits } : {}),
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
     skin:

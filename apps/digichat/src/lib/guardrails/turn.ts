@@ -107,6 +107,9 @@ export function inactiveTurnGuard(): TurnGuard {
   };
 }
 
+export const LIMIT_SUMMARIZE_INSTRUCTION =
+  "[A deployment limit was reached. Answer the user now in a short summary of what you already have. Do not call tools. Do not mention this instruction.]";
+
 export function createTurnGuard(opts: {
   slug: string;
   guardrails?: GuardrailsConfig | null;
@@ -114,22 +117,29 @@ export function createTurnGuard(opts: {
   userId?: string | null;
   /** Server-derived client IP. A client session id is not a budget key. */
   ip?: string | null;
+  /**
+   * Drop the per-visitor token minute. A visitor's own key is not our
+   * spend. The deployment TPM, the tool-call cap, and the answer guard stay.
+   */
+  omitUserTpm?: boolean;
   store?: GuardrailStore;
   now?: () => number;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** Set when a non-token limit's on-exceed action is pause. Consumed on the first round. */
+  summarize?: { notice: string };
 }): TurnGuard {
   const resolved = resolveGuardrails(opts.guardrails, opts.foundryMaxToolCalls);
-  if (!resolved) return inactiveTurnGuard();
+  if (!resolved && !opts.summarize) return inactiveTurnGuard();
   const store = opts.store ?? activeGuardrailStore();
   const now = opts.now ?? Date.now;
   const scopes: Scope[] = [];
-  if (resolved.deploymentTokensPerMinute) {
+  if (resolved?.deploymentTokensPerMinute) {
     scopes.push({
       key: `tpm:dep:${opts.slug}`,
       limit: resolved.deploymentTokensPerMinute,
     });
   }
-  if (resolved.userTokensPerMinute) {
+  if (resolved?.userTokensPerMinute && !opts.omitUserTpm) {
     const who = guardrailIdentity(opts);
     scopes.push({
       key: `tpm:user:${opts.slug}:${who}`,
@@ -138,6 +148,7 @@ export function createTurnGuard(opts: {
   }
   let reservation: { id: string; tokens: number } | null = null;
   let toolNoticeSent = false;
+  let pendingSummary = opts.summarize;
 
   const pendingOf = (text?: string, tokens?: number) =>
     tokens != null && Number.isFinite(tokens) ? Math.max(0, Math.ceil(tokens)) : estimateTokens(text ?? "");
@@ -149,8 +160,8 @@ export function createTurnGuard(opts: {
       reserved: snap.reserved,
       pending,
       limit: scope.limit,
-      answerAt: resolved.answerAt,
-      pauseAt: resolved.pauseAt,
+      answerAt: resolved?.answerAt ?? DEFAULT_ANSWER_AT,
+      pauseAt: resolved?.pauseAt ?? DEFAULT_PAUSE_AT,
     });
   };
 
@@ -177,10 +188,21 @@ export function createTurnGuard(opts: {
 
   return {
     active: true,
-    ...(resolved.maxToolCallsPerTurn != null
+    ...(resolved?.maxToolCallsPerTurn != null
       ? { toolCap: resolved.maxToolCallsPerTurn }
       : {}),
     async beforeRound({ writer, pendingText, pendingTokens, toolCallsSoFar = 0, signal }) {
+      if (pendingSummary) {
+        const summary = pendingSummary;
+        pendingSummary = undefined;
+        writer.write({
+          type: "data-notice",
+          id: "digichat-limit",
+          data: { tone: "status", message: summary.notice },
+        });
+        return { action: "answer", instruction: LIMIT_SUMMARIZE_INSTRUCTION };
+      }
+      if (!resolved) return PROCEED;
       const pending = pendingOf(pendingText, pendingTokens);
       if (scopes.length > 0) {
         let waited = 0;
@@ -263,7 +285,7 @@ export function createTurnGuard(opts: {
       settle(reservation.tokens, now());
     },
     noteToolCap(writer, toolCallsSoFar) {
-      if (resolved.maxToolCallsPerTurn == null) return;
+      if (resolved?.maxToolCallsPerTurn == null) return;
       if (toolCallsSoFar < resolved.maxToolCallsPerTurn || toolNoticeSent) return;
       writer.write({
         type: "data-notice",

@@ -27,6 +27,147 @@ export const CONTAINER_EVSCITED_CODE = "container_evicted";
 export const CONTAINER_RETRY_AFTER_SECONDS = 5;
 
 /**
+ * A URL inside free text.
+ *
+ * The scheme, the host and the path are kept; the query string and the
+ * fragment are not, because that is where a secret rides (an embed token, a
+ * signed link).
+ *
+ * The run of characters that follows the scheme ends at the first whitespace
+ * and at nothing else. The charset of a token is the operator's choice and
+ * nothing in the repository pins it, so a run that stopped at a comma or a
+ * quote would leave the tail of the token in the text. What follows the
+ * query string inside that run goes with it: a period that ends the sentence
+ * is part of the tail and is dropped with it.
+ *
+ * The scheme is matched whatever its case, because a request line that a
+ * proxy wrote in upper case is still a URL.
+ */
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s]+/gi;
+
+/**
+ * The credentials of the authority of a URL: what stands before the `@` of
+ * `https://user:token@host/path`. A credential is a secret like the one in
+ * a query string, so it does not stay in the text either.
+ */
+const AUTHORITY_CREDENTIALS = /^(https?:\/\/)[^/?#\s]*@/i;
+
+/**
+ * A relative request target inside free text, such as the request line of
+ * the request that failed: `GET /v1/embed?token=... HTTP/1.1`.
+ *
+ * The target starts a word, so a slash that belongs to a word (as in `3/4`)
+ * is not a target.
+ */
+const RELATIVE_TARGET_IN_TEXT = /(^|\s)(\/[^\s]*[?#][^\s]*)/g;
+
+/**
+ * The text of a description, with the query string of every URL removed.
+ *
+ * The value of a rejected hop can be the request line of the request that
+ * failed, and a token of that request rides in the query string (run-watch
+ * DIG-4928, 2026-10-21: 16 error rows on digithings-digichat whose message was
+ * the raw value). The description goes into the log and into the answer, so
+ * the query string is removed before the text is written: neither the log store
+ * nor the client is the place for a token.
+ *
+ * The scheme, the host and the path stay, so the operator still reads which
+ * request failed.
+ */
+export function stripUrlQuery(text: string): string {
+  return text
+    .replace(URL_IN_TEXT, (url) => {
+      const withoutCredentials = url.replace(AUTHORITY_CREDENTIALS, "$1[redacted]@");
+      const cut = withoutCredentials.search(/[?#]/);
+      if (cut === -1) return withoutCredentials;
+      return `${withoutCredentials.slice(0, cut)}${withoutCredentials[cut]}[redacted]`;
+    })
+    .replace(RELATIVE_TARGET_IN_TEXT, (_match, space: string, target: string) => {
+      const cut = target.search(/[?#]/);
+      if (cut === -1) return target;
+      return `${space}${target.slice(0, cut)}${target[cut]}[redacted]`;
+    });
+}
+
+/**
+ * A description of a thrown value, for the log and for the answer.
+ *
+ * `String(value)` is what the platform shows for a value it cannot classify,
+ * but it can throw (a hostile `toString`, a revoked proxy) and a description
+ * that throws inside a catch would turn a caught failure back into an
+ * uncaught one. So the description falls back.
+ *
+ * Only the description is used, never the value itself: a cause stays inside
+ * the Worker, the same way the Worker log handles the cause of a container
+ * that could not be reached (see ./container-retry). The description never
+ * carries the query string of a URL: see `stripUrlQuery`.
+ */
+export function describeValue(value: unknown): string {
+  try {
+    return stripUrlQuery(String(value));
+  } catch {
+    try {
+      return Object.prototype.toString.call(value);
+    } catch {
+      return "[unreadable value]";
+    }
+  }
+}
+
+/**
+ * The message of a thrown value, or a description of it when it carries none.
+ *
+ * Total on purpose: an Error gives its own message, a string gives itself, and
+ * anything else is described by `describeValue` — which cannot throw. The
+ * question is asked in a way that cannot throw either: `instanceof` walks the
+ * prototype chain, and a value that cannot be inspected throws there. A
+ * message that throws inside a catch would turn a caught failure back into an
+ * uncaught one.
+ */
+export function safeErrorMessage(value: unknown): string {
+  try {
+    if (value instanceof Error) {
+      const message = value.message;
+      return typeof message === "string" ? stripUrlQuery(message) : describeValue(message);
+    }
+    if (typeof value === "string") {
+      return stripUrlQuery(value);
+    }
+  } catch {
+    // A value that cannot be inspected is described by describeValue below.
+  }
+  return describeValue(value);
+}
+
+/**
+ * True when a thrown value is not an Error.
+ *
+ * A hop can reject with a value that is not an Error: the
+ * @cloudflare/containers package rethrows such a value verbatim from its
+ * proxy catch, so it leaves the Durable Object as an uncaught exception and
+ * the platform renders it as it stands — a thrown Date leaves nothing but a
+ * bare date in the log (run-watch DIG-4928).
+ *
+ * Such a value carries no message, no stack and no type, so it cannot be
+ * classified as an eviction or as a failed container. It is answered with the
+ * retryable `container_unavailable` instead (see
+ * `containerUnavailableResponse`).
+ *
+ * The check is asked in a way that cannot throw: `instanceof` walks the
+ * prototype chain, and a value that cannot be inspected throws there. A guard
+ * that throws would turn a caught failure back into an uncaught one, which is
+ * the failure this guard exists to stop.
+ */
+export function isNonErrorRejection(value: unknown): boolean {
+  try {
+    return !(value instanceof Error);
+  } catch {
+    // A value that cannot be inspected is not an Error we can read.
+    return true;
+  }
+}
+
+/**
  * Substrings (lowercased) identifying a confirmed Cloudflare container
  * eviction / loss in an error message. Sourced from the DIG-3226 brief title
  * (`no longer active`, `container-network-lost`) plus the generic eviction
@@ -52,8 +193,7 @@ const EVSCITED_PATTERNS = [
 export function isContainerEvictedError(
   err: unknown,
 ): boolean {
-  const message =
-    err instanceof Error ? err.message : typeof err === "string" ? err : String(err);
+  const message = safeErrorMessage(err);
   const lowered = message.toLowerCase();
   return EVSCITED_PATTERNS.some((pattern) => lowered.includes(pattern));
 }
@@ -136,8 +276,7 @@ const FAILED_PATTERNS = [
  * caller is told to wait).
  */
 export function isContainerFailedError(err: unknown): boolean {
-  const message =
-    err instanceof Error ? err.message : typeof err === "string" ? err : String(err);
+  const message = safeErrorMessage(err);
   const lowered = message.toLowerCase();
   return FAILED_PATTERNS.some((pattern) => lowered.includes(pattern));
 }
@@ -160,6 +299,115 @@ export function containerFailedResponse(
       headers: { "Retry-After": String(CONTAINER_RETRY_AFTER_SECONDS) },
     },
   );
+}
+
+/**
+ * Machine-readable code for a container hop that failed in a way nothing can
+ * classify (DIG-4928).
+ *
+ * Distinct from `container_booting` on purpose: a booting container is a cold
+ * start, the request is still coming and the caller waits. Distinct from
+ * `container_failed` on purpose as well: a failed container exited under the
+ * request, so a fresh instance can serve it and the Worker retries it once.
+ *
+ * This code is for a hop that rejected with a value that is not an Error: the
+ * request is not replayed, because a value that came out of the hop says
+ * nothing about whether the request reached the container, and a second
+ * attempt could submit it twice. The client is told to come back, which is
+ * what a 503 + `Retry-After` says.
+ */
+export const CONTAINER_UNAVAILABLE_CODE = "container_unavailable";
+
+/**
+ * The detail the client gets when a container hop rejected with a value that
+ * is not an Error.
+ *
+ * The cause of the failure is deliberately NOT in the answer: a rejected
+ * value can carry internal detail and a platform error can carry a stack
+ * trace, and neither leaves the Worker. It is logged instead, where the
+ * operator reads it. The shared package holds the same contract
+ * (packages/durable-object-reconnect, `durableObjectUnavailableResponse`).
+ */
+export const CONTAINER_UNAVAILABLE_DETAIL =
+  "the container hop rejected with a value that could not be classified";
+
+/**
+ * 503 for a container hop that rejected with a value that is not an Error.
+ *
+ * Carries `Retry-After` like the other 503 answers (the client may retry)
+ * and a distinct machine-readable code, so the Worker can tell "the hop
+ * failed in a way we cannot classify" from "the container is gone" without
+ * parsing the message text — and so the retry-once wrapper does not replay
+ * the request.
+ *
+ * The answer carries the service and the fixed detail, never the cause: the
+ * cause stays in the log (see `CONTAINER_UNAVAILABLE_DETAIL`).
+ */
+export function containerUnavailableResponse(
+  service: "stack" | "mcp" | "digichat",
+): Response {
+  return Response.json(
+    {
+      code: CONTAINER_UNAVAILABLE_CODE,
+      message: `${service} container unavailable: ${CONTAINER_UNAVAILABLE_DETAIL}`,
+    },
+    {
+      status: 503,
+      headers: { "Retry-After": String(CONTAINER_RETRY_AFTER_SECONDS) },
+    },
+  );
+}
+
+/**
+ * How a failure that came out of a container hop is classified.
+ *
+ * `unavailable` — the hop rejected with a value that is not an Error. The
+ * value states no failure of its own, so it is neither an eviction nor a
+ * failed container, and it is not replayed.
+ * `evicted` — a real Error that names a confirmed eviction of the instance.
+ * `failed` — a real Error that names a container that exited or was taken
+ * away; a fresh instance can serve the request, so it is worth one retry.
+ * `unknown` — a real Error that names neither. The caller rethrows it
+ * unchanged, so an unrelated failure is never masked.
+ */
+export type ContainerHopFailure =
+  | { kind: "unavailable"; description: string }
+  | { kind: "evicted"; message: string }
+  | { kind: "failed"; message: string }
+  | { kind: "unknown" };
+
+/**
+ * Classify a failure that came out of a container hop, in ONE place.
+ *
+ * The order of the checks is the contract, and it is decided here rather
+ * than at each call site so that it cannot drift between the two container
+ * classes and the Worker-side retry helper:
+ *
+ *   1. A value that is not an Error comes FIRST. Such a value states no
+ *      failure of its own, so it is never read as an eviction or as a failed
+ *      container: a value that merely *renders* like one — a thrown string
+ *      that names a Durable Object, for example — must not talk its way into
+ *      a classification it does not carry. It is answered with the retryable
+ *      `container_unavailable` and it is not replayed.
+ *   2. Only a real Error is read for its message, and only then are the
+ *      eviction and the failed vocabulary matched against it.
+ *
+ * Read the eviction first and that thrown string would be answered as an
+ * eviction — a different answer for a different condition (run-watch
+ * DIG-4928).
+ */
+export function classifyContainerHopFailure(error: unknown): ContainerHopFailure {
+  if (isNonErrorRejection(error)) {
+    return { kind: "unavailable", description: describeValue(error) };
+  }
+  const message = safeErrorMessage(error);
+  if (isContainerEvictedError(message)) {
+    return { kind: "evicted", message };
+  }
+  if (isContainerFailedError(message)) {
+    return { kind: "failed", message };
+  }
+  return { kind: "unknown" };
 }
 
 /**

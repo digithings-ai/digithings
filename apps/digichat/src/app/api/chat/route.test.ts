@@ -120,6 +120,7 @@ import {
   resetPremiumSpendForTests,
 } from "@/lib/premium-budget/budget";
 import { createDigiGraphClient } from "@/lib/digigraph";
+import { resetLimitsStoreForTests } from "@/lib/limits/store";
 
 function catalogWithSearchVault() {
   return parseDigichatConfig({
@@ -358,6 +359,211 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       })
     );
     expect(res.status).toBe(429);
+  });
+
+  it("keeps the request limiter when a deployment omits rateLimit", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "house",
+          backend: { type: "digigraph" },
+          guardrails: { maxToolCallsPerTurn: 5 },
+        },
+      }),
+    );
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ messages: [{ id: "1", role: "user", parts: [] }] }),
+        }),
+      );
+      expect(res.status).toBe(429);
+      expect(checkBffRateLimit).toHaveBeenCalled();
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("skips the request limiter when the visitor brings their own key", async () => {
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkEmbedIpRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "sk-or-v1-test",
+          "x-byok-provider": "openrouter",
+          "x-byok-model": "openai/gpt-4o-mini",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(checkBffRateLimit).not.toHaveBeenCalled();
+    expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("still rate-limits a blank own-key header", async () => {
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "   ",
+        },
+        body: JSON.stringify({ messages: [{ id: "1", role: "user", parts: [] }] }),
+      }),
+    );
+    expect(res.status).toBe(429);
+    expect(checkBffRateLimit).toHaveBeenCalled();
+  });
+
+  it("skips both request limiters and the per-visitor minute for an anonymous own key", async () => {
+    resetGuardrailStoreForTests();
+    vi.mocked(clientIpForRateLimit).mockReturnValue("203.0.113.9");
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkEmbedIpRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 45 });
+    const spentAt = Date.now();
+    activeGuardrailStore().commit("tpm:user:public:203.0.113.9", "seed", 900, spentAt);
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "public",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "public",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://x/",
+          agentName: "fixture-agent",
+        },
+        guardrails: {
+          maxToolCallsPerTurn: 5,
+          answerAt: 0.7,
+          pauseAt: 0.9,
+          rateLimit: true,
+          tokensPerMinute: { user: 1000, deployment: 10_000 },
+        },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-embed-host": "https://public.digithings.ai",
+            "x-byok-key": "sk-test",
+            "x-byok-provider": "openai",
+            "x-byok-model": "openai/gpt-4o-mini",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
+      expect(checkBffRateLimit).not.toHaveBeenCalled();
+      const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+        guard?: {
+          toolCap?: number;
+          beforeRound: (opts: {
+            writer: { write: (part: unknown) => void };
+            pendingTokens?: number;
+            toolCallsSoFar?: number;
+          }) => Promise<{ action: string }>;
+          recordUsage: (usage: { totalTokens: number }) => void;
+        };
+      };
+      expect(call?.guard?.toolCap).toBe(5);
+      const clearance = await call?.guard?.beforeRound({
+        writer: { write() {} },
+        pendingTokens: 10,
+      });
+      expect(clearance?.action).toBe("proceed");
+      const stopped = await call?.guard?.beforeRound({
+        writer: { write() {} },
+        toolCallsSoFar: 5,
+      });
+      expect(stopped?.action).toBe("stop-tools");
+      call?.guard?.recordUsage({ totalTokens: 5 });
+      const spent = (key: string) =>
+        activeGuardrailStore()
+          .read(key, Date.now())
+          .events.reduce((sum, event) => sum + event.tokens, 0);
+      expect(spent("tpm:user:public:203.0.113.9")).toBe(900);
+      expect(spent("tpm:dep:public")).toBeGreaterThan(0);
+    } finally {
+      resetGuardrailStoreForTests();
+      vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");
+    }
+  });
+
+  it("turns the request limiter off when the deployment sets rateLimit false", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          guardrails: {
+            rateLimit: false,
+            maxToolCallsPerTurn: 5,
+            answerAt: 0.7,
+            pauseAt: 0.9,
+          },
+        },
+      }),
+    );
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkEmbedIpRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(checkBffRateLimit).not.toHaveBeenCalled();
+      expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        prepareStep?: (step: {
+          steps: { toolCalls?: unknown[] }[];
+          messages: { role: string; content: unknown }[];
+        }) => Promise<{ toolChoice?: string } | undefined>;
+      };
+      const prepared = await call.prepareStep?.({
+        steps: [{ toolCalls: [{}, {}, {}, {}, {}] }],
+        messages: [{ role: "user", content: "hi" }],
+      });
+      expect(prepared?.toolChoice).toBe("none");
+    } finally {
+      resetDigichatConfigForTests();
+    }
   });
 
   it("returns 429 when the anonymous embed IP limiter blocks", async () => {
@@ -1159,25 +1365,39 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
   });
 
-  it("does not forward web search when env gate is off (#3420)", async () => {
+  it("does not forward web search when the deployment and the env gate are off (#3420)", async () => {
     delete process.env.DIGICHAT_WEB_SEARCH;
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-digi-enable-web-search": "1",
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "plain",
+          backend: { type: "digigraph" },
+          gate: { webSearch: false },
         },
-        body: JSON.stringify({
-          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
-        }),
-      })
+      }),
     );
-    expect(res.status).toBe(200);
-    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
-      headers?: Record<string, string>;
-    };
-    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-enable-web-search": "1",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+    } finally {
+      resetDigichatConfigForTests();
+    }
   });
 
   it("forwards web search for first-party (null embedConfig) when DIGICHAT_WEB_SEARCH=1", async () => {
@@ -1205,7 +1425,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
   });
 
-  it("does not forward web search for first-party (null embedConfig) when env is unset", async () => {
+  it("forwards web search for first-party house when the deployment allows it", async () => {
     delete process.env.DIGICHAT_WEB_SEARCH;
     vi.mocked(resolveChatTenantContext).mockResolvedValue({
       ...mockAuthCtx,
@@ -1227,7 +1447,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
       headers?: Record<string, string>;
     };
-    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
   });
 
   it("forwards X-Digi-License when the container holds a license (spec §7.1)", async () => {
@@ -2859,11 +3079,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       });
       expect(call?.responseHeaders["X-Digichat-Session"]).toBe("sess-trace");
       expect(call?.responseHeaders["X-Request-Id"]).toBe("rid-trace");
-      // The session path now resolves the same deployment the embed path does
-      // (Phase 2b), so the adapter gets that deployment's `gate.activityDetail`
-      // instead of a hard-coded "full". The synthetic dev config in tests leaves
-      // it at the schema default.
-      expect(call?.activityDetail).toBe("labels");
+      // No config file loads house. House sets activityDetail full.
+      expect(call?.activityDetail).toBe("full");
       expect(call?.signal).toBeDefined();
     });
 
@@ -3127,5 +3344,59 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         }
       });
     });
+  });
+});
+
+describe("POST /api/chat limits", () => {
+  beforeEach(() => {
+    resetLimitsStoreForTests();
+    vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
+    vi.mocked(resolveChatTenantContext).mockResolvedValue(mockAuthCtx);
+    vi.mocked(resolveDigigraphUpstreamAuth).mockResolvedValue({
+      bearer: "jwt-token",
+      litellmProxyApiKey: null,
+    });
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
+  });
+
+  afterEach(() => {
+    resetLimitsStoreForTests();
+    resetDigichatConfigForTests();
+  });
+
+  it("blocks a second conversation from the same IP without calling a model", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "trial",
+          backend: { type: "digigraph" },
+          limits: { sessions: { perIp: { max: 1, window: "concurrent", message: "one chat" } } },
+        },
+      }),
+    );
+    const req = (conversation: string) =>
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-external-conversation": conversation,
+          "x-digichat-session": "sess-1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    const first = await POST(req("conv-a"));
+    expect(first.status).toBe(200);
+    const streamCalls = vi.mocked(streamText).mock.calls.length;
+    const traceCalls = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.length;
+    const second = await POST(req("conv-b"));
+    expect(second.status).toBe(429);
+    expect(await second.json()).toMatchObject({ error: "limit_exceeded", message: "one chat" });
+    expect(vi.mocked(streamText).mock.calls.length).toBe(streamCalls);
+    expect(vi.mocked(createDigigraphTraceStreamResponse).mock.calls.length).toBe(traceCalls);
+    expect(vi.mocked(createFoundryStreamResponse)).not.toHaveBeenCalled();
   });
 });

@@ -113,7 +113,7 @@ export type EmbedTenantClientConfig = {
     available?: string[];
     allowPicker?: boolean;
     picker?: {
-      presets: Array<{ id: string; label: string; description: string; model: string }>;
+      presets: Array<{ id: string; label: string; model: string }>;
       groups: Array<{ provider: string; models: Array<{ id: string; label: string }> }>;
       showFullList: boolean;
     };

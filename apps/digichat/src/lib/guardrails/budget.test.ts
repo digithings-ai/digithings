@@ -238,6 +238,75 @@ describe("createTurnGuard", () => {
     expect(shared.read("tpm:dep:trial", 1_000).events.map((event) => event.tokens)).toContain(15);
   });
 
+  it("skips the per-visitor minute when the visitor brings their own key", async () => {
+    const store = new MemoryGuardrailStore();
+    store.commit("tpm:user:public:203.0.113.9", "seed", 750, 0);
+    const guard = createTurnGuard({
+      slug: "public",
+      guardrails: {
+        tokensPerMinute: { user: 1000, deployment: 10_000 },
+        maxToolCallsPerTurn: 2,
+        answerAt: 0.7,
+        pauseAt: 0.9,
+      },
+      userId: "embed:anonymous",
+      ip: "203.0.113.9",
+      omitUserTpm: true,
+      store,
+      now: () => 1_000,
+    });
+    const clearance = await guard.beforeRound({
+      writer: { write() {} },
+      pendingTokens: 10,
+    });
+    expect(clearance).toEqual({ action: "proceed" });
+    guard.recordUsage({ totalTokens: 5 });
+    expect(store.read("tpm:user:public:203.0.113.9", 1_000).events.map((event) => event.tokens)).toEqual([
+      750,
+    ]);
+    expect(store.read("tpm:dep:public", 1_000).events.map((event) => event.tokens)).toEqual([5]);
+  });
+
+  it("still pauses on the shared deployment minute when the visitor minute is omitted", async () => {
+    const time = clock();
+    const store = new MemoryGuardrailStore();
+    const started = time.at();
+    store.commit("tpm:dep:trial", "seed", 90, started - 1_000);
+    store.commit("tpm:user:trial:visitor", "seed", 900, started);
+    const guard = createTurnGuard({
+      slug: "trial",
+      guardrails: { tokensPerMinute: { deployment: 100, user: 1000 }, pauseAt: 0.9, answerAt: 0.7 },
+      userId: "visitor",
+      omitUserTpm: true,
+      store,
+      now: time.now,
+      sleep: time.sleep,
+    });
+    const parts: unknown[] = [];
+    const clearance = await guard.beforeRound({
+      writer: { write: (part) => parts.push(part) },
+      pendingText: "abcd",
+    });
+    expect(clearance.action).toBe("proceed");
+    expect(JSON.stringify(parts)).toContain("Pausing for the token limit, resuming shortly");
+    expect(store.read("tpm:user:trial:visitor", time.at()).events.map((event) => event.tokens)).toEqual([900]);
+  });
+
+  it("still stops tools when the visitor minute is omitted", async () => {
+    const guard = createTurnGuard({
+      slug: "public",
+      guardrails: { maxToolCallsPerTurn: 2, tokensPerMinute: { user: 1000 } },
+      omitUserTpm: true,
+    });
+    const parts: unknown[] = [];
+    const clearance = await guard.beforeRound({
+      writer: { write: (part) => parts.push(part) },
+      toolCallsSoFar: 2,
+    });
+    expect(clearance.action).toBe("stop-tools");
+    expect(JSON.stringify(parts)).toContain("Tool-call limit reached (2 this turn)");
+  });
+
   it("clips tool results and asks the model to stop once the cap is spent", async () => {
     const guard = createTurnGuard({
       slug: "trial",
