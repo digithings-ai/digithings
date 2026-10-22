@@ -18,12 +18,16 @@ or spends without an explicit live flag plus a named approval.
 | `publish-digichat-image.yml` (GHCR publish) | `publish_image.sh digichat` | Only with `--push` |
 | `publish-digillm-image.yml` (GHCR publish) | `publish_image.sh digillm` | Only with `--push` |
 
-`deploy-digithings-stack-cloudflare.yml` is named by both apps' READMEs and
-by `docs/ops/SECRETS_INVENTORY.md`, but **it does not exist in the repo** — it
-was deleted on 2026-10-01 by `f54af7052` (#4919, Human Gate, DIG-2843), and
-`deploy-digichat-cloudflare-container.yml` went with it. `deploy_worker.sh`
-already covers both, because it takes any directory under `apps/`; there was
-never a replacement to write.
+`deploy-digithings-stack-cloudflare.yml` and `deploy-digichat-cloudflare-container.yml`
+are both in the repo again: the stack lane was re-derived on `develop` on 2026-10-20
+(DIG-4612, #6013) and the digichat lane on 2026-10-22 (DIG-5120). Both were
+**re-derived, not reverted** — the files deleted on 2026-10-01 by `f54af7052`
+(#4919, Human Gate, DIG-2843) had no `production` environment gate, so a
+push-triggered successor would have deployed production on every merge. The
+digichat lane deploys on a manual `workflow_dispatch` only; the stack lane
+also deploys on a push to `main`. Both sit behind `environment: production`,
+and both deploy through each app's `npm run deploy` wrapper. `deploy_worker.sh`
+remains the local path, because it takes any directory under `apps/`.
 
 ## The release branch: one ref, one Worker at a time
 
