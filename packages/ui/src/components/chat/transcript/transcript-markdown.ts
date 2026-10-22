@@ -8,8 +8,8 @@
  */
 
 import { redactString } from "../../../replay/redact";
-import { saveTextFile } from "./save-file";
 import { stripFoundryCitationMarkers } from "./activity-view";
+import { saveTextFile } from "./save-file";
 
 export type TranscriptSource = {
   title: string;
