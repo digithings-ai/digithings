@@ -429,6 +429,31 @@ RULES: list[tuple[str, str, str]] = [
         "tests of vendor client gloomberb (private per Chris 01:26)",
     ),
     (
+        "tests/dq/data/test_gloomberb_client_quotes.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
+        "tests/dq/data/test_gloomberb_client_history.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
+        "tests/dq/data/test_gloomberb_client_macro.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
+        "tests/dq/data/test_gloomberb_client_research.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
+        "tests/dq/data/gloomberb_client_support.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
         "tests/dq/data/test_gloomberb_macro.py",
         "R2",
         "tests of vendor client gloomberb (private per Chris 01:26)",
