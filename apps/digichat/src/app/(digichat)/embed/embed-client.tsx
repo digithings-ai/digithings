@@ -463,6 +463,8 @@ function EmbedChat({
     model: sessionModelSeed({
       available: stockClient.models.available,
       defaultModel: stockClient.models.default,
+      autoModel: stockClient.models.picker?.presets.find((preset) => preset.id === "auto")
+        ?.model,
     }),
     language: tenantLanguage,
     view: stockClient.features.view,
