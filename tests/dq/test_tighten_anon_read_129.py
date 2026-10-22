@@ -18,7 +18,9 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MIGRATION = REPO_ROOT / "digiquant" / "supabase" / "migrations" / "129_tighten_anon_read.sql"
+MIGRATION = (
+    REPO_ROOT / "digiquant" / "supabase" / "migrations" / "prod" / "129_tighten_anon_read.sql"
+)
 
 # (table, policy) pairs whose anon policy is dropped idempotently.
 REVOKED_POLICIES: tuple[tuple[str, str], ...] = (

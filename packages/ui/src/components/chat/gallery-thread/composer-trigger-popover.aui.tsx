@@ -116,6 +116,44 @@ const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
 };
 
 /**
+ * Arrow-key handling for the picker.
+ *
+ * The composer textarea keeps focus while the picker is open, so the keys are
+ * caught at document level (capture) rather than on the popover.
+ *
+ * It lives inside `Unstable_TriggerPopover` because the popover scope is the
+ * only place that exposes the picker's own `close()`. A synthetic Escape
+ * dispatched on `document` has `document` as its target, so it never reaches
+ * the composer's own keydown handler and the picker stayed open (DIG-4599).
+ */
+const TriggerPopoverArrowKeys: FC = () => {
+  const { open, close } = unstable_useTriggerPopoverScopeContext();
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      const popover = document.querySelector<HTMLElement>(
+        '[data-slot="composer-trigger-popover"]',
+      );
+      if (!popover) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "ArrowRight") {
+        // Same as Enter: submit the highlighted row.
+        popover.querySelector<HTMLElement>("[data-highlighted]")?.click();
+        return;
+      }
+      // Same as Escape: go back / close the picker, through the picker's own
+      // scope. Upstream's Escape handler closes the popover the same way.
+      close();
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [open, close]);
+  return null;
+};
+
+/**
  * Pre-built popover UI for a trigger-driven picker (mentions, slash commands).
  * digichat: flat list, no category drill-down, no per-row icons, composer width.
  */
@@ -143,31 +181,6 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
     );
   }
 
-  // Focus stays in the composer textarea while the picker is open, so the
-  // keys are caught at document level (capture) rather than on the popover.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-      const popover = document.querySelector<HTMLElement>(
-        '[data-slot="composer-trigger-popover"]',
-      );
-      if (!popover) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.key === "ArrowRight") {
-        // Same as Enter: submit the highlighted row.
-        popover.querySelector<HTMLElement>("[data-highlighted]")?.click();
-        return;
-      }
-      // Same as Escape: go back / close the picker.
-      document.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-      );
-    };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, []);
-
   return (
     <ComposerPrimitive.Unstable_TriggerPopover
       data-slot="composer-trigger-popover"
@@ -189,6 +202,7 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
           removeOnExecute={action.removeOnExecute}
         />
       ) : null}
+      <TriggerPopoverArrowKeys />
       <Items emptyLabel={emptyItemsLabel} loadingLabel={loadingLabel} />
     </ComposerPrimitive.Unstable_TriggerPopover>
   );

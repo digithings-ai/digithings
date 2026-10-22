@@ -331,11 +331,17 @@ record carries the moment it was taken and the block labels it with that
 moment. The block ships collapsed; opening it shows the frame.
 
 Frames are written by the exporter of their TUI
-(`clients/digiquant-tui/src/export-frame.ts`), which renders the desk through
-the OpenTUI harness, waits for the desk's own reads to settle, crops the main
-desk pane and refuses to write a frame that still says `loading…` or
-`could not be reached`. `fixtures/tui-frames/manifest.json` lists the committed
-frames and the screenshots that belong to them, and
+(`clients/digiquant-tui/src/export-frame.ts`,
+`clients/digichat-tui/src/export-frame.ts`), which renders the client through
+the OpenTUI harness, waits for its reads to settle and crops the pane it
+previews. Both exporters write the record declared once in
+`packages/tui-frame` — the type, its guard, the fixture server and the flag
+parser — so the dashboard and the producers cannot drift on what a field means;
+the digiquant exporter refuses to write a frame that still says `loading…` or
+`could not be reached`. The fixture server binds an ephemeral port, so two
+exporters can run at once, and `--captured-at` pins the one field that would
+otherwise move between two captures. `fixtures/tui-frames/manifest.json` lists
+the committed frames and the screenshots that belong to them, and
 `lib/tui-frames-manifest.test.ts` fails the suite when the directory and the
 manifest drift apart.
 

@@ -1,3 +1,5 @@
+import { CONTAINER_BASE_PATH } from "./base-path";
+
 /**
  * DIG-1210 / DIG-3585: /chat/occ is invite-only. The Pages shell must never be
  * served without a valid invite — no title, branding or loader. Anything else
@@ -77,10 +79,92 @@ export async function occGate(
     }
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   }
-  const nf = await upstream(`${url.origin}${SITE_NOT_FOUND_PATH}`, {
+  return siteNotFound(url.origin, upstream);
+}
+
+/**
+ * The site's ordinary 404, passed through untouched: same status, body and
+ * headers as a path the site does not have (/xyz). Nothing extra (not even
+ * cache-control) may mark a gated address as special.
+ */
+export async function siteNotFound(
+  origin: string,
+  upstream: (req: Request | string, init?: RequestInit) => Promise<Response> = fetch,
+): Promise<Response> {
+  const nf = await upstream(`${origin}${SITE_NOT_FOUND_PATH}`, {
     headers: { accept: "text/html" },
   });
-  const headers = new Headers(nf.headers);
-  headers.set("cache-control", "no-store");
-  return new Response(nf.body, { status: 404, headers });
+  if (nf.status === 404) {
+    return new Response(nf.body, { status: 404, statusText: nf.statusText, headers: nf.headers });
+  }
+  // Same as the Pages twin: anything but the site's own 404 is not passed through.
+  return new Response("Not Found", { status: 404, headers: { "content-type": "text/plain" } });
+}
+
+/** Invite-only embed tenants (mirrors digichat INVITE_ONLY_EMBED_HOSTS). */
+export const INVITE_ONLY_EMBED_HOSTS: ReadonlySet<string> = new Set(["occ.digithings.ai"]);
+
+/** Same normalisation as digichat `normalizeEmbedHost`. */
+function embedHostOf(raw: string | null): string | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (!v) return null;
+  if (v.includes("://")) {
+    try {
+      return new URL(v).hostname.replace(/\.$/, "") || null;
+    } catch {
+      return null;
+    }
+  }
+  return v.split("/")[0]!.split(":")[0]!.replace(/\.$/, "") || null;
+}
+
+/**
+ * The public paths that render the embed shell.
+ *
+ * DIG-5121 moved the app under the base path, so the embed surface has two
+ * spellings: the compatibility route (/embed) and the base-path route
+ * (/chat/embed) — the same shell, served by the same component
+ * (apps/digichat/src/app/(digichat)/embed-route-shell.tsx). The app root also
+ * answers the embed shell when it asks for it with ?mode=embed
+ * (/chat/?mode=embed).
+ */
+function isEmbedSurfacePath(url: URL): boolean {
+  const path = url.pathname;
+  if (path === "/embed" || path.startsWith("/embed/")) return true;
+  const embed = `${CONTAINER_BASE_PATH}/embed`;
+  if (path === embed || path.startsWith(`${embed}/`)) return true;
+  if (url.searchParams.get("mode") !== "embed") return false;
+  return path === CONTAINER_BASE_PATH || path === `${CONTAINER_BASE_PATH}/`;
+}
+
+/**
+ * An embed request asking for an invite-only tenant. The tenant host is the
+ * one the container resolves: `?host=` when it is non-empty, else the
+ * Referer origin (`resolveEmbedHostParamOrReferer` in digichat).
+ */
+export function isInviteOnlyEmbedRequest(url: URL, referer: string | null = null): boolean {
+  if (!isEmbedSurfacePath(url)) return false;
+  const explicit = url.searchParams.get("host")?.trim();
+  const host = embedHostOf(explicit ? explicit : referer);
+  return host !== null && INVITE_ONLY_EMBED_HOSTS.has(host);
+}
+
+/**
+ * The /embed form of an invite-only tenant without its key answers the site
+ * 404, exactly like /chat/occ and like any nonexistent path — never the
+ * container's own error page. Null means "invited, proxy as usual".
+ */
+export async function occEmbedGate(
+  request: Request,
+  expected: string | undefined,
+  upstream: (req: Request | string, init?: RequestInit) => Promise<Response> = fetch,
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (!isInviteOnlyEmbedRequest(url, request.headers.get("referer"))) return null;
+  // Trimmed like the container and the parent page do. The gate reads the
+  // query only: no browser path sends the x-embed-token header to /embed.
+  // With the Worker secret unset, the embed fails closed here.
+  if (inviteTokenValid(url.searchParams.get("token")?.trim() || null, expected?.trim()))
+    return null;
+  return siteNotFound(url.origin, upstream);
 }
