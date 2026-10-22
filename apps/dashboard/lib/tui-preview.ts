@@ -6,26 +6,21 @@
  * (ADR D7): the frame is data, rendered byte-for-byte, never interpreted.
  *
  * The records are committed artifacts under `fixtures/tui-frames/`, written by
- * `clients/digiquant-tui/src/export-frame.ts`. A recorded frame carries the
- * moment it was taken, so the dashboard labels it with that moment — it is a
- * snapshot of a terminal, not a live terminal.
+ * the exporters in `clients/digiquant-tui` and `clients/digichat-tui`. The
+ * record itself is declared once, in `@digithings/tui-frame`, so the dashboard
+ * and the producers cannot drift on what a field means.
  */
 
-/** One recorded terminal frame, exactly as the exporter wrote it. */
-export type RecordedTuiFrame = {
-  /** Which TUI the frame was recorded from (label only). */
-  source: string;
-  /** Desk path the frame was captured on (e.g. `/brief`). */
-  path: string;
-  /** ISO timestamp of the capture. */
-  capturedAt: string;
-  /** Captured width in terminal columns. */
-  width: number;
-  /** Captured height in terminal rows. */
-  height: number;
-  /** Recorded frame text, byte-for-byte as `captureCharFrame()` returned it. */
-  frame: string;
-};
+import { isRecordedFrame, type RecordedFrame } from '@digithings/tui-frame';
+
+/**
+ * One recorded terminal frame, exactly as the exporter wrote it.
+ *
+ * `width` and `height` are the ink extent of the cropped frame, not the
+ * terminal the client was rendered at: a 100-column terminal whose pane ends at
+ * column 70 records width 70.
+ */
+export type RecordedTuiFrame = RecordedFrame;
 
 /** Kill switch for the recorded-frame preview. Default on, `0` turns it off. */
 export const TUI_PREVIEW_ENV_VAR = 'NEXT_PUBLIC_DIGI_TUI_PREVIEW';
@@ -51,34 +46,14 @@ export function isTuiPreviewEnabled(
 }
 
 /**
- * A capture time must carry an explicit zone (`Z` or `±HH:MM`). An offset-less
- * timestamp is read in the machine's local zone, so the server render and the
- * client hydration would label the same frame with different times.
+ * True when the value is a complete recorded frame.
+ *
+ * The guard lives with the record in `@digithings/tui-frame`; the dashboard
+ * keeps the name its call sites use. The zone rule it carries matters here:
+ * an offset-less timestamp is read in the machine's local zone, so the server
+ * render and the client hydration would label the same frame differently.
  */
-const ZONED_ISO = /(?:Z|[+-]\d{2}:?\d{2})$/i;
-
-/** True when the value is a complete recorded frame. */
-export function isRecordedTuiFrame(value: unknown): value is RecordedTuiFrame {
-  if (!value || typeof value !== 'object') return false;
-  const record = value as Partial<RecordedTuiFrame>;
-  return (
-    typeof record.source === 'string' &&
-    record.source.trim() !== '' &&
-    typeof record.path === 'string' &&
-    record.path.trim() !== '' &&
-    typeof record.capturedAt === 'string' &&
-    record.capturedAt.trim() !== '' &&
-    ZONED_ISO.test(record.capturedAt.trim()) &&
-    typeof record.width === 'number' &&
-    Number.isFinite(record.width) &&
-    record.width > 0 &&
-    typeof record.height === 'number' &&
-    Number.isFinite(record.height) &&
-    record.height > 0 &&
-    typeof record.frame === 'string' &&
-    record.frame.length > 0
-  );
-}
+export const isRecordedTuiFrame = isRecordedFrame;
 
 /** Keep the valid records of a list, drop anything malformed. */
 export function readRecordedTuiFrames(values: unknown): RecordedTuiFrame[] {

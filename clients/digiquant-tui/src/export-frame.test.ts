@@ -30,6 +30,17 @@ describe("the exporter command line", () => {
   test("it refuses a stray argument", () => {
     expect(() => parseArgs(["/brief"])).toThrow(/unexpected argument/);
   });
+
+  test("it reads and pins the capture time", () => {
+    expect(parseArgs(["--captured-at", "2026-10-22T09:00:00.000Z"]).capturedAt).toBe(
+      "2026-10-22T09:00:00.000Z",
+    );
+    expect(parseArgs(["--captured-at=2026-10-22T09:00:00.000Z"]).capturedAt).toBe(
+      "2026-10-22T09:00:00.000Z",
+    );
+    // An offset-less time would label a different moment on another machine.
+    expect(() => parseArgs(["--captured-at", "2026-10-22T09:00:00"])).toThrow(/zone/);
+  });
 });
 
 describe("the committed recorded frame", () => {

@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
+import { DIGIQUANT } from "../../../packages/hero-banner/src/definitions/index.ts";
+import { PIXEL_7X10 } from "../../../packages/hero-banner/src/font.ts";
 import {
   GLINT_EVERY_MS,
   GLINT_MS,
@@ -18,25 +20,22 @@ import {
 } from "./mark";
 
 test("the terminal hero uses the web DIGIQUANT cells", () => {
-  const src = readFileSync(
+  // The web hero and the terminal mark read one definition (packages/hero-banner,
+  // #4986). Reading the definition, not the component's JSX, is the contract: the
+  // component only renders `DIGIQUANT`, so a cell change there reaches the web
+  // without a terminal edit — and this test says so.
+  expect(DIGIQUANT.text).toBe(MARK_WORD);
+  const overrides = DIGIQUANT.glyphs as Readonly<Record<string, readonly string[]>>;
+  const cells = MARK_GLYPHS as Readonly<Record<string, readonly string[]>>;
+  for (const letter of DIGIQUANT.text) {
+    expect(overrides[letter] ?? PIXEL_7X10.glyphs[letter]).toEqual(cells[letter]);
+  }
+
+  const component = readFileSync(
     new URL("../../../apps/digiquant-web/app/_chrome/QuantWordmark.tsx", import.meta.url),
     "utf8",
   );
-  const word = readFileSync(
-    new URL("../../../apps/digiquant-web/lib/hero-build.ts", import.meta.url),
-    "utf8",
-  );
-  expect(word).toContain('export const BUILD_WORD = "DIGIQUANT"');
-  expect(src).toContain("const WORD = BUILD_WORD");
-  const web: Record<string, string[]> = {};
-  for (const match of src.matchAll(/([A-Z]): \[([^\]]+)\]/g)) {
-    const letter = match[1];
-    const rows = match[2];
-    if (!letter || !rows) continue;
-    web[letter] = [...rows.matchAll(/"([^"]*)"/g)].map((hit) => hit[1] ?? "");
-  }
-  expect(MARK_WORD).toBe("DIGIQUANT");
-  expect(web).toEqual(MARK_GLYPHS);
+  expect(component).toContain("def={DIGIQUANT}");
 });
 
 test("the header mark is two braille rows of the web glyphs", () => {

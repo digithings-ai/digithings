@@ -10,19 +10,20 @@
  * frame is what a terminal would show, so the crop in `frame.ts` is taken from
  * a real render, never from a mock.
  *
- * The capture reads the desk through the fixture API (`./fixture-api`, imported
- * first so the client reads the fixture and not a live desk), and it waits for
- * the desk's reads to land before it records. A capture taken while the blocks
- * are still loading records placeholders, not the desk — and the artifact it
- * writes would be a terminal full of error lines.
+ * The capture reads the desk through the fixture API (`./fixture-api`), and it
+ * waits for the desk's reads to land before it records. A capture taken while
+ * the blocks are still loading records placeholders, not the desk — and the
+ * artifact it writes would be a terminal full of error lines.
+ *
+ * One fixture server per process. The desk reads its API base when `src/api.ts`
+ * is evaluated, so the fixture URL has to be in the environment before the app
+ * module loads; the exporter keeps the server it started, so every capture in
+ * one process reads the same URL and the CLI exits after its single capture.
  */
 
 import { act } from 'react';
 import { testRender } from '@opentui/react/test-utils';
-// The fixture API has to be imported before the app: the client reads its API
-// base when its module is evaluated.
-import { assertFixtureBase, startFixtureApi } from './fixture-api';
-import { App } from './app';
+import { startFixtureApi, type FixtureApi } from './fixture-api';
 import {
   cropMainDeskPane,
   DEFAULT_FRAME_HEIGHT,
@@ -60,6 +61,21 @@ const SETTLE_DELAY_MS = 25;
 
 type Setup = Awaited<ReturnType<typeof testRender>>;
 
+let fixtureServer: Promise<FixtureApi> | null = null;
+
+/**
+ * The process-wide fixture server.
+ *
+ * The desk reads its API base once, when `src/api.ts` is evaluated, so the
+ * exporter keeps the server it started: every capture in one process reads the
+ * same URL, and the server does not hold that process open. The CLI is
+ * one-shot and exits after its capture.
+ */
+function sharedFixture(): Promise<FixtureApi> {
+  fixtureServer ??= startFixtureApi({ unref: true });
+  return fixtureServer;
+}
+
 /**
  * Render the desk, let its reads land, and record the main desk pane.
  *
@@ -71,9 +87,12 @@ export async function captureDeskPane(options: CaptureOptions = {}): Promise<Rec
   const width = options.width ?? DEFAULT_FRAME_WIDTH;
   const height = options.height ?? DEFAULT_FRAME_HEIGHT;
 
-  assertFixtureBase();
-  const fixture = await startFixtureApi();
   const argv = process.argv;
+  const previousApiUrl = process.env.DQ_API_URL;
+  const fixture = await sharedFixture();
+  // The desk reads its API base when `src/api.ts` is evaluated, so the fixture
+  // URL is in the environment before the app module is imported below.
+  process.env.DQ_API_URL = fixture.url;
   try {
     // The desk takes its start page from the command line (`app.tsx`), so the
     // exporter sets it explicitly. Otherwise an exporter flag that happens to
@@ -81,6 +100,7 @@ export async function captureDeskPane(options: CaptureOptions = {}): Promise<Rec
     // a page the frame does not show.
     process.argv = [argv[0] ?? 'digiquant-tui', path];
 
+    const { App } = await import('./app');
     const setup = await testRender(<App />, { width, height });
     try {
       // Two passes: the first lays the body out and measures it, the second
@@ -126,7 +146,8 @@ export async function captureDeskPane(options: CaptureOptions = {}): Promise<Rec
     }
   } finally {
     process.argv = argv;
-    await fixture.close();
+    if (previousApiUrl === undefined) delete process.env.DQ_API_URL;
+    else process.env.DQ_API_URL = previousApiUrl;
   }
 }
 
