@@ -24,10 +24,19 @@ class BrokerUnavailable(BrokerError):
     """The broker is not listening, or did not answer in time."""
 
 
+# The client waits longer than the server can take. A mint is three Paperclip
+# reads (15 s each) plus one GitHub call (20 s), and a review adds a second
+# GitHub call: 85 s in the worst case. A client that gave up before that would
+# leave a token minted for a caller that never received it, which is the one
+# outcome this control must not produce. The token is minted once per run and
+# reused, so the wait is paid once.
+DEFAULT_TIMEOUT = 90.0
+
+
 def request(
     payload: Mapping[str, Any],
     socket_path: Path | str | None = None,
-    timeout: float = 15.0,
+    timeout: float = DEFAULT_TIMEOUT,
 ) -> dict[str, Any]:
     """Send one request to the broker and return its answer.
 

@@ -22,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from scripts.dt_broker import core, github, paperclip, server
+from scripts.dt_broker import client, core, github, paperclip, server
 from scripts.dt_broker.core import Policy
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -807,3 +807,14 @@ def test_the_daemon_imports_on_the_interpreter_the_launchd_job_names() -> None:
         text=True,
     )
     assert proc.returncode == 0, proc.stderr
+
+
+def test_the_client_waits_longer_than_the_server_can_take() -> None:
+    """A caller that gives up early leaves a token that nobody received.
+
+    The server reads Paperclip three times and GitHub up to twice before it
+    answers. The client has to outlive that, or the token is minted for a
+    caller that has already walked away.
+    """
+    worst_case = 3 * paperclip.DEFAULT_TIMEOUT + 2 * github.DEFAULT_TIMEOUT
+    assert client.DEFAULT_TIMEOUT >= worst_case
