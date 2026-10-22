@@ -142,12 +142,26 @@ describe("the /chat cutover (DIG-5121)", () => {
     // and the client's prefix cannot drift apart.
     expect(image).toMatch(/ENV NEXT_PUBLIC_DIGICHAT_BASE_PATH=\$DIGICHAT_BASE_PATH/);
     // And the app reads exactly those two names — as code, not in a comment.
-    expect(read(`${APP_DIR}/next.config.ts`)).toMatch(
-      /basePath:\s*process\.env\.DIGICHAT_BASE_PATH/,
-    );
+    const nextConfig = read(`${APP_DIR}/next.config.ts`);
+    expect(nextConfig).toMatch(/const serverBasePath = process\.env\.DIGICHAT_BASE_PATH/);
+    expect(nextConfig).toMatch(/basePath:\s*serverBasePath/);
     expect(read(`${APP_DIR}/src/lib/base-path.ts`)).toMatch(
       /process\.env\.NEXT_PUBLIC_DIGICHAT_BASE_PATH/,
     );
+  });
+
+  it("the app refuses to build with only one of the two base path names", () => {
+    // One name set and the other missing serves the app under a prefix the
+    // client does not use: every client-side link 404s. The build must fail
+    // instead of shipping that.
+    const nextConfig = read(`${APP_DIR}/next.config.ts`);
+    expect(nextConfig).toMatch(
+      /const clientBasePath = process\.env\.NEXT_PUBLIC_DIGICHAT_BASE_PATH/,
+    );
+    expect(nextConfig).toMatch(
+      /if \(Boolean\(serverBasePath\) !== Boolean\(clientBasePath\)\)/,
+    );
+    expect(nextConfig).toMatch(/throw new Error\(/);
   });
 
   it("the base path is BAKED into the image, not just defaulted", () => {
@@ -167,6 +181,49 @@ describe("the /chat cutover (DIG-5121)", () => {
     expect(envAt).toBeGreaterThan(-1);
     expect(buildAt).toBeGreaterThan(-1);
     expect(envAt).toBeLessThan(buildAt);
+  });
+
+  it("an EMPTY base path fails the build instead of shipping a broken image", () => {
+    // `--build-arg DIGICHAT_BASE_PATH=` (or a wrangler image_vars entry with an
+    // empty value) leaves Next with no base path: the app answers at "/" while
+    // the Worker asks for "/chat", and every request 404s behind a green
+    // build. The build has to stop.
+    const builderStage = dockerStage(read(IMAGE), "npm run build");
+    expect(builderStage).toMatch(/test -n "\$DIGICHAT_BASE_PATH"/);
+    const guardAt = builderStage.indexOf('test -n "$DIGICHAT_BASE_PATH"');
+    const buildAt = builderStage.indexOf("npm run build");
+    expect(guardAt).toBeGreaterThan(-1);
+    expect(guardAt).toBeLessThan(buildAt);
+  });
+
+  it("both spellings of the MCP path are gated at the edge", () => {
+    // The in-image trusted proxy intercepts ONLY the container-local spelling
+    // (/api/mcp/zammad/…), and the app's own Next route for the base-path
+    // spelling (/chat/api/mcp/zammad/…) carries no auth of its own. The edge
+    // therefore gates both, and maps the base-path one back onto the
+    // container-local one so the unauthenticated copy is never reached.
+    const index = read(`${WORKER_SRC}/index.ts`);
+    expect(index).toMatch(
+      /const isZammadMcp = containerLocalMcpPath\(url\.pathname\) !== null;/,
+    );
+    const paths = read(`${WORKER_SRC}/paths.ts`);
+    expect(paths).toMatch(/export function containerLocalMcpPath\(pathname: string\): string \| null/);
+    // …and the mapping is what the container actually receives.
+    expect(paths).toMatch(/const containerLocalMcp = containerLocalMcpPath\(pathname\);/);
+    expect(paths).toMatch(/if \(containerLocalMcp\) return containerLocalMcp;/);
+  });
+
+  it("the edge refuses the container-internal surface the app already refuses", () => {
+    // Serving the app under /chat makes the whole /chat tree reachable, so
+    // the dev-only container paths are refused at the edge too.
+    const index = read(`${WORKER_SRC}/index.ts`);
+    expect(index).toMatch(/isContainerInternalPath\(url\.pathname\)/);
+    const paths = read(`${WORKER_SRC}/paths.ts`);
+    expect(paths).toMatch(/export function isContainerInternalPath\(pathname: string\): boolean/);
+    expect(paths).toMatch(/"\/api\/devkit"/);
+    expect(paths).toMatch(/"\/api\/baseline-chat"/);
+    expect(paths).toMatch(/"\/devkit"/);
+    expect(paths).toMatch(/"\/baseline"/);
   });
 
   it("the served path is not doubled: the app's chat surface is the root route", () => {

@@ -31,10 +31,15 @@ enabled = true
 # being the Pages marketing shell and becomes the digichat app — the Container
 # is built with DIGICHAT_BASE_PATH=/chat, so the app answers under /chat and
 # the legacy paths below keep working through the Worker (see
-# src/paths.ts: containerPathFor). The seven routes below stay as the
-# compatibility window ADR 0018 describes and are removed only after the
-# cutover is verified live. The OCC shell (/chat/occ*) stays a Pages shell
-# behind the invite gate.
+# src/paths.ts: containerPathFor).
+#
+# Compatibility window (ADR 0018): the seven routes below stay declared.
+# /embed* stays for good — the OCC shell's iframe points at
+# digithings.ai/embed?host=… and the marketing site's own shell points it at
+# digithings.ai/embed?host=digithings.ai, so that route is not a temporary
+# bridge. The /api/* routes below are the legacy spelling of what the app now
+# serves under /chat/api/*; they are reviewed once the cutover is verified
+# live. The OCC shell (/chat/occ*) stays a Pages shell behind the invite gate.
 #
 # To roll back: this exact route list IS the rollback shape.
 [[routes]]
@@ -90,9 +95,8 @@ zone_name = "digithings.ai"
 pattern = "digithings.ai/api/mcp/zammad*"
 zone_name = "digithings.ai"
 
-# DIG-3585: the invite-gated OCC Pages shell. Same pattern is on
-# apps/digithings-stack-cloudflare/wrangler.toml so a stack deploy keeps the gate.
-# Valid ?token= or the occ_invite cookie passes through to Pages.
+# DIG-3585: the invite-gated OCC Pages shell. Valid ?token= or the
+# occ_invite cookie passes through to Pages.
 [[routes]]
 pattern = "digithings.ai/chat/occ*"
 zone_name = "digithings.ai"
@@ -104,8 +108,10 @@ zone_name = "digithings.ai"
 # the Pages trailing-slash redirect — the same shape as the /embed* and
 # /api/chat* routes above.
 #
-# The more specific /chat/occ* pattern above wins for the OCC shell, and this
-# Worker gates that path itself (src/occ-gate.ts) so it stays a Pages shell.
+# The OCC shell stays a Pages shell because THIS Worker gates it: every
+# request is matched by the /chat* pattern below, and the Worker answers
+# /chat/occ itself (src/occ-gate.ts) before anything is proxied. That in-Worker
+# gate is the guarantee — it holds whichever order the routes are matched in.
 [[routes]]
 pattern = "digithings.ai/chat*"
 zone_name = "digithings.ai"

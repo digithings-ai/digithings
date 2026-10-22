@@ -5,6 +5,29 @@ import {
   DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
 } from "./src/lib/security-headers-bake";
 
+/**
+ * The base path, in the two names the app uses it under.
+ *
+ * `DIGICHAT_BASE_PATH` is the server's base path (the one Next bakes in);
+ * `NEXT_PUBLIC_DIGICHAT_BASE_PATH` is the prefix the client puts on its own
+ * routes (apps/digichat/src/lib/base-path.ts). They are two names for ONE
+ * value, and the image build sets both from the same ARG
+ * (infra/docker/Dockerfile.digichat-cloudflare).
+ *
+ * Setting only one of them serves the app under a prefix the client does not
+ * use: every client-side link and every `p()` call then points at a path that
+ * does not exist. That is a broken build, not a degraded one, so it fails
+ * here instead of at runtime (DIG-5121).
+ */
+const serverBasePath = process.env.DIGICHAT_BASE_PATH || undefined;
+const clientBasePath = process.env.NEXT_PUBLIC_DIGICHAT_BASE_PATH || undefined;
+if (Boolean(serverBasePath) !== Boolean(clientBasePath)) {
+  throw new Error(
+    "DIGICHAT_BASE_PATH and NEXT_PUBLIC_DIGICHAT_BASE_PATH must be set together " +
+      "(both unset = serve the app at the root)",
+  );
+}
+
 const nextConfig: NextConfig = {
   output: "standalone",
   // Separate `next dev` lock when previewing a second config (e.g. a baked skin YAML)
@@ -13,7 +36,7 @@ const nextConfig: NextConfig = {
   // Serve under a subpath when set (e.g. /chat for digithings.ai/chat). Unset →
   // root, so self-host (`make up-digichat`), local dev, and the legacy deploy are
   // unchanged. Must match NEXT_PUBLIC_DIGICHAT_BASE_PATH (see src/lib/base-path.ts).
-  basePath: process.env.DIGICHAT_BASE_PATH || undefined,
+  basePath: serverBasePath,
   // When digichat shares digithings.ai with Pages (static export also uses /_next),
   // set DIGICHAT_ASSET_PREFIX=/_dtchat so CF can route digichat assets without
   // colliding with the marketing site's /_next. Unset → default root assets.

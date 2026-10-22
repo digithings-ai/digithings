@@ -26,11 +26,15 @@ Container is **built** with `DIGICHAT_BASE_PATH=/chat` — Next bakes
 nests into `/chat/chat`. The Worker maps every public path onto the path
 the Container serves (`src/paths.ts: containerPathFor`): `/chat*` and
 `/_dtchat*` pass through, the container-local `/api/mcp/zammad*` is never
-moved, and the legacy routes are moved under the base path so they keep
-working.
+moved (and its `/chat/api/mcp/zammad*` spelling is mapped back onto it, so
+the edge key gates both), and the legacy routes are moved under the base
+path so they keep working.
 
 Future chats = a new path in the app + a row in `DIGICHAT_EMBED_TENANTS`
-— **not** a new Container.
+— **not** a new Container. A new path in the app lives **under `/chat`**
+(the app is served under that base path); a client call into it goes
+through `p()` (`apps/digichat/src/lib/base-path.ts`) so it carries the
+prefix.
 
 ```text
 Browser
@@ -166,8 +170,11 @@ secrets. They are resolved server-side and stripped by the browser projections
 Worker **path** routes: `/chat*` (the app itself — the Container is built with
 `DIGICHAT_BASE_PATH=/chat`, DIG-5121) plus the ADR 0018 compatibility window
 `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`
-(1.5 Desk+ HMAC), `/api/health`, `/_dtchat*`. The compatibility routes stay
-declared until the `/chat` cutover is verified live; they are removed only
+(1.5 Desk+ HMAC), `/api/health`, `/_dtchat*`. `/embed*` stays **indefinitely**:
+the OCC shell's iframe and the marketing site both point at
+`digithings.ai/embed?host=…`, so it is not a temporary bridge. The `/api/*`
+routes are the old spelling of what the app now serves under `/chat/api/*`
+and are reviewed once the cutover is verified live — they are removed only
 after that, and never before. Pages keeps the `/chat/occ` shell; iframe
 origin stays `digithings.ai`.
 

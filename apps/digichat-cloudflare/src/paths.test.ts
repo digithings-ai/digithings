@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   CONTAINER_BASE_PATH,
+  containerLocalMcpPath,
   containerPathFor,
+  isContainerInternalPath,
   shouldProxyToDigiChat,
   withContainerPath,
 } from "./paths";
@@ -71,9 +73,67 @@ describe("containerPathFor", () => {
     expect(containerPathFor("/api/mcp/zammad/tickets")).toBe("/api/mcp/zammad/tickets");
   });
 
+  it("maps the base-path spelling of the MCP prefix back onto the container-local one", () => {
+    // The in-image trusted proxy intercepts ONLY the container-local spelling,
+    // so the base-path spelling must be mapped back onto it — otherwise the
+    // app's own Next route would answer it with no auth of its own.
+    expect(containerPathFor("/chat/api/mcp/zammad")).toBe("/api/mcp/zammad");
+    expect(containerPathFor("/chat/api/mcp/zammad/tickets")).toBe("/api/mcp/zammad/tickets");
+  });
+
   it("is the identity on the base path itself", () => {
     expect(CONTAINER_BASE_PATH).toBe("/chat");
     expect(containerPathFor(CONTAINER_BASE_PATH)).toBe(CONTAINER_BASE_PATH);
+  });
+});
+
+describe("containerLocalMcpPath", () => {
+  it("recognises the container-local spelling", () => {
+    expect(containerLocalMcpPath("/api/mcp/zammad")).toBe("/api/mcp/zammad");
+    expect(containerLocalMcpPath("/api/mcp/zammad/tickets")).toBe("/api/mcp/zammad/tickets");
+  });
+
+  it("recognises the base-path spelling and maps it back", () => {
+    expect(containerLocalMcpPath("/chat/api/mcp/zammad")).toBe("/api/mcp/zammad");
+    expect(containerLocalMcpPath("/chat/api/mcp/zammad/tickets")).toBe("/api/mcp/zammad/tickets");
+  });
+
+  it("does not claim a path that merely starts with the same letters", () => {
+    expect(containerLocalMcpPath("/api/mcp/zam")).toBeNull();
+    expect(containerLocalMcpPath("/api/mcp/zammadfoo")).toBeNull();
+    expect(containerLocalMcpPath("/chat/api/mcp/oauth/start")).toBeNull();
+    expect(containerLocalMcpPath("/chat/api/chat")).toBeNull();
+    expect(containerLocalMcpPath("/api/mcp")).toBeNull();
+  });
+});
+
+describe("isContainerInternalPath", () => {
+  it("refuses the dev-only container surface, in either spelling", () => {
+    expect(isContainerInternalPath("/api/devkit")).toBe(true);
+    expect(isContainerInternalPath("/api/devkit/configs")).toBe(true);
+    expect(isContainerInternalPath("/chat/api/devkit/save")).toBe(true);
+    expect(isContainerInternalPath("/api/baseline-chat")).toBe(true);
+    expect(isContainerInternalPath("/chat/api/baseline-chat")).toBe(true);
+    // The preview pages themselves are local-only too (notFound() in prod).
+    expect(isContainerInternalPath("/devkit")).toBe(true);
+    expect(isContainerInternalPath("/chat/devkit")).toBe(true);
+    expect(isContainerInternalPath("/baseline")).toBe(true);
+    expect(isContainerInternalPath("/chat/baseline")).toBe(true);
+  });
+
+  it("leaves the app's public surface alone", () => {
+    expect(isContainerInternalPath("/chat/api/chat")).toBe(false);
+    expect(isContainerInternalPath("/chat/api/health")).toBe(false);
+    expect(isContainerInternalPath("/chat/api/conversations")).toBe(false);
+    expect(isContainerInternalPath("/chat/api/embed/tenant-config")).toBe(false);
+    expect(isContainerInternalPath("/chat/embed")).toBe(false);
+    expect(isContainerInternalPath("/chat")).toBe(false);
+  });
+
+  it("does not claim a path that merely starts with the same letters", () => {
+    expect(isContainerInternalPath("/chat/api/devkitchen")).toBe(false);
+    expect(isContainerInternalPath("/api/dev")).toBe(false);
+    expect(isContainerInternalPath("/baselines")).toBe(false);
   });
 });
 

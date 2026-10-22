@@ -26,6 +26,12 @@ const helpdeskMcpHost = "127.0.0.1";
 // Read-only OCC helpdesk MCP (scripts/zammad_mcp): a second loopback listener
 // inside this image, reached only through the public listener below.
 const zammadPort = Number(process.env.ZAMMAD_MCP_PORT ?? "8770");
+// Container-local path of the helpdesk MCP. COUPLED with the edge: the
+// Worker's own path table owns this prefix
+// (apps/digichat-cloudflare/src/paths.ts: containerLocalMcpPath) and maps
+// EVERY public spelling of it - including the base-path one - back onto this
+// container-local spelling, so the copy Next would answer without the edge key
+// is never reached. Change one, change the other.
 const zammadPrefix = "/api/mcp/zammad";
 // Container/repo root: this script lives at <root>/apps/digichat/scripts/, and
 // `python3 -m scripts.zammad_mcp.server` needs the root on its path.

@@ -41,6 +41,65 @@ export const CONTAINER_ASSET_PREFIX = "/_dtchat";
 export const CONTAINER_LOCAL_PREFIX = "/api/mcp/zammad";
 
 /**
+ * The container-local path for a request that addresses the in-container MCP
+ * endpoint, or null when it does not.
+ *
+ * The endpoint has two spellings once the app is served under the base path:
+ * the container-local one (/api/mcp/zammad/…, answered by the in-container
+ * trusted proxy) and the base-path one (/chat/api/mcp/zammad/…, which Next's
+ * own route would answer — and that route carries no auth of its own). Both
+ * are container-local, and the base-path spelling is mapped back onto the
+ * container-local one so the unauthenticated Next copy is never reached.
+ *
+ * The edge gate (src/index.ts) keys on this helper, so both spellings are
+ * gated with the same edge key.
+ */
+export function containerLocalMcpPath(pathname: string): string | null {
+  if (pathname === CONTAINER_LOCAL_PREFIX || pathname.startsWith(`${CONTAINER_LOCAL_PREFIX}/`)) {
+    return pathname;
+  }
+  const underBase = `${CONTAINER_BASE_PATH}${CONTAINER_LOCAL_PREFIX}`;
+  if (pathname === underBase || pathname.startsWith(`${underBase}/`)) {
+    return `${CONTAINER_LOCAL_PREFIX}${pathname.slice(underBase.length)}`;
+  }
+  return null;
+}
+
+/**
+ * Container-internal paths the app itself refuses in production.
+ *
+ * The devkit and baseline previews are local-only: their pages call
+ * `notFound()` when NODE_ENV is production
+ * (apps/digichat/src/app/(devkit)/devkit/page.tsx,
+ * apps/digichat/src/app/(baseline)/baseline/page.tsx) and their API routes
+ * are guarded by `isLocalBaselinePreview` (apps/digichat/src/lib/
+ * baseline-preview.ts).
+ *
+ * Serving the app under /chat makes the whole /chat tree reachable from the
+ * edge, so the edge refuses these too instead of relying on the app's own
+ * guard being the only thing between the internet and a dev-only surface.
+ */
+export const CONTAINER_INTERNAL_PREFIXES = [
+  "/devkit",
+  "/baseline",
+  "/api/devkit",
+  "/api/baseline-chat",
+];
+
+/**
+ * True for a container-internal path, in either spelling (with or without the
+ * base path). Such a path is never proxied: the Worker answers 404.
+ */
+export function isContainerInternalPath(pathname: string): boolean {
+  const relative = pathname.startsWith(`${CONTAINER_BASE_PATH}/`)
+    ? pathname.slice(CONTAINER_BASE_PATH.length)
+    : pathname;
+  return CONTAINER_INTERNAL_PREFIXES.some(
+    (prefix) => relative === prefix || relative.startsWith(`${prefix}/`),
+  );
+}
+
+/**
  * True for the canonical /chat surface: the app itself, minus the invite-gated
  * OCC shell, which stays a Pages surface behind the gate.
  */
@@ -80,22 +139,23 @@ export function shouldProxyToDigiChat(pathname: string): boolean {
  * path exactly once:
  *
  *   - a path already under /chat is passed through unchanged;
+ *   - the in-container MCP prefix is answered by the trusted proxy before Next
+ *     sees it, so it is never moved — including its base-path spelling, which
+ *     is mapped back onto the container-local one (see
+ *     `containerLocalMcpPath`);
  *   - static assets keep the asset prefix they are served from (/_dtchat/*),
  *     because Next rewrites the asset prefix back onto the base path itself;
- *   - the container-local MCP prefix is answered by the in-container trusted
- *     proxy before Next sees it, so it is never moved;
  *   - every other path — the legacy compatibility routes (/embed, /api/chat*,
  *     /api/embed*, /api/byok*, /api/plan-proof*, /api/health, /healthz) — is
  *     moved under the base path, so it keeps working after the move.
  */
 export function containerPathFor(pathname: string): string {
+  const containerLocalMcp = containerLocalMcpPath(pathname);
+  if (containerLocalMcp) return containerLocalMcp;
   if (pathname === CONTAINER_BASE_PATH || pathname.startsWith(`${CONTAINER_BASE_PATH}/`)) {
     return pathname;
   }
   if (pathname === CONTAINER_ASSET_PREFIX || pathname.startsWith(`${CONTAINER_ASSET_PREFIX}/`)) {
-    return pathname;
-  }
-  if (pathname === CONTAINER_LOCAL_PREFIX || pathname.startsWith(`${CONTAINER_LOCAL_PREFIX}/`)) {
     return pathname;
   }
   return `${CONTAINER_BASE_PATH}${pathname}`;

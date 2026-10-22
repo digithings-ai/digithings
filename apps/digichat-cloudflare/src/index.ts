@@ -10,9 +10,10 @@
 import { Container, getContainer } from "@cloudflare/containers";
 import { env } from "cloudflare:workers";
 import {
-  CONTAINER_LOCAL_PREFIX,
   DIGICHAT_CONTAINER_REV_VAR,
+  containerLocalMcpPath,
   digichatContainerRev,
+  isContainerInternalPath,
   sharedDigichatContainerId,
   shouldProxyToDigiChat,
   withContainerPath,
@@ -29,12 +30,6 @@ import { fetchContainerWithRetry } from "./container-retry";
  * `worker-configuration.d.ts`; the local `Env` interface is the intended shape.
  */
 const workerVars = env as unknown as Env;
-
-/**
- * OCC helpdesk MCP: the secret-gated edge path served by the in-container
- * zammad-mcp (python) through the trusted proxy, not by Next.
- */
-const ZAMMAD_MCP_PREFIX = CONTAINER_LOCAL_PREFIX;
 
 /**
  * Worker-owned, secret-gated recovery lever for the shared Container. Handled
@@ -211,13 +206,26 @@ export default {
     // OCC helpdesk MCP: /api/mcp/zammad* is served by the in-container
     // zammad-mcp through the trusted proxy, not by Next. Gate it here with the
     // edge key this Worker holds; the container never sees the key. Fail closed.
-    const isZammadMcp = url.pathname.startsWith(ZAMMAD_MCP_PREFIX);
+    //
+    // Both spellings are gated: the container-local one (/api/mcp/zammad/…) and
+    // the base-path one (/chat/api/mcp/zammad/…), which the app's own Next
+    // route would otherwise answer with no auth of its own (the in-image
+    // trusted proxy only intercepts the container-local spelling). The helper
+    // that recognises them also maps the base-path spelling back onto the
+    // container-local one, so the unauthenticated copy is never reached.
+    const isZammadMcp = containerLocalMcpPath(url.pathname) !== null;
     if (isZammadMcp) {
       const expected = workerEnv.ZAMMAD_EDGE_KEY?.trim();
       const provided = request.headers.get("x-digi-mcp-key")?.trim();
       if (!expected || !provided || provided !== expected) {
         return new Response("digithings-digichat: unauthorized", { status: 401 });
       }
+    } else if (isContainerInternalPath(url.pathname)) {
+      // Container-internal (dev-only) surface the app itself refuses in
+      // production. Serving the app under /chat makes the whole /chat tree
+      // reachable, so the edge refuses these too instead of relying on the
+      // app's own guard alone.
+      return new Response("digichat Worker: path not available.", { status: 404 });
     } else if (!shouldProxyToDigiChat(url.pathname)) {
       return new Response(
         "digichat Worker: path not routed. The digichat app is at /chat; marketing is on Pages.",
