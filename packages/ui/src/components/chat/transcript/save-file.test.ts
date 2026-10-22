@@ -119,12 +119,15 @@ describe("saveTextFile", () => {
     expect(clicks.map((c) => c.download)).toEqual(["digichat.md"]);
   });
 
-  it("asks for one more tap when the activation expired, then saves", () => {
+  it("asks for one more tap when the activation expired on a phone, then saves", () => {
+    setPointer(true);
     setActivation(false);
     saveTextFile("chat.html", "<p>x</p>", "text/html");
     expect(clicks).toEqual([]);
     const prompt = document.querySelector(`[data-slot='${SAVE_PROMPT_SLOT}']`);
     expect(prompt?.textContent).toContain("chat.html is ready");
+    expect(prompt?.getAttribute("role")).toBe("status");
+    expect(document.activeElement?.getAttribute("data-slot")).toBe(`${SAVE_PROMPT_SLOT}-save`);
     setActivation(true);
     (document.querySelector(`[data-slot='${SAVE_PROMPT_SLOT}-save']`) as HTMLButtonElement).click();
     expect(clicks.map((c) => c.download)).toEqual(["chat.html"]);
@@ -132,6 +135,7 @@ describe("saveTextFile", () => {
   });
 
   it("keeps one prompt at a time and can be dismissed", () => {
+    setPointer(true);
     setActivation(false);
     saveTextFile("a.html", "a", "text/html");
     saveTextFile("b.html", "b", "text/html");
@@ -141,5 +145,34 @@ describe("saveTextFile", () => {
     (document.querySelector("[aria-label='Dismiss']") as HTMLButtonElement).click();
     expect(document.querySelector(`[data-slot='${SAVE_PROMPT_SLOT}']`)).toBeNull();
     expect(clicks).toEqual([]);
+  });
+  it("keeps the desktop top-level path a direct download even without activation", () => {
+    setActivation(false);
+    saveTextFile("chat.html", "x", "text/html");
+    expect(clicks.map((c) => c.download)).toEqual(["chat.html"]);
+    expect(document.querySelector(`[data-slot='${SAVE_PROMPT_SLOT}']`)).toBeNull();
+  });
+
+  it("downloads when share throws synchronously", () => {
+    setPointer(true);
+    setShare(() => {
+      throw new TypeError("cannot share");
+    });
+    expect(() => saveTextFile("digichat.md", "x", "text/markdown")).not.toThrow();
+    expect(clicks.map((c) => c.download)).toEqual(["digichat.md"]);
+  });
+
+  it("asks again when a refused share comes back after the activation expired", async () => {
+    setPointer(true);
+    setShare(async () => {
+      setActivation(false);
+      throw Object.assign(new Error("nope"), { name: "NotAllowedError" });
+    });
+    saveTextFile("digichat.md", "x", "text/markdown");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(clicks).toEqual([]);
+    setActivation(true);
+    (document.querySelector(`[data-slot='${SAVE_PROMPT_SLOT}-save']`) as HTMLButtonElement).click();
+    expect(clicks.map((c) => c.download)).toEqual(["digichat.md"]);
   });
 });

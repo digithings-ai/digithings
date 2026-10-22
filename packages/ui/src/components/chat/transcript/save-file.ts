@@ -100,10 +100,24 @@ function saveNow(win: Env, doc: Document, filename: string, text: string, mime: 
   const file = typeof File === "undefined" ? null : new File([text], filename, { type: mime });
   if (file && canShareFile(win, doc, file)) {
     const nav = win.navigator as ShareNavigator;
-    nav.share!({ files: [file], title: filename }).catch((error: unknown) => {
+    const fallback = () => {
+      // The share was refused. A download now may be outside the tap, so ask
+      // for one more tap (download only) when the activation is gone.
+      if (hasUserActivation(win.navigator)) anchorDownload(doc, filename, file);
+      else showSavePrompt(doc, filename, () => anchorDownload(doc, filename, file));
+    };
+    let pending: Promise<void>;
+    try {
+      pending = nav.share!({ files: [file], title: filename });
+    } catch {
+      // WebKit throws synchronously for data it cannot share.
+      anchorDownload(doc, filename, file);
+      return;
+    }
+    pending.catch((error: unknown) => {
       // The visitor closed the sheet: nothing to do.
       if (error instanceof Error && error.name === "AbortError") return;
-      anchorDownload(doc, filename, file);
+      fallback();
     });
     return;
   }
@@ -128,32 +142,52 @@ export function showSavePrompt(
   removePrompt(doc);
   const box = doc.createElement("div");
   box.setAttribute("role", "status");
+  box.setAttribute("aria-live", "polite");
   box.setAttribute("data-slot", SAVE_PROMPT_SLOT);
   box.style.cssText =
-    "position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:2147483000;display:flex;gap:8px;align-items:center;max-width:calc(100vw - 32px);padding:8px 10px;border:1px solid currentColor;background:Canvas;color:CanvasText;font:inherit;font-size:13px;";
+    "position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:2147483000;display:flex;gap:8px;align-items:center;max-width:calc(100vw - 32px);padding:6px 6px 6px 12px;border:1px solid currentColor;background:Canvas;color:CanvasText;font:inherit;font-size:14px;";
   const label = doc.createElement("span");
-  label.textContent = `${filename} is ready`;
   label.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;";
+  const target = "min-height:44px;min-width:44px;font:inherit;color:inherit;cursor:pointer;";
   const save = doc.createElement("button");
   save.type = "button";
   save.textContent = "Save";
   save.setAttribute("data-slot", `${SAVE_PROMPT_SLOT}-save`);
-  save.style.cssText =
-    "font:inherit;padding:4px 10px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;";
+  save.style.cssText = `${target}padding:0 14px;border:1px solid currentColor;background:transparent;`;
   save.addEventListener("click", () => {
-    removePrompt(doc);
-    onSave();
+    try {
+      onSave();
+    } finally {
+      removePrompt(doc);
+    }
   });
   const close = doc.createElement("button");
   close.type = "button";
   close.textContent = "×";
   close.setAttribute("aria-label", "Dismiss");
-  close.style.cssText =
-    "font:inherit;padding:2px 6px;border:0;background:transparent;color:inherit;cursor:pointer;";
+  close.style.cssText = `${target}padding:0;border:0;background:transparent;`;
   close.addEventListener("click", () => removePrompt(doc));
   box.append(label, save, close);
+  // The live region exists before its text, so screen readers announce it.
   host.appendChild(box);
+  label.textContent = `${filename} is ready. Tap Save to download it.`;
+  try {
+    save.focus({ preventScroll: true });
+  } catch {
+    /* focus is best effort */
+  }
   return box;
+}
+
+/** Inside a cross-origin frame or on a phone, a late save needs a fresh tap. */
+function needsFreshTap(win: Env & { parent?: unknown; self?: unknown }): boolean {
+  let framed = false;
+  try {
+    framed = win.parent !== undefined && win.parent !== win.self;
+  } catch {
+    framed = true;
+  }
+  return framed || coarsePointer(win);
 }
 
 /**
@@ -167,7 +201,7 @@ export function saveTextFile(filename: string, text: string, mime: string): void
   }
   const doc = document;
   const win = globalThis as unknown as Env;
-  if (!hasUserActivation(win.navigator)) {
+  if (!hasUserActivation(win.navigator) && needsFreshTap(win)) {
     showSavePrompt(doc, filename, () => saveNow(win, doc, filename, text, mime));
     return;
   }
