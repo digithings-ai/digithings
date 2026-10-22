@@ -12,12 +12,19 @@
       "lockSessionControls": true
     }
   },
-  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json. This file carries no token and no mcp rows: the OCC token is a client secret and lives only in the host secret store. Never write this file to the worker secret. Both tenants set a catalog policy for the model picker and no raw model id list. The digigraph half (DIGI_TENANT_CORPUS_MAP) still goes to the digigraph env.",
+  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json. This file carries no token and no mcp rows: the OCC token is a client secret and lives only in the host secret store. Never write this file to the worker secret. Both tenants set a catalog policy for the model picker and no raw model id list. The digigraph half (DIGI_TENANT_CORPUS_MAP) still goes to the digigraph env. The digithings.ai tenant lists DigiSearch and DigiVault in tools.catalog, so /tools names the two corpus tools the house chat is routed to; web search stays off.",
   "DIGICHAT_EMBED_TENANTS": {
     "digithings.ai": {
       "slug": "digithings",
       "gateMode": "ungated",
       "webSearch": false,
+      "tools": {
+        "allowUserToggle": true,
+        "catalog": [
+          { "id": "digisearch", "label": "DigiSearch", "default": true },
+          { "id": "digivault", "label": "DigiVault", "default": true }
+        ]
+      },
       "models": {
         "allowPicker": true,
         "catalog": true,
