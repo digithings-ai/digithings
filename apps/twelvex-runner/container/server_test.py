@@ -310,6 +310,8 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(payload, {"error": "invalid session"})
         run.assert_not_called()
+
+
 class LogTailTests(unittest.TestCase):
     def test_a_short_log_is_kept_whole(self):
         text = "MARKET_CONTEXT_VERDICT=source: 2 source(s) failed: dmx-overview\n"
@@ -335,6 +337,19 @@ class LogTailTests(unittest.TestCase):
         self.assertLessEqual(len(payload["log_tail"]), server.LOG_TAIL)
         self.assertIn("MARKET_CONTEXT_VERDICT=source: dmx-overview failed", payload["log_tail"])
 
+    def test_the_head_covers_the_longest_verdict_line_the_pinned_script_prints(self):
+        # The pinned twelve-x caps the reason at 400 characters
+        # (_REASON_BUDGET) and prints it on stdout, right after the command
+        # line. The head must hold that whole line, or the reason that names
+        # the cause is cut in half.
+        reason = "x" * 400
+        text = (
+            "$ python -m twelve_x.scripts.ingest_market_context intraday\n"
+            "MARKET_CONTEXT_VERDICT=source: " + reason + "\n"
+        ) + ("noise line\n" * 5000)
+        clipped = server.clip(text)
+        self.assertIn("MARKET_CONTEXT_VERDICT=source: " + reason, clipped)
+
     def test_the_tail_is_redacted_before_it_is_clipped(self):
         steps = [
             (
@@ -346,7 +361,6 @@ class LogTailTests(unittest.TestCase):
         payload = server.run_steps(steps, timeout=30, dry_run=False)
         self.assertNotIn("supersecret", payload["log_tail"])
         self.assertIn("[redacted]", payload["log_tail"])
-
 
 
 if __name__ == "__main__":

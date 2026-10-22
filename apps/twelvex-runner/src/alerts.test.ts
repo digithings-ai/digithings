@@ -21,6 +21,20 @@ describe("the reason a run failed", () => {
     expect(verdictLine(tail)).toBe("source: could not establish a desk session: 401");
   });
 
+  it("reads the verdict line of a real combined container log", () => {
+    // The container puts stdout before stderr, and the pinned script prints
+    // the verdict on stdout and everything else through the logger on
+    // stderr. This is the shape the log tail really has.
+    const tail = [
+      "$ python -m twelve_x.scripts.ingest_market_context intraday",
+      "MARKET_CONTEXT_VERDICT=source: 2 source(s) failed: dmx-overview, dmx-news",
+      "INFO twelve_x.scripts.ingest_market_context:   dmx-calendar           ok (12 rows)",
+      "ERROR twelve_x.scripts.ingest_market_context:   dmx-news              FAILED  upstream 500",
+      "ERROR twelve_x.scripts.ingest_market_context: market_context: source: 2 source(s) failed: dmx-overview, dmx-news",
+    ].join("\n");
+    expect(verdictLine(tail)).toBe("source: 2 source(s) failed: dmx-overview, dmx-news");
+  });
+
   it("falls back to the last meaningful line, never to a placeholder", () => {
     expect(verdictLine("  dmx-overview   FAILED  upstream 500")).toBe(
       "dmx-overview FAILED upstream 500",

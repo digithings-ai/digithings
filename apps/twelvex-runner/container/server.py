@@ -27,8 +27,10 @@ PORT = 8080
 LOG_TAIL = 4000
 # The head of the log carries the verdict line: the ingest prints it on
 # stdout, and stdout comes before stderr in the combined output. A tail that
-# keeps only the end drops that line when the run is noisy.
-LOG_HEAD = 600
+# keeps only the end drops that line when the run is noisy. The head covers
+# the command line and the whole verdict line: the pinned twelve-x caps the
+# reason at 400 characters (_REASON_BUDGET).
+LOG_HEAD = 1200
 _TRUNCATION_MARKER = "\n... [truncated: the middle of the run was omitted] ...\n"
 _LOCK = threading.Lock()
 # The FX research sessions the workflow runs. A request string never becomes
