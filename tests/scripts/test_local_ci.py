@@ -743,8 +743,11 @@ class WatchdogTest(unittest.TestCase):
         self._state = _mod.CHILD_STATE
         self._lock = _mod.LOCK
         self._grace = _mod.WATCHDOG_GRACE_SECS
+        self._logd = _mod.LOGD
         _mod.CHILD_STATE = os.path.join(self.tmp, "child.json")
         _mod.LOCK = os.path.join(self.tmp, "lock")
+        _mod.LOGD = os.path.join(self.tmp, "logs")
+        os.makedirs(_mod.LOGD, exist_ok=True)
         _mod.WATCHDOG_GRACE_SECS = 0
         self.marker = os.path.join(self.tmp, "child.pid")
         self.holder = subprocess.Popen(["/bin/sh", "-c", f"sleep 45 & echo $! > {self.marker}; wait"])
@@ -767,6 +770,7 @@ class WatchdogTest(unittest.TestCase):
                 pass
         _mod.CHILD_STATE = self._state
         _mod.LOCK = self._lock
+        _mod.LOGD = self._logd
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _alive(self, pid):
@@ -820,6 +824,25 @@ class WatchdogTest(unittest.TestCase):
         self.assertFalse(_mod.watchdog())
         self.assertIsNone(_mod.read_child_state())
         self.assertTrue(self._alive(self.child))
+
+    def test_the_decision_is_recorded_in_the_test_log(self):
+        """The watchdog's line must land in the test's own log, never in production.
+
+        The logger resolves LOGD at call time, and this class patches the child
+        state, the lock and the grace but not the log directory: every pytest
+        run wrote a synthetic "watchdog: tick ... over budget 0s" record into
+        the production log ~/.config/digithings/logs/local-ci/local-ci.log (446
+        such records measured 2026-10-22 09:03, one per test run). That log is
+        the forensic trail the receipt producer is attributed from, so a test
+        record there is a false lead about who produced a receipt.
+        """
+        self.assertTrue(self._wait_child_age(1))
+        self._state_file(budget=0)
+        self.assertTrue(_mod.watchdog())
+        with open(os.path.join(_mod.LOGD, "local-ci.log")) as f:
+            record = f.read()
+        self.assertIn("watchdog: tick", record)
+        self.assertIn("worker-build:digithings-cron", record)
 
 
 class NoRealNetwork:
