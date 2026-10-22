@@ -1519,6 +1519,48 @@ def test_stream_retries_without_reasoning_effort_on_a_400_that_names_it() -> Non
     assert calls[1].kwargs.get("stream_options") == {"include_usage": True}
 
 
+def test_stream_drops_each_refused_field_once_across_successive_400s() -> None:
+    """A gateway that names one unknown field per 400 still gets an answer."""
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _bad_request("Unrecognized request argument supplied: reasoning_effort"),
+        _bad_request("Unrecognized request argument supplied: stream_options"),
+        [_stream_chunk("hi")],
+    ]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "deepseek/deepseek-v4.1-flash-1017",
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            stream_deltas=True,
+        )
+    assert out == "hi"
+    calls = fake_client.chat.completions.create.call_args_list
+    assert [("reasoning_effort" in c.kwargs, "stream_options" in c.kwargs) for c in calls] == [
+        (True, True),
+        (False, True),
+        (False, False),
+    ]
+
+
+def test_stream_400_naming_a_dropped_field_again_propagates() -> None:
+    """Each field is dropped once; a repeat refusal is a real error, not a loop."""
+    reject = _bad_request("Unrecognized request argument supplied: reasoning_effort")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [reject, reject]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(BadRequestError):
+            digillm.run_tools(
+                "deepseek/deepseek-v4.1-flash-1017",
+                [{"role": "user", "content": "hi"}],
+                [],
+                execute_tool=lambda *_: "",
+                stream_deltas=True,
+            )
+    assert fake_client.chat.completions.create.call_count == 2
+
+
 def test_non_streaming_1017_call_sends_no_reasoning_effort() -> None:
     """Batch (non-streaming) 1017 callers keep their request unchanged."""
     fake_client = MagicMock()

@@ -2312,39 +2312,30 @@ def _stream_completion_one_turn(
         kwargs["reasoning_effort"] = wire_effort
 
     usage_started = time.perf_counter()
-    try:
-        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
-            client,
-            _provider=provider,
-            _requested_model=model,
-            _defer_success=True,
-            **kwargs,
-        )
-    except BadRequestError as error:
-        # Strict OpenAI-compatible endpoints 400 on the unknown ``stream_options``
-        # field rather than ignoring it. Retry once without the field so streaming
-        # still works there; usage then simply arrives only if that provider reports
-        # it some other way. Only a 400 that names the field is treated as this
-        # dialect mismatch — every other bad request propagates untouched. The same
-        # holds for ``reasoning_effort`` on a provider that refuses levels: the
-        # retry runs at the model's default reasoning.
-        message = str(error).lower()
-        dropped = False
-        if "stream_options" in message:
-            kwargs.pop("stream_options", None)
-            dropped = True
-        if "reasoning" in message and "reasoning_effort" in kwargs:
-            kwargs.pop("reasoning_effort", None)
-            dropped = True
-        if not dropped:
-            raise
-        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
-            client,
-            _provider=provider,
-            _requested_model=model,
-            _defer_success=True,
-            **kwargs,
-        )
+    # Strict OpenAI-compatible endpoints 400 on an unknown optional field rather
+    # than ignoring it, and name one field per refusal. ``stream_options`` (usage
+    # then arrives only if the provider reports it some other way) and
+    # ``reasoning_effort`` (the model then reasons at its default) are each
+    # dropped once when a 400 names them, so at most one retry per field. Every
+    # other bad request, or a field already dropped, propagates untouched.
+    droppable = ("stream_options", "reasoning_effort")
+    while True:
+        try:
+            stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
+                client,
+                _provider=provider,
+                _requested_model=model,
+                _defer_success=True,
+                **kwargs,
+            )
+            break
+        except BadRequestError as error:
+            message = str(error).lower()
+            named = [field for field in droppable if field in kwargs and field in message]
+            if not named:
+                raise
+            for field in named:
+                kwargs.pop(field, None)
     content_parts: list[str] = []
     tool_calls_accum: dict[int, ToolCallDict] = {}
     evidence = _StreamEvidence()
