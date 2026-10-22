@@ -65,7 +65,9 @@ def test_migration_is_the_only_072() -> None:
 def test_migration_follows_071() -> None:
     assert (MIGRATIONS_DIR / "prod" / "071_olympus_position_events_book_source.sql").is_file()
     numbers = sorted(
-        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.rglob("[0-9][0-9][0-9]_*.sql")
+        int(p.name.split("_", 1)[0])
+        for layer in ("engine", "prod")
+        for p in (MIGRATIONS_DIR / layer).glob("*.sql")
     )
     assert numbers[-1] >= 72
     assert 72 in numbers

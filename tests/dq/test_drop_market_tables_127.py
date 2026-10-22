@@ -82,8 +82,8 @@ ACCOUNTED: dict[str, tuple[int, str]] = {
     ),
     "digiquant/src/digiquant/d1_authz_policies.py": (
         2,
-        "generated RLS predicate-class map (table names only, not a read); the two "
-        "dropped tables keep their policy rows and 127 ends the reads",
+        "generated RLS predicate-class map (table names only, not a read); 127 "
+        "drops both tables, so these two rows are inert",
     ),
     "digiquant/src/digiquant/data/gloomberb/agent_tools.py": (
         1,

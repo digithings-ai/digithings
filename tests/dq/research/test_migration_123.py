@@ -65,7 +65,9 @@ def test_migration_is_the_only_123() -> None:
 def test_migration_follows_121() -> None:
     assert (MIGRATIONS_DIR / "engine" / "121_checkpoint_blobs_nullable.sql").is_file()
     numbers = sorted(
-        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.rglob("[0-9][0-9][0-9]_*.sql")
+        int(p.name.split("_", 1)[0])
+        for layer in ("engine", "prod")
+        for p in (MIGRATIONS_DIR / layer).glob("*.sql")
     )
     assert 123 in numbers
     assert (numbers.index(122) if 122 in numbers else numbers.index(121)) < numbers.index(123)

@@ -59,7 +59,9 @@ def test_migration_is_the_only_074() -> None:
 def test_migration_follows_073() -> None:
     assert (MIGRATIONS_DIR / "prod" / "073_olympus_lookback_vs_realized.sql").is_file()
     numbers = sorted(
-        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.rglob("[0-9][0-9][0-9]_*.sql")
+        int(p.name.split("_", 1)[0])
+        for layer in ("engine", "prod")
+        for p in (MIGRATIONS_DIR / layer).glob("*.sql")
     )
     assert 74 in numbers
     assert numbers.index(73) < numbers.index(74)

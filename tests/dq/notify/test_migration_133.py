@@ -24,13 +24,9 @@ def test_migration_133_grants_the_claim_delete_and_keeps_the_log_append_only() -
     canonical = (prod / "106_notification_prefs_align_canonical.sql").read_text()
     assert "GRANT SELECT, INSERT ON public.notification_log TO service_role" in canonical
     assert "reject_notification_log_mutation" in canonical
-    # The sweep reads the applied chain (engine then prod), not the whole tree:
-    # cutover/ is staged and not applied, so a file there is not yet a live
-    # grant. rglob over the root would also reach it (DIG-4962).
     offenders = [
         f"{path.name}: {line.strip()}"
-        for layer in ("engine", "prod")
-        for path in sorted((root / layer).glob("*.sql"))
+        for path in sorted(root.rglob("*.sql"))
         for line in path.read_text().splitlines()
         if line.strip().startswith("GRANT") and "notification_log" in line and "DELETE" in line
     ]

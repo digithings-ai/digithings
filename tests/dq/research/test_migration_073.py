@@ -52,7 +52,9 @@ def test_migration_is_the_only_073() -> None:
 def test_migration_follows_072() -> None:
     assert (MIGRATIONS_DIR / "prod" / "072_olympus_period_accounting.sql").is_file()
     numbers = sorted(
-        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.rglob("[0-9][0-9][0-9]_*.sql")
+        int(p.name.split("_", 1)[0])
+        for layer in ("engine", "prod")
+        for p in (MIGRATIONS_DIR / layer).glob("*.sql")
     )
     assert 73 in numbers
     assert numbers.index(72) < numbers.index(73)
