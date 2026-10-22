@@ -50,10 +50,11 @@ on top of that. The host itself is pinned as well, but by configuration and not
 by this file: the allowlist above holds the host names this deployment allows,
 because the embed host is the client's own hostname and it changes when they
 redeploy, so a value written into this file would break the check on the next
-deploy. A host outside the allowlist is refused before a request is made, so
-the identity is never on the wire to a host nobody here vetted, and the run
-exits 2 naming the variable and the host it saw. Refusing the redirect stops
-the header travelling; pinning the host says where it may travel to. digichat
+deploy. Both the URL the page named and the URL the probes are actually sent
+to are vetted against that allowlist before a request is made, so the identity
+is never on the wire to a host nobody here vetted, and the run exits 2 naming
+the variable and the host it saw. Refusing the redirect stops the header
+travelling; pinning the host says where it may travel to. digichat
 ignores an allowlist entry shorter than 32 characters, so a value below that is
 sent and then refused; the same secret has to be in both places.
 
@@ -95,10 +96,13 @@ from typing import NamedTuple
 from urllib.error import HTTPError
 
 # ``urllib.parse`` is a string parser and nothing else: it opens no socket, reads
-# no file, reads no environment and holds no state. It is here for one job —
-# reading the host out of an embed URL, so that the host can be compared with
-# the allowlist below instead of being trusted because the page named it.
-from urllib.parse import urlsplit
+# no file, reads no environment and holds no state. It is here for two jobs, both
+# of them the same one: reading the host out of a URL, so that the host can be
+# compared with the allowlist below instead of being trusted because the page
+# named it — and building the URL the probes are sent to, so that the host of
+# the request is the host of the embed URL rather than whatever cutting a
+# suffix off a string happens to leave behind.
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 # Imported under an alias on purpose. The read-only test greps this file for the
 # literal substring used to spell the stdlib file-opening builtin in call
@@ -228,10 +232,29 @@ class EmbedTarget:
 
     @property
     def api_chat_url(self) -> str:
-        base = self.embed_url
-        if base.endswith("/embed"):
-            base = base[: -len("/embed")]
-        return base + "/api/chat"
+        """The URL both probes are POSTed to, on the embed host.
+
+        Built from the parsed URL, not by cutting a suffix off the string. The
+        authority is copied across whole, so the host of the request is always
+        the host the embed URL named.
+
+        Slicing the string instead would let the host change: "https://embed"
+        ends with "/embed" as a *string* — those last six characters are the
+        second slash of "://" plus the host name — and cutting them off leaves
+        "https:/", which posts both probes to the host "api". That is a host no
+        allowlist entry could have named, so the identity would go out to it,
+        and no answer from it would ever be scored. The path is what carries
+        the "/embed" suffix; the authority is not touched.
+
+        Raises ProbeError when the embed URL cannot be read as a URL at all.
+        That is exit 2 — the check could not see — and it is raised here rather
+        than inside a request, so nothing is on the wire when it happens.
+        """
+        parsed = _split_url(self.embed_url, "the embed URL")
+        path = parsed.path
+        if path.endswith("/embed"):
+            path = path[: -len("/embed")]
+        return urlunsplit((parsed.scheme, parsed.netloc, path + "/api/chat", "", ""))
 
 
 def _to_response(status: int, headers, raw: bytes) -> HttpResponse:
@@ -438,8 +461,31 @@ def _allowed_embed_hosts() -> frozenset[str]:
     return frozenset(entry.strip().lower() for entry in raw.split(",") if entry.strip())
 
 
-def require_allowlisted_embed_host(embed_url: str) -> None:
-    """Refuse to talk to an embed host this deployment has not named.
+def _split_url(url: str, what: str) -> SplitResult:
+    """Read a URL apart, refusing one that cannot be read.
+
+    Raises ProbeError, which is exit 2: the check could not see, and it says
+    why. The reason names the variable to set and the URL it could not read,
+    and never the token.
+
+    The port is read here as well as the host, because ``urlsplit`` only
+    raises on a port that is not a number when the port is asked for. Asking
+    for it in this one place keeps that refusal on the same path as every
+    other unreadable URL, instead of leaving it to whichever caller happens
+    to look at the port first.
+    """
+    try:
+        parsed = urlsplit(url)
+        parsed.port
+    except ValueError:
+        raise ProbeError(
+            f"{what} cannot be read as a URL, so it cannot be matched against {EMBED_HOSTS_ENV_VAR}"
+        ) from None
+    return parsed
+
+
+def require_allowlisted_embed_host(url: str, *, what: str = "the embed URL") -> None:
+    """Refuse to talk to a host this deployment has not named.
 
     The embed URL is read out of a public page, so the host in it is only as
     trustworthy as that page. The monitor identity is a secret of ours, and the
@@ -447,6 +493,14 @@ def require_allowlisted_embed_host(embed_url: str) -> None:
     to be pinned to one this deployment named — otherwise a page that names
     another host decides where our secret goes, and the check reports on
     whatever answers that host gives it.
+
+    Two URLs are vetted, and ``what`` says which one a refusal is about. The
+    first is the URL the page named. The second is the URL the probes are
+    actually POSTed to, and it is the one that matters: it is where the
+    identity lands. They carry the same host in every ordinary shape, but
+    they are not the same URL, and a check that vetted only the first would be
+    checking the wrong thing — the one that decides where the bytes go is the
+    one that has to be on the allowlist.
 
     The comparison is exact: an entry matches the whole authority, so a host
     that merely contains an allowed one ("…apps.io.attacker.example") is not
@@ -459,30 +513,23 @@ def require_allowlisted_embed_host(embed_url: str) -> None:
     why. The reason names the variable to set and the host that was seen, and
     never the token.
     """
-    try:
-        parsed = urlsplit(embed_url)
-        host = parsed.hostname
-        port = parsed.port
-    except ValueError:
-        raise ProbeError(
-            f"the embed URL cannot be read as a URL, so it cannot be matched "
-            f"against {EMBED_HOSTS_ENV_VAR}"
-        ) from None
+    parsed = _split_url(url, what)
+    host = parsed.hostname
     if host is None:
         raise ProbeError(
-            f"the embed URL names no host, so it cannot be matched against {EMBED_HOSTS_ENV_VAR}"
+            f"{what} names no host, so it cannot be matched against {EMBED_HOSTS_ENV_VAR}"
         )
     if parsed.username is not None or parsed.password is not None:
         raise ProbeError(
-            f"the embed URL carries userinfo, which no embed URL legitimately has, "
+            f"{what} carries userinfo, which no embed URL legitimately has, "
             f"so its host is not read out of it; the hosts this deployment allows "
             f"are named in {EMBED_HOSTS_ENV_VAR}"
         )
-    authority = host if port is None else f"{host}:{port}"
+    authority = host if parsed.port is None else f"{host}:{parsed.port}"
     if authority.lower() in _allowed_embed_hosts():
         return
     raise ProbeError(
-        f"the embed host {authority!r} is not in {EMBED_HOSTS_ENV_VAR}, so this "
+        f"the host {authority!r} in {what} is not in {EMBED_HOSTS_ENV_VAR}, so this "
         f"deployment has not vetted it; set {EMBED_HOSTS_ENV_VAR} to the host "
         "the embed app is served from (a redeploy to a new host changes it, and "
         "the check has to be told)"
@@ -507,6 +554,13 @@ def build_headers(target: EmbedTarget) -> dict[str, str]:
     not named. The refusal raises ProbeError before the request is made, so
     the identity is never on the wire at all when the host is not allowed.
 
+    Two URLs are vetted, and both have to be: the URL the public page named,
+    and the URL the probes are actually POSTed to. The second is where the
+    identity lands, and it is a different string from the first — it is
+    derived from it — so vetting the first alone would leave the host of the
+    request unpinned. The refusal says which of the two it is about, and names
+    the host it saw, so an operator can replace the allowlist entry.
+
     The environment is read here, in the one function that builds headers, rather
     than cached in a module global. A global would be bound once at import, which
     both hides the second read site from an audit and makes the answer depend on
@@ -517,6 +571,8 @@ def build_headers(target: EmbedTarget) -> dict[str, str]:
     quotes what it was handed, and that text reaches stdout through the exit-2
     path, so an unsendable secret would be printed rather than refused quietly.
     """
+    require_allowlisted_embed_host(target.embed_url)
+    require_allowlisted_embed_host(target.api_chat_url, what="the URL the probes are sent to")
     headers = {
         "content-type": "application/json",
         "accept": "text/event-stream",
@@ -525,7 +581,6 @@ def build_headers(target: EmbedTarget) -> dict[str, str]:
         "Referer": DISCOVERY_URL,
         "Origin": f"https://{EMBED_HOST}",
     }
-    require_allowlisted_embed_host(target.embed_url)
     monitor_token = (os.environ.get(MONITOR_TOKEN_ENV_VAR) or "").strip()
     if not monitor_token:
         return headers

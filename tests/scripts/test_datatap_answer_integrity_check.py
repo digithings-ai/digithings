@@ -20,6 +20,7 @@ import re
 import socket
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -125,6 +126,21 @@ def _discovery_page(embed_base: str) -> str:
     return (
         "<!DOCTYPE html><html><body><script>self.__next_f.push("
         '[1,"{\\"embedUrl\\":\\"' + embed_base + '/embed\\",\\"token\\":\\"' + "t" * 48 + '\\"}"]'
+        "</script></body></html>"
+    )
+
+
+def _page_naming(embed_url: str) -> str:
+    """The public page, naming an embed URL exactly as it is given.
+
+    ``_discovery_page`` always names the live shape: the embed app's base plus
+    "/embed". This one names whatever it is handed, because a public page can
+    name any URL at all and the check has to hold for the shapes it does not
+    expect.
+    """
+    return (
+        "<!DOCTYPE html><html><body><script>self.__next_f.push("
+        '[1,"{\\"embedUrl\\":\\"' + embed_url + '\\",\\"token\\":\\"' + "t" * 48 + '\\"}"]'
         "</script></body></html>"
     )
 
@@ -594,6 +610,112 @@ def test_the_refusal_never_prints_the_monitor_token(
     out = capsys.readouterr().out
     assert code == mod.COULD_NOT_RUN == 2
     assert MONITOR_TOKEN not in out, "the refusal must not print the identity"
+
+
+def test_the_api_url_is_built_on_the_host_the_embed_url_names() -> None:
+    """The URL the probes go to keeps the host the embed URL named.
+
+    Cutting "/embed" off the end of the *string* moves the host when the path
+    is empty: "https://embed" ends with those six characters, and removing them
+    leaves "https:/", which posts both probes to the host "api" — a host no
+    allowlist entry could have named, so the identity would go out to it and no
+    answer from it would ever be scored.
+
+    The authority is copied across whole instead, so the host of the request is
+    always the host of the embed URL. The live shape is unchanged by this; what
+    changes is the shape that used to move the host.
+    """
+    for embed_url in (
+        "https://embed",
+        "https://embed/embed",
+        "https://embed.example/embed",
+        "https://embed.example/foo/embed",
+        "https://embed.example/embed?x=1",
+        "https://embed.example:8443/embed",
+    ):
+        target = mod.EmbedTarget(embed_url=embed_url, token="t" * 48)
+        api = urlsplit(target.api_chat_url)
+        embed = urlsplit(embed_url)
+        assert api.netloc == embed.netloc, (
+            f"{embed_url} must keep its host: got {target.api_chat_url}"
+        )
+        assert api.path.endswith("/api/chat"), (
+            f"{embed_url} must still reach the chat endpoint: got {target.api_chat_url}"
+        )
+
+
+def test_the_identity_only_ever_goes_to_a_host_on_the_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End to end: the host that receives the identity is the allowed host.
+
+    The unit test above pins how the request URL is built; this one pins that
+    the request actually goes there. A page naming "https://embed" is answered
+    on the host "embed" — the host the deployment named — and the identity
+    lands on it and nowhere else. Under the old string surgery the same page
+    posted both probes to the host "api", which no allowlist entry could name.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, "embed")
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _page_naming("https://embed")),
+        }
+    )
+    assert code == mod.OK
+    chats = [call for call in fake.calls if call["url"].endswith("/api/chat")]
+    assert len(chats) == 2
+    for chat in chats:
+        assert urlsplit(chat["url"]).netloc == "embed", f"the identity went to {chat['url']}"
+        assert chat["headers"].get("x-embed-monitor-token") == MONITOR_TOKEN
+
+
+def test_the_destination_url_is_vetted_in_its_own_right(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The URL the probes are sent to is checked, not only the URL they came from.
+
+    They are two different strings — one is derived from the other — and only the
+    second decides where the bytes go. So the second is vetted on its own, and a
+    refusal about it says which of the two it is about, or an operator cannot
+    tell which entry to replace.
+    """
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, EMBED_HOST)
+    with pytest.raises(mod.ProbeError) as raised:
+        mod.require_allowlisted_embed_host(
+            "https://api.example/api/chat", what="the URL the probes are sent to"
+        )
+    reason = str(raised.value)
+    assert "api.example" in reason, f"must name the host it saw; got: {reason}"
+    assert EMBED_HOSTS_ENV_VAR in reason, f"must name the variable to set; got: {reason}"
+    assert "the URL the probes are sent to" in reason, (
+        f"must say which of the two URLs it refused; got: {reason}"
+    )
+
+
+def test_the_probes_are_refused_when_the_destination_host_is_not_allowlisted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A destination outside the allowlist stops the run before the first POST.
+
+    The embed URL is allowed here, and the destination is not — the shape a
+    derived URL can take when the derivation is wrong. The identity is on the
+    destination, so the destination is what has to be vetted, and the refusal
+    happens before anything is sent.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, EMBED_HOST)
+    monkeypatch.setattr(
+        mod.EmbedTarget,
+        "api_chat_url",
+        property(lambda self: "https://api.example/api/chat"),
+    )
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.COULD_NOT_RUN == 2
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == [], (
+        "no identity goes out to a host the deployment has not vetted"
+    )
 
 
 # --------------------------------------------------------------------------
