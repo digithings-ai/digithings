@@ -147,10 +147,12 @@ COULD_NOT_RUN = 2
 DISCOVERY_URL = "https://datatap.stream/chat"
 EMBED_HOST = "datatap.stream"
 
-# The one environment variable this script reads, and the only secret it is
-# allowed to read. It is our sanctioned internal-monitor identity, presented to
-# our own embed gate so the hourly check is not charged for the turns it needs
-# to run. digichat matches it against DIGICHAT_MONITOR_TOKENS on
+# The only secret this script is allowed to read. It is our sanctioned
+# internal-monitor identity, presented to our own embed gate so the hourly
+# check is not charged for the turns it needs to run. The other environment
+# variable this script reads is the host allowlist below, which is
+# configuration and not a credential. digichat matches the token against
+# DIGICHAT_MONITOR_TOKENS on
 # ``x-embed-monitor-token`` — the constant ``EMBED_MONITOR_TOKEN_HEADER`` in
 # ``apps/digichat/src/lib/embed-monitor-token.ts``, compared with
 # ``timingSafeEqual``. The spelling below must match that constant exactly; any
@@ -178,6 +180,14 @@ EMBED_HOSTS_ENV_VAR = "ANSWER_CHECK_EMBED_HOSTS"
 # failure path in this script prints the exception text — a pasted secret with a
 # stray newline would land in the hourly log.
 _BAD_HEADER_CHARS = re.compile(r"[^\x21-\x7e]")
+
+# The userinfo part of a URL, if it has one: everything between "://" and the
+# "@". The embed URL is read out of a public page and printed in the log, and a
+# URL carrying userinfo would put the client's own credentials into our hourly
+# log for no reason — such a URL is refused by the host vet a moment later
+# anyway. Only the printed text is affected; the request uses the URL as it
+# was read.
+_USERINFO_IN_URL = re.compile(r"://[^/]*@")
 
 # Both calls go to the same client platform and a slow Azure Container Apps cold
 # start is routine, so the default is generous. It is passed explicitly down the
@@ -245,6 +255,13 @@ class EmbedTarget:
         allowlist entry could have named, so the identity would go out to it,
         and no answer from it would ever be scored. The path is what carries
         the "/embed" suffix; the authority is not touched.
+
+        The query and the fragment are dropped: the chat endpoint is a path
+        and not a query, and the old string surgery appended "/api/chat"
+        *inside* the query string, so an embed URL carrying one produced a URL
+        whose chat endpoint was never reached at all. The shape the live page
+        has — "https://<host>/embed" — comes out byte for byte as it did
+        before, so nothing about the running check changes.
 
         Raises ProbeError when the embed URL cannot be read as a URL at all.
         That is exit 2 — the check could not see — and it is raised here rather
@@ -456,6 +473,15 @@ def _allowed_embed_hosts() -> frozenset[str]:
     allowed. A trailing dot, a scheme or a path in an entry is a different
     string and will not match — which is why the refusal names the host it saw
     rather than saying "not allowed".
+
+    The port is part of the entry, not decoration: the entry names the
+    authority the probe is sent to, so an entry ``host`` does not allow
+    ``https://host:8443/embed`` and an entry ``host:8443`` does not allow
+    ``https://host/embed``. Both fail closed, and the refusal names the
+    authority it saw, so an operator can see which half to write.
+
+    An IPv6 host is written without its brackets (``::1``), because the
+    brackets are part of the URL's authority and not part of the host name.
     """
     raw = os.environ.get(EMBED_HOSTS_ENV_VAR) or ""
     return frozenset(entry.strip().lower() for entry in raw.split(",") if entry.strip())
@@ -465,8 +491,8 @@ def _split_url(url: str, what: str) -> SplitResult:
     """Read a URL apart, refusing one that cannot be read.
 
     Raises ProbeError, which is exit 2: the check could not see, and it says
-    why. The reason names the variable to set and the URL it could not read,
-    and never the token.
+    why. The reason names the variable to set and never the URL itself — a URL
+    can carry userinfo, and this text reaches stdout — and never the token.
 
     The port is read here as well as the host, because ``urlsplit`` only
     raises on a port that is not a number when the port is asked for. Asking
@@ -510,8 +536,18 @@ def require_allowlisted_embed_host(url: str, *, what: str = "the embed URL") -> 
     rather than a host, and no embed URL legitimately carries userinfo.
 
     Raises ProbeError, which is exit 2: the check could not see, and it says
-    why. The reason names the variable to set and the host that was seen, and
-    never the token.
+    why. The reason names the variable to set and, except for a URL that
+    cannot be read apart at all, the host that was seen — never the token.
+
+    Two hosts are refused before the comparison, because the string read here
+    is not always the string the resolver uses. A host that is not plain ASCII
+    is resolved through IDNA ("faß" becomes "fass"), and a host carrying a
+    percent-escape is decoded before the resolver sees it ("host%2eevil.example"
+    becomes "host.evil.example"). Comparing the string that was read against
+    the allowlist would then be comparing the wrong string — the allowlist
+    entry would have to be written in the same odd shape for it to match — so
+    both are refused instead. The vetted host has to be the resolved host, and
+    a name that changes on the way to the resolver cannot be that.
     """
     parsed = _split_url(url, what)
     host = parsed.hostname
@@ -524,6 +560,19 @@ def require_allowlisted_embed_host(url: str, *, what: str = "the embed URL") -> 
             f"{what} carries userinfo, which no embed URL legitimately has, "
             f"so its host is not read out of it; the hosts this deployment allows "
             f"are named in {EMBED_HOSTS_ENV_VAR}"
+        )
+    if not host.isascii():
+        raise ProbeError(
+            f"the host {host!r} in {what} is not plain ASCII, so the host that "
+            f"would be resolved is not the host that was read; name an ASCII "
+            f"host in {EMBED_HOSTS_ENV_VAR} (a non-ASCII name is resolved "
+            "through IDNA, which is not the string that would be vetted here)"
+        )
+    if "%" in host:
+        raise ProbeError(
+            f"the host {host!r} in {what} contains a percent-escape, so the host "
+            f"that would be resolved is not the host that was read; the hosts "
+            f"this deployment allows are named in {EMBED_HOSTS_ENV_VAR}"
         )
     authority = host if parsed.port is None else f"{host}:{parsed.port}"
     if authority.lower() in _allowed_embed_hosts():
@@ -1418,7 +1467,7 @@ def _check(argv: list[str] | None = None) -> int:
     except Exception as exc:  # DNS, TLS, timeout — all mean we cannot see
         return _could_not_run(f"discovery raised {type(exc).__name__}: {exc}")
 
-    print(f"embed target: {target.embed_url}")
+    print(f"embed target: {_USERINFO_IN_URL.sub('://', target.embed_url)}")
 
     # Each answer is printed the moment it arrives, and each is scanned before
     # the next probe is sent. A finding is a fact about an answer we did receive

@@ -7,8 +7,15 @@
 #
 # Why this needs no credential at all: the check reads the answer out of DataTap's
 # own public page and compares it against its own public specification. There is
-# nothing to authenticate against, so this workflow adds no secret and no
-# repository variable. The check is read-only and writes nothing.
+# nothing to authenticate against, so this workflow adds no secret. The check is
+# read-only and writes nothing.
+#
+# One piece of configuration is not a credential and still has to come from
+# somewhere: the host allowlist the check refuses to leave
+# (`ANSWER_CHECK_EMBED_HOSTS`, below). The embed host is the client's own
+# hostname and changes on every redeploy, so its value cannot be written into
+# this file — it is a repository variable, and the refusal names both the
+# variable and the host it saw, so an operator can replace the entry.
 #
 # No `on.schedule` here on purpose: every clock for this repo lives on the
 # digithings-cron Worker (a GitHub cron on develop would double-fire, and
@@ -40,6 +47,12 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The hosts this deployment allows the check to talk to. A repository
+    # variable, not a secret: the value is a hostname, and it is not written
+    # here because the embed host changes on every client redeploy. Unset
+    # means the check refuses to run and says which variable to set.
+    env:
+      ANSWER_CHECK_EMBED_HOSTS: ${{ vars.ANSWER_CHECK_EMBED_HOSTS }}
     steps:
       - uses: actions/checkout@v4
 

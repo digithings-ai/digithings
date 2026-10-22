@@ -19,6 +19,7 @@ import json
 import re
 import socket
 import sys
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -680,6 +681,11 @@ def test_the_destination_url_is_vetted_in_its_own_right(
     second decides where the bytes go. So the second is vetted on its own, and a
     refusal about it says which of the two it is about, or an operator cannot
     tell which entry to replace.
+
+    This test pins the guard's own report — that a refusal about a URL names the
+    host it saw and the variable to set. The call site that passes the second
+    URL in, with the wording that distinguishes it, is pinned by the test
+    below, which refuses a destination whose host is outside the allowlist.
     """
     monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, EMBED_HOST)
     with pytest.raises(mod.ProbeError) as raised:
@@ -695,6 +701,7 @@ def test_the_destination_url_is_vetted_in_its_own_right(
 
 
 def test_the_probes_are_refused_when_the_destination_host_is_not_allowlisted(
+    capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A destination outside the allowlist stops the run before the first POST.
@@ -703,6 +710,10 @@ def test_the_probes_are_refused_when_the_destination_host_is_not_allowlisted(
     derived URL can take when the derivation is wrong. The identity is on the
     destination, so the destination is what has to be vetted, and the refusal
     happens before anything is sent.
+
+    The refusal also has to say *which* of the two URLs it is about: they are
+    two different strings, and an operator who cannot tell them apart cannot
+    tell which entry to replace.
     """
     monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
     monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, EMBED_HOST)
@@ -712,10 +723,174 @@ def test_the_probes_are_refused_when_the_destination_host_is_not_allowlisted(
         property(lambda self: "https://api.example/api/chat"),
     )
     code, fake = _run_main(_both_probes_clean())
+    out = capsys.readouterr().out
     assert code == mod.COULD_NOT_RUN == 2
+    assert "the URL the probes are sent to" in out, (
+        f"must say which of the two URLs it refused; got:\n{out}"
+    )
     assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == [], (
         "no identity goes out to a host the deployment has not vetted"
     )
+
+
+def test_an_allowlist_entry_may_name_the_port_the_embed_app_is_served_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An entry names the authority the probe goes to, port and all.
+
+    "embed:8443" is the entry for an embed app served on port 8443, and it is
+    a different authority from "embed" — a different place to send the
+    identity. The comparison is on the whole authority, so the entry has to
+    carry the port when the URL does.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, "embed:8443")
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _page_naming("https://embed:8443/embed")),
+        }
+    )
+    assert code == mod.OK, "an entry naming the port must allow that host on that port"
+    chats = [call for call in fake.calls if call["url"].endswith("/api/chat")]
+    assert len(chats) == 2
+    for chat in chats:
+        assert urlsplit(chat["url"]).netloc == "embed:8443"
+        assert chat["headers"].get("x-embed-monitor-token") == MONITOR_TOKEN
+
+
+def test_an_allowlist_entry_without_the_port_does_not_allow_one(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An entry without a port does not allow a host served on one.
+
+    "embed" is not "embed:8443", and the port is the difference between two
+    places to send the identity. Both directions fail closed — this one refuses
+    a host nobody vetted, the other blinds a deployment that configured the
+    port correctly — so the refusal names the authority it saw and the
+    operator can see which half to write.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, "embed")
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _page_naming("https://embed:8443/embed")),
+        }
+    )
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2
+    assert "embed:8443" in out, f"must name the authority it saw; got:\n{out}"
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == []
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "https://embed",
+        "embed/embed",
+        "embed.",
+    ],
+)
+def test_an_allowlist_entry_that_is_not_a_host_name_is_refused(
+    entry: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An operator writes a URL; an entry is a host name.
+
+    "https://embed" and "embed/embed" name the same host to a human and are
+    different strings to the comparison, and the comparison is the one that
+    decides. A trailing dot is the same host to a resolver and a different
+    string here, so it fails closed as well: the entry has to be written the
+    way the host is written in the URL.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, entry)
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _page_naming("https://embed")),
+        }
+    )
+    assert code == mod.COULD_NOT_RUN == 2, f"must refuse the entry {entry!r}"
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == []
+
+
+def test_a_url_naming_no_host_is_refused(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A URL with no host in it is refused with a sentence, not a traceback.
+
+    "https:///embed" parses, and there is no host in it to compare with the
+    allowlist. The refusal has to say so: an operator reading the hourly log
+    needs a sentence, not a Python error about a None.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _page_naming("https:///embed")),
+        }
+    )
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2
+    assert "names no host" in out, f"must say why it refused; got:\n{out}"
+    assert EMBED_HOSTS_ENV_VAR in out, f"must name the variable to set; got:\n{out}"
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == []
+
+
+def test_a_url_that_cannot_be_read_is_refused_without_quoting_the_page() -> None:
+    """A port that is not a number is refused, and the page's text is not quoted.
+
+    The refusal is a sentence about the variable to set. It must not quote the
+    text the public page handed us: that text is the client's, and urllib's
+    own error message would put it straight into the hourly log.
+    """
+    with pytest.raises(mod.ProbeError) as raised:
+        mod.require_allowlisted_embed_host("https://embed:notaport/embed")
+    reason = str(raised.value)
+    assert "cannot be read as a URL" in reason, f"must say why it refused; got: {reason}"
+    assert "notaport" not in reason, f"must not quote the page's text; got: {reason}"
+    assert EMBED_HOSTS_ENV_VAR in reason, f"must name the variable to set; got: {reason}"
+
+
+def test_a_host_the_resolver_would_change_is_refused() -> None:
+    """IDNA and percent-decoding change the host after it was read.
+
+    "faß.example" is resolved as "fass.example", and "embed%2eevil.example" is
+    decoded as "embed.evil.example". In both cases the host that would be
+    connected to is not the host that was read, so both are refused rather
+    than compared: for a comparison to mean anything the allowlist entry would
+    have to be written in the same odd shape, and the point of the pin is that
+    the vetted host is the resolved host.
+    """
+    for url in ("https://faß.example/embed", "https://embed%2eevil.example/embed"):
+        with pytest.raises(mod.ProbeError) as raised:
+            mod.require_allowlisted_embed_host(url)
+        reason = str(raised.value)
+        assert EMBED_HOSTS_ENV_VAR in reason, f"must name the variable to set; got: {reason}"
+
+
+def test_the_vetted_host_is_the_host_urllib_would_connect_to(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """For every host the guard allows, urllib connects to that same host.
+
+    urllib percent-decodes the authority it connects to, so the string the
+    guard compares is not always the string the socket is handed — and a host
+    that is not plain ASCII is resolved through IDNA on the way to the socket.
+    The guard refuses both shapes (above); this pins what is left: for every
+    allowed URL, the authority urllib would connect to is the authority that
+    was vetted, so the pin compares the right string.
+    """
+    for host in ("embed", "embed:8443", "embed.example"):
+        url = f"https://{host}/embed"
+        monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, host)
+        mod.require_allowlisted_embed_host(url)
+        assert urllib.request.Request(url).host == urlsplit(url).netloc, (
+            f"{url}: the vetted authority is not the authority urllib would connect to"
+        )
 
 
 # --------------------------------------------------------------------------

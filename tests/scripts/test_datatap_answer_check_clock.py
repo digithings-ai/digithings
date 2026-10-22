@@ -16,6 +16,14 @@ recovers a recipe's real exit code from make's. The DIG-1131 review deleted
 that guard in a scratch clone and every suite still passed, which means the
 guard had no behavioural coverage at all — so the tests below execute the
 workflow's own shell rather than grep its text.
+
+The third pin is the one input the job needs. The check refuses to leave the
+host allowlist, so the workflow has to supply it, from a repository variable
+and not from a literal: the embed host is the client's own hostname and
+changes on every redeploy, and a hostname written into the workflow would be a
+client literal in the public repository. The pin that used to forbid *any*
+repository variable here was written when the check needed no configuration at
+all; the half of it that forbids a secret still holds.
 """
 
 from __future__ import annotations
@@ -104,11 +112,35 @@ def test_the_workflow_does_not_swallow_the_exit_code() -> None:
     assert "|| exit 0" not in body
 
 
-def test_the_workflow_introduces_no_secret_and_no_repo_variable() -> None:
-    """The token comes out of DataTap's own public page. No credential is needed."""
+def test_the_workflow_introduces_no_secret() -> None:
+    """The token comes out of DataTap's own public page. No credential is needed.
+
+    The host allowlist the check refuses to leave is configuration and not a
+    credential: a hostname, held in a repository variable, that changes on
+    every client redeploy. A secret here would be a credential in a workflow
+    that does not need one, so the pin is on the secret and not on the
+    variable.
+    """
     body = WORKFLOW.read_text(encoding="utf-8")
     assert "secrets." not in body
-    assert "vars." not in body
+
+
+def test_the_workflow_supplies_the_host_allowlist_the_check_needs() -> None:
+    """The check refuses to leave the host allowlist, so the job has to set it.
+
+    Without this the run carries an empty allowlist and exits 2 on every
+    hour, with a reason naming a variable that nothing in the repository can
+    set — a blind canary whose failure reads like the client's platform being
+    down.
+
+    The value is a repository variable and not a literal here, for two
+    reasons: the embed host is the client's own hostname and changes on every
+    redeploy, and a hostname written into this file would be a client literal
+    in the public repository.
+    """
+    body = WORKFLOW.read_text(encoding="utf-8")
+    assert "ANSWER_CHECK_EMBED_HOSTS" in body
+    assert "vars.ANSWER_CHECK_EMBED_HOSTS" in body
 
 
 def test_the_clock_is_registered_on_the_cron_worker() -> None:
