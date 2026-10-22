@@ -157,16 +157,10 @@ written — the Cloudflare account was on Workers Free then, and Containers need
 (`docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md` records the gate) —
 and it stopped being true when the account moved. It was not kept with a caveat: the claim was
 simply removed. `apps/digichat-cloudflare/` (Worker `digithings-digichat` + Container) is live in
-<<<<<<< HEAD
-the tree, requires Workers Paid, declares eleven `digithings.ai` route patterns in its
+the tree, requires Workers Paid, declares twelve `digithings.ai` route patterns in its
 `wrangler.toml`, and is covered by the CI build matrix. What was missing was not the app but its
 **deploy lane**, re-derived on 2026-10-22 (DIG-5120) — see
 [Cloudflare Workers and Containers](#cloudflare-workers-and-containers).
-=======
-the tree, requires Workers Paid, declares twelve `digithings.ai` route patterns in its
-`wrangler.toml`, and is covered by the CI build matrix. What is missing is not the app but its
-**deploy lane** — see [Cloudflare Workers and Containers](#cloudflare-workers-and-containers).
->>>>>>> 57b65aeced (fix(digichat): answer the round-4 review findings on the /chat cutover)
 
 digichat Node for digithings still runs on operator Compose + Cloudflare Tunnel; that is a
 different surface from the `digichat-cloudflare` Worker.
@@ -348,13 +342,8 @@ fail a PR before it merges.
 
 | App | Worker name | Declared routes | Deploy lane |
 |---|---|---|---|
-<<<<<<< HEAD
 | `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | `deploy-digithings-stack-cloudflare.yml` — a push to `main` and a `workflow_dispatch`, both behind `environment: production` |
 | `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/chat*` (the app), `/chat/occ*` (the invite-gated Pages shell), `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*` (11 of the 12 patterns; the full list is in `apps/digichat-cloudflare/wrangler.toml`) | `deploy-digichat-cloudflare-container.yml` — `workflow_dispatch` behind `environment: production` |
-=======
-| `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | **none — manual** |
-| `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/chat*` (the app), `/chat/occ*` (the invite-gated Pages shell), `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*`, `/api/mcp/zammad*` (the helpdesk MCP route) | **none — manual** |
->>>>>>> 57b65aeced (fix(digichat): answer the round-4 review findings on the /chat cutover)
 
 Read the routes column as "what `wrangler.toml` declares", not as a claim about what is
 currently serving. Both are Workers **Containers**: both need **Workers Paid**, and both need
