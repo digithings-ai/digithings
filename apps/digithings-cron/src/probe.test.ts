@@ -280,17 +280,28 @@ describe("evaluateDeployCommit", () => {
   it("passes when production serves the production branch tip", () => {
     const verdict = evaluateDeployCommit(
       { ...stamp, commit: MAIN_SHA },
-      { commit: MAIN_SHA, committedAt: "2026-10-21T23:59:00Z" },
+      {
+        commit: MAIN_SHA,
+        committedAt: "2026-10-21T23:59:00Z",
+        unbuiltCommit: null,
+        unbuiltAt: null,
+      },
       DEPLOY_NOW,
     );
     expect(verdict.label).toBe("PASS");
     expect(verdict.failed).toBe(false);
   });
 
+  // No anchor available: the rule falls back to the tip date.
   it("fails when main moved long ago and production still serves the old build", () => {
     const verdict = evaluateDeployCommit(
       stamp,
-      { commit: MAIN_SHA, committedAt: "2026-10-19T10:45:05Z" },
+      {
+        commit: MAIN_SHA,
+        committedAt: "2026-10-19T10:45:05Z",
+        unbuiltCommit: null,
+        unbuiltAt: null,
+      },
       DEPLOY_NOW,
     );
     expect(verdict.label).toBe("FAIL");
@@ -302,7 +313,12 @@ describe("evaluateDeployCommit", () => {
   it("warns, and does not fail, while a build for the new commit may still be in flight", () => {
     const verdict = evaluateDeployCommit(
       stamp,
-      { commit: MAIN_SHA, committedAt: "2026-10-22T04:00:00Z" },
+      {
+        commit: MAIN_SHA,
+        committedAt: "2026-10-22T04:00:00Z",
+        unbuiltCommit: null,
+        unbuiltAt: null,
+      },
       DEPLOY_NOW,
     );
     expect(verdict.label).toBe("WARN");
@@ -312,7 +328,12 @@ describe("evaluateDeployCommit", () => {
   it("never fails on its own transport: an unreadable remote decides nothing", () => {
     const verdict = evaluateDeployCommit(
       stamp,
-      { commit: null, committedAt: null },
+      {
+        commit: null,
+        committedAt: null,
+        unbuiltCommit: null,
+        unbuiltAt: null,
+      },
       DEPLOY_NOW,
     );
     expect(verdict.label).toBe("WARN");
@@ -322,7 +343,12 @@ describe("evaluateDeployCommit", () => {
   it("never fails on a missing stamp: the site probe owns that signal", () => {
     const verdict = evaluateDeployCommit(
       { commit: null, builtAt: null, detail: "HTTP 404" },
-      { commit: MAIN_SHA, committedAt: "2026-10-19T10:45:05Z" },
+      {
+        commit: MAIN_SHA,
+        committedAt: "2026-10-19T10:45:05Z",
+        unbuiltCommit: null,
+        unbuiltAt: null,
+      },
       DEPLOY_NOW,
     );
     expect(verdict.label).toBe("WARN");
