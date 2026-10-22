@@ -1690,8 +1690,20 @@ class TestLedgerSemanticsContract:
         "priority",
     )
 
+    def _applied_migrations(self):
+        """The applied chain: ``engine/`` then ``prod/`` (#5854 layers).
+
+        ``cutover/`` is staged, not applied, so it is not part of the schema
+        this contract reads.
+        """
+        return [
+            path
+            for layer in ("engine", "prod")
+            for path in sorted((self._MIGRATIONS / layer).glob("*.sql"))
+        ]
+
     def _position_events_ddl(self):
-        src = (self._MIGRATIONS / "001_initial_schema.sql").read_text()
+        src = (self._MIGRATIONS / "engine" / "001_initial_schema.sql").read_text()
         i = src.index("CREATE TABLE IF NOT EXISTS position_events")
         return src[i : src.index(";", i) + 1]
 
@@ -1713,14 +1725,14 @@ class TestLedgerSemanticsContract:
         assert cols.get("event") == "text"
         assert "unique(date, ticker)" in ddl
         # 097 re-scopes the uniqueness per workspace; 113 drops the legacy key.
-        ws_unique = (self._MIGRATIONS / "097_workspaces_tenant_columns.sql").read_text()
+        ws_unique = (self._MIGRATIONS / "prod" / "097_workspaces_tenant_columns.sql").read_text()
         assert "uq_position_events_workspace_date_ticker" in ws_unique
         cutover = (self._MIGRATIONS / "cutover" / "113_drop_legacy_book_uniques.sql").read_text()
         assert "position_events_date_ticker_key" in cutover
 
     def test_no_average_entry_column_exists_on_any_table(self):
         # Control: the same sweep finds the columns that DO exist.
-        blob = "\n".join(p.read_text() for p in sorted(self._MIGRATIONS.glob("*.sql"))).lower()
+        blob = "\n".join(p.read_text() for p in self._applied_migrations()).lower()
         assert "weight_pct" in blob
         assert "prev_weight_pct" in blob
         for candidate in ("avg_entry", "avg_cost", "cost_basis", "average_entry"):

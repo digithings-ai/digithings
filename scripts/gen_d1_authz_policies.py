@@ -159,6 +159,22 @@ def classify(using_body: str) -> str:
     raise ValueError(f"unclassified USING expression: {body}")
 
 
+def _layered_migrations(migrations_dir: pathlib.Path) -> list[pathlib.Path]:
+    """The migration chain, in order: engine/ then prod/.
+
+    The migrations split (#5854) moved every SQL file out of the flat
+    ``digiquant/supabase/migrations/`` directory into the layered tree, so the
+    flat glob now reads nothing. No top-level strays: the chain lives in
+    engine/ and prod/ (D-Q6').
+    """
+    layered = sorted((migrations_dir / "engine").glob("*.sql")) + sorted(
+        (migrations_dir / "prod").glob("*.sql")
+    )
+    strays = sorted(migrations_dir.glob("*.sql"))
+    assert not strays, f"top-level migration(s) outside engine/ and prod/: {strays}"
+    return layered
+
+
 def parse_migrations(migrations_dir: pathlib.Path = MIGRATIONS_DIR):
     """Return ``(policies, unsupported)`` read off the migrations.
 
@@ -169,7 +185,8 @@ def parse_migrations(migrations_dir: pathlib.Path = MIGRATIONS_DIR):
     policies: dict[str, str] = {}
     unsupported: list[tuple[str, str, str, str]] = []
 
-    for path in sorted(migrations_dir.glob("*.sql")):
+    layered = _layered_migrations(migrations_dir)
+    for path in layered:
         sql = strip_comments(path.read_text(encoding="utf-8"))
 
         for m in CREATE_POLICY_RE.finditer(sql):
@@ -259,7 +276,7 @@ def main(argv=None) -> int:
 
     source_count = sum(
         len(CREATE_POLICY_RE.findall(strip_comments(p.read_text(encoding="utf-8"))))
-        for p in sorted(MIGRATIONS_DIR.glob("*.sql"))
+        for p in _layered_migrations(MIGRATIONS_DIR)
     )
     text = render_module(policies, unsupported, source_count)
 

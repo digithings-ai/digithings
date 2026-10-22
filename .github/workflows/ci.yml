@@ -95,6 +95,7 @@ jobs:
               - 'packages/surface-config/**'
               - 'packages/hero-banner/**'
               - 'clients/**'
+              - 'packages/tui-frame/**'
               - '.github/workflows/test-bun-suites.yml'
               - '.github/workflows/test-clients-tui.yml'
             digiquant:
@@ -134,6 +135,7 @@ jobs:
               - 'packages/catalog/**'
               - 'packages/ui/**'
               - 'packages/design/**'
+              - 'packages/tui-frame/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-dashboard.yml'
@@ -167,6 +169,7 @@ jobs:
               - '.github/workflows/test-web.yml'
             clients_tui:
               - 'clients/**'
+              - 'packages/tui-frame/**'
               - '.github/workflows/test-clients-tui.yml'
             e2e_contract:
               - 'tests/test_e2e.py'

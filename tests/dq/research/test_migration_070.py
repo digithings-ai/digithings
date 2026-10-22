@@ -22,7 +22,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "070_olympus_paper_execution_costs.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "070_olympus_paper_execution_costs.sql"
 
 TABLE = "public.portfolio_ledger_paper_executions"
 COLUMNS = ("fee", "slippage")
@@ -57,7 +57,7 @@ def _check_body(sql: str, column: str) -> str:
 
 
 def test_migration_is_the_only_070() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("070_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("070_*.sql")) == [MIGRATION_PATH]
 
 
 def test_migration_remains_single_transaction_compatible(raw: str) -> None:

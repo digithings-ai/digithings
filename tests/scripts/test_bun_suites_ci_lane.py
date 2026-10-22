@@ -42,6 +42,9 @@ SUITES = (
     "clients/digichat-devkit",
     "packages/surface-config",
     "packages/hero-banner",
+    # DIG-5212: the recorded-frame contract both TUI clients and the dashboard
+    # import. Its suite is the only place that contract is tested.
+    "packages/tui-frame",
 )
 
 
@@ -185,6 +188,33 @@ def test_ci_paths_filter_matches_each_suite() -> None:
             assert probe in globs or any(
                 probe.startswith(glob.rstrip("**").rstrip("/")) for glob in globs
             ), f"{probe} matches no bun_suites glob; gate would not fire for it"
+
+
+def test_a_workspace_suite_declares_no_runtime_dependency() -> None:
+    """A suite that skips the install step must not need one.
+
+    local-ci skips the install for root workspaces (see `is_root_workspace` in
+    local_ci.py): `bun install` in a dependency-free directory walks up to the
+    repo-root workspace and installs the whole monorepo instead. A suite that
+    declares a runtime dependency and still skips the install would test
+    against whatever happens to be lying around, so the rule is pinned here
+    (DIG-5212, carried over from the retired Actions lane).
+    """
+    workspaces = json.loads(
+        (REPO_ROOT / "package.json").read_text(encoding="utf-8")
+    )["workspaces"]
+    for suite in SUITES:
+        if not any(suite.split("/")[0] == glob.rstrip("/*") for glob in workspaces):
+            continue
+        pkg = json.loads(
+            (REPO_ROOT / suite / "package.json").read_text(encoding="utf-8")
+        )
+        runtime = pkg.get("dependencies", {})
+        assert not runtime, (
+            f"{suite} is a root workspace, so local-ci skips its install, but it "
+            f"declares runtime dependencies {sorted(runtime)} - bun test would "
+            f"resolve them from somewhere it did not install"
+        )
 
 
 def test_standalone_suites_commit_a_lockfile() -> None:

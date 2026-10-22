@@ -1557,6 +1557,7 @@ _MIGRATION_069 = (
     / "digiquant"
     / "supabase"
     / "migrations"
+    / "prod"
     / "069_olympus_portfolio_ledger.sql"
 )
 _MIGRATION_097 = (
@@ -1564,6 +1565,7 @@ _MIGRATION_097 = (
     / "digiquant"
     / "supabase"
     / "migrations"
+    / "prod"
     / "097_workspaces_tenant_columns.sql"
 )
 

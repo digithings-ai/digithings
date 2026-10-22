@@ -116,11 +116,38 @@ def test_the_repo_overlay_composes_onto_the_live_registry():
     )
 
 
-def test_the_repo_overlay_carries_the_occ_tenant():
+TOOL_ROWS = [
+    {"id": "digisearch", "label": "DigiSearch", "default": True},
+    {"id": "digivault", "label": "DigiVault", "default": True},
+]
+
+
+def test_the_repo_overlay_carries_only_the_house_tool_rows():
     overlay = registry.load_registry(_staged_overlay(), str(STAGED))
-    assert "occ.digithings.ai" in overlay
-    assert "token" not in overlay["occ.digithings.ai"]
-    assert "mcp" not in overlay["occ.digithings.ai"]
+    assert overlay == {"digithings.ai": {"tools": {"catalog": TOOL_ROWS}}}
+
+
+def test_the_repo_overlay_adds_only_the_house_tool_rows_over_the_live_copy():
+    live = json.loads(json.dumps(LIVE))
+    live["digithings.ai"]["models"] = {
+        "allowPicker": True,
+        "catalog": True,
+        "default": "tenant/default-model",
+    }
+    live["digithings.ai"]["backend"] = {
+        "type": "digigraph",
+        "digisearchIndex": "tenant_corpus",
+        "vaultPathPrefix": "clients/tenant-vault",
+    }
+    overlay = registry.load_registry(_staged_overlay(), str(STAGED))
+    composed, report = registry.compose_registry(live, overlay)
+    assert report["changed_paths"] == ["digithings.ai.tools"]
+    house = dict(composed["digithings.ai"])
+    assert house.pop("tools") == {"catalog": TOOL_ROWS}
+    assert house == live["digithings.ai"]
+    assert composed["digithings.ai"]["webSearch"] is True
+    assert composed["occ.digithings.ai"] == live["occ.digithings.ai"]
+    assert composed["digiquant.io"] == live["digiquant.io"]
 
 
 def test_the_occ_only_overlay_carries_one_tenant_and_no_credential():

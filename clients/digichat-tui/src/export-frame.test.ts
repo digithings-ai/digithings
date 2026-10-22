@@ -1,9 +1,12 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
+import { captureChatThread } from "./capture";
 import { DEFAULT_OUT, parseArgs } from "./export-frame";
+
+const ARTIFACT = resolve(dirname(import.meta.dir), "fixtures/digichat-tui.json");
 
 test("the CLI defaults to the client fixture path", () => {
   const args = parseArgs([]);
@@ -22,13 +25,23 @@ test("the CLI reads the capture size", () => {
   expect(args.height).toBe(50);
 });
 
+test("the CLI reads a pinned capture time", () => {
+  expect(parseArgs(["--captured-at", "2026-10-22T05:45:00.868Z"]).capturedAt).toBe(
+    "2026-10-22T05:45:00.868Z",
+  );
+  expect(parseArgs(["--captured-at=2026-10-22T05:45:00.868Z"]).capturedAt).toBe(
+    "2026-10-22T05:45:00.868Z",
+  );
+});
+
 test("the CLI refuses an unknown flag, a missing value and a stray word", () => {
   expect(() => parseArgs(["--nope"])).toThrow(/unknown flag/);
   expect(() => parseArgs(["--out"])).toThrow(/needs a value/);
   expect(() => parseArgs(["--width"])).toThrow(/needs a value/);
   expect(() => parseArgs(["--width", "0"])).toThrow(/positive number/);
   expect(() => parseArgs(["--width", "wide"])).toThrow(/positive number/);
-  expect(() => parseArgs(["extra"])).toThrow(/unknown flag/);
+  expect(() => parseArgs(["--captured-at", "yesterday"])).toThrow(/zone/);
+  expect(() => parseArgs(["extra"])).toThrow(/unexpected argument/);
 });
 
 test("the CLI records the chat pane of the real client", async () => {
@@ -67,4 +80,13 @@ test("the CLI records the chat pane of the real client", async () => {
   expect(record.frame).not.toContain("book");
   expect(record.width).toBeLessThan(100);
   expect(record.height).toBeGreaterThan(0);
+});
+
+test("the committed fixture is what the exporter writes today", async () => {
+  // The artifact is committed, so the exporter can be checked against it: a
+  // hand-edited frame, a crop that drifted or a changed fixture all fail here.
+  // The capture time is pinned from the artifact, so the comparison holds.
+  const committed = JSON.parse(await readFile(ARTIFACT, "utf8"));
+  const record = await captureChatThread({ capturedAt: committed.capturedAt });
+  expect(record).toEqual(committed);
 });
