@@ -51,6 +51,28 @@ def _ohlcv_frame(dates: list[date]) -> pl.DataFrame:
 
 
 @pytest.mark.unit
+def test_trading_days_filter_datetime_timestamp_casts_to_date() -> None:
+    """CSV caches may parse timestamp as Datetime; trading_days are Date (AUDIT-009)."""
+    df = pl.DataFrame(
+        {
+            "timestamp": pl.Series(
+                "timestamp",
+                [datetime(2024, 1, 2), datetime(2024, 1, 3)],
+                dtype=pl.Datetime(time_unit="us"),
+            ),
+            "open": [100.0, 101.0],
+            "high": [101.0, 102.0],
+            "low": [99.0, 100.0],
+            "close": [100.5, 101.5],
+            "volume": [1_000_000, 1_000_100],
+        }
+    )
+    trading_days = pl.Series("trading_days", [date(2024, 1, 2)], dtype=pl.Date)
+    result = compute_indicators(df, trading_days=trading_days)
+    assert result.height == 1
+
+
+@pytest.mark.unit
 def test_trading_days_filter_drops_non_trading_rows() -> None:
     """Rows outside trading_days are excluded before computation."""
     # 2024-01-02 = Tuesday (trading), 2024-01-06 = Saturday, 2024-01-07 = Sunday

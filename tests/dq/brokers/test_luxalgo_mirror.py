@@ -201,5 +201,5 @@ class TestEnrichBriefing:
         original = dict(briefing)
         enriched = enrich_briefing_with_mirror(briefing, _golden_snapshot())
         assert_enrichment_appends_read_only(
-            enriched, briefing, original, account_id="Market rallied."
+            enriched, briefing, original, account_id="alpaca-acct-1"
         )

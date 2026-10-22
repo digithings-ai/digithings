@@ -199,6 +199,4 @@ class TestEnrichBriefing:
         briefing = {"date": "2026-08-06", "body": "Market rallied.", "regime_label": "risk-on"}
         original = dict(briefing)
         enriched = enrich_briefing_with_mirror(briefing, _golden_snapshot())
-        assert_enrichment_appends_read_only(
-            enriched, briefing, original, account_id="Market rallied."
-        )
+        assert_enrichment_appends_read_only(enriched, briefing, original, account_id="VA000001")

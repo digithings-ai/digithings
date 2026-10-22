@@ -516,7 +516,14 @@ def test_watchlist_price_tickers_come_from_the_research_watchlist() -> None:
     """The priced universe is the sealed watchlist universe minus the research-only ETFs."""
     seal = set(parse_watchlist(WATCHLIST_MD))
     assert _RESEARCH_ONLY_ETFS, "the research-only watchlist section must not be empty"
+    # The two sets are disjoint: no research-only ETF is priced.
+    assert not set(WATCHLIST_PRICE_TICKERS) & _RESEARCH_ONLY_ETFS
+    # The seal is fully covered: every watchlist ticker is priced or research-only.
     assert set(WATCHLIST_PRICE_TICKERS) | _RESEARCH_ONLY_ETFS == seal
+    # The partition is the one the base pinned by hand: 78 priced tickers and the
+    # 21 sector sub-industry ETFs that carry no venue.
+    assert len(WATCHLIST_PRICE_TICKERS) == 78
+    assert len(_RESEARCH_ONLY_ETFS) == 21
 
 
 @pytest.mark.unit
