@@ -1514,17 +1514,26 @@ def _seat_verdict_comment(
     head_sha: str,
     created: str,
     comment_id: str = "",
+    scope_sha: str = "",
+    provenance_head: str = "",
 ) -> dict[str, Any]:
     """A verdict comment as the fleet posts it: both markers and a prose line.
 
     The seat is the provenance marker's `agent=` field. Every seat on this org
     pushes under one GitHub login, so the marker is the only place the seat is
     written — and it is the only place the queue can read it from.
+
+    `scope_sha` is the marker's own `scope=`, and `provenance_head` the
+    provenance marker's `head=`. Both default to `head_sha`, which is what the
+    fleet writes; they are separate arguments so a comment whose marker names a
+    different head than its provenance marker can be built.
     """
+    scope = scope_sha or head_sha
+    provenance = provenance_head or head_sha
     body = (
         f"<!-- digithings-review agent={seat} "
-        f"run=00000000-0000-0000-0000-000000000000 head={head_sha} -->\n"
-        f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{head_sha} -->\n\n"
+        f"run=00000000-0000-0000-0000-000000000000 head={provenance} -->\n"
+        f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{scope} -->\n\n"
         f"Review verdict: {verdict.replace('_', ' ')}\n"
     )
     return {
@@ -1739,6 +1748,126 @@ def test_a_seats_approve_naming_another_head_does_not_clear_its_block() -> None:
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
     assert not verdict.eligible
     assert any(SECURITY_SEAT in r for r in verdict.reasons)
+
+
+def test_a_stale_scoped_approve_does_not_clear_a_block_through_the_provenance_head() -> None:
+    """A marker verdict binds to its own `scope=`, and to nothing else.
+
+    The finding the review raised on #6177: seat R blocks on head A, then
+    approves with `scope=@A` while its provenance marker names the head the PR
+    stands at. The provenance head used to be read as a second binding, so the
+    approve covered the current head and cleared the block — while the approve
+    itself said it was about the stale commit. A verdict that names a stale head
+    says nothing about the current one, so the block stands.
+    """
+    head = "c" * 40
+    stale = "d" * 40
+    pr = _pr(
+        6177,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=stale,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="approve",
+                head_sha=stale,
+                scope_sha=stale,
+                provenance_head=head,
+                created="2026-10-21T14:50:24Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(
+        REVIEWER_SEAT in r and "changes_requested" in r and stale[:12] in r
+        for r in verdict.reasons
+    )
+
+
+def test_an_approve_whose_scope_names_the_head_clears_its_own_block() -> None:
+    """The control: the marker's own `scope=` naming the head clears the block.
+
+    The same seat blocks on the stale head and approves the head the PR stands
+    at, in a marker whose `scope=` names that head. That approve is about this
+    head, so it clears the block.
+    """
+    head = "c" * 40
+    stale = "d" * 40
+    pr = _pr(
+        6177,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=stale,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="approve",
+                head_sha=head,
+                scope_sha=head,
+                provenance_head=head,
+                created="2026-10-21T14:50:24Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_marker_with_no_scope_still_binds_the_provenance_head() -> None:
+    """The fallback stays: a marker that names no head binds the provenance one.
+
+    A marker verdict that carries no `scope=` says which head it is about only
+    through the provenance marker's `head=`. That is still a binding, so the
+    approve clears the seat's block.
+    """
+    head = "c" * 40
+    stale = "d" * 40
+    pr = _pr(
+        6177,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=stale,
+                created="2026-10-21T12:28:36Z",
+            ),
+            {
+                "id": "IC_kwDOscopeless",
+                "author": {"login": "chrizefan"},
+                "authorAssociation": "MEMBER",
+                "body": (
+                    f"<!-- digithings-review agent={REVIEWER_SEAT} "
+                    "run=00000000-0000-0000-0000-000000000000 "
+                    f"head={head} -->\n"
+                    "<!-- opencode-power-pack:code-review verdict=approve -->\n\n"
+                    "Review verdict: approve\n"
+                ),
+                "createdAt": "2026-10-21T14:50:24Z",
+            },
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
 
 
 def test_a_block_whose_seat_cannot_be_read_is_judged_by_the_newest_verdict() -> None:
