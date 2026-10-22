@@ -212,9 +212,9 @@ export type TruncateForMailtoResult = { text: string; truncated: boolean };
  * Move a cut back so it never lands inside a redaction marker.
  *
  * The body is redacted before it is cut, so the cut can land inside a
- * `[redacted]` marker. The marker is then dropped whole rather than shown
- * half-written. A `[` that is the user's own text is not a marker and is
- * left alone.
+ * `[redacted]` marker. A marker that the cut splits is dropped whole rather
+ * than shown half-written. A marker that ends before the cut is kept, and a
+ * `[` that is the user's own text is not a marker and is left alone.
  */
 function cutOutsideMarker(body: string, cut: number): number {
   for (let len = 1; len < REDACTED.length; len += 1) {

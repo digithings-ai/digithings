@@ -13,6 +13,7 @@ import {
   copyMarkdownWithFallback,
   downloadHtml,
   downloadPlainText,
+  MAILTO_TRUNCATION_NOTE,
 } from "./transcript-markdown";
 
 /** A token shape the redactor matches — a digithings-owned prefix, not a live key. */
@@ -37,6 +38,11 @@ function captureWrittenFile(): { text: () => string } {
   });
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
   return { text: () => written.text };
+}
+
+/** The decoded body of a `mailto:` URL. */
+function mailtoBody(url: string): string {
+  return decodeURIComponent(url.slice(url.indexOf("body=") + "body=".length));
 }
 
 describe("export paths redact the payload", () => {
@@ -84,6 +90,20 @@ describe("export paths redact the payload", () => {
     expect(field?.value).toBe("The overnight key is [redacted].");
   });
 
+  it("redacts before the copy falls back to a download", async () => {
+    // The clipboard is blocked and there is a document, so the copy falls
+    // back to writing a Markdown file.
+    const writeText = vi.fn().mockRejectedValue(new Error("blocked"));
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    const file = captureWrittenFile();
+
+    const result = await copyMarkdownWithFallback(`The overnight key is ${SAMPLE}.`);
+
+    expect(result).toBe("download");
+    await vi.waitFor(() => expect(file.text()).toContain("[redacted]"));
+    expect(file.text()).not.toContain(SAMPLE);
+  });
+
   it("redacts the mailto body before the URL budget is applied", () => {
     const url = buildMailtoUrl("digichat answer", `token=${SAMPLE}`);
 
@@ -100,10 +120,10 @@ describe("export paths redact the payload", () => {
 
   it("keeps a secret that straddles the mailto cut out of the body", () => {
     // The budget cuts inside the secret: the head of the secret must not
-    // survive the cut. The padding puts the cut inside the secret's first
-    // characters, where the token shape no longer matches the fragment, so a
-    // redactor running after the cut would leave it in the URL.
-    const body = `${"x".repeat(37)} ${SAMPLE}${"y".repeat(4000)}`;
+    // survive the cut. The padding puts the cut inside the secret, where the
+    // token shape no longer matches the fragment, so a redactor running
+    // after the cut would leave the fragment in the URL.
+    const body = `${"x".repeat(26)} ${SAMPLE}${"y".repeat(4000)}`;
     const url = buildMailtoUrl("digichat answer", body, { maxEncoded: 120 });
 
     expect(url).not.toContain("digi_");
@@ -118,6 +138,41 @@ describe("export paths redact the payload", () => {
 
     expect(url).not.toContain("%5Bredac");
     expect(url).not.toContain("[redac");
+  });
+
+  it("drops a redaction marker the cut splits, whole", () => {
+    // The cut lands one character into the marker. The marker is dropped
+    // whole rather than shown in part, and it never takes the character
+    // before it with it.
+    const body = `${"x".repeat(20)}[redacted]${"y".repeat(4000)}`;
+    const url = buildMailtoUrl("digichat answer", body, { maxEncoded: 100 });
+
+    expect(mailtoBody(url)).toBe(`${"x".repeat(20)}\n\n${MAILTO_TRUNCATION_NOTE}`);
+  });
+
+  it("keeps a redaction marker that ends before the cut", () => {
+    const body = `${"x".repeat(10)}[redacted]${"y".repeat(4000)}`;
+    const url = buildMailtoUrl("digichat answer", body, { maxEncoded: 110 });
+
+    const text = mailtoBody(url);
+    expect(text).toContain("[redacted]");
+    expect(text.startsWith(`${"x".repeat(10)}[redacted]`)).toBe(true);
+  });
+
+  it("keeps a lone `[` that is not part of a marker", () => {
+    const body = `${"x".repeat(20)}[${"y".repeat(4000)}`;
+    const url = buildMailtoUrl("digichat answer", body, { maxEncoded: 100 });
+
+    expect(mailtoBody(url)).toBe(`${"x".repeat(20)}[\n\n${MAILTO_TRUNCATION_NOTE}`);
+  });
+
+  it("cuts the mailto body at the budget, to the character", () => {
+    const body = `${"x".repeat(40)}tail${"y".repeat(4000)}`;
+    const url = buildMailtoUrl("digichat answer", body, { maxEncoded: 100 });
+
+    // The longest prefix that fits the budget, then the note. No character
+    // of the body is dropped and none is invented.
+    expect(mailtoBody(url)).toBe(`${"x".repeat(23)}\n\n${MAILTO_TRUNCATION_NOTE}`);
   });
 
   it("redacts the .txt export before the file is written", async () => {

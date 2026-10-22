@@ -207,6 +207,14 @@ describe("redactValue", () => {
     expect(out).toBe("https://files.example/o?token=[redacted]&ok=1");
   });
 
+  it("redacts a query secret whose tail follows a closing parenthesis", () => {
+    // The character after the parenthesis looks like part of a secret, so the
+    // value continues and the tail is part of the secret too.
+    const out = redactString("?token=abcdef123456)+GHIJKLMNOP");
+    expect(out).not.toContain("GHIJKLMNOP");
+    expect(out).toBe("?token=[redacted]");
+  });
+
   it("keeps sentence punctuation outside a query secret", () => {
     const out = redactString("(https://files.example/o?token=tok-plain-9f3c2a).");
     expect(out).toBe("(https://files.example/o?token=[redacted]).");
@@ -237,6 +245,19 @@ describe("redactValue", () => {
     const out = redactString("`session=sess`plain-9f3c2a`");
     expect(out).not.toContain("sess`plain-9f3c2a");
     expect(out).toBe("`session=[redacted]`");
+  });
+
+  it("redacts a session value whose tail follows a backtick", () => {
+    // The character after the backtick looks like part of a secret, so the
+    // value continues and the tail is part of the secret too.
+    const out = redactString("session=abcdef123456`+GHIJKLMNOP");
+    expect(out).not.toContain("GHIJKLMNOP");
+    expect(out).toBe("session=[redacted]");
+  });
+
+  it("keeps prose punctuation outside a session value", () => {
+    const out = redactString("`session=abcdefgh`, and more");
+    expect(out).toBe("`session=[redacted]`, and more");
   });
 
   it("redacts a session value of 500 characters whole", () => {
