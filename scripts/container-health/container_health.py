@@ -68,6 +68,11 @@ HEALTH_PATH = "/healthz"
 DEFAULT_TIMEOUT = 20.0
 USER_AGENT = "digithings-container-health/1.0 (launchd, read-only)"
 
+#: The scheme the probe speaks. Production is https; the tests point it at a
+#: local server, because the only honest way to prove that a redirect is never
+#: followed is to let a server try.
+DEFAULT_SCHEME = "https"
+
 # --- how we read an answer ----------------------------------------------------
 
 STATE_OK = "container_ok"      # the container was awake and answered
@@ -117,6 +122,31 @@ TICKET_STATUS = "todo"
 #: finds the ticket that is already open.
 TICKET_TITLE_PREFIX = "[run-watch] container-health:"
 
+#: This job's own issue. It is named in the ticket description, so it can never
+#: be the identifier of the ticket that was just created, and it must not be
+#: read as one.
+OWN_ISSUE = "DIG-2910"
+
+#: The statuses that count as an open ticket. A closed ticket is not this job's
+#: ticket any more: the failure that follows it is filed as a new one.
+OPEN_STATUSES = ("todo", "in_progress", "in_review", "blocked")
+
+#: How many issues one page of the lookup holds.
+LOOKUP_PAGE_SIZE = 50
+
+#: How many pages the lookup reads at most. The bound keeps a board that keeps
+#: answering with a full page from turning the daily check into an endless read.
+LOOKUP_MAX_PAGES = 10
+
+#: The most the lookup reads from one answer. A body bigger than this is not an
+#: answer this job is going to use.
+LOOKUP_MAX_BYTES = 512 * 1024
+
+#: How long ``dt-create-issue`` may take. A helper that hangs must not disable
+#: the daily check for good: the socket timeout is per call and says nothing
+#: about a child process that never returns.
+CREATE_TIMEOUT = 180.0
+
 #: A recurrence comment on the ticket is a note, not a new signal: one per day is
 #: enough, unless the symptom changed.
 RECURRENCE_COMMENT_HOURS = 24.0
@@ -159,6 +189,29 @@ def resolve_api_base() -> str:
 # --- probing ------------------------------------------------------------------
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """A redirect handler that refuses to follow.
+
+    The probe asks one path and stays on it. A 30x off ``/healthz`` could land
+    on a route that boots the container, and the daily check would start
+    costing money. Returning ``None`` makes urllib treat the 30x as the answer
+    itself, so the redirect target is never fetched.
+
+    The default opener carries a redirect handler that follows, so the probe
+    must not use the default opener.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # The name belongs to urllib: this is the hook it calls, and returning
+        # None is how it is told not to follow.
+        return None
+
+
+def build_opener() -> urllib.request.OpenerDirector:
+    """The opener the probe uses: one that refuses to follow a redirect."""
+    return urllib.request.build_opener(_NoRedirectHandler())
+
+
 def classify(status: int, body: str) -> tuple[str, str]:
     """Classify one answer from a host.
 
@@ -187,13 +240,16 @@ def probe(
     domain: str = DEFAULT_DOMAIN,
     timeout: float = DEFAULT_TIMEOUT,
     opener: Callable[..., Any] | None = None,
+    scheme: str = DEFAULT_SCHEME,
 ) -> dict[str, Any]:
     """Probe one host and return the result as a plain dict.
 
-    ``opener`` is injectable so the tests can answer without a network.
+    ``opener`` is injectable so the tests can answer without a network. The
+    opener the probe uses on its own refuses to follow a redirect, so a 30x is
+    the answer and its target is never fetched.
     """
-    url = f"https://{host}.{domain}{HEALTH_PATH}"
-    open_it = opener or urllib.request.urlopen
+    url = f"{scheme}://{host}{'.' + domain if domain else ''}{HEALTH_PATH}"
+    open_it = opener or build_opener().open
     # The User-Agent is not decoration. The edge answers Python-urllib with 403
     # (measured 2026-10-22), so a probe that does not name itself sees a
     # firewall, not the stack.
@@ -203,6 +259,7 @@ def probe(
     status: int | None = None
     error: str | None = None
     final_url: str | None = None
+    location = ""
     try:
         with open_it(request, timeout=timeout) as response:
             status = getattr(response, "status", None) or response.getcode()
@@ -217,6 +274,10 @@ def probe(
             raw = err.read(8192)
         except Exception:  # pragma: no cover - the body is best effort
             raw = b""
+        try:
+            location = (err.headers or {}).get("Location", "") or ""
+        except Exception:  # pragma: no cover - the headers are best effort
+            location = ""
     except Exception as err:  # DNS, TLS, timeout, refused connection
         error = f"{type(err).__name__}: {err}"
     elapsed_ms = int((time.monotonic() - started) * 1000)
@@ -234,6 +295,22 @@ def probe(
     # A redirect leaves the wake-hygiene path: the answer would come from
     # somewhere else, and if that somewhere else boots the container, the daily
     # check starts costing money. The check asks one path and stays on it.
+    #
+    # The opener refuses to follow, so this is reached with the 30x itself and
+    # its target has never been fetched.
+    if status is not None and 300 <= int(status) < 400:
+        where = location or final_url or ""
+        return {
+            "host": host,
+            "url": url,
+            "state": STATE_UNEXPECTED,
+            "http_status": int(status),
+            "elapsed_ms": elapsed_ms,
+            "detail": "redirected off "
+            + HEALTH_PATH
+            + (": " + excerpt(where, 120) if where else ""),
+            "body": excerpt(body, 240),
+        }
     if final_url and not final_url.rstrip("/").endswith(HEALTH_PATH):
         return {
             "host": host,
@@ -261,9 +338,12 @@ def run_probes(
     domain: str = DEFAULT_DOMAIN,
     timeout: float = DEFAULT_TIMEOUT,
     opener: Callable[..., Any] | None = None,
+    scheme: str = DEFAULT_SCHEME,
 ) -> dict[str, Any]:
     """Probe every host and summarise the run."""
-    results = [probe(host, domain=domain, timeout=timeout, opener=opener) for host in hosts]
+    results = [
+        probe(host, domain=domain, timeout=timeout, opener=opener, scheme=scheme) for host in hosts
+    ]
     states = {r["state"] for r in results}
     if not results:
         # Probing nothing is not a green run. It is a misconfiguration, and it
@@ -374,8 +454,13 @@ def save_state(state: dict[str, Any], path: Path = STATE_PATH) -> None:
         os.close(fd)
 
 
-def append_log(report: dict[str, Any], path: Path = LOG_PATH) -> None:
-    """Append the run to the host log as one JSON line."""
+def append_log(report: dict[str, Any], path: Path = LOG_PATH, action: str = "") -> None:
+    """Append the run to the host log as one JSON line.
+
+    The action is part of the line: the log is the record of what the run did
+    with the failure, and a log that says only "failed" cannot answer the
+    question the run-watch ticket asks.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(
@@ -383,6 +468,7 @@ def append_log(report: dict[str, Any], path: Path = LOG_PATH) -> None:
             "ts": report["ts"],
             "overall": report["overall"],
             "symptom": report.get("symptom", ""),
+            "action": action,
             "results": [
                 {
                     "host": r["host"],
@@ -413,10 +499,35 @@ def _save_quietly(state: dict[str, Any], path: Path | None) -> None:
 # --- the ticket ---------------------------------------------------------------
 
 
-def extract_identifier(stdout: str) -> str | None:
-    """The issue identifier in the output of ``dt-create-issue``, if there is one."""
-    match = IDENTIFIER_RE.search(stdout or "")
-    return match.group(0) if match else None
+class LookupFailed(Exception):
+    """The board could not be asked whether a ticket for this job is open.
+
+    A failed lookup is not the same as an answer of "no ticket": filing now
+    would be a second ticket for the same job, so the caller keeps the failure
+    and tries again later.
+    """
+
+
+def extract_identifier(*streams: str | None, exclude: Sequence[str] = ()) -> str | None:
+    """The issue identifier in the output of ``dt-create-issue``, if there is one.
+
+    Both streams are read, stdout first. The script prints the identifier on
+    stdout when the create works, and in its failure messages on stderr
+    (``sys.exit("...")`` writes to stderr), and a create that failed *after* the
+    POST still means the ticket exists. Reading stdout alone called that
+    "not filed" and filed a second ticket for the same failure.
+
+    ``exclude`` holds the identifiers this job names in the ticket description.
+    They are never the identifier of the ticket that was just created, and the
+    script echoes the description length, so they must not be read as one.
+    """
+    excluded = {str(item) for item in exclude or ()}
+    for stream in streams:
+        for match in IDENTIFIER_RE.finditer(stream or ""):
+            found = match.group(0)
+            if found not in excluded:
+                return found
+    return None
 
 
 def file_issue(
@@ -453,6 +564,15 @@ def file_issue(
             file=sys.stderr,
         )
         return None
+    if not os.path.exists(create_script):
+        # A missing helper is silent otherwise: the job would run every day and
+        # never file a ticket, and nothing would say so.
+        print(
+            f"container-health: dt-create-issue is not there: {create_script}; "
+            "the ticket was NOT filed",
+            file=sys.stderr,
+        )
+        return None
     cmd = [
         sys.executable or "/usr/bin/python3",
         create_script,
@@ -473,23 +593,44 @@ def file_issue(
         "--priority",
         priority,
     ]
+    # The helper reads the credential from its environment, never from argv: an
+    # argument list is in the process table of every other process on the Mac.
+    # An explicit key is passed down, so the credential the helper uses is the
+    # one that was checked here and not whatever else the environment holds.
+    child_env = dict(os.environ)
+    if api_key is not None:
+        child_env["PAPERCLIP_API_KEY"] = api_key
     try:
-        proc = runner(cmd, capture_output=True, text=True)
+        proc = runner(
+            cmd, capture_output=True, text=True, timeout=CREATE_TIMEOUT, env=child_env
+        )
+    except subprocess.TimeoutExpired:
+        # The socket timeout is per call and says nothing about a child that
+        # never returns. Without a deadline here a hung helper would disable
+        # the daily check for good.
+        print(
+            f"container-health: dt-create-issue did not finish in {int(CREATE_TIMEOUT)}s; "
+            "the ticket was NOT filed",
+            file=sys.stderr,
+        )
+        return None
     except Exception as err:  # the script could not even be run
         print(f"container-health: dt-create-issue could not run: {err}", file=sys.stderr)
         return None
-    identifier = extract_identifier(getattr(proc, "stdout", "") or "")
+    stdout = getattr(proc, "stdout", "") or ""
+    stderr = getattr(proc, "stderr", "") or ""
+    identifier = extract_identifier(stdout, stderr, exclude=(OWN_ISSUE, TICKET_PARENT))
     if proc.returncode != 0:
         if identifier:
             print(
                 f"container-health: dt-create-issue exited {proc.returncode} after the create; "
-                f"the ticket exists: {identifier}: {excerpt(proc.stdout + proc.stderr, 300)}",
+                f"the ticket exists: {identifier}: {excerpt(stdout + stderr, 300)}",
                 file=sys.stderr,
             )
             return identifier
         print(
             "container-health: dt-create-issue refused (exit "
-            f"{proc.returncode}); the ticket was NOT filed: {excerpt(proc.stdout + proc.stderr, 300)}",
+            f"{proc.returncode}); the ticket was NOT filed: {excerpt(stdout + stderr, 300)}",
             file=sys.stderr,
         )
         return None
@@ -508,12 +649,22 @@ def find_existing_ticket(
     opener: Callable[..., Any] | None = None,
     timeout: float = 60.0,
     api_key: str | None = None,
+    limit: int = LOOKUP_PAGE_SIZE,
+    max_pages: int = LOOKUP_MAX_PAGES,
 ) -> str | None:
     """The identifier of the run-watch ticket for this job, if one is open.
 
     The state file is the first record of the ticket. This is the second one,
     for the day the state file is lost: without it, a lost state file means a
     second ticket for the same job, one per day.
+
+    Only the open statuses are asked for. A closed ticket is not this job's
+    ticket any more, and adopting one would put every later failure on a
+    ticket nobody reads. The pages are read to the end, because a ticket the
+    lookup does not see is a ticket that gets filed a second time.
+
+    Raises ``LookupFailed`` when the board could not be asked: that is not an
+    answer of "no ticket", and the caller must not read it as one.
     """
     key = api_key if api_key is not None else os.environ.get("PAPERCLIP_API_KEY")
     if not key:
@@ -521,34 +672,44 @@ def find_existing_ticket(
     base = (api_base or resolve_api_base()).rstrip("/")
     company = company_id or os.environ.get("PAPERCLIP_COMPANY_ID") or DEFAULT_COMPANY_ID
     open_it = opener or urllib.request.urlopen
+    statuses = ",".join(OPEN_STATUSES)
     found: list[tuple[int, str]] = []
-    for status_filter in ("", "done"):
-        query = "?limit=50&q=container-health"
-        if status_filter:
-            query += f"&status={status_filter}"
+    offset = 0
+    for _page in range(max(1, int(max_pages))):
+        query = (
+            f"?limit={int(limit)}&offset={offset}"
+            f"&q=container-health&status={statuses}"
+        )
         request = urllib.request.Request(
             f"{base}/companies/{company}/issues{query}",
             headers={"Authorization": f"Bearer {key}", "User-Agent": USER_AGENT},
         )
         try:
             with open_it(request, timeout=timeout) as response:
-                raw = response.read()
+                raw = response.read(LOOKUP_MAX_BYTES + 1)
+            if len(raw) > LOOKUP_MAX_BYTES:
+                raise ValueError(f"the answer is larger than {LOOKUP_MAX_BYTES} bytes")
             payload = json.loads(raw.decode("utf-8", "replace") or "[]")
         except Exception as err:
-            print(
-                f"container-health: the existing-ticket lookup failed: {err}",
-                file=sys.stderr,
-            )
-            continue
+            raise LookupFailed(str(err)) from err
         items = payload if isinstance(payload, list) else (payload or {}).get("issues", [])
         for item in items or []:
             if not isinstance(item, dict):
                 continue
             if not (item.get("title") or "").startswith(TICKET_TITLE_PREFIX):
                 continue
+            item_status = (item.get("status") or "").strip().lower()
+            if item_status and item_status not in OPEN_STATUSES:
+                # The board was asked for the open ones, but a closed ticket in
+                # the answer is not this job's ticket any more: putting every
+                # later failure on it would put them where nobody reads them.
+                continue
             identifier = item.get("identifier")
             if identifier:
                 found.append((int(item.get("issueNumber") or 0), identifier))
+        if len(items) < limit:
+            break
+        offset += int(limit)
     if not found:
         return None
     return max(found)[1]
@@ -680,18 +841,39 @@ def handle_failure(
     state: dict[str, Any],
     report: dict[str, Any],
     state_path: Path | None = None,
+    api_opener: Callable[..., Any] | None = None,
+    api_base: str | None = None,
+    api_key: str | None = None,
 ) -> str:
     """File the ticket on the first failure, comment on it on every later one.
 
     Returns what happened: ``filed``, ``commented``, ``throttled``, ``skipped`` or
     ``not-filed``.
     """
-    ticket = state.get("ticket")
     signature = symptom_signature(report["results"])
+    # A failure that could not reach the board waits in the state file and goes
+    # to the board on the next run. Otherwise a board outage at 07:40 loses
+    # every failure of the day.
+    _file_pending_failure(state, report, state_path, api_key)
+    ticket = state.get("ticket")
     if not ticket:
         # The state file is the first record of the ticket; the board is the
         # second one, for the day the state file is lost.
-        existing = find_existing_ticket()
+        try:
+            existing = find_existing_ticket(
+                api_base=api_base, opener=api_opener, api_key=api_key
+            )
+        except LookupFailed as err:
+            # The board could not be asked. That is not an answer of "no
+            # ticket", and filing on it would be a second ticket for the same
+            # job, so nothing is filed now.
+            print(
+                f"container-health: the open ticket could not be looked up: {err}; "
+                "no ticket was filed",
+                file=sys.stderr,
+            )
+            _keep_pending_failure(state, report, signature, state_path)
+            return ACTION_NOT_FILED
         if existing:
             ticket = {
                 "identifier": existing,
@@ -705,11 +887,16 @@ def handle_failure(
                 "adopted": True,
             }
             state["ticket"] = ticket
-            action = _comment_on_ticket(ticket, report, signature)
+            action = _comment_on_ticket(
+                ticket, report, signature, api_opener=api_opener, api_base=api_base, api_key=api_key
+            )
             _save_quietly(state, state_path)
             return action
-        identifier = file_issue(ticket_title(report), ticket_description(report))
+        identifier = file_issue(
+            ticket_title(report), ticket_description(report), api_key=api_key
+        )
         if not identifier:
+            _keep_pending_failure(state, report, signature, state_path)
             return ACTION_NOT_FILED
         state["ticket"] = _new_ticket_record(identifier, report, signature)
         # The identifier is on the disk before the first comment: a crash after
@@ -723,17 +910,70 @@ def handle_failure(
     if not changed and _within_hours(ticket.get("last_comment_at"), RECURRENCE_COMMENT_HOURS):
         # One comment a day is enough. A changed symptom is not.
         return ACTION_THROTTLED
-    action = _comment_on_ticket(ticket, report, signature)
+    action = _comment_on_ticket(
+        ticket, report, signature, api_opener=api_opener, api_base=api_base, api_key=api_key
+    )
     _save_quietly(state, state_path)
     return action
 
 
+def _keep_pending_failure(
+    state: dict[str, Any],
+    report: dict[str, Any],
+    signature: str,
+    state_path: Path | None,
+) -> None:
+    """Keep a failure that did not reach the board, so the next run files it."""
+    state["pending_failure"] = {"report": report, "signature": signature}
+    _save_quietly(state, state_path)
+
+
+def _file_pending_failure(
+    state: dict[str, Any],
+    report: dict[str, Any],
+    state_path: Path | None,
+    api_key: str | None,
+) -> str | None:
+    """File the failure that waited for the board, if there is one.
+
+    The pending failure is the older evidence, so it becomes the ticket and
+    this run's failure is the first recurrence on it.
+    """
+    pending = state.get("pending_failure")
+    if not pending or state.get("ticket"):
+        return None
+    pending_report = pending.get("report") or report
+    identifier = file_issue(
+        ticket_title(pending_report), ticket_description(pending_report), api_key=api_key
+    )
+    if not identifier:
+        # Still no board. It waits for the next run.
+        return None
+    state.pop("pending_failure", None)
+    state["ticket"] = _new_ticket_record(
+        identifier, pending_report, pending.get("signature", "")
+    )
+    _save_quietly(state, state_path)
+    return identifier
+
+
 def _comment_on_ticket(
-    ticket: dict[str, Any], report: dict[str, Any], signature: str
+    ticket: dict[str, Any],
+    report: dict[str, Any],
+    signature: str,
+    api_opener: Callable[..., Any] | None = None,
+    api_base: str | None = None,
+    api_key: str | None = None,
 ) -> str:
     """Comment on the ticket. Returns the action of this run."""
     body = _recurrence_body(ticket, report)
-    if comment(ticket["identifier"], body):
+    if comment(
+        ticket["identifier"],
+        body,
+        api_base=api_base,
+        api_key=api_key,
+        opener=api_opener,
+    ):
         ticket["last_comment_at"] = report["ts"]
         ticket["comments"] = int(ticket.get("comments", 0)) + 1
         ticket["comment_failures"] = 0
@@ -751,7 +991,9 @@ def _comment_on_ticket(
             "without landing; a new ticket is filed",
             file=sys.stderr,
         )
-        identifier = file_issue(ticket_title(report), ticket_description(report))
+        identifier = file_issue(
+            ticket_title(report), ticket_description(report), api_key=api_key
+        )
         if identifier:
             ticket.update(_new_ticket_record(identifier, report, signature))
             return ACTION_FILED
@@ -762,6 +1004,9 @@ def handle_recovery(
     state: dict[str, Any],
     report: dict[str, Any],
     state_path: Path | None = None,
+    api_opener: Callable[..., Any] | None = None,
+    api_base: str | None = None,
+    api_key: str | None = None,
 ) -> str:
     """Say once on the ticket that the check is green again."""
     ticket = state.get("ticket")
@@ -773,7 +1018,13 @@ def handle_recovery(
         + report_text(report)
         + "\n\nThe ticket stays open: a recurrence is commented here, not filed again."
     )
-    if not comment(ticket["identifier"], body):
+    if not comment(
+        ticket["identifier"],
+        body,
+        api_base=api_base,
+        api_key=api_key,
+        opener=api_opener,
+    ):
         ticket["comment_failures"] = int(ticket.get("comment_failures", 0)) + 1
         return ACTION_SKIPPED
     ticket["recovered_at"] = report["ts"]
@@ -801,8 +1052,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Sequence[str] | None = None, opener: Callable[..., Any] | None = None) -> int:
-    """Run the check. ``opener`` is injectable so the tests never touch the network."""
+def main(
+    argv: Sequence[str] | None = None,
+    opener: Callable[..., Any] | None = None,
+    api_opener: Callable[..., Any] | None = None,
+    api_base: str | None = None,
+    api_key: str | None = None,
+) -> int:
+    """Run the check.
+
+    ``opener`` and ``api_opener`` are injectable so the tests never touch the
+    network: the first answers the probes, the second answers the board.
+    """
     args = parse_args(argv)
     state_path = Path(args.state_path)
     log_path = Path(args.log_path)
@@ -828,19 +1089,26 @@ def main(argv: Sequence[str] | None = None, opener: Callable[..., Any] | None = 
         print(report_text(report))
     if args.dry_run:
         return 0 if report["overall"] == OVERALL_HEALTHY else 1
-    try:
-        append_log(report, log_path)
-    except OSError as err:
-        print(f"container-health: the log line was not written: {err}", file=sys.stderr)
     state = load_state(state_path)
     if report["overall"] == OVERALL_HEALTHY:
-        action = handle_recovery(state, report, state_path)
+        action = handle_recovery(
+            state, report, state_path, api_opener=api_opener, api_base=api_base, api_key=api_key
+        )
     else:
-        action = handle_failure(state, report, state_path)
+        action = handle_failure(
+            state, report, state_path, api_opener=api_opener, api_base=api_base, api_key=api_key
+        )
+    # The log line carries the action, so it is written after the action is
+    # known.
+    try:
+        append_log(report, log_path, action)
+    except OSError as err:
+        print(f"container-health: the log line was not written: {err}", file=sys.stderr)
     state["last_run"] = {
         "ts": report["ts"],
         "overall": report["overall"],
         "symptom": report.get("symptom", ""),
+        "action": action,
         "results": [
             {"host": r["host"], "state": r["state"], "http_status": r["http_status"]}
             for r in report["results"]

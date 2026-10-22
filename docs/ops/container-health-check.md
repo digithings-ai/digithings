@@ -30,7 +30,10 @@ A sleeping container is **not** a failure. Waking it would cost money to answer 
 daily check does not need answered, and the container sleeps on purpose.
 
 The probe also refuses to follow a redirect off `/healthz`: a redirect leaves the wake-hygiene
-path, and if the target boots the container, the daily check starts costing money.
+path, and if the target boots the container, the daily check starts costing money. The refusal is
+in the opener, not in a check after the fetch: a 30x is read as the answer and its target is never
+asked for. A test proves it against a local server that answers with a 302 and counts the hits on
+the target.
 
 ## What a failure means
 
@@ -67,18 +70,28 @@ Two things protect the "one ticket" rule:
 
 - **A lost state file does not become a second ticket.** The state file is the first record of the
   ticket; when it is gone, the job looks the open `[run-watch] container-health:` ticket up on the
-  board and comments on that one. A ticket whose comments are refused three times in a row (closed
-  or deleted) is treated as unreachable and replaced, so a failure is never swallowed.
+  board and comments on that one. The lookup asks for the open statuses only (`todo`, `in_progress`,
+  `in_review`, `blocked`): a closed ticket is not this job's ticket any more, and a ticket the
+  lookup cannot see is a ticket that gets filed a second time, so the pages are read to the end. A
+  ticket whose comments are refused three times in a row (closed or deleted) is treated as
+  unreachable and replaced, so a failure is never swallowed.
 - **A create that failed after the create is still a ticket.** `dt-create-issue` checks the
   read-back after the POST, so a non-zero exit can mean the issue exists. The identifier in the
-  output is the evidence, and it wins.
+  output is the evidence, and it wins. It is read on stdout and on stderr, because the messages that
+  carry the identifier after a failed read-back are written to stderr. The identifiers this job
+  names in the description (DIG-2910 and its parent) are never the identifier of the ticket that
+  was just created, and are not read as one.
+
+If the board cannot be reached, nothing is filed: a failed lookup is not an answer of "no ticket",
+and filing on it would be a second ticket for the same job. The failure waits in the state file and
+goes to the board on the next run, so a board outage at 07:40 does not lose the failure of the day.
 
 If there is no agent credential in the environment, the check still runs and still reports: a
 failure that cannot be filed is logged as `not-filed`, never filed as Chris.
 
 ### What a run did
 
-The action is written to the state file, to the log and to stdout:
+The action is written to the state file, to the log line and to stdout:
 
 | action | meaning |
 |---|---|
@@ -105,7 +118,10 @@ Point it at a dedicated clone on `develop`, not a working tree: the job runs eve
 the session that installed it is over, and it must find the same script it was installed with. The
 installer refuses a linked worktree unless `--allow-worktree` is passed, warns when the checkout is
 not on `develop`, lints the rendered plist with `plutil` before it puts it in place, keeps the
-previous plist, and puts the previous plist back if the load fails.
+previous plist, and puts the previous plist back if the load fails. It also refuses an install
+when the create helper (`~/paperclip-workspace/kit/bin/dt-create-issue`) is not there: a job without
+it runs every day and never files anything, and nothing says so. A bootout that fails stops the
+install, because bootstrapping on top of a job that is still loaded leaves two jobs or none.
 
 Two things about launchd are worth knowing:
 
@@ -123,10 +139,11 @@ laptop can move the check by hours.
 ### The credential
 
 The job reads the **agent** key `digithings/paperclip-api-key` from the login keychain, the same
-way `com.digithings.it-watch` does, and exports it as `PAPERCLIP_API_KEY`. It has to be the agent
-key: `dt-create-issue` asks `/api/agents/me` first and refuses anything else, and a board key
+way `com.digithings.routine-watch` reads it, and exports it as `PAPERCLIP_API_KEY`. It has to be the
+agent key: `dt-create-issue` asks `/api/agents/me` first and refuses anything else, and a board key
 would file the ticket and the comments in Chris's name. The board key is not needed here and is not
-read.
+read. Each keychain item is read once: a second read of the same item is a second prompt and a
+second way to fail.
 
 The credential is withheld when its rotation deadline (`digithings/paperclip-api-key-rotate-by`)
 has passed, and also when the deadline is missing or is not a number. Both checks fail closed: a
@@ -134,6 +151,21 @@ deadline that cannot be read never exports the key. Rotating the credential is S
 
 A missing credential does not stop the job: the check is read-only, so it keeps running and says
 in the log that a failure cannot be filed.
+
+The job runs on `/usr/bin/python3`, the interpreter macOS ships (3.9), and the probe script is kept
+compatible with it. The repository pins 3.12, but a launchd job may not count on a Homebrew
+install being there on the day it runs, so the job uses the one that is always there and a test
+keeps the script parseable under 3.9.
+
+### The deadlines
+
+Every wait has a deadline, so a hung thing cannot disable the daily check:
+
+| wait | deadline |
+|---|---|
+| one probe | `--timeout`, 20 s by default |
+| the create | 180 s (`dt-create-issue` is a child process, and a socket timeout says nothing about a child that never returns) |
+| the whole job | `TimeOut` 600 s in the plist: the backstop for a run that hangs anyway |
 
 ## Run it by hand
 
@@ -167,8 +199,9 @@ posts its comments to a 404, and the ticket goes quiet without a word.
 | the probe | `scripts/container-health/container_health.py` | the check, stdlib only |
 | the launchd unit | `scripts/container-health/com.digithings.container-health.plist.template` | copy of record for the unit |
 | the installer | `scripts/container-health/install.sh` | renders, lints, installs, loads (only on an explicit flag) |
-| the suite | `tests/scripts/test_container_health.py` | the checks, no network |
+| the suite | `tests/scripts/test_container_health.py` | the checks; the network is refused for the whole run |
 | the free guarantee | `apps/digithings-stack-cloudflare/src/wake-hygiene-free.test.js` | pins that a `/healthz` probe never fetches the container |
+| this page | `docs/ops/container-health-check.md` | how the check works, and what it means when it fails |
 
 ## Rollback
 
@@ -181,6 +214,6 @@ Leave `~/.config/digithings/state/container-health.json` alone: it holds the lin
 ticket. If it is deleted anyway, the job finds the open `[run-watch] container-health:` ticket on
 the board and comments on that one, so no second ticket is filed. The log can go.
 
-Unloading a launchd job is Chris's call too, so the `--unload` flag is the whole of it. The three
+Unloading a launchd job is Chris's call too, so the `--unload` flag is the whole of it. The six
 files in this repository are removed by reverting the commit that added them; do not roll this back
 by naming a sha, because the branch this landed on is not `main`.

@@ -49,6 +49,9 @@ CHECKOUT=$(CDPATH= cd -- "$CHECKOUT" && pwd)
 SCRIPT="$CHECKOUT/scripts/container-health/container_health.py"
 DEST="$HOME/Library/LaunchAgents/$LABEL.plist"
 SERVICE="gui/$(id -u)/$LABEL"
+# The helper the job uses to file a ticket. A job without it runs every day and
+# never files anything, and nothing says so, so the install refuses it.
+CREATE_HELPER=${DT_CREATE_ISSUE:-$HOME/paperclip-workspace/kit/bin/dt-create-issue}
 
 is_loaded() {
   launchctl print "$SERVICE" > /dev/null 2>&1
@@ -96,6 +99,16 @@ fi
 if [ ! -f "$SCRIPT" ]; then
   echo "install.sh: no probe script at $SCRIPT" >&2
   exit 1
+fi
+if [ ! -x "$CREATE_HELPER" ] && [ ! -f "$CREATE_HELPER" ]; then
+  # The job files its ticket through this helper. Without it the check keeps
+  # running and keeps failing to file, every day, in silence.
+  if [ "$INSTALL" = 1 ]; then
+    echo "install.sh: no create helper at $CREATE_HELPER" >&2
+    echo "install.sh: the job would run and never file a ticket; nothing was changed" >&2
+    exit 1
+  fi
+  echo "install.sh: warning: no create helper at $CREATE_HELPER; an install would refuse" >&2
 fi
 if [ -f "$CHECKOUT/.git" ] && [ "$ALLOW_WT" != 1 ]; then
   echo "install.sh: $CHECKOUT is a linked worktree (.git is a file)." >&2
@@ -151,7 +164,15 @@ if [ "$LOAD" != 1 ]; then
   exit 0
 fi
 if is_loaded; then
-  launchctl bootout "$SERVICE" || echo "install.sh: warning: bootout of the running job failed" >&2
+  # A bootout that fails means the old job may still be running with the old
+  # definition. Bootstrapping on top of that leaves two jobs or none, so this
+  # is an error and not a warning.
+  if ! launchctl bootout "$SERVICE"; then
+    echo "install.sh: bootout of $LABEL failed; the old job may still be loaded" >&2
+    echo "install.sh: the new plist was not loaded. Check it with:" >&2
+    echo "install.sh:   launchctl print $SERVICE" >&2
+    exit 1
+  fi
 fi
 if ! launchctl bootstrap "gui/$(id -u)" "$DEST"; then
   echo "install.sh: bootstrap failed; restoring the previous job" >&2
