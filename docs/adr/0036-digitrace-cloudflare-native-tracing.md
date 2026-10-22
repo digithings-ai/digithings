@@ -1,7 +1,11 @@
 # ADR-0036 — digitrace tracing: Cloudflare-native ingest and store, with on-demand MLflow analysis
 
-**Status:** Accepted (2026-10-09).
+**Status:** Accepted (2026-10-09; amended 2026-10-22).
 **Date:** 2026-10-09 (decision). Recorded in the repository on 2026-10-22.
+**Amended:** 2026-10-22 — review round 4 on DIG-2655: the MLflow role grants, the
+`search_path` and the connection mode, the tenant filter column, two stale "no
+database" sentences and the AC2 cut list. See the Amendment section at the end of this
+ADR.
 **Author:** CTO (board seat).
 **Raised by:** DIG-2655 (child of DIG-2643).
 **Amends:** ADR-0021 — one narrow, machine-owned exception, recorded in §4. digitrace's own tables conform to ADR-0021.
@@ -88,13 +92,14 @@ flowchart LR
   - `x-digitrace-tenant` — the tenant slug the source claims.
 - **The tenant is resolved server-side.** The ingest Worker looks the token up and
   checks the claimed slug against the tenants that token may write for. A slug the token
-  may not claim is rejected and the batch is dropped (fail closed). The stored row keeps
-  `tenant_slug` and `tenant_slug_verified`.
+  may not claim is rejected and the batch is dropped (fail closed). The stored record
+  keeps `tenant_slug` and `tenant_slug_verified`; they are edge values, not columns on
+  the index rows (§5).
 - **Documented deviation from digikey.** In digikey, `tenant_slug_verified` is true only
   for a signed JWT claim and false for an unsigned header. The static per-source token
   path above is not that exchange: the flag is false unless the source presented a
   digikey-signed JWT carrying the claim, and the value is persisted on the stored
-  span/trace row either way. The security consequence is recorded in §5.
+  record either way. The security consequence is recorded in §5.
 - **Cloudflare destination names:** one per source Worker — `digitrace-digichat` and
   `digitrace-digiquant-runner`. Each destination carries the two fixed headers above.
 - **Format.** The ingest Worker accepts **both** OTLP/HTTP encodings: **JSON** from the
@@ -176,8 +181,8 @@ scale". This ADR **conforms to ADR-0021** for digitrace's own tables:
   `digitrace_traces`, `digitrace_spans_index`, `digitrace_scores`, `digitrace_sessions`.
 - **Tenancy column `workspace_id`** (uuid, `public.workspaces`), with per-table RLS
   policies keyed on `auth.uid()` through `public.workspace_members` — the house pattern,
-  not a new one. The ingest path resolves a tenant slug to a `workspaces` row by slug,
-  server-side, and stores the resolved `workspace_id`.
+  not a new one. The consumer that writes the index rows resolves a tenant slug to a
+  `workspaces` row by slug, server-side, and stores the resolved `workspace_id` (§5).
 - **Additive migrations only**: `CREATE TABLE IF NOT EXISTS` plus `CREATE POLICY`. No
   DROP, ALTER or TRUNCATE, the house idiom.
 
@@ -185,17 +190,83 @@ scale". This ADR **conforms to ADR-0021** for digitrace's own tables:
 creates them itself from the backend-store URI. Those tables live in a dedicated
 `mlflow` schema in the same instance:
 
-- The mechanism is a **dedicated Postgres role** with `search_path=mlflow`, carried on the
-  backend-store URI (`?options=-csearch_path%3Dmlflow`). The role gets `USAGE` on that
-  schema and nothing else.
+- The mechanism is **two dedicated Postgres roles** in `core`, bound to that schema and to
+  nothing else:
+  - `digitrace_mlflow_owner` **owns** the `mlflow` schema. Ownership is what carries
+    `CREATE`: `USAGE` on a schema only allows access to the objects in it, and
+    `mlflow db upgrade` is an Alembic run that issues `CREATE TABLE` for the MLflow
+    tracking tables and for `alembic_version`. A role that holds `USAGE` and nothing
+    else cannot create them. The owner role runs that DDL and nothing else; it never
+    serves a request. The runtime role's table grants are **default privileges**:
+    `ALTER DEFAULT PRIVILEGES FOR ROLE digitrace_mlflow_owner IN SCHEMA mlflow GRANT
+    SELECT, INSERT, UPDATE, DELETE ON TABLES TO digitrace_mlflow`. A grant on
+    `ALL TABLES IN SCHEMA mlflow` would be empty — the tables do not exist until the
+    upgrade creates them — and the tables created later would belong to the owner role
+    with no grant for the runtime role.
+  - `digitrace_mlflow` is the **runtime** role: `USAGE` on the `mlflow` schema and DML
+    on every table in it — the MLflow tracking tables and `alembic_version`, which
+    MLflow reads at start-up to check the schema version — no `CREATE`, and nothing on
+    `public` beyond the default `USAGE` that every role inherits. The MLflow server and
+    the backend store of `digitrace replay` connect as this role. It is **only** the
+    MLflow backend-store credential: every read of the `public` index — by
+    `digitrace replay`, dashboard-api or the MCP server — goes over PostgREST with the
+    service role and through the application-layer tenant filter of §5. A plain
+    database role has no `auth.uid()` for the RLS policy to match, so a direct read or
+    a direct write on that role is rejected, and a rejected read is silent: it returns
+    no rows.
+- **The `search_path` is a role default, not a startup parameter.** Both roles carry
+  `ALTER ROLE <role> SET search_path = mlflow`. PostgreSQL applies that at login, so
+  every server connection opened as the role carries it, and the backend-store URI
+  therefore carries **no** `?options=-csearch_path%3Dmlflow`: a client-issued
+  `search_path` is not preserved by every pooler mode, and where a pooler does not
+  track it, the setting leaks to the next client on the same server connection. Two
+  consequences follow. The default is applied **at login**, so DIG-2658 must set it
+  before the first connection is opened as the role, or the pooler's server
+  connections must be recycled. And `search_path = mlflow` **replaces** the default
+  path: `pg_catalog` stays implicitly in it, `public` leaves it. The runtime role
+  cannot resolve a `public` table unqualified even where it holds the privilege —
+  another reason the index is read over PostgREST, and the reason the invariant below
+  holds.
+- **The connection mode is named: the direct connection, or session mode — never
+  transaction mode.** Supabase's own guidance puts migrations and long-lived backends
+  on the direct connection or on session mode, and transaction mode is excluded for
+  that reason: it returns the connection to the pool after each transaction, so
+  session-level state, prepared statements and session advisory locks do not survive
+  between transactions, and an Alembic run needs them. The `search_path` is **not** the
+  reason: the role default is applied at login and a pooler's server connection keeps
+  it, so the silent "MLflow's tables land in `public`" failure this ADR once
+  described belongs to the client-issued startup parameter it no longer uses. What the
+  mode decides is whether the migration has the session state it needs.
+- **The endpoints are named, because the port alone is ambiguous.** The direct
+  connection is `db.[PROJECT-REF].supabase.co:5432` (IPv6, or IPv4 with the add-on) and
+  the shared pooler in session mode is `aws-[INDEX]-[REGION].pooler.supabase.com:5432`
+  (IPv4). The username differs with the connection type: on a direct connection it is
+  the role name, on the shared pooler it is `[ROLE].[PROJECT-REF]` — so
+  `digitrace_mlflow.[PROJECT-REF]`, not `digitrace_mlflow`. Which of the two the
+  analysis container can reach is the leaf's call (DIG-2662); the transaction-mode
+  port 6543 is not on the list.
 - `anon`, `authenticated` and `PUBLIC` are revoked on that schema, and PostgREST's
   `db_schemas` stays at `public`, so those tables are never exposed through PostgREST.
   ADR-0021's actual objection — a second schema complicating PostgREST exposure — is
   therefore answered, not argued away.
-- MLflow's own DDL runs only inside the `mlflow` schema, on the analysis container's
-  start-up, never against `public`. `mlflow db upgrade` is on the human checklist.
+- MLflow's own DDL runs only inside the `mlflow` schema, never against `public`, and
+  only as the owner role. `mlflow db upgrade` is on the human checklist (§15): it runs
+  with the owner credentials over the direct connection or the shared pooler in session
+  mode, from the analysis container or from the Mac. A container that starts without the
+  owner credentials expects the schema to be migrated already, and must fail loudly when
+  it is not. The failure is loud, but it arrives as one of two different errors, and the
+  difference matters: MLflow's tracking store checks the schema version at start-up and
+  raises "Detected out-of-date database schema (found version None, but expected …)",
+  while the job store tries to create the tables itself, which under a runtime role
+  with no `CREATE` surfaces as `permission denied for schema mlflow` — an error that
+  points at the grants rather than at a missing upgrade. MLflow never migrates by
+  itself: the upgrade is a step, which is why it is on the checklist.
 - A Supabase service-role key is a PostgREST credential, not a database role, so it is
-  not what the container uses.
+  not the MLflow backend-store credential. It is the credential of the **index**: the
+  consumer Worker, dashboard-api, the MCP server and the write-back to
+  `public.digitrace_scores` all go over PostgREST with the service role and through the
+  application-layer tenant filter of §5. The analysis container holds it for that
+  write-back; it holds the runtime role's password for the MLflow backend store.
 
 This is an exception, not a precedent: one schema for our own tables, RLS per table,
 `public` only for PostgREST.
@@ -211,6 +282,16 @@ reaches PostgREST directly.
 The ingest path adds one more boundary: the token decides which tenants a source may
 write for, the worker checks the claimed slug against that list, and a rejected batch is
 dropped rather than repaired.
+
+**The filter has one column: `workspace_id`.** The slug is resolved to a `workspaces`
+row once, on the core side, by the consumer that writes the index rows (DIG-2657); the
+ingest Worker only checks the claimed slug against the tenant list the token may write
+for (§2) and does not read `public.workspaces` at all. The resolved `workspace_id`
+travels on the payload the consumer writes, `dashboard-api` filters on
+`workspace_id`, and DIG-2661's tenant-filter test therefore has one target.
+`tenant_slug` and `tenant_slug_verified` are **edge values**: they are kept on the
+stored record in R2 — the raw object, whose archive key `tenant=<slug>/…` carries the
+slug as well — and they are not columns on the index rows.
 
 ### 6. The library's role
 
@@ -247,10 +328,13 @@ dropped rather than repaired.
   later with the `mlflow[genai]` extra plus LiteLLM** for the token and cost columns.
   3.6 alone gives traces, not cost.
 - **One MLflow experiment per tenant**, selected by the `x-mlflow-experiment-id` header.
-- **Backend store:** the `mlflow` schema in `core` through the dedicated role of §4, or a
-  local Postgres or SQLite in Mac mode. Artifacts go to R2.
+- **Backend store:** the `mlflow` schema in `core` through the two roles of §4 — the
+  owner role for the DDL, the runtime role for the server — over the direct connection
+  or the shared pooler in session mode, never transaction mode, with the username of §4
+  (`[ROLE].[PROJECT-REF]` on the shared pooler). In Mac mode it is a local Postgres or
+  SQLite. Artifacts go to R2.
 - **Scores** written in MLflow are written back to the `digitrace_scores` table in
-  `public`.
+  `public`, through the service role (§5) and not through the runtime role of §4.
 - **On demand only.** The Cloudflare Container sleeps after about ten minutes of quiet.
   The ingest path must never wake it: ingest writes R2 and the index, replay reads R2.
   A 20 GiB-h usage alarm is part of DIG-2662's definition of done.
@@ -317,11 +401,11 @@ This ADR is done when all of the following hold. Each item names its owner.
 
 | # | Acceptance criterion | Owner | State |
 |---|---|---|---|
-| AC1 | ADR-0036 lands in `develop` | CTO | this PR (#6260) |
-| AC2 | `apps/digitrace-langfuse/` and its two Dockerfiles are deleted, with the CI, contract, secret and runner surface cleaned in the same change | Repo, CI & Release Engineer | **DIG-5136** |
-| AC3 | `docs/ops/digitrace-langfuse.md` is a tombstone pointing at this ADR, not a runbook | Repo, CI & Release Engineer | **DIG-5136** |
-| AC4 | the 2026-10-01 plan memo carries a superseding banner | CTO | this PR |
-| AC5 | the architecture document and the vision document no longer state that digitrace has no database, no worker and no queue | CTO | this PR, for those two documents. The openwiki page repeats the same sentence; it is listed as superseded in this ADR and is corrected in the next openwiki run, because editing a page with claim sidecars is not safe here |
+| AC1 | ADR-0036 lands in `develop` | CTO | PR #6260, merged 2026-10-22 |
+| AC2 | `apps/digitrace-langfuse/` and its two Dockerfiles (`infra/docker/Dockerfile.digitrace-langfuse-web`, `infra/docker/Dockerfile.digitrace-langfuse-worker`) are deleted, with the CI, contract, secret and runner surface cleaned in the same change — the CI workflows, the `config/contract/` set, `.github/secret-names.json`, `docs/ops/SECRETS_INVENTORY.md`, `scripts/ci_paths.yaml` and the digiquant-runner surface — and digitrace's own `langfuse-otlp` export mode cut with it. That mode cut is what makes the generated artefact move: `docs/openapi/digitrace.json` carries `langfuse-otlp`, `langfuse_configured` and `langfuse_host` from that mode, and `make openapi-export` regenerates it in the same change. `apps/digithings-web/lib/module-counts.json` does not move with this cut — it counts endpoints, and the mode adds none — so it is regenerated by whatever change changes its input, `python3 scripts/fetch_module_counts.py`. The "Langfuse" pricing tier in `apps/digithings-web/lib/stackCatalog.ts` is a product decision raised on DIG-2663, not a mechanical cut, and is not part of this criterion | Repo, CI & Release Engineer | **DIG-5136** |
+| AC3 | `docs/ops/digitrace-langfuse.md` is a tombstone pointing at this ADR, not a runbook: the banner is already in place and says every step below is void, and the runnable body under it is removed, so nothing in the file reads as something to run | Repo, CI & Release Engineer | **DIG-5136** |
+| AC4 | the 2026-10-01 plan memo carries a superseding banner | CTO | PR #6260, merged 2026-10-22 |
+| AC5 | the architecture document and the vision document no longer state, unqualified, that digitrace has no database, no worker and no queue: the vision document retires the claim and the architecture document scopes it to the code as shipped today | CTO | the vision document in PR #6260, the architecture document in the amendment of 2026-10-22. The openwiki page repeats the same sentence; it is listed as superseded in this ADR and is corrected in the next openwiki run, because editing a page with claim sidecars is not safe here |
 | AC6 | a read-only `digitrace.mcp_server` exists with `get_trace`, `search_traces`, `get_cost_summary` | R&D Engineer | **DIG-5141** |
 | AC7 | the index tables live in `public` with per-table RLS, named `digitrace_*` | Backend Engineer, Core Services | **DIG-2658** |
 | AC8 | the LangSmith leg is removed from the code and `LANGSMITH_API_KEY` is unset | DevOps Lead, then Chris for the secret | **DIG-2663** |
@@ -350,7 +434,21 @@ app, nothing else.
    cut because Langfuse was never live. The cut list on that leaf also takes
    `scripts/smoke_digitrace_langfuse_otlp.sh`, `scripts/deploy/langfuse.sh`, the
    `scripts/deploy/workers.tsv` entry and the `config/self-host/parity-baseline.json`
-   reference to the dropped service.
+   reference to the dropped service. Inside the categories AC2 names, this ADR also
+   names the sites a cut list has to cover: the CI workflows (`.github/workflows/ci.yml`,
+   `.github/workflows/test-web.yml`, `.github/workflows/sync-digiquant-runner-digikey-secret.yml`),
+   the `config/contract/` set (`contract.yaml`, `services.yaml`, `README.md`,
+   `bootstrap_contract.py`, `check_contract.py`, `generate.py`, `generated/env.example`,
+   `generated/wrangler.vars.digitrace-langfuse.json`), `.github/secret-names.json`,
+   `docs/ops/SECRETS_INVENTORY.md`, `scripts/ci_paths.yaml` and the digiquant-runner
+   surface. The `langfuse-otlp` export mode of `digitrace.config` goes with the app,
+   and with it `docs/openapi/digitrace.json` moves: `make openapi-export` regenerates
+   it in the same change. `apps/digithings-web/lib/module-counts.json` counts endpoints
+   and does not move with this cut. **DIG-5136's body is the authoritative list**: a
+   site that leaf does not name is not cut, and a site it does name is cut in that
+   change. The "Langfuse" pricing tier in `apps/digithings-web/lib/stackCatalog.ts`
+   (and its test) is deliberately outside the mechanical cut: it is a product decision
+   raised on DIG-2663.
 
 ### 15. What stays a human step
 
@@ -361,11 +459,29 @@ Prepared, not performed. Each item is a production action.
 - [ ] Create the R2 bucket `digitrace-archive`, the Queue, the KV binding and the
       Analytics Engine dataset (DIG-2657).
 - [ ] Put the per-source ingest tokens, the per-source tenant slugs and the Supabase
-      role secret (production secrets).
-- [ ] Apply the index migration in `core` and create the `mlflow` schema, its dedicated
-      role and the `search_path` grant (DIG-2658).
-- [ ] Run `mlflow db upgrade` against the `mlflow` schema from the analysis container
-      (DIG-2662).
+      role secrets in place (production secrets): the password of `digitrace_mlflow`,
+      which the analysis container uses for the MLflow backend store; the password of
+      `digitrace_mlflow_owner`, which the upgrade step uses and nothing else; the
+      backend-store URI built from the runtime role, the `mlflow` schema and the
+      endpoint of §4; and the Supabase service-role key, which the container holds for
+      the write-back of §8.
+- [ ] Apply the index migration in `core` and create the `mlflow` schema and its two
+      roles with their `search_path` defaults (DIG-2658): `digitrace_mlflow_owner` owns
+      the schema and carries `ALTER ROLE digitrace_mlflow_owner SET search_path = mlflow`;
+      `digitrace_mlflow` holds `USAGE` on the schema and DML on the MLflow tables, and
+      carries `ALTER ROLE digitrace_mlflow SET search_path = mlflow`. In the same change
+      the default privileges go on — `ALTER DEFAULT PRIVILEGES FOR ROLE
+      digitrace_mlflow_owner IN SCHEMA mlflow GRANT SELECT, INSERT, UPDATE, DELETE ON
+      TABLES TO digitrace_mlflow` — because a grant on `ALL TABLES IN SCHEMA mlflow`
+      would be empty until the upgrade runs — and `anon`, `authenticated` and `PUBLIC`
+      are revoked on the schema. The role default is applied at login, so it must be
+      set before the first connection is opened as the role.
+- [ ] Run `mlflow db upgrade` against the `mlflow` schema as `digitrace_mlflow_owner`,
+      over the direct connection or the shared pooler in session mode and never
+      transaction mode, from the analysis container or from the Mac (DIG-2662). Two
+      guards make the invariant of §4 real instead of conventional: assert
+      `current_schema() = 'mlflow'` before the upgrade, and assert afterwards that no
+      MLflow table exists in `public`.
 - [ ] Publish the ingest route and the DNS for the ingest host; the OTLP endpoint becomes
       `https://<ingest-host>/v1/traces` (DIG-2657).
 - [ ] Set the 20 GiB-h container usage alarm (DIG-2662).
@@ -409,9 +525,10 @@ Prepared, not performed. Each item is a production action.
 
 ## Links
 
-- Related issues: DIG-2643 (parent: infra stabilization), DIG-2656, DIG-2657, DIG-2658,
-  DIG-2659, DIG-2660, DIG-2661, DIG-2662, DIG-2663 (the build leaves), DIG-2664 (the
-  Claude review), DIG-5136 (the Langfuse app removal), DIG-5141 (the MCP server).
+- Related issues: DIG-2643 (parent: infra stabilization), DIG-2655 (this ADR), DIG-2656,
+  DIG-2657, DIG-2658, DIG-2659, DIG-2660, DIG-2661, DIG-2662, DIG-2663 (the build
+  leaves), DIG-2664 (the Claude review), DIG-5136 (the Langfuse app removal), DIG-5141
+  (the MCP server).
 - **Amended by this ADR:** DIG-2657 (index rows go to `public`, not to a `digitrace`
   schema), DIG-2658 (schema `public`, tables `digitrace_*`, tenancy column `workspace_id`,
   the `mlflow` schema exception), DIG-2661 (reads the `public` index, and the tenant
@@ -424,3 +541,66 @@ Prepared, not performed. Each item is a production action.
   tickets) in the header, the Supersedes list and AC5; **M5** (the Langfuse retirement as a
   named acceptance criterion) in §13; **M6** (RLS is not the tenant boundary on the
   service-role path) in §5; **M7** (the read-only MCP server) in §10.
+- Review round 4 (the Code Reviewer seat, on the merged text of PR #6260) is recorded in
+  the amendment below; it lives on DIG-2655, not in this repository.
+
+## Amendment (2026-10-22)
+
+Review round 4 on DIG-2655 (the Code Reviewer seat, on the merged text of PR #6260)
+returned two defects and three suggestions. All five are corrected here and in the two
+documents named, because the ten leaves that build this design read those sections as a
+contract and none of them has started: no migration has been applied, no role exists and
+no consumer has been written.
+
+1. **The role's grants (was §4).** "USAGE on that schema and nothing else" could not run
+   the DDL this ADR schedules: `mlflow db upgrade` issues `CREATE TABLE`, and `CREATE` on
+   a schema is a separate privilege from `USAGE`. §4 now states the ladder — an owner
+   role that holds `CREATE` implicitly and runs the DDL, a runtime role that holds
+   `USAGE` and DML — and names who runs the upgrade and over which connection. The
+   runtime role's grants are default privileges, because a grant on `ALL TABLES` would
+   be empty until the upgrade creates the tables. The score write-back to
+   `public.digitrace_scores` is named as a service-role write, and so is every read of
+   the index: a plain database role has no `auth.uid()`, so the RLS policy would reject
+   the write and would return no rows for the read, silently.
+2. **The connection mode (was §4, §8 and §15).** `?options=-csearch_path%3Dmlflow` is a
+   startup parameter, and it does not survive transaction mode: the `search_path` would
+   not apply and MLflow's tables would land in `public` silently, which is what §4
+   forbids. The `search_path` is now a role default (`ALTER ROLE ... SET search_path`),
+   the backend-store URI carries no `options` parameter, and §4, §8 and §15 name the
+   connection mode for the container and for the upgrade step: the direct connection or
+   the shared pooler in session mode, never transaction mode. The reason transaction
+   mode is excluded is the session state a migration needs, not the `search_path`: the
+   role default is applied at login and a pooler's server connection keeps it, so the
+   silent failure belonged to the startup parameter this ADR no longer uses. §4 also
+   names the endpoints and the username rule, because the port alone is ambiguous.
+3. **The tenant filter column (was §5).** §5 now names `workspace_id` as the one column
+   the application-layer filter runs on, so DIG-2661 has one target instead of three
+   candidates. It also names who resolves the slug to a `workspaces` row — the consumer,
+   on the core side — and says that `tenant_slug` and `tenant_slug_verified` are edge
+   values kept on the archived row, not columns on the index rows. §2 says the same
+   thing about the stored row.
+4. **Two stale sentences (was AC5).** The architecture document's "There is no database,
+   no background worker, no queue …" is now scoped to the code as shipped today, and the
+   ops runbook's tombstone paragraph no longer splices a clause into the sentence it
+   annotates. The AC5 row says what the change actually does.
+5. **The AC2 cut list (was AC2 and §14).** AC2 names the categories and the sites inside
+   them, §14 enumerates the files, and DIG-5136's body is named as the authoritative
+   list. The two Dockerfiles are named by path, and the generated artefact is handled
+   honestly: `docs/openapi/digitrace.json` moves because digitrace's own
+   `langfuse-otlp` mode is cut with the app, and the artefact that does not move with
+   this cut is named too.
+
+A second review, of this amendment rather than of the original text, ran in-session with
+two fresh-context reviewers and found further defects in the amended words. They are
+corrected here: the reason for excluding transaction mode, the read path of
+`digitrace replay` (it reads the index over PostgREST with the service role, not over
+the runtime role), the default privileges, the named endpoints and the pooler username
+rule, the claim about the generated artefacts, the paths of the two Dockerfiles, and the
+sites the cut list had not named.
+
+No decision changes: the design, the cost ceiling and the tenant model of this ADR are
+as accepted on 2026-10-09. What changes is the mechanism text the implementation leaves
+would otherwise have built from and gotten wrong. The mechanism text is amended in place
+for that reason, the way ADR-0018 amends its own decision body with a dated note; the
+amendment is recorded here so the change is visible in the record rather than silent.
+Round 4 of the review lives on DIG-2655.

@@ -119,7 +119,7 @@ digitrace ships exactly five source files under `digitrace/src/digitrace/`:
 | `redaction.py` | `PiiRedactor` — value-pattern redaction for span payloads | Emails, API-key prefixes, phone numbers, `DIGI_PII_PATTERNS` extras | Key-name allowlists, length-based document summarization |
 | `server.py` | FastAPI application, `/health`, `/v1/status`, `/metrics` | All three endpoints, OTel wiring, correlation ID, Prometheus instrumentation | `/v1/status/detailed` |
 
-There is no database, no background worker, no queue, and no internal LangGraph graph. digitrace does not receive traces — it only enables other services to emit them via the LangSmith SDK. — that is the state of the shipped code today. ADR-0036 replaces it with an ingest Worker, a Queue, a consumer and three stores; DIG-2657 lands the pipeline.
+As shipped today there is no database, no background worker, no queue, and no internal LangGraph graph: digitrace does not receive traces, it only enables other services to emit them — via the LangSmith SDK today and via an OTel/HTTP leg shipped in Phase 2 (#4931). ADR-0036 replaces that with an ingest Worker, a Queue, a consumer and three stores; DIG-2657 lands the pipeline.
 
 ---
 
