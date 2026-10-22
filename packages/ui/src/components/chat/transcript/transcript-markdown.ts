@@ -7,6 +7,7 @@
  * because callers only pass user/assistant text turns.
  */
 
+import { redactString } from "../../../replay/redact";
 import { stripFoundryCitationMarkers } from "./activity-view";
 
 export type TranscriptSource = {
@@ -91,7 +92,7 @@ export function downloadTextFile(filename: string, text: string, mime: string): 
 export function downloadMarkdown(filename: string, text: string): void {
   downloadTextFile(
     filename.endsWith(".md") ? filename : `${filename}.md`,
-    text,
+    redactString(text),
     "text/markdown;charset=utf-8",
   );
 }

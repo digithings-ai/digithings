@@ -27,7 +27,10 @@ import {
 } from "./embed-chat-prefs";
 // Package twins of the app types (identical literals/shapes; see skin-types.ts).
 // Aliased to the app names so the hook body below reads unchanged (WS4).
-import type { StockComposerMenuKind as ComposerMenuKind } from "./skin-types";
+import {
+  isStockComposerMenuKind,
+  type StockComposerMenuKind as ComposerMenuKind,
+} from "./skin-types";
 import type { SkinMcpServerConfig as SessionMcpConfig } from "./skin-types";
 import type { ThinkingMode, ViewMode } from "./skin-types";
 
@@ -38,6 +41,12 @@ export type StockChatPrefsConfig = {
   defaultLanguage?: string;
   defaultModel?: string;
   availableModels: readonly string[];
+  /** Catalog presets and groups. The menu falls back to raw ids when absent. */
+  modelPicker?: {
+    presets: readonly { id: string; label: string; description: string; model: string }[];
+    groups: readonly { provider: string; models: readonly { id: string; label: string }[] }[];
+    showFullList: boolean;
+  };
   /** Host pre-computes models.allowPicker || features.modelPicker. */
   allowModelPicker?: boolean;
   view: ViewMode;
@@ -57,6 +66,8 @@ export type StockChatPrefsConfig = {
   providerLabel?: string;
   allowUserServers?: boolean;
   allowAddForm?: boolean;
+  /** Foundry is `agent`, a host lock is `locked`, otherwise tools toggle. */
+  toolControl?: "toggle" | "locked" | "agent";
 };
 
 /** Injectable product deps: pure app functions the package must not import. */
@@ -84,6 +95,8 @@ export type StockChatPrefsDeps = {
   renderMenuPanes?: (args: {
     kind: ComposerMenuKind;
     models: readonly string[];
+    defaultModel?: string;
+    modelPicker?: StockChatPrefsConfig["modelPicker"];
     providerSeed?: string;
     mcpSeed?: string;
     onClose: () => void;
@@ -149,6 +162,30 @@ export function useStockChatPrefs({
   }));
   useStoredDensityAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const draftSink = useRef<(text: string) => void>(() => {});
+  const [composerDraftBound, setComposerDraftBound] = useState(false);
+  const syncPalette = useCallback(
+    (next: {
+      kind: "closed" | "commands" | "pane";
+      menu: "close" | "keep" | string;
+      filter: string;
+    }) => {
+      setPaletteQuery(next.filter);
+      if (next.menu === "close") setComposerMenu(null);
+      else if (next.menu !== "keep" && isStockComposerMenuKind(next.menu)) {
+        setComposerMenu(next.menu);
+      }
+    },
+    [],
+  );
+  const bindComposerDraft = useCallback((setText: (text: string) => void) => {
+    draftSink.current = setText;
+    setComposerDraftBound(true);
+  }, []);
+  const setComposerDraft = useCallback((text: string) => {
+    draftSink.current(text);
+  }, []);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
   const chatPrefsRef = useRef(chatPrefs);
@@ -324,6 +361,12 @@ export function useStockChatPrefs({
       },
       undo: () => {},
       redo,
+      toolControl: config.toolControl,
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      syncPalette,
     }),
     [
       chatPrefs,
@@ -352,6 +395,12 @@ export function useStockChatPrefs({
       deps.resolveLanguage,
       deps.defaultLanguageCode,
       deps.onOpenSessions,
+      config.toolControl,
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      syncPalette,
     ],
   );
 
@@ -359,6 +408,8 @@ export function useStockChatPrefs({
     deps.renderMenuPanes?.({
       kind: composerMenu,
       models: config.availableModels,
+      defaultModel: config.defaultModel,
+      modelPicker: config.modelPicker,
       providerSeed,
       mcpSeed,
       onClose: () => {

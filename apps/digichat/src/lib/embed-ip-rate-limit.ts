@@ -95,9 +95,55 @@ function isTrusted(ip: string, networks: TrustedNetwork[]): boolean {
   });
 }
 
+/** A header is a rate-limit key only when `parseIp` accepts it. */
+function acceptedIp(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed || !parseIp(trimmed)) return null;
+  return trimmed;
+}
+
+/** Header the production entrypoint sets. Callers cannot choose it. */
+export const PEER_IP_HEADER = "x-digichat-peer-ip";
+/** Proves `PEER_IP_HEADER` was written by this process's entrypoint. */
+export const PEER_STAMP_HEADER = "x-digichat-peer-stamp";
+
+/**
+ * Logged at startup when `DIGICHAT_TRUSTED_PROXIES` is unset. The address to
+ * put in that variable is the socket peer the entrypoint stamps, not a
+ * Cloudflare edge range. This repo does not contain that address.
+ */
+export const TRUSTED_PROXIES_UNSET_WARNING =
+  "DIGICHAT_TRUSTED_PROXIES is unset. The entrypoint stamps the socket peer. Guardrail and premium keys use that socket when it is the client, and unknown when it is a shared ingress. The embed limiter and trial quota follow develop: cf-connecting-ip, then the leftmost X-Forwarded-For hop, otherwise unknown. A header-less request is unknown: the embed limiter collapses onto embed_ip:unknown, and the trial quota skips it. Set DIGICHAT_TRUSTED_PROXIES to the container ingress or overlay peer the entrypoint logs, never Cloudflare's edge ranges. Spoofable headers are not guardrail or premium keys.";
+
+export function warnTrustedProxiesUnset(
+  env: NodeJS.ProcessEnv = process.env,
+  log: (message: string) => void = console.warn,
+): void {
+  if (env.DIGICHAT_TRUSTED_PROXIES?.trim()) return;
+  log(TRUSTED_PROXIES_UNSET_WARNING);
+}
+
+function stampedSocket(req: Request): string | null {
+  const expected = process.env.DIGICHAT_PEER_STAMP?.trim();
+  if (!expected) return null;
+  const got = req.headers.get(PEER_STAMP_HEADER);
+  if (!got || got !== expected) return null;
+  return acceptedIp(req.headers.get(PEER_IP_HEADER));
+}
+
+/**
+ * The TCP peer is a shared ingress when our entrypoint stamped it and
+ * Cloudflare's visitor header names a different address. The visitor header
+ * is not used as a guardrail or premium key in that case.
+ */
+function sharedIngress(req: Request, socket: string): boolean {
+  const cf = acceptedIp(req.headers.get("cf-connecting-ip"));
+  return Boolean(cf && cf !== socket);
+}
+
 function forwardedIp(req: Request, networks: TrustedNetwork[]): string | null {
-  const cf = req.headers.get("cf-connecting-ip")?.trim();
-  if (cf && parseIp(cf)) return cf;
+  const cf = acceptedIp(req.headers.get("cf-connecting-ip"));
+  if (cf) return cf;
 
   const hops = req.headers
     .get("x-forwarded-for")
@@ -107,43 +153,70 @@ function forwardedIp(req: Request, networks: TrustedNetwork[]): string | null {
   if (!hops) return null;
   for (const hop of hops.reverse()) {
     if (isTrusted(hop, networks)) continue;
-    return parseIp(hop) ? hop : null;
+    return acceptedIp(hop);
   }
   return null;
 }
 
 /**
- * Best-effort client IP for rate-limiting only — never treat this as an
- * identity signal. `cf-connecting-ip` is set authoritatively by Cloudflare's
- * edge (digichat's deployment target per ADR-0018) and can't be spoofed by
- * the client when actually behind Cloudflare. Falls back to the first
- * `X-Forwarded-For` hop for non-Cloudflare setups (dev, other proxies) — that
- * header, and `cf-connecting-ip` itself outside Cloudflare, CAN be spoofed
- * absent a proxy that strips/overwrites them. When `DIGICHAT_TRUSTED_PROXIES`
- * is configured, only a socket peer captured by the production entrypoint in
- * `x-digichat-peer-ip` can authorize using either forwarded header. That
- * internal header is removed and re-added from `socket.remoteAddress` before
- * Next.js receives a request, so callers cannot forge it.
+ * Client IP for guardrail budgets and premium spend. Never an identity.
+ * Every candidate goes through `parseIp`.
+ *
+ * `x-digichat-peer-ip` counts only when this process's entrypoint stamped it
+ * (`DIGICHAT_PEER_STAMP`). A caller-supplied copy is `"unknown"`, including
+ * when `DIGICHAT_TRUSTED_PROXIES` is set. Forwarded headers
+ * (`cf-connecting-ip`, `X-Forwarded-For`) count only from a stamped peer
+ * that the allowlist trusts. A stamped socket that is a shared ingress is
+ * also `"unknown"` here: the visitor header must not decide a guardrail or
+ * premium key.
  */
 export function clientIpForRateLimit(req: Request): string {
   const trustedRaw = process.env.DIGICHAT_TRUSTED_PROXIES ?? "";
   const trustedProxies = parseTrustedProxies(trustedRaw);
+  const stamped = stampedSocket(req);
   if (trustedRaw.trim()) {
-    const peer = req.headers.get("x-digichat-peer-ip")?.trim();
-    if (!peer || !isTrusted(peer, trustedProxies)) return peer || "unknown";
-    return forwardedIp(req, trustedProxies) ?? peer;
+    if (!stamped) return "unknown";
+    if (!isTrusted(stamped, trustedProxies)) return stamped;
+    return forwardedIp(req, trustedProxies) ?? stamped;
   }
+  if (!stamped) return "unknown";
+  if (sharedIngress(req, stamped)) return "unknown";
+  return stamped;
+}
+
+/**
+ * develop's `clientIpForRateLimit` when `DIGICHAT_TRUSTED_PROXIES` is unset.
+ * The stamped socket is not a key. The raw trimmed `cf-connecting-ip` wins,
+ * then the raw trimmed first `X-Forwarded-For` hop, else `"unknown"`.
+ * `parseIp` does not run: a non-IP value is still the key.
+ */
+function developVisitorIp(req: Request): string {
   const cf = req.headers.get("cf-connecting-ip")?.trim();
   if (cf) return cf;
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]?.trim() || "unknown";
-  return "unknown";
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+/**
+ * IP for the embed per-IP limiter and the embed trial quota.
+ *
+ * Allowlist unset: `developVisitorIp`, the raw trimmed header. A header-less
+ * request is `"unknown"`. `checkEmbedIpRateLimit` then keys
+ * `embed_ip:unknown`, which is develop's collapse for that case. The trial
+ * quota skips `"unknown"` and does not count those visitors together. A
+ * non-IP `cf-connecting-ip` or first `X-Forwarded-For` hop is its own key.
+ *
+ * Allowlist set: same as `clientIpForRateLimit`. A stamped trusted peer with
+ * no visitor header is that peer, which is also what develop returns.
+ */
+export function clientIpForEmbedLimit(req: Request): string {
+  if (!(process.env.DIGICHAT_TRUSTED_PROXIES ?? "").trim()) return developVisitorIp(req);
+  return clientIpForRateLimit(req);
 }
 
 /** Per-IP check for the shared anonymous /embed chat bucket. */
 export function checkEmbedIpRateLimit(
   req: Request
 ): { allowed: true } | { allowed: false; retryAfterSec: number } {
-  const ip = clientIpForRateLimit(req);
+  const ip = clientIpForEmbedLimit(req);
   return checkBffRateLimit(`embed_ip:${ip}`, EMBED_IP_MAX, EMBED_IP_WINDOW_MS);
 }

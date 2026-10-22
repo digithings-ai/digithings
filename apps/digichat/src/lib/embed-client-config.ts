@@ -69,6 +69,11 @@ export type EmbedTenantClientConfig = {
   layout?: "page" | "embed";
   llmAccess?: EmbedLlmAccess;
   showLanguageSelector?: boolean;
+  /**
+   * Gates the composer context meter for house slugs. The live house
+   * publishes no models, so this release shows no bar there.
+   */
+  showContextMeter?: boolean;
   /** Tenant allows opt-in web search UI (#3420). Default false. */
   webSearch?: boolean;
   /** Chain-of-thought view mode (reasoning + tool calls). Omit = deploy default. */
@@ -80,8 +85,11 @@ export type EmbedTenantClientConfig = {
   toolbar?: boolean;
   scrollbars?: "always" | "auto";
   searchEngine?: string;
+  /** OCC locks tool and MCP toggles. Omitted unless true. */
+  lockSessionControls?: boolean;
   /** Catalog entries — no MCP URLs */
   tools?: {
+    allowUserToggle?: boolean;
     catalog: Array<{
       id: string;
       default?: boolean;
@@ -100,7 +108,16 @@ export type EmbedTenantClientConfig = {
     allowUserServers?: boolean;
     allowAddForm?: boolean;
   };
-  models?: { default?: string; available?: string[]; allowPicker?: boolean };
+  models?: {
+    default?: string;
+    available?: string[];
+    allowPicker?: boolean;
+    picker?: {
+      presets: Array<{ id: string; label: string; description: string; model: string }>;
+      groups: Array<{ provider: string; models: Array<{ id: string; label: string }> }>;
+      showFullList: boolean;
+    };
+  };
   /**
    * Discriminator only — never project Foundry endpoints / digigraph URLs.
    * CliThread uses this to enable regenerate/edit when the BFF turn
@@ -170,6 +187,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     // showByok, by product decision (#2103). DEFAULT_EMBED_TENANT_CONFIG
     // above (the unresolved/gated fallback) stays false.
     showLanguageSelector: cfg.showLanguageSelector ?? true,
+    ...(typeof cfg.showContextMeter === "boolean" ? { showContextMeter: cfg.showContextMeter } : {}),
     // Tenant-gated default-on (#3420, #3859): omit/false stays corpus-only;
     // an enabled tenant pairs with the default-on user pref before digichat
     // sends X-Digi-Enable-Web-Search.
@@ -181,6 +199,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     ...(cfg.toolbar === false ? { toolbar: false } : {}),
     ...(cfg.scrollbars ? { scrollbars: cfg.scrollbars } : {}),
     ...(cfg.searchEngine ? { searchEngine: cfg.searchEngine } : {}),
+    ...(cfg.lockSessionControls === true ? { lockSessionControls: true } : {}),
     tools: cfg.tools,
     mcp: cfg.mcp
       ? {
