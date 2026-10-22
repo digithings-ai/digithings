@@ -4,22 +4,34 @@ version: 1
 # tenant's projectEndpoint + agentName. Foundry auth is the container's
 # managed identity (DefaultAzureCredential); no secret is baked here.
 # The agent itself carries the tenant search index + MCP tool.
+#
+# Overlay on house. The Foundry backend replaces the digigraph backend.
+# Catalog, premium meter, house prompt, per-visitor TPM, and the context
+# meter stay off. One shared allowance (tokensPerMinute.deployment) is this
+# trial's cap. The Azure TPM for gpt-5.6-terra in westeurope is not in this
+# repo.
+# TODO: leave that shared allowance unset until the Azure number is known.
+# The tool-call cap and the answer guard stay. The request limiter stays.
+extends: defaults
+embedHosts:
+  - datatapstream.com
+  - www.datatapstream.com
+  - dev.datatapstream.com
+  - datatap.stream
+  - www.datatap.stream
+  - dev.datatap.stream
+  - nice-glacier-0187d6403.7.azurestaticapps.net
+  - nice-glacier-0187d6403-10.westeurope.7.azurestaticapps.net
+  - nice-glacier-0187d6403-11.westeurope.7.azurestaticapps.net
+hosts: null
 deployment:
   slug: datatap-trial-foundry
+  aliases: null
   chrome:
     mode: embed
     theme: dark
     skin: digichat
     title: ask datatap
-    # Client-facing copy for the trial. The trial tenant holds a sample
-    # dataset (the public Enron email archive), not the visitor's own data,
-    # so the copy says what is actually there. The agent searches it with its
-    # own search tool and opens items with its MCP tool; the UI shows each tool
-    # call as a row, not a per-answer source list. The copy names no mechanism
-    # and promises only those rows.
-    # Attachments are not promised until a live run has opened one.
-    # Template note: the pipeline clones this file per trial, so a tenant on
-    # other data needs its own title, body and placeholder.
     welcome:
       title: Ask about the Enron email archive.
       body:
@@ -27,9 +39,6 @@ deployment:
           archive."
         - The agent searches and opens the emails, and shows each search it
           ran and each email it opened.
-    # Starters are tested live against the trial agent (Enron sample data):
-    # each must finish with no tool error on two runs and show a different
-    # tool path. Re-test them when the trial data or agent changes.
     suggestions:
       - How did email volume change through 2001 as Enron collapsed?
       - What did Enron's traders say about the California energy crisis?
@@ -37,6 +46,7 @@ deployment:
       - Who sends the most emails in this archive, and what do they write about?
       - Find an email about the Dabhol power plant and open it.
     placeholder: Ask about the Enron emails
+    launcher: null
   persistence: none
   auth: anonymous
   features:
@@ -49,25 +59,29 @@ deployment:
     sources: true
     branchPicker: true
     modelPicker: false
+  models:
+    catalog: false
+    allowPicker: false
+    default: null
+    priceCapUsdPerMillion: null
+    costPerWindow: null
+    presets: null
+    showFullList: null
   backend:
     type: foundry
     # Per-trial values — replaced by the pipeline (see
     # config/examples/datatap-trial-deploy.md).
     projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/REPLACE-PROJECT
     agentName: REPLACE-AGENT-NAME
-    # Alias of guardrails.maxToolCallsPerTurn. Prefer the shared block below.
-    # maxToolCalls: 5
-    # maxToolCalls: 4
-  # Proposed guardrails for this trial. Commented, so nothing is applied.
-  # Uncomment the block and one maxToolCallsPerTurn line after confirming.
-  # tokensPerMinute.deployment is the Azure TPM for gpt-5.6-terra in
-  # westeurope. Fill that number in from Azure; do not guess it, and do not
-  # change the Azure deployment from here.
-  # guardrails:
-  #   maxToolCallsPerTurn: 5
-  #   # maxToolCallsPerTurn: 4
-  #   tokensPerMinute:
-  #     deployment: <Azure TPM for gpt-5.6-terra, westeurope>
+  # The house per-visitor minute is cleared. The shared allowance is
+  # tokensPerMinute.deployment.
+  # TODO: set tokensPerMinute.deployment when the Azure number is known.
+  # Do not guess it. Tool-call cap and answer guard are inherited.
+  # The request limiter stays on.
+  guardrails:
+    tokensPerMinute: null
+  prompt: null
+  tokenEnv: null
   tools:
     # Declared for /tools. The Foundry agent owns these tools; the page does
     # not fetch them and the visitor cannot toggle them.
@@ -84,9 +98,16 @@ deployment:
             label: List connections
           - id: datatap__get_item
             label: Open item
+  # House MCP servers are not this trial's. An omitted block would inherit them.
+  mcp:
+    servers: []
+    allowUserServers: false
+    allowAddForm: false
   gate:
     mode: ungated
     activityDetail: full
     llmAccess: operator
     showByok: false
     showLanguageSelector: true
+    showContextMeter: null
+    webSearch: false

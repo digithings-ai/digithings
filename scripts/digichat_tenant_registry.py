@@ -66,8 +66,9 @@ The OCC tenant may carry a catalog ``models`` policy. Chris signed off
 on 21 Oct 2026, 19:19 Rome: "Yes, enable the model picker on OCC for
 2.6.6, I sign off on overriding the DIG-4488 lock". He confirmed on
 21 Oct 2026, 22:50 Rome: "Yes, I confirm no Counsel ruling is needed
-for the OCC model picker". ``models.occPicker`` turns the visitor picker
-on. OCC sets no premium meter and no token budget (22:51 Rome). A raw
+for the OCC model picker". Omitting ``models.occPicker`` leaves the
+picker on; ``false`` is the off switch. OCC sets no premium meter and
+no token budget (22:51 Rome). A raw
 ``models.available`` id list is still refused on the way in and stripped
 from a live copy. Tool and MCP locks are not part of that sign-off.
 """
@@ -203,11 +204,9 @@ FORBIDDEN_INDEX = "occ_tickets"
 
 # DIG-4486 refused an OCC model picker and DIG-4750 confirmed that refusal:
 # a raw `models.available` id list does not belong on a client tenant.
-# Chris signed off on 21 Oct 2026, 19:19 Rome: "Yes, enable the model picker
-# on OCC for 2.6.6, I sign off on overriding the DIG-4488 lock". The catalog
-# policy is allowed, and `models.occPicker` turns the visitor picker on.
-# A raw `available` array is still refused on the way in and stripped from a
-# live copy. Tool and MCP locks are not part of that sign-off.
+# The catalog policy is the default picker. `models.occPicker: false` turns
+# it off. A raw `available` array is still refused on the way in and stripped
+# from a live copy. Tool and MCP locks are not part of that sign-off.
 OCC_MODELS_KEY = "models"
 
 # The Workers KV copy of the registry. A KV copy whose credential references

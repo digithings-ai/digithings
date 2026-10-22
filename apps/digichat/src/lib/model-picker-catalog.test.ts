@@ -59,7 +59,6 @@ describe("model picker catalog", () => {
       "z-ai/glm-5.3-flash",
     );
     for (const id of [
-      "deepseek/deepseek-v4-pro",
       "deepseek/deepseek-v4-flash",
       "deepseek/deepseek-v4-flash-0731",
       "deepseek/deepseek-v4-flash-0731-fast",
@@ -107,13 +106,15 @@ describe("model picker catalog", () => {
       { latestGenerationsPerFamily: 2, showFullList: true },
       { openRouterConfigured: false },
     );
-    expect(wide.available).toContain("deepseek/deepseek-v4-pro");
+    expect(wide.available).not.toContain("deepseek/deepseek-v4-pro");
+    expect(wide.available).toContain("deepseek/deepseek-v4-pro-0813");
     expect(wide.available).toContain("z-ai/glm-4.7-flash");
     expect(wide.available).toContain("openai/gpt-5.6-luna");
     expect(wide.available).not.toContain("deepseek/deepseek-v3.2");
     expect(wide.available).not.toContain("openai/gpt-5-mini");
+    expect(wide.available).not.toContain("google/gemini-3.7-flash");
     expect(wide.picker.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
-      "deepseek/deepseek-v4-pro",
+      "deepseek/deepseek-v4-pro-0813",
     );
   });
 

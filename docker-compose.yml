@@ -744,7 +744,7 @@ services:
       - DIGICHAT_AUTO_MIGRATE=1
       # Catalog template: DIGICHAT_CHROME_SKIN=claude
       # or DIGICHAT_CONFIG_PATH=/app/config/examples/skins/claude.yaml (baked in image)
-      - DIGICHAT_CONFIG_PATH=${DIGICHAT_CONFIG_PATH:-/app/config/digichat.yaml}
+      - DIGICHAT_CONFIG_PATH=${DIGICHAT_CONFIG_PATH:-/app/config/overrides/docker.yaml}
       - DIGICHAT_CHROME_SKIN=${DIGICHAT_CHROME_SKIN:-}
     # Mounts the source config dir (so the baked examples stay reachable).
     # Drop a digichat.yaml here and point DIGICHAT_CONFIG_PATH at it to drive

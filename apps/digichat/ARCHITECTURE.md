@@ -1174,13 +1174,21 @@ guardrails:                      # omit the block and every guard is off
   maxToolCallsPerTurn: 5         # optional, 1–100
   answerAt: 0.7                  # optional; default 0.7 when a TPM is set
   pauseAt: 0.9                   # optional; default 0.9; must be above answerAt
+  rateLimit: true                # optional; omit or true keeps the request limiter; false turns it off
   tokensPerMinute:
     deployment: 100000           # optional; match an upstream TPM
     user: 80000                  # optional; per user id, else server-derived IP
 ```
 
-The numbers in that block are the shape. No shipped yaml sets them. The
-public digithings.ai example only comments a per-user value of 80000.
+House (`defaults.yaml`) sets `maxToolCallsPerTurn: 5`, `answerAt: 0.7`,
+`pauseAt: 0.9`, `rateLimit: true`, and a per-visitor `tokensPerMinute.user` of
+80000. OCC sets `rateLimit: false` and clears the per-visitor minute. The
+tool-call cap and the answer guard stay. The Foundry trial clears the
+per-visitor minute and keeps the request limiter. Its shared deployment TPM
+stays unset (TODO) until the Azure number for gpt-5.6-terra in westeurope is
+known. A visitor's own key (`X-BYOK-Key`) skips the per-visitor minute and the
+request limiter. The deployment minute, the tool-call cap, and the answer
+guard stay on for that turn.
 
 `maxToolCallsPerTurn` caps tool calls in one user turn where the backend can
 enforce it, and is notice/best-effort where it cannot (digigraph, langgraph,
@@ -1245,11 +1253,15 @@ It does not abort the upstream call, and a wrap-up instruction cannot reach a
 later round of that same request. a2a reports no tool calls, so the key is
 refused at config load.
 
-The trial yaml leaves a proposed cap of 5 (4 is the other candidate)
-and a deployment TPM commented out until the Azure number for gpt-5.6-terra in
-westeurope is confirmed. The public digithings.ai example comments a per-user
-limit of 80000 and does not enable it. OCC and the trial do not carry that
-per-user value.
+defaults.yaml sets the tool-call cap to 5, the answer guard to 0.7 / 0.9,
+`rateLimit: true`, and a per-visitor minute of 80000 because house is public.
+OCC sets `rateLimit: false` and clears that minute. Local clears the minute
+and keeps the request limiter, the cap, and the answer guard. The Foundry
+trial clears the per-visitor minute and keeps the request limiter. Its shared
+deployment TPM stays unset (TODO) until the Azure number for gpt-5.6-terra in
+westeurope is known. A visitor's own key skips the per-visitor minute and the
+request limiter. The deployment minute, the tool-call cap, and the answer
+guard stay.
 
 A reasoning disclosure appears only when the Foundry event includes summary text. Operators enable that
 summary on the agent definition: the Responses API refuses a per-call
@@ -2022,6 +2034,7 @@ Canonical operator config is a Zod-validated YAML file:
 - Path: `DIGICHAT_CONFIG_PATH` (default `/app/config/digichat.yaml`)
 - Loader: `src/lib/deploy-config/` (`loadDigichatConfig` / `getDigichatConfig`)
 - Examples: `apps/digichat/config/examples/*.yaml` (incl. `skins/<id>.yaml` and `local-cli.yaml`)
+- House: `apps/digichat/config/defaults.yaml`. OCC, the Foundry trial, local, and Docker are `extends: defaults` overlays. Objects merge, arrays replace, `embedHosts` unions, `null` deletes a key, and a different `backend.type` replaces the backend. A missing config file loads this document, so a deployment with no overrides looks like digithings.ai (`gate.webSearch: true`, `gate.showContextMeter: true`, per-visitor `guardrails.tokensPerMinute.user: 80000`, `guardrails.rateLimit: true`, `maxToolCallsPerTurn: 5`, `answerAt: 0.7`, `pauseAt: 0.9`). The per-visitor minute and the request limiter are house because house is public. OCC sets `guardrails.rateLimit: false`, clears that minute, the premium cost meter, and the context meter, and inherits the catalog picker. The Foundry trial clears the per-visitor minute, keeps the request limiter, and keeps one shared `tokensPerMinute.deployment` allowance. TODO: the Azure number is not in this repo, so that allowance stays unset. The tool-call cap and the answer guard stay on every overlay. A visitor's own key skips the per-visitor minute and the request limiter. `prompt` and `tokenEnv` stay server-side.
 - Startup: `src/instrumentation.ts` calls `initDigichatConfigAtStartup()` (fail closed)
 
 **Unrendered templates are refused at load (#6023).** The shipped templates
@@ -2282,8 +2295,8 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_EMBED_TOKEN` | Alternative to legacy flag: gate unregistered `/embed` on `X-Embed-Token` | Optional |
 | `DIGICHAT_EMBED_TENANTS` | Optional JSON registry of embed tenants (see "Embed tenant registry & external backends"). Unset = no external embed tenants; first-party embeds behave exactly as before. Runtime-only — never pass as a Docker build-arg, it carries every tenant's secret `token` and build-args persist in image layer history / cloud-build logs (#1360). Each entry requires a `token` — the embed snippet passes it back as `?token=` / `X-Embed-Token`; a registered host alone is not sufficient authorization (#1339). | Optional |
 | `DIGICHAT_EMBED_HOSTS` | Plain comma-separated embed-tenant hostnames, no secrets. Feeds `/embed` CSP `frame-ancestors` at **runtime** via `src/proxy.ts` (preferred over deriving hosts from `DIGICHAT_EMBED_TENANTS` when both are set — #1360). Optional seed list: `embed-hosts.txt` (not baked into the GHCR image). Never emits `frame-ancestors *`; fail-closed to first-party origins when unset/invalid. | Optional |
-| `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
-| `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
+| `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms). Skipped when `guardrails.rateLimit` is false or the request carries `X-BYOK-Key` | Optional |
+| `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`). Same skip as the row above | Optional |
 | `DIGICHAT_TRUSTED_PROXIES` | Comma-separated IP addresses/CIDRs whose stamped socket peers may supply `cf-connecting-ip` or `X-Forwarded-For`. Required for a Cloudflare Container release: set it to the container ingress or overlay peer the entrypoint logs on the first request (`x-digichat-peer-ip`), never Cloudflare's published edge ranges. The address is not in this repo. Unset, the entrypoint still stamps the socket and logs a startup warning. Guardrail and premium keys use that socket when it is the client. The embed limiter and trial quota follow develop (the raw trimmed `cf-connecting-ip`, then the raw trimmed first `X-Forwarded-For` hop, else `unknown`, including a value that is not an IP); a header-less request collapses the embed limiter onto `embed_ip:unknown` and the trial quota skips it. An unstamped peer header is never a key. The entrypoint always isolates Next on loopback and strips a caller-supplied peer header. A client disconnect destroys that loopback request so Next aborts the turn. | Required on the Cloudflare Container release |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
 | `DIGICHAT_VERSION` | Version string returned in health response | Optional override. Unset/blank → `package.json` version. Cloudflare Container (`infra/docker/Dockerfile.digichat-cloudflare`) and the app image (`apps/digichat/Dockerfile`) bake it from `package.json` at image build (`ARG`/`ENV` + `/etc/digichat-version`). Not a dashboard secret. |

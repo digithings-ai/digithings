@@ -294,10 +294,9 @@ already matches those fields still changes in `models` when the live copy has
 no picker switch.
 
 The staged overlay `DIG-3556-staged-prod-tenant-config.json` carries both
-tenants and the same catalog policy on each. It also sends the `digithings.ai`
-tenant to the `digithings_docs` corpus and turns its web search off. That
-switch waits for the DIG-3556 rollout steps: the merged `DIGI_TENANT_CORPUS_MAP`
-prompt for `digithings`, and the corpus backfill.
+tenants and the same catalog policy on each. It sends the `digithings.ai`
+tenant to the `digithings_docs` corpus with web search on, matching live, and
+the short house prompt. Applying it to KV is still a human step.
 
 | Scope | Overlay | Change to the `digithings.ai` tenant |
 |---|---|---|

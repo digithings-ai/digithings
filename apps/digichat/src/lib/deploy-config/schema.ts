@@ -304,8 +304,9 @@ export const ModelsSchema = z
     /**
      * OCC visitor picker. On unless false, after Chris's sign-off (21 Oct
      * 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I
-     * sign off on overriding the DIG-4488 lock". Other hosts ignore it. Tool
-     * and MCP locks stay closed.
+     * sign off on overriding the DIG-4488 lock". `false` keeps the operator
+     * model. A row that only shares the slug stays locked unless the flag
+     * is true. Tool and MCP locks stay closed.
      */
     occPicker: z.boolean().optional(),
     /**
@@ -773,6 +774,13 @@ export const GuardrailsSchema = z
       })
       .strict()
       .optional(),
+    /**
+     * Chat request limiter for this deployment. Omit or true keeps the
+     * process default (per visitor, and per IP for anonymous embed).
+     * `false` turns it off. OCC does that. The tool-call cap and the
+     * answer guard are separate and stay on.
+     */
+    rateLimit: z.boolean().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -788,6 +796,13 @@ export const GuardrailsSchema = z
   });
 
 export type GuardrailsConfig = z.infer<typeof GuardrailsSchema>;
+
+/** Omitted means the request limiter is on. `false` is the per-deployment off switch. */
+export function deploymentRateLimitEnabled(
+  guardrails: { rateLimit?: boolean } | null | undefined,
+): boolean {
+  return guardrails?.rateLimit !== false;
+}
 
 export const DeploymentSchema = z
   .object({
@@ -837,6 +852,19 @@ export const DeploymentSchema = z
      * Never projected to the browser via the client config API.
      */
     token: z.string().min(1).optional(),
+    /**
+     * Env var that holds the embed token. The name only — the loader resolves
+     * it and the client projection never copies it.
+     */
+    tokenEnv: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]*$/, "tokenEnv must be an env var name")
+      .optional(),
+    /**
+     * Server-only system prompt for this deployment. The client projection
+     * does not copy it. House puts the digithings corpus prompt here.
+     */
+    prompt: z.string().min(1).optional(),
   })
   .strict()
   .superRefine((dep, ctx) => {
@@ -917,6 +945,16 @@ export const DeploymentSchema = z
 export const DigichatConfigSchema = z
   .object({
     version: z.literal(1),
+    /**
+     * Parents allowed to embed this install. Hostnames, not origins.
+     * An overlay unions onto this list (`extends-merge`).
+     */
+    embedHosts: z.array(z.string().min(1)).optional(),
+    /**
+     * digigraph tool names for the house project. Not the catalog ids.
+     * Server-only; the client projection does not copy the list.
+     */
+    graphTools: z.array(z.string().min(1)).optional(),
     /** Single-install product shape (typical client deploy). */
     deployment: DeploymentSchema.optional(),
     /**
