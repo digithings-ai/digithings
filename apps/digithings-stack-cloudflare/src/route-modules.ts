@@ -37,6 +37,8 @@
  * precisely so vitest can import it under node.
  */
 
+import { safeErrorMessage } from "./container-errors";
+
 /** Route groups with independent failure budgets. */
 export type StackModuleName =
   | "key-proxy"
@@ -82,8 +84,18 @@ function freshHealth(): Record<StackModuleName, StackModuleHealth> {
 /** Module-scoped registry (Worker isolate global; survives across requests). */
 const health: Record<StackModuleName, StackModuleHealth> = freshHealth();
 
+/**
+ * The message of a failed module.
+ *
+ * The message reaches a client-visible body (`moduleUnavailable`) and the
+ * status surface (`/_stack/status`), so it goes through the same total
+ * description the container errors use: the query string of a URL never rides
+ * along (run-watch DIG-4928: the value of a rejected hop can be a request URL
+ * whose query string carries an embed token, and a body or a status line is
+ * not the place for a token).
+ */
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return safeErrorMessage(error);
 }
 
 /**

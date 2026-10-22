@@ -38,11 +38,14 @@ import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
 import {
   CONTAINER_RETRY_AFTER_SECONDS,
+  classifyContainerHopFailure,
   containerEvictedResponse,
   containerFailedResponse,
   containerRestartMessage,
+  containerUnavailableResponse,
   isContainerEvictedError,
   isContainerFailedError,
+  safeErrorMessage,
 } from "./container-errors";
 import { fetchWithContainerRetry } from "./container-retry";
 import { getStackStatus, runIsolated } from "./route-modules";
@@ -230,7 +233,7 @@ export class DigiStackContainer extends Container {
         },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = safeErrorMessage(err);
       // DIG-3226: a confirmed eviction is not a cold start — return the
       // non-retryable 410 so callers stop retrying a container that is gone
       // (same distinction as digiquant-runner RunLostError, runner.ts).
@@ -260,12 +263,35 @@ export class DigiStackContainer extends Container {
     try {
       response = await this.containerFetch(request, targetPort);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isContainerEvictedError(message)) {
-        return containerEvictedResponse("stack", message);
+      // A hop that rejected with a value that is not an Error (DIG-4928): the
+      // @cloudflare/containers package rethrows such a value verbatim from its
+      // proxy catch, so it would leave this Durable Object as an uncaught
+      // exception and the platform would record it as it stands — a thrown
+      // Date leaves nothing but a bare date in the log.
+      //
+      // Such a value states no failure of its own, so it is neither an
+      // eviction nor a failed container: it cannot be classified, and it is
+      // not replayed either (a value that came out of the hop says nothing
+      // about whether the request reached the container). The client is told
+      // to come back instead.
+      //
+      // The classification is decided in ONE place (classifyContainerHopFailure),
+      // so the order of the checks cannot drift between the two container
+      // classes: a value that is not an Error is read before the eviction and
+      // the failed vocabulary, whatever its text says.
+      const failure = classifyContainerHopFailure(err);
+      if (failure.kind === "unavailable") {
+        console.error(
+          "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
+          failure.description,
+        );
+        return containerUnavailableResponse("stack");
       }
-      if (isContainerFailedError(message)) {
-        return containerFailedResponse("stack", message);
+      if (failure.kind === "evicted") {
+        return containerEvictedResponse("stack", failure.message);
+      }
+      if (failure.kind === "failed") {
+        return containerFailedResponse("stack", failure.message);
       }
       throw err;
     }
@@ -345,7 +371,7 @@ export class DigiQuantMcpContainer extends Container {
         },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = safeErrorMessage(err);
       // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("mcp", message);
@@ -363,12 +389,35 @@ export class DigiQuantMcpContainer extends Container {
     try {
       response = await this.containerFetch(request, DIGIQUANT_MCP_PORT);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isContainerEvictedError(message)) {
-        return containerEvictedResponse("mcp", message);
+      // A hop that rejected with a value that is not an Error (DIG-4928): the
+      // @cloudflare/containers package rethrows such a value verbatim from its
+      // proxy catch, so it would leave this Durable Object as an uncaught
+      // exception and the platform would record it as it stands — a thrown
+      // Date leaves nothing but a bare date in the log.
+      //
+      // Such a value states no failure of its own, so it is neither an
+      // eviction nor a failed container: it cannot be classified, and it is
+      // not replayed either (a value that came out of the hop says nothing
+      // about whether the request reached the container). The client is told
+      // to come back instead.
+      //
+      // The classification is decided in ONE place (classifyContainerHopFailure),
+      // so the order of the checks cannot drift between the two container
+      // classes: a value that is not an Error is read before the eviction and
+      // the failed vocabulary, whatever its text says.
+      const failure = classifyContainerHopFailure(err);
+      if (failure.kind === "unavailable") {
+        console.error(
+          "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
+          failure.description,
+        );
+        return containerUnavailableResponse("mcp");
       }
-      if (isContainerFailedError(message)) {
-        return containerFailedResponse("mcp", message);
+      if (failure.kind === "evicted") {
+        return containerEvictedResponse("mcp", failure.message);
+      }
+      if (failure.kind === "failed") {
+        return containerFailedResponse("mcp", failure.message);
       }
       throw err;
     }
@@ -740,8 +789,11 @@ export default {
       return runIsolated("container-routes", () => import("./ports"), async ({ MCP_CONTAINER_ID }) => {
         const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
         // DIG-4477: retry once on a recycled container (see
-        // ./container-retry.ts).
-        return fetchWithContainerRetry(() => container.fetch(request.clone()));
+        // ./container-retry.ts). DIG-4928: the answer for a hop that rejected
+        // with a value that is not an Error names the container it came from.
+        return fetchWithContainerRetry(() => container.fetch(request.clone()), {
+          service: "mcp",
+        });
       });
     }
 

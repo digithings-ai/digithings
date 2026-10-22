@@ -1,12 +1,47 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
   CONTAINER_UNAVAILABLE_BODY,
   DEFAULT_ATTEMPTS,
   RETRY_AFTER_SECONDS,
+  causeDetail,
+  describeValue,
   fetchContainerWithRetry,
   isContainerDeathResponse,
   isInstanceLimitResponse,
 } from "./container-retry";
+
+/**
+ * The root of the repository, so a test can read the other copy of the
+ * redactor.
+ */
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+/**
+ * The code of a redactor, without the doc comment around it.
+ */
+function redactorCode(file: string): string {
+  const source = readFileSync(file, "utf8");
+  const start = source.indexOf("const URL_IN_TEXT");
+  const fn = source.indexOf("export function stripUrlQuery");
+  const end = source.indexOf("\n}\n", fn);
+  return source
+    .slice(start, end)
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      return !(
+        trimmed.startsWith("*") ||
+        trimmed.startsWith("/**") ||
+        trimmed.startsWith("*/") ||
+        trimmed.startsWith("//")
+      );
+    })
+    .join("\n")
+    .trim();
+}
 
 /**
  * The package's own 503 body, verbatim (@cloudflare/containers 0.3.7,
@@ -308,5 +343,148 @@ describe("a container that cannot be reached at all", () => {
     });
     await fetchContainerWithRetry(new Request("https://digithings.ai/api/chat"), fetchOnce);
     expect(fetchOnce).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a cause that cannot be described", () => {
+  // DIG-4928: the description of the cause runs INSIDE the catch, so a
+  // description that throws turns a caught failure back into an uncaught one:
+  // the helper would reject with a TypeError instead of answering the
+  // retryable 503.
+  it("describes a value with a hostile toString without throwing", () => {
+    const hostile = {
+      toString() {
+        throw new Error("no");
+      },
+    };
+    expect(causeDetail(hostile)).not.toBe("");
+  });
+
+  it("describes a revoked proxy without throwing", () => {
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    expect(causeDetail(revoked.proxy)).not.toBe("");
+  });
+
+  it("keeps the inner cause of a real Error in the log line", () => {
+    const inner = new Error("Network connection lost.");
+    const failure = new Error("there is no container instance");
+    (failure as Error & { cause?: unknown }).cause = inner;
+    expect(causeDetail(failure)).toContain("there is no container instance");
+    expect(causeDetail(failure)).toContain("Network connection lost.");
+  });
+
+  it("keeps the query string of a URL out of the description", () => {
+    // The value of a rejected hop can be the request line of the request that
+    // failed, and the embed token of that request rides in the query string
+    // (run-watch DIG-4928, 2026-10-21: 16 error rows on digithings-digichat
+    // whose message was the raw value). The description goes into the Worker
+    // log, so the token must not be in it.
+    const described = describeValue(
+      "GET https://digithings.ai/embed?host=occ.digithings.ai&token=s3cret",
+    );
+    expect(described).not.toContain("s3cret");
+    expect(described).not.toContain("token=");
+    // The path stays, so the operator still reads which request failed.
+    expect(described).toContain("https://digithings.ai/embed");
+  });
+
+  it("keeps the tail of a query string out of the description", () => {
+    // The charset of a token is the operator's choice and nothing in the
+    // repository pins it, so a run that stopped at a comma would leave the
+    // rest of the token in the description.
+    const described = describeValue("GET https://digithings.ai/embed?token=xy7,zw8");
+    expect(described).not.toContain("xy7");
+    expect(described).not.toContain("zw8");
+    expect(described).toContain("https://digithings.ai/embed");
+  });
+
+  it("keeps the query string of a relative request target out of the description", () => {
+    const described = describeValue("GET /v1/embed?token=xy7 HTTP/1.1");
+    expect(described).not.toContain("xy7");
+    expect(described).toContain("/v1/embed");
+  });
+
+  it("keeps the tail of a token that holds a bracket out of the description", () => {
+    // The same rule with another character that a token may hold: a run that
+    // stopped at the bracket would leave the rest of the token in the
+    // description, and the description goes into the Worker log.
+    const described = describeValue('GET https://digithings.ai/embed?token=xy7(zw8"qv9');
+    expect(described).not.toContain("xy7");
+    expect(described).not.toContain("zw8");
+    expect(described).not.toContain("qv9");
+    expect(described).toContain("https://digithings.ai/embed");
+  });
+
+  it("keeps the query string of a URL whose scheme is in upper case out of the description", () => {
+    const described = describeValue("GET HTTPS://digithings.ai/embed?token=xy7");
+    expect(described).not.toContain("xy7");
+    expect(described).toContain("digithings.ai/embed");
+  });
+
+  it("keeps the redactor in step with the shared package", () => {
+    // The redactor lives in three copies (the package, digichat and the
+    // stack), because the two Workers do not depend on the package. One copy
+    // that drifts is one copy that lets a token through, so the copies are
+    // compared here. The doc comment around the code may differ; the code
+    // may not.
+    expect(
+      redactorCode(path.join(repoRoot, "apps/digichat-cloudflare/src/container-retry.ts")),
+    ).toBe(
+      redactorCode(path.join(repoRoot, "packages/durable-object-reconnect/src/index.ts")),
+    );
+  });
+
+  it("keeps the query string of a URL out of the cause detail", () => {
+    const detail = causeDetail(
+      new Error("failed to GET https://digithings.ai/embed?token=s3cret"),
+    );
+    expect(detail).not.toContain("s3cret");
+    expect(detail).toContain("https://digithings.ai/embed");
+  });
+
+  it("answers the retryable 503 for a cause with a hostile toString", async () => {
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map((arg) => describeValue(arg)).join(" "));
+    });
+    const hostile = {
+      toString() {
+        throw new Error("no");
+      },
+    };
+    const res = await fetchContainerWithRetry(
+      new Request("https://digithings.ai/api/chat"),
+      async () => {
+        throw hostile;
+      },
+    );
+    const body = await res.text();
+    spy.mockRestore();
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe(String(RETRY_AFTER_SECONDS));
+    expect(body).toBe(CONTAINER_UNAVAILABLE_BODY);
+    expect(logged.join("\n")).toContain("container could not be reached");
+  });
+
+  it("answers the retryable 503 for a revoked proxy", async () => {
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map((arg) => describeValue(arg)).join(" "));
+    });
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    const res = await fetchContainerWithRetry(
+      new Request("https://digithings.ai/api/chat"),
+      async () => {
+        throw revoked.proxy;
+      },
+    );
+    const body = await res.text();
+    spy.mockRestore();
+
+    expect(res.status).toBe(503);
+    expect(body).toBe(CONTAINER_UNAVAILABLE_BODY);
   });
 });
