@@ -31,23 +31,19 @@ const PARENT_ERROR_CODES: ReadonlySet<string> = new Set([
   "ready_target_missing",
 ]);
 
+/**
+ * Visitor-facing copy for each code. These lines render in the chat, so they
+ * never name env vars, origins or container internals; operators read the
+ * code itself (and the parent shell's dev console).
+ */
 function defaultParentErrorBody(code: ParentErrorCode): string {
   switch (code) {
     case "ready_timeout":
-      return (
-        "digichat embed did not signal ready — check DIGICHAT_EMBED_ORIGIN and " +
-        "that the digichat Container is up"
-      );
+      return "the chat is taking longer than usual to start. Refresh to try again.";
     case "embed_unloadable":
-      return (
-        "digichat embed failed to load — check DIGICHAT_EMBED_ORIGIN and " +
-        "Container readiness, then refresh"
-      );
+      return "the chat could not load. Please try again in a moment.";
     case "ready_target_missing":
-      return (
-        "could not resolve parent origin for ready handshake " +
-        "(ancestorOrigins/referrer missing)"
-      );
+      return "the chat could not connect to this page. Refresh to try again.";
     default: {
       const _exhaustive: never = code;
       return _exhaustive;
