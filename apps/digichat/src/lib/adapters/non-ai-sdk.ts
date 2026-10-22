@@ -10,6 +10,7 @@
 import type { UIMessage } from "ai";
 import type { ActivityDetail } from "@/lib/chat-activity";
 import type { NonAiSdkBackendConfig } from "@/lib/backend-adapters";
+import type { TurnGuard } from "@/lib/guardrails/turn";
 import { readBackendApiKey } from "@/lib/adapters/ai-sdk/providers";
 import { createLangGraphStreamResponse } from "@/lib/adapters/langgraph/stream";
 import { createAgUiStreamResponse } from "@/lib/adapters/ag-ui/stream";
@@ -21,6 +22,7 @@ export async function createNonAiSdkStreamResponse(opts: {
   responseHeaders: Record<string, string>;
   activityDetail: ActivityDetail;
   signal?: AbortSignal;
+  guard?: TurnGuard;
 }): Promise<Response> {
   let apiKey: string | null = null;
   if (opts.backend.apiKeyEnv) {

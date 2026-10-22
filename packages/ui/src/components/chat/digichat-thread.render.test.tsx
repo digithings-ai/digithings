@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DigichatThread, type GroupDisclosureMode } from "./DigichatThread";
+import { setExportKeepMounted } from "../../replay/export-mount";
 import { workVisibilityForView, type WorkVisibility } from "./stock/skin-types";
 
 const adapter: ChatModelAdapter = {
@@ -605,6 +606,20 @@ describe("DigichatThread", () => {
     }
   });
 
+  it("mounts closed work only while an export is reading the page", async () => {
+    const { host, unmount } = await mount({
+      initialMessages: REASONING_ONLY_MESSAGES,
+      workVisibility: "quiet",
+    });
+    await act(async () => {});
+    expect(host.textContent).not.toContain("thinking through the plan");
+    setExportKeepMounted(true);
+    expect(host.textContent).toContain("thinking through the plan");
+    setExportKeepMounted(false);
+    expect(host.textContent).not.toContain("thinking through the plan");
+    unmount();
+  });
+
   it("keeps the work shut while the agent works when the client is quiet", async () => {
     // The one rule quiet carries alone: while the work runs, the rows stay
     // shut. The same turn under the balanced level opens the row, so the
@@ -622,7 +637,6 @@ describe("DigichatThread", () => {
     const row = host.querySelector('[data-slot="tool-group-root"]');
     expect(row).toBeTruthy();
     expect(row?.hasAttribute("data-closed")).toBe(true);
-    // The running tool is not on the page either.
     expect(host.textContent).not.toContain("Running tool: digisearch");
     unmount();
 

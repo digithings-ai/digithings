@@ -12,6 +12,7 @@ import {
   EmbedChatPrefsProvider,
   type EmbedChatPrefsApi,
 } from "@digithings/ui/chat/stock";
+import { resolveModelCatalog } from "@/lib/model-picker-catalog";
 
 /** Navigated row: the user-message chevron on the left. */
 function hasChevron(row: HTMLElement): boolean {
@@ -443,6 +444,79 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
+  it("puts presets above provider groups and selects a preset token", async () => {
+    const onClose = vi.fn();
+    const setModel = vi.fn();
+    const picker = {
+      showFullList: true,
+      presets: [
+        {
+          id: "auto",
+          label: "Auto",
+          description: "DeepSeek V4.1 Flash 1017, our default.",
+          model: "alpha",
+        },
+        {
+          id: "reasoning",
+          label: "Reasoning",
+          description: "Best reasoning in this list.",
+          model: "beta",
+        },
+      ],
+      groups: [{ provider: "DeepSeek", models: [{ id: "alpha", label: "Flash" }] }],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha"]} onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+    const radios = await screen.findAllByRole("menuitemradio");
+    expect(radios.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Auto"),
+      expect.stringContaining("Reasoning"),
+      expect.stringContaining("Flash"),
+    ]);
+    expect(screen.queryByRole("menuitem", { name: "DeepSeek" })).toBeNull();
+    expect(screen.getByText("DeepSeek")).not.toBeNull();
+    expect(screen.getByText("Best reasoning in this list.")).not.toBeNull();
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /Reasoning/ }));
+    expect(setModel).toHaveBeenCalledWith("preset:reasoning");
+    unmount();
+  });
+
+  it("renders the newest-generation catalog and omits superseded models", async () => {
+    const onClose = vi.fn();
+    const resolved = resolveModelCatalog(
+      { presets: ["auto", "reasoning", "fast", "light"], showFullList: true },
+      { openRouterConfigured: false },
+    );
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" } })}>
+        <EmbedComposerMenu
+          kind="models"
+          picker={resolved.picker}
+          models={resolved.available}
+          onClose={onClose}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(await screen.findByRole("menuitemradio", { name: /Auto/ })).not.toBeNull();
+    expect(screen.getByText("GLM 5.3 Flash. Best reasoning in this list.")).not.toBeNull();
+    expect(screen.getByText("Gemini 3.5 Flash Lite. Fastest model in this list.")).not.toBeNull();
+    expect(screen.getByText("GPT-OSS 120B. Lowest price in this list.")).not.toBeNull();
+    expect(screen.getByText("Qwen 3.8 Flash")).not.toBeNull();
+    expect(screen.getByText("Premium")).not.toBeNull();
+    expect(screen.getByText("Manual selection")).not.toBeNull();
+    expect(screen.getByText("GLM 5.3")).not.toBeNull();
+    expect(screen.getByText("Gemini 3.8 Flash")).not.toBeNull();
+    expect(screen.getByText("Qwen 3.8 27B")).not.toBeNull();
+    expect(screen.queryByText("DeepSeek V4 Pro")).toBeNull();
+    expect(screen.queryByText("GLM 4.7 Flash")).toBeNull();
+    expect(screen.queryByText("GPT-5.6 Luna")).toBeNull();
+    expect(screen.queryByText("Gemini 3.1 Flash Lite")).toBeNull();
+    unmount();
+  });
+
   it("does not offer auto when a model is pinned", async () => {
     const onClose = vi.fn();
     const { unmount } = render(
@@ -735,6 +809,34 @@ describe("EmbedComposerMenu current value", () => {
 
     const openai = await screen.findByRole("menuitemradio", { name: /\/openai/ });
     expect(hasChevron(openai)).toBe(true);
+  });
+
+  it("closes a model pick when the composer writer is not bound", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const api = prefs({ setComposerDraft: vi.fn() });
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="models" models={["alpha", "beta"]} onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+    await user.click(await screen.findByRole("menuitemradio", { name: "beta" }));
+    expect(api.setModel).toHaveBeenCalledWith("beta");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the provider page on Escape when the composer writer is not bound", async () => {
+    const user = userEvent.setup();
+    const setComposerDraft = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={prefs({ setComposerDraft })}>
+        <EmbedComposerMenu kind="provider" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    await screen.findByRole("menuitemradio", { name: /\/cheaperinference/ });
+    await user.keyboard("{Escape}");
+    expect(setComposerDraft).not.toHaveBeenCalled();
+    expect(await screen.findByRole("menuitem", { name: /\/language/ })).toBeTruthy();
   });
 });
 

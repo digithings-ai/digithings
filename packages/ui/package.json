@@ -14,6 +14,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./theme": "./src/theme/index.ts",
+    "./replay": "./src/replay/index.ts",
     "./theme/tui": "./src/theme/tui-prefs.ts",
     "./chart-scale": "./src/components/finance-charts/chart-scale.ts",
     "./cn": "./src/lib/utils.ts",
@@ -49,6 +50,8 @@
     "./chat/overlay-scrollbar": "./src/components/chat/overlay-scrollbar.tsx",
     "./chat/skins": "./src/components/chat/skins/index.ts",
     "./chat/skins/digichat": "./src/components/chat/skins/digichat.tsx",
+    "./chat/context-meter": "./src/components/chat/skins/digichat-context-meter.tsx",
+    "./chat/composer-toolbar": "./src/components/chat/skins/digichat-composer-toolbar.tsx",
     "./chat/stock": "./src/components/chat/stock/index.ts",
     "./chat/stock/thread": "./src/components/chat/stock/thread.aui.tsx",
     "./chat/transcript": "./src/components/chat/transcript/index.ts",

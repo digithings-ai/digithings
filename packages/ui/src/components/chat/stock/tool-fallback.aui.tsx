@@ -19,6 +19,7 @@ import {
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useExportKeepMounted } from "../../../replay/export-mount";
 import { toolRowTitle } from "./tool-display";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -214,8 +215,10 @@ function ToolFallbackContent({
   children,
   ...props
 }: React.ComponentProps<typeof CollapsibleContent>) {
+  const keepMounted = useExportKeepMounted();
   return (
     <CollapsibleContent
+      keepMounted={keepMounted}
       data-slot="tool-fallback-content"
       className={cn(
         "aui-tool-fallback-content relative overflow-hidden text-sm outline-none",
