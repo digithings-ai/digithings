@@ -17,4 +17,4 @@ This app is bun-managed and lives outside the root npm workspaces.
 
 A digichat terminal tab is parked and not built here.
 
-Terminal, Charts, and digichat stay on the rail. They are not drawn in this terminal.
+Terminal, Gloomberb, Vela, and digichat stay on the rail. They are not drawn in this terminal.
