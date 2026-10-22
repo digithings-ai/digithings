@@ -10,11 +10,17 @@ CTO decision, 19 Oct 2026. This pins the contract for leaves A, B and C.
 | question-log.csv has 10 rows in the same window | `csv.reader`, field 0 in 13-19 Oct |
 | dt-decide-poll never writes question-log.csv | read of `kit/bin/dt-decide-poll`, no reference to the file |
 | The CSV is written by hand | `decision-making/SKILL.md` step 5, `agents/decider.md` step 3 |
-| 252 parsed data rows (19 Oct snapshot), 250 of them accounted for by the field counts below | `csv.reader`, under a 10-column header |
+| 252 parsed data rows (19 Oct snapshot): 250 in the five width buckets below, 2 at a width those buckets omit | `csv.reader`, under a 10-column header |
 | 10/10 recent rows are `GOOD` | column 4 of the 13-19 Oct rows |
 | 595 data rows on 22 Oct, of which exactly 4 break the 10-column schema | `csv.reader`, field counts 8:1, 9:1, 10:591, 11:2 |
 
-The CoS's measurement (DIG-4327) is correct. Coverage is 10/160 = 6%.
+The CoS's counts on DIG-4327 are the ones this document uses: 160 distinct cards in the
+window and 10 rows in `question-log.csv`. Coverage is therefore 10/160 = 6 percent, and
+this document uses that one numerator throughout. The CoS summary and the DIG-4342 brief
+pair the same two counts with 3 percent and "156 cards have no row"; 160 minus 10 is 150,
+so neither figure follows from the counts they are quoted beside. The conclusion those
+two documents draw is unaffected: at 6 percent coverage the per-asker quality column is
+unmeasured for the week.
 
 Both figures are a 19 Oct snapshot of a window that was still being written, so they
 are not the numbers the Monday review uses. The cohort table below reconciles every
@@ -28,9 +34,11 @@ Two writers, one file, no enforced schema:
 2. **each rung, by hand** - told to by the skill.
 
 Hand rows are ragged: 118 rows have 8 fields (no `class`, no `source_path`), 89 have
-10, **38 have 11**, 3 have 9, 2 have 12. That accounts for 250 of the 252 parsed
-rows; the other two did not parse. Under a 10-column header, `row[4]` is
-`quality` in one row and something else in another. One row (DIG-1134, 2026-10-06)
+10, **38 have 11**, 3 have 9, 2 have 12 - those five buckets hold 250 of the 252 rows
+in the snapshot. The remaining 2 rows were read by the parser but are degenerate: their
+width falls outside the five buckets, so the histogram does not classify them. Under a
+10-column header, `row[4]` is `quality` in one row and something else in another. One row
+(DIG-1134, 2026-10-06)
 carries a 4337-character multi-line run essay in its last field. Two DIG-3395 rows
 carry truncated 8-character pseudo-ids instead of a UUID. Several `asking_agent`
 values are raw UUIDs instead of names.
@@ -43,9 +51,13 @@ So the fix is not "tell seats to log harder". It is **one machine writer**.
 
 ## Decision 1: the router is the writer
 
-`dt-decide-poll` is the only component that sees 100% of cards, runs unattended
-every 5 minutes, and already records the same lifecycle in route-log.jsonl. Asking
-160 rungs a week to remember a CSV line is the defect, not the solution.
+`dt-decide-poll` runs unattended every 5 minutes and is the only component that already
+records the same lifecycle in route-log.jsonl. It is the right writer, and it is not
+because it sees every card: it does not. It sees every card the issue page it reads
+reaches, and the 13-19 Oct window measures that at **205 of 257 cards, 80 percent** - 52
+cards were never seen (see "Known limitation" below for the split and the pagination fix
+that closes the hole for future windows). Asking 160 rungs a week to remember a CSV line
+is the defect, not the solution.
 
 New module `kit/bin/dt-qlog.py`, pure functions, imported by `dt-decide-poll` so the
 daemon does not grow. dt-decide-poll passes it the card, the issue, the agents map
@@ -92,14 +104,15 @@ line of the chain, so nobody handed it up.
 
 Implemented as `HANDUP_RUNG = 2` in `kit/bin/dt-qlog.py` (line 94). The rule at
 line 135 is `ANSWERABLE if rung >= HANDUP_RUNG else GOOD`, so rung 0 and rung 1 are
-both `GOOD` and only a handed-up card (rung 2 or later) is `ANSWERABLE`. Measured
-on the 13-19 Oct window: with the threshold at rung 1, 45 of the 49
-threshold-dependent cards become `ANSWERABLE` (92 percent), which mirrors `GOOD`
-and leaves the metric with no discriminating power. At rung 2 the window yields 4
-`ANSWERABLE` cards in the 206-card cohort measured on 22 Oct (DIG-711, DIG-2205,
-DIG-3664, DIG-3699); the R&D Engineer measured 5 at 06:55Z, before the writer had
-completed every row of the window. Six rows that were wrongly filed as `GOOD`
-become `BAD`.
+both `GOOD` and only a handed-up card (rung 2 or later) is `ANSWERABLE`. Two of the
+next counts are the R&D Engineer's, measured on the pre-backfill file and not
+reproducible from this checkout because that file is gone: with the threshold at rung
+1, **45 of the 49** threshold-dependent cards become `ANSWERABLE` (92 percent), which
+mirrors `GOOD` and leaves the metric with no discriminating power; at the rung-2
+threshold **six rows that were wrongly filed as `GOOD` become `BAD`**. At rung 2 the
+window yields 4 `ANSWERABLE` cards in the 206-card cohort measured on 22 Oct (DIG-711,
+DIG-2205, DIG-3664, DIG-3699); the R&D Engineer measured 5 at 06:55Z, before the writer
+had completed every row of the window.
 
 The empty `ANSWERABLE` bucket in the first review was plumbing, not definition:
 `dt-decide-poll` deletes a retired card's route entry, so the writer read rung 0
@@ -195,8 +208,8 @@ claim is bounded by this measurement, not assumed.
 22 Oct it has one (`kit.git`), so commits reach `develop` and `main` through a
 branch and a merge. What still holds:
 
-- launchd execs `/Users/chrisstefan/paperclip-workspace/kit/bin/dt-decide-poll`
-  directly, so **the working tree is production**;
+- launchd execs `~/paperclip-workspace/kit/bin/dt-decide-poll` by absolute path,
+  so **the working tree is production**;
 - the checkout sits on `DIG-4355-question-log-backfill`, a ticket branch;
 - the tree carries **317 uncommitted entries, 62 of them under `bin/`**;
 - the branch list holds many `rescue/kit-*` and `backup/main-*` refs, so this
