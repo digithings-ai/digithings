@@ -66,15 +66,17 @@ def test_schema_has_no_index_argument() -> None:
     assert set(s["function"]["parameters"]["properties"]) == {"query", "top_k"}
 
 
-# --- OCC: ticket search is an ADDITION next to help search (#6302 review) ---
+# --- Ticket search is an ADDITION next to help search (#6302 review) ---
+_SLUG, _TIX = "occ", "occ-tickets"
+_HELP = _MAP[_SLUG]["digisearchIndex"]  # the help index; the live map must agree
+# The five live ticket MCP tools pass through untouched; generic stand-in names.
+_LIVE = ("search_tickets", "list_tickets", "get_ticket", "customer_history", "ticket_report")
+_LIVE_TOOLS = tuple(f"tickets_mcp__{n}" for n in _LIVE)
 
-_ZAMMAD = (
-    "zammad__search_tickets",
-    "zammad__list_tickets",
-    "zammad__get_ticket",
-    "zammad__customer_history",
-    "zammad__ticket_report",
-)
+
+def _ticket_tool(o) -> str:
+    """The dedicated tool the live map binds to the ticket collection."""
+    return next(n for n, s in (o.digisearch_tools or {}).items() if s["index"] == _TIX)
 
 
 def _fn(name: str) -> dict:
@@ -85,48 +87,52 @@ def _names(tools: list) -> list[str]:
     return [research._tool_def_name(t) for t in tools]
 
 
-def _live_occ_override():
+def _live_override():
     import tomllib
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
     raw = tomllib.loads((root / "apps/digithings-stack-cloudflare/wrangler.toml").read_text())
     table = load_tenant_corpus_map(raw["vars"]["DIGI_TENANT_CORPUS_MAP"])
-    return resolve_corpus_override(tenant_slug="occ", corpus_map=table)
+    return resolve_corpus_override(tenant_slug=_SLUG, corpus_map=table)
 
 
-def test_live_occ_tool_set_keeps_help_search_and_adds_ticket_search() -> None:
-    o = _live_occ_override()
-    assert o.digisearch_index == "occ_help"
+def test_live_tool_set_keeps_help_search_and_adds_ticket_search() -> None:
+    o = _live_override()
+    assert o.digisearch_index == _HELP
     base = [_fn("digisearch"), _fn("digisearch_fetch_all"), _fn("digivault_search_notes")]
-    base += [_fn(n) for n in _ZAMMAD]
-    tools, bound = research._apply_tenant_search_tools(base, o.digisearch_tools, set(), "occ_help")
+    base += [_fn(n) for n in _LIVE_TOOLS]
+    tools, bound = research._apply_tenant_search_tools(base, o.digisearch_tools, set(), _HELP)
     names = set(_names(tools))
-    for expected in ("digisearch", "digisearch_fetch_all", "digisearch_zammad_tickets", *_ZAMMAD):
+    _TIX_TOOL = _ticket_tool(o)
+    assert _TIX_TOOL.startswith("digisearch_") and _TIX_TOOL.endswith("_tickets")
+    for expected in ("digisearch", "digisearch_fetch_all", _TIX_TOOL, *_LIVE_TOOLS):
         assert expected in names, expected
-    assert bound["digisearch_zammad_tickets"]["index"] == "occ-tickets"
+    assert bound[_TIX_TOOL]["index"] == _TIX
 
 
 def test_dedicated_tools_covering_the_tenant_index_still_replace_generic_search() -> None:
-    o = resolve_corpus_override(tenant_slug="occ", corpus_map=load_tenant_corpus_map(json.dumps(_MAP)))
+    table = load_tenant_corpus_map(json.dumps(_MAP))
+    o = resolve_corpus_override(tenant_slug=_SLUG, corpus_map=table)
     base = [_fn("digisearch"), _fn("digisearch_fetch_all"), _fn("todo")]
-    tools, _ = research._apply_tenant_search_tools(base, o.digisearch_tools, set(), "occ_help")
+    tools, _ = research._apply_tenant_search_tools(base, o.digisearch_tools, set(), _HELP)
     names = _names(tools)
     assert "digisearch" not in names and "digisearch_fetch_all" not in names
-    assert {"digisearch_occ_help", "digisearch_zammad_tickets", "todo"} <= set(names)
+    assert {f"digisearch_{_HELP}", _ticket_tool(o), "todo"} <= set(names)
 
 
 def test_no_generic_search_means_no_dedicated_tools() -> None:
-    o = _live_occ_override()
-    tools, bound = research._apply_tenant_search_tools([_fn("todo")], o.digisearch_tools, set(), "occ_help")
+    o = _live_override()
+    tools, bound = research._apply_tenant_search_tools(
+        [_fn("todo")], o.digisearch_tools, set(), _HELP
+    )
     assert _names(tools) == ["todo"] and bound == {}
 
 
 def test_session_disabled_dedicated_tool_is_not_offered() -> None:
-    o = _live_occ_override()
+    o = _live_override()
     base = [_fn("digisearch"), _fn("digisearch_fetch_all")]
-    tools, bound = research._apply_tenant_search_tools(
-        base, o.digisearch_tools, {"digisearch_zammad_tickets"}, "occ_help"
-    )
-    assert "digisearch_zammad_tickets" not in _names(tools) and "digisearch" in _names(tools)
+    _TIX_TOOL = _ticket_tool(o)
+    tools, bound = research._apply_tenant_search_tools(base, o.digisearch_tools, {_TIX_TOOL}, _HELP)
+    assert _TIX_TOOL not in _names(tools) and "digisearch" in _names(tools)
     assert bound == {}

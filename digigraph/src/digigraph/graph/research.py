@@ -826,9 +826,9 @@ def _apply_tenant_search_tools(
     The generic ``digisearch`` / ``digisearch_fetch_all`` tools search the
     tenant's own index. They are hidden only when the dedicated tools cover
     every part of that index, i.e. the dedicated tools REPLACE it. A dedicated
-    tool over some other collection (OCC's ``digisearch_zammad_tickets`` over
-    ``occ-tickets`` next to ``occ_help``) is an addition, so the generic tools
-    stay. Dedicated tools are offered only when generic search is allowed.
+    tool over some other collection (a ticket collection next to the help
+    index) is an addition, so the generic tools stay. Dedicated tools are
+    offered only when generic search is allowed.
     """
     if not tenant_search_tools:
         return tools_for_llm, {}
