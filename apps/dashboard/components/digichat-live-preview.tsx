@@ -8,6 +8,15 @@
  * baseline tiers get the upgrade panel and never an iframe (#3662).
  * The iframe origin must stay inside DASHBOARD_DIGICHAT_FRAME_SRC
  * (security-headers.mjs); no wildcard, no new origin in this file.
+ *
+ * The section is a flex-row sibling of <main>, so on a phone (390px) the
+ * iframe's 300px intrinsic width squeezed the page column to 90px (measured
+ * 22 Oct 2026). The preview is therefore desktop-only: `hidden md:block`.
+ * Desktop pixels are unchanged, and the phone keeps the DigiChat popup.
+ * Both branches are desktop-only on purpose: the section is a row sibling of
+ * <main>, so any branch left visible on a 390px phone takes its width out of
+ * the page column. The upgrade branch carries the same text width as the
+ * iframe, so hiding only the iframe would not give the phone its column back.
  */
 
 import { useMemo } from 'react';
@@ -50,7 +59,7 @@ export default function DigichatLivePreview({
 
   if (src === null) {
     return (
-      <section data-digichat-live-preview="upgrade">
+      <section data-digichat-live-preview="upgrade" className="hidden md:block">
         <h2>{DIGICHAT_UPGRADE_TITLE}</h2>
         <p>{DIGICHAT_UPGRADE_BODY}</p>
         <a href={DIGICHAT_UPGRADE_CTA_HREF}>{DIGICHAT_UPGRADE_CTA_LABEL}</a>
@@ -59,7 +68,7 @@ export default function DigichatLivePreview({
   }
 
   return (
-    <section data-digichat-live-preview="live">
+    <section data-digichat-live-preview="live" className="hidden md:block">
       <iframe src={src} title="digichat live preview" />
     </section>
   );

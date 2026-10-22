@@ -370,6 +370,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 135 for DIG-4657 (the per-index bge-m3 override prose in the
     Vectorize section and the three env-table rows in ARCHITECTURE.md) —
     fixture prose only; RecursiveChunker unchanged.
+    Re-recorded for DIG-4602 (PR #5441) merged onto develop: the renamed
+    module's prose and develop's newer DIG-2203 / DIG-4657 paragraphs changed
+    the chunk boundaries from index 125 on — count 135, hashes re-recorded —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -505,8 +509,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "9f5ba1e6a4571e53",
         "001c13b0286cffd2",
         "5668e90c11bf9127",
-        "05bb8905105bc94e",
-        "d922a9899a8996a2",
+        "64d4a8d12ef0ee1f",
+        "05501c10a3d0de0f",
         "166b840aa01714e1",
         "6ffeafba73e75348",
         "79ae674b8661ea64",
@@ -515,5 +519,4 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "8b8c754092fe534f",
         "059d9ccf5c138f8c",
         "22f9d694bae83638",
-
     ]
