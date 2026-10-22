@@ -373,7 +373,7 @@ and it is the only proof that the whole chain (Pages route → `readInviteToken`
 
 **Browser check — closed by decision on 2026-10-21 (this file updated 2026-10-22).** On 2026-10-21
 Chris answered the DIG-4810 card with *the machine proof is enough* (card `9cbd759c`), so the OCC
-end-to-end proof stands on the machine half: `verify_occ_invite_key.sh` with `EXPECT_B2=1` →
+end-to-end proof stands on the machine half: `scripts/verify_occ_invite_key.sh` with `EXPECT_B2=1` →
 PASS 7/7, and the Pages gate answering 308 → `/chat/occ/` → **200** on
 `GET /chat/occ?token=<key>`. The step above stays the way to prove the chain end to end for a
 person, and a future rotation should still run it — but it is not outstanding on DIG-4810.
