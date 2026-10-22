@@ -137,8 +137,10 @@ For a week-long unattended run:
 One public domain serves marketing + chat shell:
 
 - **Marketing shell:** `digithings.ai` — Cloudflare Pages (`apps/digithings-web/`).
-- **Visitor chat:** `digithings.ai/chat` — Pages iframe → digichat Node `/embed`
-  (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, e.g. Tunnel hostname `digichat.digithings.ai`).
+- **Visitor chat:** `digithings.ai/chat` — today a Pages iframe → digichat Node `/embed`
+  (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, e.g. Tunnel hostname `digichat.digithings.ai`); after the
+  DIG-5121 cutover the digichat **app** answers `/chat` itself, served by the digichat Worker under
+  the base path `/chat`.
   Backend: digichat → digigraph → digillm → LiteLLM (+ digivault tools).
 - digithings has **no Azure**. DataTap digichat ACA is client-only.
 - Operator runbook: [`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md).
@@ -192,6 +194,12 @@ To update the landing page: edit `apps/digithings-web/`, run the build script lo
 - **Backend:** digichat BFF → digigraph (not a Pages Function OpenRouter loop).
 - **Operator host:** Compose + Cloudflare Tunnel — see
   [`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md).
+- **Cutover (DIG-5121, in `develop`, not live yet):** the digichat Worker claims
+  `digithings.ai/chat*` and the Container is built with `DIGICHAT_BASE_PATH=/chat`, so the
+  **app** — not the Pages shell — answers `/chat` once the deploy lane (DIG-5120) and Chris's
+  approval of the production environment land. `/chat/occ` stays a Pages shell behind the invite
+  gate, and the legacy `/embed*` / digichat API routes stay as a compatibility window until the
+  cutover is verified live.
 
 ### Verifying the routing
 
@@ -319,8 +327,8 @@ fail a PR before it merges.
 
 | App | Worker name | Declared routes | Deploy lane |
 |---|---|---|---|
-| `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | `deploy-digithings-stack-cloudflare.yml` — a push to `main` and a `workflow_dispatch`, both behind `environment: production` |
-| `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*`, `/chat/occ*` (10 of the 11 patterns; the full list is in `apps/digichat-cloudflare/wrangler.toml`) | `deploy-digichat-cloudflare-container.yml` — `workflow_dispatch` behind `environment: production` |
+| `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | `deploy-digithings-stack-cloudflare.yml` - a push to `main` and a `workflow_dispatch`, both behind `environment: production` |
+| `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/chat*`, `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*`, `/chat/occ*` (11 of the 12 patterns; the full list is in `apps/digichat-cloudflare/wrangler.toml`) | `deploy-digichat-cloudflare-container.yml` - `workflow_dispatch` behind `environment: production` |
 
 Read the routes column as "what `wrangler.toml` declares", not as a claim about what is
 currently serving. Both are Workers **Containers**: both need **Workers Paid**, and both need

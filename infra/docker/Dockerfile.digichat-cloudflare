@@ -90,6 +90,12 @@ LABEL org.digithings.image.registry="${IMAGE_PUSH_REGISTRY}" \
       org.digithings.image.repository="${IMAGE_PUSH_REPOSITORY}"
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# The base path is BAKED into the build (see the builder stage), so the running
+# server already answers under it. The value is present in the runtime env as
+# well, so a server-side read of it can never disagree with the build.
+ARG DIGICHAT_BASE_PATH
+ENV DIGICHAT_BASE_PATH=$DIGICHAT_BASE_PATH
+ENV NEXT_PUBLIC_DIGICHAT_BASE_PATH=$DIGICHAT_BASE_PATH
 # zammad-mcp (read-only OCC helpdesk MCP) runs beside the Node process: the
 # trusted proxy spawns `python3 -m scripts.zammad_mcp.server` and routes
 # /api/mcp/zammad* to it. Same dep pin as scripts/zammad_mcp/Dockerfile.mcp.

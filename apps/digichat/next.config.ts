@@ -46,6 +46,21 @@ const nextConfig: NextConfig = {
         source: "/((?!embed$|embed/).*)",
         headers: [...DIGICHAT_APP_SECURITY_HEADERS],
       },
+      {
+        // The app root, explicitly (DIG-5121). Next prefixes every custom-route
+        // source with the basePath at build time
+        // (next/dist/lib/load-custom-routes.js:350), so under basePath=/chat
+        // the global rule above becomes "/chat/((?!embed$|embed/).*)" and its
+        // compiled regex is "^/chat(?:/((?!embed$|embed/).*))(?:/)?$" — which
+        // does NOT match the canonical root "/chat" (Next redirects
+        // "/chat/" → "/chat"). Without this rule the public chat URL would be
+        // served without CSP, X-Frame-Options and the rest of the app
+        // hardening. Without a basePath the source stays "/" and matches the
+        // same root with the same header set (no behaviour change for the
+        // self-hosted deploy).
+        source: "/",
+        headers: [...DIGICHAT_APP_SECURITY_HEADERS],
+      },
     ];
   },
   /**
