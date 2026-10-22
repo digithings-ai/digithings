@@ -1148,6 +1148,15 @@ standard tool Result pane with mid-stream completion — display parity with a
 directly-plugged tool, no per-tool UI. `mcp_approval_request` is unmapped by
 design: trial agents auto-approve server-side.
 
+**Limits (`limits`).** The canonical gate block. Omit it and every gate is
+off. Paths, the backend matrix, and the digithings.ai, OCC, and Foundry
+trial examples are in [`docs/digichat/LIMITS.md`](../../docs/digichat/LIMITS.md).
+`guardrails` remains the alias of `limits.tokens.total.perMinute` and
+`limits.toolCalls.perTurn`. `models.costPerWindow` is the alias of one
+premium-only `limits.cost.usd` gate (`onExceed: fallback-auto`). A config
+that sets both spellings of the same gate must not disagree. Minute, hour,
+and day windows roll (60s, 3600s, 86400s).
+
 **Guardrails (`guardrails`).** Optional on a deployment. Omit the block and
 every guard is off. `tokensPerMinute` applies on every backend. `maxToolCallsPerTurn`
 is enforced on Foundry and the AI SDK backends (openai-completions,
