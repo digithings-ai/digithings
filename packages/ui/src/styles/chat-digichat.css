@@ -374,28 +374,6 @@
   background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
 }
 
-.aui-overlay-scroll {
-  position: absolute;
-  top: 0;
-  right: 2px;
-  bottom: 0;
-  z-index: 5;
-  pointer-events: none;
-}
-
-.aui-overlay-thumb {
-  position: absolute;
-  right: 0;
-  left: 0;
-  border-radius: 0;
-  background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
-  pointer-events: auto;
-}
-
-.aui-overlay-thumb:hover {
-  background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
-}
-
 .dc-composer-menu-scroll {
   position: absolute;
   top: 0;
