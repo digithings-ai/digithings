@@ -17,6 +17,7 @@ import {
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { resolveEmbedTenants } from "./tenants-kv";
 import { isOccShellPath, occGate } from "./occ-gate";
+import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
 import { fetchContainerWithRetry } from "./container-retry";
 
@@ -228,6 +229,11 @@ export default {
     // The container slot is shared, and a rollout can leave the previous
     // instance draining while this one starts. A busy slot comes back as a
     // retryable 503 instead of a hard failure (DIG-4487).
-    return fetchContainerWithRetry(request, (req) => container.fetch(req));
+    // A failed page/frame load is always served as inline HTML (never a
+    // download on phones); API callers keep the original answer.
+    return frameSafeErrorResponse(
+      request,
+      await fetchContainerWithRetry(request, (req) => container.fetch(req)),
+    );
   },
 };

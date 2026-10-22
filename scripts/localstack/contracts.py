@@ -765,6 +765,9 @@ def _assert_loopback_url(url: str, name: str) -> None:
     Only ``127.0.0.1`` is accepted. A hostname is a promise another machine
     can break; the loopback address is not.
 
+    Userinfo is refused too (``user@127.0.0.1``): no probe needs it, and it is
+    the shape of the ``8000@evil.com`` confusion.
+
     The scheme and the port are checked too, because the gate opens what the
     URL says: ``ftp://127.0.0.1/x`` is on the loopback and still is not a
     probe, and a port that is not a number in 1-65535 is not a port. A URL
@@ -777,11 +780,19 @@ def _assert_loopback_url(url: str, name: str) -> None:
         split = urllib.parse.urlsplit(url)
         host = split.hostname
         scheme = split.scheme
+        userinfo = split.username is not None or split.password is not None
     except ValueError:  # a URL that does not parse
         host = scheme = None
+        userinfo = True
     if host != LOOPBACK_HOST:
         raise ContractRefusal(
             f"{name} resolved to {url!r}: the probe must stay on {LOOPBACK_HOST}"
+        )
+    if userinfo:
+        # ``user@127.0.0.1`` is still the loopback, but userinfo in a probe URL
+        # is the shape of the ``8000@evil.com`` confusion, and no probe needs it.
+        raise ContractRefusal(
+            f"{name} resolved to {url!r}: the probe URL must not carry userinfo"
         )
     if scheme not in ("http", "https"):
         raise ContractRefusal(
@@ -806,19 +817,27 @@ def _assert_loopback_port(url: str, name: str, port: int) -> None:
     template (a second host, another expansion, a different default) cannot
     quietly move the probe off the machine. It also catches the shape the
     digit check cannot see on its own: a URL that parses into a host other
-    than 127.0.0.1, or into a port other than the validated one.
+    than 127.0.0.1, into a port other than the validated one, or that carries
+    userinfo.
+
+    A template whose references are all outside the port slot has no port
+    to compare; :func:`resolve` holds every expanded URL to the loopback host
+    (and refuses userinfo) through :func:`_assert_loopback_url` regardless.
+
+    A URL that does not parse at all is refused as well (:class:`InvalidPort`,
+    never a bare ``ValueError``), so every caller sees one exception type.
     """
-    split = None
     try:
         split = urllib.parse.urlsplit(url)
         host = split.hostname
         resolved_port = split.port
-    except ValueError:  # a URL that does not parse, or a netloc with no numeric port
-        host, resolved_port = None, None
-    if host != LOOPBACK_HOST or resolved_port != port:
+        userinfo = split.username is not None or split.password is not None
+    except ValueError:  # a URL or netloc that does not parse
+        host, resolved_port, userinfo = None, None, True
+    if host != LOOPBACK_HOST or userinfo or resolved_port != port:
+        target = f"http://{LOOPBACK_HOST}:{port}"
         raise InvalidPort(
-            f"{name} resolved to {url!r}: the probe must stay on "
-            f"http://{LOOPBACK_HOST}:{port}"
+            f"{name} resolved to {url!r}: the probe must stay on {target}"
         )
 
 
@@ -885,6 +904,12 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
     canonical port, never a padded one; a caller that hands a padded value
     straight to :func:`resolve` is refused, which is fail-closed.
 
+    A reference inside the authority that is not the port slot (the host, or
+    userinfo) is refused outright: only the port of a probe URL may be
+    templated. Every expanded URL is then held to ``127.0.0.1`` with no
+    userinfo by :func:`resolve` (:func:`_assert_loopback_url`), whether or not
+    one of the references was the port.
+
     The URL that comes out is then parsed and refused unless it is still the
     loopback probe on the validated port (:func:`_assert_loopback_port`), so
     the guarantee holds on the URL the probe actually opens and not only on
@@ -894,10 +919,20 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
         return url
 
     ports: dict[str, int] = {}
+    auth_start, auth_end = _authority_span(url)
 
     def sub(match: re.Match[str]) -> str:
         name, default = match.group(1), match.group(2)
         raw = config.get(name) or default or ""
+        in_authority = auth_start <= match.start() < auth_end
+        if in_authority and not _fills_the_port_slot(url, match.start()):
+            # Only the port of a probe URL may be templated. A reference in
+            # the host or userinfo is the shape that moves a probe off the
+            # machine, so the template is refused before any value lands.
+            raise InvalidPort(
+                f"{name} is templated outside the port slot of {url!r}: "
+                "only the port of a probe URL may be templated"
+            )
         if _fills_the_port_slot(url, match.start()):
             # The value has to be a port before it is templated: a value that
             # is not a port is the one thing that can move the URL off this

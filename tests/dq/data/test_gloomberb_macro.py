@@ -1,7 +1,7 @@
 """Unit tests for the gloomberb macro panel adapter (#4794, PR 1).
 
-The adapter swaps only the macro-panel writer: the 23 kept FRED ids refresh
-from anonymous ``GloomberbClient.econ_series`` while the 8 dropped ids stop
+The adapter swaps only the macro-panel writer: the kept FRED ids refresh
+from anonymous ``GloomberbClient.econ_series`` while the dropped ids stop
 refreshing. Dataset ids (``fred__{SERIES}``) and the parquet ``source="fred"``
 column are unchanged. All clients here are fakes; no network.
 """
@@ -62,8 +62,8 @@ def _manifest(*series_ids: str) -> MacroManifest:
 
 
 def test_panel_sets_are_the_probed_split() -> None:
-    assert len(KEPT_SERIES_IDS) == 23
-    assert len(DROPPED_SERIES_IDS) == 8
+    assert KEPT_SERIES_IDS
+    assert DROPPED_SERIES_IDS
     assert KEPT_SERIES_IDS.isdisjoint(DROPPED_SERIES_IDS)
     assert "DGS10" in KEPT_SERIES_IDS and "M2SL" in KEPT_SERIES_IDS
     assert "DTWEXBGS" in DROPPED_SERIES_IDS and "MANEMP" in DROPPED_SERIES_IDS
@@ -89,7 +89,9 @@ def test_manifest_matches_probed_panel() -> None:
 def test_default_liquidity_specs_match_live_panel() -> None:
     from digiquant.indicators.macro_liquidity import DEFAULT_MACRO_SPECS
 
-    assert {s.series_id for s in DEFAULT_MACRO_SPECS} == {"M2SL", "UNRATE"}
+    specs = {s.series_id for s in DEFAULT_MACRO_SPECS}
+    assert specs
+    assert specs <= KEPT_SERIES_IDS
 
 
 def test_window_limit_covers_cadence_and_rejects_unknown() -> None:

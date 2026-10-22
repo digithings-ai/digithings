@@ -185,6 +185,44 @@ PROVENANCE_READ_TIMEOUT_SHADOW = 2.0
 #: hangs is a tick that hangs, and the queue reads one commit per pull request.
 PROVENANCE_STATUS_TIMEOUT = 10.0
 
+#: How many times one URL is read before the read is called a failed read. A
+#: dropped connection says nothing about the build behind the URL, so the read
+#: is tried again: one dropped connection used to refuse a pull request on a
+#: transport fact that had nothing to do with the build. The read is a GET, so
+#: the question is the same every time, and a question that was not answered
+#: is not an answer.
+PROVENANCE_READ_ATTEMPTS = 3
+
+#: The pause before the next attempt, in seconds. The pause is short because
+#: the queue has a tick to finish, and it is there so the second attempt does
+#: not arrive while the first one is still being answered.
+PROVENANCE_RETRY_BACKOFF = 0.5
+
+#: The whole cost of one URL, attempts and pauses together. The pause before
+#: an attempt and the attempt itself both happen inside it, so one path costs
+#: the budget once and not once per attempt. It is a deadline and not only a
+#: sum of timeouts: the body is read in chunks and the read gives up when the
+#: deadline has passed, so a server that answers the headers and then trickles
+#: the body cannot hold the read open past the budget. It is the budget of ONE
+#: URL read, not of the tick.
+PROVENANCE_READ_BUDGET = 20.0
+
+#: How long a host that could not be read is remembered, in seconds. The queue
+#: asks the same host about every pull request of the tick, so a host that
+#: could not be read is asked once more - briefly - and the rest of the tick
+#: is answered from the memory instead of waiting for a host that is not
+#: answering. The memory does not outlive its minute: after it the host is
+#: read again with the whole budget.
+PROVENANCE_HOST_COOLDOWN = 60.0
+
+#: How long the host is asked again after it did not answer, in seconds. The
+#: ask is one attempt and not three, and it is brief: the host either answers
+#: or it does not, and a host that was asleep for a moment answers at once.
+#: The queue asks the host once per pull request, so this is the cost of a
+#: dead host per pull request, and it has to stay small: the tick has an
+#: interval to keep.
+PROVENANCE_REPROBE_TIMEOUT = 2.0
+
 #: The provenance log grows by one line per pull request per tick, so it is
 #: capped: the oldest file is dropped when the log passes this size.
 PROVENANCE_LOG_MAX_BYTES = 1_000_000
@@ -210,6 +248,11 @@ PROVENANCE_INDEX_MAX_AGE_DAYS = 14
 #: request.
 _TOKEN_CACHE: dict[tuple[str, str], str] = {}
 _READ_CACHE: dict[str, tuple[int, Any]] = {}
+#: The hosts that could not be read, with the answer they gave and the moment
+#: they gave it. The key is the scheme and the host, because two services on
+#: one machine are two hosts and one of them can answer while the other does
+#: not.
+_HOST_FAILURE: dict[str, tuple[float, tuple[int, Any]]] = {}
 #: The allowed hosts, read once per queue run from the deployment's own files.
 _HOST_CACHE: dict[tuple[Any, ...], tuple[tuple[str, ...], str]] = {}
 #: The log index, by the path it is written to.
@@ -1105,7 +1148,7 @@ _WOODPECKER_OPENER = urllib.request.build_opener(_NoRedirect)
 def _woodpecker_read(
     url: str, token: str, timeout: float = PROVENANCE_READ_TIMEOUT
 ) -> tuple[int, Any]:
-    """One read-only GET against the Woodpecker API.
+    """One read-only GET against the Woodpecker API, read again if it is dropped.
 
     Returns the HTTP status and the decoded body. A transport failure is
     reported as status 0, because "the API could not be read" and "the build is
@@ -1114,38 +1157,161 @@ def _woodpecker_read(
     Nothing a posted status can put in the URL may kill the tick: the read
     catches everything, because a queue that dies on a crafted `target_url`
     stops merging for everybody.
+
+    Three things are true of a read that could not be made, and each of them
+    used to be false:
+
+    - A dropped connection is not an answer about the build, so the read is
+      tried again before it is believed.
+    - A host that could not be read is remembered for a short while, so the
+      queue does not ask a dead host three times per pull request of the tick.
+      One dropped connection used to refuse every pull request of the tick,
+      for a reason that had nothing to do with them.
+    - A failed read is not cached as the answer for that URL, so the URL is
+      read again once the memory of the failure has passed. The memory is of
+      that host and not of the queue: it keeps that host unasked for a minute,
+      and after that the host is asked again.
+
+    An answer the API gave - any status code, and a refused redirect - is
+    cached for the tick: the API answered, and its answer is the same until
+    the next tick.
     """
     cached = _READ_CACHE.get(url)
     if cached is not None:
         return cached
+    host = _read_host(url)
+    remembered = _HOST_FAILURE.get(host)
+    if remembered is not None:
+        failed_at, answer = remembered
+        if time.monotonic() - failed_at < PROVENANCE_HOST_COOLDOWN:
+            # The host did not answer a moment ago. It is asked once more, and
+            # briefly: a host that was asleep for a moment answers, and the
+            # tick carries on with the build instead of with the memory of a
+            # failure that is no longer true. One ask and not three, so a host
+            # that is down costs the tick one short read per pull request.
+            status, payload, dropped = _woodpecker_read_once(
+                url, token, PROVENANCE_REPROBE_TIMEOUT
+            )
+            if not dropped:
+                _HOST_FAILURE.pop(host, None)
+                _READ_CACHE[url] = (status, payload)
+                return (status, payload)
+            return (
+                0,
+                f"{answer[1]} (the host was asked once more and did not answer)",
+            )
+        # The memory of the failure has run out: the host is read again with
+        # the whole budget.
+        _HOST_FAILURE.pop(host, None)
+    status, payload, dropped = _woodpecker_read_attempts(url, token, timeout)
+    if dropped:
+        _HOST_FAILURE[host] = (time.monotonic(), (status, payload))
+    else:
+        _READ_CACHE[url] = (status, payload)
+    return (status, payload)
+
+
+def _read_host(url: str) -> str:
+    """The scheme and the host of a URL, which is what a read of it shares.
+
+    Two URLs on one host are one host for the queue: a host that could not be
+    read could not be read for either of them. The key is normalised the way
+    the allow-list is - the host in lower case, with its port - so that two
+    spellings of one address do not each pay their own retry storm.
+    """
+    parts = urllib.parse.urlsplit(url)
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    host = (parts.hostname or "").lower()
+    if port:
+        return f"{parts.scheme}://{host}:{port}"
+    return f"{parts.scheme}://{host}"
+
+
+def _woodpecker_read_attempts(
+    url: str, token: str, timeout: float
+) -> tuple[int, Any, bool]:
+    """The read, tried again while the API cannot be reached.
+
+    The third value says whether the API could not be reached at all, which is
+    the only failure worth trying again: a server that answered 404 answered,
+    and its answer is the same until the next tick.
+
+    The budget bounds the attempts of one read, so one path costs the budget
+    once and not once per attempt. It is a deadline and not a sum of timeouts:
+    the deadline is handed to the attempt, so a server that answers the
+    headers and then trickles the body cannot hold the read open past it.
+    """
+    deadline = time.monotonic() + PROVENANCE_READ_BUDGET
+    reason = ""
+    attempts = 0
+    for attempt in range(1, PROVENANCE_READ_ATTEMPTS + 1):
+        if attempt > 1:
+            time.sleep(
+                min(PROVENANCE_RETRY_BACKOFF, max(0.0, deadline - time.monotonic()))
+            )
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        attempts = attempt
+        status, payload, dropped = _woodpecker_read_once(
+            url, token, min(timeout, remaining), deadline
+        )
+        if not dropped:
+            return (status, payload, False)
+        reason = f"{payload} (tried {attempt} times)"
+    return (0, reason, True) if attempts else (0, "the read was not attempted", True)
+
+
+def _woodpecker_read_once(
+    url: str, token: str, timeout: float, deadline: float | None = None
+) -> tuple[int, Any, bool]:
+    """One attempt at the read.
+
+    The third value says whether the API could not be reached, so that the
+    caller can tell a dropped connection from an answer the API gave.
+
+    The body is read in chunks and the deadline is checked between them. The
+    timeout of a socket is the timeout of one operation on it, so a server
+    that answers the headers and then trickles the body would hold the read
+    open for as long as it liked.
+    """
     request = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
     )
     try:
         with _WOODPECKER_OPENER.open(request, timeout=timeout) as response:
-            body = response.read().decode("utf-8", "replace")
+            chunks: list[bytes] = []
+            while True:
+                if deadline is not None and time.monotonic() > deadline:
+                    raise TimeoutError("the read exceeded its budget")
+                chunk = response.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            body = b"".join(chunks).decode("utf-8", "replace")
             status = int(response.status)
             final_url = response.geturl()
     except urllib.error.HTTPError as exc:
         code = int(exc.code)
         if code in (301, 302, 303, 307, 308):
             # The redirect was refused: the answer of another host is not the
-            # answer of ours, and the token would have gone with it.
-            result = (0, "the request was redirected")
-        else:
-            result = (code, None)
+            # answer of ours, and the token would have gone with it. The answer
+            # is the same every time, so the read is not tried again.
+            return (0, "the request was redirected", False)
+        return (code, None, False)
     except Exception as exc:  # a status must never kill a tick
-        result = (0, f"{type(exc).__name__}: {exc}")
-    else:
-        if final_url != url:
-            result = (0, "the request was redirected")
-        else:
-            try:
-                result = (status, json.loads(body or "null"))
-            except json.JSONDecodeError:
-                result = (status, None)
-    _READ_CACHE[url] = result
-    return result
+        # The API could not be reached. This is the one failure that says
+        # nothing about the build, so it is the one failure worth trying again.
+        return (0, f"{type(exc).__name__}: {exc}", True)
+    if final_url != url:
+        return (0, "the request was redirected", False)
+    try:
+        return (status, json.loads(body or "null"), False)
+    except json.JSONDecodeError:
+        return (status, None, False)
 
 
 def _build_steps(pipeline: Mapping[str, Any]) -> dict[str, frozenset[str]]:
@@ -2091,10 +2257,13 @@ def _gate_checks(pr: dict[str, Any], policy: Policy, repo: str | None = None) ->
 # requested — one finding blocks approval" at 22:07:11Z and merged at 22:13:57Z on
 # an attestation, because the queue only ever fetched `reviews`.
 #
-# Only the marker's `key=value` fields are read. The prose is not a contract: a
-# matcher on `## Verdict: changes requested (narrow)` would have to survive a
-# reviewer reformatting a heading, and a heading someone forgets to update is
-# indistinguishable from a verdict someone forgot to post.
+# Only the marker's `key=value` fields are read, and one line of prose beside it:
+# `Review verdict: changes requested`. The prose is not a contract *about the
+# findings* — a matcher on `## Verdict: changes requested (narrow)` would have to
+# survive a reviewer reformatting a heading, and a heading someone forgets to
+# update is indistinguishable from a verdict someone forgot to post. The review
+# rule's own token is different: it is how a reviewer says which way the review
+# went, and a queue that cannot read it cannot see the verdict at all (DIG-4878).
 
 _MARKER_RE = re.compile(r"<!--\s*opencode-power-pack:code-review\b(?P<fields>[^>]*?)\s*-->")
 _MARKER_FIELD_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)=(?P<value>\S+)")
@@ -2104,21 +2273,21 @@ _SCOPE_SHA_RE = re.compile(r"@(?P<sha>[0-9a-f]{7,40})\b")
 # discipline named the two verdicts "approve" and "changes needed"; a reviewer
 # writing that spelling must not slip past the gate.
 BLOCKING_VERDICTS = frozenset({"changes_requested", "changes_needed"})
-READABLE_VERDICTS = BLOCKING_VERDICTS | {"approved", "approve"}
+APPROVE_VERDICTS = frozenset({"approved", "approve"})
+READABLE_VERDICTS = BLOCKING_VERDICTS | APPROVE_VERDICTS
 
 
 def _normalise_verdict(value: str) -> str:
     return value.strip().strip("'\";").lower().replace("-", "_")
 
 
-def _posted_verdict(comment: dict[str, Any]) -> tuple[str, str] | None:
-    """`(verdict, scope_sha)` from a review marker comment, or None.
+def _marker_verdict(body: str) -> tuple[str, str] | None:
+    """`(verdict, scope_sha)` from a review marker in `body`, or None.
 
-    None means "this comment is not a verdict the queue can read" — which covers
-    both a plain comment and a marker whose `verdict=` is missing or misspelled.
-    That is a missing signal, not a clearance, and it must not be treated as one.
+    None means "this comment carries no marker verdict the queue can read" — a
+    plain comment, or a marker whose `verdict=` is missing or misspelled. That
+    is a missing signal, not a clearance, and it must not be treated as one.
     """
-    body = str(comment.get("body") or "")
     for marker in _MARKER_RE.finditer(body):
         fields = {
             m.group("key").lower(): m.group("value")
@@ -2132,81 +2301,329 @@ def _posted_verdict(comment: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
-def _on_pr_history(pr: dict[str, Any], sha: str) -> bool:
-    """Whether `sha` is the PR head, or a commit behind it.
+# The review rule's own format is a line carrying the token `Review verdict:`.
+# The queue reads it as well as the marker: a reviewer who posts the line and no
+# marker has still delivered a verdict, and reading only the marker leaves that
+# verdict invisible — which is how a "changes requested" written in prose came
+# to be read as no verdict at all (DIG-4878).
+#
+# The value list is explicit and longest-first. A loose `(?P<verdict>[\w -]+?)`
+# reads one character and stops, which turns "changes requested" into "c" —
+# unreadable, and the block goes with it. "no review owed" and "NO REVIEW —
+# non-answer" are not on the list on purpose: they are the review rule's
+# non-answers, and a non-answer is not a verdict.
+_PROSE_VERDICT_RE = re.compile(
+    r"review\s+verdict\s*:\s*[*_`\s]*"
+    r"(?P<verdict>changes\s+requested|changes\s+needed|changes_requested|changes_needed"
+    r"|approved|approve)\b",
+    re.IGNORECASE,
+)
 
-    Every commit GitHub lists for a PR is an ancestor of its head, so the commit
-    list is the ancestry proof the gate needs — without a repository or a network
-    round trip, which is what keeps `evaluate` a pure function the tests can pin.
+# A sha written in prose, read as a prefix of the head at 7 characters or more —
+# the same width the reviewer-independence gate reads. The token has to stand
+# alone: a hex run inside a word is a word, not a commit, and a hex run joined
+# to another by a dash is a uuid group, not a commit.
+_PROSE_SHA_RE = re.compile(r"(?<![0-9a-zA-Z-])(?P<sha>[0-9a-f]{7,40})(?![0-9a-zA-Z-])")
+
+# The markers are read from the raw comment; the prose is what is left. A hex run
+# inside a marker is not prose: `agent=54a431af-501a-47d9-...` is a seat uuid,
+# and reading its first group as a commit would name a head nobody reviewed.
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+# The seat a verdict belongs to. Every seat on this org pushes under one GitHub
+# login, so `author.login` cannot tell two reviewers apart — the seat id is the
+# provenance marker's `agent=` field, and it is the only place it is written.
+# A verdict whose seat cannot be read is judged by the newest-verdict rule
+# instead of by seat (see `_standing_seat_blocks`).
+_SEAT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$")
+
+
+def _comment_text(body: str) -> str:
+    """The comment body with its HTML comments taken out."""
+    return _HTML_COMMENT_RE.sub(" ", body)
+
+
+def _line_at(body: str, index: int) -> str:
+    """The line of `body` that contains `index`."""
+    start = body.rfind("\n", 0, index) + 1
+    end = body.find("\n", index)
+    return body[start:] if end == -1 else body[start:end]
+
+
+def _prose_verdict(body: str) -> tuple[str, str] | None:
+    """`(verdict, the line it was read from)` from a `Review verdict:` line."""
+    match = _PROSE_VERDICT_RE.search(body)
+    if match is None:
+        return None
+    return match.group("verdict").lower().replace(" ", "_"), _line_at(body, match.start())
+
+
+@dataclass(frozen=True)
+class PostedVerdict:
+    """The verdict the queue reads on a PR, and the head it names."""
+
+    verdict: str
+    source: str
+    scope: str
+    bindings: tuple[str, ...]
+    comment_id: str
+    author: str
+    at: str
+    # The seat that posted it, read from the provenance marker. Empty when the
+    # comment carries no readable seat: every seat shares one GitHub login, so
+    # there is nothing else to tell them apart by.
+    seat: str = ""
+
+
+def _comment_seat(provenance: Mapping[str, str]) -> str:
+    """The seat that posted this comment, or "" when it cannot be read."""
+    agent = str(provenance.get("agent") or "").strip()
+    return agent if agent and _SEAT_ID_RE.match(agent) else ""
+
+
+def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
+    """The verdict one comment carries, with the head it names, or None.
+
+    The marker wins inside a comment: it is the contract, and the prose around
+    it is what a reviewer reads. The prose line is read when the comment carries
+    no marker verdict at all — a marker whose `verdict=` is missing or
+    misspelled is skipped, and the line beside it still says what the reviewer
+    decided.
     """
-    if not sha:
+    body = str(comment.get("body") or "")
+    text = _comment_text(body)
+    marker = _marker_verdict(body)
+    prose = _prose_verdict(text)
+    if marker is None and prose is None:
+        return None
+    if marker is not None:
+        verdict, scope = marker
+        source = "a `verdict=` marker"
+        # The marker's `scope=` is the head the verdict is about. The prose around
+        # it may name any number of commits, so it is not read as a binding.
+        claims = [scope] if scope else []
+    else:
+        verdict, _line = prose
+        source = "a `Review verdict:` line"
+        scope = ""
+        # A prose verdict names the head it covers somewhere in the comment — on
+        # the verdict line, in the sentence after it, or in the scope line the
+        # review opens with. The question this gate asks is "does this comment
+        # name the head the PR stands at", so every sha in it is a candidate.
+        claims = [found.group("sha") for found in _PROSE_SHA_RE.finditer(text)]
+    provenance = _provenance_fields(body)
+    provenance_head = str(provenance.get("head") or "")
+    if provenance_head and not scope:
+        # A marker verdict names the head it is about through its own `scope=`.
+        # The provenance marker's `head=` is the fallback for a marker that names
+        # no scope, and never a second binding for one that does: an approve
+        # whose `scope=` names a stale head says nothing about the head the PR
+        # stands at, and must not clear a block just because the provenance
+        # marker names the newer head. The prose path has no `scope=`, so it
+        # keeps every sha in the comment as a candidate, the provenance head
+        # included.
+        claims.append(provenance_head)
+    bindings: list[str] = []
+    for binding in claims:
+        if binding and binding not in bindings:
+            bindings.append(binding)
+    author = comment.get("author")
+    login = "?"
+    if isinstance(author, Mapping):
+        login = str(author.get("login") or "?")
+    return PostedVerdict(
+        verdict=verdict,
+        source=source,
+        scope=scope,
+        bindings=tuple(bindings),
+        comment_id=str(comment.get("id") or ""),
+        author=login,
+        at=str(comment.get("createdAt") or ""),
+        seat=_comment_seat(provenance),
+    )
+
+
+def _readable_verdicts(pr: dict[str, Any]) -> list[PostedVerdict]:
+    """Every verdict the queue can read on this PR, oldest first.
+
+    A verdict the queue cannot read is skipped rather than counted: a typo'd
+    marker, a comment with no verdict, or a reviewer's non-answer is a missing
+    signal, not a clearance, and letting it displace a real block would hand
+    anyone who can comment a way to unlock the queue.
+    """
+    verdicts: list[PostedVerdict] = []
+    for comment in pr.get("comments") or []:
+        if not isinstance(comment, Mapping):
+            continue
+        parsed = _comment_verdict(comment)
+        if parsed is None:
+            continue
+        verdicts.append(parsed)
+    verdicts.sort(key=lambda verdict: verdict.at)
+    return verdicts
+
+
+def _covers_head(verdict: PostedVerdict, head: str) -> bool:
+    """True when the verdict names the head the PR stands at.
+
+    A binding of 7 characters or more that prefixes the head binds it — the
+    same width the reviewer-independence gate reads.
+    """
+    if not head:
         return False
-    head = str(pr.get("headRefOid") or "")
-    if head and sha == head:
-        return True
-    return sha in {str(c.get("oid") or "") for c in (pr.get("commits") or [])}
+    return any(
+        len(binding) >= 7 and head.lower().startswith(binding.lower())
+        for binding in verdict.bindings
+    )
 
 
-def _latest_readable_verdict(pr: dict[str, Any]) -> tuple[dict[str, Any], str, str] | None:
-    """The newest comment carrying a verdict the queue can read, with its scope.
+def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
+    """The blocks the seats who posted them have not cleared, oldest first.
+
+    A blocking verdict belongs to the seat that posted it: that seat's own
+    later approve naming the head the PR stands at clears it, and nothing else
+    does. An approve by the same seat that names another head clears nothing —
+    it says nothing about this head. Another seat's approve clears nothing
+    either: `#6170` (DIG-4911) merged into `develop` on 2026-10-21 with the
+    security desk's `changes requested` on the branch, because the code
+    reviewer's later approve on the head was the newest readable verdict.
+
+    A verdict whose seat cannot be read is not judged here: the seat is
+    unknown, so the newest-verdict rule (`_latest_posted_verdict`) judges it.
+    That is a known limitation, not a choice — 33 of the 40 readable verdicts
+    on the open PRs carried no seat marker when this rule was measured.
+    """
+    by_seat: dict[str, list[PostedVerdict]] = {}
+    for verdict in _readable_verdicts(pr):
+        if verdict.seat:
+            by_seat.setdefault(verdict.seat, []).append(verdict)
+    standing: list[PostedVerdict] = []
+    for verdicts in by_seat.values():
+        newest = verdicts[-1]
+        if newest.verdict in BLOCKING_VERDICTS:
+            standing.append(newest)
+            continue
+        if newest.verdict in APPROVE_VERDICTS and _covers_head(newest, head):
+            # This seat approved the head the PR stands at: its block is cleared.
+            continue
+        # The seat's newest verdict does not clear this head. A block it posted
+        # earlier therefore still stands.
+        for verdict in reversed(verdicts[:-1]):
+            if verdict.verdict in BLOCKING_VERDICTS:
+                standing.append(verdict)
+                break
+    standing.sort(key=lambda verdict: verdict.at)
+    return standing
+
+
+def _latest_posted_verdict(pr: dict[str, Any]) -> PostedVerdict | None:
+    """The newest comment carrying a verdict the queue can read.
 
     Newest wins, so a reviewer who blocked and then came back and approved clears
     their own block. Comments the queue cannot read are skipped rather than
     counted as the newest: letting a typo'd marker displace a real block would
     hand anyone who can comment a way to unlock the queue.
     """
-    best: tuple[dict[str, Any], str, str] | None = None
-    best_at = ""
-    for comment in pr.get("comments") or []:
-        if not isinstance(comment, Mapping):
-            continue
-        parsed = _posted_verdict(comment)
-        if parsed is None:
-            continue
-        verdict, scope_sha = parsed
-        posted_at = str(comment.get("createdAt") or "")
-        if best is None or posted_at >= best_at:
-            best, best_at = (comment, verdict, scope_sha), posted_at
-    return best
+    verdicts = _readable_verdicts(pr)
+    return verdicts[-1] if verdicts else None
 
 
-def _posted_verdict_reason(pr: dict[str, Any]) -> list[str]:
-    """A refusal when the newest readable posted verdict blocks this PR.
+def _sha_text(sha: str) -> str:
+    """A sha as the queue names it in a refusal."""
+    return f"`{sha[:12]}`" if sha else "no commit"
 
-    A block stands while the commit it names is still on the branch, which is what
-    `_on_pr_history` answers from `pr["commits"]`. When the row carries no commit
-    list that question cannot be answered at all, and answering "gone" would retire a
-    live block — the second leg of the `#5903` hole, where a verdict scoped to a
-    commit that was still on the branch was cleared by a row that never said which
-    commits the branch had. Unverifiable blocks; only a branch that is *known* not to
-    carry the commit spends the verdict.
+
+def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
+    """A refusal when the newest readable verdict does not clear this PR.
+
+    DIG-4878. A blocking verdict used to be spent the moment the commit it named
+    left the branch: the gate asked `pr["commits"]` whether that commit was still
+    there, and a new commit, a rebase or a merge from develop rewrites that list.
+    The block was retired, the coverage gate then carried the merge on
+    `reviewed:agent`, and a PR whose latest verdict was "changes requested" landed
+    with no approve on the head it merged. Six digithings PRs did it between
+    2026-10-20 and 2026-10-21 (#6115, #6074, #6071, #6019, #5968, #5761).
+
+    The rule reads the verdict now, not the branch, and it is one rule with two
+    clauses, in this order. It is written down once, in
+    `docs/MERGE_QUEUE.md` ("The verdict rule"), so no two seats read it
+    differently:
+
+    1. **A seat's own block stands until that seat clears it.** A blocking
+       verdict belongs to the seat that posted it. That seat's later approve
+       naming the head the PR stands at clears it; an approve naming another
+       head does not, and no other seat's approve does either. `#6170`
+       (DIG-4911) merged into `develop` on 2026-10-21 with the security desk's
+       `changes requested` still on the branch, because the code reviewer's
+       later approve on the head was the newest readable verdict — a second
+       sign-off was never asked for, so the queue never held the PR for it.
+    2. **Everything else is judged by the newest readable verdict.** The newest
+       readable verdict is the one that counts, whatever it is scoped to — a
+       blocking verdict blocks, and only a later approve clears it; an approve
+       clears only when it names the head the PR stands at; a verdict the queue
+       cannot read is skipped, not read as a clearance.
+
+    Clause 1 needs the seat, and the seat is written only in the provenance
+    marker (`agent=`): every seat pushes under one GitHub login, so a comment's
+    author cannot say who wrote it. A verdict whose seat cannot be read is
+    judged by clause 2 — the newest-verdict rule — because there is no seat to
+    hold it to. That is a known limitation of what the marker carries, not a
+    second policy.
+
+    This is the value gate. Whether a review happened at all, and whether it came
+    from another seat, is the coverage gate's question (`_review_coverage`), and
+    the two stay apart on purpose (DIG-4795).
     """
-    latest = _latest_readable_verdict(pr)
+    head = str(pr.get("headRefOid") or "")
+    standing = _standing_seat_blocks(pr, head)
+    if standing:
+        return [_standing_seat_reason(pr, standing[-1], head)]
+    latest = _latest_posted_verdict(pr)
     if latest is None:
+        # No verdict the queue can read is not a verdict. The coverage gate
+        # decides this PR, on its own evidence.
         return []
-    comment, verdict, scope_sha = latest
-    if verdict not in BLOCKING_VERDICTS:
+    head_text = f"`{head[:12]}`" if head else "an unknown head"
+    where = f"comment {latest.comment_id}" if latest.comment_id else "a comment"
+    if latest.verdict in BLOCKING_VERDICTS:
+        if latest.scope:
+            scope_text = f", scoped to `{latest.scope[:12]}`"
+        elif latest.bindings:
+            scope_text = f", naming `{latest.bindings[0][:12]}`"
+        else:
+            scope_text = ""
+        return [
+            f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
+            f"({latest.source}, posted by {latest.author} in {where}){scope_text}; "
+            f"the PR now stands at {head_text}, and a blocking "
+            f"verdict stands until a later approve names the head it covers"
+        ]
+    if _covers_head(latest, head):
         return []
-    on_history = _on_pr_history(pr, scope_sha)
-    if not on_history and pr.get("commits") is not None:
-        return []
-    login = str((comment.get("author") or {}).get("login") or "?")
-    where = (
-        f"comment {comment.get('id') or '?'}" if comment.get("id") else f"a comment from {login}"
-    )
-    scope = scope_sha[:12] if scope_sha else "an unstated commit"
-    still = (
-        "and that commit is still on this branch"
-        if on_history
-        else (
-            "and this row carries no commit list, so that commit could not be "
-            "checked against the branch"
-        )
-    )
     return [
-        f"a code-review verdict of '{verdict}' was posted on this PR by {login} "
-        f"({where}) against {scope}, {still}; a new review must clear it"
+        f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
+        f"({latest.source}, posted by {latest.author} in {where}) but it names "
+        f"{_sha_text(latest.bindings[0] if latest.bindings else '')}, and the PR now "
+        f"stands at {head_text}; an approve counts only when it names the head it covers"
     ]
+
+
+def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -> str:
+    """The refusal for a block the seat that posted it has not cleared."""
+    head_text = f"`{head[:12]}`" if head else "an unknown head"
+    where = f"comment {block.comment_id}" if block.comment_id else "a comment"
+    if block.scope:
+        scope_text = f", scoped to `{block.scope[:12]}`"
+    elif block.bindings:
+        scope_text = f", naming `{block.bindings[0][:12]}`"
+    else:
+        scope_text = ""
+    return (
+        f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+        f"({block.source}, in {where}){scope_text}, and the PR now stands at "
+        f"{head_text}; a blocking verdict stands until that seat posts a later "
+        f"approve naming the head it covers"
+    )
 
 
 def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2241,7 +2658,7 @@ def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
 def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
     """Give the row its comments, or say why it cannot. Returns a refusal, or None.
 
-    `_posted_verdict_reason` reads `pr["comments"]`, and a PR can carry a
+    `_verdict_value_reason` reads `pr["comments"]`, and a PR can carry a
     `changes_requested` verdict with **no label at all** — so this is not the
     `reviewed:agent` lazy fetch's client, and it runs before both review gates rather
     than inside the coverage one.
@@ -2249,13 +2666,13 @@ def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
     `#5903` merged on 2026-10-19T08:23:06Z with four review passes on it and the
     newest a `changes_requested` verdict. The gate was not wrong: run against the
     real payload it refuses. The *row* was wrong — the host tick fetched it with a
-    field list that left `comments` out, so `_posted_verdict_reason` read nothing,
+    field list that left `comments` out, so `_verdict_value_reason` read nothing,
     `_gate_review` stayed silent, and `_gate_review_coverage` authorised the merge on
     a label. The queue's own audit comment says which gate carried it:
     `review: review evidence via the coverage gate (_gate_review_coverage)`.
 
     An absent comment list is a missing signal, not a clearance — the sentence
-    `_posted_verdict` already applies to a marker it cannot parse. So the row is
+    `_marker_verdict` already applies to a marker it cannot parse. So the row is
     completed here when it can be, and refused when it cannot: with no repo there is
     nothing to read, and a failed read is not an empty one.
     """
@@ -2314,13 +2731,17 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
     The review that counts is the board's own review pass, read by
     `_gate_review_coverage`, with its comments addressed (`_gate_review_threads`)
     — Chris's 2026-10-15 definition. A human approval still counts there.
+
+    `_verdict_value_reason` is the value gate, and it runs here, before the
+    coverage gate: a PR whose newest verdict blocks must not be carried to a
+    merge by a `reviewed:agent` label (DIG-4878).
     """
     reasons: list[str] = []
     if str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
         reasons.append("review has outstanding change requests")
     # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
     # requested". A posted blocking verdict stays a block until a newer one clears it.
-    reasons.extend(_posted_verdict_reason(pr))
+    reasons.extend(_verdict_value_reason(pr))
     return reasons
 
 

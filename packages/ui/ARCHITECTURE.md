@@ -637,6 +637,51 @@ satisfy it and a duplicated block cannot carry a stale value. Full rule and
 the pinned test:
 [MIGRATION.md § Overlay scrollbar pointer contract](MIGRATION.md).
 
+## Scrollbar mode carrier (DIG-4603)
+
+The scrollbar preference has two states, `always` and `auto`, and it is
+written in exactly one place in the repo: `data-scrollbars` on the thread
+root (`packages/ui/src/components/chat/gallery-thread/thread.aui.tsx`), next
+to `data-thread-skin` on the same `ThreadPrimitive.Root`. The thread root is
+therefore the **only carrier** of the mode, and every mode-dependent rule in
+the sheet has to be keyed on it **in the same compound as the skin** and name
+the mode value:
+`[data-thread-skin="digichat"][data-scrollbars="always"]`.
+
+The rule exists because the two modes need opposite treatments of the
+native bar. `always` is a square bar in a stable gutter (the native bar is
+suppressed, `scrollbar-width: none` and the webkit pseudo set to
+`display: none`, and a styled `::-webkit-scrollbar` replaces it). `auto` is
+the native overlay (no reserved gutter, no bar when the surface fits), and a
+styled webkit pseudo must not appear at all — a styled webkit scrollbar is a
+classic bar that reserves its own track and never becomes an overlay. A
+rule that takes the native bar away without being conditioned on the mode
+reaches an `auto` thread as well, and since the `auto` rules hide the
+component bars, that surface paints **no bar at all**. The failure is
+silent: a missing bar reads as a quiet preference, not as a defect.
+
+Five ways to get it wrong, all of them seen in this repo: a rule not
+conditioned on the mode at all; a rule keyed on `:not([data-scrollbars="auto"])`
+on an ancestor (the app shell carries `data-thread-skin` without the mode, so
+that ancestor matches the negation); a rule that reads the mode off a
+descendant (the mode is a property of the carrier, not of whatever is below
+it); a rule that reads the mode off the document (`html:has(...)` — a page can
+carry one thread per mode, and the document-level form hands the always
+treatment to the auto thread's palette); and a selector list that mixes one
+conditioned selector with one unconditioned selector, so the condition on half
+a group styles the other half too.
+
+The check is a **source-text** test
+(`packages/ui/src/styles/chat-scrollbars.contract.test.ts`) for the same
+reason as the pointer contract above: the `packages/ui` test environment is
+`node`, with no CSS processing and no DOM, so the effective cascade cannot be
+computed. It parses the rule body per selector and audits **every** rule
+that touches a scroll surface, so a mode condition on one selector cannot
+satisfy a rule that mixes selectors, and a duplicated unscoped block cannot
+hide. Every surface the sheet styles is in the list: the thread viewport, the
+composer menu body, the reasoning pane, the tool group content and the
+palette list.
+
 ## DotMatrix — one name per control (DIG-4669)
 
 `DotMatrix` (`packages/ui/src/components/chat/DotMatrix.tsx`, exported as
@@ -741,3 +786,40 @@ only where `data-aria-hidden` is set, `inert` on the page shell,
 cannot be resolved, it shows an error and does not save the thread.
 Markdown `/export`, a bare `/export`, and Export as Markdown run the
 same string redactor before the file is saved.
+
+## Chat export redaction
+
+Every digichat export path runs its payload through the shared redactor
+(`packages/ui/src/replay/redact.ts`) before the payload leaves the page:
+the clipboard copy (and its fallback textarea, its parent-window post
+message, and its markdown download), the `mailto:` subject and body, the
+`.txt` export, and the minimal-HTML export. The replay HTML snapshot export
+is a different path: it redacts the cloned DOM (`redact-dom.ts`), not a
+string.
+
+The mailto body is redacted *before* the URL budget is applied, so the
+`[redacted]` marker counts toward the budget and a cut that lands inside a
+secret cannot leave a fragment of it in the URL. A cut that lands inside the
+marker drops the partial marker instead of writing out half of it. The
+serializers themselves (`markdownToPlainText`, `markdownToHtmlDocument`) are
+pure and do not redact: the download helpers redact before they call them, so
+a caller that writes the serializer output itself must redact first.
+
+The redactor is pattern-based, so an unlabeled secret of unknown shape can
+still get through. Two delimiters end a secret value only when the value does
+not continue after them: a `)` inside a query secret belongs to the secret
+when the value continues after it with a character that can be part of a
+secret — a base64 or base64url character, or another delimiter — so
+`?token=abc)def` and `?token=abcdef123456)+GHIJKLMNOP` redact the whole
+value, and the same holds for a backtick inside a session value. A `)` that
+closes a link (`?token=abc)`), a full stop (`?token=abc).`) and a backtick
+that closes a code span (`session=abc``) stay outside the value, so the
+surrounding prose keeps its delimiters. Three limits follow from the
+delimiter being ambiguous: a secret whose value *ends* in one of those two
+characters leaves that last character outside the match, a word that follows
+a closing parenthesis with no space in between (`?token=abc)and more`) is
+eaten with the value, and a delimiter followed by prose punctuation
+(`?token=abc).def`) ends the value, so the text after such a delimiter is not
+redacted. The rule is deliberately biased towards the secret — a redactor that
+eats a word is a bug in every export, and a redactor that leaves a secret
+tail is a leak.

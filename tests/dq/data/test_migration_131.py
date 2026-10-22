@@ -22,8 +22,8 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-M131 = MIGRATIONS_DIR / "131_fx_intraday_interval.sql"
-M130 = MIGRATIONS_DIR / "130_fx_intraday_observations.sql"
+M131 = MIGRATIONS_DIR / "engine" / "131_fx_intraday_interval.sql"
+M130 = MIGRATIONS_DIR / "engine" / "130_fx_intraday_observations.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 
@@ -41,7 +41,7 @@ def raw() -> str:
 
 
 def test_migration_131_is_only_131_file() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("131_*.sql")) == [M131]
+    assert sorted(MIGRATIONS_DIR.rglob("131_*.sql")) == [M131]
 
 
 def test_single_transaction_compatible(raw: str) -> None:

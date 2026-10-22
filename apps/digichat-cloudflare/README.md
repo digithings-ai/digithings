@@ -48,11 +48,17 @@ Mac Compose remains **dev-only** — see
 
 ## Deploy
 
-> **There is no CI deploy lane for this Worker** (DIG-2843). The
-> `deploy-digithings-stack-cloudflare.yml` referenced here was deleted on 2026-10-01 by
-> `f54af7052` (#4919, Human Gate), so the recipe below is the whole deploy path. The build
-> half is still gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for
-> this app on every PR. See
+> **The CI deploy lane for this Worker is `deploy-digichat-cloudflare-container.yml`**, re-derived
+> on `develop` on 2026-10-22 (DIG-5120). It is a re-derivation, not a revert of the file
+> deleted on 2026-10-01 by `f54af7052` (#4919, Human Gate): the deleted lane had no
+> `production` environment gate, so a push-triggered successor would have deployed production
+> on every merge. The re-derived lane deploys on a manual `workflow_dispatch` only, behind
+> `environment: production`, so Chris approves every deploy; a merge to `main` validates the
+> app and deploys nothing. The `production` environment allows `main` deployments only and
+> `develop` is this repo's default branch, so the lane becomes deployable when a promotion
+> carries it to `main`. The recipe below is the **local** path. The build half is still
+> gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for this app on every
+> PR. See
 > [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
 
 From **repo root** (Dockerfile context is monorepo root):
@@ -76,9 +82,11 @@ npx wrangler secret put DIGICHAT_TENANT_MINT_CREDENTIALS  # tenant mint credenti
 npx wrangler deploy
 ```
 
-Then enable zone routes (uncomment in `wrangler.toml` or Dashboard → Worker →
-Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`,
-`/api/health`, `/_dtchat*`.
+The zone routes are declared, not enabled by hand: `wrangler.toml` carries all eleven
+`digithings.ai` patterns (`/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`,
+`/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*`,
+`/api/mcp/zammad*`, `/chat/occ*`) under the ROUTE HOLD note of 2026-10-18 — a deploy must not
+narrow that list.
 
 ### `DIGICHAT_EMBED_TENANTS` (digithings + OCC)
 

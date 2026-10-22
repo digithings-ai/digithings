@@ -11,6 +11,7 @@ import { DisclosureChevron } from "../disclosure-chevron";
 import { WorkStatusLead } from "../work-status-lead";
 import { cn } from "./cn";
 import { workStatusText } from "./work-status";
+import { turnCutShort, useTurnOutcome } from "../turn-outcome";
 
 /**
  * How long the chain waits before it folds away once the turn is over.
@@ -87,7 +88,12 @@ export function WorkChain({
   // run. Until then the block is still working — a second run of tool calls
   // and reasoning without text in between is the same block, not a new one.
   // The marker and the title follow the work; the disclosure follows it too.
-  const working = !followedByText;
+  //
+  // A turn that was stopped or failed before any text is over too: nothing
+  // more will arrive, so the marker stops and the title says how it ended.
+  const outcome = useTurnOutcome();
+  const cutShort = !followedByText && turnCutShort(outcome);
+  const working = !followedByText && !cutShort;
 
   useEffect(() => {
     if (working) {
@@ -107,12 +113,27 @@ export function WorkChain({
   // and the tool calls are underneath it.
   const parts = useAuiState((s) => s.message.parts);
   const status = !open && indices ? workStatusText(parts, indices) : undefined;
-  const title = status ? status.label : working ? "Working" : "Worked";
-  const markerRunning = status ? status.running : working;
+  const endedTitle = outcome === "failed" ? "Failed" : "Stopped";
+  const title = cutShort
+    ? endedTitle
+    : status
+      ? status.label
+      : working
+        ? "Working"
+        : "Worked";
+  const markerRunning = !cutShort && (status ? status.running : working);
+  const marker = cutShort
+    ? outcome === "failed"
+      ? "error"
+      : "stop"
+    : markerRunning
+      ? "loading"
+      : "idle";
 
   return (
     <Collapsible
       data-slot="aui_work-chain"
+      data-outcome={cutShort ? outcome : working ? "running" : "done"}
       open={open}
       onOpenChange={setUserOpen}
       className={cn("aui-work-chain", className)}
@@ -124,10 +145,7 @@ export function WorkChain({
       >
         {/* Same lead as the pre-response loader: the marker and the label
             keep their slots, so the handoff reads as the words changing. */}
-        <WorkStatusLead
-          marker={markerRunning ? "loading" : "idle"}
-          label={title}
-        />
+        <WorkStatusLead marker={marker} label={title} />
         <DisclosureChevron />
       </CollapsibleTrigger>
       <CollapsibleContent

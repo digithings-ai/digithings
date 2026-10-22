@@ -33,8 +33,27 @@ const TOKEN_SHAPES: readonly RegExp[] = [
   /(?:x-api-key|x-embed-token|x-embed-chat-token|x-invite-key|api[_-]?key|embed[_-]?(?:key|token)|invite[_-]?(?:key|token)|access[_-]?token|refresh[_-]?token|auth[_-]?secret|nextauth[_-]?secret|client[_-]?secret|private[_-]?key|password|passwd|(?<![A-Za-z0-9_?&-])token)["']?[ \t]{0,8}[:=][ \t]{0,8}["']?(?!\[redacted\])[^"'\s,}&]{6,}/gi,
 ];
 
+/**
+ * A query secret ends at `&`, `#`, whitespace or a quote.
+ *
+ * A `)` inside the value belongs to the secret when the value continues after
+ * it, so a secret that contains a parenthesis cannot leak its tail
+ * (`?token=abc)def` redacts the whole value). The character after the `)`
+ * has to look like part of a secret — a base64 or base64url character, or
+ * another delimiter — which is what keeps the closing parenthesis of a link
+ * (`?token=abc)`), a full stop (`?token=abc).`) and markdown emphasis
+ * (`?token=abc)**bold**`) outside the value.
+ *
+ * Three limits follow from the character being ambiguous. A secret whose
+ * value *ends* in a `)` still loses that character, a word right after a
+ * closing parenthesis (`?token=abc)and more`) is eaten with the value, and a
+ * delimiter followed by prose punctuation (`?token=abc).def`) ends the value,
+ * so the text after such a delimiter is not redacted. The rule is
+ * deliberately biased towards the secret: a redactor that eats a word is a
+ * bug in every export, and a redactor that leaves a secret tail is a leak.
+ */
 const QUERY_SECRET =
-  /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key|x-amz-signature|x-amz-credential|x-amz-security-token|awsaccesskeyid|x-goog-signature|x-goog-credential|signature|sig|key-pair-id)=)[^&#\s"')]*/gi;
+  /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key|x-amz-signature|x-amz-credential|x-amz-security-token|awsaccesskeyid|x-goog-signature|x-goog-credential|signature|sig|key-pair-id)=)(?:[^&#\s"')]|\)(?=[A-Za-z0-9_\-=+/~)]))*/gi;
 
 /**
  * Header-style labels whose value is replaced but whose label stays, so the
@@ -45,7 +64,15 @@ const QUERY_SECRET =
 const LABELED: readonly RegExp[] = [
   /(\b(?:proxy-)?authorization["']?[ \t]{0,8}[:=][ \t]{0,8}["']?)(?:(?:bearer|basic|token|digest|apikey|negotiate)[ \t]{1,4}(?:token=)?[^\s"',}]{3,2048}|(?=[^\s"',}]{0,2048}\d)[A-Za-z0-9\-._~+/=:]{8,2048})/gi,
   /(\b(?:set-cookie|cookie|x-digichat-session)["']?[ \t]{0,8}:[ \t]{0,8}["']?)[^"'\n\r]{1,4096}/gi,
-  /((?<![A-Za-z0-9_-])(?:session(?:[_-]?id)?|sid|csrftoken|connect\.sid)=)[^;\s"',&`]{4,512}/gi,
+  // A backtick inside a session value belongs to the value when the value
+  // continues after it, so a secret that contains a backtick cannot leak its
+  // tail (`session=abc`def`). The character after the backtick has to look
+  // like part of a secret — a base64 or base64url character, or another
+  // backtick — which is what keeps the backtick that closes a code span
+  // (`session=abc``) and the one that precedes prose (`session=abc`, and
+  // more) outside the value. The lookahead keeps every unit of the value
+  // one character long, so the bound below stays 512 characters.
+  /((?<![A-Za-z0-9_-])(?:session(?:[_-]?id)?|sid|csrftoken|connect\.sid)=)(?:[^;\s"',&`]|`(?=[A-Za-z0-9_\-=+/~`])){4,512}/gi,
   // scheme://user:password@host (DSNs, URLs with userinfo).
   /(\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s:/@"']{1,256}:)[^\s@/"']{1,256}(?=@)/gi,
 ];

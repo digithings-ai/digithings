@@ -16,7 +16,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "107_ensure_personal_workspace.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "107_ensure_personal_workspace.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 SYSTEM_ID = "1105372f-4109-5815-be5a-21091ccfc8ad"
@@ -39,7 +39,7 @@ def sql(raw: str) -> str:
 
 
 def test_migration_is_the_only_107(raw: str) -> None:
-    assert sorted(MIGRATIONS_DIR.glob("107_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("107_*.sql")) == [MIGRATION_PATH]
 
 
 def test_migration_remains_single_transaction_compatible(raw: str) -> None:

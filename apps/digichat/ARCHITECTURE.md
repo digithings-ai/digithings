@@ -764,23 +764,55 @@ The digichat composer footer carries a provider chip: a backend indicator
 sitting next to the model chip. It follows the same two rules the model chip
 already follows, one for the model chip and one for this one.
 
-- **The chip appears only where BYOK is on the table.** The gate is the
-  `showByok` preference the `/byok` slash command uses
-  (`src/lib/product-slash-commands.ts`), so a surface that does not offer
-  BYOK shows no provider chip at all.
+- **The chip appears when the host names a backend, and it is a button only
+  where BYOK is on the table.** The gate is the label, not BYOK:
+  `packages/ui/src/components/chat/skins/digichat-composer-toolbar.tsx`
+  sets `showProvider = providerLabel.length > 0`, so a host that names no
+  backend shows no chip at all. The tenant's `showByok` gate flag — the
+  one that decides whether the `/byok` slash command is offered
+  (`src/lib/product-slash-commands.ts`; the command itself is defined in
+  `packages/digichat-ui/src/slash-commands.ts`) — decides only what the
+  chip is: where BYOK is on the table the chip is a button that opens the
+  provider menu, and where it is not the same label renders as a static
+  span, so a surface that does not offer BYOK still shows the house
+  backend chip.
 - **The label is derived from the backend that actually serves the chat.**
-  The host names it: `EmbedChatPrefsApi.providerLabel` carries the own-key
-  provider id while the session carries a key, else the house backend id
-  (`src/lib/provider-label.ts` — `backendLabel()` and `HOUSE_BACKEND_ID`).
-  Absent means unknown, and an unknown backend renders no chip rather than
-  a wrong one.
+  The host names it: `EmbedChatPrefsApi.providerLabel` carries one of
+  three kinds of value — a provider id (`openrouter`) while the session
+  carries an own key, a routing id (the house backend id,
+  `cheaperinference`), or a display name (`Azure AI Foundry`, for a tenant
+  on `backendType` `foundry`, added in #6073). The field keeps its name:
+  the value range is wider than the name suggests, and a rename is not
+  wanted (`src/lib/provider-label.ts` — `backendLabel()` and
+  `HOUSE_BACKEND_ID`). Absent means unknown, and an unknown backend
+  renders no chip rather than a wrong one.
 
 `packages/ui` cannot import app code, so the package holds **no provider
 vocabulary**: it renders the label it is handed, and the app owns the
 names. The static surfaces (home, baseline, devkit) have no BYOK state of
 their own — the provider menu they render cannot activate an own key — so
 they name the house backend; the embed surface names its own provider while
-a key is set.
+a key is set, and names a foundry tenant's real backend (`Azure AI
+Foundry`) when no key is set.
+
+**The chip follows the label, not the BYOK gate (DIG-4888).** Decision: the
+chip appears when the host names a backend, and `showByok` decides only
+whether that chip is a button or a static label. Reason: the toolbar
+derives the chip from `providerLabel` alone
+(`packages/ui/src/components/chat/skins/digichat-composer-toolbar.tsx` —
+`showProvider = providerLabel.length > 0`), so a gate on `showByok` would
+hide a true backend on a surface that does not offer BYOK — the same lie
+the chip exists to avoid, in the other direction. The Foundry work
+(#6073) made that surface real: a tenant that cannot switch its backend
+still has a backend worth naming.
+
+**The label field keeps its name (DIG-4888).** Decision: `providerLabel`
+keeps its name while it carries three kinds of value — a provider id, a
+routing id, a display name. Reason: the field is a display string, and a
+rename would change the interface contract between the app and
+`packages/ui` for no behaviour change. The value range is simply wider
+than the name suggests, so the doc says so instead of the field being
+renamed.
 
 **The house backend id has one home (DIG-4887).** Decision: the provider menu
 (`src/components/stock/embed-composer-menu.tsx`) reads the house backend id
@@ -1399,7 +1431,7 @@ is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trus
 mutate language/model/effort/search-engine/MCP. `session_toggle_tool` does not flip a tool;
 it answers "Tools are changed in /tools." `session_upsert_mcp` cannot plant a new session URL
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
-`X-Digi-Effort` (low/medium/high) is forwarded to digigraph. `X-Digi-Search-Engine`
+`X-Digi-Effort` (low/medium/high) is forwarded to digigraph, which passes it to digillm as the model's `reasoning_effort` where the level is configurable; Foundry backends get it as Responses `reasoning.effort` (dropped for the turn if the agent refuses it). With no /effort the model keeps its default level, except DeepSeek V4.1 Flash 1017, which only reasons when asked and so gets `medium`. `X-Digi-Search-Engine`
 (auto/internal/exa/tavily/parallel/firecrawl/tinyfish) is forwarded with it: effective
 engine is the user pref, else the tenant `gate.searchEngine` default. An unset pref
 sends nothing (follow-tenant); an explicit `auto` is sent literally by the browser

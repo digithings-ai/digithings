@@ -201,7 +201,7 @@ describe("post-deploy verdict", () => {
       readError: "HTTP 404",
     });
     expect(notVerifiable.exitCode).toBe(EXIT_DEPLOYED_UNVERIFIED);
-    expect(notVerifiable.message).toContain("no zone route");
+    expect(notVerifiable.message).toContain("The read-back could not be performed");
   });
 
   it("never reports verified when the id does not match", () => {

@@ -146,6 +146,14 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
      /etc/searxng/limiter.toml
 # Rebuild marker: wrangler tags the container image from this Dockerfile, so a
 # context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
+# Rebuild marker v18 (2026-10-20): the container entrypoint now verifies the
+# Cheaper Inference LiteLLM merge against the curated house models, and it
+# always exports ENV_LITELLM_CONFIG so supervisord never starts litellm with
+# an empty --config (DIG-4512). A merge that fails, or an overlay asset that
+# is missing, keeps the container up on the base config and names the verdict
+# - including the missing model ids - in the log file, instead of serving the
+# base config in silence. The entrypoint and the merge script are context-only
+# changes, so the image must be rebuilt.
 # Rebuild marker v13 (2026-09-19): broadens the in-stack searxng engine set in
 # config/searxng/settings.yml — drops the 4-engine `keep_only` allowlist and
 # clears `disabled` (+ `inactive` where upstream sets both, e.g. swisscows/

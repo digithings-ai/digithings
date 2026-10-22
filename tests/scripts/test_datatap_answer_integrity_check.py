@@ -899,6 +899,111 @@ def test_scan_answer_is_quiet_on_a_refusal() -> None:
     )
 
 
+# --------------------------------------------------------------------------
+# Placeholder ids in a generic how-to answer are not leaks; real ids still are.
+# --------------------------------------------------------------------------
+
+# A generic how-to answer with a sample curl, of the shape that produced a false
+# FAIL on develop: the tenant slot in the sample holds the nil UUID.
+_HOWTO_TEMPLATE = (
+    "I can't read your tenant data from here, but you can query your index.\n\n"
+    "Example curl (replace {{tenantId}} and {{indexName}}):\n\n"
+    "```bash\n"
+    'API_KEY="your_api_key_here"\n'
+    'TENANT="{tenant}"\n'
+    'INDEX="customers"\n\n'
+    'curl -s -H "X-API-KEY: $API_KEY" \\\n'
+    '  "https://api.example.com/api/${{TENANT}}/indexes/${{INDEX}}/documents?top=5"\n'
+    "```\n"
+)
+
+_NIL_UUID = "00000000-0000-0000-0000-000000000000"
+
+
+def _howto(tenant: str) -> str:
+    return _HOWTO_TEMPLATE.format(tenant=tenant)
+
+
+@pytest.mark.parametrize(
+    "tenant",
+    [
+        _NIL_UUID,
+        _NIL_UUID.upper(),
+        "0" * 32,
+        "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+        "<tenant-id>",
+        "YOUR_TENANT_ID",
+        "{tenantId}",
+    ],
+    ids=[
+        "nil_uuid",
+        "nil_uuid_upper",
+        "nil_uuid_dashless",
+        "xxxx_placeholder",
+        "XXXX_placeholder",
+        "angle_bracket_placeholder",
+        "your_tenant_id",
+        "brace_placeholder",
+    ],
+)
+def test_a_placeholder_tenant_in_a_sample_curl_is_not_a_finding(tenant: str) -> None:
+    assert mod.scan_answer(_howto(tenant)) == []
+
+
+def test_a_nil_uuid_sample_curl_answer_passes_end_to_end() -> None:
+    """The whole check, network mocked at the one seam: a how-to answer is OK."""
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer(_howto(_NIL_UUID))),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+    assert code == mod.OK == 0
+
+
+@pytest.mark.parametrize(
+    "tenant",
+    [
+        "3f6c2a9e-8b41-4d7a-9c05-e2b7d1a4f860",
+        "00000000-0000-0000-0000-000000000001",
+        "10000000-0000-0000-0000-000000000000",
+        "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "3f6c2a9e8b414d7a9c05e2b7d1a4f860",
+    ],
+    ids=[
+        "random_uuid",
+        "nil_but_last_digit",
+        "nil_but_first_digit",
+        "max_uuid",
+        "random_dashless",
+    ],
+)
+def test_a_real_looking_uuid_in_a_sample_curl_is_still_reported(tenant: str) -> None:
+    findings = mod.scan_answer(_howto(tenant))
+    assert findings == [f"customer id (uuid): {tenant}"]
+
+
+def test_a_nil_uuid_does_not_mask_a_real_id_in_the_same_answer() -> None:
+    real = "3f6c2a9e-8b41-4d7a-9c05-e2b7d1a4f860"
+    findings = mod.scan_answer(_howto(_NIL_UUID) + f"\nYour top customer is {real} (CUS-4821).")
+    assert f"customer id (uuid): {real}" in findings
+    assert "customer id (prefixed): CUS-4821" in findings
+    assert not any(_NIL_UUID in f for f in findings)
+
+
+def test_a_real_uuid_sample_curl_answer_still_fails_end_to_end() -> None:
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok(
+                "text/event-stream", _answer(_howto("3f6c2a9e-8b41-4d7a-9c05-e2b7d1a4f860"))
+            ),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+    assert code == mod.FAIL == 1
+
+
 def test_a_single_name_in_prose_is_not_a_customer_list() -> None:
     """Spec 3.4 says 'customer-name-list shape'.
 
