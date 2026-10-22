@@ -33,9 +33,17 @@ const deployModels = JSON.parse(
 const allowlist = SESSION_MODEL_ALLOWLIST_DEFAULT.split(",").map((slug) => slug.trim()).filter(Boolean);
 
 describe("session model allowlist", () => {
-  it("allows exactly the models the deployment publishes", () => {
+  it("allows exactly the published, price-capped list", () => {
     expect(new Set(allowlist).size).toBe(allowlist.length);
+    expect([...allowlist].sort()).toEqual([...deployModels.sessionAllowlist].sort());
     expect([...allowlist].sort()).toEqual([...deployModels.available].sort());
+  });
+
+  it("matches the wrangler.toml value it mirrors", () => {
+    const toml = readFileSync(resolve(here, "../wrangler.toml"), "utf-8");
+    const line = toml.split("\n").find((row) => row.startsWith("DIGI_SESSION_MODEL_ALLOWLIST"));
+    const value = line?.split('"')[1] ?? "";
+    expect(value.split(",").sort()).toEqual([...allowlist].sort());
   });
 
   it("allows the published default model", () => {

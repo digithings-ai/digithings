@@ -23,6 +23,7 @@ import {
 } from "@/lib/baseline-embed";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 import { DEPLOY_DEFAULT_MODELS } from "./deploy-models";
+import type { ModelPickerView } from "@/lib/model-picker-catalog";
 
 /** Search-engine ids the BFF forwards to digigraph (digisearch vocabulary, #4724). */
 export const SEARCH_ENGINE_ALLOWLIST: ReadonlySet<string> = new Set([
@@ -85,6 +86,8 @@ export type DigichatClientModels = {
   default?: string;
   available: string[];
   allowPicker: boolean;
+  /** Presets and provider groups. Present when the deployment uses the catalog. */
+  picker?: ModelPickerView;
 };
 
 export type DigichatClientSubTool = { id: string; label?: string };
@@ -140,8 +143,11 @@ export type DigichatClientConfig = {
     lockedContact?: string;
     showByok?: boolean;
     showLanguageSelector?: boolean;
+    showContextMeter?: boolean;
     webSearch?: boolean;
     searchEngine?: string;
+    /** Present only when the host locks session tool/MCP toggles. */
+    lockSessionControls?: boolean;
   };
   /** Discriminator only — never project endpoints / agent names */
   backendType: DigichatDeployment["backend"]["type"];
@@ -261,6 +267,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       ...(models?.default ? { default: models.default } : {}),
       available: [...(models?.available ?? [])],
       allowPicker,
+      ...(models?.picker ? { picker: models.picker } : {}),
     },
     cli: { enabled: dep.cli?.enabled === true },
     tools: {
@@ -286,8 +293,12 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       lockedContact: dep.gate.lockedContact,
       showByok: dep.gate.showByok,
       showLanguageSelector: dep.gate.showLanguageSelector,
+      ...(typeof dep.gate.showContextMeter === "boolean"
+        ? { showContextMeter: dep.gate.showContextMeter }
+        : {}),
       webSearch,
       ...(searchEngine ? { searchEngine } : {}),
+      ...(dep.gate.lockSessionControls === true ? { lockSessionControls: true } : {}),
     },
     backendType: dep.backend.type,
   };

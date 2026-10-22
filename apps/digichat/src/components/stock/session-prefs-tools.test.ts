@@ -58,7 +58,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
 }
 
 describe("applySessionTool", () => {
-  it("maps language, model, effort, view, thinking, and tools onto prefs", () => {
+  it("maps language, model, effort, view, and thinking onto prefs", () => {
     const a = api();
     expect(applySessionTool("session_set_language", { code: "Dutch" }, a).ok).toBe(true);
     expect(a.setLanguage).toHaveBeenCalledWith("nl");
@@ -78,8 +78,52 @@ describe("applySessionTool", () => {
     expect(a.setThinking).toHaveBeenCalledWith("collapsed");
     applySessionTool("session_set_thinking", { mode: "open" }, a);
     expect(a.setThinking).toHaveBeenCalledWith("open");
-    applySessionTool("session_toggle_tool", { id: "digisearch", enabled: false }, a);
-    expect(a.setDigisearch).toHaveBeenCalledWith(false);
+  });
+
+  it("refuses session_toggle_tool on an unlocked host and points at /tools", () => {
+    const unlocked = api();
+    const result = applySessionTool(
+      "session_toggle_tool",
+      { id: "digisearch", enabled: false },
+      unlocked,
+    );
+    expect(result).toEqual({ ok: false, message: "Tools are changed in /tools." });
+    expect(unlocked.setDigisearch).not.toHaveBeenCalled();
+    expect(unlocked.setVault).not.toHaveBeenCalled();
+    expect(unlocked.setWebSearch).not.toHaveBeenCalled();
+    expect(unlocked.setExtraTool).not.toHaveBeenCalled();
+
+    const toggle = api({ toolControl: "toggle" });
+    const toggleResult = applySessionTool(
+      "session_toggle_tool",
+      { id: "websearch", enabled: true },
+      toggle,
+    );
+    expect(toggleResult.ok).toBe(false);
+    expect(toggleResult.message).toBe("Tools are changed in /tools.");
+    expect(toggle.setWebSearch).not.toHaveBeenCalled();
+  });
+
+  it("does not toggle tools when the host locks them or the agent owns them", () => {
+    const locked = api({ toolControl: "locked" });
+    const lockedResult = applySessionTool(
+      "session_toggle_tool",
+      { id: "digisearch", enabled: false },
+      locked,
+    );
+    expect(lockedResult.ok).toBe(false);
+    expect(lockedResult.message).toBe("Tools are locked for this host.");
+    expect(locked.setDigisearch).not.toHaveBeenCalled();
+
+    const agent = api({ toolControl: "agent" });
+    const agentResult = applySessionTool(
+      "session_toggle_tool",
+      { id: "file_search", enabled: true },
+      agent,
+    );
+    expect(agentResult.ok).toBe(false);
+    expect(agentResult.message).toBe("Managed by the agent.");
+    expect(agent.setExtraTool).not.toHaveBeenCalled();
   });
 
   it("names only the live view levels when a view is refused", () => {

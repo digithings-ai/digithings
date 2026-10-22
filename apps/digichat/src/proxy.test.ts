@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { proxy } from "./proxy";
+// Next's own helpers, the ones its router uses on a middleware rewrite.
+import { getRelativeURL } from "next/dist/shared/lib/router/utils/relativize-url";
+import { formatHostname } from "next/dist/server/lib/format-hostname";
+import { nextUpstreamHost } from "../scripts/trusted-proxy-server.mjs";
 import { resetEmbedTenantRegistryForTests } from "./lib/embed-tenants";
 
 describe("proxy per-mode security headers", () => {
@@ -114,5 +118,64 @@ describe("proxy per-mode security headers", () => {
       "frame-ancestors",
     );
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+});
+
+/**
+ * 2.6.6 regression: behind scripts/trusted-proxy-server.mjs, Next's router
+ * builds its request URL from the child's HOSTNAME and PORT, and resolves a
+ * proxy.ts rewrite against it (resolve-routes: getRelativeURL(rewrite,
+ * initUrl)). An absolute result is an external rewrite: Next fetches it
+ * itself and answers 500 with no content-type.
+ */
+describe("proxy ?token= rewrite behind the trusted-proxy entrypoint", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetEmbedTenantRegistryForTests();
+  });
+
+  function routerInitUrl(hostname: string, search: string): string {
+    // Same shape as next/dist/server/lib/router-utils/resolve-routes.js,
+    // with x-forwarded-proto: https from the edge.
+    return `https://${formatHostname(hostname)}:3001/embed${search}`;
+  }
+
+  function resolvedRewrite(hostname: string, search: string): string {
+    const initUrl = routerInitUrl(hostname, search);
+    const res = proxy(new NextRequest(initUrl));
+    const rewrite = res.headers.get("x-middleware-rewrite");
+    expect(rewrite).toBeTruthy();
+    return getRelativeURL(rewrite as string, initUrl);
+  }
+
+  it("keeps a token-bearing tenant rewrite internal (relative, token stripped)", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const out = resolvedRewrite(
+      nextUpstreamHost,
+      "?host=occ.example.com&layout=page&token=fixture-token",
+    );
+    expect(out).toBe("/embed?host=occ.example.com&layout=page");
+    expect(out).not.toMatch(/^https?:/);
+    expect(out).not.toContain("fixture-token");
+  });
+
+  it("forwards the stripped token as the x-embed-token request header", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const res = proxy(
+      new NextRequest(routerInitUrl(nextUpstreamHost, "?host=occ.example.com&token=fixture-token")),
+    );
+    expect(res.headers.get("x-middleware-request-x-embed-token")).toBe("fixture-token");
+  });
+
+  it("documents the 2.6.6 failure: a 127.0.0.1 child turns the same rewrite external", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const out = resolvedRewrite("127.0.0.1", "?host=occ.example.com&token=fixture-token");
+    expect(out).toBe("https://localhost:3001/embed?host=occ.example.com");
+  });
+
+  it("leaves a tokenless request un-rewritten", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const res = proxy(new NextRequest(routerInitUrl(nextUpstreamHost, "?host=occ.example.com")));
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull();
   });
 });

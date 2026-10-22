@@ -38,6 +38,8 @@ export {
   type PageContextMode,
   type UserAlign,
   type ViewMode,
+  isStockComposerMenuKind,
+  type StockComposerMenuKind,
 } from "./skin-types";
 export {
   SkinRuntime,

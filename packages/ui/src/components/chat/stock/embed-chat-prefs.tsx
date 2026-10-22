@@ -13,6 +13,7 @@ import {
   writeStoredDensity,
   type TraceDensity,
 } from "../trace-spacing";
+import type { PaletteName, ResolvedTheme, ThemePreference } from "../../../theme/apply-theme";
 import {
   normalizeViewPref,
   type ThinkingMode,
@@ -165,6 +166,17 @@ export type EmbedChatPrefsApi = {
    */
   providerLabel?: string;
   showModels: boolean;
+  /**
+   * Model id the turn sends, including a bring-your-own-key binding.
+   * Sizes the context meter only. An empty session still sends no
+   * X-Digi-Model.
+   */
+  meterModel?: string;
+  /**
+   * Render gate for the context meter. The toolbar draws the bar only
+   * when this is true.
+   */
+  showContextMeter?: boolean;
   hasDigisearch: boolean;
   hasVault: boolean;
   hasSessions: boolean;
@@ -188,12 +200,22 @@ export type EmbedChatPrefsApi = {
   openView: () => void;
   openDensity: () => void;
   /**
-   * Tenant embed: the parent or tenant pins the mode. `/theme` is hidden and
-   * a typed command does nothing. The full app leaves this unset.
+   * Hide `/theme` and ignore a typed one. No host sets this today: tenant
+   * embeds offer `/theme` through `themeState` / `setTheme` (2.6.6). The full
+   * app leaves this unset.
    */
   themeLocked?: boolean;
   /** Open the mode + palette picker. No-op when the host does not provide it. */
   openTheme?: () => void;
+  /**
+   * Host-owned theme (tenant embeds). When set, `/theme` and its picker read
+   * this instead of the document-wide `dt-theme` / `dt-palette` keys, and a
+   * pick goes through `setTheme` rather than `applyDocumentTheme`, so it is
+   * not written to localStorage. `auto` drops the pick (back to the host's
+   * default). The full app leaves both unset.
+   */
+  themeState?: { preference: ThemePreference; palette: PaletteName; resolved: ResolvedTheme };
+  setTheme?: (preference: ThemePreference, palette: PaletteName) => void;
   openThinking: () => void;
   openLanguage: () => void;
   openSessions: () => void;
@@ -202,6 +224,29 @@ export type EmbedChatPrefsApi = {
   compactThread: () => void | Promise<void>;
   undo: () => void;
   redo: () => void;
+  /**
+   * Who may flip a tool. `agent` (Foundry) and `locked` (OCC session lock,
+   * or allowUserToggle false) list every tool and MCP server with no toggle.
+   * Omit means the host still toggles.
+   */
+  toolControl?: "toggle" | "locked" | "agent";
+  /** Text after the pane command. The open pane filters on it. */
+  paletteQuery?: string;
+  /** Composer writer used by menu rows. The skin binds it to `setText`. */
+  setComposerDraft?: (text: string) => void;
+  /**
+   * True only after a skin called `bindComposerDraft`. The writer exists on
+   * every host, and until a skin binds it the sink is a no-op, so the menu
+   * must close and change pages itself.
+   */
+  composerDraftBound?: boolean;
+  bindComposerDraft?: (setText: (text: string) => void) => void;
+  /** One palette frame. `keep` leaves a button-opened menu alone. */
+  syncPalette?: (next: {
+    kind: "closed" | "commands" | "pane";
+    menu: "close" | "keep" | string;
+    filter: string;
+  }) => void;
 };
 
 const EmbedChatPrefsContext = createContext<EmbedChatPrefsApi | null>(null);

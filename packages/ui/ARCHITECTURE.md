@@ -269,6 +269,7 @@ reasoning              -> ["group-chainOfThought", "group-reasoning"]
 "tool-call"            -> ["group-chainOfThought", "group-tool"]
 source                 -> ["group-chainOfThought", "group-tool"]
 data / data-*          -> ["group-chainOfThought", "group-tool"]
+data-notice            -> outside the chain (stays visible after the fold)
 "standalone-tool-call" -> []  (renders outside the chain)
 ```
 
@@ -702,3 +703,41 @@ control that keeps its name from its glyph),
 `packages/ui/src/components/chat/dot-matrix-aria.test.tsx` (the two modes) and
 `packages/ui/src/components/chat/gallery-thread/work-chain-status.test.tsx`
 (the chain trigger's name).
+
+## Chat HTML export
+
+`/export` and `/export md` download the thread as markdown. Any other format shows an unsupported-format error. `/export html`
+downloads the active thread as one file (`packages/ui/src/replay/`), not the memory
+sidebar or any other thread. Ancestors of that thread are attribute-only
+wrappers, so deployment rules scoped to `[data-stock-product]` still match,
+and a node the live page has computed as `display: none` or `visibility:
+hidden` is left out. Only the closed panel element is exempt, so a
+deployment-hidden source inside it is still omitted. The live page unmounts
+closed reasoning and tool panels; the export mounts them for the read and
+then unmounts them again. A page with no thread
+root shows an error instead of saving a file, and a refresh meta is removed
+wherever it sits. The file is that thread's rendered DOM:
+styles and same-origin images are inlined, the composer is removed, and
+work-chain, reasoning, tool, and source disclosures become `<details>` so
+they still open offline. `redact-dom.ts` redacts text and
+attribute values on the cloned DOM before serialization (tool JSON by key,
+everything else with the `redact.ts` patterns, including a standalone 48-hex
+invite key, a `session` JSON key, and `Signature` and `Key-Pair-Id` query
+values). It is
+pattern-based, so an unlabeled secret of unknown shape can
+still get through. The filename is
+`<deployment>-<YYYY-MM-DD-HHMM>-<question-slug>.html` (UTC, latest question,
+id-like words dropped). The filename reads the slug from the open page.
+The file itself does not keep `data-deployment` or any other deployment
+or tenant attribute. The assistant message menu's Export as HTML uses
+that same path for the question and answer of that one interaction. It
+resolves the message while its action bar is still mounted, so an
+older answer still exports after that bar unmounts, and a duplicate id
+earlier in the page is not the one that is saved. It waits until the
+menu has closed. The file drops the menu's page lock (`aria-hidden`
+only where `data-aria-hidden` is set, `inert` on the page shell,
+`data-scroll-locked`, the body's `pointer-events`, and
+`[data-scroll-locked]` CSS). If that message
+cannot be resolved, it shows an error and does not save the thread.
+Markdown `/export`, a bare `/export`, and Export as Markdown run the
+same string redactor before the file is saved.

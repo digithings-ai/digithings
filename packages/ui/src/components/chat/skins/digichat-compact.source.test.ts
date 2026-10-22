@@ -16,6 +16,7 @@ describe("DigichatSkin /compact submit", () => {
     expect(runBranch).toContain('action.command.id === "compact"');
     expect(runBranch).toContain('commands.find((command) => command.id === "compact")');
     expect(runBranch).toContain("compact.execute()");
+    expect(runBranch).toContain("applyExportSlash(action.arg");
     expect(src).toMatch(/copyExport, extra, commands\]/);
   });
 });

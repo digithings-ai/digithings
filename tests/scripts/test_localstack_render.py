@@ -50,3 +50,25 @@ def test_an_unconfigured_surface_is_still_reported_as_not_configured():
     table = render.render_url_table((unconfigured,), {}, "all")
     assert "(not configured: DT_R2_URL not set)" in table
     assert "(invalid:" not in table
+
+
+def test_the_url_table_shows_a_refused_contract_row(tmp_path):
+    """A refused contract row prints its reason and no URL.
+
+    The row points at the built-in URL, so printing the default would show
+    a reachable address for a probe that never runs.
+    """
+    contract = tmp_path / "config" / "contract"
+    contract.mkdir(parents=True)
+    (contract / "services.yaml").write_text(
+        "services:\n  - name: digigraph\n    port: '8000@evil.com'\n",
+        encoding="utf-8",
+    )
+    checks, _origin = contracts.load_checks(tmp_path)
+    row = next(c for c in checks if c.name == "digigraph")
+
+    table = render.render_url_table((row,), {}, "all")
+
+    assert "(invalid:" in table
+    assert "8000@evil.com" in table
+    assert "http://127.0.0.1:8000/healthz" not in table
