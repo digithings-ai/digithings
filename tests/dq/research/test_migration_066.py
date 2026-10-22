@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-MIGRATION_PATH = REPO_ROOT / "digiquant" / "supabase" / "migrations" / "066_olympus_run_events.sql"
+MIGRATION_PATH = (
+    REPO_ROOT / "digiquant" / "supabase" / "migrations" / "engine" / "066_olympus_run_events.sql"
+)
 PUBLIC_COLUMNS = {
     "run_id",
     "attempt",

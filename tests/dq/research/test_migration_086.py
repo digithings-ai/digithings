@@ -9,7 +9,12 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATION_PATH = (
-    REPO_ROOT / "digiquant" / "supabase" / "migrations" / "086_olympus_run_events_wp1_join.sql"
+    REPO_ROOT
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "engine"
+    / "086_olympus_run_events_wp1_join.sql"
 )
 JOIN_COLUMNS = {"call_id", "attempt_id", "node_run_id"}
 PUBLIC_BASE = {

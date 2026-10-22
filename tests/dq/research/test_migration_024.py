@@ -18,13 +18,8 @@ from pathlib import Path
 
 import pytest
 
-MIGRATION_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "digiquant"
-    / "supabase"
-    / "migrations"
-    / "024_thesis_deliberation_first_class.sql"
-)
+MIGRATIONS_DIR = Path(__file__).resolve().parents[3] / "digiquant" / "supabase" / "migrations"
+MIGRATION_PATH = MIGRATIONS_DIR / "engine" / "024_thesis_deliberation_first_class.sql"
 
 EXPECTED_TABLES = (
     "thesis_vehicles",
@@ -232,8 +227,9 @@ class TestDeepDiveTriggersShape:
 @pytest.mark.unit
 class TestMigrationNumbering:
     def test_no_duplicate_number(self) -> None:
-        migrations_dir = MIGRATION_PATH.parent
-        prefixes = [p.name.split("_", 1)[0] for p in migrations_dir.glob("*.sql")]
+        # The whole tree, not one layer: after the #5854 split a second 024
+        # could land in prod/ and still be applied.
+        prefixes = [p.name.split("_", 1)[0] for p in MIGRATIONS_DIR.rglob("*.sql")]
         # 024 must appear exactly once.
         assert prefixes.count("024") == 1
 
