@@ -208,6 +208,53 @@ describe("routing and auth", () => {
   });
 });
 
+describe("the Durable Object hop", () => {
+  it("answers 503 with the Retry-After when the instance was not available", async () => {
+    // The container hop can reject with a value that is not an Error, and the
+    // Durable Object then answers 503 with a Retry-After so the caller backs
+    // off instead of hammering a runner that is still coming up (run-watch
+    // DIG-4928). That answer is retryable, so it reaches the client with its
+    // status and its header instead of being rewritten to a 502 that drops
+    // the only instruction the caller needs.
+    const container = vi.fn(async (_request: Request) =>
+      new Response(
+        JSON.stringify({
+          error: "durable_object_unavailable",
+          detail: "the runner's Durable Object instance was not available; retry later",
+        }),
+        {
+          status: 503,
+          headers: { "content-type": "application/json", "retry-after": "30" },
+        },
+      ),
+    );
+    const res = await handle(
+      post("heartbeat", { job_id: "twelve-x-primemarket-heartbeat" }),
+      env(),
+      stubOf(container),
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBe("30");
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toBe("durable_object_unavailable");
+  });
+
+  it("still answers 502 when the container itself fails", async () => {
+    const container = vi.fn(async (_request: Request) =>
+      new Response("the container died", { status: 500 }),
+    );
+    const res = await handle(
+      post("heartbeat", { job_id: "twelve-x-primemarket-heartbeat" }),
+      env(),
+      stubOf(container),
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(502);
+    expect(res.headers.get("retry-after")).toBeNull();
+  });
+});
+
 describe("alerts", () => {
   it("ingest exit 2 stays quiet and exit 3 uses the transport label", () => {
     expect(

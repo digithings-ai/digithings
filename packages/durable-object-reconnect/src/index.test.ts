@@ -179,6 +179,38 @@ describe("stripUrlQuery", () => {
     expect(stripped).toContain("https://a.example/p");
     expect(stripped).toContain("https://b.example/q");
   });
+
+  it("redacts the whole query string whatever the token holds", () => {
+    // The charset of a token is the operator's choice and nothing in the
+    // repository pins it, so the tail of a query string cannot be kept
+    // because of a comma in it: a run that stopped at the comma would leave
+    // the rest of the token in the text.
+    const stripped = stripUrlQuery("GET https://digithings.ai/embed?token=xy7,zw8");
+    expect(stripped).not.toContain("xy7");
+    expect(stripped).not.toContain("zw8");
+    expect(stripped).toBe("GET https://digithings.ai/embed?[redacted]");
+  });
+
+  it("redacts the query string of a relative request target", () => {
+    const stripped = stripUrlQuery("GET /v1/embed?token=xy7 HTTP/1.1");
+    expect(stripped).not.toContain("xy7");
+    expect(stripped).toBe("GET /v1/embed?[redacted] HTTP/1.1");
+  });
+
+  it("leaves a slash that belongs to a word alone", () => {
+    expect(stripUrlQuery("the ratio of 3/4? is unknown")).toBe(
+      "the ratio of 3/4? is unknown",
+    );
+  });
+
+  it("drops the punctuation that follows a query string", () => {
+    // The run of a URL ends at the first whitespace, so the period that ends
+    // the sentence is part of the redacted tail and goes with it. The rule
+    // says so in the comment above it; this is what holds the comment to it.
+    expect(stripUrlQuery("failed for https://digithings.ai/embed?token=xy7.")).toBe(
+      "failed for https://digithings.ai/embed?[redacted]",
+    );
+  });
 });
 
 describe("isNonErrorRejection", () => {

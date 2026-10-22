@@ -96,6 +96,22 @@ describe("describeValue", () => {
     expect(described).toContain("https://digithings.ai/embed");
   });
 
+  it("keeps the tail of a query string out of the description", () => {
+    // The charset of a token is the operator's choice and nothing in the
+    // repository pins it, so a run that stopped at a comma would leave the
+    // rest of the token in the description.
+    const described = describeValue("GET https://digithings.ai/embed?token=xy7,zw8");
+    expect(described).not.toContain("xy7");
+    expect(described).not.toContain("zw8");
+    expect(described).toContain("https://digithings.ai/embed");
+  });
+
+  it("keeps the query string of a relative request target out of the description", () => {
+    const described = describeValue("GET /v1/embed?token=xy7 HTTP/1.1");
+    expect(described).not.toContain("xy7");
+    expect(described).toContain("/v1/embed");
+  });
+
   it("keeps the query string of a URL out of the message", () => {
     const message = safeErrorMessage(
       "failed to GET https://digithings.ai/embed?token=s3cret",

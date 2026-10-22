@@ -31,10 +31,25 @@ export const CONTAINER_RETRY_AFTER_SECONDS = 5;
  *
  * The scheme, the host and the path are kept; the query string and the
  * fragment are not, because that is where a secret rides (an embed token, a
- * signed link). Punctuation that ends a sentence is not part of the URL, so it
- * is not matched either.
+ * signed link).
+ *
+ * The run of characters that follows the scheme ends at the first whitespace
+ * and at nothing else. The charset of a token is the operator's choice and
+ * nothing in the repository pins it, so a run that stopped at a comma or a
+ * quote would leave the tail of the token in the text. What follows the
+ * query string inside that run goes with it: a period that ends the sentence
+ * is part of the tail and is dropped with it.
  */
-const URL_IN_TEXT = /\bhttps?:\/\/[^\s"'<>()[\],]+/g;
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s]+/g;
+
+/**
+ * A relative request target inside free text, such as the request line of
+ * the request that failed: `GET /v1/embed?token=... HTTP/1.1`.
+ *
+ * The target starts a word, so a slash that belongs to a word (as in `3/4`)
+ * is not a target.
+ */
+const RELATIVE_TARGET_IN_TEXT = /(^|\s)(\/[^\s]*[?#][^\s]*)/g;
 
 /**
  * The text of a description, with the query string of every URL removed.
@@ -46,15 +61,21 @@ const URL_IN_TEXT = /\bhttps?:\/\/[^\s"'<>()[\],]+/g;
  * the query string is removed before the text is written: neither the log store
  * nor the client is the place for a token.
  *
- * Nothing else in the text changes, so the operator still reads which request
- * failed.
+ * The scheme, the host and the path stay, so the operator still reads which
+ * request failed.
  */
 export function stripUrlQuery(text: string): string {
-  return text.replace(URL_IN_TEXT, (url) => {
-    const cut = url.search(/[?#]/);
-    if (cut === -1) return url;
-    return `${url.slice(0, cut)}${url[cut]}[redacted]`;
-  });
+  return text
+    .replace(URL_IN_TEXT, (url) => {
+      const cut = url.search(/[?#]/);
+      if (cut === -1) return url;
+      return `${url.slice(0, cut)}${url[cut]}[redacted]`;
+    })
+    .replace(RELATIVE_TARGET_IN_TEXT, (_match, space: string, target: string) => {
+      const cut = target.search(/[?#]/);
+      if (cut === -1) return target;
+      return `${space}${target.slice(0, cut)}${target[cut]}[redacted]`;
+    });
 }
 
 /**
