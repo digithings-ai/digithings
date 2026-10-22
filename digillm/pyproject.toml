@@ -57,6 +57,8 @@ pythonpath = ["src"]
 # `markers` never applies. Without this the lane prints PytestUnknownMarkWarning on every
 # run. digifetch needs no equivalent: its pyproject has no [tool.pytest.ini_options], so
 # it falls through to the root config. Wording matches pytest.ini.
+# digillm/conftest.py installs tests/paid_llm_guard.py. This rootdir does not load
+# the repo-root conftest, and this is the lane that can spend the house key.
 markers = [
     "unit: Unit tests (no network, no Docker).",
 ]
