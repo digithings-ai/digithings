@@ -101,6 +101,19 @@ export function containerPathFor(pathname: string): string {
   return `${CONTAINER_BASE_PATH}${pathname}`;
 }
 
+/**
+ * The request the Container serves: same method, headers, body and query, with
+ * the path moved onto the Container's base path (see `containerPathFor`).
+ *
+ * The URL is rewritten, not the path string alone, so the query string and
+ * every header the edge set (host, cookies, the client IP) survive.
+ */
+export function withContainerPath(request: Request, pathname: string): Request {
+  const target = new URL(request.url);
+  target.pathname = containerPathFor(pathname);
+  return new Request(target.toString(), request);
+}
+
 /** Every shared Container id starts here. */
 const SHARED_DIGICHAT_ID_PREFIX = "shared-";
 

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CONTAINER_BASE_PATH, containerPathFor, shouldProxyToDigiChat } from "./paths";
+import {
+  CONTAINER_BASE_PATH,
+  containerPathFor,
+  shouldProxyToDigiChat,
+  withContainerPath,
+} from "./paths";
 
 describe("shouldProxyToDigiChat", () => {
   it("proxies embed and digichat API paths", () => {
@@ -29,6 +34,13 @@ describe("shouldProxyToDigiChat", () => {
     expect(shouldProxyToDigiChat("/chat/occ/")).toBe(false);
     expect(shouldProxyToDigiChat("/docs")).toBe(false);
     expect(shouldProxyToDigiChat("/_next/static/x.js")).toBe(false);
+  });
+
+  it("does not claim a path that merely starts with the same letters", () => {
+    // "/chatfoo" is not under the base path: a prefix match on the string
+    // "/chat" alone would claim it and hand it to the container.
+    expect(shouldProxyToDigiChat("/chatfoo")).toBe(false);
+    expect(shouldProxyToDigiChat("/chatfoo/bar")).toBe(false);
   });
 });
 
@@ -60,6 +72,44 @@ describe("containerPathFor", () => {
   });
 
   it("is the identity on the base path itself", () => {
+    expect(CONTAINER_BASE_PATH).toBe("/chat");
     expect(containerPathFor(CONTAINER_BASE_PATH)).toBe(CONTAINER_BASE_PATH);
+  });
+});
+
+describe("withContainerPath", () => {
+  it("moves the path onto the base path and keeps everything else", async () => {
+    const request = new Request("https://digithings.ai/embed?host=occ.digithings.ai", {
+      method: "POST",
+      headers: { "x-embed-host": "occ.digithings.ai", "content-type": "application/json" },
+      body: JSON.stringify({ mode: "embed" }),
+    });
+    const mapped = withContainerPath(request, "/embed");
+    const url = new URL(mapped.url);
+    expect(url.pathname).toBe("/chat/embed");
+    expect(url.search).toBe("?host=occ.digithings.ai");
+    expect(mapped.method).toBe("POST");
+    expect(mapped.headers.get("x-embed-host")).toBe("occ.digithings.ai");
+    expect(await mapped.text()).toBe(JSON.stringify({ mode: "embed" }));
+  });
+
+  it("leaves a path that is already under the base path alone", () => {
+    const request = new Request("https://digithings.ai/chat/api/chat?x=1");
+    const mapped = withContainerPath(request, "/chat/api/chat");
+    expect(new URL(mapped.url).pathname).toBe("/chat/api/chat");
+    expect(new URL(mapped.url).search).toBe("?x=1");
+  });
+
+  it("keeps the asset prefix and the container-local MCP prefix where they are", () => {
+    const assets = withContainerPath(
+      new Request("https://digithings.ai/_dtchat/_next/static/x.js"),
+      "/_dtchat/_next/static/x.js",
+    );
+    expect(new URL(assets.url).pathname).toBe("/_dtchat/_next/static/x.js");
+    const mcp = withContainerPath(
+      new Request("https://digithings.ai/api/mcp/zammad/tickets"),
+      "/api/mcp/zammad/tickets",
+    );
+    expect(new URL(mcp.url).pathname).toBe("/api/mcp/zammad/tickets");
   });
 });

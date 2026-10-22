@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import nextConfig from "../../../next.config";
+import { DIGICHAT_APP_SECURITY_HEADERS } from "../../../src/lib/security-headers-bake";
 
 type HeaderRule = {
   source: string;
@@ -37,6 +38,10 @@ describe("app security headers cover the app root", () => {
     expect(root).toBeDefined();
     expect(root?.headers.some((h) => h.key === "Content-Security-Policy")).toBe(true);
     expect(root?.headers.some((h) => h.key === "X-Frame-Options")).toBe(true);
+    // The root carries the FULL app header set, not a subset: the global rule
+    // is the reference, and the root rule exists because the global rule does
+    // not match the canonical path under a base path.
+    expect(root?.headers).toEqual([...DIGICHAT_APP_SECURITY_HEADERS]);
   });
 
   it("keeps the global rule for every other non-embed path", async () => {
@@ -44,6 +49,7 @@ describe("app security headers cover the app root", () => {
     const global = rules.find((rule) => rule.source === "/((?!embed$|embed/).*)");
     expect(global).toBeDefined();
     expect(global?.headers.some((h) => h.key === "Content-Security-Policy")).toBe(true);
+    expect(global?.headers).toEqual([...DIGICHAT_APP_SECURITY_HEADERS]);
   });
 
   it("keeps the embed arms on the fail-closed baked embed headers", async () => {

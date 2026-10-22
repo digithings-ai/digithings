@@ -12,10 +12,10 @@ import { env } from "cloudflare:workers";
 import {
   CONTAINER_LOCAL_PREFIX,
   DIGICHAT_CONTAINER_REV_VAR,
-  containerPathFor,
   digichatContainerRev,
   sharedDigichatContainerId,
   shouldProxyToDigiChat,
+  withContainerPath,
 } from "./paths";
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { resolveEmbedTenants } from "./tenants-kv";
@@ -246,16 +246,3 @@ export default {
     );
   },
 };
-
-/**
- * The request the Container serves: same method, headers, body and query, with
- * the path moved onto the Container's base path (see `containerPathFor`).
- *
- * The URL is rewritten, not the path string alone, so the query string and
- * every header the edge set (host, cookies, the client IP) survive.
- */
-function withContainerPath(request: Request, pathname: string): Request {
-  const target = new URL(request.url);
-  target.pathname = containerPathFor(pathname);
-  return new Request(target.toString(), request);
-}
