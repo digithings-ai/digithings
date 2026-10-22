@@ -78,6 +78,12 @@ describe('TuiRecordedFrames', () => {
     const pre = container.querySelector('pre.font-mono');
     expect(pre).not.toBeNull();
     expect(pre!.textContent).toContain('Brief');
+    // Every committed frame reaches the desk pane, not only the one imported
+    // first: the dashboard copy of the digichat frame is easy to forget.
+    const summaries = Array.from(container.querySelectorAll('summary')).map(
+      (node) => node.textContent ?? '',
+    );
+    expect(summaries.some((text) => text.includes('digichat-tui'))).toBe(true);
     // The committed artifact is a fixture capture, not a loading or error
     // state: the exporter refuses to write a frame that still says
     // "loading…" or "could not be reached".
