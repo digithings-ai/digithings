@@ -22,7 +22,7 @@ model_list:
   # checkpoints everywhere.
   - model_name: deepseek/deepseek-v4.1-flash-1017
     litellm_params: &ci_ds_v41_flash_1017
-      model: openai/deepseek-v4.1-flash-1017
+      model: openai/deepseek-v4.1-flash  # 1017 not in CI catalog (2026-10-22)
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       # drop_params strips reasoning_effort on openai/ routes. Every route whose
@@ -39,7 +39,7 @@ model_list:
   # legacy alias → 1017 (2026-10-21)
   - model_name: deepseek/deepseek-v4.1-flash
     litellm_params: &ci_ds_v41_flash
-      model: openai/deepseek-v4.1-flash-1017
+      model: openai/deepseek-v4.1-flash  # 1017 not in CI catalog (2026-10-22)
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       allowed_openai_params:
@@ -52,7 +52,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4.1-flash-release
     litellm_params: &ci_ds_v41_flash_release
-      model: openai/deepseek-v4.1-flash-1017
+      model: openai/deepseek-v4.1-flash  # 1017 not in CI catalog (2026-10-22)
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       allowed_openai_params:
@@ -125,7 +125,7 @@ model_list:
   # legacy alias → 1017 (2026-10-21)
   - model_name: deepseek/deepseek-v4-flash
     litellm_params: &ci_ds_v4_flash
-      model: openai/deepseek-v4.1-flash-1017
+      model: openai/deepseek-v4.1-flash  # 1017 not in CI catalog (2026-10-22)
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       allowed_openai_params:
@@ -138,7 +138,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4-flash-release
     litellm_params: &ci_ds_v4_flash_release
-      model: openai/deepseek-v4.1-flash-1017
+      model: openai/deepseek-v4.1-flash  # 1017 not in CI catalog (2026-10-22)
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       allowed_openai_params:
@@ -215,7 +215,7 @@ model_list:
   # legacy alias → 1017 (2026-10-21)
   - model_name: deepseek/deepseek-v4-flash-0731
     litellm_params: &ci_ds_v4_flash_0731
-      model: openai/deepseek-v4.1-flash-1017
+      model: openai/deepseek-v4.1-flash  # 1017 not in CI catalog (2026-10-22)
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       allowed_openai_params:
@@ -228,7 +228,7 @@ model_list:
 
   - model_name: deepseek/deepseek-v4-flash-0731-release
     litellm_params: &ci_ds_v4_flash_0731_release
-      model: openai/deepseek-v4.1-flash-1017
+      model: openai/deepseek-v4.1-flash  # 1017 not in CI catalog (2026-10-22)
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       allowed_openai_params:

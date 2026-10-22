@@ -25,7 +25,7 @@ def test_ci_base_rewrites_mapped_house_slug(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("OPENAI_API_BASE", "https://api.cheaperinference.com/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "ci_live_test")
     assert (
-        client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4.1-flash-1017"
+        client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4.1-flash"
     )
     made: dict[str, Any] = {}
 
@@ -93,7 +93,7 @@ def test_ci_key_beats_openrouter_base_for_mapped_house_slug(
     monkeypatch.setenv("OPENAI_API_KEY", "sk-or-v1-test")
     monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
     assert (
-        client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4.1-flash-1017"
+        client_mod._effective_model_id("deepseek/deepseek-v4-flash") == "deepseek-v4.1-flash"
     )
     made: dict[str, Any] = {}
 
@@ -188,33 +188,33 @@ def test_api_base_host_is_not_a_substring(
 def test_flash_slugs_including_release_alias_to_1017() -> None:
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4.1-flash")
-        == "deepseek-v4.1-flash-1017"
+        == "deepseek-v4.1-flash"
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-flash")
-        == "deepseek-v4.1-flash-1017"
+        == "deepseek-v4.1-flash"
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-flash-0731")
-        == "deepseek-v4.1-flash-1017"
+        == "deepseek-v4.1-flash"
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4.1-flash-release")
-        == "deepseek-v4.1-flash-1017"
+        == "deepseek-v4.1-flash"
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-flash-release")
-        == "deepseek-v4.1-flash-1017"
+        == "deepseek-v4.1-flash"
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug(
             "deepseek/deepseek-v4-flash-0731-release"
         )
-        == "deepseek-v4.1-flash-1017"
+        == "deepseek-v4.1-flash"
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4.1-flash-1017")
-        == "deepseek-v4.1-flash-1017"
+        == "deepseek-v4.1-flash"
     )
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4-pro-0813")

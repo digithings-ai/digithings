@@ -19,7 +19,8 @@
   "balanced_flagship_markers": ["gpt-5.6-luna"],
   "reasoning_effort": {
     "default_sent": {
-      "deepseek-v4.1-flash-1017": "medium"
+      "deepseek-v4.1-flash-1017": "medium",
+      "deepseek-v4.1-flash": "medium"
     },
     "configurable_prefixes": [
       "gpt-5",

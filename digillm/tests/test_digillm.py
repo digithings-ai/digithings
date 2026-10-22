@@ -1439,7 +1439,7 @@ def test_stream_deltas_emits_reasoning_then_content() -> None:
 # The chat reasoning policy as config/model-policy.json declares it. digillm ships
 # with an empty policy; the application registers the configured one at import.
 _CHAT_REASONING_POLICY = client_mod.ReasoningEffortPolicy(
-    default_sent={"deepseek-v4.1-flash-1017": "medium"},
+    default_sent={"deepseek-v4.1-flash-1017": "medium", "deepseek-v4.1-flash": "medium"},
     configurable_prefixes=("gpt-5", "gpt-6", "gpt-oss", "gemini-3"),
 )
 

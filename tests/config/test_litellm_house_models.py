@@ -357,7 +357,7 @@ def _assert_overlay_allows_reasoning_effort(reasoning_effort_configurable: Any) 
         if reasoning_effort_configurable(str(entry["litellm_params"]["model"]))
     ]
     assert any(
-        entry["litellm_params"]["model"] == "openai/deepseek-v4.1-flash-1017" for entry in routes
+        entry["litellm_params"]["model"] == "openai/deepseek-v4.1-flash" for entry in routes
     )
     missing = sorted(
         entry["model_name"]
@@ -472,11 +472,11 @@ def test_merge_litellm_cheaperinference_replaces_mapped_drops_retired() -> None:
     flash = by_name["deepseek/deepseek-v4-flash"]["litellm_params"]
     assert flash["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
     # Legacy flash slugs and the *-release names all alias to 1017.
-    assert flash["model"] == "openai/deepseek-v4.1-flash-1017"
+    assert flash["model"] == "openai/deepseek-v4.1-flash"
     release = by_name["deepseek/deepseek-v4-flash-release"]["litellm_params"]
-    assert release["model"] == "openai/deepseek-v4.1-flash-1017"
+    assert release["model"] == "openai/deepseek-v4.1-flash"
     checkpoint = by_name["deepseek/deepseek-v4.1-flash-1017"]["litellm_params"]
-    assert checkpoint["model"] == "openai/deepseek-v4.1-flash-1017"
+    assert checkpoint["model"] == "openai/deepseek-v4.1-flash"
     resurrected = sorted(_RETIRED_OPENROUTER_ROUTES & by_name.keys())
     assert not resurrected, f"merge resurrected retired OpenRouter routes: {resurrected}"
 

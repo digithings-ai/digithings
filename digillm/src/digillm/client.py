@@ -778,14 +778,17 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # the V4.1 Flash 1017 checkpoint (2026-10-21). Chris decided 1017 replaces
 # the older flash checkpoints. The 0731 fast row is its own markets id, with
 # its own price, so that slug keeps its bare name instead of aliasing to 1017.
+# 2026-10-22 15:45: the 1017 id is gone from the Cheaper Inference catalog
+# ("not currently available"), so every flash slug, 1017 included, routes to
+# the live ``deepseek-v4.1-flash`` id until 1017 is listed again.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
-    "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4.1-flash-release": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4-flash-release": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4-flash-0731-release": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash",
+    "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash",
+    "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-release": "deepseek-v4.1-flash",
+    "deepseek/deepseek-v4-flash-release": "deepseek-v4.1-flash",
+    "deepseek/deepseek-v4-flash-0731-release": "deepseek-v4.1-flash",
     "deepseek/deepseek-v4-flash-0731-fast": "deepseek-v4-flash-0731-fast",
     "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro-0813",
