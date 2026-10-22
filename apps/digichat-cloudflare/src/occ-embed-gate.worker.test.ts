@@ -4,6 +4,7 @@
  * keyless form gets the site 404. Container and Pages are mocked.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { containerPathFor } from "./paths";
 
 const KEY = "fixture-invite-key";
 const containerFetch = vi.fn(async (req: Request) => {
@@ -61,12 +62,38 @@ describe("the /embed invite gate in the Worker", () => {
       expect(rewrite).not.toMatch(/^https?:\/\//);
       expect(rewrite.startsWith("/")).toBe(true);
       const forwardedPath = new URL(containerFetch.mock.calls[i]![0].url).pathname;
-      expect(rewrite).toBe(`${forwardedPath}?host=occ.digithings.ai&layout=page`);
+      expect(forwardedPath).toBe(containerPathFor("/embed"));
+      expect(rewrite).toBe(`${containerPathFor("/embed")}?host=occ.digithings.ai&layout=page`);
     }
     expect(containerFetch).toHaveBeenCalledTimes(3);
     const forwarded = new URL(containerFetch.mock.calls[0]![0].url);
     expect(forwarded.searchParams.get("token")).toBe(KEY);
     expect(pages).not.toHaveBeenCalled();
+  });
+
+  it("gates the base-path spelling of the OCC embed too (DIG-5121)", async () => {
+    const w = await worker();
+    // The keyless form gets the site 404 and never reaches the container.
+    for (const path of [
+      "/chat/embed?host=occ.digithings.ai&layout=page",
+      "/chat/embed/x?host=occ.digithings.ai",
+      "/chat/?mode=embed&host=occ.digithings.ai&layout=page",
+    ]) {
+      const res = await w.fetch(new Request(`https://digithings.ai${path}`), env);
+      expect(res.status, path).toBe(404);
+      expect(await res.text()).not.toMatch(/occ|digichat/i);
+    }
+    expect(containerFetch).not.toHaveBeenCalled();
+    // The key-bearing form reaches the container, on the base-path route.
+    const ok = await w.fetch(
+      new Request(
+        `https://digithings.ai/chat/embed?host=occ.digithings.ai&layout=page&token=${KEY}`,
+      ),
+      env,
+    );
+    expect(ok.status).toBe(200);
+    expect(containerFetch).toHaveBeenCalledTimes(1);
+    expect(new URL(containerFetch.mock.calls[0]![0].url).pathname).toBe(containerPathFor("/embed"));
   });
 
   it("keeps the house embed ungated", async () => {

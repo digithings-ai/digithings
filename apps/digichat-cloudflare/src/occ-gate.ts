@@ -1,3 +1,5 @@
+import { CONTAINER_BASE_PATH } from "./base-path";
+
 /**
  * DIG-1210 / DIG-3585: /chat/occ is invite-only. The Pages shell must never be
  * served without a valid invite — no title, branding or loader. Anything else
@@ -117,12 +119,31 @@ function embedHostOf(raw: string | null): string | null {
 }
 
 /**
- * /embed (or /embed/*) asking for an invite-only tenant. The tenant host is
- * the one the container resolves: `?host=` when it is non-empty, else the
+ * The public paths that render the embed shell.
+ *
+ * DIG-5121 moved the app under the base path, so the embed surface has two
+ * spellings: the compatibility route (/embed) and the base-path route
+ * (/chat/embed) — the same shell, served by the same component
+ * (apps/digichat/src/app/(digichat)/embed-route-shell.tsx). The app root also
+ * answers the embed shell when it asks for it with ?mode=embed
+ * (/chat/?mode=embed).
+ */
+function isEmbedSurfacePath(url: URL): boolean {
+  const path = url.pathname;
+  if (path === "/embed" || path.startsWith("/embed/")) return true;
+  const embed = `${CONTAINER_BASE_PATH}/embed`;
+  if (path === embed || path.startsWith(`${embed}/`)) return true;
+  if (url.searchParams.get("mode") !== "embed") return false;
+  return path === CONTAINER_BASE_PATH || path === `${CONTAINER_BASE_PATH}/`;
+}
+
+/**
+ * An embed request asking for an invite-only tenant. The tenant host is the
+ * one the container resolves: `?host=` when it is non-empty, else the
  * Referer origin (`resolveEmbedHostParamOrReferer` in digichat).
  */
 export function isInviteOnlyEmbedRequest(url: URL, referer: string | null = null): boolean {
-  if (url.pathname !== "/embed" && !url.pathname.startsWith("/embed/")) return false;
+  if (!isEmbedSurfacePath(url)) return false;
   const explicit = url.searchParams.get("host")?.trim();
   const host = embedHostOf(explicit ? explicit : referer);
   return host !== null && INVITE_ONLY_EMBED_HOSTS.has(host);

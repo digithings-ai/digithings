@@ -87,6 +87,46 @@ describe("occ gate", () => {
       expect(await snap(r!)).toEqual(baseline);
     }
   });
+  it("gates every spelling of the embed shell (DIG-5121 serves the app under /chat)", () => {
+    // The compatibility route.
+    expect(
+      isInviteOnlyEmbedRequest(new URL("https://digithings.ai/embed?host=occ.digithings.ai")),
+    ).toBe(true);
+    // The base-path route: the same shell, one path deeper.
+    expect(
+      isInviteOnlyEmbedRequest(new URL("https://digithings.ai/chat/embed?host=occ.digithings.ai")),
+    ).toBe(true);
+    expect(
+      isInviteOnlyEmbedRequest(
+        new URL("https://digithings.ai/chat/embed/x?host=occ.digithings.ai"),
+      ),
+    ).toBe(true);
+    // The app root asked for the embed shell.
+    expect(
+      isInviteOnlyEmbedRequest(
+        new URL("https://digithings.ai/chat/?mode=embed&host=occ.digithings.ai"),
+      ),
+    ).toBe(true);
+    expect(
+      isInviteOnlyEmbedRequest(
+        new URL("https://digithings.ai/chat?mode=embed&host=occ.digithings.ai"),
+      ),
+    ).toBe(true);
+    // Not the embed surface: the menu and the catalogue.
+    expect(
+      isInviteOnlyEmbedRequest(new URL("https://digithings.ai/chat?host=occ.digithings.ai")),
+    ).toBe(false);
+    expect(
+      isInviteOnlyEmbedRequest(
+        new URL("https://digithings.ai/chat/?mode=catalog&host=occ.digithings.ai"),
+      ),
+    ).toBe(false);
+    // Another tenant on the same paths is not gated.
+    expect(
+      isInviteOnlyEmbedRequest(new URL("https://digithings.ai/chat/embed?host=digithings.ai")),
+    ).toBe(false);
+  });
+
   it("lets an invited or non-gated embed through to the container", async () => {
     expect(await occEmbedGate(new Request(`https://digithings.ai/embed?host=occ.digithings.ai&token=${KEY}`), KEY, pages)).toBeNull();
     expect(await occEmbedGate(new Request("https://digithings.ai/embed?host=digithings.ai"), KEY, pages)).toBeNull();

@@ -43,8 +43,11 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
      never forwarded to the container"), which the route gate compares at
      `apps/digichat-cloudflare/src/index.ts:165`. Since 2.6.8 the same copy also gates
      `/embed?host=occ.digithings.ai` (`occEmbedGate`): a request without the key gets the site
-     404 at the Worker. With this secret unset the OCC embed fails closed at the Worker, and a
-     value that differs from copy 1 404s every invited embed, so rotate both together;
+     404 at the Worker. The gate keys on the embed **surface**, not on one path spelling, so it
+     covers every route that renders the embed shell: `/embed`, `/chat/embed` (the base-path
+     spelling the app is served under since DIG-5121) and `/chat/?mode=embed`. With this secret
+     unset the OCC embed fails closed at the Worker, and a value that differs from copy 1 404s
+     every invited embed, so rotate both together;
   3. the Cloudflare Pages secret `OCC_INVITE_KEY` on project `digithings-ai`, which the `/chat/occ`
      shell gate compares (`apps/digithings-web/functions/chat/occ/[[path]].ts:25`).
 
@@ -54,6 +57,11 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
   tenant, or the tenant admits the caller and the shell answers 404. A rotation must also refresh
   the Keychain custody copy and the local host secret store, or the next
   [restore](#custody) reinstalls a dead key as the sanctioned copy.
+- The 404 the gate answers is the **site's own** 404, passed through untouched (`siteNotFound` in
+  `apps/digichat-cloudflare/src/occ-gate.ts`): a gated address must answer exactly like a path that
+  does not exist — same status, same headers, same body. Do not "fix" it by adding
+  `cache-control: no-store` or any other marker: that would make the gated address
+  distinguishable from a plain 404.
 - **Entered by the browser as** `?token=<key>` on `https://digithings.ai/chat/occ`, read once
   in a mount effect (`apps/digithings-web/lib/inviteToken.ts`, only because
   `app/chat/occ/page.tsx` sets `acceptsInviteToken`), and forwarded to digichat as the
