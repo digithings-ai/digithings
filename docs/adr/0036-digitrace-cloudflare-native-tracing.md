@@ -103,7 +103,9 @@ flowchart LR
 - **Contract names.** `DIGI_OTEL_ENDPOINT` and `DIGI_OTEL_HEADERS` are the names, and
   they are one plumbing: `digibase.otel` resolves the endpoint from `DIGI_OTEL_ENDPOINT`
   (fallback `OTEL_EXPORTER_OTLP_ENDPOINT`) and the headers from `DIGI_OTEL_HEADERS`
-  (fallback `OTEL_EXPORTER_OTLP_HEADERS`); the GHA job sets the same two names.
+  (fallback `OTEL_EXPORTER_OTLP_HEADERS`), the header value in the OTel standard
+  comma-separated `key=value` form. The GHA job sets those two names once **DIG-2660**
+  lands; today it sets only `DIGI_OTEL_HEADERS`.
   `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` and `LANGFUSE_OTLP_ENDPOINT` are **retired**:
   leaving them in a workflow points a live workflow at a dropped service.
 - **The live digiquant-runner leg still carries the Langfuse name.** The Phase-3 sync
@@ -111,11 +113,25 @@ flowchart LR
   `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` and `DIGI_OTEL_HEADERS` into the digiquant-runner
   secret, and the runner forwards both into the container (`FORWARDED_ENV_NAMES` in
   `apps/digiquant-runner/src/env.ts`, the command allowlist in
-  `apps/digiquant-runner/commands.json`). The header name does not change:
-  `DIGI_OTEL_HEADERS` stays, and `digibase.otel` already reads it. The endpoint name
-  becomes `DIGI_OTEL_ENDPOINT` in each of those places, and that repoint is **DIG-2660**.
-  DIG-5136 retires the Langfuse app, its runbook and its scripts; it does not touch
-  this leg.
+  `apps/digiquant-runner/commands.json`). Nothing under
+  `apps/digiquant-runner/container` reads an OTLP endpoint today, so this is a name to
+  repoint, not a running export to migrate.
+- **The header name stays; the header value changes.** `DIGI_OTEL_HEADERS` stays and
+  `digibase.otel` already reads it, but the value it carries today is the Langfuse
+  Basic auth pair. It must carry `x-digitrace-token=<per-source token>` and
+  `x-digitrace-tenant=<tenant slug>` instead, and the endpoint name becomes
+  `DIGI_OTEL_ENDPOINT`.
+- **Two tickets touch the same files.** The endpoint name and the header value live in
+  the workflow, in `apps/digiquant-runner/src/env.ts` (`FORWARDED_ENV_NAMES`), in
+  `apps/digiquant-runner/commands.json`, in the `apps/digiquant-runner/wrangler.toml`
+  comment, in `docs/ops/digiquant-runner.md` and in the tests that assert the forwarded
+  names: `apps/digiquant-runner/src/env.test.ts`,
+  `apps/digiquant-runner/src/runner.test.ts`,
+  `apps/digiquant-runner/container/exec_job_test.py` and
+  `tests/scripts/test_sync_digiquant_runner_digikey_secret_workflow.py`, which asserts
+  the old name and so breaks on the rename. **DIG-5136** removes the Langfuse-named
+  entries in those files; **DIG-2660** writes the new endpoint name and the new header
+  value in their place and turns the emitter on. Neither ticket does the other's half.
 - **`persist = false`** on `[observability.traces]`. Consequence, decided on purpose: the
   Cloudflare dashboard keeps no traces of its own, so the stored-trace billing that
   starts on 1 December 2026 does not apply to us.
@@ -320,7 +336,9 @@ app, nothing else.
 1. **DIG-2656** — enrich the OTel leg (`gen_ai` attributes, redaction, ids).
 2. **DIG-2657** — deploy `apps/digitrace-ingest` (Worker, Queue, consumer, R2, index).
 3. **DIG-2659 / DIG-2660** — turn the emitters on: Workers native traces (`persist = false`)
-   and the digiquant GitHub Actions root span.
+   and the digiquant GitHub Actions root span, with the digiquant-runner secret repointed
+   at the new endpoint name and the new header value (DIG-2660, after DIG-5136 has
+   removed the Langfuse-named entries).
 4. **DIG-2658** — apply the index schema and the RLS policies.
 5. **DIG-2661** — the dashboard Traces tab; **DIG-2662** — `digitrace replay` and MLflow.
 6. **DIG-2663** — seven days of parity against LangSmith and the AI Gateway logs. Chris
@@ -342,7 +360,8 @@ Prepared, not performed. Each item is a production action.
       Containers allowance in §Context depends on it.
 - [ ] Create the R2 bucket `digitrace-archive`, the Queue, the KV binding and the
       Analytics Engine dataset (DIG-2657).
-- [ ] Put the per-source ingest tokens and the Supabase role secret (production secrets).
+- [ ] Put the per-source ingest tokens, the per-source tenant slugs and the Supabase
+      role secret (production secrets).
 - [ ] Apply the index migration in `core` and create the `mlflow` schema, its dedicated
       role and the `search_path` grant (DIG-2658).
 - [ ] Run `mlflow db upgrade` against the `mlflow` schema from the analysis container
