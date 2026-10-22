@@ -361,7 +361,7 @@ def test_the_path_filters_include_the_packaging_action() -> None:
             "that only edits it changes what the build context carries and "
             "matches no filter"
         )
-        assert "scripts/package_r5_image_inputs.py" in paths, (
+        assert _filter_covers(paths, "scripts/package_r5_image_inputs.py"), (
             f"the {trigger} path filter does not match the packaging generator, "
             "so a change to it matches no filter and the merge packages the "
             "previous recipe"
