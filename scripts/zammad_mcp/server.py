@@ -70,8 +70,8 @@ def _allowed_host_patterns(raw: str) -> list[str]:
 # host, so the portless spellings are refused. This server is a loopback
 # service: the edge sends the public Host and the digichat entrypoint
 # forwards it, so the loopback names are allow-listed here rather than left to
-# the SDK's construction-time default. ZAMMAD_MCP_ALLOWED_HOSTS adds to them;
-# it does not replace them (the compose stack path still needs "zammad-mcp").
+# the SDK's construction-time default. The environment variable adds to them;
+# it does not replace them (the compose stack path still needs its own name).
 DEFAULT_ALLOWED_HOSTS = "127.0.0.1, localhost"
 
 

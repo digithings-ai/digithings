@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import {
   forwardHeaders,
+  helpdeskMcpPath,
   nextChildEnv,
   nextUpstreamHost,
   proxyToUpstream,
@@ -301,7 +302,7 @@ describe("upstreamTarget", () => {
             {
               host: "127.0.0.1",
               port: frontPort,
-              path: "/api/mcp/zammad/mcp",
+              path: `${helpdeskMcpPath}/mcp`,
               headers: { host: "digithings.ai" },
             },
             (res) => {

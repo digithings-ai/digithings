@@ -32,7 +32,7 @@ const zammadPort = Number(process.env.ZAMMAD_MCP_PORT ?? "8770");
 // EVERY public spelling of it - including the base-path one - back onto this
 // container-local spelling, so the copy Next would answer without the edge key
 // is never reached. Change one, change the other.
-const zammadPrefix = "/api/mcp/zammad";
+export const helpdeskMcpPath = "/api/mcp/zammad";
 // Container/repo root: this script lives at <root>/apps/digichat/scripts/, and
 // `python3 -m scripts.zammad_mcp.server` needs the root on its path.
 const appRoot = fileURLToPath(new URL("../../..", import.meta.url));
@@ -97,7 +97,7 @@ export function forwardHeaders(headers, peerIp, stamp = process.env.DIGICHAT_PEE
  * uses the configured one.
  */
 export function upstreamTarget(url, headers, upstreamPort, helpdeskPort = zammadPort) {
-  if ((url ?? "").startsWith(zammadPrefix)) {
+  if ((url ?? "").startsWith(helpdeskMcpPath)) {
     return {
       headers: { ...headers, host: `${helpdeskMcpHost}:${helpdeskPort}` },
       host: helpdeskMcpHost,
