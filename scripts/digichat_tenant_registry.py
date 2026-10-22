@@ -177,7 +177,7 @@ ALLOWED_NESTED_KEYS = {
 # Keys allowed for the objects inside a list.
 ALLOWED_LIST_ITEM_KEYS = {
     "tools.catalog": frozenset(["id", "default", "label", "tools"]),
-    "tools.catalog.tools": frozenset(["id", "label"]),
+    "tools.catalog.tools": frozenset(["id", "label", "group"]),
 }
 
 # Paths where the runtime reads an OBJECT. A scalar there is a shape

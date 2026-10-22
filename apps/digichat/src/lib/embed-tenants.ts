@@ -292,7 +292,7 @@ export type EmbedTenantConfig = {
       default?: boolean;
       label?: string;
       /** Individual tools under this catalog entry (per-tool session toggles). */
-      tools?: Array<{ id: string; label?: string }>;
+      tools?: Array<{ id: string; label?: string; group?: string }>;
     }>;
   };
   /**
@@ -999,7 +999,11 @@ function parseTenantTools(
           if (typeof st?.id !== "string" || !TOOL_ID_RE.test(st.id)) {
             throw new Error(`embed tenant "${hostKey}": tools.catalog[${i}].tools[${j}].id invalid`);
           }
-          return { id: st.id, ...(typeof st.label === "string" ? { label: st.label } : {}) };
+          return {
+            id: st.id,
+            ...(typeof st.label === "string" ? { label: st.label } : {}),
+            ...(typeof st.group === "string" && st.group.trim() ? { group: st.group.trim() } : {}),
+          };
         })
       : undefined;
     return {

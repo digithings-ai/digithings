@@ -90,7 +90,8 @@ export type DigichatClientModels = {
   picker?: ModelPickerView;
 };
 
-export type DigichatClientSubTool = { id: string; label?: string };
+/** `group` files the tool under a sub-header in `/tools`. */
+export type DigichatClientSubTool = { id: string; label?: string; group?: string };
 
 export type DigichatClientTool = {
   id: string;

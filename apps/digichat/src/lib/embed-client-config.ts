@@ -94,7 +94,7 @@ export type EmbedTenantClientConfig = {
       id: string;
       default?: boolean;
       label?: string;
-      tools?: Array<{ id: string; label?: string }>;
+      tools?: Array<{ id: string; label?: string; group?: string }>;
     }>;
   };
   /** Operator MCP ids/labels only (+ per-tool ids from the allowlist) */

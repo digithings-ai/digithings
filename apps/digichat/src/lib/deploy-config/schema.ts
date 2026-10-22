@@ -535,9 +535,20 @@ export const ToolCatalogEntrySchema = z
     id: z.string().min(1),
     default: z.boolean().optional(),
     label: z.string().optional(),
-    /** Individual tools under this entry, for per-tool session toggles. */
+    /**
+     * Individual tools under this entry, for per-tool session toggles.
+     * `group` files a tool under a sub-header in `/tools`, in listed order.
+     */
     tools: z
-      .array(z.object({ id: z.string().min(1), label: z.string().optional() }).strict())
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            label: z.string().optional(),
+            group: z.string().min(1).optional(),
+          })
+          .strict(),
+      )
       .optional(),
   })
   .strict();

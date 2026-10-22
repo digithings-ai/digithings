@@ -1465,7 +1465,9 @@ The `DIGICHAT_EMBED_TENANTS` env registry accepts the same operator-only fields 
 `mcp.servers` entry (`token`/`tokenEnv`/`authHeader`), merged through the same loader and stripped
 by the same browser projections. `/tools` lists every
 connected catalog + MCP tool. Where the host allows it, each row is On/Off.
-A Foundry host shows the same rows read-only ("Managed by the agent"). A locked
+A Foundry host shows the same rows on and locked: the agent owns them, so each row reads On
+and does not toggle. A catalog tool may carry `group`, which files it under a sub-header in
+the tree. A locked
 host (`lockSessionControls`) lists them and does not toggle. `/mcp` lists MCP
 servers with status Active / Disabled / Needs auth; Enter opens the session JSON and field
 editors when the host allows editing (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**

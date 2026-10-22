@@ -150,10 +150,11 @@ describe("composer palette sync", () => {
         <EmbedComposerMenu kind="tools" onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    expect(screen.getByRole("menuitem", { name: /^\/file_search/ })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: /^\/records/ })).toBeTruthy();
-    expect(screen.getAllByText("Managed by the agent").length).toBeGreaterThan(0);
-    await user.click(screen.getByRole("menuitem", { name: /^\/file_search/ }));
+    const fileSearch = screen.getByRole("menuitemcheckbox", { name: /^\/file_search/ });
+    expect(fileSearch.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("menuitemcheckbox", { name: /^\/records/ })).toBeTruthy();
+    expect(screen.queryByText(/managed by the agent/i)).toBeNull();
+    await user.click(fileSearch);
     expect(api.setExtraTool).not.toHaveBeenCalled();
     expect(api.setDigisearch).not.toHaveBeenCalled();
     unmount();
@@ -164,7 +165,7 @@ describe("composer palette sync", () => {
       </EmbedChatPrefsProvider>,
     );
     expect(screen.getByRole("menuitem", { name: /Records/ })).toBeTruthy();
-    expect(screen.getAllByText("Managed by the agent").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/managed by the agent/i)).toBeNull();
   });
 
   it("lists OCC tools and MCP servers without toggling them", async () => {
@@ -267,18 +268,20 @@ describe("/tools tree", () => {
       </EmbedChatPrefsProvider>,
     );
     expect(toolsTree()).toMatchInlineSnapshot(`
-      "/digisearch                  Managed by the agent
-        ├─ search                  Managed by the agent
-        └─ fetch_all               Managed by the agent
-      /digivault                   Managed by the agent
-        ├─ search_notes            Managed by the agent
-        └─ get_note                Managed by the agent
-      /desk                        Managed by the agent
-        ├─ search_tickets          Managed by the agent
-        ├─ get_ticket              Managed by the agent
-        └─ ticket_report           Managed by the agent"
+      "/digisearch                  On
+        ├─ search                  On
+        └─ fetch_all               On
+      /digivault                   On
+        ├─ search_notes            On
+        └─ get_note                On
+      /desk                        On
+        ├─ search_tickets          On
+        ├─ get_ticket              On
+        └─ ticket_report           On"
     `);
-    expect(screen.queryAllByRole("menuitemcheckbox")).toHaveLength(0);
+    const switches = screen.queryAllByRole("menuitemcheckbox");
+    expect(switches.length).toBeGreaterThan(0);
+    expect(switches.every((row) => row.getAttribute("aria-checked") === "true")).toBe(true);
   });
 
   it("toggles a configured tool, and a built-in tool follows its service", async () => {

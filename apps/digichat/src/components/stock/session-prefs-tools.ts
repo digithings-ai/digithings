@@ -120,8 +120,9 @@ export function applySessionTool(
   }
   if (name === "session_toggle_tool") {
     // /tools calls the setters itself. This model path must not flip a tool.
-    if (api.toolControl === "agent") return { ok: false, message: "Managed by the agent." };
-    if (api.toolControl === "locked") return { ok: false, message: "Tools are locked for this host." };
+    if (api.toolControl === "agent" || api.toolControl === "locked") {
+      return { ok: false, message: "Tools are locked for this host." };
+    }
     return { ok: false, message: "Tools are changed in /tools." };
   }
   if (name === "session_remove_mcp") {
