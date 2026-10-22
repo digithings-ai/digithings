@@ -1836,7 +1836,10 @@ def acquire_lock():
     try:
         with open(os.path.join(LOCK, "pid"), "w") as f: f.write(str(os.getpid()))
     except OSError: pass
-    _start_lock_heartbeat()
+    # Pass LOCK explicitly: the parameter default was bound at import time, so a
+    # caller that moved LOCK (the local suite does) asked for a heartbeat on a
+    # path that is nobody's lock, and got none at all.
+    _start_lock_heartbeat(LOCK)
     return True
 
 def release_lock():
