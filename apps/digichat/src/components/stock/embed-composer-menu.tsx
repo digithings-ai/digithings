@@ -639,9 +639,11 @@ export function EmbedComposerMenu({
       });
       // Provider groups as a /tools-style tree: a /provider row whose children
       // are the raw model ids. Activating the header collapses or expands it.
+      const filtering = Boolean(api.paletteQuery?.trim());
       const groupRows: MenuRow[] = picker.showFullList
         ? picker.groups.flatMap((group) => {
-            const open = opened[group.provider] === true;
+            // A typed filter searches every provider, collapsed or not.
+            const open = filtering || opened[group.provider] === true;
             const header: MenuRow = {
               id: `provider:${group.provider}`,
               label: `/${group.provider}`,
@@ -664,6 +666,8 @@ export function EmbedComposerMenu({
                 branch: (index === group.models.length - 1 ? "last" : "mid") as MenuRow["branch"],
                 insert: optionDraft("/models", model.id),
                 token: model.id,
+                // `gpt` finds `openai/gpt-6-luna`: the filter matches prefixes.
+                aliases: model.id.includes("/") ? [model.id.slice(model.id.indexOf("/") + 1)] : [],
                 activate: () => {
                   commitExclusive(() => {
                     api.setModel(model.id);

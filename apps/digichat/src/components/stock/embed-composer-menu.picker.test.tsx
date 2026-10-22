@@ -494,6 +494,31 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
+  it("finds a model under a collapsed provider while a filter is typed", async () => {
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "alpha/flash" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/flash", label: "Alpha Flash" }] },
+        { provider: "beta", models: [{ id: "beta/think", label: "Beta Think" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider
+        value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, paletteQuery: "thi" })}
+      >
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha/flash"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    // `/beta` starts collapsed, but the typed `thi` still finds `beta/think`
+    // by the part of the id after the provider.
+    const radios = await screen.findAllByRole("menuitemradio");
+    expect(radios.map((row) => row.textContent?.trim())).toEqual([
+      expect.stringContaining("beta/think"),
+    ]);
+    unmount();
+  });
+
   it("renders the modes first, then a /provider tree of raw ids", async () => {
     const onClose = vi.fn();
     const resolved = resolveModelCatalog(
