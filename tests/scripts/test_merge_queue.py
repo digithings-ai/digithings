@@ -1011,7 +1011,7 @@ def test_a_pr_without_a_comments_key_is_not_a_clearance() -> None:
 
     This is the `#5903` post-mortem, and the version of this test that stood here
     asserted the opposite. The host tick fetched its rows with a field list that left
-    `comments` out, so `_posted_verdict_reason` read nothing and `_gate_review` stayed
+    `comments` out, so `_verdict_value_reason` read nothing and `_gate_review` stayed
     silent — while four review passes sat on that PR, the newest a
     `changes_requested`. It merged on the coverage gate; the queue's own audit comment
     names it (`review: review evidence via the coverage gate`).
@@ -1132,11 +1132,14 @@ def test_a_comments_field_that_is_not_a_list_is_refused() -> None:
 
 
 def test_a_missing_commits_key_does_not_clear_a_posted_block() -> None:
-    """The second leg of `#5903`: unverifiable ancestry must not spend a block.
+    """The second leg of `#5903`: a block is never spent by the branch.
 
-    `_on_pr_history` answers "is the verdict's commit still on this branch?" from
-    `pr["commits"]`. With no commit list the question is unanswerable, and the shape
-    that answered "no" retired a verdict whose commit was still on the branch.
+    The old gate answered "is the verdict's commit still on this branch?" from
+    `pr["commits"]`, and retired the block when the answer was no. That made
+    the branch — not the verdict — decide whether a block stood, and any new
+    commit or rebase retired it (DIG-4878). The value gate asks the verdict
+    instead, so a row with no commit list refuses on the same ground as every
+    other row: the newest readable verdict is a block.
     """
     pr = _pr(
         347,
@@ -1147,7 +1150,7 @@ def test_a_missing_commits_key_does_not_clear_a_posted_block() -> None:
     )
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
     assert not verdict.eligible
-    assert any("changes_requested" in r and "no commit list" in r for r in verdict.reasons)
+    assert any("changes_requested" in r and "bbbbbbbbbbbb" in r for r in verdict.reasons)
 
 
 def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
@@ -1170,13 +1173,19 @@ def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
     assert not mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
-def test_a_verdict_against_a_head_this_pr_does_not_carry_does_not_block() -> None:
-    """A force-push or rebase rewrites history, and the old sha is gone.
+def test_a_verdict_against_a_head_this_pr_does_not_carry_still_blocks() -> None:
+    """A verdict on a head that has moved is still the newest verdict.
 
-    The verdict was about code that no longer exists, so holding the PR on it
-    would strand it: the finding cannot be re-applied to the new commits, and the
-    only way to clear it would be to close and reopen the PR. A reviewer who
-    disagrees posts a fresh verdict against the new head.
+    This test asserted the opposite until 2026-10-21, and the shape it pinned
+    is the defect DIG-4878 is about: the block was spent when the commit it
+    named left the branch, so a rebase or a new commit retired it and the
+    coverage gate carried the merge on a label. Six digithings PRs merged that
+    way between 2026-10-20 and 2026-10-21 (#6115, #6074, #6071, #6019, #5968,
+    #5761).
+
+    The finding is still worth answering; it just cannot be answered against
+    code that no longer exists. The remedy is a fresh verdict on the head the
+    PR stands at, and until then the PR waits.
     """
     head = "c" * 40
     pr = _pr(
@@ -1187,7 +1196,9 @@ def test_a_verdict_against_a_head_this_pr_does_not_carry_does_not_block() -> Non
         comments=[_review_comment(verdict="changes_requested", head_sha="f" * 40)],
         commits=[{"oid": head}],
     )
-    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r and "ffffffffffff" in r for r in verdict.reasons)
 
 
 def test_the_latest_posted_verdict_wins() -> None:
@@ -1241,6 +1252,632 @@ def test_the_fetch_asks_github_for_the_fields_the_posted_verdict_needs() -> None
     assert "commits" in fields
 
 
+# --- the value gate: the newest verdict decides, and it has to name the head ---
+#
+# DIG-4878. A blocking verdict used to be spent the moment the commit it named
+# left the branch, so a rebase retired it and `reviewed:agent` carried the
+# merge. The gate below asks the verdict instead: the newest readable verdict is
+# the one that counts, whatever it is scoped to, and an approve counts only when
+# it names the head the PR stands at.
+
+
+def _in_session_review_comment(
+    *,
+    created: str = "2026-10-21T08:00:00Z",
+    login: str = "reviewer",
+    head_sha: str = "c" * 40,
+) -> dict[str, Any]:
+    """A comment in the shape an in-session review leaves on a PR.
+
+    It carries the coverage gate's marker and the reviewer's provenance marker,
+    and it says nothing about a verdict: the value gate must not read one here.
+    """
+    body = (
+        "<!-- in-session-review -->\n"
+        "<!-- digithings-review agent=11111111-1111-1111-1111-111111111111 "
+        f"run=22222222-2222-2222-2222-222222222222 head={head_sha} -->\n\n"
+        "One finding, addressed in the next commit.\n"
+    )
+    return {
+        "id": f"IC_kwDO{login}_session",
+        "author": {"login": login},
+        "authorAssociation": "MEMBER",
+        "body": body,
+        "createdAt": created,
+    }
+
+
+def test_a_stale_scope_changes_requested_is_not_spent_by_a_new_head() -> None:
+    """The defect in one fixture: the branch moved, and the block was retired.
+
+    The verdict names a commit that is no longer on the branch, which is what a
+    rebase or a merge from develop leaves behind. The label says a review ran,
+    so the coverage gate would carry this PR to a merge — and it did, six times
+    over between 2026-10-20 and 2026-10-21.
+    """
+    head = "c" * 40
+    stale = "f" * 40
+    pr = _pr(
+        6071,
+        head_sha=head,
+        comments=[
+            _review_comment(
+                verdict="changes_requested",
+                head_sha=stale,
+                created="2026-10-21T01:30:00Z",
+                number=6071,
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    # The refusal has to name the PR, the verdict, the scope it was written
+    # against and the head the PR stands at, or nobody can tell what to do.
+    assert any(
+        "6071" in r and "changes_requested" in r and stale[:12] in r and head[:12] in r
+        for r in verdict.reasons
+    )
+
+
+def test_the_label_alone_still_carries_a_pr_with_no_blocking_verdict() -> None:
+    """The control for the test above: the fix must not refuse everything.
+
+    A PR whose newest review says nothing about blocking merges on the same
+    label it merged on before. The gate refuses a verdict, not a PR.
+    """
+    head = "c" * 40
+    pr = _pr(
+        6071,
+        head_sha=head,
+        comments=[_in_session_review_comment()],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+
+
+def test_an_approve_on_the_current_head_clears_an_earlier_block() -> None:
+    """A reviewer who came back and approved on the head clears their own block."""
+    head = "c" * 40
+    pr = _pr(
+        347,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(
+                verdict="changes_requested", head_sha=head, created="2026-10-07T22:07:11Z"
+            ),
+            _review_comment(verdict="approved", head_sha=head, created="2026-10-07T22:20:00Z"),
+        ],
+        commits=[{"oid": head}],
+    )
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+
+
+def test_a_changes_requested_after_an_approve_still_blocks() -> None:
+    """The approve came first, so the block stands."""
+    head = "c" * 40
+    pr = _pr(
+        347,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="approved", head_sha="b" * 40, created="2026-10-07T22:07:11Z"),
+            _review_comment(
+                verdict="changes_requested", head_sha=head, created="2026-10-07T22:20:00Z"
+            ),
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_prose_only_changes_requested_blocks() -> None:
+    """A `Review verdict:` line with no marker is a verdict too.
+
+    The queue read markers only, so a reviewer who wrote the review rule's own
+    format and no marker was invisible to it. The marker is the contract; the
+    line is how a reviewer says which way the review went.
+    """
+    pr = _pr(
+        347,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDOprose_347",
+                "author": {"login": "chrizefan"},
+                "body": "**Review verdict: changes requested** — one finding blocks approval.",
+                "createdAt": "2026-10-21T08:00:00Z",
+            }
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r and "chrizefan" in r for r in verdict.reasons)
+
+
+def test_a_prose_approve_that_names_the_head_clears() -> None:
+    """The prose line can name the head it covers, and then it counts."""
+    head = "c" * 40
+    pr = _pr(
+        347,
+        head_sha=head,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDOprose_347",
+                "author": {"login": "chrizefan"},
+                "body": f"**Review verdict: approve** — reviewed head `{head}`.",
+                "createdAt": "2026-10-21T08:00:00Z",
+            }
+        ],
+        commits=[{"oid": head}],
+    )
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+
+
+def test_an_approve_that_names_another_head_does_not_count() -> None:
+    """An approve is a verdict about one head. The PR stands at another."""
+    head = "c" * 40
+    pr = _pr(
+        347,
+        head_sha=head,
+        approved=True,
+        comments=[_review_comment(verdict="approved", head_sha="b" * 40)],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("approve" in r and "bbbbbbbbbbbb" in r for r in verdict.reasons)
+
+
+def test_a_non_answer_is_not_a_verdict() -> None:
+    """`NO REVIEW — non-answer` is the review rule's non-answer, not a verdict.
+
+    It must neither block nor clear: a reviewer who could not judge has
+    attested nothing, and the queue reads that as no signal at all.
+    """
+    pr = _pr(
+        347,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDOprose_347",
+                "author": {"login": "chrizefan"},
+                "body": "Review verdict: NO REVIEW — non-answer\n\nOut of quota this run.",
+                "createdAt": "2026-10-21T08:00:00Z",
+            }
+        ],
+    )
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+
+
+def test_the_6071_timeline_is_refused() -> None:
+    """The shape the audit found: blocked, rebased, merged on the label.
+
+    `digithings-ai/digithings#6071` was blocked at 01:30 Rome against
+    `028e67ed`, merged at 02:28 on head `7b3b921d95`, and approved at 02:44 —
+    sixteen minutes after the merge, which is why the queue never saw an
+    approve on the head it merged. This fixture is the record as it stood at
+    02:28, when the merge decision was taken.
+    """
+    head = "7b3b921d95" + "0" * 30
+    pr = _pr(
+        6071,
+        head_sha=head,
+        comments=[
+            _review_comment(
+                verdict="changes_requested",
+                head_sha="028e67ed",
+                created="2026-10-21T01:30:00Z",
+                number=6071,
+            ),
+            _in_session_review_comment(created="2026-10-21T01:34:00Z", head_sha=head),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(
+        "6071" in r and "changes_requested" in r and "028e67ed" in r and "7b3b921d95" in r
+        for r in verdict.reasons
+    )
+
+
+# --- a block belongs to the seat that posted it ---------------------------------
+#
+# DIG-4878, second rule. The newest readable verdict was enough until the
+# security desk found #6170: two seats posted verdicts on one PR, the code
+# reviewer approved the head, and the queue read that approve as the newest
+# verdict — while the security desk's `changes requested` was still standing and
+# the commit it named was still an ancestor of the merged head. A block belongs
+# to the seat that posted it, and only that seat can clear it.
+
+# The seats in the #6170 timeline, by the uuid the provenance marker carries.
+REVIEWER_SEAT = "c59332b4-a0ef-4a6a-8027-5c081486f899"
+SECURITY_SEAT = "77fd6c7a-97b1-41f7-be9d-859cf5d7af33"
+# The head #6170 merged on, and the commit the security desk's block named.
+HEAD_6170 = "cd17d6539b51e09e4fd739e5cf65996c7fec3a75"
+STALE_6170 = "fb309e64583a5313d2af556d95b4d5892e594d65"
+
+
+def _seat_verdict_comment(
+    *,
+    seat: str,
+    verdict: str,
+    head_sha: str,
+    created: str,
+    comment_id: str = "",
+) -> dict[str, Any]:
+    """A verdict comment as the fleet posts it: both markers and a prose line.
+
+    The seat is the provenance marker's `agent=` field. Every seat on this org
+    pushes under one GitHub login, so the marker is the only place the seat is
+    written — and it is the only place the queue can read it from.
+    """
+    body = (
+        f"<!-- digithings-review agent={seat} "
+        f"run=00000000-0000-0000-0000-000000000000 head={head_sha} -->\n"
+        f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{head_sha} -->\n\n"
+        f"Review verdict: {verdict.replace('_', ' ')}\n"
+    )
+    return {
+        "id": comment_id or f"IC_kwDO{seat[:8]}_{created}",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "body": body,
+        "createdAt": created,
+    }
+
+
+def _the_6170_timeline(*, with_the_security_approve: bool = False) -> dict[str, Any]:
+    """The #6170 comment record, as it stood when the merge decision was taken.
+
+    `digithings-ai/digithings#6170` (DIG-4911) merged into `develop` on
+    2026-10-21T14:56:39Z on head `cd17d6539b`, with no security sign-off on
+    that head. The code reviewer approved the head at 14:50:24Z; the security
+    desk's `changes requested` on `fb309e6458` (still an ancestor of the merged
+    head) was standing. The security desk posted its own approve at 14:59:53Z,
+    after the merge — `with_the_security_approve` adds that comment, which is
+    the record as it stands today.
+    """
+    comments = [
+        _seat_verdict_comment(
+            seat=REVIEWER_SEAT,
+            verdict="changes_requested",
+            head_sha=STALE_6170,
+            created="2026-10-21T12:10:35Z",
+            comment_id="IC_kwDORaGBGM8AAAABeG_ufQ",
+        ),
+        _seat_verdict_comment(
+            seat=SECURITY_SEAT,
+            verdict="changes_requested",
+            head_sha=STALE_6170,
+            created="2026-10-21T12:28:36Z",
+            comment_id="IC_kwDORaGBGM8AAAABeHUK8g",
+        ),
+        _seat_verdict_comment(
+            seat=REVIEWER_SEAT,
+            verdict="changes_requested",
+            head_sha=STALE_6170,
+            created="2026-10-21T12:55:08Z",
+            comment_id="IC_kwDORaGBGM8AAAABeH7A8Q",
+        ),
+        _seat_verdict_comment(
+            seat=REVIEWER_SEAT,
+            verdict="changes_requested",
+            head_sha=STALE_6170,
+            created="2026-10-21T14:14:22Z",
+            comment_id="IC_kwDORaGBGM8AAAABeJj8Cg",
+        ),
+        _in_session_review_comment(
+            created="2026-10-21T14:35:54Z", head_sha=STALE_6170
+        ),
+        _in_session_review_comment(
+            created="2026-10-21T14:47:11Z", head_sha=HEAD_6170
+        ),
+        _seat_verdict_comment(
+            seat=REVIEWER_SEAT,
+            verdict="approve",
+            head_sha=HEAD_6170,
+            created="2026-10-21T14:50:24Z",
+            comment_id="IC_kwDORaGBGM8AAAABeKPydw",
+        ),
+    ]
+    if with_the_security_approve:
+        comments.append(
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=HEAD_6170,
+                created="2026-10-21T14:59:53Z",
+                comment_id="IC_kwDORaGBGM8AAAABeKb_Xg",
+            )
+        )
+    pr = _pr(6170, head_sha=HEAD_6170, comments=comments, commits=[{"oid": HEAD_6170}])
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    return pr
+
+
+def test_the_6170_timeline_is_refused() -> None:
+    """The shape the security desk found: another seat's approve does not clear it.
+
+    The code reviewer's approve on the head is the newest readable verdict, so
+    the newest-verdict rule alone lets this PR through — while the security
+    desk's `changes requested` is still standing on a commit that is still an
+    ancestor of the head. The refusal has to name the PR, the seat that still
+    holds the block, the verdict, the scope and the head.
+    """
+    verdict = mq.evaluate(
+        _the_6170_timeline(), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert not verdict.eligible
+    assert any(
+        "6170" in r
+        and "changes_requested" in r
+        and STALE_6170[:12] in r
+        and HEAD_6170[:12] in r
+        for r in verdict.reasons
+    )
+    assert any(SECURITY_SEAT in r for r in verdict.reasons)
+
+
+def test_the_6170_timeline_is_cleared_by_the_security_desks_own_approve() -> None:
+    """The other half of the rule: the seat that blocked can clear its own block.
+
+    The security desk posted its approve on the head at 14:59:53Z, after the
+    merge. With that comment on the PR, the standing block is gone and the
+    newest readable verdict names the head — so the PR is not held.
+    """
+    verdict = mq.evaluate(
+        _the_6170_timeline(with_the_security_approve=True),
+        mq.load_policy(),
+        acting_role="em",
+        base="develop",
+    )
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_block_from_one_seat_is_not_cleared_by_another_seats_approve() -> None:
+    """The rule in one fixture: seat A blocks, seat B approves, the PR waits."""
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:50:24Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(SECURITY_SEAT in r and "changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_seat_clears_its_own_block_with_an_approve_naming_the_head() -> None:
+    """The seat that blocked can clear it — by approving the head."""
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:59:53Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_seats_approve_naming_another_head_does_not_clear_its_block() -> None:
+    """An approve on another head says nothing about this head.
+
+    The seat approved a commit the PR no longer stands at, so its block stands:
+    the same rule the ticket states for the newest verdict, applied to the seat
+    that posted it.
+    """
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha="b" * 40,
+                created="2026-10-21T13:00:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:50:24Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(SECURITY_SEAT in r for r in verdict.reasons)
+
+
+def test_a_block_whose_seat_cannot_be_read_is_judged_by_the_newest_verdict() -> None:
+    """The limitation, pinned: no seat marker, no seat-scoped rule.
+
+    The queue reads the seat from the provenance marker, and a comment without
+    one has no seat to hold its block to — so the newest-verdict rule judges
+    it, and a later approve naming the head clears it. 33 of the 40 readable
+    verdicts on the open PRs carried no seat marker when this was measured, so
+    this is the common path today, not the rare one. The alternative — holding
+    every unreadable-seat block until an unreadable-seat approve — changes no
+    open PR today either (0 flips over 37, 36 and 35 open PRs on 2026-10-21),
+    but it would strand a PR whose blocking seat's earlier verdict carries no
+    marker and whose later clearance does: the marker only appeared on
+    2026-10-21, and that seat has no way left to clear its own block. The
+    newest-verdict rule is what an unreadable seat gets.
+    """
+    head = "c" * 40
+    pr = _pr(
+        5975,
+        head_sha=head,
+        comments=[
+            _review_comment(
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T09:00:00Z",
+                number=5975,
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T11:00:00Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_prose_approve_that_names_the_head_later_counts() -> None:
+    """A prose verdict names the head where the review names it, not on one line.
+
+    The real shape (`digithings-ai/digithings#6168`, 2026-10-21): the comment
+    opens with the scope line — "four independent reviewers, head `31a7b1333c`"
+    — and the verdict line comes three paragraphs later. The question the gate
+    asks is whether the comment names the head the PR stands at, so a binding
+    read off one line only would refuse a verdict that does name it.
+    """
+    head = "31a7b1333c81b43d15779dd06a917abdad6097f9"
+    pr = _pr(
+        6168,
+        head_sha=head,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDOsession_6168",
+                "author": {"login": "chrizefan"},
+                "body": (
+                    "## In-session review pass - four independent reviewers, head "
+                    f"`{head[:12]}`\n\n"
+                    "Scope: this branch at head "
+                    f"`{head}`, base `develop`.\n\n"
+                    "**Review verdict: approve.** All five findings are addressed.\n"
+                ),
+                "createdAt": "2026-10-21T12:10:09Z",
+            }
+        ],
+        commits=[{"oid": head}],
+    )
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+
+
+def test_a_prose_approve_that_names_only_another_commit_does_not_count() -> None:
+    """The commit it names is not the head the PR stands at."""
+    head = "54887618dbd8c1d673efdb0edd991ffa077b66ba"
+    pr = _pr(
+        6018,
+        head_sha=head,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDOsession_6018",
+                "author": {"login": "chrizefan"},
+                "body": (
+                    "Review verdict: approve - digithings #6018 (DIG-4590) @ "
+                    "`667778db3b6eaa33a7dbd30f91770cb13718f95f`\n\n"
+                    "<!-- digithings-review agent=6f361355-e086-4a53-a913-b5811e099ab0 "
+                    "run=5f7b3c6a-0e10-4f7f-8dee-cd5a2a3502fd "
+                    "head=667778db3b6eaa33a7dbd30f91770cb13718f95f -->\n"
+                ),
+                "createdAt": "2026-10-21T08:40:26Z",
+            }
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("approve" in r and "667778db3b6e" in r for r in verdict.reasons)
+
+
+def test_a_seat_uuid_in_a_marker_is_not_read_as_a_commit() -> None:
+    """`agent=54a431af-...` is a seat, not a head.
+
+    The shape is `digithings-ai/digithings#6139` (2026-10-21): the verdict
+    comment carries the provenance marker, whose `agent=` group starts with
+    eight hex characters. Read as a commit, that group names a head nobody
+    reviewed — and the refusal then names the wrong sha.
+    """
+    head = "8ef8190bc87967f433c61e7498c7923ded6c94b7"
+    pr = _pr(
+        6139,
+        head_sha=head,
+        comments=[
+            {
+                "id": "IC_kwDOsession_6139",
+                "author": {"login": "chrizefan"},
+                "body": (
+                    "<!-- digithings-review agent=54a431af-501a-47d9-83a9-c1d5808809c4 "
+                    f"run=40ffa6ac-1f31-450f-ab4b-80e2bb8cf327 head={head} -->\n"
+                    "<!-- in-session-review -->\n\n"
+                    "Review verdict: changes requested\n\n"
+                    "One finding blocks approval.\n"
+                ),
+                "createdAt": "2026-10-21T09:59:22Z",
+            }
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r and head[:12] in r for r in verdict.reasons)
+    # The uuid is the seat, and the refusal may name it as the seat — but it is
+    # never quoted as the commit the verdict covers. A sha is always quoted in
+    # backticks, so a uuid in backticks would mean it was read as a commit.
+    assert not any("`54a431af" in r for r in verdict.reasons)
 def test_the_default_limit_stays_under_github_node_cap() -> None:
     """DIG-3240: the default fetch must stay under GitHub's 500,000-node cap.
 
