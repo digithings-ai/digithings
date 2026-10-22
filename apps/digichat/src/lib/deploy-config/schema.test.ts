@@ -495,7 +495,12 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.models.available).not.toContain("qwen/qwen3.8-max");
     expect(dt?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
     expect(
-      dt?.models.picker?.groups.find((group) => group.premium)?.models.map((model) => model.id),
+      dt?.models.picker?.groups.find((group) => group.premium),
+    ).toBeUndefined();
+    expect(
+      dt?.models.picker?.groups.flatMap((group) =>
+        group.models.filter((model) => model.premium).map((model) => model.id),
+      ),
     ).toEqual(["google/gemini-3.8-flash", "z-ai/glm-5.3"]);
     expect(dt?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
       "z-ai/glm-5.3-flash",

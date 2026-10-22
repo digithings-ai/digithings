@@ -34,6 +34,8 @@ import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { createTurnGuard, guardrailPrepareStep } from "@/lib/guardrails/turn";
+import { admitChatTurn, projectedGuardrails } from "@/lib/limits/admit";
+import { loadCatalogPrices } from "@/lib/limits/prices";
 import { resolveLanguageCode } from "@/lib/languages";
 import { deploymentRateLimitEnabled, premiumModelsHeader } from "@/lib/deploy-config/schema";
 import { catalogModelRate, premiumIdsFromGroups } from "@/lib/model-picker-catalog";
@@ -253,6 +255,9 @@ export async function POST(req: Request) {
     ip: clientIpForRateLimit(req),
     omitUserTpm: byokKey.length > 0,
   });
+  const limitSlug = embedConfig?.slug ?? dep?.slug ?? tenantSlug;
+  const limitGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
+  const limitConfig = embedConfig?.limits ?? dep?.limits;
   // The registry describes the backend once (#4522): the streaming path is
   // chosen from `adapter.protocol`, never from a `backend.type` comparison.
   const adapter = backendAdapterFor(backend?.type);
@@ -572,6 +577,46 @@ export async function POST(req: Request) {
   const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
   const reasoningEffort =
     effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
+
+  // models.costPerWindow stays on the premium budget above. The limits block
+  // is the other gates (tokens, turns, sessions, tool calls, model tiers).
+  const clientIp = clientIpForRateLimit(req);
+  const admission = admitChatTurn({
+    limits: limitConfig,
+    guardrails: limitGuardrails,
+    slug: limitSlug,
+    userId: ownerUserSub,
+    sessionId,
+    ip: clientIp,
+    conversationId: externalConversation,
+    modelId,
+    explicitModel: Boolean(requestedModel),
+    autoModel: tenantDefaultModel || dep?.models?.default,
+    outputCapUsdPerMillion: dep?.models?.priceCapUsdPerMillion,
+    prices: loadCatalogPrices(),
+  });
+  if (admission.decision.action === "block") {
+    runLock.release();
+    return jsonError(429, "limit_exceeded", admission.decision.message, responseHeaders);
+  }
+  if (admission.model && !premiumNotice) {
+    modelId = admission.model;
+    houseSessionModel = undefined;
+  }
+  const guard = createTurnGuard({
+    slug: limitSlug,
+    guardrails: projectedGuardrails(limitConfig, limitGuardrails),
+    foundryMaxToolCalls: foundryAlias,
+    userId: ownerUserSub,
+    sessionId,
+    ip: clientIp,
+    ...(admission.summarize ? { summarize: { notice: admission.summarize.notice } } : {}),
+  });
+  const recordLimitUsage = guard.recordUsage.bind(guard);
+  guard.recordUsage = (usage) => {
+    recordLimitUsage(usage);
+    admission.record(usage, modelId);
+  };
 
   if (adapter.protocol === "foundry-responses" && isFoundryConfig(backend)) {
     const foundryBackend = backend;

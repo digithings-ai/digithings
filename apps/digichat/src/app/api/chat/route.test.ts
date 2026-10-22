@@ -120,6 +120,7 @@ import {
   resetPremiumSpendForTests,
 } from "@/lib/premium-budget/budget";
 import { createDigiGraphClient } from "@/lib/digigraph";
+import { resetLimitsStoreForTests } from "@/lib/limits/store";
 
 function catalogWithSearchVault() {
   return parseDigichatConfig({
@@ -3343,5 +3344,59 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         }
       });
     });
+  });
+});
+
+describe("POST /api/chat limits", () => {
+  beforeEach(() => {
+    resetLimitsStoreForTests();
+    vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
+    vi.mocked(resolveChatTenantContext).mockResolvedValue(mockAuthCtx);
+    vi.mocked(resolveDigigraphUpstreamAuth).mockResolvedValue({
+      bearer: "jwt-token",
+      litellmProxyApiKey: null,
+    });
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
+  });
+
+  afterEach(() => {
+    resetLimitsStoreForTests();
+    resetDigichatConfigForTests();
+  });
+
+  it("blocks a second conversation from the same IP without calling a model", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "trial",
+          backend: { type: "digigraph" },
+          limits: { sessions: { perIp: { max: 1, window: "concurrent", message: "one chat" } } },
+        },
+      }),
+    );
+    const req = (conversation: string) =>
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-external-conversation": conversation,
+          "x-digichat-session": "sess-1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    const first = await POST(req("conv-a"));
+    expect(first.status).toBe(200);
+    const streamCalls = vi.mocked(streamText).mock.calls.length;
+    const traceCalls = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.length;
+    const second = await POST(req("conv-b"));
+    expect(second.status).toBe(429);
+    expect(await second.json()).toMatchObject({ error: "limit_exceeded", message: "one chat" });
+    expect(vi.mocked(streamText).mock.calls.length).toBe(streamCalls);
+    expect(vi.mocked(createDigigraphTraceStreamResponse).mock.calls.length).toBe(traceCalls);
+    expect(vi.mocked(createFoundryStreamResponse)).not.toHaveBeenCalled();
   });
 });

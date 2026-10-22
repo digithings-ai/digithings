@@ -31,7 +31,6 @@ export type CatalogModel = {
 type CatalogPresetDef = {
   id: PresetId;
   label: string;
-  description: string;
   model?: string;
   requires?: string;
 };
@@ -65,14 +64,14 @@ const catalog = catalogJson as CatalogFile;
 export type ModelPickerPreset = {
   id: string;
   label: string;
-  description: string;
   model: string;
 };
 
 export type ModelPickerGroup = {
+  /** Backend provider id: the model id prefix before the first "/". */
   provider: string;
-  models: { id: string; label: string }[];
-  /** Manual selection only. Presets and the router never use this group. */
+  models: { id: string; label: string; premium?: boolean }[];
+  /** A hand-written group can still be manual-only. The catalog never sets it. */
   premium?: boolean;
 };
 
@@ -111,15 +110,20 @@ export function catalogModelRate(
   return { inputPerM: row.inputPerM, outputPerM: row.outputPerM };
 }
 
-/** Ids in a picker group marked premium. The router allowlist drops these. */
+/** Ids marked premium, on the model or on a hand-written manual-only group. */
 export function premiumIdsFromGroups(
-  groups: readonly { premium?: boolean; models: readonly { id: string }[] }[] | undefined,
+  groups:
+    | readonly {
+        premium?: boolean;
+        models: readonly { id: string; premium?: boolean }[];
+      }[]
+    | undefined,
 ): string[] {
   if (!groups) return [];
   const ids: string[] = [];
   for (const group of groups) {
-    if (!group.premium) continue;
     for (const model of group.models) {
+      if (!group.premium && !model.premium) continue;
       if (!ids.includes(model.id)) ids.push(model.id);
     }
   }
@@ -128,6 +132,12 @@ export function premiumIdsFromGroups(
 
 function isPresetId(id: string): id is PresetId {
   return (PRESET_IDS as readonly string[]).includes(id);
+}
+
+/** Backend provider id: the part of a model id before the first "/". */
+export function providerIdOf(id: string): string {
+  const at = id.indexOf("/");
+  return at > 0 ? id.slice(0, at) : id;
 }
 
 function providerRank(provider: string): number {
@@ -212,14 +222,10 @@ export function autoPresetModelId(): string {
   return autoModelId();
 }
 
-function fill(template: string, label: string): string {
-  return template.split("{label}").join(label);
-}
-
 /**
  * digigraph's session allowlist: the published picker. That is the standard
- * models at the $2 cap plus the manual Premium tier at or under the $2.50
- * premium cap. No router, and nothing above the premium cap. digigraph is
+ * models at the $2 cap plus the premium tier at or under the $2.50 premium
+ * cap. No router, and nothing above the premium cap. digigraph is
  * the last hop before a bill, so it must not bind an id the premium cap
  * excludes even if a hand-written `available` list on some host offers one.
  * Raising a cap means raising this list and DIGI_SESSION_MODEL_ALLOWLIST.
@@ -276,7 +282,6 @@ export function resolveModelCatalog(
       presets.push({
         id: "auto",
         label: def.label,
-        description: def.description,
         model: model.id,
       });
     }
@@ -296,7 +301,6 @@ export function resolveModelCatalog(
       presets.push({
         id: "reasoning",
         label: def.label,
-        description: fill(def.description, winner.label),
         model: winner.id,
       });
     }
@@ -311,7 +315,6 @@ export function resolveModelCatalog(
       presets.push({
         id: "fast",
         label: def.label,
-        description: fill(def.description, winner.label),
         model: winner.id,
       });
     }
@@ -327,7 +330,6 @@ export function resolveModelCatalog(
       presets.push({
         id: "light",
         label: def.label,
-        description: fill(def.description, winner.label),
         model: winner.id,
       });
     }
@@ -340,7 +342,6 @@ export function resolveModelCatalog(
       presets.push({
         id: "router",
         label: def.label,
-        description: def.description,
         model: router.id,
       });
     }
@@ -348,20 +349,26 @@ export function resolveModelCatalog(
 
   const groups: ModelPickerGroup[] = [];
   if (showFullList) {
-    for (const model of capped) {
-      let group = groups.find((entry) => entry.provider === model.provider);
-      if (!group) {
-        group = { provider: model.provider, models: [] };
-        groups.push(group);
-      }
-      group.models.push({ id: model.id, label: model.label });
-    }
-    if (premium.length) {
-      groups.push({
-        provider: "Premium",
-        premium: true,
-        models: premium.map((model) => ({ id: model.id, label: model.label })),
+    // One group per backend provider id, laid out as a collapsible tree in the
+    // picker. Premium models stay under their own provider and carry the flag;
+    // there is no separate manual group. Providers and ids sort alphabetically
+    // so the tree is stable between visits.
+    const byProvider = new Map<string, ModelPickerGroup["models"]>();
+    const premiumIds = new Set(premium.map((model) => model.id));
+    for (const model of [...capped, ...premium]) {
+      const provider = providerIdOf(model.id);
+      const rows = byProvider.get(provider) ?? [];
+      rows.push({
+        id: model.id,
+        label: model.label,
+        ...(premiumIds.has(model.id) ? { premium: true } : {}),
       });
+      byProvider.set(provider, rows);
+    }
+    for (const provider of [...byProvider.keys()].sort((a, b) => a.localeCompare(b))) {
+      const rows = byProvider.get(provider) ?? [];
+      rows.sort((a, b) => a.id.localeCompare(b.id));
+      groups.push({ provider, models: rows });
     }
   }
 
