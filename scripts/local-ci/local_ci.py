@@ -841,12 +841,77 @@ def worker_build(wt, step):
         shutil.rmtree(outdir, ignore_errors=True)
 
 
+# The checks worktree checkout (DIG-5285). A healthy checkout of this tree
+# takes well under a second; the step was allowed 900 s, so a stalled git - a
+# lazy promisor fetch on a partial clone, a busy Mac - held the gate for a
+# quarter of an hour and then failed the whole check on a transient stall. The
+# budget is now minutes, and a checkout that does not land is retried once on
+# a fresh worktree instead of failing the check.
+WT_CHECKOUT_TIMEOUT = 300
+WT_REBUILD_TIMEOUT = 600
+
+
 def wt_head():
     """HEAD sha of the checks worktree, or None when git cannot read it
     (missing dir, pruned worktree metadata, broken index)."""
     rc, o = sh(["git", "rev-parse", "HEAD"], cwd=WT) if os.path.isdir(WT) else (1, "")
     o = (o or "").strip()
     return o if rc == 0 and re.fullmatch(r"[0-9a-f]{40}", o) else None
+
+
+def _wt_unlock(out):
+    """Release the worktree lock. A locked worktree is not pruned, so a rebuild
+    that skips this leaves the admin dir behind and the next add cannot work."""
+    sh(["git", "worktree", "unlock", WT], cwd=MAIN, out=out)
+
+
+def _wt_rebuild(sha, out):
+    """Remove the checks worktree and add it again at `sha`. True when the add
+    worked.
+
+    The lock goes first: git does not prune a locked worktree, so the admin dir
+    would survive the removal and the next `worktree add` would fail on a path
+    that already exists.
+    """
+    _wt_unlock(out)
+    shutil.rmtree(WT, ignore_errors=True)
+    sh(["git", "worktree", "prune"], cwd=MAIN, out=out)
+    rc, _ = sh(["git", "worktree", "add", "--detach", "-f", WT, sha], cwd=MAIN,
+               timeout=WT_REBUILD_TIMEOUT, out=out)
+    return rc == 0
+
+
+def checkout_wt(sha, out):
+    """Put the checks worktree on `sha`. Returns (ok, reason).
+
+    A checkout that times out or lands on another HEAD is retried once on a
+    fresh worktree (DIG-5285): a stalled git must not turn one transient stall
+    into a red check on every pull request. The retry never rebuilds a
+    directory this runner did not create, so an operator-supplied LOCAL_CI_WT
+    keeps its contents and the reason says so. When the retry does not land
+    either, the reason carries the rc and both HEADs, so the check that failed
+    says why instead of naming a step.
+    """
+    if not os.path.isdir(WT):
+        return False, f"the checks worktree {WT} does not exist; the worktree add failed"
+    rc, _ = sh(["git", "checkout", "-q", "--detach", "-f", sha], cwd=WT,
+               timeout=WT_CHECKOUT_TIMEOUT, out=out)
+    head = wt_head()
+    if rc == 0 and head == sha:
+        return True, ""
+    why = f"checkout rc={rc} HEAD {(head or 'unreadable')[:12]} != {sha[:12]}"
+    if not wt_is_ours(WT):
+        return False, f"{why}; refusing to rebuild a worktree this runner did not create"
+    out.write(f"worktree checkout did not land ({why}); rebuilding the worktree and retrying\n")
+    if not _wt_rebuild(sha, out):
+        return False, f"{why}; the worktree rebuild failed"
+    rc, _ = sh(["git", "checkout", "-q", "--detach", "-f", sha], cwd=WT,
+               timeout=WT_CHECKOUT_TIMEOUT, out=out)
+    head = wt_head()
+    if rc == 0 and head == sha:
+        return True, ""
+    return False, (f"{why}; the rebuilt worktree also failed "
+                   f"(rc={rc}, HEAD {(head or 'unreadable')[:12]})")
 
 
 def prepare_wt(n, sha, base, out):
@@ -857,7 +922,9 @@ def prepare_wt(n, sha, base, out):
     one frozen tree, so local-ci posted green for code it never checked.
     Now every step's rc is logged, a worktree git cannot read is rebuilt,
     and HEAD must equal the PR head before any gate runs. origin/main is
-    fetched too: check_vendor_content.py baselines on merge-base(HEAD, origin/main)."""
+    fetched too: check_vendor_content.py baselines on merge-base(HEAD, origin/main).
+    A checkout that stalls is retried once on a fresh worktree (DIG-5285), and
+    the reason it failed carries the rc and both HEADs."""
     _guard()
     out.write(f"===== worktree {sha[:12]}\n")
     sh(["git", "fetch", "-q", "origin", base, "main", f"pull/{n}/head"], cwd=MAIN, timeout=600, out=out)
@@ -866,11 +933,16 @@ def prepare_wt(n, sha, base, out):
             return False, (f"{WT} is not a worktree this runner created; refusing to rebuild "
                            "over it (set LOCAL_CI_WT to the runner's own worktree directory)")
         out.write("worktree unreadable by git; rebuilding\n")
-        shutil.rmtree(WT, ignore_errors=True)
-        sh(["git", "worktree", "prune"], cwd=MAIN, out=out)
+        if not _wt_rebuild(sha, out):
+            return False, "the worktree rebuild failed"
     if not os.path.exists(WT):
-        sh(["git", "worktree", "add", "--detach", "-f", WT, sha], cwd=MAIN, timeout=900, out=out)
-    sh(["git", "checkout", "-q", "--detach", "-f", sha], cwd=WT, timeout=900, out=out)
+        sh(["git", "worktree", "add", "--detach", "-f", WT, sha], cwd=MAIN,
+           timeout=WT_REBUILD_TIMEOUT, out=out)
+    ok, why = checkout_wt(sha, out)
+    if not ok:
+        out.write(f"worktree FAIL: {why}; no gate ran\n")
+        log(f"PR #{n} worktree checkout failed: {why}")
+        return False, why
     sh(["git", "clean", "-fdq", "-e", ".venv", "-e", "node_modules"], cwd=WT, out=out)
     try:
         with open(os.path.join(WT, ".local-ci-worktree"), "w", encoding="utf-8") as fh:

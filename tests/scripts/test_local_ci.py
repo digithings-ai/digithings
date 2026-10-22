@@ -360,6 +360,8 @@ class PrepareWorktreeTest(unittest.TestCase):
                 open(os.path.join(wt, ".local-ci-worktree"), "w").write(self.SHA)
         def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
             calls.append(cmd)
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(wt, exist_ok=True)  # git creates the worktree
             return 0, ""
         _mod.sh = fake_sh
         _mod.wt_head = lambda: seq.pop(0) if seq else None
@@ -374,7 +376,9 @@ class PrepareWorktreeTest(unittest.TestCase):
         return res, calls, buf.getvalue()
 
     def test_head_matches_ok(self):
-        (ok, why), calls, _ = self._run([self.SHA, self.SHA])
+        # three reads of HEAD: the worktree-is-it-readable read, the read after
+        # the checkout, and the final one before the gates (DIG-5285)
+        (ok, why), calls, _ = self._run([self.SHA, self.SHA, self.SHA])
         self.assertTrue(ok)
         self.assertEqual(why, "")
         fetch = calls[0]
@@ -389,7 +393,7 @@ class PrepareWorktreeTest(unittest.TestCase):
         self.assertIn("no gate ran", text)
 
     def test_unreadable_worktree_is_rebuilt(self):
-        (ok, _), calls, text = self._run([None, self.SHA])
+        (ok, _), calls, text = self._run([None, self.SHA, self.SHA])
         self.assertTrue(ok)
         self.assertIn("rebuilding", text)
         self.assertTrue(any(c[:3] == ["git", "worktree", "prune"] for c in calls))
@@ -404,7 +408,7 @@ class PrepareWorktreeTest(unittest.TestCase):
         self.assertFalse(any(c[:3] == ["git", "worktree", "add"] for c in calls))
 
     def test_missing_worktree_added(self):
-        (ok, _), calls, _ = self._run([self.SHA], wt_exists=False)
+        (ok, _), calls, _ = self._run([self.SHA, self.SHA], wt_exists=False)
         self.assertTrue(ok)
         self.assertTrue(any(c[:3] == ["git", "worktree", "add"] for c in calls))
 
@@ -412,6 +416,113 @@ class PrepareWorktreeTest(unittest.TestCase):
         src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
         self.assertIn("run_checks(pr, out) if ok_wt else", src)
         self.assertIn("run_review_coverage(pr, out) if ok_wt else", src)
+
+
+class WorktreeSelfHealTest(unittest.TestCase):
+    """DIG-5285: a stalled checkout must not fail the whole check.
+
+    The post-merge run on develop tip 9581532dc712 spent 900 s inside
+    `git checkout` and then failed the check, on a worktree that checks out in
+    under a second, and the check named one opaque step. A checkout that does
+    not land is retried once on a fresh worktree, the lock is released before
+    the prune (a locked worktree is not pruned), and the reason carries the rc
+    and both HEADs.
+    """
+
+    SHA = "a" * 40
+    STALE = "b" * 40
+
+    def _run(self, checkouts, own=True):
+        """checkouts: what each `git checkout` does - "land", "stall" or "wrong"."""
+        calls = []
+        state = {"head": self.STALE, "outs": list(checkouts)}
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        os.mkdir(wt)
+        if own:
+            open(os.path.join(wt, ".local-ci-worktree"), "w").write(self.SHA)
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            calls.append((cmd, timeout))
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(wt, exist_ok=True)  # git creates the worktree
+            elif cmd[:2] == ["git", "checkout"]:
+                outcome = state["outs"].pop(0) if state["outs"] else "land"
+                if outcome == "land":
+                    state["head"] = self.SHA
+                elif outcome == "wrong":
+                    state["head"] = self.STALE
+                return (124 if outcome == "stall" else 0), ""
+            return 0, ""
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log, _mod.wt_is_ours)
+        _mod.sh = fake_sh
+        _mod.wt_head = lambda: state["head"]
+        _mod.WT = wt
+        _mod.log = lambda m: None
+        _mod.wt_is_ours = lambda path: own
+        try:
+            buf = io.StringIO()
+            res = _mod.prepare_wt(7, self.SHA, "develop", buf)
+        finally:
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log, _mod.wt_is_ours = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+        return res, calls, buf.getvalue()
+
+    def _cmds(self, calls):
+        return [c for c, _ in calls]
+
+    def _checkouts(self, calls):
+        return [c for c, _ in calls if c[:2] == ["git", "checkout"]]
+
+    def test_a_stalled_checkout_is_retried_on_a_fresh_worktree(self):
+        (ok, why), calls, text = self._run(["stall", "land"])
+        self.assertTrue(ok, why)
+        self.assertEqual(why, "")
+        self.assertIn("rebuilding", text)
+        self.assertEqual(len(self._checkouts(calls)), 2, "the retry is bounded to one")
+        self.assertTrue(any(c[:3] == ["git", "worktree", "prune"] for c in self._cmds(calls)))
+        self.assertTrue(any(c[:3] == ["git", "worktree", "add"] for c in self._cmds(calls)))
+
+    def test_a_silently_failed_checkout_is_retried_too(self):
+        """The 17 Oct incident: the checkout returned 0 and the HEAD stayed stale."""
+        (ok, why), calls, _ = self._run(["wrong", "land"])
+        self.assertTrue(ok, why)
+        self.assertEqual(len(self._checkouts(calls)), 2)
+
+    def test_the_retry_is_bounded(self):
+        (ok, why), calls, _ = self._run(["stall", "stall"])
+        self.assertFalse(ok)
+        self.assertIn("the rebuilt worktree also failed", why)
+        self.assertEqual(len(self._checkouts(calls)), 2, "a wedged git must not loop")
+
+    def test_the_failure_carries_the_evidence(self):
+        (ok, why), _, text = self._run(["stall", "stall"])
+        self.assertFalse(ok)
+        self.assertIn("rc=124", why)
+        self.assertIn(self.SHA[:12], why)
+        self.assertIn("no gate ran", text)
+
+    def test_the_lock_is_released_before_the_prune(self):
+        """git does not prune a locked worktree: the admin dir survives and the
+        next add fails on a path that already exists."""
+        _, calls, _ = self._run(["stall", "land"])
+        cmds = self._cmds(calls)
+        unlock = next(i for i, c in enumerate(cmds) if c[:3] == ["git", "worktree", "unlock"])
+        prune = next(i for i, c in enumerate(cmds) if c[:3] == ["git", "worktree", "prune"])
+        self.assertLess(unlock, prune, "the unlock has to come before the prune")
+
+    def test_a_worktree_we_did_not_create_is_never_rebuilt(self):
+        (ok, why), calls, _ = self._run(["stall"], own=False)
+        self.assertFalse(ok)
+        self.assertIn("did not create", why)
+        self.assertFalse(any(c[:3] == ["git", "worktree", "prune"] for c in self._cmds(calls)))
+        self.assertFalse(any(c[:3] == ["git", "worktree", "add"] for c in self._cmds(calls)))
+
+    def test_the_checkout_budget_is_bounded(self):
+        self.assertLessEqual(_mod.WT_CHECKOUT_TIMEOUT, 300)
+        _, calls, _ = self._run(["stall", "land"])
+        for cmd, timeout in calls:
+            if cmd[:2] == ["git", "checkout"]:
+                self.assertEqual(timeout, _mod.WT_CHECKOUT_TIMEOUT)
 
 class ReviewCoverageShallowTest(unittest.TestCase):
     """DIG-4389: a shallow clone must never yield a false-green promotion gate.
