@@ -2461,3 +2461,21 @@ html:has(.aui-theme-stage) :focus-visible {
   min-height: 0;
   padding-top: 0;
 }
+
+/* DENSITY: on earlier turns the action bar floats (`autohideFloat="always"`
+   sets data-floating while the turn is hovered). The footer keeps height 0 and
+   the bar overlays the message gap just below the last line, so hovering never
+   shifts the thread. The last turn's bar is not floating and stays in flow. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-footer"]:has(> [data-floating]) {
+  position: relative;
+  min-height: 0;
+  padding-top: 0;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-footer"] > .aui-assistant-action-bar-root[data-floating] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  background: var(--background);
+}

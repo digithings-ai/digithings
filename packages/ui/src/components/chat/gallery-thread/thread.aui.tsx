@@ -1367,6 +1367,9 @@ const AssistantActionBar: FC = () => {
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
+      // Earlier turns: the bar floats (data-floating) over the message gap on
+      // hover instead of taking a row, so the thread never shifts (chat-digichat.css).
+      autohideFloat="always"
       className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
     >
       <ActionBarPrimitive.Copy asChild>

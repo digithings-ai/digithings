@@ -131,4 +131,11 @@ describe("worked chain spacing tokens", () => {
     expect(rule?.[1]).toContain("margin-top: calc(-1 * var(--density-gap-4");
     expect(rule?.[1]).not.toContain("1.5rem");
   });
+
+  it("floats the earlier turns' action bar over the gap instead of taking a row", () => {
+    expect(skin).toMatch(
+      /\[data-slot="aui_assistant-message-footer"\]:has\(> \[data-floating\]\) \{[^}]*min-height: 0/,
+    );
+    expect(skin).toMatch(/\.aui-assistant-action-bar-root\[data-floating\] \{[^}]*position: absolute/);
+  });
 });
