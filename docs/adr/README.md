@@ -6,4 +6,4 @@ Use the template: [0000-template.md](0000-template.md).
 
 Link ADRs from [docs/agent-backlog/INDEX.md](../agent-backlog/INDEX.md) when they govern ongoing work.
 
-Current high-water mark: **0035** ([0035-tenant-lock-flag-fails-closed.md](0035-tenant-lock-flag-fails-closed.md), Accepted) — a non-boolean `lockSessionControls` in the tenant corpus map fails closed to locked, with a warning naming the tenant and the JSON type.
+Current high-water mark: **0036** ([0036-digitrace-cloudflare-native-tracing.md](0036-digitrace-cloudflare-native-tracing.md), Accepted) — digitrace tracing is a Cloudflare-native pipeline: an ingest Worker and Queue, an R2 archive as the system of record, a Supabase `public` index with per-table RLS, Workers Analytics Engine aggregates, and MLflow on demand for the deep analysis. Self-hosted Langfuse is dropped (no new paid services).

@@ -4,6 +4,14 @@
 **Version:** 0.1.0
 **Status:** Minimal viable implementation — library complete, HTTP service stable, Phase 2 observability platform deferred
 
+> **Superseded in part (2026-10-09):** the hosting target and the scope statement below are
+> superseded by [ADR-0036](../docs/adr/0036-digitrace-cloudflare-native-tracing.md). digitrace
+> tracing is a Cloudflare-native pipeline — an ingest Worker and Queue, an R2 archive as the system
+> of record, a Supabase `public` index with per-table RLS, Workers Analytics Engine aggregates —
+> with MLflow on demand for the deep analysis. Self-hosted Langfuse is dropped: no new paid
+> services. The "no database, no background worker, no queue, zero dependencies" philosophy stated
+> in this file no longer holds.
+
 ---
 
 ## 1. Overview
@@ -14,13 +22,26 @@ digitrace occupies the observability role in the digithings stack. It has two di
 
 **As an HTTP microservice** (port 8003), it exposes two read-only endpoints that tell orchestrators and dashboards whether tracing is active, which LangSmith host is configured, and whether the SDK is installed — all without ever surfacing a secret.
 
-### Phase 1 hosting target (self-hosted Langfuse)
+### Phase 1 hosting target: Cloudflare-native ingest and store (superseded, ADR-0036)
 
-Phase 1 (#4930) stands up **self-hosted Langfuse** on Cloudflare Containers
-(Web + Worker) with house Postgres, R2 event uploads, and **external**
-ClickHouse + Redis. Operator runbook:
-[`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md). App:
-[`apps/digitrace-langfuse/`](../apps/digitrace-langfuse/).
+The self-hosted Langfuse plan (Web + Worker on Cloudflare Containers with external ClickHouse +
+Redis) is **dropped**. It needed two new paid services, and the decision of 2026-10-09 was "no new
+paid services".
+
+The hosting target is now the ADR-0036 pipeline:
+
+```
+apps → OTLP/HTTP → digitrace-ingest Worker → Queue → consumer
+     → R2 digitrace-archive (system of record, OTLP-JSON per tenant per day)
+     → Supabase core / public (traces, spans_index, scores, sessions) with per-table RLS
+     → Workers Analytics Engine (tokens, cost, latency per tenant and model)
+dashboard Traces tab reads through dashboard-api; `digitrace replay` loads an R2 window into
+MLflow 3.6+ over OTLP/HTTP /v1/traces, on the Mac or on a scale-to-zero Cloudflare Container.
+```
+
+Decision record: [ADR-0036](../docs/adr/0036-digitrace-cloudflare-native-tracing.md).
+The Langfuse operator runbook ([`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md))
+and the app ([`apps/digitrace-langfuse/`](../apps/digitrace-langfuse/)) are retired under that ADR.
 
 Phase 2 (#4931) dual-export is **shipped** (see § Phase 2 dual-export below).
 Do not point `LANGSMITH_ENDPOINT` at Langfuse.
@@ -54,6 +75,13 @@ remains the real LangSmith API.
 ### Current scope vs. intended platform
 
 The current implementation is deliberately minimal. What exists today is a tracing shim, a health surface, and a Prometheus `/metrics` endpoint backed by the shared `digibase.metrics.install_metrics` helper. The wider roadmap — PII redaction middleware, span schema validation, custom samplers, centralized trace dashboards — is described in the gap analysis in Section 11. The current code is correct and production-safe for its narrow scope; the risks are in what it does not yet do.
+
+**The intended platform is now decided, and this section no longer describes it.**
+[ADR-0036](../docs/adr/0036-digitrace-cloudflare-native-tracing.md) replaces the "no database, no
+background worker, no queue" picture with a real pipeline: an ingest Worker, a Queue, a consumer,
+an R2 archive, a Supabase index with per-table RLS, an on-demand MLflow analysis path and a
+read-only MCP server. The sections below still describe the library as it stands; the platform
+target is the ADR.
 
 ### Observability contract (Prometheus)
 
