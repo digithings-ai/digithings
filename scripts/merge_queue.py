@@ -2247,7 +2247,15 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         claims = [found.group("sha") for found in _PROSE_SHA_RE.finditer(text)]
     provenance = _provenance_fields(body)
     provenance_head = str(provenance.get("head") or "")
-    if provenance_head:
+    if provenance_head and not scope:
+        # A marker verdict names the head it is about through its own `scope=`.
+        # The provenance marker's `head=` is the fallback for a marker that names
+        # no scope, and never a second binding for one that does: an approve
+        # whose `scope=` names a stale head says nothing about the head the PR
+        # stands at, and must not clear a block just because the provenance
+        # marker names the newer head. The prose path has no `scope=`, so it
+        # keeps every sha in the comment as a candidate, the provenance head
+        # included.
         claims.append(provenance_head)
     bindings: list[str] = []
     for binding in claims:

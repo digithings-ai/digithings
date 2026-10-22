@@ -89,7 +89,7 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. |
 | Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat that did not write the PR's code. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring seat, or that seat's own marker posted while its own run was still active, is dropped — the PR then waits for a review from another seat. See [Reviewer independence](#reviewer-independence). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
-| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **whatever it is scoped to**. A block belongs to the seat that posted it: that seat's later approve clears it, and only when the approve names the head the PR stands at — another seat's approve clears nothing, and a new commit, a rebase or a merge from `develop` does not spend a block (DIG-4878). See [The verdict rule](#the-verdict-rule). |
+| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **whatever it is scoped to**. A block belongs to the seat that posted it: that seat's later approve clears it, and only when the approve names the head the PR stands at — another seat's approve clears nothing, and a new commit, a rebase or a merge from `develop` does not spend a block (DIG-4878). A marker verdict names that head by its own `scope=`; the provenance marker's `head=` is the fallback for a marker with no `scope=` and never a second binding for one that has it. See [The verdict rule](#the-verdict-rule). |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
 
 Three of these are deliberate choices worth stating plainly.
@@ -168,6 +168,23 @@ policy — and it is a live one: of the 40 readable verdicts on the open PRs mea
 2026-10-21, 7 carried a seat. The marker was introduced that day; the older reviews
 carry a verdict and no seat. **Post the provenance marker with every verdict**, or the
 queue cannot tell your block from another seat's.
+
+**Which head a verdict names.** Both clauses ask the same question, so the answer is
+written once:
+
+- A **marker verdict names the head through its own `scope=`** and through nothing else.
+  The provenance marker's `head=` is the fallback for a marker that carries no `scope=`,
+  and it is never a second binding for one that does. An approve whose `scope=` names a
+  stale head says nothing about the head the PR stands at, and must not clear a block
+  because the provenance marker names the newer head. That was the hole the review on
+  `#6177` found on 2026-10-21: the seat's approve named the stale commit in its own
+  marker and cleared the block through the provenance head.
+- A **prose verdict names the head** through any sha written in the comment — on the
+  verdict line, in the sentence after it, or in the scope line the review opens with —
+  and through the provenance marker's `head=`.
+
+A binding of 7 characters or more that prefixes the head binds it, which is the width
+the reviewer-independence gate reads.
 
 Three consequences worth stating plainly.
 
