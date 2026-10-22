@@ -29,6 +29,9 @@ The body says which of the two answers came back:
 A sleeping container is **not** a failure. Waking it would cost money to answer a question the
 daily check does not need answered, and the container sleeps on purpose.
 
+The probe also refuses to follow a redirect off `/healthz`: a redirect leaves the wake-hygiene
+path, and if the target boots the container, the daily check starts costing money.
+
 ## What a failure means
 
 Only three things, and one of them is the class the cron cannot see:
@@ -47,16 +50,43 @@ One ticket per job, for the life of the job:
 - the first failure files `[run-watch] container-health: <symptom>` through
   `kit/bin/dt-create-issue` (never a bare `POST /api/issues`: a bare POST writes no workspace
   fields and the issue lands on another issue's worktree, DIG-2040 and DIG-1635);
-- every later failure is a **comment on that same ticket**, never a second ticket (at most one
-  comment a day, and one straight away when the symptom changed);
+- every later failure is a **comment on that same ticket**, never a second ticket. At most one
+  comment a day, and one straight away when the symptom changed;
 - a green run says so once on the ticket, and the ticket stays open: a recurrence is commented
-  there, not filed again.
+  there, not filed again. Each new failure opens a new episode, so each recovery is announced
+  again;
+- the symptom of the first failure is kept in the ticket and in the state file, because it is the
+  record of what went wrong first. Later symptoms are in the comments;
+- the ticket title names the symptom when it was filed, so the comments say which symptom is
+  current.
 
-The ticket is parented to DIG-2904 (the epic that owns the container) and assigned to the DevOps
-Lead.
+The ticket is parented to DIG-2904 (the epic that owns the container), assigned to the DevOps
+Lead, and carries the goal of DIG-2910.
 
-If there is no credential in the environment, the check still runs and still reports: a failure
-that cannot be filed is logged as NOT FILED, never filed as Chris.
+Two things protect the "one ticket" rule:
+
+- **A lost state file does not become a second ticket.** The state file is the first record of the
+  ticket; when it is gone, the job looks the open `[run-watch] container-health:` ticket up on the
+  board and comments on that one. A ticket whose comments are refused three times in a row (closed
+  or deleted) is treated as unreachable and replaced, so a failure is never swallowed.
+- **A create that failed after the create is still a ticket.** `dt-create-issue` checks the
+  read-back after the POST, so a non-zero exit can mean the issue exists. The identifier in the
+  output is the evidence, and it wins.
+
+If there is no agent credential in the environment, the check still runs and still reports: a
+failure that cannot be filed is logged as `not-filed`, never filed as Chris.
+
+### What a run did
+
+The action is written to the state file, to the log and to stdout:
+
+| action | meaning |
+|---|---|
+| `filed` | a new ticket was filed |
+| `commented` | the failure was written on the ticket that is already open |
+| `throttled` | the failure is the same as yesterday's, and the ticket was already told today |
+| `skipped` | there was nothing to say (no ticket open yet, or the comment did not land) |
+| `not-filed` | the ticket could not be filed: no credential, or the create script refused |
 
 ## Install
 
@@ -68,6 +98,7 @@ scripts/container-health/install.sh --dry-run          # print the plist, change
 scripts/container-health/install.sh --status           # is it installed and loaded?
 scripts/container-health/install.sh --install          # write ~/Library/LaunchAgents/com.digithings.container-health.plist
 scripts/container-health/install.sh --install --load   # write it and load it (Chris's OK)
+scripts/container-health/install.sh --unload           # unload the job
 ```
 
 Point it at a dedicated clone on `develop`, not a working tree: the job runs every day, long after
@@ -76,11 +107,33 @@ installer refuses a linked worktree unless `--allow-worktree` is passed, warns w
 not on `develop`, lints the rendered plist with `plutil` before it puts it in place, keeps the
 previous plist, and puts the previous plist back if the load fails.
 
+Two things about launchd are worth knowing:
+
+- **launchd does not re-read a plist that changes on disk.** A job that is already loaded keeps the
+  definition it was bootstrapped with, so a re-install only takes effect after the job is booted
+  out and loaded again. The installer says so when the job is already loaded.
+- **Unloading is by service target**, not by path: a path-based bootout only removes a service that
+  was bootstrapped from that exact file, and a job that keeps running with its plist deleted is the
+  worst outcome. The installer checks the exit status and tells you when the job is still loaded.
+
 The job runs every day at 07:40 local (`StartCalendarInterval`), does not run at load
-(`RunAtLoad false`), and reads the credential the way `com.digithings.it-watch` does: from the
-login keychain, account `digithings/paperclip-api-key-board`, withheld when its rotation deadline
-has passed. A missing credential does not stop the job: the check is read-only, so it keeps
-running and says in the log that a failure cannot be filed.
+(`RunAtLoad false`). A Mac that is asleep at 07:40 runs the check when it wakes up, so a closed
+laptop can move the check by hours.
+
+### The credential
+
+The job reads the **agent** key `digithings/paperclip-api-key` from the login keychain, the same
+way `com.digithings.it-watch` does, and exports it as `PAPERCLIP_API_KEY`. It has to be the agent
+key: `dt-create-issue` asks `/api/agents/me` first and refuses anything else, and a board key
+would file the ticket and the comments in Chris's name. The board key is not needed here and is not
+read.
+
+The credential is withheld when its rotation deadline (`digithings/paperclip-api-key-rotate-by`)
+has passed, and also when the deadline is missing or is not a number. Both checks fail closed: a
+deadline that cannot be read never exports the key. Rotating the credential is Security's call.
+
+A missing credential does not stop the job: the check is read-only, so it keeps running and says
+in the log that a failure cannot be filed.
 
 ## Run it by hand
 
@@ -90,16 +143,22 @@ scripts/container-health/container_health.py --json      # the report as JSON
 scripts/container-health/container_health.py --status    # the last run from the state file
 ```
 
+With `--json` the report on stdout stays machine readable and the action line goes to stderr.
+
 State: `~/.config/digithings/state/container-health.json` (the last run, and the ticket it opened).
 Log: `~/.config/digithings/logs/container-health.log`, one JSON line per run. launchd's own output
 lands in `~/.config/digithings/logs/container-health/`.
 
-## One trap worth knowing
+## Two traps worth knowing
 
-The edge answers `Python-urllib/3.9` with `403` (measured 2026-10-22), so a probe that does not
+**The edge answers `Python-urllib/3.9` with `403`** (measured 2026-10-22), so a probe that does not
 name itself reads the firewall and reports a failure that is not there. The probe sends
 `User-Agent: digithings-container-health/1.0 (launchd, read-only)`, and there is a test that keeps
 it from being dropped.
+
+**`PAPERCLIP_API_URL` names the server, not the API path.** The kit's convention is a server root
+(`http://127.0.0.1:3100`) and every script appends `/api` itself. A script that does not append it
+posts its comments to a 404, and the ticket goes quiet without a word.
 
 ## The files
 
@@ -109,14 +168,18 @@ it from being dropped.
 | the launchd unit | `scripts/container-health/com.digithings.container-health.plist.template` | copy of record for the unit |
 | the installer | `scripts/container-health/install.sh` | renders, lints, installs, loads (only on an explicit flag) |
 | the suite | `tests/scripts/test_container_health.py` | the checks, no network |
+| the free guarantee | `apps/digithings-stack-cloudflare/src/wake-hygiene-free.test.js` | pins that a `/healthz` probe never fetches the container |
 
 ## Rollback
 
 ```sh
 scripts/container-health/install.sh --unload
 rm ~/Library/LaunchAgents/com.digithings.container-health.plist
-rm ~/.config/digithings/state/container-health.json ~/.config/digithings/logs/container-health.log
 ```
+
+Leave `~/.config/digithings/state/container-health.json` alone: it holds the link to the open
+ticket. If it is deleted anyway, the job finds the open `[run-watch] container-health:` ticket on
+the board and comments on that one, so no second ticket is filed. The log can go.
 
 Unloading a launchd job is Chris's call too, so the `--unload` flag is the whole of it. The three
 files in this repository are removed by reverting the commit that added them; do not roll this back

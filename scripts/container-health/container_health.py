@@ -50,6 +50,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -93,7 +94,12 @@ LOG_PATH = CONFIG_DIR / "logs" / "container-health.log"
 CREATE_ISSUE = os.environ.get(
     "DT_CREATE_ISSUE", str(Path.home() / "paperclip-workspace" / "kit" / "bin" / "dt-create-issue")
 )
-API_BASE = os.environ.get("PAPERCLIP_API_URL", "http://localhost:3100/api")
+
+#: The Paperclip server, without the API path. The kit's convention is that
+#: ``PAPERCLIP_API_URL`` names the server, and every script appends ``/api``
+#: itself: a URL that already ends in ``/api`` is left alone.
+DEFAULT_API_URL = "http://127.0.0.1:3100"
+DEFAULT_COMPANY_ID = "3d7a91f3-c674-4a9e-862b-11b9698f6686"
 
 # --- how a filed ticket is routed ----------------------------------------------
 
@@ -107,9 +113,28 @@ TICKET_ASSIGNEE = "c838b4b0-424b-4b58-a2c6-c140c97a0f87"  # DevOps Lead
 TICKET_PRIORITY = "high"
 TICKET_STATUS = "todo"
 
+#: The title prefix of the run-watch ticket. It is also how a lost state file
+#: finds the ticket that is already open.
+TICKET_TITLE_PREFIX = "[run-watch] container-health:"
+
 #: A recurrence comment on the ticket is a note, not a new signal: one per day is
 #: enough, unless the symptom changed.
 RECURRENCE_COMMENT_HOURS = 24.0
+
+#: How many times a comment may fail before the ticket is treated as unreachable
+#: and a new one is filed. Without it, a closed or deleted ticket would swallow
+#: every later failure.
+COMMENT_FAILURE_LIMIT = 3
+
+#: What a run did. The action is written to the state file and to the log.
+ACTION_FILED = "filed"
+ACTION_COMMENTED = "commented"
+ACTION_THROTTLED = "throttled"
+ACTION_SKIPPED = "skipped"
+ACTION_NOT_FILED = "not-filed"
+
+#: An issue identifier, as printed by ``dt-create-issue``.
+IDENTIFIER_RE = re.compile(r"\bDIG-\d+\b")
 
 
 def utcnow() -> str:
@@ -123,6 +148,12 @@ def excerpt(text: str, limit: int = 160) -> str:
     if len(flat) <= limit:
         return flat
     return flat[: limit - 1] + "…"
+
+
+def resolve_api_base() -> str:
+    """The Paperclip API root, whether ``PAPERCLIP_API_URL`` names it or not."""
+    raw = (os.environ.get("PAPERCLIP_API_URL") or DEFAULT_API_URL).rstrip("/")
+    return raw if raw.endswith("/api") else raw + "/api"
 
 
 # --- probing ------------------------------------------------------------------
@@ -171,10 +202,14 @@ def probe(
     raw = b""
     status: int | None = None
     error: str | None = None
+    final_url: str | None = None
     try:
         with open_it(request, timeout=timeout) as response:
             status = getattr(response, "status", None) or response.getcode()
             raw = response.read(8192)
+            final_url = getattr(response, "url", None)
+            if final_url is None and hasattr(response, "geturl"):
+                final_url = response.geturl()
     except urllib.error.HTTPError as err:  # a status code that is not 200
         status = err.code
         error = f"HTTP {err.code}"
@@ -195,6 +230,19 @@ def probe(
             "elapsed_ms": elapsed_ms,
             "detail": excerpt(error, 160),
             "body": "",
+        }
+    # A redirect leaves the wake-hygiene path: the answer would come from
+    # somewhere else, and if that somewhere else boots the container, the daily
+    # check starts costing money. The check asks one path and stays on it.
+    if final_url and not final_url.rstrip("/").endswith(HEALTH_PATH):
+        return {
+            "host": host,
+            "url": url,
+            "state": STATE_UNEXPECTED,
+            "http_status": int(status or 0),
+            "elapsed_ms": elapsed_ms,
+            "detail": "redirected off " + HEALTH_PATH + ": " + excerpt(final_url, 120),
+            "body": excerpt(body, 240),
         }
     state, detail = classify(int(status or 0), body)
     return {
@@ -217,7 +265,11 @@ def run_probes(
     """Probe every host and summarise the run."""
     results = [probe(host, domain=domain, timeout=timeout, opener=opener) for host in hosts]
     states = {r["state"] for r in results}
-    if states & {STATE_HTTP, STATE_UNREACHABLE}:
+    if not results:
+        # Probing nothing is not a green run. It is a misconfiguration, and it
+        # must never be reported as "the stack is fine".
+        overall = OVERALL_FAILED
+    elif states & {STATE_HTTP, STATE_UNREACHABLE}:
         overall = OVERALL_FAILED
     elif states & {STATE_UNEXPECTED}:
         overall = OVERALL_DEGRADED
@@ -256,6 +308,14 @@ def symptom_signature(results: Iterable[dict[str, Any]]) -> str:
     return ",".join(parts)
 
 
+def failing_url(report: dict[str, Any]) -> str:
+    """The URL of the first host that did not answer well."""
+    for r in report.get("results", []):
+        if r["state"] not in HEALTHY_STATES:
+            return r.get("url", "")
+    return ""
+
+
 # --- the report ---------------------------------------------------------------
 
 
@@ -288,12 +348,30 @@ def load_state(path: Path = STATE_PATH) -> dict[str, Any]:
 
 
 def save_state(state: dict[str, Any], path: Path = STATE_PATH) -> None:
-    """Write the state file, atomically enough for a daily job."""
+    """Write the state file, atomically and flushed.
+
+    A state file that is lost means a second ticket for the same job, so the
+    write is flushed to the disk before it is put in place, and the directory
+    entry is flushed too.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    with tmp.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps(state, indent=2, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
     tmp.replace(path)
+    try:
+        fd = os.open(str(path.parent), os.O_RDONLY)
+    except OSError:  # pragma: no cover - the directory is there, it opened
+        return
+    try:
+        os.fsync(fd)
+    except OSError:  # pragma: no cover - not every filesystem allows this
+        pass
+    finally:
+        os.close(fd)
 
 
 def append_log(report: dict[str, Any], path: Path = LOG_PATH) -> None:
@@ -322,7 +400,23 @@ def append_log(report: dict[str, Any], path: Path = LOG_PATH) -> None:
         handle.write(line + "\n")
 
 
+def _save_quietly(state: dict[str, Any], path: Path | None) -> None:
+    """Save the state, but never let a write error end the run."""
+    if path is None:
+        return
+    try:
+        save_state(state, path)
+    except OSError as err:
+        print(f"container-health: the state file was not written: {err}", file=sys.stderr)
+
+
 # --- the ticket ---------------------------------------------------------------
+
+
+def extract_identifier(stdout: str) -> str | None:
+    """The issue identifier in the output of ``dt-create-issue``, if there is one."""
+    match = IDENTIFIER_RE.search(stdout or "")
+    return match.group(0) if match else None
 
 
 def file_issue(
@@ -336,15 +430,29 @@ def file_issue(
     status: str = TICKET_STATUS,
     create_script: str = CREATE_ISSUE,
     runner: Callable[..., Any] = subprocess.run,
+    api_key: str | None = None,
 ) -> str | None:
     """File the run-watch ticket through ``dt-create-issue``.
 
     DIG-2040 / DIG-1635: a bare ``POST /api/issues`` writes no workspace fields and
     the issue lands on somebody else's worktree, so creation always goes through
     the script, which sets ``executionWorkspacePreference: isolated_workspace`` and
-    reads the issue back. A non-zero exit means the issue was NOT filed: this
-    returns None and never falls back to a raw POST.
+    reads the issue back.
+
+    The script refuses without an agent credential (it asks ``/api/agents/me``
+    first), so a board key can never file here.
+
+    A non-zero exit is not always a refusal: some of the script's checks run
+    after the create, so the ticket exists even when the exit code is not zero.
+    The identifier in the output is the evidence, and it wins.
     """
+    key = api_key if api_key is not None else os.environ.get("PAPERCLIP_API_KEY")
+    if not key:
+        print(
+            "container-health: no agent credential in PAPERCLIP_API_KEY; the ticket was NOT filed",
+            file=sys.stderr,
+        )
+        return None
     cmd = [
         sys.executable or "/usr/bin/python3",
         create_script,
@@ -370,43 +478,107 @@ def file_issue(
     except Exception as err:  # the script could not even be run
         print(f"container-health: dt-create-issue could not run: {err}", file=sys.stderr)
         return None
+    identifier = extract_identifier(getattr(proc, "stdout", "") or "")
     if proc.returncode != 0:
+        if identifier:
+            print(
+                f"container-health: dt-create-issue exited {proc.returncode} after the create; "
+                f"the ticket exists: {identifier}: {excerpt(proc.stdout + proc.stderr, 300)}",
+                file=sys.stderr,
+            )
+            return identifier
         print(
             "container-health: dt-create-issue refused (exit "
             f"{proc.returncode}); the ticket was NOT filed: {excerpt(proc.stdout + proc.stderr, 300)}",
             file=sys.stderr,
         )
         return None
-    parts = (proc.stdout or "").split()
-    if not parts:
-        print("container-health: dt-create-issue printed no identifier; the ticket was NOT filed", file=sys.stderr)
+    if not identifier:
+        print(
+            "container-health: dt-create-issue printed no issue identifier; the ticket was NOT filed",
+            file=sys.stderr,
+        )
         return None
-    return parts[0]
+    return identifier
+
+
+def find_existing_ticket(
+    api_base: str | None = None,
+    company_id: str | None = None,
+    opener: Callable[..., Any] | None = None,
+    timeout: float = 60.0,
+    api_key: str | None = None,
+) -> str | None:
+    """The identifier of the run-watch ticket for this job, if one is open.
+
+    The state file is the first record of the ticket. This is the second one,
+    for the day the state file is lost: without it, a lost state file means a
+    second ticket for the same job, one per day.
+    """
+    key = api_key if api_key is not None else os.environ.get("PAPERCLIP_API_KEY")
+    if not key:
+        return None
+    base = (api_base or resolve_api_base()).rstrip("/")
+    company = company_id or os.environ.get("PAPERCLIP_COMPANY_ID") or DEFAULT_COMPANY_ID
+    open_it = opener or urllib.request.urlopen
+    found: list[tuple[int, str]] = []
+    for status_filter in ("", "done"):
+        query = "?limit=50&q=container-health"
+        if status_filter:
+            query += f"&status={status_filter}"
+        request = urllib.request.Request(
+            f"{base}/companies/{company}/issues{query}",
+            headers={"Authorization": f"Bearer {key}", "User-Agent": USER_AGENT},
+        )
+        try:
+            with open_it(request, timeout=timeout) as response:
+                raw = response.read()
+            payload = json.loads(raw.decode("utf-8", "replace") or "[]")
+        except Exception as err:
+            print(
+                f"container-health: the existing-ticket lookup failed: {err}",
+                file=sys.stderr,
+            )
+            continue
+        items = payload if isinstance(payload, list) else (payload or {}).get("issues", [])
+        for item in items or []:
+            if not isinstance(item, dict):
+                continue
+            if not (item.get("title") or "").startswith(TICKET_TITLE_PREFIX):
+                continue
+            identifier = item.get("identifier")
+            if identifier:
+                found.append((int(item.get("issueNumber") or 0), identifier))
+    if not found:
+        return None
+    return max(found)[1]
 
 
 def comment(
     identifier: str,
     body: str,
-    api_base: str = API_BASE,
+    api_base: str | None = None,
     api_key: str | None = None,
     opener: Callable[..., Any] | None = None,
     timeout: float = 60.0,
 ) -> bool:
     """Add a comment to an existing ticket.
 
-    The write carries the bearer header: without it the server files the comment
-    as Chris (local-board), which is not who ran the check.
+    The write carries the bearer header of an agent credential: without it the
+    server files the comment as Chris (local-board), which is not who ran the
+    check, and with a board key it would do exactly that.
     """
     key = api_key if api_key is not None else os.environ.get("PAPERCLIP_API_KEY")
     if not key:
         print(
-            "container-health: no PAPERCLIP_API_KEY in the environment; the comment was NOT posted",
+            "container-health: no agent credential in PAPERCLIP_API_KEY; the comment was NOT posted",
             file=sys.stderr,
         )
         return False
+    base = (api_base or resolve_api_base()).rstrip("/")
     open_it = opener or urllib.request.urlopen
     request = urllib.request.Request(
-        f"{api_base.rstrip('/')}/issues/{identifier}/comments",
+        f"{base}/issues/{identifier}/comments",
         data=json.dumps({"body": body}).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {key}",
@@ -427,7 +599,7 @@ def comment(
 def ticket_title(report: dict[str, Any]) -> str:
     """The title of the run-watch ticket. One ticket per job, symptom first."""
     symptom_text = report.get("symptom") or "unknown symptom"
-    return f"[run-watch] container-health: {symptom_text}"
+    return f"{TICKET_TITLE_PREFIX} {symptom_text}"
 
 
 def ticket_description(report: dict[str, Any]) -> str:
@@ -454,58 +626,147 @@ def ticket_description(report: dict[str, Any]) -> str:
         "worker not answering, or the container awake with the service broken inside",
         "it. The worker-only cron probe (/_stack/status) cannot see this class.",
         "",
-        "Next: reproduce with curl -sS -w '\\n%{http_code}\\n' "
-        "https://graph.digithings.ai/healthz and look at the stack container.",
-        "A repeat of this symptom is commented here, not filed again.",
     ]
+    url = failing_url(report)
+    if url:
+        lines.append(f"Next: reproduce with curl -sS -w '\\n%{{http_code}}\\n' {url}")
+    else:
+        lines.append("Next: read the run log and look at the stack container.")
+    lines.append("A repeat of this symptom is commented here, not filed again.")
     text = "\n".join(lines)
     return text[:1150]
 
 
-def handle_failure(state: dict[str, Any], report: dict[str, Any]) -> str:
-    """File the ticket on the first failure, comment on it on every later one.
+def _within_hours(ts: str | None, hours: float) -> bool:
+    """True when ``ts`` is less than ``hours`` old."""
+    if not ts:
+        return False
+    try:
+        moment = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return False
+    age = (datetime.now(timezone.utc) - moment).total_seconds() / 3600.0
+    return age < hours
 
-    Returns what happened: ``filed``, ``commented``, ``skipped`` or ``not-filed``.
-    """
-    ticket = state.get("ticket")
-    signature = symptom_signature(report["results"])
-    if not ticket:
-        identifier = file_issue(ticket_title(report), ticket_description(report))
-        if not identifier:
-            return "not-filed"
-        state["ticket"] = {
-            "identifier": identifier,
-            "symptom": report.get("symptom", ""),
-            "signature": signature,
-            "created_at": report["ts"],
-            "last_comment_at": report["ts"],
-            "comments": 1,
-        }
-        return "filed"
-    body = (
+
+def _new_ticket_record(identifier: str, report: dict[str, Any], signature: str) -> dict[str, Any]:
+    return {
+        "identifier": identifier,
+        # The symptom when the ticket was filed. It is never overwritten: the
+        # ticket is the record of the first failure.
+        "symptom": report.get("symptom", ""),
+        "last_symptom": report.get("symptom", ""),
+        "signature": signature,
+        "created_at": report["ts"],
+        "last_comment_at": report["ts"],
+        "comments": 1,
+        "comment_failures": 0,
+    }
+
+
+def _recurrence_body(ticket: dict[str, Any], report: dict[str, Any]) -> str:
+    return (
         f"The daily container health check (DIG-2910) failed again.\n\n"
         f"Run: {report['ts']}\n"
         f"Symptom now: {report.get('symptom') or 'unknown symptom'}\n"
         f"Symptom when filed: {ticket.get('symptom') or 'unknown symptom'}\n\n"
         + report_text(report)
         + "\n\nThe full report is in ~/.config/digithings/logs/container-health.log."
+        + "\nThe title of this ticket names the symptom when it was filed."
     )
-    posted = comment(ticket["identifier"], body)
-    if posted:
+
+
+def handle_failure(
+    state: dict[str, Any],
+    report: dict[str, Any],
+    state_path: Path | None = None,
+) -> str:
+    """File the ticket on the first failure, comment on it on every later one.
+
+    Returns what happened: ``filed``, ``commented``, ``throttled``, ``skipped`` or
+    ``not-filed``.
+    """
+    ticket = state.get("ticket")
+    signature = symptom_signature(report["results"])
+    if not ticket:
+        # The state file is the first record of the ticket; the board is the
+        # second one, for the day the state file is lost.
+        existing = find_existing_ticket()
+        if existing:
+            ticket = {
+                "identifier": existing,
+                "symptom": "unknown (the ticket was found on the board, not filed by this job)",
+                "last_symptom": report.get("symptom", ""),
+                "signature": signature,
+                "created_at": report["ts"],
+                "last_comment_at": report["ts"],
+                "comments": 0,
+                "comment_failures": 0,
+                "adopted": True,
+            }
+            state["ticket"] = ticket
+            action = _comment_on_ticket(ticket, report, signature)
+            _save_quietly(state, state_path)
+            return action
+        identifier = file_issue(ticket_title(report), ticket_description(report))
+        if not identifier:
+            return ACTION_NOT_FILED
+        state["ticket"] = _new_ticket_record(identifier, report, signature)
+        # The identifier is on the disk before the first comment: a crash after
+        # this line must not cost the job its ticket.
+        _save_quietly(state, state_path)
+        return ACTION_FILED
+    # A new episode: the recovery of the last one is over, and the next green
+    # run says so again.
+    ticket.pop("recovered_at", None)
+    changed = ticket.get("signature") != signature
+    if not changed and _within_hours(ticket.get("last_comment_at"), RECURRENCE_COMMENT_HOURS):
+        # One comment a day is enough. A changed symptom is not.
+        return ACTION_THROTTLED
+    action = _comment_on_ticket(ticket, report, signature)
+    _save_quietly(state, state_path)
+    return action
+
+
+def _comment_on_ticket(
+    ticket: dict[str, Any], report: dict[str, Any], signature: str
+) -> str:
+    """Comment on the ticket. Returns the action of this run."""
+    body = _recurrence_body(ticket, report)
+    if comment(ticket["identifier"], body):
         ticket["last_comment_at"] = report["ts"]
         ticket["comments"] = int(ticket.get("comments", 0)) + 1
+        ticket["comment_failures"] = 0
+        ticket["last_symptom"] = report.get("symptom", "")
         if ticket.get("signature") != signature:
             ticket["signature"] = signature
-            ticket["symptom"] = report.get("symptom", "")
-        return "commented"
-    return "skipped"
+        return ACTION_COMMENTED
+    failures = int(ticket.get("comment_failures", 0)) + 1
+    ticket["comment_failures"] = failures
+    if failures >= COMMENT_FAILURE_LIMIT:
+        # The ticket cannot be reached. Staying quiet about it would lose every
+        # later failure, so a new ticket is filed.
+        print(
+            f"container-health: the ticket {ticket['identifier']} took {failures} comments "
+            "without landing; a new ticket is filed",
+            file=sys.stderr,
+        )
+        identifier = file_issue(ticket_title(report), ticket_description(report))
+        if identifier:
+            ticket.update(_new_ticket_record(identifier, report, signature))
+            return ACTION_FILED
+    return ACTION_SKIPPED
 
 
-def handle_recovery(state: dict[str, Any], report: dict[str, Any]) -> str:
+def handle_recovery(
+    state: dict[str, Any],
+    report: dict[str, Any],
+    state_path: Path | None = None,
+) -> str:
     """Say once on the ticket that the check is green again."""
     ticket = state.get("ticket")
     if not ticket or ticket.get("recovered_at"):
-        return "skipped"
+        return ACTION_SKIPPED
     body = (
         f"The daily container health check (DIG-2910) is green again.\n\n"
         f"Run: {report['ts']}\n\n"
@@ -513,9 +774,12 @@ def handle_recovery(state: dict[str, Any], report: dict[str, Any]) -> str:
         + "\n\nThe ticket stays open: a recurrence is commented here, not filed again."
     )
     if not comment(ticket["identifier"], body):
-        return "skipped"
+        ticket["comment_failures"] = int(ticket.get("comment_failures", 0)) + 1
+        return ACTION_SKIPPED
     ticket["recovered_at"] = report["ts"]
-    return "commented"
+    ticket["comment_failures"] = 0
+    _save_quietly(state, state_path)
+    return ACTION_COMMENTED
 
 
 # --- the command line ---------------------------------------------------------
@@ -549,6 +813,14 @@ def main(argv: Sequence[str] | None = None, opener: Callable[..., Any] | None = 
         print(json.dumps({"last_run": last, "ticket": ticket}, indent=2, sort_keys=True))
         return 0
     hosts = [h.strip() for h in args.hosts.split(",") if h.strip()]
+    if not hosts:
+        # Probing nothing and calling it a green run is the worst outcome of
+        # this job: a typo in the host list would hide a dead stack.
+        print(
+            "container-health: no hosts to probe; nothing was checked and nothing was filed",
+            file=sys.stderr,
+        )
+        return 2
     report = run_probes(hosts, domain=args.domain, timeout=args.timeout, opener=opener)
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
@@ -556,12 +828,15 @@ def main(argv: Sequence[str] | None = None, opener: Callable[..., Any] | None = 
         print(report_text(report))
     if args.dry_run:
         return 0 if report["overall"] == OVERALL_HEALTHY else 1
-    append_log(report, log_path)
+    try:
+        append_log(report, log_path)
+    except OSError as err:
+        print(f"container-health: the log line was not written: {err}", file=sys.stderr)
     state = load_state(state_path)
     if report["overall"] == OVERALL_HEALTHY:
-        action = handle_recovery(state, report)
+        action = handle_recovery(state, report, state_path)
     else:
-        action = handle_failure(state, report)
+        action = handle_failure(state, report, state_path)
     state["last_run"] = {
         "ts": report["ts"],
         "overall": report["overall"],
@@ -572,8 +847,10 @@ def main(argv: Sequence[str] | None = None, opener: Callable[..., Any] | None = 
         ],
     }
     state["last_action"] = action
-    save_state(state, state_path)
-    print(f"container-health: {action}")
+    _save_quietly(state, state_path)
+    # With --json the report on stdout stays machine readable, so the action
+    # line goes to stderr.
+    print(f"container-health: {action}", file=sys.stderr if args.json else sys.stdout)
     return 0 if report["overall"] == OVERALL_HEALTHY else 1
 
 

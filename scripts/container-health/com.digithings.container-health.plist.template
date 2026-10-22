@@ -8,14 +8,20 @@
   container (wake hygiene, apps/digithings-stack-cloudflare/src/wake-hygiene.ts), so
   the check costs nothing: it reads the container's own liveness payload when the
   container is awake and the worker's sleeping answer when it is not. The cron job
-  smoke-stack keeps the worker-only probes (/_stack/status); this is the deep half
+  smoke-stack keeps the worker only probes (/_stack/status); this is the deep half
   that the cron cannot do.
 
-  ProgramArguments reads the credential the same way com.digithings.it-watch does,
-  and in the same spirit: a missing credential means the check still runs (it is
-  read-only) but a failure cannot be filed as a ticket, so the job says so in the
-  log instead of dying silently. A rotation deadline that has passed withholds the
-  credential: rotating it is Security's call, not this job's.
+  The credential is the agent key digithings/paperclip-api-key, read from the
+  login keychain the way com.digithings.it-watch reads it. It has to be the agent
+  key: dt-create-issue asks /api/agents/me first and refuses anything else, and a
+  board key would file the ticket and the comments in Chris's name. The board key
+  is not needed here and is not read.
+
+  A missing credential means the check still runs (it is read-only) but a failure
+  cannot be filed as a ticket, so the job says so in the log instead of dying
+  silently. A rotation deadline that has passed, or that is not a number at all,
+  withholds the credential: rotating it is Security's call, not this job's. Both
+  checks fail closed, so a deadline that cannot be read never exports the key.
 
   The file in this repository is the copy of record. Install it with
   scripts/container-health/install.sh. Loading a launchd job is Chris's call, so
@@ -23,7 +29,7 @@
 -->
 <plist version="1.0"><dict>
 <key>Label</key><string>com.digithings.container-health</string>
-<key>ProgramArguments</key><array><string>/bin/bash</string><string>-c</string><string>K=$(/usr/bin/security find-generic-password -s digithings -a paperclip-api-key-board -w 2>/dev/null); if [ -z "$K" ]; then echo "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ) container-health: no credential in the login keychain (digithings/paperclip-api-key-board); continuing read-only. The check still runs, but a failure cannot be filed as a ticket."; else D=$(/usr/bin/security find-generic-password -s digithings -a paperclip-api-key-board-rotate-by -w 2>/dev/null); if [ -z "$D" ] || [ "$D" -le "$(/bin/date +%s)" ]; then echo "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ) container-health: PAPERCLIP_API_KEY withheld, rotation deadline missing or passed. Rotating the credential is Security's call (DIG-780); continuing read-only."; K=; else export PAPERCLIP_API_KEY="$K"; fi; unset K D; fi; exec /usr/bin/python3 __CHECKOUT__/scripts/container-health/container_health.py</string></array>
+<key>ProgramArguments</key><array><string>/bin/bash</string><string>-c</string><string>E=$(/usr/bin/security find-generic-password -s digithings -a paperclip-api-key -w 2>&amp;1 1>/dev/null); K=$(/usr/bin/security find-generic-password -s digithings -a paperclip-api-key -w 2>/dev/null); if [ -z "$K" ]; then echo "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ) container-health: no agent credential in the login keychain (digithings/paperclip-api-key): $E. The check still runs, but a failure cannot be filed as a ticket."; else DE=$(/usr/bin/security find-generic-password -s digithings -a paperclip-api-key-rotate-by -w 2>&amp;1 1>/dev/null); D=$(/usr/bin/security find-generic-password -s digithings -a paperclip-api-key-rotate-by -w 2>/dev/null); case "$D" in ''|*[!0-9]*) echo "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ) container-health: the rotation deadline of the agent credential is missing or is not a number ($DE). PAPERCLIP_API_KEY withheld. Rotating the credential is Security's call; continuing read only."; K= ;; *) if [ "$D" -le "$(/bin/date +%s)" ]; then echo "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ) container-health: the rotation deadline of the agent credential has passed. PAPERCLIP_API_KEY withheld. Rotating the credential is Security's call; continuing read only."; K= ; fi ;; esac; fi; if [ -n "$K" ]; then export PAPERCLIP_API_KEY="$K"; fi; unset K D E DE; exec /usr/bin/python3 "__CHECKOUT__/scripts/container-health/container_health.py"</string></array>
 <key>StartCalendarInterval</key><dict>
 <key>Hour</key><integer>7</integer>
 <key>Minute</key><integer>40</integer>
@@ -31,7 +37,8 @@
 <key>RunAtLoad</key><false/>
 <key>ProcessType</key><string>Background</string>
 <key>EnvironmentVariables</key><dict>
-<key>PAPERCLIP_API_URL</key><string>http://localhost:3100/api</string>
+<key>PAPERCLIP_API_URL</key><string>http://127.0.0.1:3100</string>
+<key>PAPERCLIP_COMPANY_ID</key><string>3d7a91f3-c674-4a9e-862b-11b9698f6686</string>
 </dict>
 <key>StandardOutPath</key><string>__HOME__/.config/digithings/logs/container-health/launchd.out</string>
 <key>StandardErrorPath</key><string>__HOME__/.config/digithings/logs/container-health/launchd.err</string>

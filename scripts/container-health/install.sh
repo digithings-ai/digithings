@@ -15,6 +15,10 @@
 # or edits one on its own), so the installer writes the plist and leaves the load to
 # an explicit --load. The install is staged: the plist is rendered and linted before
 # it is put in place, the previous one is kept, and a failed load puts it back.
+#
+# launchd does not re-read a plist that changes on disk. A job that is already
+# loaded keeps the definition it was bootstrapped with, so a re-install only takes
+# effect after the job is booted out and loaded again.
 set -eu
 : "${HOME:?install.sh: HOME is empty; refusing to install outside a user tree}"
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -44,6 +48,11 @@ fi
 CHECKOUT=$(CDPATH= cd -- "$CHECKOUT" && pwd)
 SCRIPT="$CHECKOUT/scripts/container-health/container_health.py"
 DEST="$HOME/Library/LaunchAgents/$LABEL.plist"
+SERVICE="gui/$(id -u)/$LABEL"
+
+is_loaded() {
+  launchctl print "$SERVICE" > /dev/null 2>&1
+}
 
 if [ "$STATUS" = 1 ]; then
   echo "plist:   $DEST"
@@ -52,9 +61,9 @@ if [ "$STATUS" = 1 ]; then
   else
     echo "state:   not installed"
   fi
-  if launchctl print "gui/$(id -u)/$LABEL" > /dev/null 2>&1; then
+  if is_loaded; then
     echo "loaded:  yes"
-    launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null | sed -n 's/^[[:space:]]*state = /state:  /p' | head -n 1
+    launchctl print "$SERVICE" 2>/dev/null | sed -n 's/^[[:space:]]*state = /state:  /p' | head -n 1
   else
     echo "loaded:  no"
   fi
@@ -62,12 +71,25 @@ if [ "$STATUS" = 1 ]; then
 fi
 
 if [ "$UNLOAD" = 1 ]; then
-  if [ ! -f "$DEST" ]; then
-    echo "install.sh: there is no $DEST; nothing to unload"
-    exit 0
+  if is_loaded; then
+    # Boot out by service target, not by path: a path based bootout only
+    # removes a service that was bootstrapped from that exact file, and a job
+    # that is still running with its plist deleted is the worst outcome.
+    if launchctl bootout "$SERVICE"; then
+      echo "install.sh: unloaded $LABEL"
+    else
+      echo "install.sh: bootout of $LABEL failed; the job may still be loaded" >&2
+    fi
+    if is_loaded; then
+      echo "install.sh: $LABEL is still loaded. Check it with:" >&2
+      echo "install.sh:   launchctl print $SERVICE" >&2
+    fi
+  else
+    echo "install.sh: $LABEL is not loaded"
   fi
-  launchctl bootout "gui/$(id -u)" "$DEST" 2>/dev/null || true
-  echo "install.sh: unloaded $LABEL (the plist is still on disk; remove it by hand)"
+  if [ -f "$DEST" ]; then
+    echo "install.sh: the plist is still on disk ($DEST); remove it by hand"
+  fi
   exit 0
 fi
 
@@ -91,7 +113,9 @@ fi
 
 # Paths go through sed; escape the three characters that would change the pattern.
 esc() { printf '%s' "$1" | sed -e 's/[&|\\]/\\&/g'; }
-OUT=$(sed -e "s|__CHECKOUT__|$(esc "$CHECKOUT")|g" -e "s|__HOME__|$(esc "$HOME")|g" "$HERE/$LABEL.plist.template")
+# The result also goes into XML, where & and < are not allowed as they are.
+xml_esc() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+OUT=$(sed -e "s|__CHECKOUT__|$(esc "$(xml_esc "$CHECKOUT")")|g" -e "s|__HOME__|$(esc "$(xml_esc "$HOME")")|g" "$HERE/$LABEL.plist.template")
 if [ "$DRY" = 1 ]; then
   printf '%s\n' "$OUT"
   exit 0
@@ -116,11 +140,19 @@ fi
 mv "$DEST.staged" "$DEST"
 echo "install.sh: wrote $DEST"
 if [ "$LOAD" != 1 ]; then
-  echo "install.sh: the job is NOT loaded. Loading a launchd job is Chris's call:"
-  echo "install.sh:   scripts/container-health/install.sh --install --load"
+  if is_loaded; then
+    echo "install.sh: $LABEL is loaded, and launchd keeps the definition it was loaded with."
+    echo "install.sh: re-load it to pick up this plist (Chris's call):"
+    echo "install.sh:   scripts/container-health/install.sh --install --load"
+  else
+    echo "install.sh: the job is NOT loaded. Loading a launchd job is Chris's call:"
+    echo "install.sh:   scripts/container-health/install.sh --install --load"
+  fi
   exit 0
 fi
-launchctl bootout "gui/$(id -u)" "$DEST" 2>/dev/null || true
+if is_loaded; then
+  launchctl bootout "$SERVICE" || echo "install.sh: warning: bootout of the running job failed" >&2
+fi
 if ! launchctl bootstrap "gui/$(id -u)" "$DEST"; then
   echo "install.sh: bootstrap failed; restoring the previous job" >&2
   if [ -f "$BACKUP" ]; then
