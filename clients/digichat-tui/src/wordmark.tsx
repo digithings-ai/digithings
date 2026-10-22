@@ -14,4 +14,4 @@ export function DigichatWordmark({ cols }: { cols: number }) {
   return <HeroBanner def={DIGICHAT} cols={cols} scale={1} align="left" holdMs={frozenMs()} />;
 }
 
-export const WORDMARK_ROWS = 5;
+export { WORDMARK_ROWS } from "./layout";

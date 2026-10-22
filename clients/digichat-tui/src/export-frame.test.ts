@@ -26,8 +26,10 @@ test("the CLI refuses an unknown flag, a missing value and a stray word", () => 
   expect(() => parseArgs(["--nope"])).toThrow(/unknown flag/);
   expect(() => parseArgs(["--out"])).toThrow(/needs a value/);
   expect(() => parseArgs(["--width"])).toThrow(/needs a value/);
-  expect(() => parseArgs(["--width", "0"])).toThrow(/positive number/);
-  expect(() => parseArgs(["--width", "wide"])).toThrow(/positive number/);
+  expect(() => parseArgs(["--width", "0"])).toThrow(/positive whole number/);
+  expect(() => parseArgs(["--width", "wide"])).toThrow(/positive whole number/);
+  expect(() => parseArgs(["--width", "80px"])).toThrow(/positive whole number/);
+  expect(() => parseArgs(["--width", "12.9"])).toThrow(/positive whole number/);
   expect(() => parseArgs(["extra"])).toThrow(/unknown flag/);
 });
 
@@ -47,8 +49,8 @@ test("the CLI records the chat pane of the real client", async () => {
     child.exited,
   ]);
   expect(exitCode).toBe(0);
-  expect(stderr).not.toContain("error:");
   expect(stdout).toContain("wrote");
+  expect(stderr).not.toContain("the digichat thread did not load");
 
   const record = JSON.parse(await readFile(out, "utf8")) as {
     source: string;
@@ -61,10 +63,26 @@ test("the CLI records the chat pane of the real client", async () => {
   expect(record.source).toBe("digichat-tui");
   expect(record.path).toBe("/thread");
   expect(record.capturedAt.length).toBeGreaterThan(0);
-  expect(record.frame).toContain("captureCharFrame");
+
+  // The frame carries the fixture's own conversation, so it was recorded
+  // from the fixture and not from a live backend.
+  expect(record.frame).toContain("what is a recorded frame");
+  expect(record.frame).toContain("a recorded captureCharFrame() frame");
+  expect(record.frame).toContain("Ask digichat");
   expect(record.frame).not.toContain("the official API could not be reached");
-  // The rail is cropped away: the session title lives only in the rail.
+
+  // The rail is cropped away: the session title lives only in the rail, and
+  // every thread row starts in the pane's own padding, so no rail border is
+  // left in the frame.
   expect(record.frame).not.toContain("book");
-  expect(record.width).toBeLessThan(100);
-  expect(record.height).toBeGreaterThan(0);
+  for (const row of record.frame.split("\n")) {
+    if (row.trim() === "") continue;
+    expect(row.startsWith("  ")).toBe(true);
+  }
+
+  expect(record.width).toBeGreaterThan(0);
+  expect(record.height).toBe(record.frame.split("\n").length);
+  expect(record.width).toBe(
+    Math.max(...record.frame.split("\n").map((row) => row.length)),
+  );
 });

@@ -14,6 +14,10 @@ test("the fixture API serves the conversation list and one conversation", async 
     expect(conversation.status).toBe(200);
     const messages = (await conversation.json()) as { messages: { role: string }[] };
     expect(messages.messages.length).toBeGreaterThan(0);
+
+    // The fixture counts what it served: the exporter refuses a frame the
+    // client did not read here.
+    expect(api.served()).toBe(2);
   } finally {
     api.close();
   }
@@ -26,6 +30,15 @@ test("the fixture API refuses every other route", async () => {
     expect(other.status).toBe(404);
     const body = (await other.json()) as { error: { code: string } };
     expect(body.error.code).toBe("not_found");
+  } finally {
+    api.close();
+  }
+});
+
+test("the fixture API listens on loopback only", async () => {
+  const api = startFixtureApi();
+  try {
+    expect(api.url.startsWith("http://127.0.0.1:")).toBe(true);
   } finally {
     api.close();
   }

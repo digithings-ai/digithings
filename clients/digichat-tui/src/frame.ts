@@ -6,11 +6,15 @@
  * dashboard renders them as text in Geist Mono. The frame is data: it is
  * rendered byte-for-byte, never interpreted.
  *
- * The client paints a left rail (the session list) and the chat thread to its
- * right (src/app.tsx:397,470,484). The rail is `min(28, max(18, floor(width *
- * 0.28)))` columns wide and its right border sits in the last rail column, so
- * the thread starts at column `rail`.
+ * The client paints the wordmark banner at the top of the screen (full width)
+ * and below it a left rail with the session list, with the chat thread to
+ * the rail's right (src/app.tsx:468-484). The recorded frame is the chat
+ * pane: the banner rows are dropped and the rail columns are cropped away.
+ * The rail width and the banner height come from src/layout.ts, the same
+ * module the client itself uses, so the crop cannot drift from the screen.
  */
+
+import { railColumns, WORDMARK_ROWS } from "./layout";
 
 export const TUI_SOURCE = "digichat-tui";
 
@@ -26,28 +30,28 @@ export type RecordedFrame = {
 export const DEFAULT_FRAME_WIDTH = 100;
 export const DEFAULT_FRAME_HEIGHT = 40;
 
-/** The rail width in columns — the same rule the app uses (src/app.tsx:397). */
-export function railColumns(width: number): number {
-  return Math.min(28, Math.max(18, Math.floor(width * 0.28)));
-}
+export { railColumns, WORDMARK_ROWS };
 
 /**
- * Crop a captured frame to the main chat pane: drop the rail columns, strip
- * the trailing spaces each row leaves behind and drop the trailing empty rows.
+ * Crop a captured frame to the main chat pane: drop the wordmark rows, drop
+ * the rail columns, strip the trailing spaces each row leaves behind and drop
+ * the trailing empty rows.
  */
-export function cropMainPane(
+export function cropChatPane(
   captured: string,
-  options?: { railCols?: number },
+  options?: { railCols?: number; headerRows?: number },
 ): { frame: string; width: number; height: number } {
   const railCols = options?.railCols ?? 0;
+  const headerRows = options?.headerRows ?? 0;
   const kept = captured
     .split("\n")
+    .slice(headerRows)
     .map((row) => row.slice(railCols).replace(/\s+$/, ""));
   while (kept.length > 0 && kept[kept.length - 1] === "") kept.pop();
   const width = kept.reduce((widest, row) => Math.max(widest, row.length), 0);
   if (kept.length === 0 || width === 0) {
     throw new Error(
-      `the main chat pane crop is empty (${kept.length} rows, ${width} columns)`,
+      `the chat pane crop is empty (${kept.length} rows, ${width} columns)`,
     );
   }
   return { frame: kept.join("\n"), width, height: kept.length };

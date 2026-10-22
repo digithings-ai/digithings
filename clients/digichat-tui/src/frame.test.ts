@@ -1,18 +1,23 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  cropMainPane,
+  cropChatPane,
   makeRecordedFrame,
   railColumns,
   serializeRecordedFrame,
+  WORDMARK_ROWS,
   TUI_SOURCE,
   DEFAULT_FRAME_WIDTH,
 } from "./frame";
 
 const RAIL = `${"s".repeat(27)}│`;
 
+function header(): string[] {
+  return Array.from({ length: WORDMARK_ROWS }, (_, index) => `wordmark row ${index}`);
+}
+
 function captured(rows: string[]): string {
-  return rows.map((row) => `${RAIL}${row}`).join("\n");
+  return [...header(), ...rows.map((row) => `${RAIL}${row}`)].join("\n");
 }
 
 describe("recorded frame geometry", () => {
@@ -22,27 +27,40 @@ describe("recorded frame geometry", () => {
     expect(railColumns(200)).toBe(28);
   });
 
-  test("the crop drops the rail columns and the trailing empty rows", () => {
-    const cropped = cropMainPane(
+  test("the crop drops the wordmark rows and the rail columns", () => {
+    const cropped = cropChatPane(
       captured(["  chat thread", "  what is a recorded frame", "", ""]),
-      { railCols: railColumns(DEFAULT_FRAME_WIDTH) },
+      { railCols: railColumns(DEFAULT_FRAME_WIDTH), headerRows: WORDMARK_ROWS },
     );
     expect(cropped.frame).toBe("  chat thread\n  what is a recorded frame");
+    expect(cropped.frame).not.toContain("wordmark");
     expect(cropped.height).toBe(2);
     expect(cropped.width).toBe("  what is a recorded frame".length);
   });
 
-  test("the crop strips the trailing spaces of a row", () => {
-    const cropped = cropMainPane(captured(["  padded   "]), {
+  test("the crop keeps the banner when the header rows are kept", () => {
+    const cropped = cropChatPane(captured(["  chat thread"]), {
       railCols: railColumns(DEFAULT_FRAME_WIDTH),
+    });
+    expect(cropped.frame).toContain("wordmark row 0");
+    expect(cropped.frame).toContain("chat thread");
+  });
+
+  test("the crop strips the trailing spaces of a row", () => {
+    const cropped = cropChatPane(captured(["  padded   "]), {
+      railCols: railColumns(DEFAULT_FRAME_WIDTH),
+      headerRows: WORDMARK_ROWS,
     });
     expect(cropped.frame).toBe("  padded");
   });
 
   test("the crop refuses a capture with no pane in it", () => {
-    expect(() => cropMainPane("")).toThrow(/empty/);
+    expect(() => cropChatPane("")).toThrow(/empty/);
     expect(() =>
-      cropMainPane(captured([""]), { railCols: railColumns(DEFAULT_FRAME_WIDTH) }),
+      cropChatPane(captured([""]), {
+        railCols: railColumns(DEFAULT_FRAME_WIDTH),
+        headerRows: WORDMARK_ROWS,
+      }),
     ).toThrow(/empty/);
   });
 });
@@ -60,6 +78,22 @@ describe("the recorded frame record", () => {
     expect(record.width).toBe(11);
     expect(record.height).toBe(1);
     expect(record.frame).toBe("chat thread");
+  });
+
+  test("the record's width and height describe the frame it carries", () => {
+    const cropped = cropChatPane(captured(["  chat thread", "  and more"]), {
+      railCols: railColumns(DEFAULT_FRAME_WIDTH),
+      headerRows: WORDMARK_ROWS,
+    });
+    const record = makeRecordedFrame({
+      path: "/thread",
+      capturedAt: "2026-10-22T06:00:00.000Z",
+      cropped,
+    });
+    expect(record.height).toBe(record.frame.split("\n").length);
+    expect(record.width).toBe(
+      Math.max(...record.frame.split("\n").map((row) => row.length)),
+    );
   });
 
   test("the serializer writes stable JSON with a trailing newline", () => {

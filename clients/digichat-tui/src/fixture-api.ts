@@ -6,16 +6,17 @@
  * The exporter points the client at this server through DIGI_CHAT_URL
  * (packages/surface-config/src/endpoints.ts:42-47). The client resolves its
  * API base when its module is evaluated (src/app.tsx:46), so the URL must be
- * in the environment before the client module loads — hence the module-scope
- * assignment below and the dynamic import in src/capture.tsx.
+ * in the environment before the client module loads — hence the dynamic
+ * import in src/capture.tsx.
  *
  * The payloads are the shapes the client reads (src/read.ts:8-11,99,189): a
  * conversation list and one conversation's messages. Any other route answers
  * 404, so a frame can never be recorded from an unexpected endpoint.
+ *
+ * The server counts the requests it served: the exporter refuses to write a
+ * frame the client did not read here, which is what keeps live customer data
+ * out of a recorded frame.
  */
-
-export const FIXTURE_API_PORT = 8792;
-export const FIXTURE_API_URL = `http://127.0.0.1:${FIXTURE_API_PORT}`;
 
 const CONVERSATIONS = {
   conversations: [
@@ -37,15 +38,19 @@ const MESSAGES = {
 
 export type FixtureApi = {
   url: string;
+  /** How many requests the client made to this server. */
+  served: () => number;
   close: () => void;
 };
 
-/** Start the fixture API on loopback. */
+/** Start the fixture API on a free loopback port. */
 export function startFixtureApi(): FixtureApi {
+  let served = 0;
   const server = Bun.serve({
-    port: FIXTURE_API_PORT,
+    port: 0,
     hostname: "127.0.0.1",
     fetch(request) {
+      served += 1;
       const path = new URL(request.url).pathname;
       if (path === "/api/conversations") return Response.json(CONVERSATIONS);
       if (path.startsWith("/api/conversations/")) return Response.json(MESSAGES);
@@ -56,7 +61,8 @@ export function startFixtureApi(): FixtureApi {
     },
   });
   return {
-    url: FIXTURE_API_URL,
+    url: server.url.toString().replace(/\/$/, ""),
+    served: () => served,
     close: () => {
       server.stop(true);
     },

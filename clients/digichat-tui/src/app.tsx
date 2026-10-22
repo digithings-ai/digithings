@@ -1,5 +1,7 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
+
+import { railColumns } from "./layout";
 import {
   attachmentLine,
   exportMarkdown,
@@ -394,7 +396,7 @@ export function App() {
   };
   useKeyboard((key) => onKey.current(key));
 
-  const rail = Math.min(28, Math.max(18, Math.floor(width * 0.28)));
+  const rail = railColumns(width);
   const threadWidth = Math.max(24, width - rail - 4);
   const spinner = still ? STILL_SPINNER : spinnerFrame(tick);
   const messages = screen?.messages ?? [];

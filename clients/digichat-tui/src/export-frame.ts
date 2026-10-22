@@ -12,14 +12,8 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 import { serializeRecordedFrame } from "./frame";
-import { FIXTURE_API_URL } from "./fixture-api";
 
 const HERE = import.meta.dir;
-
-// The client resolves its API base when its module is evaluated
-// (src/app.tsx:46), so the fixture URL is in the environment before the
-// client module loads — the client is imported dynamically below.
-process.env.DIGI_CHAT_URL = FIXTURE_API_URL;
 
 export const DEFAULT_OUT = resolve(HERE, "../fixtures/digichat-tui.json");
 
@@ -30,9 +24,9 @@ export type ExportArgs = {
 };
 
 function positiveInt(value: string, flag: string): number {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`${flag} needs a positive number, got "${value}"`);
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${flag} needs a positive whole number, got "${value}"`);
   }
   return parsed;
 }
