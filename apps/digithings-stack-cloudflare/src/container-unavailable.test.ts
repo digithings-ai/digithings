@@ -20,6 +20,10 @@
  * imports `cloudflare:workers` / `@cloudflare/containers` and cannot run under
  * vitest — the same split container-retry-wiring.test.js uses).
  */
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   CONTAINER_UNAVAILABLE_CODE,
@@ -32,6 +36,36 @@ import {
   safeErrorMessage,
 } from "./container-errors";
 import { fetchWithContainerRetry, isContainerRecycledResponse } from "./container-retry";
+
+/**
+ * The root of the repository, so a test can read the other copy of the
+ * redactor.
+ */
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+/**
+ * The code of a redactor, without the doc comment around it.
+ */
+function redactorCode(file: string): string {
+  const source = readFileSync(file, "utf8");
+  const start = source.indexOf("const URL_IN_TEXT");
+  const fn = source.indexOf("export function stripUrlQuery");
+  const end = source.indexOf("\n}\n", fn);
+  return source
+    .slice(start, end)
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      return !(
+        trimmed.startsWith("*") ||
+        trimmed.startsWith("/**") ||
+        trimmed.startsWith("*/") ||
+        trimmed.startsWith("//")
+      );
+    })
+    .join("\n")
+    .trim();
+}
 
 /** The exact value the production hop rejected with (a Date, not an Error). */
 const OPAQUE_REJECTION = new Date("2026-10-21T12:56:13Z");
@@ -110,6 +144,36 @@ describe("describeValue", () => {
     const described = describeValue("GET /v1/embed?token=xy7 HTTP/1.1");
     expect(described).not.toContain("xy7");
     expect(described).toContain("/v1/embed");
+  });
+
+  it("keeps the tail of a token that holds a bracket out of the description", () => {
+    // The same rule with another character that a token may hold: a run that
+    // stopped at the bracket would leave the rest of the token in the
+    // description, and the description reaches the client.
+    const described = describeValue('GET https://digithings.ai/embed?token=xy7(zw8"qv9');
+    expect(described).not.toContain("xy7");
+    expect(described).not.toContain("zw8");
+    expect(described).not.toContain("qv9");
+    expect(described).toContain("https://digithings.ai/embed");
+  });
+
+  it("keeps the query string of a URL whose scheme is in upper case out of the description", () => {
+    const described = describeValue("GET HTTPS://digithings.ai/embed?token=xy7");
+    expect(described).not.toContain("xy7");
+    expect(described).toContain("digithings.ai/embed");
+  });
+
+  it("keeps the redactor in step with the shared package", () => {
+    // The redactor lives in three copies (the package, digichat and the
+    // stack), because the two Workers do not depend on the package. One copy
+    // that drifts is one copy that lets a token through, so the copies are
+    // compared here. The doc comment around the code may differ; the code
+    // may not.
+    expect(
+      redactorCode(path.join(repoRoot, "apps/digithings-stack-cloudflare/src/container-errors.ts")),
+    ).toBe(
+      redactorCode(path.join(repoRoot, "packages/durable-object-reconnect/src/index.ts")),
+    );
   });
 
   it("keeps the query string of a URL out of the message", () => {

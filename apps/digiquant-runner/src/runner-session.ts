@@ -564,7 +564,11 @@ export class RunnerSession {
       try {
         await this.deps.archive.put(key, body);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        // The failure goes into the log with a description that cannot throw
+        // and that carries no query string: `String(err)` would throw on a
+        // value that refuses to be read as text, and a message that holds a
+        // URL would carry its token into the log (run-watch DIG-4928).
+        const message = errorMessage(err);
         console.error(`house_ledger_write_failed ${message}`);
       }
     } else {

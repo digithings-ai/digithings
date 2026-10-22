@@ -92,8 +92,18 @@ const UNREADABLE_VALUE = "[unreadable value]";
  * quote would leave the tail of the token in the text. What follows the
  * query string inside that run goes with it: a period that ends the sentence
  * is part of the tail and is dropped with it.
+ *
+ * The scheme is matched whatever its case, because a request line that a
+ * proxy wrote in upper case is still a URL.
  */
-const URL_IN_TEXT = /\bhttps?:\/\/[^\s]+/g;
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s]+/gi;
+
+/**
+ * The credentials of the authority of a URL: what stands before the `@` of
+ * `https://user:token@host/path`. A credential is a secret like the one in
+ * a query string, so it does not stay in the text either.
+ */
+const AUTHORITY_CREDENTIALS = /^(https?:\/\/)[^/?#\s]*@/i;
 
 /**
  * A relative request target inside free text, such as the request line of
@@ -120,9 +130,10 @@ const RELATIVE_TARGET_IN_TEXT = /(^|\s)(\/[^\s]*[?#][^\s]*)/g;
 export function stripUrlQuery(text: string): string {
   return text
     .replace(URL_IN_TEXT, (url) => {
-      const cut = url.search(/[?#]/);
-      if (cut === -1) return url;
-      return `${url.slice(0, cut)}${url[cut]}[redacted]`;
+      const withoutCredentials = url.replace(AUTHORITY_CREDENTIALS, "$1[redacted]@");
+      const cut = withoutCredentials.search(/[?#]/);
+      if (cut === -1) return withoutCredentials;
+      return `${withoutCredentials.slice(0, cut)}${withoutCredentials[cut]}[redacted]`;
     })
     .replace(RELATIVE_TARGET_IN_TEXT, (_match, space: string, target: string) => {
       const cut = target.search(/[?#]/);
@@ -268,27 +279,29 @@ export async function fetchDurableObject(
     try {
       return await connect().fetch(makeRequest());
     } catch (error) {
-      if (isDurableObjectGone(error)) {
-        // The instance is gone: address a fresh stub once.
-        lastError = error;
-        continue;
-      }
       if (isNonErrorRejection(error)) {
         // The hop rejected with a value nobody can read. It is logged with its
         // description, so the failure is triageable instead of a bare value in
         // the log, and it is treated as a retryable failure of the instance:
         // the Worker answers 503 + Retry-After instead of the value escaping.
         //
-        // The request is not replayed. An eviction is safe to replay because
-        // the platform closed the instance before the request was delivered; a
-        // value that came out of the hop says nothing about that, so a second
-        // attempt could submit the same request twice.
+        // The request is not replayed, whatever the value says. An eviction is
+        // safe to replay because the platform closed the instance before the
+        // request was delivered, and the platform raises that as an Error. A
+        // value that came out of the hop says nothing about it, not even when
+        // it names a Durable Object, so a second attempt could submit the
+        // same request twice.
         console.error(
           "[durable-object-reconnect] the Durable Object hop rejected with a value that is not an Error:",
           errorMessage(error),
         );
         lastError = error;
         break;
+      }
+      if (isDurableObjectGone(error)) {
+        // The instance is gone: address a fresh stub once.
+        lastError = error;
+        continue;
       }
       // A real error that does not name a Durable Object keeps its own error:
       // retrying it and then reporting it as an unavailable instance would

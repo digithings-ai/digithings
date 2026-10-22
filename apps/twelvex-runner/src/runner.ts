@@ -9,16 +9,11 @@ import {
   isNonErrorRejection,
 } from "@digithings/durable-object-reconnect";
 import { dataPlaneEnv, type Env } from "./env";
+import { RUNNER_UNAVAILABLE_DETAIL } from "./unavailable";
 
 export const RUNNER_CONTAINER_ID = "twelvex-runner-v1";
 
-/**
- * The detail the client gets when the instance could not serve the request.
- * The same wording the Worker gives when the Durable Object instance itself
- * is gone, so a client sees one contract for "come back later".
- */
-export const RUNNER_UNAVAILABLE_DETAIL =
-  "the runner's Durable Object instance was not available; retry later";
+export { RUNNER_UNAVAILABLE_DETAIL };
 
 export class TwelveXRunnerContainer extends Container<Env> {
   defaultPort = 8080;

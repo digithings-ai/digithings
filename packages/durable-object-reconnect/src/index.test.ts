@@ -191,6 +191,33 @@ describe("stripUrlQuery", () => {
     expect(stripped).toBe("GET https://digithings.ai/embed?[redacted]");
   });
 
+  it("redacts the tail of a token that holds a bracket or a quote", () => {
+    // The same rule with other characters that a token may hold: a run that
+    // stopped at the bracket would leave the rest of the token in the text.
+    const stripped = stripUrlQuery('GET https://digithings.ai/embed?token=xy7(zw8"qv9');
+    expect(stripped).not.toContain("xy7");
+    expect(stripped).not.toContain("zw8");
+    expect(stripped).not.toContain("qv9");
+    expect(stripped).toBe("GET https://digithings.ai/embed?[redacted]");
+  });
+
+  it("redacts the query string of a URL whose scheme is in upper case", () => {
+    // A request line that a proxy wrote in upper case is still a URL, so the
+    // rule matches the scheme whatever its case.
+    const stripped = stripUrlQuery("GET HTTPS://digithings.ai/embed?token=xy7");
+    expect(stripped).not.toContain("xy7");
+    expect(stripped).toBe("GET HTTPS://digithings.ai/embed?[redacted]");
+  });
+
+  it("redacts the credentials of the authority of a URL", () => {
+    // A URL can carry a credential before the host as well, and a credential
+    // is a secret like the one in a query string.
+    const stripped = stripUrlQuery("GET https://user:xy7@digithings.ai/embed?token=xy8");
+    expect(stripped).not.toContain("xy7");
+    expect(stripped).not.toContain("xy8");
+    expect(stripped).toBe("GET https://[redacted]@digithings.ai/embed?[redacted]");
+  });
+
   it("redacts the query string of a relative request target", () => {
     const stripped = stripUrlQuery("GET /v1/embed?token=xy7 HTTP/1.1");
     expect(stripped).not.toContain("xy7");
@@ -514,10 +541,12 @@ describe("fetchDurableObject when the hop rejects with a value that is not an Er
     expect((caught as DurableObjectUnavailableError).lastError).toBe(proxy);
   });
 
-  it("takes the eviction path for a thrown string that names a Durable Object", async () => {
-    // The order of the two checks is the contract: a string that states the
-    // instance is gone is an eviction, so it is reconnected, not reported as
-    // an unreadable value.
+  it("never replays a rejection that is not an Error, even when it names a Durable Object", async () => {
+    // The order of the two checks is the contract. A value that is not an
+    // Error says nothing about whether the request was delivered, so it is
+    // never replayed: a second attempt could submit the same request twice.
+    // The platform raises a real eviction as an Error, and that one is
+    // reconnected.
     let attempts = 0;
     await expect(
       fetchDurableObject(
@@ -530,6 +559,24 @@ describe("fetchDurableObject when the hop rejects with a value that is not an Er
         () => jobRequest(),
       ),
     ).rejects.toBeInstanceOf(DurableObjectUnavailableError);
+    expect(attempts).toBe(1);
+  });
+
+  it("reconnects a real Error that says the instance is gone", async () => {
+    // The eviction of the platform is an Error, so it is safe to replay: the
+    // platform closed the instance before the request was delivered.
+    let attempts = 0;
+    const res = await fetchDurableObject(
+      () => ({
+        fetch: async () => {
+          attempts += 1;
+          if (attempts === 1) throw goneError();
+          return new Response("ok");
+        },
+      }),
+      () => jobRequest(),
+    );
+    expect(res.status).toBe(200);
     expect(attempts).toBe(2);
   });
 

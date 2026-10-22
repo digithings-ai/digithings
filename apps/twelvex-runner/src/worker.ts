@@ -19,6 +19,7 @@ import {
   SESSION_LABEL,
 } from "./alerts";
 import type { Env } from "./env";
+import { RUNNER_UNAVAILABLE_DETAIL } from "./unavailable";
 import {
   defaultTimeoutSeconds,
   isBucket,
@@ -184,9 +185,7 @@ export async function handle(
         exit_code: null,
         error: DURABLE_OBJECT_UNAVAILABLE,
       });
-      return durableObjectUnavailableResponse(
-        "the runner's Durable Object instance was not available; retry later",
-      );
+      return durableObjectUnavailableResponse(RUNNER_UNAVAILABLE_DETAIL);
     }
     throw error;
   }

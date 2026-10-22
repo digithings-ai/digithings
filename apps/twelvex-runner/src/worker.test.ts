@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { decideAlert, SESSION_LABEL, SOURCE_LABEL, TRANSPORT_LABEL } from "./alerts";
 import type { Env } from "./env";
 import { handle, type RunResult } from "./worker";
+import { RUNNER_UNAVAILABLE_DETAIL } from "./unavailable";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -220,7 +221,7 @@ describe("the Durable Object hop", () => {
       new Response(
         JSON.stringify({
           error: "durable_object_unavailable",
-          detail: "the runner's Durable Object instance was not available; retry later",
+          detail: RUNNER_UNAVAILABLE_DETAIL,
         }),
         {
           status: 503,
@@ -236,8 +237,11 @@ describe("the Durable Object hop", () => {
     );
     expect(res.status).toBe(503);
     expect(res.headers.get("retry-after")).toBe("30");
-    const body = (await res.json()) as { error?: string };
+    const body = (await res.json()) as { error?: string; detail?: string };
     expect(body.error).toBe("durable_object_unavailable");
+    // The Durable Object and the Worker answer the same contract, so the
+    // detail is the one wording and not two copies of it.
+    expect(body.detail).toBe(RUNNER_UNAVAILABLE_DETAIL);
   });
 
   it("still answers 502 when the container itself fails", async () => {
@@ -252,6 +256,29 @@ describe("the Durable Object hop", () => {
     );
     expect(res.status).toBe(502);
     expect(res.headers.get("retry-after")).toBeNull();
+  });
+
+  it("still answers 502 when the container answers 503 without the code of the Durable Object", async () => {
+    // A 503 that does not come from the Durable Object is the container's own
+    // answer (the @cloudflare/containers no-instance answer is a 503 whose
+    // body is plain text), so it is a container failure and not an
+    // unavailable instance. It must not be answered as the retryable one: a
+    // caller that backs off on it would wait for an instance that is there.
+    const container = vi.fn(async (_request: Request) =>
+      new Response("There is no Container instance available at this time.", {
+        status: 503,
+        headers: { "content-type": "text/plain" },
+      }),
+    );
+    const res = await handle(
+      post("heartbeat", { job_id: "twelve-x-primemarket-heartbeat" }),
+      env(),
+      stubOf(container),
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(502);
+    expect(res.headers.get("retry-after")).toBeNull();
+    expect(await res.json()).toEqual({ error: "container_failed" });
   });
 });
 

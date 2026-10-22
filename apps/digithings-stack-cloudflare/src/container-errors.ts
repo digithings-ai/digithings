@@ -39,8 +39,18 @@ export const CONTAINER_RETRY_AFTER_SECONDS = 5;
  * quote would leave the tail of the token in the text. What follows the
  * query string inside that run goes with it: a period that ends the sentence
  * is part of the tail and is dropped with it.
+ *
+ * The scheme is matched whatever its case, because a request line that a
+ * proxy wrote in upper case is still a URL.
  */
-const URL_IN_TEXT = /\bhttps?:\/\/[^\s]+/g;
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s]+/gi;
+
+/**
+ * The credentials of the authority of a URL: what stands before the `@` of
+ * `https://user:token@host/path`. A credential is a secret like the one in
+ * a query string, so it does not stay in the text either.
+ */
+const AUTHORITY_CREDENTIALS = /^(https?:\/\/)[^/?#\s]*@/i;
 
 /**
  * A relative request target inside free text, such as the request line of
@@ -67,9 +77,10 @@ const RELATIVE_TARGET_IN_TEXT = /(^|\s)(\/[^\s]*[?#][^\s]*)/g;
 export function stripUrlQuery(text: string): string {
   return text
     .replace(URL_IN_TEXT, (url) => {
-      const cut = url.search(/[?#]/);
-      if (cut === -1) return url;
-      return `${url.slice(0, cut)}${url[cut]}[redacted]`;
+      const withoutCredentials = url.replace(AUTHORITY_CREDENTIALS, "$1[redacted]@");
+      const cut = withoutCredentials.search(/[?#]/);
+      if (cut === -1) return withoutCredentials;
+      return `${withoutCredentials.slice(0, cut)}${withoutCredentials[cut]}[redacted]`;
     })
     .replace(RELATIVE_TARGET_IN_TEXT, (_match, space: string, target: string) => {
       const cut = target.search(/[?#]/);

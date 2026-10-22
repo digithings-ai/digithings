@@ -800,6 +800,44 @@ describe("watchdog and poll resilience", () => {
     }
   });
 
+  // The ledger write can fail with a value that is not an Error, and one of
+  // the shapes measured in production is the request line of the request that
+  // failed, with the token in its query string (run-watch DIG-4928). The
+  // trace of that failure goes into the log, so the query string must not
+  // ride along with it.
+  it("keeps the query string of a URL out of the ledger failure trace", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const archive = memoryArchive();
+      archive.put = async () => {
+        throw "PUT https://archive.internal/ledger?token=xy7 HTTP/1.1";
+      };
+      const { session, starts, statuses } = harness({ archive });
+      await session.accept(
+        job({
+          command: "house-run",
+          concurrency: "digiquant-pipeline",
+          idempotency_key: "house-run-09:token",
+          args: { refresh_scope: "none", run_date: "2026-09-30" },
+        }),
+      );
+      const remote = statuses.get(starts[0]);
+      if (!remote) throw new Error("missing status");
+      remote.status = "succeeded";
+      remote.exit_code = 0;
+      remote.finished_at = "2026-09-30T17:00:00.000Z";
+      await session.alarm();
+
+      const traced = errors.mock.calls.map((call) => String(call[0]));
+      const line = traced.find((entry) => entry.startsWith("house_ledger_write_failed"));
+      expect(line).toBeTruthy();
+      expect(line).not.toContain("token=xy7");
+      expect(line).toContain("https://archive.internal/ledger?[redacted]");
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
   it("starts a queued price tick only after the house-run lock clears", async () => {
     const { session, starts, statuses, bodies } = harness();
     const house = await session.accept(
