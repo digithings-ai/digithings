@@ -301,6 +301,137 @@ describe("exchangeDigikeyBffSession", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("treats a 200 without an access_token as a refusal, not as a cold digikey", async () => {
+    // digikey answered and issued no token: that is a refusal of the request,
+    // not a dependency that never came up.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ litellm_proxy_api_key: "llmk_abc" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1")
+    ).resolves.toEqual({ ok: false, reason: "rejected", status: 200 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a 200 with a body that is not JSON as a refusal", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new Error("Unexpected token < in JSON at position 0");
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1")
+    ).resolves.toEqual({ ok: false, reason: "rejected", status: 200 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throw when the token payload has an unusable shape", async () => {
+    // A field that is not a string must not throw out of the exchange: it used
+    // to escape as a raw TypeError and be answered 502 upstream_auth with the
+    // TypeError text in the body.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: 12_345 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1")
+    ).resolves.toEqual({ ok: false, reason: "rejected", status: 200 });
+  });
+
+  it("keeps a token digikey issued even when the optional litellm key is malformed", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: "tok", litellm_proxy_api_key: { a: 1 } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1")
+    ).resolves.toEqual({
+      ok: true,
+      exchange: { accessToken: "tok", litellmProxyApiKey: null },
+    });
+  });
+
+  it("lets the last answer win: a transient 503 then a 401 is a refusal", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const p = exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1");
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    // digikey woke up and then refused the token: the refusal is the answer.
+    await expect(p).resolves.toEqual({
+      ok: false,
+      reason: "rejected",
+      status: 401,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("recognises digikey's own answer that its bff_session grant is not configured", async () => {
+    // digikey answers 503 {"detail":"bff_session grant not configured
+    // (DIGIKEY_BFF_TOKEN)"} when it has no DIGIKEY_BFF_TOKEN in its own env.
+    // That is a permanent credential problem on the digikey side, and it
+    // shares its status with a waking container, so the answer has to be read
+    // to tell the two apart (DIG-4424).
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+      text: async () =>
+        JSON.stringify({
+          detail: "bff_session grant not configured (DIGIKEY_BFF_TOKEN)",
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1")
+    ).resolves.toEqual({ ok: false, reason: "not_configured", status: 503 });
+    // Permanent: one attempt, no retry, no wait.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps another transient 503 retryable", async () => {
+    // The stack Worker answers a booting container with its own body, which
+    // must stay on the retryable side.
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+      text: async () => JSON.stringify({ error: "container_booting" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const p = exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1");
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expect(p).resolves.toEqual({
+      ok: false,
+      reason: "unreachable",
+      status: 503,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+  });
+
   it("pins the stated budget of one exchange", () => {
     // The budget bounds the whole retry loop, not each attempt: the loop is
     // abandoned once this much wall clock has passed, and no attempt starts

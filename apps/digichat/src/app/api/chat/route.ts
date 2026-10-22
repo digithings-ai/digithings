@@ -790,7 +790,11 @@ async function handleChat(
     upstreamBearer = up.bearer;
     litellmProxyApiKey = up.litellmProxyApiKey;
   } catch (e) {
-    runLock.release();
+    // The upstream exchange failed before any turn was produced, so the run id
+    // must not refuse the retry: the client replays the same X-Digi-Run-Id
+    // when it repeats the send, and the cold case is answered with a
+    // Retry-After (DIG-4424).
+    runLock.release({ forgetRunId: true });
     if (e instanceof DigigraphUpstreamUnavailableError) {
       // digikey was cold, asleep or down: the request is retryable, so it is
       // answered 503 with a Retry-After and NOT as an upstream_auth failure.

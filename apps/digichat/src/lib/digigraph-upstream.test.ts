@@ -175,6 +175,36 @@ describe("resolveDigigraphUpstreamAuth bff_session failure reasons", () => {
     expect(String((err as Error).message)).toContain("not a DIGIKEY_BFF_TOKEN problem");
   });
 
+  it("raises an auth error, not an unavailable error, when digikey has no bff_session grant", async () => {
+    // digikey answers 503 when its own env has no DIGIKEY_BFF_TOKEN, so its
+    // bff_session grant does not exist. Waiting cannot install the missing
+    // secret, and the copy on the digichat side is not the one that is wrong
+    // (DIG-4424).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: async () => ({}),
+        text: async () =>
+          JSON.stringify({
+            detail: "bff_session grant not configured (DIGIKEY_BFF_TOKEN)",
+          }),
+      })
+    );
+    bffEnv();
+    const req = new Request("http://localhost/api/chat", { method: "POST" });
+
+    const err = await resolveDigigraphUpstreamAuth(req, "acme", "user-1").then(
+      () => null,
+      (e: unknown) => e
+    );
+
+    expect(err).toBeInstanceOf(DigigraphUpstreamAuthError);
+    expect(err).not.toBeInstanceOf(DigigraphUpstreamUnavailableError);
+    expect(String((err as Error).message)).toContain("digikey side");
+  });
+
   it("raises an auth error when digikey refuses the token", async () => {
     vi.stubGlobal(
       "fetch",
@@ -191,5 +221,6 @@ describe("resolveDigigraphUpstreamAuth bff_session failure reasons", () => {
     expect(err).toBeInstanceOf(DigigraphUpstreamAuthError);
     expect(err).not.toBeInstanceOf(DigigraphUpstreamUnavailableError);
     expect(String((err as Error).message)).toContain("DIGIKEY_BFF_TOKEN");
+    expect(String((err as Error).message)).toContain("rejected");
   });
 });

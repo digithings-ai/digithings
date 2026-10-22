@@ -143,12 +143,22 @@ export async function resolveDigigraphUpstreamAuth(
       // exchange hits a waking container and every attempt fails until the
       // retry budget is spent. That is not a credential problem, so this
       // message must not blame DIGIKEY_BFF_TOKEN (DIG-4424).
+      const last = outcome.status ? ` (last answer: ${outcome.status})` : "";
       throw new DigigraphUpstreamUnavailableError(
-        "digikey did not answer the bff_session exchange (it is cold or unreachable). This is not a DIGIKEY_BFF_TOKEN problem — retry in a few seconds."
+        `digikey did not answer the bff_session exchange — it is cold or unreachable${last}. This is not a DIGIKEY_BFF_TOKEN problem; retry in a few seconds.`
       );
     }
+    if (outcome.reason === "not_configured") {
+      // digikey itself has no DIGIKEY_BFF_TOKEN, so its bff_session grant does
+      // not exist. Waiting cannot install the missing secret, and the copy on
+      // the digichat side is not the one that is wrong.
+      throw new DigigraphUpstreamAuthError(
+        "digikey has no DIGIKEY_BFF_TOKEN configured (the bff_session grant is not set on the digikey side). Check the digikey side, not only the digichat copy."
+      );
+    }
+    const answered = outcome.status && outcome.status >= 400 ? ` (answered ${outcome.status})` : "";
     throw new DigigraphUpstreamAuthError(
-      "digikey rejected the bff_session exchange (check DIGIKEY_BFF_TOKEN and digikey configuration)."
+      `digikey rejected the bff_session exchange${answered}. Check DIGIKEY_BFF_TOKEN and digikey configuration.`
     );
   }
 

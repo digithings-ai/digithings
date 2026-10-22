@@ -237,7 +237,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     // it must not be answered 502 upstream_auth (DIG-4424).
     vi.mocked(resolveDigigraphUpstreamAuth).mockRejectedValue(
       new DigigraphUpstreamUnavailableError(
-        "digikey did not answer the bff_session exchange (it is cold or unreachable). This is not a DIGIKEY_BFF_TOKEN problem — retry in a few seconds."
+        "digikey did not answer the bff_session exchange — it is cold or unreachable (last answer: 503). This is not a DIGIKEY_BFF_TOKEN problem; retry in a few seconds."
       )
     );
     const res = await POST(
@@ -256,10 +256,41 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(res.headers.get("retry-after")).toBe("5");
   });
 
+  it("does not refuse the retry with 409 run_id_replay after a cold digikey", async () => {
+    // The client repeats the send with the same X-Digi-Run-Id when it obeys
+    // the Retry-After, so a request that failed before it produced a turn must
+    // not leave the run id behind and turn that retry into a 409 (DIG-4424).
+    vi.mocked(resolveDigigraphUpstreamAuth).mockRejectedValue(
+      new DigigraphUpstreamUnavailableError(
+        "digikey did not answer the bff_session exchange — it is cold or unreachable (last answer: 503). This is not a DIGIKEY_BFF_TOKEN problem; retry in a few seconds."
+      )
+    );
+    const request = () =>
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digichat-session": "sess-cold",
+          "x-digi-run-id": "run-cold-1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+
+    const first = await POST(request());
+    expect(first.status).toBe(503);
+
+    const second = await POST(request());
+    expect(second.status).toBe(503);
+    const body = (await second.json()) as { error: string };
+    expect(body.error).toBe("upstream_unavailable");
+  });
+
   it("still answers 502 upstream_auth when digikey refuses the token", async () => {
     vi.mocked(resolveDigigraphUpstreamAuth).mockRejectedValue(
       new DigigraphUpstreamAuthError(
-        "digikey rejected the bff_session exchange (check DIGIKEY_BFF_TOKEN and digikey configuration)."
+        "digikey rejected the bff_session exchange (answered 401). Check DIGIKEY_BFF_TOKEN and digikey configuration."
       )
     );
     const res = await POST(
