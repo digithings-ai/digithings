@@ -14,6 +14,14 @@ run is not a passing check, so it is never reported as one, and
 
 Nothing here invents an endpoint. Checks that could not be sourced from the
 repository arrive with ``url=None`` and skip with a reason.
+
+The transport is part of the verdict (DIG-4991). A probe answers on the URL it
+was given: a redirect is a failure and is never followed, because following one
+would report a verdict about an address the catalogue never named. The opener
+carries an empty proxy map, so a proxy in the environment cannot reroute the
+request after the URL was checked. A URL that reaches a report is printed with
+its userinfo redacted -- ``dt status --json`` and the gate table are pasted into
+tickets.
 """
 
 from __future__ import annotations
@@ -28,7 +36,15 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .contracts import FAILED, PASSED, SKIPPED, Check, ContractRefusal, resolve
+from .contracts import (
+    FAILED,
+    PASSED,
+    SKIPPED,
+    Check,
+    ContractRefusal,
+    redact_userinfo,
+    resolve,
+)
 
 DEFAULT_TIMEOUT = 5.0
 
@@ -54,7 +70,7 @@ class Result:
             "name": self.name,
             "status": self.status,
             "detail": self.detail,
-            "url": self.url,
+            "url": redact_userinfo(self.url),
             "elapsed_ms": self.elapsed_ms,
         }
 
@@ -105,6 +121,37 @@ def new_nonce() -> str:
     return uuid.uuid4().hex[:12]
 
 
+class RedirectRefused(Exception):
+    """A probe answered with a redirect. Refused, never followed.
+
+    ``_assert_loopback_url`` checks where the URL points; it cannot check
+    where a server sends the request next. A followed redirect would report a
+    verdict about an address the catalogue never named, so a 3xx is a failure
+    (DIG-4991).
+    """
+
+
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    """Leave every 3xx to raise instead of turning it into a second request."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _build_opener() -> urllib.request.OpenerDirector:
+    """The opener every probe uses.
+
+    ``ProxyHandler({})`` empties the proxy map. The default handler reads
+    ``http_proxy``/``all_proxy`` when it is built, and a developer's proxy
+    must not reroute a loopback probe: the gate would then report a verdict
+    about whatever the proxy answered (DIG-4991).
+    """
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), _RefuseRedirects())
+
+
+_OPENER = _build_opener()
+
+
 def _request(
     url: str,
     *,
@@ -113,13 +160,23 @@ def _request(
     content_type: str | None = None,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> tuple[int, bytes]:
-    """Perform one HTTP request. Raises on transport failure or bad status."""
+    """Perform one HTTP request. Raises on transport failure or bad status.
+
+    A 3xx raises :class:`RedirectRefused`; it is never followed.
+    """
     headers = {"User-Agent": "dt-health/1"}
     if content_type:
         headers["Content-Type"] = content_type
     req = urllib.request.Request(url, data=body, method=method, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return int(resp.status), resp.read()
+    try:
+        with _OPENER.open(req, timeout=timeout) as resp:
+            return int(resp.status), resp.read()
+    except urllib.error.HTTPError as exc:
+        if 300 <= exc.code < 400:
+            raise RedirectRefused(
+                f"HTTP {exc.code}: redirect refused; a probe must answer on the URL it was given"
+            ) from exc
+        raise
 
 
 def probe_http(
@@ -133,6 +190,8 @@ def probe_http(
     started = time.monotonic()
     try:
         code, payload = _request(url, method=method, timeout=timeout)
+    except RedirectRefused as exc:
+        return FAILED, str(exc)
     except urllib.error.HTTPError as exc:
         return FAILED, f"HTTP {exc.code}"
     except Exception as exc:
@@ -154,6 +213,8 @@ def probe_jsonrpc(url: str, *, timeout: float = DEFAULT_TIMEOUT) -> tuple[str, s
         code, payload = _request(
             url, method="POST", body=body, content_type="application/json", timeout=timeout
         )
+    except RedirectRefused as exc:
+        return FAILED, str(exc)
     except urllib.error.HTTPError as exc:
         return FAILED, f"HTTP {exc.code}"
     except Exception as exc:
@@ -196,6 +257,8 @@ def probe_roundtrip(
     payload = json.dumps({"probe": nonce}).encode("utf-8")
     try:
         _request(url, method="POST", body=payload, content_type="application/json", timeout=timeout)
+    except RedirectRefused as exc:
+        return FAILED, f"write failed: {exc}"
     except urllib.error.HTTPError as exc:
         return FAILED, f"write failed: HTTP {exc.code}"
     except Exception as exc:
@@ -208,6 +271,8 @@ def probe_roundtrip(
         read_url = url
     try:
         code, body = _request(read_url, timeout=timeout)
+    except RedirectRefused as exc:
+        return FAILED, f"read-back failed: {exc}"
     except urllib.error.HTTPError as exc:
         return FAILED, f"read-back failed: HTTP {exc.code}"
     except Exception as exc:

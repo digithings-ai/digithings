@@ -1521,3 +1521,86 @@ def test_a_contract_row_without_a_url_or_a_port_still_keeps_the_built_in_url(tmp
     row = _digigraph_row(tmp_path)
     assert row.refusal is None
     assert row.url == "http://127.0.0.1:${DT_DIGIGRAPH_PORT:-8000}/healthz"
+
+
+# --- the verb a contract row may probe with (DIG-4991) ----------------------
+#
+# A health probe reads, or writes a nonce it then reads back. It never deletes,
+# replaces or patches anything: a `method:` in a contract is the operator
+# saying what the gate will do to their service, and a typo there is a
+# destructive request against a live endpoint. The set is therefore closed and
+# a row outside it is refused, not coerced to GET -- a silently probed GET
+# would report a verdict on a request the operator never wrote.
+
+
+@pytest.mark.parametrize("method", ["GET", "POST", "get", "post"])
+def test_a_contract_row_may_probe_with_get_or_post(tmp_path, method):
+    _contract(tmp_path, f"services:\n  - name: digigraph\n    method: {method}\n")
+    row = _digigraph_row(tmp_path)
+    assert row.refusal is None
+    assert row.method == method.upper()
+
+
+@pytest.mark.parametrize("method", ["DELETE", "PUT", "PATCH", "HEAD", "OPTIONS", "TRACE"])
+def test_a_contract_row_may_not_probe_with_any_other_verb(tmp_path, method):
+    """The refusal names the verb, so the operator can see the typo."""
+    _contract(tmp_path, f"services:\n  - name: digigraph\n    method: {method}\n")
+    row = _digigraph_row(tmp_path)
+    assert row.refusal is not None
+    assert method in row.refusal
+    with pytest.raises(contracts.ContractRefusal):
+        contracts.resolve(row, {})
+
+
+def test_a_contract_method_that_is_not_a_verb_is_refused(tmp_path):
+    """A list is not a method, and it is refused rather than stringified."""
+    _contract(tmp_path, "services:\n  - name: digigraph\n    method: [GET]\n")
+    row = _digigraph_row(tmp_path)
+    assert row.refusal is not None
+    with pytest.raises(contracts.ContractRefusal):
+        contracts.resolve(row, {})
+
+
+# --- a credential in a URL is never printed (DIG-4991) ---------------------
+#
+# #6207 refuses userinfo in a probe URL. A refusal is only half of it: the
+# reason is printed by `dt urls`, by `dt status` and in the gate's JSON, so the
+# message must not carry the password it refused. Redaction keeps the address
+# (the operator still needs to know which row and which host) and drops the
+# credential.
+
+
+def test_redact_userinfo_keeps_the_address_and_drops_the_credential():
+    assert (
+        contracts.redact_userinfo("http://operator:s3cret@127.0.0.1:9000/healthz")
+        == "http://***@127.0.0.1:9000/healthz"
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1:9000/healthz",
+        "http://127.0.0.1:${DT_DIGIGRAPH_PORT:-8000}/healthz",
+    ],
+)
+def test_redact_userinfo_leaves_a_url_without_userinfo_alone(url):
+    """The control: redaction is not a rewrite of every URL that passes."""
+    assert contracts.redact_userinfo(url) == url
+
+
+def test_a_refusal_never_echoes_the_userinfo_it_refused(tmp_path):
+    """The refusal names the row and the host, and not the password."""
+    _contract(
+        tmp_path,
+        "services:\n"
+        "  - name: digigraph\n"
+        "    url: http://operator:s3cret@127.0.0.1:9000/healthz\n",
+    )
+    row = _digigraph_row(tmp_path)
+    with pytest.raises(contracts.ContractRefusal) as caught:
+        contracts.resolve(row, {})
+    message = str(caught.value)
+    assert "s3cret" not in message
+    assert "***" in message
+    assert "127.0.0.1" in message
