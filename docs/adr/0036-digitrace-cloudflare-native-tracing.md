@@ -100,10 +100,22 @@ flowchart LR
 - **Format.** The ingest Worker accepts **both** OTLP/HTTP encodings: **JSON** from the
   Cloudflare destinations, which never send protobuf, and **protobuf** from the Python and
   GitHub Actions sources, because `digibase.otel` exports OTLP/HTTP protobuf.
-- **Contract names.** `DIGI_OTEL_ENDPOINT` and `DIGI_OTEL_HEADERS` are the names: one
-  plumbing (`digibase.otel`), and the names the live digiquant-runner workflows already
-  forward. `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` and `LANGFUSE_OTLP_ENDPOINT` are **retired**
-  (DIG-5136): leaving them in a workflow points a live workflow at a dropped service.
+- **Contract names.** `DIGI_OTEL_ENDPOINT` and `DIGI_OTEL_HEADERS` are the names, and
+  they are one plumbing: `digibase.otel` resolves the endpoint from `DIGI_OTEL_ENDPOINT`
+  (fallback `OTEL_EXPORTER_OTLP_ENDPOINT`) and the headers from `DIGI_OTEL_HEADERS`
+  (fallback `OTEL_EXPORTER_OTLP_HEADERS`); the GHA job sets the same two names.
+  `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` and `LANGFUSE_OTLP_ENDPOINT` are **retired**:
+  leaving them in a workflow points a live workflow at a dropped service.
+- **The live digiquant-runner leg still carries the Langfuse name.** The Phase-3 sync
+  workflow (`.github/workflows/sync-digiquant-runner-digikey-secret.yml`) puts
+  `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` and `DIGI_OTEL_HEADERS` into the digiquant-runner
+  secret, and the runner forwards both into the container (`FORWARDED_ENV_NAMES` in
+  `apps/digiquant-runner/src/env.ts`, the command allowlist in
+  `apps/digiquant-runner/commands.json`). The header name does not change:
+  `DIGI_OTEL_HEADERS` stays, and `digibase.otel` already reads it. The endpoint name
+  becomes `DIGI_OTEL_ENDPOINT` in each of those places, and that repoint is **DIG-2660**.
+  DIG-5136 retires the Langfuse app, its runbook and its scripts; it does not touch
+  this leg.
 - **`persist = false`** on `[observability.traces]`. Consequence, decided on purpose: the
   Cloudflare dashboard keeps no traces of its own, so the stored-trace billing that
   starts on 1 December 2026 does not apply to us.
