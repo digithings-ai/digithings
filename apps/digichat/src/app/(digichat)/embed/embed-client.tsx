@@ -1369,24 +1369,8 @@ function EmbedChat({
         });
         chat.reset?.();
       },
-      compactThread: () => {
-        setChatPrefs({
-          ...DEFAULT_EMBED_CHAT_PREFS,
-          language: tenantLanguage,
-          view: stockClient.features.view,
-          thinking: stockClient.features.thinking,
-          ...chromePrefsFromDeploy({
-            density: stockClient.features.density,
-            effort: stockClient.features.effort,
-            searchEngine: stockClient.gate.searchEngine,
-            toolbar: stockClient.chrome.toolbar,
-            scrollbars: stockClient.chrome.scrollbars,
-          }),
-          extra: extraOffFromCatalog(catalogTools),
-        });
-        chat.reset?.();
-      },
-      undo: () => {},
+      hasNewThread: true,
+      hasRedo: true,
       redo: () => {
         chat.regenerate?.();
       },

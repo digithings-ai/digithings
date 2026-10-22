@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { slashHelpText } from "@digithings/digichat-ui";
+import { SLASH_COMMANDS, slashHelpText } from "@digithings/digichat-ui";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
 } from "@digithings/ui/chat/stock";
 import { emptyMcpConfig } from "@/components/stock/embed-mcp-flow";
+import { spyFixture } from "@/lib/embed-chat-prefs.fixture";
 import {
   buildProductSlashCommands,
+  canRunInComposerMenu,
   canRunProductCommand,
   catalogForceTool,
   executeSlashDef,
@@ -67,9 +69,9 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openSessions: vi.fn(),
     openArtifacts: vi.fn(),
     newThread: vi.fn(),
-    compactThread: vi.fn(),
-    undo: vi.fn(),
     redo: vi.fn(),
+    hasNewThread: true,
+    hasRedo: true,
     ...over,
   };
 }
@@ -221,13 +223,23 @@ describe("canRunProductCommand", () => {
     expect(canRunProductCommand("copy")).toBe(false);
     expect(canRunProductCommand("export")).toBe(false);
     expect(canRunProductCommand("export-html")).toBe(false);
+    // /compact reads the thread to summarise it; the app's runner cannot do
+    // that, so only the palette may offer it (#4667).
+    expect(canRunProductCommand("compact")).toBe(false);
   });
 
   it("allows the commands the app runner can execute", () => {
     expect(canRunProductCommand("new")).toBe(true);
-    expect(canRunProductCommand("compact")).toBe(true);
+    expect(canRunProductCommand("clear")).toBe(true);
+    expect(canRunProductCommand("redo")).toBe(true);
     expect(canRunProductCommand("language")).toBe(true);
     expect(canRunProductCommand("english")).toBe(true);
+  });
+
+  it("refuses a row it cannot classify", () => {
+    // Fail closed: an unknown row id would close the menu and do nothing.
+    expect(canRunProductCommand("not-a-command")).toBe(false);
+    expect(canRunProductCommand("undo")).toBe(false);
   });
 
   it("leaves the palette rows alone, so the palette still offers them", () => {
@@ -235,6 +247,30 @@ describe("canRunProductCommand", () => {
     expect(ids).toContain("copy");
     expect(ids).toContain("export");
     expect(ids).toContain("export-html");
+  });
+});
+
+describe("canRunInComposerMenu", () => {
+  it("withholds /new and /clear from a host that cannot start a conversation", () => {
+    const a = api({ hasNewThread: false });
+    expect(canRunInComposerMenu("new", a)).toBe(false);
+    expect(canRunInComposerMenu("clear", a)).toBe(false);
+    expect(canRunInComposerMenu("help", a)).toBe(true);
+  });
+
+  it("offers /new and /clear where the host can start a conversation", () => {
+    const a = api({ hasNewThread: true });
+    expect(canRunInComposerMenu("new", a)).toBe(true);
+    expect(canRunInComposerMenu("clear", a)).toBe(true);
+  });
+});
+
+describe("host capabilities in the built rows", () => {
+  it("offers /redo only where the host can regenerate the last answer", () => {
+    const withRedo = buildProductSlashCommands(api({ hasRedo: true })).map((c) => c.id);
+    expect(withRedo).toContain("redo");
+    const withoutRedo = buildProductSlashCommands(api({ hasRedo: false })).map((c) => c.id);
+    expect(withoutRedo).not.toContain("redo");
   });
 });
 
@@ -375,6 +411,24 @@ describe("executeSlashDef", () => {
         }),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("the runner covers every command", () => {
+  it("gives every command a runner, or marks it as chat-state", () => {
+    // The defect this guards (#4667): a command def with no runner is a row
+    // that closes the menu and does nothing. A new def must either reach the
+    // runner or say that only a surface holding the chat can run it.
+    for (const def of SLASH_COMMANDS) {
+      if (def.needsChatState) continue;
+      const api = spyFixture(vi.fn);
+      executeSlashDef(def, "", api);
+      const called = Object.values(api as unknown as Record<string, unknown>).some((value) => {
+        const mock = value as { mock?: { calls?: unknown[] } };
+        return typeof value === "function" && (mock.mock?.calls?.length ?? 0) > 0;
+      });
+      expect(called, `/${def.id} has no runner`).toBe(true);
+    }
   });
 });
 

@@ -33,7 +33,6 @@ export type SlashId =
   | "thinking"
   | "sessions"
   | "compact"
-  | "undo"
   | "redo"
   | "mcp"
   | "tools"
@@ -321,15 +320,10 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     needsArg: false,
     hint: "Summarize this thread to free context",
     kind: "client",
+    // Summarising reads the thread, so only a surface that holds the chat
+    // can run it (#4667).
+    needsChatState: true,
     category: "session",
-  },
-  {
-    id: "undo",
-    names: ["/undo"],
-    needsArg: false,
-    hint: "Previous assistant branch",
-    kind: "client",
-    category: "actions",
   },
   {
     id: "redo",
@@ -384,6 +378,11 @@ export type SlashVisibility = {
   artifacts?: boolean;
   /** Colour theme. Hidden only when a host sets `themeLocked`; tenant embeds own the pick (`setTheme`). */
   theme?: boolean;
+  /**
+   * The host can regenerate the last answer. Hidden where it cannot: a row
+   * the host cannot run closes the menu and does nothing (#4667).
+   */
+  redo?: boolean;
 };
 
 export type ParsedSlash =
@@ -412,7 +411,7 @@ export function parseSlashInput(raw: string, extra?: readonly SlashDef[]): Parse
   return { kind: "command", command, arg };
 }
 
-function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
+export function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "search-engine") return visibility?.webSearch === true;
   if (cmd.id === "byok") return visibility?.byok !== false;
   if (cmd.id === "sessions") return visibility?.sessions === true;
@@ -421,6 +420,7 @@ function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "tools") return visibility?.tools !== false;
   if (cmd.id === "artifacts") return visibility?.artifacts === true;
   if (cmd.id === "theme") return visibility?.theme !== false;
+  if (cmd.id === "redo") return visibility?.redo === true;
   return true;
 }
 
@@ -506,6 +506,18 @@ const MENU_ID: Record<string, string> = { lang: "language", byok: "provider" };
 /** Menu id for a command id. `lang` is the language pane; `byok` is provider. */
 export function menuIdForCommand(id: string): string {
   return MENU_ID[id] ?? id;
+}
+
+const COMMAND_ROW_ID: Record<string, string> = { lang: "language" };
+
+/**
+ * Row id a command gets in the product command list. `lang` is the
+ * `/language` row. The menu node of a command is a different vocabulary
+ * (`menuIdForCommand`): `byok` opens the `provider` node, but the row is
+ * the `byok` row.
+ */
+export function commandRowId(id: string): string {
+  return COMMAND_ROW_ID[id] ?? id;
 }
 
 export type PaletteKind = "closed" | "commands" | "pane";

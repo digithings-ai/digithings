@@ -219,7 +219,6 @@ function HomeStockClientSingle({
     sessionKey,
     hasSessions: false,
     hasArtifacts: true,
-    newThread: () => {},
     redo: () => {
       redoRef.current();
     },
@@ -292,7 +291,6 @@ function HomeStockClientMemory({
     sessionKey,
     hasSessions: true,
     hasArtifacts: true,
-    newThread: () => {},
     redo: () => {
       const mainId = runtimeRef.current?.threads.getState().mainThreadId;
       if (!mainId) return;

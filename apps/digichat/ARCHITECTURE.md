@@ -1251,20 +1251,34 @@ no longer sends it.
 
 **Decision — a surface never offers a row it cannot run (DIG-4667).** The composer
 root menu and the `/` palette read the same command list, but they do not hold the
-same state: the palette sits inside the thread, so it can copy the last answer and
-download the thread, while the app's own runner knows the chat prefs and nothing
-else. A command that acts on the live chat therefore carries `needsChatState` on its
-def in `@digithings/digichat-ui` `slash-commands.ts` (`/copy` and `/export`), and the
-app asks `canRunProductCommand` before it builds a root-menu row. A row the app
-cannot run is not offered there, because such a row closes the menu and does
-nothing: #6034 started listing the palette's copy and export rows in the root menu
-while the app runner had no case for them, so the row was a dead end. The palette
-keeps those rows and still runs them, so the capability is not lost — only the
-surface that cannot run them stops offering them. `/export html` is the second face
-of `/export` and a row the app itself synthesizes, so it is marked by the same rule
-(`EXPORT_HTML_ROW_ID`). The tool rows this ticket named were removed upstream by
-#6211 (tools are toggled in `/tools`, never as their own slash commands); copy and
-export are the surviving instance of that defect class.
+same state, and they do not run on every host. A row that a surface cannot run
+closes the menu and does nothing, so no surface offers one. There are two reasons,
+and both are checked where the row is built:
+
+- *The command needs the live chat.* The palette sits inside the thread, so it can
+  copy the last answer, download the thread and summarise it; the app's own runner
+  knows the chat prefs and cannot read the thread or the last answer. Such a
+  command carries `needsChatState` on its def in `@digithings/digichat-ui`
+  `slash-commands.ts` (`/copy`, `/export` and `/compact`), and the app asks
+  `canRunProductCommand` before it builds a root-menu row. `/export html` is the
+  second face of `/export` and a row the app itself synthesizes, so it is marked
+  by the same rule (`EXPORT_HTML_ROW_ID`).
+- *The host cannot run the row.* A host declares what it can do on
+  `EmbedChatPrefsApi`: `hasRedo` for `/redo` (the host can regenerate the last
+  answer) and `hasNewThread` for `/new` and `/clear` (the host can start a
+  conversation). The full app owns its own thread list, so it cannot start a chat
+  from the prefs api; the palette keeps the row, because the skin holds the
+  runtime and switches threads itself. `isVisible` in the shared package reads
+  `hasRedo` as the `/redo` visibility flag, so the row disappears from the
+  palette as well.
+
+#6034 started listing the palette's rows in the root menu while the app runner
+had no case for them, so the rows were dead ends. The tool rows this ticket named
+were removed upstream by #6211 (tools are toggled in `/tools`, never as their own
+slash commands). `/undo` had no runner at all — every host stubbed it — so the
+def, the runner case and the api field are gone, the same way #6211 removed the
+runner-less tool defs. A command def that no surface can run is a dead row; the
+suite pins that every def either reaches the runner or says it needs the chat.
 
 Web-search defaults (#3859, tool-only grounding — no synthesis-model pins):
 

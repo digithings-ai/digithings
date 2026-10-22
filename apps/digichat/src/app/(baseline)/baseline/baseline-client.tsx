@@ -35,8 +35,11 @@ import {
   tryResolveLanguageInput,
 } from "@/lib/languages";
 
-/** Stable no-ops: the catalog has no persisted session to reset or redo. */
-const noop = () => {};
+/**
+ * The catalog has no persisted session to reset or redo, so the host offers
+ * no `newThread` and no `redo`: the composer menu withholds `/new`, `/clear`
+ * and `/redo` there instead of offering a row that does nothing (#4667).
+ */
 
 /** Skin runtime: the catalog gets the same error copy as the product shell. */
 const SKIN_RUNTIME = {
@@ -140,8 +143,6 @@ function BaselineClientInner() {
     deps: PREFS_DEPS,
     sessionKey: "baseline",
     hasSessions: false,
-    newThread: noop,
-    redo: noop,
   });
 
   const hrefFor = (nextSkin: string, nextTheme: string) => {

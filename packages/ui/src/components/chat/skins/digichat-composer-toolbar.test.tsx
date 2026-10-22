@@ -74,9 +74,9 @@ function prefsApi(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openSessions: noop,
     openArtifacts: noop,
     newThread: noop,
-    compactThread: noop,
-    undo: noop,
     redo: noop,
+    hasNewThread: true,
+    hasRedo: true,
     ...over,
   };
 }

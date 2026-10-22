@@ -58,9 +58,9 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openSessions: vi.fn(),
     openArtifacts: vi.fn(),
     newThread: vi.fn(),
-    compactThread: vi.fn(),
-    undo: vi.fn(),
     redo: vi.fn(),
+    hasNewThread: true,
+    hasRedo: true,
     ...over,
   };
 }

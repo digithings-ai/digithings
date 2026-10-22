@@ -36,8 +36,11 @@ import {
   type DevkitModeId,
 } from "./devkit-looks";
 
-/** Stable no-ops: the preview has no persisted session to reset or redo. */
-const noop = () => {};
+/**
+ * The preview has no persisted session to reset or redo, so the host offers
+ * no `newThread` and no `redo`: the composer menu withholds `/new`, `/clear`
+ * and `/redo` there instead of offering a row that does nothing (#4667).
+ */
 
 // Unsaved-changes dot in the preview header.
 const DIRTY_DOT_CLASS =
@@ -202,8 +205,6 @@ function DevkitPreviewInner({
     deps: PREFS_DEPS,
     sessionKey,
     hasSessions: false,
-    newThread: noop,
-    redo: noop,
   });
 
   // Live chrome copy: the same provider value the product shell builds from

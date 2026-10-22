@@ -221,9 +221,16 @@ export type EmbedChatPrefsApi = {
   openSessions: () => void;
   openArtifacts: () => void;
   newThread: () => void;
-  compactThread: () => void | Promise<void>;
-  undo: () => void;
-  redo: () => void;
+  /**
+   * The host can start a fresh conversation through this api. A host that
+   * owns its own thread list cannot, so the composer menu hides `/new` and
+   * `/clear` there; the palette keeps them, because the skin holds the
+   * runtime and switches threads itself (#4667).
+   */
+  hasNewThread?: boolean;
+  /** The host can regenerate the last answer. Hidden where it cannot (#4667). */
+  hasRedo?: boolean;
+  redo?: () => void;
   /**
    * Who may flip a tool. `agent` (Foundry) and `locked` (OCC session lock,
    * or allowUserToggle false) list every tool and MCP server with no toggle.

@@ -3,6 +3,7 @@ import {
   applyPaletteFrame,
   formatCliSettingLine,
   isLangCode,
+  isVisible,
   LANG_LABELS,
   matchingSlashCommands,
   nextPaletteIndex,
@@ -229,7 +230,35 @@ describe("SLASH_COMMANDS", () => {
 describe("chat-state commands", () => {
   it("marks the commands that act on the live chat", () => {
     const chatState = SLASH_COMMANDS.filter((def) => def.needsChatState).map((def) => def.id);
-    expect(chatState).toEqual(["copy", "export"]);
+    expect(chatState).toEqual(["compact", "copy", "export"]);
+  });
+
+  it("has no /undo command: no host can run one (#4667)", () => {
+    // /undo reached the composer root menu through #6034 and closed the menu
+    // without doing anything: every host stubbed `undo`. With no runner, the
+    // def is gone — a def that no surface can run is a dead row.
+    expect(SLASH_COMMANDS.find((def) => def.id === "undo")).toBeUndefined();
+    expect(SLASH_COMMANDS.flatMap((def) => def.names)).not.toContain("/undo");
+  });
+});
+
+describe("isVisible", () => {
+  it("shows /redo only where the host can regenerate the last answer", () => {
+    const redo = SLASH_COMMANDS.find((def) => def.id === "redo");
+    expect(redo).toBeDefined();
+    // No visibility at all: the host never said it can redo, so the row is
+    // withheld (fail closed, the same rule every other capability follows).
+    expect(isVisible(redo!, undefined)).toBe(false);
+    expect(isVisible(redo!, {})).toBe(false);
+    expect(isVisible(redo!, { redo: false })).toBe(false);
+    expect(isVisible(redo!, { redo: true })).toBe(true);
+  });
+
+  it("keeps every command without a visibility rule visible", () => {
+    const gated = new Set(["search-engine", "sessions", "artifacts", "redo"]);
+    for (const def of SLASH_COMMANDS.filter((d) => !gated.has(d.id))) {
+      expect(isVisible(def, undefined)).toBe(true);
+    }
   });
 });
 

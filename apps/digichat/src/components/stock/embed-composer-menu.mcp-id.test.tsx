@@ -5,62 +5,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EmbedComposerMenu } from "./embed-composer-menu";
-import {
-  DEFAULT_EMBED_CHAT_PREFS,
-  EmbedChatPrefsProvider,
-  type EmbedChatPrefsApi,
-} from "@digithings/ui/chat/stock";
+import { spyFixture } from "@/lib/embed-chat-prefs.fixture";
+import { EmbedChatPrefsProvider, type EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 
 function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
-  return {
-    prefs: { ...DEFAULT_EMBED_CHAT_PREFS },
-    setWebSearch: vi.fn(),
-    setDigisearch: vi.fn(),
-    setVault: vi.fn(),
-    setExtraTool: vi.fn(),
-    extraToolOn: () => true,
-    setMcpConfig: vi.fn(),
-    removeMcpConfig: vi.fn(),
-    setLanguage: vi.fn(),
-    setView: vi.fn(),
-    setThinking: vi.fn(),
-    setModel: vi.fn(),
-    setEffort: vi.fn(),
-    setSearchEngine: vi.fn(),
-    setToolbar: vi.fn(),
-    setScrollbars: vi.fn(),
-    setDensity: vi.fn(),
-    reset: vi.fn(),
+  // The /mcp view needs the connected-tools capabilities on.
+  return spyFixture(vi.fn, {
     tenantAllowsWeb: true,
     showByok: true,
-    showModels: true,
     hasDigisearch: true,
     hasVault: true,
-    hasSessions: false,
     allowUserMcp: true,
     allowAddMcp: true,
-    catalogTools: [],
-    mcpServers: [],
-    sessionKey: "t",
-    openSettings: vi.fn(),
-    openHelp: vi.fn(),
-    openTools: vi.fn(),
-    openMcp: vi.fn(),
-    openByok: vi.fn(),
-    openModels: vi.fn(),
-    openEffort: vi.fn(),
-    openSearchEngine: vi.fn(),
-    openView: vi.fn(),
-    openDensity: vi.fn(),
-    openThinking: vi.fn(),
-    openLanguage: vi.fn(),
-    openSessions: vi.fn(),
-    newThread: vi.fn(),
-    compactThread: vi.fn(),
-    undo: vi.fn(),
-    redo: vi.fn(),
     ...over,
-  };
+  });
 }
 
 describe("EmbedComposerMenu /mcp id dropdown", () => {

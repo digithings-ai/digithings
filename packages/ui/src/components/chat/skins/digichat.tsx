@@ -60,6 +60,8 @@ import { applyExportSlash } from "../../../replay/export-format";
  * - `SkinSlashExtraDef` mirrors the app's `SlashDef` minus `category`
  *   (optional-only there, so assignment holds both directions; runtime
  *   values are real app defs, and the skin never reads the extra fields).
+ *   `needsChatState` says the command reads the live chat, so only the
+ *   palette can run it.
  * - `SkinSlashAction` mirrors the app's `SlashSubmitAction` (`pass`, not `none`).
  */
 export type SkinSlashCommand = {
@@ -78,6 +80,8 @@ export type SkinSlashExtraDef = {
   forceTool?: string;
   choiceOptions?: readonly { value: string; label: string }[];
   kind?: "toggle" | "action" | "tool" | "client";
+  /** The command reads the live chat, so only a surface holding it can run it. */
+  needsChatState?: boolean;
 };
 
 export type SkinSlashAction =
@@ -261,6 +265,8 @@ export function DigichatSkin({
     return slashWiring.buildCommands(slashPrefs).map((c) => {
       if (c.id === "copy") return { ...c, execute: copyExport.copy };
       if (c.id === "export") return { ...c, execute: copyExport.exportThread };
+      // Row id of the synthesized `/export html` row (the app's
+      // `EXPORT_HTML_ROW_ID`); the skin cannot import the app's module.
       if (c.id === "export-html") return { ...c, execute: copyExport.exportHtml };
       if (c.id === "compact") {
         return {

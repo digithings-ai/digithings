@@ -44,6 +44,8 @@ export {
   isLangCode,
   commandOpensPane,
   menuIdForCommand,
+  commandRowId,
+  isVisible,
   paletteFrame,
   paletteSurfaces,
   applyPaletteFrame,

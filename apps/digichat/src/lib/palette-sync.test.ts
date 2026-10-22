@@ -62,9 +62,9 @@ function api(): EmbedChatPrefsApi {
     openSessions: () => {},
     openArtifacts: () => {},
     newThread: () => {},
-    compactThread: () => {},
-    undo: () => {},
     redo: () => {},
+    hasNewThread: true,
+    hasRedo: true,
   };
 }
 

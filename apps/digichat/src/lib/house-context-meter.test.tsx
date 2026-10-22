@@ -89,9 +89,9 @@ function footer(input: { showContextMeter?: boolean; meterModel?: string; model?
     openSessions: noop,
     openArtifacts: noop,
     newThread: noop,
-    compactThread: noop,
-    undo: noop,
     redo: noop,
+    hasNewThread: true,
+    hasRedo: true,
   };
   return render(<DigichatComposerToolbar prefs={prefs} />);
 }

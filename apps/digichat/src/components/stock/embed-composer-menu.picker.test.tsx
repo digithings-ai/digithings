@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { EmbedComposerMenu, cursorOnCurrentRow, type MenuRow } from "./embed-composer-menu";
 import { VIEW_MODES } from "@/lib/view-modes";
 import { VIEW_LABELS } from "@digithings/digichat-ui";
+import { spyFixture } from "@/lib/embed-chat-prefs.fixture";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
@@ -25,55 +26,19 @@ function hasDiamond(row: HTMLElement): boolean {
 }
 
 function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
-  return {
+  // The picker pages need the connected-tools capabilities on, and this host
+  // has no composer writer: the menu closes itself when a row is chosen.
+  return spyFixture(vi.fn, {
     prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "alpha" },
-    setWebSearch: vi.fn(),
-    setDigisearch: vi.fn(),
-    setVault: vi.fn(),
-    setExtraTool: vi.fn(),
-    extraToolOn: () => true,
-    setMcpConfig: vi.fn(),
-    removeMcpConfig: vi.fn(),
-    setLanguage: vi.fn(),
-    setView: vi.fn(),
-    setThinking: vi.fn(),
-    setModel: vi.fn(),
-    setEffort: vi.fn(),
-    setSearchEngine: vi.fn(),
-    setToolbar: vi.fn(),
-    setScrollbars: vi.fn(),
-    setDensity: vi.fn(),
-    reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
-    showModels: true,
     hasDigisearch: true,
     hasVault: true,
-    hasSessions: false,
     allowUserMcp: true,
     allowAddMcp: true,
-    catalogTools: [],
-    mcpServers: [],
-    sessionKey: "t",
-    openSettings: vi.fn(),
-    openHelp: vi.fn(),
-    openTools: vi.fn(),
-    openMcp: vi.fn(),
-    openByok: vi.fn(),
-    openModels: vi.fn(),
-    openEffort: vi.fn(),
-    openSearchEngine: vi.fn(),
-    openView: vi.fn(),
-    openDensity: vi.fn(),
-    openThinking: vi.fn(),
-    openLanguage: vi.fn(),
-    openSessions: vi.fn(),
-    newThread: vi.fn(),
-    compactThread: vi.fn(),
-    undo: vi.fn(),
-    redo: vi.fn(),
+    composerDraftBound: false,
     ...over,
-  };
+  });
 }
 
 function mountHost() {

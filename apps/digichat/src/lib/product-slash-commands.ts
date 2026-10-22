@@ -6,9 +6,11 @@
 import type { Unstable_SlashCommand } from "@assistant-ui/react";
 import {
   commandOpensPane,
+  commandRowId,
   isEffortCode,
   isSearchEngine,
   isThinkingCode,
+  isVisible,
   parseSlashInput,
   type SlashDef,
   type SlashVisibility,
@@ -141,6 +143,7 @@ export function visibilityFromPrefs(api: EmbedChatPrefsApi): SlashVisibility {
     tools: hasTools,
     artifacts: api.hasArtifacts,
     theme: api.themeLocked !== true,
+    redo: api.hasRedo === true,
   };
 }
 
@@ -191,28 +194,51 @@ export function featuredLanguageCommands(
 /** The `/export` command's HTML face, offered next to its markdown face. */
 export const EXPORT_HTML_ROW_ID = "export-html";
 
-/** The row id a command gets in the command list. */
-function rowIdForDef(def: SlashDef): string {
-  return def.id === "lang" ? "language" : def.id;
-}
-
 /** The rows the app synthesizes, and the command each one is a face of. */
 const SYNTHESIZED_ROW_COMMANDS: Record<string, string> = {
   [EXPORT_HTML_ROW_ID]: "export",
 };
 
+/** The featured-language rows: they set the reply language and run anywhere. */
+const FEATURED_LANGUAGE_ROW_IDS = new Set(
+  FEATURED_LANGUAGE_CODES.map((code) => languageLabel(code).toLowerCase()),
+);
+
 /**
  * Can the app's own runner execute this row?
  *
- * The `/` palette holds the chat state, so it can copy the last answer and
- * download the thread. The app's composer menu knows the chat prefs and
- * nothing else, so for it a chat-state row is a row that closes the menu
- * and does nothing. Such a row is not offered there; the palette keeps it.
+ * The `/` palette holds the chat state, so it can copy the last answer,
+ * download the thread and summarise it. The app's composer menu knows the
+ * chat prefs and nothing else, so for it a chat-state row is a row that
+ * closes the menu and does nothing. Such a row is not offered there; the
+ * palette keeps it.
+ *
+ * A row the runner does not know counts as unrunnable: it would close the
+ * menu and do nothing, which is the defect this guards (#4667).
  */
-export function canRunProductCommand(id: string): boolean {
+export function canRunProductCommand(
+  id: string,
+  extra: readonly SlashDef[] = [],
+): boolean {
   const commandId = SYNTHESIZED_ROW_COMMANDS[id] ?? id;
-  const def = SLASH_COMMANDS.find((candidate) => rowIdForDef(candidate) === commandId);
-  return !def?.needsChatState;
+  const def = [...SLASH_COMMANDS, ...extra].find(
+    (candidate) => commandRowId(candidate.id) === commandId,
+  );
+  if (def) return !def.needsChatState;
+  return FEATURED_LANGUAGE_ROW_IDS.has(id);
+}
+
+/**
+ * Can the composer menu run this row on this host?
+ *
+ * `/new` and `/clear` start a conversation through the host. A host that
+ * owns its own thread list cannot do that from the prefs api, so the menu
+ * does not offer the row there. The palette keeps it: the skin holds the
+ * runtime and switches threads itself (#4667).
+ */
+export function canRunInComposerMenu(id: string, api: EmbedChatPrefsApi): boolean {
+  if (id === "new" || id === "clear") return api.hasNewThread === true;
+  return true;
 }
 
 export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_SlashCommand[] {
@@ -222,14 +248,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
   const rows: Unstable_SlashCommand[] = [];
 
   for (const def of [...SLASH_COMMANDS, ...extra]) {
-    if (def.id === "search-engine" && !vis.webSearch) continue;
-    if (def.id === "byok" && vis.byok === false) continue;
-    if (def.id === "sessions" && vis.sessions !== true) continue;
-    if (def.id === "artifacts" && vis.artifacts !== true) continue;
-    if ((def.id === "models" || def.id === "effort") && vis.models === false) continue;
-    if (def.id === "mcp" && vis.mcp === false) continue;
-    if (def.id === "tools" && vis.tools === false) continue;
-    if (def.id === "theme" && vis.theme === false) continue;
+    if (!isVisible(def, vis)) continue;
 
     let description = def.hint;
     if (def.id === "view") {
@@ -257,7 +276,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = "Markdown file of this thread";
     }
 
-    const id = rowIdForDef(def);
+    const id = commandRowId(def.id);
     const insertName = def.id === "export" ? "/export md" : def.names[0];
     rows.push({
       id,
@@ -409,14 +428,8 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       api.reset();
       api.newThread();
       return;
-    case "compact":
-      void api.compactThread();
-      return;
-    case "undo":
-      api.undo();
-      return;
     case "redo":
-      api.redo();
+      api.redo?.();
       return;
     default:
       return;

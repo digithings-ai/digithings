@@ -16,7 +16,7 @@ Do not reintroduce a second transcript renderer here.
 
 | File | What it is |
 |---|---|
-| `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. Bare `/export` and `/export md` are markdown; `/export html` is the rendered page. Any other format shows an unsupported-format error. The digichat host shows both `/export md` and `/export html` in the palette. |
+| `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export` `/compact`. Bare `/export` and `/export md` are markdown; `/export html` is the rendered page. Any other format shows an unsupported-format error. The digichat host shows both `/export md` and `/export html` in the palette. A def that acts on the live chat carries `needsChatState`, and a def no host can run is not in this list at all (`/undo` was removed in DIG-4667). |
 | `@digithings/ui/chat/transcript` (`activity-view.ts`, `transcript-markdown.ts`, `types.ts`) | Activity rows, markdown export, and `DigiChatActivity` / `DigiChatMessage` / `DigiChatController`. This package re-exports them from `src/index.ts`. There is no local `src/types.ts`. |
 | `src/components/DigiChatMark.tsx` | Brand mark / wordmark (digithings-web nav). |
 | `src/components/DocumentPane.tsx` / `MiniMarkdown.tsx` | Optional helpers. Not mounted by the stock assistant-ui Thread. `MiniMarkdown` delegates to `@digithings/ui` `ChatMarkdown`. |
@@ -32,6 +32,11 @@ Do not reintroduce a second transcript renderer here.
   is the one home of the wording for the view levels, and `VIEW_CHOICES` and the
   palette's `/view` choice options are built from it. A consumer that needs the
   wording imports it; a second copy is a drift (DIG-4665).
+- **A def says what it needs.** `needsChatState` on a `SlashDef` marks a command
+  that acts on the live chat, so only a surface that holds the chat may offer it
+  (`/copy`, `/export`, `/compact`). `isVisible` is the shared matcher between a
+  command and a `SlashVisibility`, and `commandRowId` is the one home of the
+  command-to-row vocabulary (DIG-4667).
 - **Class names are API.** Consumers style/target `.dc-*` and `.dt-*`/`.dtc-*`
   directly. digichat layers `.dc-term-*` chrome around the stock Thread.
 - Styles read canon tokens (`--ink`, `--accent`, `--hair`, …) under the

@@ -129,8 +129,10 @@ export function useStockChatPrefs({
   hasSessions: boolean;
   /** Gating flag for /artifacts. Off until an artifact surface is wired. */
   hasArtifacts?: boolean;
-  newThread: () => void;
-  redo: () => void;
+  /** The host can start a fresh conversation. Absent = it cannot. */
+  newThread?: () => void;
+  /** The host can regenerate the last answer. Absent = it cannot. */
+  redo?: () => void;
 }) {
   const catalogTools = useMemo(
     () =>
@@ -341,25 +343,10 @@ export function useStockChatPrefs({
             scrollbars: config.scrollbars,
           }),
         });
-        newThread();
+        newThread?.();
       },
-      compactThread: () => {
-        setChatPrefs({
-          ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
-          extra: extraOffFromCatalog(catalogTools),
-          view: config.view,
-          thinking: config.thinking,
-          ...chromePrefsFromDeploy({
-            density: config.density,
-            effort: config.effort,
-            searchEngine: config.searchEngine,
-            toolbar: config.toolbar,
-            scrollbars: config.scrollbars,
-          }),
-        });
-        newThread();
-      },
-      undo: () => {},
+      hasNewThread: newThread !== undefined,
+      hasRedo: redo !== undefined,
       redo,
       toolControl: config.toolControl,
       paletteQuery,

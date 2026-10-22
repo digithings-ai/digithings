@@ -49,8 +49,10 @@ import {
 import {
   applyThemePick,
   buildProductSlashCommands,
+  canRunInComposerMenu,
   canRunProductCommand,
   currentThemeState,
+  extraSlashDefs,
   languageSelectOptions,
 } from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
@@ -522,9 +524,10 @@ export function EmbedComposerMenu({
    * truth, so going back never lands on a second, shorter "main". Rows that
    * name a page open it in place; actions run and close the menu.
    *
-   * A row the app cannot run is not offered here: the palette owns the
-   * chat-state commands, and a row the app cannot run closes the menu and
-   * does nothing.
+   * A row the menu cannot run is not offered here. Two reasons: the palette
+   * owns the chat-state commands (it holds the thread), and a host that
+   * cannot run a row does not get it. A row that closes the menu and does
+   * nothing is the defect this avoids (#4667).
    */
   const mainRows = useMemo((): MenuRow[] => {
     const NODE_BY_ID: Partial<Record<string, MenuView>> = {
@@ -541,8 +544,14 @@ export function EmbedComposerMenu({
       byok: "provider",
       help: "help",
     };
+    const extra = extraSlashDefs(api);
     return buildProductSlashCommands(api)
-      .filter((command) => command.id !== "settings" && canRunProductCommand(command.id))
+      .filter(
+        (command) =>
+          command.id !== "settings" &&
+          canRunProductCommand(command.id, extra) &&
+          canRunInComposerMenu(command.id, api),
+      )
       .map((command) => {
         const node = NODE_BY_ID[command.id];
         const draft = node ? paneDraftForId(command.id) : null;
