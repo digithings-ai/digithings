@@ -185,6 +185,44 @@ PROVENANCE_READ_TIMEOUT_SHADOW = 2.0
 #: hangs is a tick that hangs, and the queue reads one commit per pull request.
 PROVENANCE_STATUS_TIMEOUT = 10.0
 
+#: How many times one URL is read before the read is called a failed read. A
+#: dropped connection says nothing about the build behind the URL, so the read
+#: is tried again: one dropped connection used to refuse a pull request on a
+#: transport fact that had nothing to do with the build. The read is a GET, so
+#: the question is the same every time, and a question that was not answered
+#: is not an answer.
+PROVENANCE_READ_ATTEMPTS = 3
+
+#: The pause before the next attempt, in seconds. The pause is short because
+#: the queue has a tick to finish, and it is there so the second attempt does
+#: not arrive while the first one is still being answered.
+PROVENANCE_RETRY_BACKOFF = 0.5
+
+#: The whole cost of one URL, attempts and pauses together. The pause before
+#: an attempt and the attempt itself both happen inside it, so one path costs
+#: the budget once and not once per attempt. It is a deadline and not only a
+#: sum of timeouts: the body is read in chunks and the read gives up when the
+#: deadline has passed, so a server that answers the headers and then trickles
+#: the body cannot hold the read open past the budget. It is the budget of ONE
+#: URL read, not of the tick.
+PROVENANCE_READ_BUDGET = 20.0
+
+#: How long a host that could not be read is remembered, in seconds. The queue
+#: asks the same host about every pull request of the tick, so a host that
+#: could not be read is asked once more - briefly - and the rest of the tick
+#: is answered from the memory instead of waiting for a host that is not
+#: answering. The memory does not outlive its minute: after it the host is
+#: read again with the whole budget.
+PROVENANCE_HOST_COOLDOWN = 60.0
+
+#: How long the host is asked again after it did not answer, in seconds. The
+#: ask is one attempt and not three, and it is brief: the host either answers
+#: or it does not, and a host that was asleep for a moment answers at once.
+#: The queue asks the host once per pull request, so this is the cost of a
+#: dead host per pull request, and it has to stay small: the tick has an
+#: interval to keep.
+PROVENANCE_REPROBE_TIMEOUT = 2.0
+
 #: The provenance log grows by one line per pull request per tick, so it is
 #: capped: the oldest file is dropped when the log passes this size.
 PROVENANCE_LOG_MAX_BYTES = 1_000_000
@@ -210,6 +248,11 @@ PROVENANCE_INDEX_MAX_AGE_DAYS = 14
 #: request.
 _TOKEN_CACHE: dict[tuple[str, str], str] = {}
 _READ_CACHE: dict[str, tuple[int, Any]] = {}
+#: The hosts that could not be read, with the answer they gave and the moment
+#: they gave it. The key is the scheme and the host, because two services on
+#: one machine are two hosts and one of them can answer while the other does
+#: not.
+_HOST_FAILURE: dict[str, tuple[float, tuple[int, Any]]] = {}
 #: The allowed hosts, read once per queue run from the deployment's own files.
 _HOST_CACHE: dict[tuple[Any, ...], tuple[tuple[str, ...], str]] = {}
 #: The log index, by the path it is written to.
@@ -1105,7 +1148,7 @@ _WOODPECKER_OPENER = urllib.request.build_opener(_NoRedirect)
 def _woodpecker_read(
     url: str, token: str, timeout: float = PROVENANCE_READ_TIMEOUT
 ) -> tuple[int, Any]:
-    """One read-only GET against the Woodpecker API.
+    """One read-only GET against the Woodpecker API, read again if it is dropped.
 
     Returns the HTTP status and the decoded body. A transport failure is
     reported as status 0, because "the API could not be read" and "the build is
@@ -1114,38 +1157,161 @@ def _woodpecker_read(
     Nothing a posted status can put in the URL may kill the tick: the read
     catches everything, because a queue that dies on a crafted `target_url`
     stops merging for everybody.
+
+    Three things are true of a read that could not be made, and each of them
+    used to be false:
+
+    - A dropped connection is not an answer about the build, so the read is
+      tried again before it is believed.
+    - A host that could not be read is remembered for a short while, so the
+      queue does not ask a dead host three times per pull request of the tick.
+      One dropped connection used to refuse every pull request of the tick,
+      for a reason that had nothing to do with them.
+    - A failed read is not cached as the answer for that URL, so the URL is
+      read again once the memory of the failure has passed. The memory is of
+      that host and not of the queue: it keeps that host unasked for a minute,
+      and after that the host is asked again.
+
+    An answer the API gave - any status code, and a refused redirect - is
+    cached for the tick: the API answered, and its answer is the same until
+    the next tick.
     """
     cached = _READ_CACHE.get(url)
     if cached is not None:
         return cached
+    host = _read_host(url)
+    remembered = _HOST_FAILURE.get(host)
+    if remembered is not None:
+        failed_at, answer = remembered
+        if time.monotonic() - failed_at < PROVENANCE_HOST_COOLDOWN:
+            # The host did not answer a moment ago. It is asked once more, and
+            # briefly: a host that was asleep for a moment answers, and the
+            # tick carries on with the build instead of with the memory of a
+            # failure that is no longer true. One ask and not three, so a host
+            # that is down costs the tick one short read per pull request.
+            status, payload, dropped = _woodpecker_read_once(
+                url, token, PROVENANCE_REPROBE_TIMEOUT
+            )
+            if not dropped:
+                _HOST_FAILURE.pop(host, None)
+                _READ_CACHE[url] = (status, payload)
+                return (status, payload)
+            return (
+                0,
+                f"{answer[1]} (the host was asked once more and did not answer)",
+            )
+        # The memory of the failure has run out: the host is read again with
+        # the whole budget.
+        _HOST_FAILURE.pop(host, None)
+    status, payload, dropped = _woodpecker_read_attempts(url, token, timeout)
+    if dropped:
+        _HOST_FAILURE[host] = (time.monotonic(), (status, payload))
+    else:
+        _READ_CACHE[url] = (status, payload)
+    return (status, payload)
+
+
+def _read_host(url: str) -> str:
+    """The scheme and the host of a URL, which is what a read of it shares.
+
+    Two URLs on one host are one host for the queue: a host that could not be
+    read could not be read for either of them. The key is normalised the way
+    the allow-list is - the host in lower case, with its port - so that two
+    spellings of one address do not each pay their own retry storm.
+    """
+    parts = urllib.parse.urlsplit(url)
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    host = (parts.hostname or "").lower()
+    if port:
+        return f"{parts.scheme}://{host}:{port}"
+    return f"{parts.scheme}://{host}"
+
+
+def _woodpecker_read_attempts(
+    url: str, token: str, timeout: float
+) -> tuple[int, Any, bool]:
+    """The read, tried again while the API cannot be reached.
+
+    The third value says whether the API could not be reached at all, which is
+    the only failure worth trying again: a server that answered 404 answered,
+    and its answer is the same until the next tick.
+
+    The budget bounds the attempts of one read, so one path costs the budget
+    once and not once per attempt. It is a deadline and not a sum of timeouts:
+    the deadline is handed to the attempt, so a server that answers the
+    headers and then trickles the body cannot hold the read open past it.
+    """
+    deadline = time.monotonic() + PROVENANCE_READ_BUDGET
+    reason = ""
+    attempts = 0
+    for attempt in range(1, PROVENANCE_READ_ATTEMPTS + 1):
+        if attempt > 1:
+            time.sleep(
+                min(PROVENANCE_RETRY_BACKOFF, max(0.0, deadline - time.monotonic()))
+            )
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        attempts = attempt
+        status, payload, dropped = _woodpecker_read_once(
+            url, token, min(timeout, remaining), deadline
+        )
+        if not dropped:
+            return (status, payload, False)
+        reason = f"{payload} (tried {attempt} times)"
+    return (0, reason, True) if attempts else (0, "the read was not attempted", True)
+
+
+def _woodpecker_read_once(
+    url: str, token: str, timeout: float, deadline: float | None = None
+) -> tuple[int, Any, bool]:
+    """One attempt at the read.
+
+    The third value says whether the API could not be reached, so that the
+    caller can tell a dropped connection from an answer the API gave.
+
+    The body is read in chunks and the deadline is checked between them. The
+    timeout of a socket is the timeout of one operation on it, so a server
+    that answers the headers and then trickles the body would hold the read
+    open for as long as it liked.
+    """
     request = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
     )
     try:
         with _WOODPECKER_OPENER.open(request, timeout=timeout) as response:
-            body = response.read().decode("utf-8", "replace")
+            chunks: list[bytes] = []
+            while True:
+                if deadline is not None and time.monotonic() > deadline:
+                    raise TimeoutError("the read exceeded its budget")
+                chunk = response.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            body = b"".join(chunks).decode("utf-8", "replace")
             status = int(response.status)
             final_url = response.geturl()
     except urllib.error.HTTPError as exc:
         code = int(exc.code)
         if code in (301, 302, 303, 307, 308):
             # The redirect was refused: the answer of another host is not the
-            # answer of ours, and the token would have gone with it.
-            result = (0, "the request was redirected")
-        else:
-            result = (code, None)
+            # answer of ours, and the token would have gone with it. The answer
+            # is the same every time, so the read is not tried again.
+            return (0, "the request was redirected", False)
+        return (code, None, False)
     except Exception as exc:  # a status must never kill a tick
-        result = (0, f"{type(exc).__name__}: {exc}")
-    else:
-        if final_url != url:
-            result = (0, "the request was redirected")
-        else:
-            try:
-                result = (status, json.loads(body or "null"))
-            except json.JSONDecodeError:
-                result = (status, None)
-    _READ_CACHE[url] = result
-    return result
+        # The API could not be reached. This is the one failure that says
+        # nothing about the build, so it is the one failure worth trying again.
+        return (0, f"{type(exc).__name__}: {exc}", True)
+    if final_url != url:
+        return (0, "the request was redirected", False)
+    try:
+        return (status, json.loads(body or "null"), False)
+    except json.JSONDecodeError:
+        return (status, None, False)
 
 
 def _build_steps(pipeline: Mapping[str, Any]) -> dict[str, frozenset[str]]:
