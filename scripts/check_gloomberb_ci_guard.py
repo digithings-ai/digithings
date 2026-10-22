@@ -660,7 +660,7 @@ def tracked_files(repo_root: Path | None = None) -> list[str]:
     root = repo_root if repo_root is not None else REPO_ROOT
     try:
         out = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z"],
+            ["git", "-C", str(root), "-c", "core.fsmonitor=false", "ls-files", "-z"],
             capture_output=True,
             check=True,
         ).stdout

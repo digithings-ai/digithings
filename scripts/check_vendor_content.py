@@ -408,7 +408,7 @@ def git(*args: str) -> str:
     message that reads like the gate is broken.
     """
     proc = subprocess.run(
-        [GIT, *args], cwd=REPO, capture_output=True, text=True, errors="replace"
+        [GIT, "-c", "core.fsmonitor=false", *args], cwd=REPO, capture_output=True, text=True, errors="replace"
     )
     if proc.returncode == 1 and args and args[0] == "grep":
         return ""
@@ -438,7 +438,7 @@ def read_text(rel: str) -> str | None:
 def resolve_base(base_ref: str) -> str:
     """Merge-base of HEAD and base_ref, so the baseline is the fork point."""
     proc = subprocess.run(
-        [GIT, "merge-base", "HEAD", base_ref],
+        [GIT, "-c", "core.fsmonitor=false", "merge-base", "HEAD", base_ref],
         cwd=REPO,
         capture_output=True,
         text=True,
