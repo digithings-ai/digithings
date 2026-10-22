@@ -46,16 +46,23 @@
 # pull_request path filters are the same list, so the proof on a develop PR is
 # the proof that runs on main.
 #
-# THE REF IS A CHOICE, NOT A DEFAULT TO TRUST. `ref` defaults to `main`,
-# because main is the only branch the `production` environment's branch
-# policy allows a deployment to run on - a dispatch at another ref is refused
-# by GitHub before the deploy job starts. As of 2026-10-22 main is BEHIND the
-# live digichat Worker (DIG-2615 P1: main was 1005 commits behind, 2.3.2 vs
-# the live 2.4.0), because the live Worker script was uploaded from an
-# unmerged commit. Dispatching at main therefore ships main's tree, which is
-# the P2 risk DIG-2615 recorded: reviving the lane would strip the live OCC
-# control. The ref is therefore printed and resolved before the deploy, and
-# the approval is Chris's to give knowingly. DIG-3390 owns the follow-up.
+# THE REF IS A CHOICE, NOT A DEFAULT TO TRUST, AND TWO REFS ARE IN PLAY.
+#   * The DISPATCH ref is the branch or tag the RUN is started from, and the
+#     `production` environment's branch policy is evaluated against it. That
+#     policy allows `main` only, and this repo's default branch is
+#     `develop`, so a run started from `develop` is refused by the
+#     environment before the deploy job runs. The lane cannot deploy while it
+#     lives on `develop` alone; it becomes deployable once a promotion
+#     carries it to `main`.
+#   * `inputs.ref` is the TREE that gets checked out and deployed. It
+#     defaults to `main`, so a dispatch from `main` ships `main`.
+# As of 2026-10-22 main is BEHIND the live digichat Worker (DIG-2615 P1: main
+# was 1005 commits behind, 2.3.2 vs the live 2.4.0), because the live Worker
+# script was uploaded from an unmerged commit. Dispatching at main therefore
+# ships main's tree, which is the P2 risk DIG-2615 recorded: reviving the
+# lane would strip the live OCC control. The ref is therefore printed and
+# resolved before the deploy, and the approval is Chris's to give knowingly.
+# DIG-3390 owns the follow-up.
 #
 # CREDENTIALS. wrangler authenticates from the CLOUDFLARE_API_TOKEN
 # environment variable, and the repo secret of that name is the token this

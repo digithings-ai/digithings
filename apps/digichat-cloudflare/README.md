@@ -54,7 +54,9 @@ Mac Compose remains **dev-only** — see
 > `production` environment gate, so a push-triggered successor would have deployed production
 > on every merge. The re-derived lane deploys on a manual `workflow_dispatch` only, behind
 > `environment: production`, so Chris approves every deploy; a merge to `main` validates the
-> app and deploys nothing. The recipe below is the **local** path. The build half is still
+> app and deploys nothing. The `production` environment allows `main` deployments only and
+> `develop` is this repo's default branch, so the lane becomes deployable when a promotion
+> carries it to `main`. The recipe below is the **local** path. The build half is still
 > gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for this app on every
 > PR. See
 > [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).

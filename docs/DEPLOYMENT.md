@@ -317,7 +317,7 @@ fail a PR before it merges.
 | App | Worker name | Declared routes | Deploy lane |
 |---|---|---|---|
 | `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | `deploy-digithings-stack-cloudflare.yml` — `workflow_dispatch` behind `environment: production` |
-| `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*` | `deploy-digichat-cloudflare-container.yml` — `workflow_dispatch` behind `environment: production` |
+| `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*`, `/api/mcp/zammad*`, `/chat/occ*` (11 patterns) | `deploy-digichat-cloudflare-container.yml` — `workflow_dispatch` behind `environment: production` |
 
 Read the routes column as "what `wrangler.toml` declares", not as a claim about what is
 currently serving. Both are Workers **Containers**: both need **Workers Paid**, and both need
@@ -379,6 +379,12 @@ One caveat stays live, and it is about the ref, not about the lane: `main` is cu
 **behind** the live digichat Worker script (DIG-2615 P1/P2 — the live Worker was uploaded from
 an unmerged commit), so a dispatch at `ref: main` ships `main`'s tree. DIG-3390 owns that
 follow-up.
+
+A second caveat sits on the `production` environment's branch policy: it allows `main`
+deployments only, and this repo's default branch is `develop`. A `workflow_dispatch` run
+started from `develop` is therefore refused by the environment before the deploy job runs. Both
+lanes become deployable only once a promotion carries them to `main`; until then the operator
+path below is the way.
 
 #### Deploying by hand today
 
