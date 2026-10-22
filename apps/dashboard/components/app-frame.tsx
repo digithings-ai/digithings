@@ -46,14 +46,18 @@ export default function AppFrame({ children }: { children: ReactNode }) {
         <CommandPalette />
         {/* D9 recorded TUI frame preview (DIG-2698); no-ops when env off. */}
         <TuiRecordedFrames />
+        {/* D8 live DigiChat preview (DIG-2698, DIG-5138); no-ops when env off.
+            It sits inside the content column: as a row sibling of <main> it
+            took its max-content width and squeezed the page column to 38px
+            (QA, DIG-5134). Both strips are column children on every viewport:
+            neither carries the old `hidden md:block` phone stopgap. */}
+        <DigichatLivePreview />
         <div className="flex min-h-0 flex-1 flex-col">
           {gated ? <DbUnavailable /> : <FxHubOnlyGuard>{children}</FxHubOnlyGuard>}
         </div>
       </main>
       {/* Desk+ research/portfolio digichat popup (#3422); no-ops when env off. */}
       <DigichatPopup />
-      {/* D8 live DigiChat preview (DIG-2698); no-ops when env off. */}
-      <DigichatLivePreview />
     </div>
   );
 }
