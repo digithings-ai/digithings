@@ -469,26 +469,9 @@ def _run_document_rag_path(
     _session_disabled = {
         str(t).strip().lower() for t in (state.get("disabled_tools") or []) if str(t).strip()
     }
-    if tenant_search_tools:
-        _had_search = any(
-            _tool_def_name(t) in ("digisearch", "digisearch_fetch_all") for t in tools_for_llm
-        )
-        tools_for_llm = [
-            t
-            for t in tools_for_llm
-            if _tool_def_name(t) not in ("digisearch", "digisearch_fetch_all")
-        ]
-        if _session_disabled:
-            tenant_search_tools = {
-                k: v for k, v in tenant_search_tools.items() if k.lower() not in _session_disabled
-            }
-        if _had_search:
-            tools_for_llm = [
-                *(_tenant_search_schema(n, s) for n, s in tenant_search_tools.items()),
-                *tools_for_llm,
-            ]
-        else:
-            tenant_search_tools = {}
+    tools_for_llm, tenant_search_tools = _apply_tenant_search_tools(
+        tools_for_llm, tenant_search_tools, _session_disabled, context.index_name
+    )
     collected_stored: dict[str, dict] = {}
     collected_rag: list[dict] = []
 
@@ -827,6 +810,43 @@ def _tenant_digisearch_tools(raw: Any) -> dict[str, dict[str, str]]:
         for n, s in raw.items()
         if isinstance(s, dict) and s.get("index") and s.get("description")
     }
+
+
+_GENERIC_SEARCH_TOOLS = ("digisearch", "digisearch_fetch_all")
+
+
+def _apply_tenant_search_tools(
+    tools_for_llm: list,
+    tenant_search_tools: dict[str, dict[str, str]],
+    session_disabled: set[str],
+    tenant_index: str | None,
+) -> tuple[list, dict[str, dict[str, str]]]:
+    """Merge dedicated tenant search tools (DIG-3269) into the model's tool list.
+
+    The generic ``digisearch`` / ``digisearch_fetch_all`` tools search the
+    tenant's own index. They are hidden only when the dedicated tools cover
+    every part of that index, i.e. the dedicated tools REPLACE it. A dedicated
+    tool over some other collection (OCC's ``digisearch_zammad_tickets`` over
+    ``occ-tickets`` next to ``occ_help``) is an addition, so the generic tools
+    stay. Dedicated tools are offered only when generic search is allowed.
+    """
+    if not tenant_search_tools:
+        return tools_for_llm, {}
+    had_search = any(_tool_def_name(t) in _GENERIC_SEARCH_TOOLS for t in tools_for_llm)
+    if not had_search:
+        return tools_for_llm, {}
+    covered = {s["index"] for s in tenant_search_tools.values()}
+    parts = {p.strip() for p in str(tenant_index or "").split(",") if p.strip()}
+    if parts and parts <= covered:
+        tools_for_llm = [t for t in tools_for_llm if _tool_def_name(t) not in _GENERIC_SEARCH_TOOLS]
+    if session_disabled:
+        tenant_search_tools = {
+            k: v for k, v in tenant_search_tools.items() if k.lower() not in session_disabled
+        }
+    return [
+        *(_tenant_search_schema(n, s) for n, s in tenant_search_tools.items()),
+        *tools_for_llm,
+    ], tenant_search_tools
 
 
 def _tenant_search_schema(name: str, spec: dict[str, str]) -> dict[str, Any]:
