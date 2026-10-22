@@ -20,6 +20,7 @@ import {
   setPendingForceTool,
   setPendingWebSearchForce,
 } from "@/lib/pending-chat-headers";
+import { applyPaletteFrame, paletteFrame, paneDraftForId } from "@digithings/digichat-ui";
 import {
   buildProductSlashCommands,
   executeSlashDef,
@@ -45,6 +46,9 @@ export const DIGICHAT_SKIN_OPTIONS: DigichatSkinOptions = {
     submitAction: slashSubmitAction,
     executeDef: executeSlashDef,
     executeFromComposer: executeSlashFromComposer,
+    frame: paletteFrame,
+    applyFrame: applyPaletteFrame,
+    paneDraft: paneDraftForId,
     armForceTool: armForceToolThenHold,
     setForceTool: setPendingForceTool,
     setWebSearchForce: setPendingWebSearchForce,

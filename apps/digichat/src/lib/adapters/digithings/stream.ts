@@ -21,6 +21,7 @@ import {
 } from "@/lib/ui-stream-parts";
 import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
 import { CredentialRedirectError, fetchGuarded } from "@/lib/fetch-guarded";
+import type { TurnGuard } from "@/lib/guardrails/turn";
 
 export type DigigraphTracePayload = {
   v?: number;
@@ -382,6 +383,17 @@ export async function createDigigraphTraceStreamResponse(opts: {
   model?: string;
   /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
   signal?: AbortSignal;
+  /** Shown before the answer when a premium pick falls back to Auto. */
+  preface?: string;
+  /**
+   * Reported token usage for the premium spend window. Called from the
+   * stream `finally`, including when the visitor aborts after an answer.
+   * Omitted usage charges a typical turn. Absent when the deployment does
+   * not meter (OCC).
+   */
+  onUsage?: (usage?: { inputTokens: number; outputTokens: number }) => void;
+  /** Shared TPM / tool-cap guard. Inactive when the deployment sets neither. */
+  guard?: TurnGuard;
 }) {
   const stripped = uiMessagesForUpstream(opts.messages).map((m) => {
     const { id: _omit, ...rest } = m;
@@ -402,6 +414,10 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let textOpen = false;
       /** Any answer text was written — the normal success signal. */
       let textEmitted = false;
+      let usageMetadata:
+        | { inputTokens: number; outputTokens: number; totalTokens: number }
+        | undefined;
+      let toolCallsSoFar = 0;
       const activityCtx = createActivityWriteContext();
       const openText = () => {
         if (textOpen) return;
@@ -416,6 +432,11 @@ export async function createDigigraphTraceStreamResponse(opts: {
         textOpen = false;
         textSeq += 1;
       };
+      if (opts.preface) {
+        openText();
+        writer.write({ type: "text-delta", id: textId, delta: `${opts.preface}\n\n` });
+        textEmitted = true;
+      }
       writer.write({
         type: "data-connection",
         id: "digigraph-connection",
@@ -426,9 +447,21 @@ export async function createDigigraphTraceStreamResponse(opts: {
       // success tail: a part left streaming keeps the thinking animation
       // parked above the final state (foundry wraps the same way).
       try {
+      let outbound = coreMessagesToDigigraphOpenAi(coreMessages);
+      if (opts.guard?.active) {
+        const clearance = await opts.guard.beforeRound({
+          writer,
+          pendingText: outbound.map((message) => message.content).join("\n"),
+          toolCallsSoFar: 0,
+          signal: opts.signal,
+        });
+        if (clearance.action !== "proceed") {
+          outbound = [...outbound, { role: "user", content: clearance.instruction }];
+        }
+      }
       const bodyPayload: Record<string, unknown> = {
         model,
-        messages: coreMessagesToDigigraphOpenAi(coreMessages),
+        messages: outbound,
         stream: true,
       };
       // #2572: never follow cross-origin redirects while carrying BYOK /
@@ -595,9 +628,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
         closeText();
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
-      let usageMetadata:
-        | { inputTokens: number; outputTokens: number; totalTokens: number }
-        | undefined;
       for await (const delta of iterateOpenAiSse(res.body, (usage) => {
         const inputTokens = usage.prompt_tokens;
         const outputTokens = usage.completion_tokens;
@@ -669,6 +699,17 @@ export async function createDigigraphTraceStreamResponse(opts: {
           // resets which text part subsequent "content" deltas land in.
           if (payload.type === "round_boundary") {
             closeText();
+            // Notice only. beforeRound may ask for an answer-band follow-up;
+            // this loop has no second request to attach it to, so the result
+            // is discarded. The tool-cap notice still fires from noteToolCap.
+            if (opts.guard?.active) {
+              await opts.guard.beforeRound({
+                writer,
+                pendingText: outbound.map((message) => message.content).join("\n"),
+                toolCallsSoFar,
+                signal: opts.signal,
+              });
+            }
             continue;
           }
 
@@ -677,7 +718,20 @@ export async function createDigigraphTraceStreamResponse(opts: {
             closeText();
           }
           for (const span of spans) {
-            writeStandardActivity(writer, span, activityCtx);
+            if (span.operation === "execute_tool") {
+              toolCallsSoFar += 1;
+              // noteToolCap no-ops under the cap and after the notice is sent,
+              // including when one event carries two execute_tool spans.
+              if (opts.guard?.active) opts.guard.noteToolCap(writer, toolCallsSoFar);
+            }
+            const next =
+              opts.guard?.active && span.toolResult !== undefined
+                ? {
+                    ...span,
+                    toolResult: opts.guard.capToolPayload(span.toolResult) as typeof span.toolResult,
+                  }
+                : span;
+            writeStandardActivity(writer, next, activityCtx);
           }
         }
       }
@@ -690,6 +744,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
           type: "message-metadata",
           messageMetadata: { usage: usageMetadata },
         });
+        opts.guard?.recordUsage(usageMetadata);
       }
       // #3910: a real 200 always has a non-null body even when the upstream
       // sends no bytes, so `!res.body` only catches 204/205/HEAD. Without this,
@@ -707,6 +762,13 @@ export async function createDigigraphTraceStreamResponse(opts: {
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       } finally {
+        // An abort used to skip the charge that sat after the SSE loop, so a
+        // visitor who disconnected at the end of each answer was not billed.
+        // House passes onUsage; OCC does not, and stays unmetered.
+        if (opts.onUsage && (textEmitted || usageMetadata)) {
+          opts.onUsage(usageMetadata);
+        }
+        opts.guard?.release();
         // Idempotent when the turn already settled on the success path.
         finishStandardActivity(writer, activityCtx);
         closeText();

@@ -173,10 +173,6 @@
       "count": 15,
       "ticket": "DIG-2912"
     },
-    "apps/digichat/src/components/assistant-ui/skins/digichat-force-web.test.tsx": {
-      "count": 2,
-      "ticket": "DIG-3689"
-    },
     "apps/digichat/src/components/stock/embed-mcp-catalog.test.ts": {
       "count": 2,
       "ticket": "DIG-3689"
@@ -351,10 +347,6 @@
     },
     "apps/digichat/src/lib/license/verify.test.ts": {
       "count": 3,
-      "ticket": "DIG-3689"
-    },
-    "apps/digichat/src/lib/product-slash-commands.test.ts": {
-      "count": 15,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/security-headers.test.ts": {
@@ -670,14 +662,6 @@
       "ticket": "DIG-3689"
     },
     "packages/design/releases.json": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
-    "packages/digichat-ui/src/slash-commands.test.ts": {
-      "count": 4,
-      "ticket": "DIG-3689"
-    },
-    "packages/digichat-ui/src/slash-commands.ts": {
       "count": 1,
       "ticket": "DIG-3689"
     },

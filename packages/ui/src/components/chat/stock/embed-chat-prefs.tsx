@@ -166,6 +166,17 @@ export type EmbedChatPrefsApi = {
    */
   providerLabel?: string;
   showModels: boolean;
+  /**
+   * Model id the turn sends, including a bring-your-own-key binding.
+   * Sizes the context meter only. An empty session still sends no
+   * X-Digi-Model.
+   */
+  meterModel?: string;
+  /**
+   * Render gate for the context meter. The toolbar draws the bar only
+   * when this is true.
+   */
+  showContextMeter?: boolean;
   hasDigisearch: boolean;
   hasVault: boolean;
   hasSessions: boolean;
@@ -213,6 +224,29 @@ export type EmbedChatPrefsApi = {
   compactThread: () => void | Promise<void>;
   undo: () => void;
   redo: () => void;
+  /**
+   * Who may flip a tool. `agent` (Foundry) and `locked` (OCC session lock,
+   * or allowUserToggle false) list every tool and MCP server with no toggle.
+   * Omit means the host still toggles.
+   */
+  toolControl?: "toggle" | "locked" | "agent";
+  /** Text after the pane command. The open pane filters on it. */
+  paletteQuery?: string;
+  /** Composer writer used by menu rows. The skin binds it to `setText`. */
+  setComposerDraft?: (text: string) => void;
+  /**
+   * True only after a skin called `bindComposerDraft`. The writer exists on
+   * every host, and until a skin binds it the sink is a no-op, so the menu
+   * must close and change pages itself.
+   */
+  composerDraftBound?: boolean;
+  bindComposerDraft?: (setText: (text: string) => void) => void;
+  /** One palette frame. `keep` leaves a button-opened menu alone. */
+  syncPalette?: (next: {
+    kind: "closed" | "commands" | "pane";
+    menu: "close" | "keep" | string;
+    filter: string;
+  }) => void;
 };
 
 const EmbedChatPrefsContext = createContext<EmbedChatPrefsApi | null>(null);
