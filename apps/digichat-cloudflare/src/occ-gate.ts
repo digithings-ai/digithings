@@ -92,7 +92,11 @@ export async function siteNotFound(
   const nf = await upstream(`${origin}${SITE_NOT_FOUND_PATH}`, {
     headers: { accept: "text/html" },
   });
-  return new Response(nf.body, { status: 404, statusText: nf.statusText, headers: nf.headers });
+  if (nf.status === 404) {
+    return new Response(nf.body, { status: 404, statusText: nf.statusText, headers: nf.headers });
+  }
+  // Same as the Pages twin: anything but the site's own 404 is not passed through.
+  return new Response("Not Found", { status: 404, headers: { "content-type": "text/plain" } });
 }
 
 /** Invite-only embed tenants (mirrors digichat INVITE_ONLY_EMBED_HOSTS). */
@@ -112,10 +116,15 @@ function embedHostOf(raw: string | null): string | null {
   return v.split("/")[0]!.split(":")[0]!.replace(/\.$/, "") || null;
 }
 
-/** /embed (or /embed/*) asking for an invite-only tenant via ?host=. */
-export function isInviteOnlyEmbedRequest(url: URL): boolean {
+/**
+ * /embed (or /embed/*) asking for an invite-only tenant. The tenant host is
+ * the one the container resolves: `?host=` when it is non-empty, else the
+ * Referer origin (`resolveEmbedHostParamOrReferer` in digichat).
+ */
+export function isInviteOnlyEmbedRequest(url: URL, referer: string | null = null): boolean {
   if (url.pathname !== "/embed" && !url.pathname.startsWith("/embed/")) return false;
-  const host = embedHostOf(url.searchParams.get("host"));
+  const explicit = url.searchParams.get("host")?.trim();
+  const host = embedHostOf(explicit ? explicit : referer);
   return host !== null && INVITE_ONLY_EMBED_HOSTS.has(host);
 }
 
@@ -130,7 +139,11 @@ export async function occEmbedGate(
   upstream: (req: Request | string, init?: RequestInit) => Promise<Response> = fetch,
 ): Promise<Response | null> {
   const url = new URL(request.url);
-  if (!isInviteOnlyEmbedRequest(url)) return null;
-  if (inviteTokenValid(url.searchParams.get("token"), expected)) return null;
+  if (!isInviteOnlyEmbedRequest(url, request.headers.get("referer"))) return null;
+  // Trimmed like the container and the parent page do. The gate reads the
+  // query only: no browser path sends the x-embed-token header to /embed.
+  // With the Worker secret unset, the embed fails closed here.
+  if (inviteTokenValid(url.searchParams.get("token")?.trim() || null, expected?.trim()))
+    return null;
   return siteNotFound(url.origin, upstream);
 }

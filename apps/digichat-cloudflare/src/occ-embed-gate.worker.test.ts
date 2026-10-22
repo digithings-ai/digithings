@@ -62,7 +62,7 @@ describe("the /embed invite gate in the Worker", () => {
     expect(pages).not.toHaveBeenCalled();
   });
 
-  it("keeps the house embed and the chat API ungated", async () => {
+  it("keeps the house embed ungated", async () => {
     const w = await worker();
     expect(
       (
@@ -85,6 +85,36 @@ describe("the /embed invite gate in the Worker", () => {
       expect(res.status).toBe(404);
       expect(await res.text()).not.toMatch(/occ|digichat/i);
     }
+    expect(containerFetch).not.toHaveBeenCalled();
+  });
+  it("gates the Referer form, the port form, an encoded host, a subpath and a padded key", async () => {
+    const w = await worker();
+    const cases: Array<[string, Record<string, string>]> = [
+      ["https://digithings.ai/embed?layout=page", { referer: "https://occ.digithings.ai/x" }],
+      ["https://digithings.ai/embed?host=&layout=page", { referer: "https://occ.digithings.ai/" }],
+      ["https://digithings.ai/embed?host=occ.digithings.ai:443", {}],
+      ["https://digithings.ai/embed?host=occ%2Edigithings%2Eai", {}],
+      ["https://digithings.ai/embed/x?host=occ.digithings.ai", {}],
+    ];
+    for (const [u, headers] of cases) {
+      const res = await w.fetch(new Request(u, { headers }), env);
+      expect(res.status, u).toBe(404);
+    }
+    expect(containerFetch).not.toHaveBeenCalled();
+    const padded = await w.fetch(
+      new Request(`https://digithings.ai/embed?host=occ.digithings.ai&token=%20${KEY}%20`),
+      env,
+    );
+    expect(padded.status).toBe(200);
+  });
+
+  it("fails closed when the Worker secret is unset", async () => {
+    const w = await worker();
+    const res = await w.fetch(
+      new Request(`https://digithings.ai/embed?host=occ.digithings.ai&token=${KEY}`),
+      {} as never,
+    );
+    expect(res.status).toBe(404);
     expect(containerFetch).not.toHaveBeenCalled();
   });
 });

@@ -36,12 +36,15 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
 - **Lives in three production copies, and two of them are gates** (the Keychain custody copy and
   the local host secret store hold it too — see [Custody](#custody)):
   1. the `token` field of the `occ.digithings.ai` entry inside the digichat Worker secret
-     `DIGICHAT_EMBED_TENANTS` (`apps/digichat-cloudflare/src/index.ts:141`) — the registry copy the
+     `DIGICHAT_EMBED_TENANTS` (`apps/digichat-cloudflare/src/index.ts:139`) — the registry copy the
      Container reads;
-  2. the digichat Worker secret `OCC_INVITE_KEY` (`apps/digichat-cloudflare/src/index.ts:122`,
+  2. the digichat Worker secret `OCC_INVITE_KEY` (`apps/digichat-cloudflare/src/index.ts:120`,
      documented in `apps/digichat-cloudflare/wrangler.toml:125` as "Worker-only /chat/occ gate;
      never forwarded to the container"), which the route gate compares at
-     `apps/digichat-cloudflare/src/index.ts:167`;
+     `apps/digichat-cloudflare/src/index.ts:165`. Since 2.6.8 the same copy also gates
+     `/embed?host=occ.digithings.ai` (`occEmbedGate`): a request without the key gets the site
+     404 at the Worker. With this secret unset the OCC embed fails closed at the Worker, and a
+     value that differs from copy 1 404s every invited embed, so rotate both together;
   3. the Cloudflare Pages secret `OCC_INVITE_KEY` on project `digithings-ai`, which the `/chat/occ`
      shell gate compares (`apps/digithings-web/functions/chat/occ/[[path]].ts:25`).
 
@@ -181,7 +184,7 @@ Consequences:
 > hand, and read both scripts before you do.
 
 The container boot-env trap applies: `DIGICHAT_EMBED_TENANTS` reaches the digichat Container
-process env (`apps/digichat-cloudflare/src/index.ts:69`, merged from the KV registry at
+process env (`apps/digichat-cloudflare/src/index.ts:68`, merged from the KV registry at
 `:94-114`), but a warm instance keeps its boot env until it is recycled, and `sleepAfter` alone
 does not evict a Container under steady traffic. `secret put` **plus** `deploy` is **not** enough
 on its own.
