@@ -18,6 +18,26 @@ describe("sessionModelSeed", () => {
     ).toBe(FLASH);
   });
 
+  it("starts on Auto when the curated default is the auto preset model", () => {
+    // The picker shows "auto" and selects the Auto row; the turn still runs
+    // on the deployment default because an empty session model sends no
+    // X-Digi-Model and the route falls back to models.default.
+    expect(
+      sessionModelSeed({
+        available: [FLASH, "openai/gpt-oss-120b"],
+        defaultModel: FLASH,
+        autoModel: FLASH,
+      }),
+    ).toBe("");
+    expect(
+      sessionModelSeed({
+        available: [FLASH, "openai/gpt-oss-120b"],
+        defaultModel: "openai/gpt-oss-120b",
+        autoModel: FLASH,
+      }),
+    ).toBe("openai/gpt-oss-120b");
+  });
+
   it("leaves the session model empty when the house list is empty", () => {
     const sessionModel = sessionModelSeed({ available: [] });
     expect(sessionModel).toBe("");
