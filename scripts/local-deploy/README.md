@@ -24,10 +24,10 @@ are both in the repo again: the stack lane was re-derived on `develop` on 2026-1
 **re-derived, not reverted** — the files deleted on 2026-10-01 by `f54af7052`
 (#4919, Human Gate, DIG-2843) had no `production` environment gate, so a
 push-triggered successor would have deployed production on every merge. The
-re-derived lanes deploy on a manual `workflow_dispatch` only, behind
-`environment: production`, and they deploy through each app's `npm run deploy`
-wrapper. `deploy_worker.sh` remains the local path, because it takes any directory
-under `apps/`.
+digichat lane deploys on a manual `workflow_dispatch` only; the stack lane
+also deploys on a push to `main`. Both sit behind `environment: production`,
+and both deploy through each app's `npm run deploy` wrapper. `deploy_worker.sh`
+remains the local path, because it takes any directory under `apps/`.
 
 ## The release branch: one ref, one Worker at a time
 

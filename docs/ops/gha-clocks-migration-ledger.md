@@ -56,15 +56,15 @@ turns "port, then disable" into one invariant.
 
 ## Brief items that are not workflows on `develop`
 
-The cutover request listed four names that do not exist in
-`.github/workflows/` on `develop` (64 files):
+The cutover request listed four names; three are still absent from
+`.github/workflows/` (66 files on `develop`, 67 on this branch):
 
 | Name | Why there is nothing to port |
 |---|---|
 | `project-status.yml` | Absent from `develop`. |
 | `docs-onboard-digithings.yml` | Absent from `develop`. |
 | `project-stub-fields.yml` | Absent from `develop`. |
-| `deploy-digithings-stack-cloudflare.yml` | Present on `develop` since 2026-10-20 (DIG-4612, #6013). It has no scheduled clock — it deploys on a manual `workflow_dispatch` behind `environment: production` — so there is nothing to port. |
+| `deploy-digithings-stack-cloudflare.yml` | Present on `develop` since 2026-10-20 (DIG-4612, #6013). It has no scheduled clock — it deploys on a push to `main` and on a manual `workflow_dispatch`, both behind `environment: production` — so there is nothing to port. |
 
 ## Behavioural receipt
 

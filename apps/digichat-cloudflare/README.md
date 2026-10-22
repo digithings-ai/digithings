@@ -82,9 +82,11 @@ npx wrangler secret put DIGICHAT_TENANT_MINT_CREDENTIALS  # tenant mint credenti
 npx wrangler deploy
 ```
 
-Then enable zone routes (uncomment in `wrangler.toml` or Dashboard → Worker →
-Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`,
-`/api/health`, `/_dtchat*`.
+The zone routes are declared, not enabled by hand: `wrangler.toml` carries all eleven
+`digithings.ai` patterns (`/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`,
+`/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*`,
+`/api/mcp/zammad*`, `/chat/occ*`) under the ROUTE HOLD note of 2026-10-18 — a deploy must not
+narrow that list.
 
 ### `DIGICHAT_EMBED_TENANTS` (digithings + OCC)
 

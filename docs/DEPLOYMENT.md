@@ -155,18 +155,21 @@ written — the Cloudflare account was on Workers Free then, and Containers need
 (`docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md` records the gate) —
 and it stopped being true when the account moved. It was not kept with a caveat: the claim was
 simply removed. `apps/digichat-cloudflare/` (Worker `digithings-digichat` + Container) is live in
-the tree, requires Workers Paid, declares seven `digithings.ai` route patterns in its
-`wrangler.toml`, and is covered by the CI build matrix. What is missing is not the app but its
-**deploy lane** — see [Cloudflare Workers and Containers](#cloudflare-workers-and-containers).
+the tree, requires Workers Paid, declares eleven `digithings.ai` route patterns in its
+`wrangler.toml`, and is covered by the CI build matrix. What was missing was not the app but its
+**deploy lane**, re-derived on 2026-10-22 (DIG-5120) — see
+[Cloudflare Workers and Containers](#cloudflare-workers-and-containers).
 
 digichat Node for digithings still runs on operator Compose + Cloudflare Tunnel; that is a
 different surface from the `digichat-cloudflare` Worker.
 
 The Worker fronts the `DigiChatContainer` Container (`apps/digichat-cloudflare/wrangler.toml`,
-`infra/docker/Dockerfile.digichat-cloudflare`); deploying it by hand is `npx wrangler deploy` from
-`apps/digichat-cloudflare/` with the build context at the monorepo root, per
-[`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md). No workflow
-deploys it — the section below measures exactly that.
+`infra/docker/Dockerfile.digichat-cloudflare`); deploying a specific tree by hand is
+`npx wrangler deploy` from `apps/digichat-cloudflare/` with the build context at the monorepo
+root, per
+[`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md). The CI lane
+deploys it — `deploy-digichat-cloudflare-container.yml`, on a manual dispatch behind
+`environment: production`.
 
 ### digithings.ai — static landing page
 
@@ -316,7 +319,7 @@ fail a PR before it merges.
 
 | App | Worker name | Declared routes | Deploy lane |
 |---|---|---|---|
-| `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | `deploy-digithings-stack-cloudflare.yml` — `workflow_dispatch` behind `environment: production` |
+| `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | `deploy-digithings-stack-cloudflare.yml` — a push to `main` and a `workflow_dispatch`, both behind `environment: production` |
 | `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*`, `/chat/occ*` (10 of the 11 patterns; the full list is in `apps/digichat-cloudflare/wrangler.toml`) | `deploy-digichat-cloudflare-container.yml` — `workflow_dispatch` behind `environment: production` |
 
 Read the routes column as "what `wrangler.toml` declares", not as a claim about what is
@@ -325,9 +328,10 @@ a Docker CLI locally for `wrangler deploy` to build the image.
 
 Both `infra/docker/Dockerfile.digichat-cloudflare` and `infra/docker/Dockerfile.digithings-stack-cloudflare` are live at
 the repo root, and both lanes now exist on `develop`: the stack lane was re-derived on
-2026-10-20 (DIG-4612) and the digichat lane on 2026-10-22 (DIG-5120). Both deploy **only** on a
-manual dispatch, and only behind the `production` environment, whose required reviewer is
-Chris. A merge to `main` runs the validation gate and deploys nothing.
+2026-10-20 (DIG-4612) and the digichat lane on 2026-10-22 (DIG-5120). Both sit behind the
+`production` environment, whose required reviewer is Chris. The **digichat** lane deploys only
+on a manual dispatch, so a merge to `main` runs its validation gate and deploys nothing; the
+**stack** lane still deploys on a push to `main`, behind Chris's approval.
 
 #### Why the lane was deleted, and what brought it back
 
@@ -373,18 +377,21 @@ every merge with nobody's approval — DIG-4612 ruled on that by name), a deploy
 runs on a manual `workflow_dispatch`, and the rev-injecting wrapper `npm run deploy`, so the
 Container id is derived from the deployed commit. Both lanes keep a `push: main` trigger
 because this repo's own invariant requires every deploy-capable workflow to fire on a push to
-`main`; on that path the lane validates and deploys nothing.
+`main`; on that path the digichat lane validates and deploys nothing, and the stack lane
+deploys behind the `production` gate.
 
-One caveat stays live, and it is about the ref, not about the lane: `main` is currently
-**behind** the live digichat Worker script (DIG-2615 P1/P2 — the live Worker was uploaded from
-an unmerged commit), so a dispatch at `ref: main` ships `main`'s tree. DIG-3390 owns that
-follow-up.
+One caveat stays live, and it is about the ref, not about the lane: a dispatch ships the tree
+of the ref it names, so `inputs.ref` decides what production gets. As of 2026-10-22 `main` is
+**at** the live digichat Worker (the live rev `eef1ee72c20f` is `main`'s tip — it was promoted
+by #6226), so a dispatch at `ref: main` ships the live tree, OCC gate included. That is a
+measurement, not a guarantee, and it moves as soon as `main` moves. DIG-3390 owns keeping the
+ref honest.
 
 A second caveat sits on the `production` environment's branch policy: it allows `main`
 deployments only, and this repo's default branch is `develop`. A `workflow_dispatch` run
-started from `develop` is therefore refused by the environment before the deploy job runs. Both
-lanes become deployable only once a promotion carries them to `main`; until then the operator
-path below is the way.
+started from `develop` is therefore refused by the environment before the deploy job runs. The
+digichat lane becomes deployable once a promotion carries it to `main` — the stack lane is
+already there. Until then the operator path below is the way.
 
 #### Deploying by hand today
 

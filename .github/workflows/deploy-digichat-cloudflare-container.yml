@@ -56,13 +56,12 @@
 #     carries it to `main`.
 #   * `inputs.ref` is the TREE that gets checked out and deployed. It
 #     defaults to `main`, so a dispatch from `main` ships `main`.
-# As of 2026-10-22 main is BEHIND the live digichat Worker (DIG-2615 P1: main
-# was 1005 commits behind, 2.3.2 vs the live 2.4.0), because the live Worker
-# script was uploaded from an unmerged commit. Dispatching at main therefore
-# ships main's tree, which is the P2 risk DIG-2615 recorded: reviving the
-# lane would strip the live OCC control. The ref is therefore printed and
-# resolved before the deploy, and the approval is Chris's to give knowingly.
-# DIG-3390 owns the follow-up.
+# As of 2026-10-22 the live digichat Worker's rev (eef1ee72c20f) IS main's
+# tip - it was promoted to main by #6226 - so a dispatch at main ships the
+# live tree, including the OCC gate. That is a measurement, not a guarantee,
+# and it moves as soon as main moves: the ref decides what production gets,
+# so the ref is printed and resolved before the deploy and the approval is
+# Chris's to give knowingly. DIG-3390 owns keeping the ref honest.
 #
 # CREDENTIALS. wrangler authenticates from the CLOUDFLARE_API_TOKEN
 # environment variable, and the repo secret of that name is the token this

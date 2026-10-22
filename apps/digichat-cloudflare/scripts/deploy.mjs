@@ -97,8 +97,9 @@ export const REV_LEN = 12;
  * Where to read the deployed id back from.
  *
  * This Worker is routable today — `wrangler.toml` re-asserts the live route set
- * (the ROUTE HOLD note of 2026-10-18) — so this URL answers. That is why `main`
- * exits 2 rather than claiming a verification it could not perform.
+ * (the ROUTE HOLD note of 2026-10-18) — so this URL answers and the check is
+ * real. Exit 2 then means the read-back did not prove this rev, not that the
+ * read-back was impossible.
  */
 export const META_URL = "https://digithings.ai/_digichat/meta";
 
@@ -211,10 +212,11 @@ export function verdictFor({ meta, expected, metaUrl, readError, field = "contai
           "so the running Container may still be the previous instance. Redeploy with " +
           "`npm run deploy` from a checkout (not a bare `npx wrangler deploy`).\n"
         : "  The read-back could not be performed, so this rev is unproven: the " +
-          "Worker is routable (`/_digichat/meta` is one of its declared routes), so a " +
-          "failed read is the Worker answering with an error, not a missing route. The " +
-          "deploy DID run; what it did not prove is that this rev is the id serving " +
-          "traffic. Confirm on the fold, which shares the same derivation: curl -s " +
+          `Worker declares the route (${metaUrl} is in its wrangler.toml), so a failed ` +
+          "read is one of three things: the Worker answered with an error, the route " +
+          "is missing, or the request never reached the edge. The deploy DID run; " +
+          "what it did not prove is that this rev is the id serving traffic. Confirm " +
+          "on the fold, which shares the same derivation: curl -s " +
           "https://graph.digithings.ai/_stack/meta\n"),
   };
 }
