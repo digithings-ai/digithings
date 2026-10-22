@@ -53,7 +53,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -2269,6 +2269,56 @@ _MARKER_RE = re.compile(r"<!--\s*opencode-power-pack:code-review\b(?P<fields>[^>
 _MARKER_FIELD_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)=(?P<value>\S+)")
 _SCOPE_SHA_RE = re.compile(r"@(?P<sha>[0-9a-f]{7,40})\b")
 
+# A verdict written inside a code block is an example of a verdict, not a
+# verdict. #6197 merged into `develop` on 2026-10-21T16:53:08Z on the PR
+# author's own reply: the reply asked the desk to post a verdict and wrote the
+# marker down inside a fenced block, and the queue read the template as the
+# newest approve on the head. The three `changes requested` verdicts that stood
+# before it were overridden by a template (DIG-4990, 22 Oct 2026).
+#
+# So a fenced block (``` or ~~~) and an inline code span are both taken out
+# before any marker, prose line or provenance claim is read. A reviewer writes
+# the template down to be copied from; that is the opposite of a verdict.
+#
+# The fence is read the way CommonMark reads it: it opens at the start of a
+# line with up to three spaces of indentation, and it closes on a line that
+# carries the same run of backticks or tildes. A fence that is never closed
+# runs to the end of the body, because an unterminated template is still a
+# template.
+_FENCE_RE = re.compile(
+    r"(?ms)^[ \t]{0,3}(?P<fence>`{3,}|~{3,})[^\n]*\n.*?(?:^[ \t]{0,3}(?P=fence)[ \t]*$|\Z)"
+)
+# An inline code span: a run of backticks, some text that does not start or
+# end with a backtick, and the same run of backticks again.
+_INLINE_CODE_RE = re.compile(r"(`+)(?!`).+?(?<!`)\1(?!`)", re.DOTALL)
+
+
+def _unfenced(body: str) -> str:
+    """The body with its fenced code blocks taken out."""
+    return _FENCE_RE.sub("\n", body)
+
+
+def _code_free(body: str) -> str:
+    """The body with its fenced code blocks and inline code spans taken out.
+
+    Everything the queue reads as a verdict — the `verdict=` marker, the
+    `Review verdict:` line, the `digithings-review` provenance marker and the
+    in-session marker — is read from this text, so a template written down in
+    a comment cannot be read as a verdict posted on a PR (DIG-4990).
+    """
+    return _INLINE_CODE_RE.sub(" ", _unfenced(body))
+
+
+def _body_for_shas(body: str) -> str:
+    """The body with its HTML comments and fenced code blocks taken out.
+
+    The backticks are dropped rather than the code they wrap: a reviewer
+    writes the sha they reviewed as `` `6aab1cea` ``, and that sha names the
+    head the verdict covers. A sha inside a fenced block is a template's text,
+    not a claim about a head.
+    """
+    return _comment_text(_unfenced(body)).replace("`", "")
+
 # `changes_needed` is read alongside `changes_requested` because DIG-1021's interim
 # discipline named the two verdicts "approve" and "changes needed"; a reviewer
 # writing that spelling must not slip past the gate.
@@ -2287,8 +2337,12 @@ def _marker_verdict(body: str) -> tuple[str, str] | None:
     None means "this comment carries no marker verdict the queue can read" — a
     plain comment, or a marker whose `verdict=` is missing or misspelled. That
     is a missing signal, not a clearance, and it must not be treated as one.
+
+    The marker is read from the body with its code blocks taken out: a marker
+    written inside a fenced block is a template the author copied from, and
+    #6197 merged on one (DIG-4990).
     """
-    for marker in _MARKER_RE.finditer(body):
+    for marker in _MARKER_RE.finditer(_code_free(body)):
         fields = {
             m.group("key").lower(): m.group("value")
             for m in _MARKER_FIELD_RE.finditer(marker.group("fields"))
@@ -2335,7 +2389,17 @@ _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 # provenance marker's `agent=` field, and it is the only place it is written.
 # A verdict whose seat cannot be read is judged by the newest-verdict rule
 # instead of by seat (see `_standing_seat_blocks`).
-_SEAT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$")
+
+#: The shape of a uuid as it is written down. It is deliberately wider than
+#: `_UUID_RE` (the shape the Paperclip API accepts): the check here asks "is
+#: this a seat id or a placeholder", not "would the API take it". A template's
+#: placeholder — `<your-seat-uuid>`, `…` — is not a uuid in either shape, and
+#: reading one as a seat is how a quoted template became a clearance
+#: (DIG-4990). The shape the API accepts is checked where the API is asked
+#: (`_marker_problems`).
+_UUID_SHAPE_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 
 
 def _comment_text(body: str) -> str:
@@ -2351,11 +2415,17 @@ def _line_at(body: str, index: int) -> str:
 
 
 def _prose_verdict(body: str) -> tuple[str, str] | None:
-    """`(verdict, the line it was read from)` from a `Review verdict:` line."""
-    match = _PROSE_VERDICT_RE.search(body)
+    """`(verdict, the line it was read from)` from a `Review verdict:` line.
+
+    The line is read from the body with its code blocks taken out: the review
+    template that ships with the marker writes "Review verdict: approve" inside
+    a fenced block, and a template is not a verdict (DIG-4990).
+    """
+    text = _code_free(body)
+    match = _PROSE_VERDICT_RE.search(text)
     if match is None:
         return None
-    return match.group("verdict").lower().replace(" ", "_"), _line_at(body, match.start())
+    return match.group("verdict").lower().replace(" ", "_"), _line_at(text, match.start())
 
 
 @dataclass(frozen=True)
@@ -2373,12 +2443,22 @@ class PostedVerdict:
     # comment carries no readable seat: every seat shares one GitHub login, so
     # there is nothing else to tell them apart by.
     seat: str = ""
+    # The run that posted it, read from the same marker. Empty when the marker
+    # carries no readable run. A seat and a run together are what makes a
+    # clearance attributable (see `_may_clear`).
+    run: str = ""
 
 
 def _comment_seat(provenance: Mapping[str, str]) -> str:
     """The seat that posted this comment, or "" when it cannot be read."""
     agent = str(provenance.get("agent") or "").strip()
-    return agent if agent and _SEAT_ID_RE.match(agent) else ""
+    return agent.lower() if _UUID_SHAPE_RE.match(agent) else ""
+
+
+def _comment_run(provenance: Mapping[str, str]) -> str:
+    """The run that posted this comment, or "" when it cannot be read."""
+    run = str(provenance.get("run") or "").strip()
+    return run.lower() if _UUID_SHAPE_RE.match(run) else ""
 
 
 def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
@@ -2410,8 +2490,10 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         # the verdict line, in the sentence after it, or in the scope line the
         # review opens with. The question this gate asks is "does this comment
         # name the head the PR stands at", so every sha in it is a candidate.
-        claims = [found.group("sha") for found in _PROSE_SHA_RE.finditer(text)]
-    provenance = _provenance_fields(body)
+        # The shas are read with the fenced blocks taken out: a sha in a
+        # template is the template's text, not a claim about a head (DIG-4990).
+        claims = [found.group("sha") for found in _PROSE_SHA_RE.finditer(_body_for_shas(body))]
+    provenance = _provenance_claim(body)
     provenance_head = str(provenance.get("head") or "")
     if provenance_head and not scope:
         # A marker verdict names the head it is about through its own `scope=`.
@@ -2440,6 +2522,7 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         author=login,
         at=str(comment.get("createdAt") or ""),
         seat=_comment_seat(provenance),
+        run=_comment_run(provenance),
     )
 
 
@@ -2477,7 +2560,9 @@ def _covers_head(verdict: PostedVerdict, head: str) -> bool:
     )
 
 
-def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
+def _standing_seat_blocks(
+    pr: dict[str, Any], head: str, author_seat: Callable[[], str]
+) -> list[PostedVerdict]:
     """The blocks the seats who posted them have not cleared, oldest first.
 
     A blocking verdict belongs to the seat that posted it: that seat's own
@@ -2492,6 +2577,11 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     unknown, so the newest-verdict rule (`_latest_posted_verdict`) judges it.
     That is a known limitation, not a choice — 33 of the 40 readable verdicts
     on the open PRs carried no seat marker when this rule was measured.
+
+    An approve that the seat posted does not clear its own block when it may
+    not clear at all (`_may_clear`): the PR's own author never clears its own
+    block, and a clearance nobody can be named to is not a clearance
+    (DIG-4990).
     """
     by_seat: dict[str, list[PostedVerdict]] = {}
     for verdict in _readable_verdicts(pr):
@@ -2503,7 +2593,11 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
         if newest.verdict in BLOCKING_VERDICTS:
             standing.append(newest)
             continue
-        if newest.verdict in APPROVE_VERDICTS and _covers_head(newest, head):
+        if (
+            newest.verdict in APPROVE_VERDICTS
+            and _covers_head(newest, head)
+            and _may_clear(newest, author_seat())
+        ):
             # This seat approved the head the PR stands at: its block is cleared.
             continue
         # The seat's newest verdict does not clear this head. A block it posted
@@ -2533,7 +2627,93 @@ def _sha_text(sha: str) -> str:
     return f"`{sha[:12]}`" if sha else "no commit"
 
 
-def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
+def _may_clear(verdict: PostedVerdict, author_seat: str) -> bool:
+    """Whether this verdict may clear a block that stands before it.
+
+    Two rules, and both are about who is speaking (DIG-4990):
+
+    * the verdict carries provenance — a `digithings-review` marker naming a
+      seat and a run. A clearance nobody can be named to is not a clearance,
+      and a template's placeholder (`agent=<your-seat-uuid>`) names nobody.
+      That is the marker #6197 merged on: the author's own reply asked the
+      desk to post a verdict, wrote the marker down inside a fenced block,
+      and the queue read the template as the newest approve.
+    * the seat it names is not the seat that owns this PR's ticket, so the
+      PR's own author never clears a block on its own PR.
+
+    An author seat that could not be read excludes nobody: the rule that
+    cannot be applied is not applied, and the provenance rule — which needs no
+    API and is applied either way — still holds.
+    """
+    if not (verdict.seat and verdict.run):
+        return False
+    if author_seat and verdict.seat == author_seat:
+        return False
+    return True
+
+
+def _clears_a_block(pr: dict[str, Any], verdict: PostedVerdict) -> bool:
+    """Whether this verdict is clearing a block that stands before it.
+
+    A block is a blocking verdict posted before this one. An approve that
+    follows one clears it, and a clearance has to be attributable
+    (DIG-4990). An approve with no block before it is a review, not a
+    clearance, and the coverage gate judges it on its own evidence.
+    """
+    return any(
+        other.verdict in BLOCKING_VERDICTS and other.at <= verdict.at
+        for other in _readable_verdicts(pr)
+    )
+
+
+def _author_seat(pr: dict[str, Any], prov: ReviewerProvenance | None) -> str:
+    """The seat that owns the ticket this PR is about, or "" when unknown.
+
+    The ticket is the one named in the PR's title or its branch (`_ticket_key`)
+    and the seat is its assignee: the seat that is driving the PR. The live
+    guard reads the same fact the same way (`mq-cr-hold.py`,
+    `author_seat(branch)`), and the two must not disagree about who the author
+    of a PR is.
+
+    A ticket that cannot be read leaves the seat unknown, and an unknown seat
+    excludes nobody — see `_may_clear`.
+    """
+    key = _ticket_key(pr)
+    if not key or prov is None:
+        return ""
+    try:
+        ticket = prov.ticket(key)
+    except _PaperclipUnavailable:
+        return ""
+    if not ticket:
+        return ""
+    return str(ticket.get("assigneeAgentId") or "").strip().lower()
+
+
+class _AuthorSeat:
+    """The seat that owns this PR's ticket, read once and only when it is asked for.
+
+    The read is lazy on purpose: a PR with nothing to clear never asks, so a
+    tick does not spend one API read per PR on a gate that has nothing to
+    judge.
+    """
+
+    def __init__(self, pr: dict[str, Any], prov: ReviewerProvenance | None) -> None:
+        self._pr = pr
+        self._prov = prov
+        self._seat = ""
+        self._read = False
+
+    def __call__(self) -> str:
+        if not self._read:
+            self._seat = _author_seat(self._pr, self._prov)
+            self._read = True
+        return self._seat
+
+
+def _verdict_value_reason(
+    pr: dict[str, Any], prov: ReviewerProvenance | None = None
+) -> list[str]:
     """A refusal when the newest readable verdict does not clear this PR.
 
     DIG-4878. A blocking verdict used to be spent the moment the commit it named
@@ -2570,14 +2750,27 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
     hold it to. That is a known limitation of what the marker carries, not a
     second policy.
 
+    3. **A clearance has to be attributable, and the PR's own author never
+       clears its own block.** An approve that clears a changes-requested must
+       carry the provenance marker naming a seat and a run, and that seat must
+       not be the seat that owns this PR's ticket. #6197 merged into `develop`
+       on 2026-10-21 on the author's own reply, whose fenced review template
+       carried an approve marker with `agent=<your-seat-uuid>` in it — the
+       queue read the template as the newest approve, and the three
+       `changes requested` verdicts that stood before it were overridden by a
+       template (DIG-4990). So the code blocks are read out before any marker
+       is matched, a marker whose `agent=` or `run=` is not a uuid names
+       nobody, and the seat that owns the ticket cannot clear its own block.
+
     This is the value gate. Whether a review happened at all, and whether it came
     from another seat, is the coverage gate's question (`_review_coverage`), and
     the two stay apart on purpose (DIG-4795).
     """
     head = str(pr.get("headRefOid") or "")
-    standing = _standing_seat_blocks(pr, head)
+    author_seat = _AuthorSeat(pr, prov)
+    standing = _standing_seat_blocks(pr, head, author_seat)
     if standing:
-        return [_standing_seat_reason(pr, standing[-1], head)]
+        return [_standing_seat_reason(pr, standing[-1], head, author_seat())]
     latest = _latest_posted_verdict(pr)
     if latest is None:
         # No verdict the queue can read is not a verdict. The coverage gate
@@ -2599,6 +2792,8 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
             f"verdict stands until a later approve names the head it covers"
         ]
     if _covers_head(latest, head):
+        if _clears_a_block(pr, latest) and not _may_clear(latest, author_seat()):
+            return [_unattributed_clearance_reason(pr, latest, head)]
         return []
     return [
         f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
@@ -2608,7 +2803,33 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
     ]
 
 
-def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -> str:
+def _unattributed_clearance_reason(
+    pr: dict[str, Any], verdict: PostedVerdict, head: str
+) -> str:
+    """The refusal for an approve that cannot clear the block before it."""
+    head_text = f"`{head[:12]}`" if head else "an unknown head"
+    where = f"comment {verdict.comment_id}" if verdict.comment_id else "a comment"
+    if not (verdict.seat and verdict.run):
+        return (
+            f"PR #{pr.get('number')}: the latest review verdict is '{verdict.verdict}' "
+            f"({verdict.source}, posted by {verdict.author} in {where}) and it names "
+            f"the head {head_text}, but it carries no `digithings-review` provenance "
+            "naming a seat and a run, so the queue cannot tell who cleared the "
+            "changes requested before it; an approve that clears a block must carry "
+            "that provenance"
+        )
+    return (
+        f"PR #{pr.get('number')}: the latest review verdict is '{verdict.verdict}' "
+        f"({verdict.source}, posted by {verdict.author} in {where}) and it names "
+        f"the head {head_text}, but seat {verdict.seat} owns this PR's ticket, so its "
+        "own approve cannot clear the changes requested before it; a seat other than "
+        "the PR's author has to post an approve naming the head it covers"
+    )
+
+
+def _standing_seat_reason(
+    pr: dict[str, Any], block: PostedVerdict, head: str, author_seat: str = ""
+) -> str:
     """The refusal for a block the seat that posted it has not cleared."""
     head_text = f"`{head[:12]}`" if head else "an unknown head"
     where = f"comment {block.comment_id}" if block.comment_id else "a comment"
@@ -2618,6 +2839,17 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         scope_text = f", naming `{block.bindings[0][:12]}`"
     else:
         scope_text = ""
+    if author_seat and block.seat == author_seat:
+        # The seat that posted the block owns this PR's ticket, so its own
+        # approve cannot clear it: the PR's own author never clears its own
+        # block (DIG-4990).
+        return (
+            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"({block.source}, in {where}){scope_text}, and the PR now stands at "
+            f"{head_text}; that seat owns this PR's ticket, so its own approve "
+            "cannot clear the block — a seat other than the PR's author has to "
+            "post an approve naming the head it covers"
+        )
     return (
         f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
         f"({block.source}, in {where}){scope_text}, and the PR now stands at "
@@ -2720,7 +2952,9 @@ def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
     return None
 
 
-def _gate_review(pr: dict[str, Any]) -> list[str]:
+def _gate_review(
+    pr: dict[str, Any], prov: ReviewerProvenance | None = None
+) -> list[str]:
     """Open change requests block: a formal one, or a verdict posted as a comment.
 
     This gate no longer demands an approving review from a non-author, and it no
@@ -2741,7 +2975,7 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
         reasons.append("review has outstanding change requests")
     # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
     # requested". A posted blocking verdict stays a block until a newer one clears it.
-    reasons.extend(_verdict_value_reason(pr))
+    reasons.extend(_verdict_value_reason(pr, prov))
     return reasons
 
 
@@ -3238,11 +3472,41 @@ def _provenance_for(cfg: ReviewIndependence) -> ReviewerProvenance:
 
 
 def _provenance_fields(body: str) -> dict[str, str]:
-    """The `digithings-review` marker's fields, lower-cased keys."""
+    """The `digithings-review` marker's fields, lower-cased keys.
+
+    The marker is read from the body with its code blocks taken out: a marker
+    written inside a fenced block is a template the author copied from, and it
+    claims nobody (DIG-4990).
+    """
     fields: dict[str, str] = {}
-    for marker in _PROVENANCE_RE.finditer(body):
+    for marker in _PROVENANCE_RE.finditer(_code_free(body)):
         for match in _MARKER_FIELD_RE.finditer(marker.group("fields")):
             fields[match.group("key").lower()] = match.group("value")
+    return fields
+
+
+def _provenance_claim(body: str) -> dict[str, str]:
+    """The provenance marker's fields, when it is a claim.
+
+    A claim names a seat and a run, and both have to be uuids. A marker whose
+    `agent=` or `run=` is a placeholder — `<your-seat-uuid>`, `…`, a typo —
+    names no seat and no run, so the queue reads nothing from it.
+
+    That is the template the review rule ships with, and #6197 merged on it:
+    the author's reply asked the desk to post a verdict and wrote the marker
+    down with `agent=<your-seat-uuid>` in it, and the queue read the template
+    as the newest approve on the head (DIG-4990).
+
+    The coverage gate still reads every marker as it stands and refuses the
+    bad ones by name (`_marker_problems`); this reader is the one the verdict
+    gate asks, and it answers "who cleared this?" — so it accepts a marker only
+    when both ids are uuids.
+    """
+    fields = _provenance_fields(body)
+    agent = str(fields.get("agent") or "").strip()
+    run = str(fields.get("run") or "").strip()
+    if not (_UUID_SHAPE_RE.match(agent) and _UUID_SHAPE_RE.match(run)):
+        return {}
     return fields
 
 
@@ -3260,9 +3524,12 @@ def _scope_head(body: str) -> str:
     The power-pack marker carries the reviewed commit as
     `scope=owner/repo#12@<sha>`. That is a real head binding, so it counts as
     one when the comment carries no provenance marker of its own.
+
+    The marker is read from the body with its code blocks taken out: a scope
+    written inside a fenced block is a template's text (DIG-4990).
     """
     head = ""
-    for marker in _MARKER_RE.finditer(body):
+    for marker in _MARKER_RE.finditer(_code_free(body)):
         found = _SCOPE_SHA_RE.search(_marker_fields(marker).get("scope", ""))
         if found:
             head = found.group("sha")
@@ -3276,12 +3543,18 @@ def _carries_review_evidence(body: str, marker_literal: str) -> bool:
     posted verdict marker. The first is the coverage hatch, the second is the
     review rule's own format, and the third is the marker the queue reads for
     a blocking verdict.
+
+    All three are read from the body with its code blocks taken out. A review
+    template written down in a comment is not a review: the in-session marker
+    and the verdict line inside the fenced block that ships with the template
+    are the template's own text, and #6197 merged on it (DIG-4990).
     """
-    if marker_literal in body:
+    text = _code_free(body)
+    if marker_literal in text:
         return True
-    if _VERDICT_LINE_RE.search(body):
+    if _VERDICT_LINE_RE.search(text):
         return True
-    for marker in _MARKER_RE.finditer(body):
+    for marker in _MARKER_RE.finditer(text):
         verdict = _normalise_verdict(_marker_fields(marker).get("verdict", ""))
         if verdict in READABLE_VERDICTS:
             return True
@@ -3983,6 +4256,21 @@ def _review_coverage(
     ], ""
 
 
+def _value_provenance(policy: Policy) -> ReviewerProvenance | None:
+    """The reader the verdict gate asks for a PR's author seat, or None.
+
+    The gate reads no provenance at all when the reviewer-independence gate is
+    off (`MQ_REVIEW_INDEPENDENCE=off`): "off" means the queue reads no
+    provenance, and a gate that asked anyway would read provenance the policy
+    says is not read. The reader is shared with the coverage gate, so a tick
+    reads the credential once and every answer is cached for the tick.
+    """
+    cfg = policy.review_independence
+    if _effective_mode(cfg) == "off":
+        return None
+    return _provenance_for(cfg)
+
+
 def evaluate(
     pr: dict[str, Any],
     policy: Policy,
@@ -4028,7 +4316,7 @@ def evaluate(
     unreadable = _ensure_comments(pr, repo)
     if unreadable:
         reasons.append(unreadable)
-    reasons.extend(_gate_review(pr))
+    reasons.extend(_gate_review(pr, prov if prov is not None else _value_provenance(policy)))
     coverage_reasons, review_evidence = _review_coverage(
         pr, repo, policy.review_independence, prov
     )
@@ -4070,9 +4358,13 @@ def evaluate_all(
     base: str,
     acting_role: str,
     repo: str | None = None,
+    prov: ReviewerProvenance | None = None,
 ) -> list[Verdict]:
     """Every PR, in queue order, with its verdict."""
-    verdicts = [evaluate(pr, policy, base=base, acting_role=acting_role, repo=repo) for pr in prs]
+    verdicts = [
+        evaluate(pr, policy, base=base, acting_role=acting_role, repo=repo, prov=prov)
+        for pr in prs
+    ]
     verdicts.sort(key=Verdict.order_key)
     return verdicts
 
@@ -4320,6 +4612,11 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
 
+        # One reader for the tick: the credential is read once and every answer
+        # is cached, so the verdict gate's author-seat read and the coverage
+        # gate's provenance read share one credential.
+        prov = _value_provenance(policy)
+
         def read_queue() -> list[Verdict]:
             prs = fetch_queue(args.repo, args.base, args.limit)
             # No once-per-invocation guard is needed, and that is worth stating rather
@@ -4348,6 +4645,7 @@ def main(argv: list[str] | None = None) -> int:
                 base=args.base,
                 acting_role=args.acting_role,
                 repo=args.repo,
+                prov=prov,
             )
 
         if args.command == "list":

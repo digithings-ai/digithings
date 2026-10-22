@@ -175,6 +175,13 @@ def _pr(
     return pr
 
 
+# The seats, by the uuid the provenance marker carries. Every seat on this org
+# pushes under one GitHub login, so the marker is the only place the seat is
+# written — and the only place the queue can read it from.
+REVIEWER_SEAT = "c59332b4-a0ef-4a6a-8027-5c081486f899"
+SECURITY_SEAT = "77fd6c7a-97b1-41f7-be9d-859cf5d7af33"
+
+
 def _review_comment(
     *,
     verdict: str | None = "changes_requested",
@@ -183,17 +190,28 @@ def _review_comment(
     login: str = "chrizefan",
     number: int = 347,
     prose: bool = True,
+    seat: str = "",
 ) -> dict[str, Any]:
     """A PR comment in the shape a posted code-review verdict arrives in.
 
     The marker is an HTML comment whose `key=value` fields are the machine-readable
     part; the prose below it is what a human reads. Only the fields are parsed, so
     the prose here is free to say anything.
+
+    `seat` adds the provenance marker the fleet posts beside the verdict: it is
+    the only place the seat is written, and a verdict that clears a
+    changes-requested has to carry it (DIG-4990).
     """
     fields = [f"scope=digithings-ai/twelve-x#{number}@{head_sha}"]
     if verdict is not None:
         fields.append(f"verdict={verdict}")
-    body = f"<!-- opencode-power-pack:code-review {' '.join(fields)} -->\n"
+    body = ""
+    if seat:
+        body += (
+            f"<!-- digithings-review agent={seat} "
+            f"run=00000000-0000-0000-0000-000000000000 head={head_sha} -->\n"
+        )
+    body += f"<!-- opencode-power-pack:code-review {' '.join(fields)} -->\n"
     if prose:
         body += "## Verdict: changes requested (narrow)\n\n**One finding blocks approval.**\n"
     return {
@@ -1202,7 +1220,34 @@ def test_a_verdict_against_a_head_this_pr_does_not_carry_still_blocks() -> None:
 
 
 def test_the_latest_posted_verdict_wins() -> None:
-    """A reviewer who came back and approved clears their own earlier block."""
+    """A reviewer who came back and approved clears their own earlier block.
+
+    The clearance carries the provenance marker: a verdict that clears a
+    changes-requested has to name the seat that cleared it (DIG-4990).
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", created="2026-10-07T22:07:11Z"),
+            _review_comment(
+                verdict="approved", created="2026-10-07T22:20:00Z", seat=REVIEWER_SEAT
+            ),
+        ],
+    )
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+
+
+def test_an_approve_with_no_provenance_cannot_clear_an_earlier_block() -> None:
+    """A clearance nobody can be named to is not a clearance.
+
+    The newest readable verdict still wins, but an approve that clears a
+    changes-requested has to carry the `digithings-review` marker naming the
+    seat and the run that posted it. A marker with a placeholder in it
+    (`agent=<your-seat-uuid>`) names nobody, and #6197 merged on one
+    (DIG-4990).
+    """
     pr = _pr(
         347,
         reviews=[],
@@ -1212,7 +1257,11 @@ def test_the_latest_posted_verdict_wins() -> None:
             _review_comment(verdict="approved", created="2026-10-07T22:20:00Z"),
         ],
     )
-    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "changes requested" in reason
+    assert "provenance" in reason
 
 
 def test_an_older_block_still_blocks_when_a_later_marker_has_no_verdict() -> None:
@@ -1340,7 +1389,11 @@ def test_the_label_alone_still_carries_a_pr_with_no_blocking_verdict() -> None:
 
 
 def test_an_approve_on_the_current_head_clears_an_earlier_block() -> None:
-    """A reviewer who came back and approved on the head clears their own block."""
+    """A reviewer who came back and approved on the head clears their own block.
+
+    The clearance names the seat that made it, because a clearance nobody can
+    be named to is not a clearance (DIG-4990).
+    """
     head = "c" * 40
     pr = _pr(
         347,
@@ -1350,7 +1403,12 @@ def test_an_approve_on_the_current_head_clears_an_earlier_block() -> None:
             _review_comment(
                 verdict="changes_requested", head_sha=head, created="2026-10-07T22:07:11Z"
             ),
-            _review_comment(verdict="approved", head_sha=head, created="2026-10-07T22:20:00Z"),
+            _review_comment(
+                verdict="approved",
+                head_sha=head,
+                created="2026-10-07T22:20:00Z",
+                seat=REVIEWER_SEAT,
+            ),
         ],
         commits=[{"oid": head}],
     )
@@ -1500,8 +1558,6 @@ def test_the_6071_timeline_is_refused() -> None:
 # to the seat that posted it, and only that seat can clear it.
 
 # The seats in the #6170 timeline, by the uuid the provenance marker carries.
-REVIEWER_SEAT = "c59332b4-a0ef-4a6a-8027-5c081486f899"
-SECURITY_SEAT = "77fd6c7a-97b1-41f7-be9d-859cf5d7af33"
 # The head #6170 merged on, and the commit the security desk's block named.
 HEAD_6170 = "cd17d6539b51e09e4fd739e5cf65996c7fec3a75"
 STALE_6170 = "fb309e64583a5313d2af556d95b4d5892e594d65"
@@ -7018,3 +7074,367 @@ def test_a_build_that_reports_no_commit_is_measured_not_refused(
     assert verdict.eligible, verdict.reasons
     written = log.read_text(encoding="utf-8")
     assert "reports no commit" in written, written
+
+
+# --- DIG-4990: a verdict written inside a code block is not a verdict ----------
+#
+# `digithings-ai/digithings#6197` merged into `develop` on 2026-10-21T16:53:08Z
+# on the PR author's own reply. The reply asked the desk to post a verdict and
+# wrote the marker down inside a fenced block — with the template's own
+# `agent=<your-seat-uuid>` placeholder in it — and the queue read the template
+# as the newest approve on the head. The three `changes requested` verdicts
+# that stood before it were overridden by a template.
+#
+# The comments below are the real ones, as they were posted.
+
+HEAD_6197 = "6aab1cea5e87f10b915db1ba7d51350502e09611"
+HEAD_6197_EARLY = "e9fdab5160e2fa4513d26349acec4ec2d2bd09a3"
+HEAD_6197_MID = "cf9a6e3b492452252244015c777ab350e9b74ece"
+
+
+def _the_6197_author_reply() -> dict[str, Any]:
+    """The author's 18:43 reply on #6197, as it was posted.
+
+    The body is the reply as it stands: the fix is described, and the review
+    template is written down inside a fenced block so the desk can copy it.
+    Every line that could be read as a verdict is inside that block.
+    """
+    body = (
+        "## The blocker is fixed, and both non-blocking items with it\n"
+        "\n"
+        "Thanks — the desk's verdict is right on all three counts, and the blocker "
+        "was a regression I introduced. **Head: `6aab1cea5e87f10b915db1ba7d51350502e09611`**\n"
+        "\n"
+        "### 1. Blocking — a contract row whose `url:` does not parse crashed `dt status`\n"
+        "\n"
+        "Fixed. Both guards now hold the parse:\n"
+        "\n"
+        "```\n"
+        "$ ./scripts/dt status --profile core --json\n"
+        "{\n"
+        '  "name": "digigraph",\n'
+        '  "status": "failed",\n'
+        '  "detail": "contract row \'digigraph\' url resolved to \'http://[0::1\': '
+        "the probe must stay on 127.0.0.1\"\n"
+        "}\n"
+        "```\n"
+        "\n"
+        "### Re-request\n"
+        "\n"
+        "The queue takes the newest readable verdict, so the `changes_requested` "
+        "scoped to `e9fdab5160` needs a fresh approve on the new head to clear it. "
+        "Please post the verdict on `6aab1cea5e87f10b915db1ba7d51350502e09611`:\n"
+        "\n"
+        "```\n"
+        "Review verdict: approve\n"
+        "<!-- opencode-power-pack:code-review verdict=approve "
+        "scope=@6aab1cea5e87f10b915db1ba7d51350502e09611 -->\n"
+        "<!-- digithings-review agent=<your-seat-uuid> run=<your-run-uuid> "
+        "head=6aab1cea5e87f10b915db1ba7d51350502e09611 -->\n"
+        "<!-- in-session-review -->\n"
+        "```\n"
+        "\n"
+        "I did not merge and did not touch `main`: the merge queue owns it.\n"
+    )
+    return {
+        "id": "IC_kwDORaGBGM8AAAABeMhDIA",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-21T16:43:35Z",
+        "body": body,
+    }
+
+
+def _the_6197_comments() -> list[dict[str, Any]]:
+    """The #6197 comment record, as it stood when the merge decision was taken.
+
+    The first two are the in-session review passes: they carry the in-session
+    marker and say "Verdict: changes requested" in prose, which is the review
+    rule's evidence and not a verdict the queue reads. The next three are the
+    marked `changes requested` verdicts, one per seat. The last is the
+    author's reply.
+    """
+    return [
+        {
+            "id": "IC_kwDORaGBGM8AAAABeL-Vdw",
+            "author": {"login": "chrizefan"},
+            "authorAssociation": "MEMBER",
+            "createdAt": "2026-10-21T16:17:43Z",
+            "body": (
+                "<!-- in-session-review -->\n"
+                "\n"
+                "## In-session review pass 1 of 2 — correctness and crash paths\n"
+                "\n"
+                "**Verdict: changes requested** on the first head of this PR "
+                "(`e8c1d395`).\n"
+            ),
+        },
+        {
+            "id": "IC_kwDORaGBGM8AAAABeL-YcA",
+            "author": {"login": "chrizefan"},
+            "authorAssociation": "MEMBER",
+            "createdAt": "2026-10-21T16:17:45Z",
+            "body": (
+                "<!-- in-session-review -->\n"
+                "\n"
+                "## In-session review pass 2 of 2 — test quality and surviving mutants\n"
+                "\n"
+                "**Verdict: changes requested** on the first head of this PR "
+                "(`e8c1d395`).\n"
+            ),
+        },
+        {
+            "id": "IC_kwDORaGBGM8AAAABeMNqxg",
+            "author": {"login": "chrizefan"},
+            "authorAssociation": "MEMBER",
+            "createdAt": "2026-10-21T16:29:24Z",
+            "body": (
+                "Review verdict: changes requested\n"
+                "<!-- opencode-power-pack:code-review verdict=changes_requested "
+                f"scope=@{HEAD_6197_EARLY} -->\n"
+                "<!-- digithings-review agent=77fd6c7a-97b1-41f7-be9d-859cf5d7af33 "
+                "run=714c43de-4b1c-42f3-b50d-def77a20655c "
+                f"head={HEAD_6197_EARLY} -->\n"
+                "<!-- in-session-review -->\n"
+            ),
+        },
+        {
+            "id": "IC_kwDORaGBGM8AAAABeMS6DQ",
+            "author": {"login": "chrizefan"},
+            "authorAssociation": "MEMBER",
+            "createdAt": "2026-10-21T16:33:14Z",
+            "body": (
+                "Review verdict: changes requested\n"
+                "<!-- opencode-power-pack:code-review verdict=changes_requested "
+                f"scope=@{HEAD_6197_MID} -->\n"
+                "<!-- digithings-review agent=77fd6c7a-97b1-41f7-be9d-859cf5d7af33 "
+                "run=714c43de-4b1c-42f3-b50d-def77a20655c "
+                f"head={HEAD_6197_MID} -->\n"
+                "<!-- in-session-review -->\n"
+            ),
+        },
+        {
+            "id": "IC_kwDORaGBGM8AAAABeMbpEA",
+            "author": {"login": "chrizefan"},
+            "authorAssociation": "MEMBER",
+            "createdAt": "2026-10-21T16:39:35Z",
+            "body": (
+                "Review verdict: changes requested\n"
+                "<!-- opencode-power-pack:code-review verdict=changes_requested "
+                f"scope=@{HEAD_6197_MID} -->\n"
+                "<!-- digithings-review agent=c59332b4-a0ef-4a6a-8027-5c081486f899 "
+                "run=1b3779ed-ba92-413a-98b7-e4ba455c8ca9 "
+                f"head={HEAD_6197_MID} -->\n"
+                "<!-- in-session-review -->\n"
+            ),
+        },
+        _the_6197_author_reply(),
+    ]
+
+
+def test_the_6197_fenced_template_reply_is_not_a_verdict() -> None:
+    """The author's own reply is not an approve, though it says approve.
+
+    The reply asks the desk to post a verdict and writes the marker down
+    inside a fenced block. Read as a verdict, it cleared the three
+    `changes requested` verdicts that stood before it, and #6197 merged on it
+    (DIG-4990).
+    """
+    comment = _the_6197_author_reply()
+    assert mq._comment_verdict(comment) is None
+    assert not mq._carries_review_evidence(comment["body"], "<!-- in-session-review -->")
+    assert mq._scope_head(comment["body"]) == ""
+    assert mq._provenance_claim(comment["body"]) == {}
+
+
+def test_a_marker_inside_an_inline_code_span_is_not_a_verdict() -> None:
+    """A marker quoted in a sentence is prose about the marker.
+
+    The queue reads the marker out of the body with its inline code spans
+    taken out, so a reviewer who writes the marker down to show what it looks
+    like has not posted a verdict (DIG-4990).
+    """
+    body = (
+        "<!-- in-session-review -->\n"
+        "The gate wants a `<!-- opencode-power-pack:code-review verdict=approve "
+        "scope=@6aab1cea5e87f10b915db1ba7d51350502e09611 -->` marker on the head.\n"
+    )
+    comment = {
+        "id": "IC_kwDOinline_6197",
+        "author": {"login": "chrizefan"},
+        "createdAt": "2026-10-21T16:43:35Z",
+        "body": body,
+    }
+    assert mq._comment_verdict(comment) is None
+
+
+def test_a_placeholder_provenance_marker_names_no_seat() -> None:
+    """The template's placeholder is not a seat and not a run.
+
+    A marker whose `agent=` or `run=` is not a uuid names nobody, so the
+    queue reads nothing from it — that is the marker #6197 merged on
+    (DIG-4990).
+    """
+    body = (
+        "<!-- digithings-review agent=<your-seat-uuid> run=<your-run-uuid> "
+        f"head={HEAD_6197} -->\n"
+        "<!-- opencode-power-pack:code-review verdict=approve "
+        f"scope=@{HEAD_6197} -->\n"
+    )
+    # The angle brackets are not part of the marker's own field syntax, so the
+    # marker cannot even be read as a claim.
+    assert mq._provenance_fields(body) == {}
+    assert mq._provenance_claim(body) == {}
+    comment = {
+        "id": "IC_kwDOplaceholder_6197",
+        "author": {"login": "chrizefan"},
+        "createdAt": "2026-10-21T16:43:35Z",
+        "body": body,
+    }
+    verdict = mq._comment_verdict(comment)
+    assert verdict is not None
+    assert verdict.seat == ""
+    assert verdict.run == ""
+
+
+def test_a_seat_that_is_not_a_uuid_names_no_seat() -> None:
+    """A seat id that is not a uuid is not a seat.
+
+    The seat is the only thing that holds a verdict to the seat that posted
+    it, so a value that cannot be one — a template's placeholder written
+    without the angle brackets, a typo — must not be read as one
+    (DIG-4990).
+    """
+    body = (
+        "<!-- digithings-review agent=your-seat-uuid run=your-run-uuid "
+        f"head={HEAD_6197} -->\n"
+        "<!-- opencode-power-pack:code-review verdict=approve "
+        f"scope=@{HEAD_6197} -->\n"
+    )
+    assert mq._provenance_fields(body)["agent"] == "your-seat-uuid"
+    assert mq._provenance_claim(body) == {}
+    comment = {
+        "id": "IC_kwDOseat_6197",
+        "author": {"login": "chrizefan"},
+        "createdAt": "2026-10-21T16:43:35Z",
+        "body": body,
+    }
+    verdict = mq._comment_verdict(comment)
+    assert verdict is not None
+    assert verdict.seat == ""
+    assert verdict.run == ""
+
+
+def test_the_6197_timeline_is_refused() -> None:
+    """The three changes-requested verdicts still stand, so the PR does not merge.
+
+    This is the whole regression: before the fix, the author's fenced template
+    was the newest readable verdict and the PR merged on it.
+    """
+    pr = _pr(
+        6197,
+        head_sha=HEAD_6197,
+        comments=_the_6197_comments(),
+        commits=[{"oid": HEAD_6197}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "changes_requested" in reason
+    assert "c59332b4-a0ef-4a6a-8027-5c081486f899" in reason
+
+
+def test_the_6197_timeline_without_the_author_reply_is_refused_too() -> None:
+    """The control: the blocks were standing before the template was posted."""
+    comments = [c for c in _the_6197_comments() if c["id"] != "IC_kwDORaGBGM8AAAABeMhDIA"]
+    pr = _pr(
+        6197,
+        head_sha=HEAD_6197,
+        comments=comments,
+        commits=[{"oid": HEAD_6197}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert "changes_requested" in " ".join(verdict.reasons)
+
+
+def test_the_author_seat_cannot_clear_its_own_block() -> None:
+    """The PR's own author never clears its own block.
+
+    The author seat is the assignee of the ticket the PR is about — the same
+    fact the live guard reads (`mq-cr-hold.py`, `author_seat(branch)`). When
+    the clearing approve comes from that seat, it does not clear
+    (DIG-4990).
+    """
+    prov = _FakePaperclip(
+        tickets={"DIG-4990": {"id": TICKET_ID, "assigneeAgentId": REVIEWER_SEAT}}
+    )
+    pr = _pr(
+        4990,
+        title="fix(merge-queue): the verdict marker is a claim (DIG-4990)",
+        head_sha=HEAD_6197,
+        approved=True,
+        comments=[
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=HEAD_6197,
+                created="2026-10-21T16:39:35Z",
+                comment_id="IC_kwDOsame_4990",
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="approve",
+                head_sha=HEAD_6197,
+                created="2026-10-21T16:43:35Z",
+                comment_id="IC_kwDOsame2_4990",
+            ),
+        ],
+        commits=[{"oid": HEAD_6197}],
+    )
+    verdict = mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", prov=prov
+    )
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "owns this PR's ticket" in reason
+
+
+def test_a_seat_that_is_not_the_author_clears_the_block() -> None:
+    """The control for the rule above: another seat's approve does clear it.
+
+    The block belongs to the seat that posted it and only that seat clears it
+    (DIG-4878) — so the block here is the security desk's, and the approve is
+    the security desk's own. The seat that owns the ticket is a third seat, so
+    the clearance is allowed.
+    """
+    prov = _FakePaperclip(
+        tickets={"DIG-4990": {"id": TICKET_ID, "assigneeAgentId": REVIEWER_SEAT}}
+    )
+    pr = _pr(
+        4990,
+        title="fix(merge-queue): the verdict marker is a claim (DIG-4990)",
+        head_sha=HEAD_6197,
+        approved=True,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=HEAD_6197,
+                created="2026-10-21T16:39:35Z",
+                comment_id="IC_kwDOsame_4990",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=HEAD_6197,
+                created="2026-10-21T16:43:35Z",
+                comment_id="IC_kwDOther_4990",
+            ),
+        ],
+        commits=[{"oid": HEAD_6197}],
+    )
+    verdict = mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", prov=prov
+    )
+    assert verdict.eligible, verdict.reasons

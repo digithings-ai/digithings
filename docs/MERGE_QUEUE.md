@@ -144,8 +144,8 @@ reset.
 ### The verdict rule
 
 The verdict gate asks one question: **does any verdict on this PR block the head the PR
-stands at?** The rule is two clauses, in this order. It is written here and nowhere else,
-so no two seats read it differently (DIG-4878, DIG-4911).
+stands at?** The rule is three clauses, in this order. It is written here and nowhere
+else, so no two seats read it differently (DIG-4878, DIG-4911, DIG-4990).
 
 1. **A seat's own block stands until that seat clears it.** A blocking verdict belongs
    to the seat that posted it. That seat's later approve clears it, and only when the
@@ -158,6 +158,17 @@ so no two seats read it differently (DIG-4878, DIG-4911).
 2. **Everything else is judged by the newest readable verdict.** A blocking verdict
    blocks, whatever it is scoped to; an approve clears only when it names the head the
    PR stands at; a verdict the queue cannot read is skipped, not read as a clearance.
+3. **A clearance has to name a seat, and that seat must not be the PR's author.** An
+   approve that clears a block must carry provenance that names a seat — a
+   `digithings-review` marker whose `agent=` and `run=` are both UUIDs — and that seat
+   must not be the seat that owns the PR's ticket, which is the assignee of the `DIG-`
+   ticket the branch names. An approve with no provenance names no seat; a marker whose
+   `agent=` or `run=` is a placeholder (`agent=<your-seat-uuid>`) names no seat either;
+   neither clears anything. The owner's own reply never clears, however it is phrased.
+   `#6197` (DIG-4911) merged into `develop` on 2026-10-21 with three `changes
+   requested` verdicts still on the branch: the newest readable verdict was the
+   author's own reply, whose fenced reviewer template carried `verdict=approve` for
+   the head and `agent=<your-seat-uuid>` for the seat (DIG-4990).
 
 Clause 1 needs to know the seat, and the seat is written in one place only: the
 provenance marker's `agent=` field (`<!-- digithings-review agent=… -->`). Every seat
@@ -168,6 +179,12 @@ policy — and it is a live one: of the 40 readable verdicts on the open PRs mea
 2026-10-21, 7 carried a seat. The marker was introduced that day; the older reviews
 carry a verdict and no seat. **Post the provenance marker with every verdict**, or the
 queue cannot tell your block from another seat's.
+
+**A seat is a UUID or it is nothing.** The provenance marker is read only when its
+`agent=` and its `run=` both carry a UUID; a placeholder, a typo or a name that is not
+a UUID is not a seat, and a marker that carries one names no seat at all. It is still
+read by the coverage gate, which refuses such a marker by name, so a broken marker is
+never silently ignored (DIG-4990).
 
 **Which head a verdict names.** Both clauses ask the same question, so the answer is
 written once:
@@ -186,11 +203,28 @@ written once:
 A binding of 7 characters or more that prefixes the head binds it, which is the width
 the reviewer-independence gate reads.
 
-Three consequences worth stating plainly.
+**Where a verdict may live.** A verdict is a statement about the head, and the queue
+reads it out of the prose of a comment — so a statement about what a verdict *looks
+like* is not a verdict. Before the queue reads any marker, any `Review verdict:` line
+or any sha, it strips the fenced code blocks (the triple-backtick and the tilde fence)
+and the inline code spans out of the comment. A marker, a verdict line or a head sha
+inside a fence or inside backticks is a quotation of the syntax, and it is skipped like
+any other verdict the queue cannot read. The blocks a quotation leaves standing stay
+standing: on `#6197` the author's reply was the newest readable verdict, so the
+security desk's and the code reviewer's `changes requested` never got read at all
+(DIG-4990).
+
+Four consequences worth stating plainly.
 
 - **A withdrawal is not a clearance.** The queue reads verdicts, not announcements: the
   only thing that clears a block is a later approve naming the head. A seat that
   withdraws a block by comment still has to post the approve.
+- **The PR's own owner cannot clear its own block.** The seat that owns the PR's ticket
+  is the seat asked to move it along, so its approve answers itself instead of
+  reviewing the work; another seat has to post the clearance. This is narrower than
+  the reviewer-independence gate below, which asks who *wrote* the code — there,
+  owning the ticket is not authorship. Here the question is who is answering for the
+  PR, and the owner of the ticket is answering for themselves (DIG-4990).
 - **The queue has no notion of a required second sign-off.** It reads verdicts, not
   requests. A seat that needs two signatures asks for them itself — a hold file, a
   label — and the merge captain is the decider for that, not this gate.
