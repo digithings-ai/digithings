@@ -318,6 +318,33 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         assert str(params.get("model", "")).startswith("openai/"), entry["model_name"]
 
 
+def test_ci_overlay_lets_reasoning_effort_reach_configurable_models() -> None:
+    """drop_params strips reasoning_effort on openai/ routes unless allowed per route.
+
+    Chats send reasoning_effort (the /effort level, or 1017's default) to every
+    model digillm treats as configurable; each such overlay route must allow it
+    or the proxy silently drops it.
+    """
+    from digillm.client import reasoning_effort_configurable
+
+    overlay = CONFIG / "litellm.cheaperinference.yaml"
+    data = yaml.safe_load(overlay.read_text(encoding="utf-8"))
+    routes = [
+        entry
+        for entry in data["model_list"]
+        if reasoning_effort_configurable(str(entry["litellm_params"]["model"]))
+    ]
+    assert any(
+        entry["litellm_params"]["model"] == "openai/deepseek-v4.1-flash-1017" for entry in routes
+    )
+    missing = sorted(
+        entry["model_name"]
+        for entry in routes
+        if "reasoning_effort" not in (entry["litellm_params"].get("allowed_openai_params") or [])
+    )
+    assert not missing, f"routes drop reasoning_effort: {missing}"
+
+
 def test_picker_catalog_models_are_on_the_ci_overlay() -> None:
     """Every catalog house id routes on the CI overlay. The router does not."""
     catalog = json.loads(

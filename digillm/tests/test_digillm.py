@@ -1436,6 +1436,99 @@ def test_stream_deltas_emits_reasoning_then_content() -> None:
     assert [p for k, p in seen if k == "content"] == ["answer"]
 
 
+def _streamed_kwargs(model: str, effort: str | None = None) -> dict[str, Any]:
+    """Wire kwargs of one mocked streamed chat turn for ``model`` at ``effort``."""
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = [_stream_chunk(content="ok")]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.run_tools(
+            model,
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            stream_deltas=True,
+            reasoning_effort=effort,
+        )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    return kwargs
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4.1-flash-release",
+        "deepseek/deepseek-v4-flash",
+    ],
+)
+def test_1017_chat_without_effort_sends_its_default_to_turn_reasoning_on(model: str) -> None:
+    """1017 streams no reasoning unless asked; with no /effort it gets its default level."""
+    assert _streamed_kwargs(model)["reasoning_effort"] == "medium"
+
+
+@pytest.mark.parametrize("effort", ["low", "medium", "high", "HIGH "])
+def test_chat_effort_maps_to_reasoning_effort_on_1017(effort: str) -> None:
+    """The chat's /effort becomes the request's reasoning_effort."""
+    kwargs = _streamed_kwargs("deepseek/deepseek-v4.1-flash-1017", effort)
+    assert kwargs["reasoning_effort"] == effort.strip().lower()
+
+
+@pytest.mark.parametrize(
+    "model", ["openai/gpt-5.6-luna", "openai/gpt-oss-120b", "google/gemini-3.7-flash"]
+)
+def test_configurable_models_take_chat_effort_and_keep_their_default_otherwise(
+    model: str,
+) -> None:
+    """Models with levels get /effort; with none set the field is omitted (model default)."""
+    assert _streamed_kwargs(model, "low")["reasoning_effort"] == "low"
+    assert "reasoning_effort" not in _streamed_kwargs(model)
+
+
+@pytest.mark.parametrize("model", ["gpt-4o-mini", "deepseek/deepseek-v4-pro", "qwen/qwen3.8-flash"])
+def test_models_without_levels_never_get_reasoning_effort(model: str) -> None:
+    """No configurable level: the request is unchanged even when /effort is set."""
+    assert "reasoning_effort" not in _streamed_kwargs(model, "high")
+
+
+def test_unknown_effort_counts_as_unset() -> None:
+    """Only low/medium/high pass; anything else falls back to the model default."""
+    assert _streamed_kwargs("deepseek/deepseek-v4.1-flash-1017", "max")["reasoning_effort"] == (
+        "medium"
+    )
+    assert "reasoning_effort" not in _streamed_kwargs("openai/gpt-5.6-luna", "max")
+
+
+def test_stream_retries_without_reasoning_effort_on_a_400_that_names_it() -> None:
+    """A provider that refuses levels still answers, at the model's default reasoning."""
+    reject = _bad_request("Unrecognized request argument supplied: reasoning_effort")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [reject, [_stream_chunk("hi")]]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "deepseek/deepseek-v4.1-flash-1017",
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            stream_deltas=True,
+            reasoning_effort="high",
+        )
+    assert out == "hi"
+    calls = fake_client.chat.completions.create.call_args_list
+    assert [call.kwargs.get("reasoning_effort") for call in calls] == ["high", None]
+    assert calls[1].kwargs.get("stream_options") == {"include_usage": True}
+
+
+def test_non_streaming_1017_call_sends_no_reasoning_effort() -> None:
+    """Batch (non-streaming) 1017 callers keep their request unchanged."""
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion("deepseek/deepseek-v4.1-flash-1017", [{"role": "user", "content": "hi"}])
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert "reasoning_effort" not in kwargs
+
+
 def test_stream_deltas_tool_call_then_final_answer() -> None:
     """A tool call streamed across fragments runs, then the final answer streams."""
     round1 = [

@@ -149,7 +149,14 @@ export interface FoundryResponsesCreateBody {
   agent_reference: { name: string; type: "agent_reference" };
   max_tool_calls?: number;
   tool_choice?: "none";
+  /**
+   * The chat's /effort choice. Omitted when the visitor set none, so the
+   * agent's model keeps its own default reasoning level.
+   */
+  reasoning?: { effort: FoundryReasoningEffort };
 }
+
+export type FoundryReasoningEffort = "low" | "medium" | "high";
 
 export interface OpenAIResponsesClientLike {
   conversations: {
@@ -1552,6 +1559,12 @@ export async function createFoundryStreamResponse(opts: {
    */
   maxToolCalls?: number;
   /**
+   * The chat's /effort choice, sent as Responses `reasoning.effort`. Omit to
+   * keep the model's default level. If the agent refuses the override, the
+   * turn retries once without it and keeps the default for the rest of the turn.
+   */
+  reasoningEffort?: FoundryReasoningEffort;
+  /**
    * Shared guardrails (TPM and the tool cap). Foundry still aborts the
    * response and sends `max_tool_calls` / `tool_choice`; the guard decides
    * when to pause, nudge, or stop.
@@ -1671,10 +1684,16 @@ export async function createFoundryStreamResponse(opts: {
         // Set when Foundry refuses max_tool_calls / tool_choice beside
         // agent_reference. Later creates in this turn omit those fields.
         let apiOverrideRefused = false;
+        // Set when Foundry refuses reasoning.effort beside agent_reference.
+        // Tracked apart from the tool controls so losing one keeps the other.
+        let reasoningOverrideRefused = false;
         const responseBody = (toolChoice?: "none"): FoundryResponsesCreateBody => ({
           agent_reference: { name: opts.agentName, type: "agent_reference" },
           ...(!apiOverrideRefused && toolCap !== undefined ? { max_tool_calls: toolCap } : {}),
           ...(!apiOverrideRefused && toolChoice ? { tool_choice: toolChoice } : {}),
+          ...(!reasoningOverrideRefused && opts.reasoningEffort
+            ? { reasoning: { effort: opts.reasoningEffort } }
+            : {}),
         });
 
         const createWithCapacityRetry = async (
@@ -1712,6 +1731,13 @@ export async function createFoundryStreamResponse(opts: {
               }
               return created;
             } catch (err) {
+              if (body.reasoning && isAgentOverrideRejected(err)) {
+                // Drop only the effort and send the same request again; this is
+                // not a capacity retry, so the backoff schedule does not advance.
+                reasoningOverrideRefused = true;
+                attempt -= 1;
+                continue;
+              }
               let failure = err;
               if (usedOverride && isAgentOverrideRejected(err)) {
                 apiOverrideRefused = true;

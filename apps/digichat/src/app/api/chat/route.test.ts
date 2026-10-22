@@ -1597,6 +1597,47 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call && "guard" in call).toBe(true);
   });
 
+  it.each([
+    ["high", "high"],
+    ["LOW", "low"],
+    ["max", undefined],
+    [undefined, undefined],
+  ])("passes /effort %s to the foundry adapter as %s", async (header, expected) => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "foundry-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "foundry-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "fixture-agent" },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      "x-embed-host": "https://foundry-tenant.digithings.ai",
+    };
+    if (header) headers["x-digi-effort"] = header;
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+      reasoningEffort?: string;
+    };
+    expect(call?.reasoningEffort).toBe(expected);
+  });
+
   it("prefers guardrails.maxToolCallsPerTurn over the Foundry alias", async () => {
     vi.mocked(resolveChatTenantContext).mockResolvedValue({
       tenantSlug: "foundry-tenant",

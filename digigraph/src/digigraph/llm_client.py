@@ -243,6 +243,7 @@ def run_tools(
     tool_choice: str = "auto",
     on_tool_step: Callable[[str, Any], None] | None = None,
     final_response_format: JsonSchemaResponseFormat | None = None,
+    reasoning_effort: str | None = None,
 ) -> str:
     """Run digillm's agentic tool-calling loop with digigraph's parallel-safe set + streaming.
 
@@ -257,6 +258,10 @@ def run_tools(
     output schema on the forced tool-free wrap-up completion only (#4556) — the
     tool-enabled turns cannot carry it, since function-calling and json_schema are
     mutually exclusive provider modes.
+
+    ``reasoning_effort`` is the chat's /effort (``X-Digi-Effort``), forwarded to
+    digillm, which maps it to the model's ``reasoning_effort`` where the level is
+    configurable and keeps the model's default when it is ``None``.
     """
     with _logical_call_scope(
         CallPurpose.TOOL_SELECTION,
@@ -276,6 +281,7 @@ def run_tools(
             parallel_safe_tools=_parallel_safe_tools(),
             stream_deltas=on_tool_step is not None,
             final_response_format=final_response_format,
+            reasoning_effort=reasoning_effort,
         )
 
 

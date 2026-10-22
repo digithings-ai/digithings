@@ -931,6 +931,54 @@ def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
     return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
 
 
+# Chat reasoning (Chris, 2026-10-22): reasoning is on for every chat. A chat's
+# /effort (low/medium/high, ``X-Digi-Effort``) maps to ``reasoning_effort`` on
+# models whose level is configurable; with no /effort set the model keeps its
+# own default level. Models without levels reason (or not) as they always do.
+REASONING_EFFORTS: frozenset[str] = frozenset({"low", "medium", "high"})
+
+# Configurable models whose default must be SENT to turn reasoning on. The 1017
+# checkpoint answers with reasoning_tokens 0 when no effort is set; a live check
+# (2026-10-22) with ``reasoning_effort: "medium"`` streamed reasoning_content.
+_REASONING_EFFORT_DEFAULT_SENT: dict[str, str] = {
+    "deepseek-v4.1-flash-1017": "medium",
+}
+# Configurable models that already reason at their default level when the field
+# is omitted (OpenAI reasoning models, gpt-oss, Gemini 3 thinking). Matched on
+# the wire id prefix.
+_REASONING_EFFORT_PREFIXES: tuple[str, ...] = ("gpt-5", "gpt-6", "gpt-oss", "gemini-3")
+
+
+def _reasoning_wire_id(model: str) -> str:
+    """Catalog id the reasoning policy keys on: CI bare id, else the last slug segment."""
+    bare = cheaperinference_bare_id_for_house_slug(model)
+    if bare is not None:
+        return bare
+    return model.split(":", 1)[0].rsplit("/", 1)[-1]
+
+
+def reasoning_effort_configurable(model: str) -> bool:
+    """True when ``model`` takes a ``reasoning_effort`` level (house slug or bare id)."""
+    wire = _reasoning_wire_id(model)
+    return wire in _REASONING_EFFORT_DEFAULT_SENT or wire.startswith(_REASONING_EFFORT_PREFIXES)
+
+
+def chat_reasoning_effort(model: str, requested: str | None = None) -> str | None:
+    """``reasoning_effort`` a chat turn sends for ``model``, or ``None`` to omit it.
+
+    ``requested`` is the chat's /effort. It is sent only to models with
+    configurable levels; anything other than low/medium/high counts as unset.
+    Unset keeps the model's default: omitted, except where the default has to be
+    sent to turn reasoning on at all (``_REASONING_EFFORT_DEFAULT_SENT``).
+    """
+    if not reasoning_effort_configurable(model):
+        return None
+    effort = (requested or "").strip().lower()
+    if effort in REASONING_EFFORTS:
+        return effort
+    return _REASONING_EFFORT_DEFAULT_SENT.get(_reasoning_wire_id(model))
+
+
 def _cheaperinference_api_base() -> str:
     return (
         os.environ.get("CHEAPERINFERENCE_API_BASE") or ""
@@ -2228,6 +2276,7 @@ def _stream_completion_one_turn(
     tool_choice: str | ToolArguments = "auto",
     on_content_delta: Callable[[str], None] | None = None,
     on_reasoning_delta: Callable[[str], None] | None = None,
+    reasoning_effort: str | None = None,
 ) -> tuple[str, list[ToolCallDict] | None]:
     """Run one ``stream=True`` completion, accumulating content and tool calls.
 
@@ -2239,6 +2288,10 @@ def _stream_completion_one_turn(
     models). Returns ``(content, tool_calls)``: ``tool_calls`` is ``None`` when the
     model called no tool (caller returns the content), else the accumulated calls
     for the caller to run before looping.
+
+    ``reasoning_effort`` is the chat's /effort; :func:`chat_reasoning_effort`
+    decides what goes on the wire. A 400 that names the field drops it once and
+    retries, so a provider that refuses levels still answers.
     """
     provider, _ = _parse_provider_prefix(model)
     client = get_client_for_model(model)
@@ -2254,6 +2307,9 @@ def _stream_completion_one_turn(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
+    wire_effort = chat_reasoning_effort(model, reasoning_effort)
+    if wire_effort is not None:
+        kwargs["reasoning_effort"] = wire_effort
 
     usage_started = time.perf_counter()
     try:
@@ -2269,10 +2325,19 @@ def _stream_completion_one_turn(
         # field rather than ignoring it. Retry once without the field so streaming
         # still works there; usage then simply arrives only if that provider reports
         # it some other way. Only a 400 that names the field is treated as this
-        # dialect mismatch — every other bad request propagates untouched.
-        if "stream_options" not in str(error).lower():
+        # dialect mismatch — every other bad request propagates untouched. The same
+        # holds for ``reasoning_effort`` on a provider that refuses levels: the
+        # retry runs at the model's default reasoning.
+        message = str(error).lower()
+        dropped = False
+        if "stream_options" in message:
+            kwargs.pop("stream_options", None)
+            dropped = True
+        if "reasoning" in message and "reasoning_effort" in kwargs:
+            kwargs.pop("reasoning_effort", None)
+            dropped = True
+        if not dropped:
             raise
-        kwargs.pop("stream_options", None)
         stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
             client,
             _provider=provider,
@@ -2580,6 +2645,7 @@ def run_tools(
     parallel_safe_tools: set[str] | None = None,
     stream_deltas: bool = False,
     final_response_format: JsonSchemaResponseFormat | None = None,
+    reasoning_effort: str | None = None,
 ) -> str:
     """Run a non-streaming tool-calling loop until the model returns a final answer.
 
@@ -2631,6 +2697,9 @@ def run_tools(
             retry path and discards the grounding this loop just gathered. The
             wrap-up runs with ``turn_tools=None``, so it is the one legal place
             to enforce a schema; providers without json_schema support ignore it.
+        reasoning_effort: The chat's /effort (low/medium/high) for streamed turns.
+            ``None`` keeps the model's default level; see
+            :func:`chat_reasoning_effort`.
 
     Returns:
         The model's final response content.
@@ -2721,6 +2790,7 @@ def run_tools(
                 tool_choice=tool_choice,
                 on_content_delta=_on_content,
                 on_reasoning_delta=_on_reasoning,
+                reasoning_effort=reasoning_effort,
             )
             if gate_required and on_tool_step is not None and tool_calls:
                 # Requirement satisfied this round -- release the buffered narration in

@@ -1431,7 +1431,7 @@ is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trus
 mutate language/model/effort/search-engine/MCP. `session_toggle_tool` does not flip a tool;
 it answers "Tools are changed in /tools." `session_upsert_mcp` cannot plant a new session URL
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
-`X-Digi-Effort` (low/medium/high) is forwarded to digigraph. `X-Digi-Search-Engine`
+`X-Digi-Effort` (low/medium/high) is forwarded to digigraph, which passes it to digillm as the model's `reasoning_effort` where the level is configurable; Foundry backends get it as Responses `reasoning.effort` (dropped for the turn if the agent refuses it). With no /effort the model keeps its default level, except DeepSeek V4.1 Flash 1017, which only reasons when asked and so gets `medium`. `X-Digi-Search-Engine`
 (auto/internal/exa/tavily/parallel/firecrawl/tinyfish) is forwarded with it: effective
 engine is the user pref, else the tenant `gate.searchEngine` default. An unset pref
 sends nothing (follow-tenant); an explicit `auto` is sent literally by the browser
