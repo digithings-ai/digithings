@@ -2244,7 +2244,10 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     expect(bodyOf(calls[0]).reasoning).toBeUndefined();
   });
 
-  it("drops only the effort when the agent reference refuses it", async () => {
+  it.each([
+    "Not allowed when agent is specified",
+    "Unsupported value: 'reasoning.effort' does not support 'low' with this model.",
+  ])("drops only the effort when Foundry refuses it: %s", async (refusal) => {
     const calls: unknown[][] = [];
     const client: OpenAIResponsesClientLike = {
       conversations: {
@@ -2256,7 +2259,7 @@ describe("createFoundryStreamResponse tool-call cap", () => {
         async create(params, options) {
           calls.push([params, options]);
           if (options.body.reasoning) {
-            const err = new Error("Not allowed when agent is specified") as Error & { status?: number };
+            const err = new Error(refusal) as Error & { status?: number };
             err.status = 400;
             throw err;
           }

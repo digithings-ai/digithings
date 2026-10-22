@@ -1460,6 +1460,8 @@ def _streamed_kwargs(model: str, effort: str | None = None) -> dict[str, Any]:
         "deepseek/deepseek-v4.1-flash",
         "deepseek/deepseek-v4.1-flash-release",
         "deepseek/deepseek-v4-flash",
+        "openrouter/deepseek/deepseek-v4.1-flash-1017",
+        "openrouter/deepseek/deepseek-v4.1-flash",
     ],
 )
 def test_1017_chat_without_effort_sends_its_default_to_turn_reasoning_on(model: str) -> None:

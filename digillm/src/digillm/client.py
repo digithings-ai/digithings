@@ -951,10 +951,11 @@ _REASONING_EFFORT_PREFIXES: tuple[str, ...] = ("gpt-5", "gpt-6", "gpt-oss", "gem
 
 def _reasoning_wire_id(model: str) -> str:
     """Catalog id the reasoning policy keys on: CI bare id, else the last slug segment."""
-    bare = cheaperinference_bare_id_for_house_slug(model)
+    slug = model.removeprefix("openrouter/")
+    bare = cheaperinference_bare_id_for_house_slug(slug)
     if bare is not None:
         return bare
-    return model.split(":", 1)[0].rsplit("/", 1)[-1]
+    return slug.split(":", 1)[0].rsplit("/", 1)[-1]
 
 
 def reasoning_effort_configurable(model: str) -> bool:

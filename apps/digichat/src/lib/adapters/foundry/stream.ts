@@ -280,6 +280,19 @@ function isAgentOverrideRejected(err: unknown): boolean {
   return /not allowed when agent is specified/i.test(message);
 }
 
+/**
+ * A 400 that refuses the per-call reasoning level: the agent-reference refusal
+ * above, or any bad request that names reasoning (an effort the model does not
+ * support). Only checked while `reasoning` is on the body, so dropping it once
+ * is the whole fallback and the turn runs at the model's default level.
+ */
+function isReasoningOverrideRejected(err: unknown): boolean {
+  if (httpStatusOf(err) !== 400) return false;
+  if (isAgentOverrideRejected(err)) return true;
+  const message = upstreamErrorMessage(err) ?? (err instanceof Error ? err.message : "");
+  return /reasoning/i.test(message);
+}
+
 function forwardAbort(parent: AbortSignal | undefined, child: AbortController): () => void {
   if (!parent) return () => {};
   if (parent.aborted) {
@@ -1731,7 +1744,7 @@ export async function createFoundryStreamResponse(opts: {
               }
               return created;
             } catch (err) {
-              if (body.reasoning && isAgentOverrideRejected(err)) {
+              if (body.reasoning && isReasoningOverrideRejected(err)) {
                 // Drop only the effort and send the same request again; this is
                 // not a capacity retry, so the backoff schedule does not advance.
                 reasoningOverrideRefused = true;
