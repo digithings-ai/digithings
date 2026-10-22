@@ -837,6 +837,58 @@ def _recurrence_body(ticket: dict[str, Any], report: dict[str, Any]) -> str:
     )
 
 
+def _open_ticket_on_board(
+    api_opener: Callable[..., Any] | None,
+    api_base: str | None,
+    api_key: str | None,
+) -> tuple[str | None, bool]:
+    """Ask the board whether a ticket for this job is open.
+
+    Returns ``(identifier, asked)``. ``asked`` is False when the board could
+    not be asked, which is not an answer of "no ticket": filing on it would be
+    a second ticket for the same job.
+    """
+    try:
+        existing = find_existing_ticket(
+            api_base=api_base, opener=api_opener, api_key=api_key
+        )
+    except LookupFailed as err:
+        print(
+            f"container-health: the open ticket could not be looked up: {err}; "
+            "no ticket was filed",
+            file=sys.stderr,
+        )
+        return None, False
+    return existing, True
+
+
+def _adopt_ticket(
+    state: dict[str, Any],
+    identifier: str,
+    report: dict[str, Any],
+    signature: str,
+    state_path: Path | None,
+) -> dict[str, Any]:
+    """Take the ticket that is already open on the board as this job's ticket."""
+    ticket = {
+        "identifier": identifier,
+        "symptom": "unknown (the ticket was found on the board, not filed by this job)",
+        "last_symptom": report.get("symptom", ""),
+        "signature": signature,
+        "created_at": report["ts"],
+        "last_comment_at": report["ts"],
+        "comments": 0,
+        "comment_failures": 0,
+        "adopted": True,
+    }
+    state["ticket"] = ticket
+    # The ticket that is open covers the failure that waited for the board:
+    # filing that one would open a second ticket for the same job.
+    state.pop("pending_failure", None)
+    _save_quietly(state, state_path)
+    return ticket
+
+
 def handle_failure(
     state: dict[str, Any],
     report: dict[str, Any],
@@ -851,58 +903,50 @@ def handle_failure(
     ``not-filed``.
     """
     signature = symptom_signature(report["results"])
-    # A failure that could not reach the board waits in the state file and goes
-    # to the board on the next run. Otherwise a board outage at 07:40 loses
-    # every failure of the day.
-    _file_pending_failure(state, report, state_path, api_key)
     ticket = state.get("ticket")
     if not ticket:
         # The state file is the first record of the ticket; the board is the
-        # second one, for the day the state file is lost.
-        try:
-            existing = find_existing_ticket(
-                api_base=api_base, opener=api_opener, api_key=api_key
-            )
-        except LookupFailed as err:
+        # second one, for the day the state file is lost. The board is asked
+        # before anything is filed, so a failure that waited for the board
+        # never becomes a second ticket.
+        existing, asked = _open_ticket_on_board(api_opener, api_base, api_key)
+        if not asked:
             # The board could not be asked. That is not an answer of "no
             # ticket", and filing on it would be a second ticket for the same
             # job, so nothing is filed now.
-            print(
-                f"container-health: the open ticket could not be looked up: {err}; "
-                "no ticket was filed",
-                file=sys.stderr,
-            )
             _keep_pending_failure(state, report, signature, state_path)
             return ACTION_NOT_FILED
         if existing:
-            ticket = {
-                "identifier": existing,
-                "symptom": "unknown (the ticket was found on the board, not filed by this job)",
-                "last_symptom": report.get("symptom", ""),
-                "signature": signature,
-                "created_at": report["ts"],
-                "last_comment_at": report["ts"],
-                "comments": 0,
-                "comment_failures": 0,
-                "adopted": True,
-            }
-            state["ticket"] = ticket
+            ticket = _adopt_ticket(state, existing, report, signature, state_path)
             action = _comment_on_ticket(
                 ticket, report, signature, api_opener=api_opener, api_base=api_base, api_key=api_key
             )
             _save_quietly(state, state_path)
             return action
-        identifier = file_issue(
-            ticket_title(report), ticket_description(report), api_key=api_key
-        )
-        if not identifier:
-            _keep_pending_failure(state, report, signature, state_path)
-            return ACTION_NOT_FILED
-        state["ticket"] = _new_ticket_record(identifier, report, signature)
-        # The identifier is on the disk before the first comment: a crash after
-        # this line must not cost the job its ticket.
-        _save_quietly(state, state_path)
-        return ACTION_FILED
+        # A failure that could not reach the board waits in the state file and
+        # goes to the board on the next run, green or red. Otherwise a board
+        # outage at 07:40 loses every failure of the day.
+        if state.get("pending_failure"):
+            identifier = _file_pending_failure(state, report, state_path, api_key)
+            if not identifier:
+                # Still no board. It waits for the next run.
+                _keep_pending_failure(state, report, signature, state_path)
+                return ACTION_NOT_FILED
+            # The pending failure is the ticket, and this run's failure is the
+            # first recurrence on it.
+            ticket = state["ticket"]
+        else:
+            identifier = file_issue(
+                ticket_title(report), ticket_description(report), api_key=api_key
+            )
+            if not identifier:
+                _keep_pending_failure(state, report, signature, state_path)
+                return ACTION_NOT_FILED
+            state["ticket"] = _new_ticket_record(identifier, report, signature)
+            # The identifier is on the disk before the first comment: a crash after
+            # this line must not cost the job its ticket.
+            _save_quietly(state, state_path)
+            return ACTION_FILED
     # A new episode: the recovery of the last one is over, and the next green
     # run says so again.
     ticket.pop("recovered_at", None)
@@ -1010,7 +1054,29 @@ def handle_recovery(
 ) -> str:
     """Say once on the ticket that the check is green again."""
     ticket = state.get("ticket")
-    if not ticket or ticket.get("recovered_at"):
+    if not ticket:
+        # A failure that waited for the board must reach the board even when
+        # this run is green: the next run is not necessarily a failing one, and
+        # a failure that waits for a failing run is lost for good. The board is
+        # asked first, so the failure lands on the ticket that is already open
+        # instead of opening a second one.
+        if not state.get("pending_failure"):
+            return ACTION_SKIPPED
+        existing, asked = _open_ticket_on_board(api_opener, api_base, api_key)
+        if not asked:
+            # The board cannot be asked, so the failure waits for the next run.
+            return ACTION_SKIPPED
+        if existing:
+            ticket = _adopt_ticket(
+                state, existing, report, symptom_signature(report["results"]), state_path
+            )
+        else:
+            identifier = _file_pending_failure(state, report, state_path, api_key)
+            if not identifier:
+                # Still no board. It waits for the next run.
+                return ACTION_SKIPPED
+            ticket = state["ticket"]
+    if ticket.get("recovered_at"):
         return ACTION_SKIPPED
     body = (
         f"The daily container health check (DIG-2910) is green again.\n\n"

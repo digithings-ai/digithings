@@ -84,7 +84,10 @@ Two things protect the "one ticket" rule:
 
 If the board cannot be reached, nothing is filed: a failed lookup is not an answer of "no ticket",
 and filing on it would be a second ticket for the same job. The failure waits in the state file and
-goes to the board on the next run, so a board outage at 07:40 does not lose the failure of the day.
+goes to the board on the next run, green or red: the next run is not necessarily a failing one, so a
+failure that waited for a failing run would be lost for good. A board outage at 07:40 does not lose
+the failure of the day. When the green run is the one that files it, that run also says on the
+ticket that the check is green again.
 
 If there is no agent credential in the environment, the check still runs and still reports: a
 failure that cannot be filed is logged as `not-filed`, never filed as Chris.

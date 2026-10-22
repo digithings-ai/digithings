@@ -700,6 +700,88 @@ class TicketTests(unittest.TestCase):
         self.assertNotIn("pending_failure", state)
         self.assertIn(action, ("throttled", "commented"))
 
+    def test_a_green_run_files_the_failure_that_waited_for_the_board(self):
+        """The next run is not necessarily a failing one: a failure that waits
+        for a failing run is lost for good."""
+        report = self._report()
+        state = {
+            "version": 1,
+            "pending_failure": {"report": report, "signature": "graph:unreachable:None"},
+        }
+        green = self._report(ts="2026-10-23T07:40:00Z")
+        green["overall"] = ch.OVERALL_HEALTHY
+        green["symptom"] = ""
+        action = ch.handle_recovery(state, green)
+        self.assertEqual(len(self.filed), 1, "the green run files the failure that waited")
+        self.assertEqual(state["ticket"]["identifier"], "DIG-9999")
+        self.assertNotIn("pending_failure", state)
+        # The green run says on the ticket it just filed that the check is green.
+        self.assertEqual(self.commented[0][0], "DIG-9999")
+        self.assertIn("green again", self.commented[0][1])
+        self.assertEqual(action, "commented")
+
+    def test_a_green_run_without_a_failure_to_wait_for_says_nothing(self):
+        state = {"version": 1}
+        green = self._report(ts="2026-10-23T07:40:00Z")
+        green["overall"] = ch.OVERALL_HEALTHY
+        green["symptom"] = ""
+        self.assertEqual(ch.handle_recovery(state, green), "skipped")
+        self.assertEqual(self.filed, [])
+        self.assertEqual(self.commented, [])
+
+    def test_a_pending_failure_does_not_file_a_second_ticket(self):
+        """The board is asked before anything is filed, so a failure that waited
+        for the board lands on the ticket that is already open."""
+        ch.find_existing_ticket = lambda *a, **k: "DIG-4242"
+        report = self._report()
+        state = {
+            "version": 1,
+            "pending_failure": {"report": report, "signature": "graph:unreachable:None"},
+        }
+        action = ch.handle_failure(state, report)
+        self.assertEqual(self.filed, [], "the ticket that is already open is used")
+        self.assertEqual(state["ticket"]["identifier"], "DIG-4242")
+        self.assertNotIn("pending_failure", state)
+        self.assertEqual(self.commented[0][0], "DIG-4242")
+        self.assertEqual(action, "commented")
+
+    def test_a_green_run_does_not_file_a_second_ticket(self):
+        """The same rule on the green path: the failure that waited lands on the
+        ticket that is already open."""
+        ch.find_existing_ticket = lambda *a, **k: "DIG-4242"
+        report = self._report()
+        state = {
+            "version": 1,
+            "pending_failure": {"report": report, "signature": "graph:unreachable:None"},
+        }
+        green = self._report(ts="2026-10-23T07:40:00Z")
+        green["overall"] = ch.OVERALL_HEALTHY
+        green["symptom"] = ""
+        action = ch.handle_recovery(state, green)
+        self.assertEqual(self.filed, [], "the ticket that is already open is used")
+        self.assertEqual(state["ticket"]["identifier"], "DIG-4242")
+        self.assertNotIn("pending_failure", state)
+        self.assertEqual(self.commented[0][0], "DIG-4242")
+        self.assertEqual(action, "commented")
+
+    def test_a_green_run_keeps_the_failure_when_the_board_is_down(self):
+        """The board is still down: the failure waits for the next run."""
+        def refused(*args, **kwargs):
+            raise ch.LookupFailed("the board is down")
+
+        ch.find_existing_ticket = refused
+        report = self._report()
+        state = {
+            "version": 1,
+            "pending_failure": {"report": report, "signature": "graph:unreachable:None"},
+        }
+        green = self._report(ts="2026-10-23T07:40:00Z")
+        green["overall"] = ch.OVERALL_HEALTHY
+        green["symptom"] = ""
+        self.assertEqual(ch.handle_recovery(state, green), "skipped")
+        self.assertEqual(self.filed, [])
+        self.assertIn("pending_failure", state)
+
 
 class FileIssueTests(unittest.TestCase):
     """Creation goes through dt-create-issue, and only through it."""
@@ -1467,6 +1549,62 @@ class CliTests(unittest.TestCase):
             for url in board.urls():
                 self.assertTrue(url.startswith("http://test/api/"), url)
             self.assertEqual(board.comments, [], "a first failure files, it does not comment")
+
+    def test_a_failure_that_waited_for_the_board_is_filed_by_the_next_green_run(self):
+        """A board outage at 07:40 must not lose the failure of the day, and the
+        next run is not necessarily a failing one."""
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = os.path.join(tmp, "state.json")
+            log_path = os.path.join(tmp, "log.jsonl")
+            failing = _fake_opener({_url("graph"): urllib.error.URLError("timed out")})
+            healthy = _fake_opener({_url("graph"): _FakeResponse(200, _CONTAINER_OK.encode())})
+            filed = []
+            board = _FakeBoard([])
+            down = {"on": True}
+
+            def board_open(request, timeout=None):
+                if down["on"]:
+                    raise urllib.error.URLError("the board is down")
+                return board.open(request, timeout=timeout)
+
+            with mock.patch.object(
+                ch, "file_issue", lambda *a, **k: filed.append(a) or "DIG-9999"
+            ):
+                code = ch.main(
+                    [
+                        "--hosts", "graph",
+                        "--state-path", state_path,
+                        "--log-path", log_path,
+                    ],
+                    opener=failing,
+                    api_opener=board_open,
+                    api_base="http://test/api",
+                    api_key=AGENT_KEY,
+                )
+                self.assertEqual(code, 1)
+                self.assertEqual(filed, [], "the board is down: nothing is filed")
+                state = ch.load_state(ch.Path(state_path))
+                self.assertIn("pending_failure", state)
+                self.assertNotIn("ticket", state)
+
+                down["on"] = False
+                code = ch.main(
+                    [
+                        "--hosts", "graph",
+                        "--state-path", state_path,
+                        "--log-path", log_path,
+                    ],
+                    opener=healthy,
+                    api_opener=board_open,
+                    api_base="http://test/api",
+                    api_key=AGENT_KEY,
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual(len(filed), 1, "the failure that waited reaches the board")
+            state = ch.load_state(ch.Path(state_path))
+            self.assertEqual(state["ticket"]["identifier"], "DIG-9999")
+            self.assertNotIn("pending_failure", state)
+            self.assertEqual(len(board.comments), 1, "the green run says so on that ticket")
 
     def test_no_hosts_is_an_error_and_not_a_green_run(self):
         with tempfile.TemporaryDirectory() as tmp:
