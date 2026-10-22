@@ -32,6 +32,14 @@ with FIXTURE.open(encoding="utf-8") as _handle:
     SNAPSHOT = json.load(_handle)
 PRS = {int(pr["number"]): pr for pr in SNAPSHOT["prs"]}
 
+#: The clock the snapshot was taken at. The rolling corpus only keeps entries
+#: from the last 24 h, so a test that reads the corpus has to read it at the
+#: snapshot's own clock: two days after the snapshot every fixture entry is
+#: older than the window and the corpus reads as empty. The corpus code takes
+#: ``now=`` for exactly this; the tests pass the snapshot's clock instead of
+#: reading the wall clock.
+FIXTURE_NOW = rpf.parse_ts("2026-10-20T13:30:00Z")
+
 
 def _thread(resolved_by, note="Verified: scoped to the cutover slice.", **extra):
     thread = {
@@ -157,7 +165,7 @@ def test_identical_text_on_another_pr_is_a_duplicate():
     entries = rpf.corpus_entries(5942, [(first["at"], first["body"])])
     second = PRS[5947]["reviews"][0]
     matches = rpf.duplicate_reviews(
-        rpf.normalise_review_text(second["body"]), 5947, entries
+        rpf.normalise_review_text(second["body"]), 5947, entries, now=FIXTURE_NOW
     )
     assert matches
     assert matches[0]["pr"] == 5942
@@ -168,7 +176,7 @@ def test_the_same_review_on_its_own_pr_is_not_a_duplicate():
     first = PRS[5942]["reviews"][0]
     entries = rpf.corpus_entries(5942, [(first["at"], first["body"])])
     matches = rpf.duplicate_reviews(
-        rpf.normalise_review_text(first["body"]), 5942, entries
+        rpf.normalise_review_text(first["body"]), 5942, entries, now=FIXTURE_NOW
     )
     assert matches == []
 
@@ -178,7 +186,7 @@ def test_a_different_review_is_not_a_duplicate():
     other = PRS[6013]["reviews"][1]
     entries = rpf.corpus_entries(5942, [(first["at"], first["body"])])
     matches = rpf.duplicate_reviews(
-        rpf.normalise_review_text(other["body"]), 6013, entries
+        rpf.normalise_review_text(other["body"]), 6013, entries, now=FIXTURE_NOW
     )
     assert matches == []
 
@@ -189,7 +197,7 @@ def test_every_copy_of_the_canned_review_after_the_first_is_a_duplicate():
     for pr in ordered:
         body = pr["reviews"][0]["body"]
         norm = rpf.normalise_review_text(body)
-        matches = rpf.duplicate_reviews(norm, pr["number"], entries)
+        matches = rpf.duplicate_reviews(norm, pr["number"], entries, now=FIXTURE_NOW)
         if entries:
             assert matches, "PR %s copies an earlier review" % pr["number"]
         entries.extend(rpf.corpus_entries(pr["number"], [(pr["reviews"][0]["at"], body)]))
@@ -210,10 +218,15 @@ def test_normalising_drops_the_marker_and_the_shas():
 
 def test_corpus_round_trip_with_iso_timestamps(tmp_path):
     path = str(tmp_path / "corpus.json")
-    entries = rpf.record_reviews(5942, [("2026-10-20T13:05:43Z", PRS[5942]["reviews"][0]["body"])], path=path)
+    entries = rpf.record_reviews(
+        5942,
+        [("2026-10-20T13:05:43Z", PRS[5942]["reviews"][0]["body"])],
+        path=path,
+        now=FIXTURE_NOW,
+    )
     assert len(entries) == 1
     assert isinstance(entries[0]["at"], float)
-    loaded = rpf.load_corpus(path)
+    loaded = rpf.load_corpus(path, now=FIXTURE_NOW)
     assert len(loaded) == 1
     assert loaded[0]["pr"] == 5942
 

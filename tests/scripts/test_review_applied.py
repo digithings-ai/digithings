@@ -245,7 +245,10 @@ class Dig4631ReviewPassTest(unittest.TestCase):
         )
         folder = tempfile.mkdtemp()
         corpus = os.path.join(folder, "corpus.json")
-        rpf.record_reviews(5942, [("2026-10-20T13:05:43Z", body)], path=corpus)
+        # The corpus is a rolling 24 h window, so the entry is stamped now: a
+        # snapshot timestamp would fall out of the window when the producer
+        # reads it and the copy would not be detected.
+        rpf.record_reviews(5942, [(None, body)], path=corpus)
         previous = os.environ.get(rpf.CORPUS_PATH_ENV)
         os.environ[rpf.CORPUS_PATH_ENV] = corpus
         try:
@@ -406,12 +409,38 @@ class Dig4646ProducerTest(unittest.TestCase):
     def test_the_queue_and_the_producer_read_the_same_body(self):
         # One definition of a verdict line: the queue's parser and the
         # producer's parser must not disagree about the fleet's own words.
+        #
+        # The queue on develop reads a "Review verdict: ..." line (its
+        # _PROSE_VERDICT_RE) and a provenance marker's verdict= field; the
+        # producer reads the same shapes through the shared parser in
+        # scripts/review_pass_filter.py. The two are compared on the bodies the
+        # QA lane actually writes.
         mq = _load_merge_queue()
-        for body in (self.FLEET_CHANGES_BODY, self.FLEET_APPROVE_BODY,
-                     "**Verdict: CHANGES** (narrow)",
-                     "The verdict: changes look fine."):
-            self.assertEqual(mq._in_session_state(body),
-                             _mod.in_session_state(body), body)
+        for body, expected, state in (
+            (self.FLEET_CHANGES_BODY, "changes_requested", "CHANGES_REQUESTED"),
+            (self.FLEET_APPROVE_BODY, "approve", "APPROVED"),
+        ):
+            prose = mq._prose_verdict(body)
+            self.assertIsNotNone(prose, body)
+            self.assertEqual(prose[0], expected, body)
+            self.assertEqual(_mod.in_session_state(body), state, body)
+
+    def test_a_verdict_shape_the_queue_cannot_read_is_still_read_by_the_producer(self):
+        # The queue on develop reads "Review verdict: ..." lines and markers
+        # only. The producer also reads the "**Verdict: CHANGES**" shape, so it
+        # is the stricter of the two. The producer's `review-applied` status is
+        # a required check on develop, so the stricter reading is the one that
+        # gates the merge: a shape the queue cannot read cannot unblock a PR.
+        mq = _load_merge_queue()
+        body = "**Verdict: CHANGES** (narrow)"
+        self.assertIsNone(mq._prose_verdict(body))
+        self.assertEqual(_mod.in_session_state(body), "CHANGES_REQUESTED")
+
+    def test_prose_that_only_mentions_a_verdict_is_not_a_verdict(self):
+        mq = _load_merge_queue()
+        body = "The verdict: changes look fine."
+        self.assertIsNone(mq._prose_verdict(body))
+        self.assertEqual(_mod.in_session_state(body), "COMMENTED")
 
 
 def _load_merge_queue():
