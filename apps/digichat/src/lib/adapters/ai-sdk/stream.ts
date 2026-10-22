@@ -10,6 +10,7 @@
  */
 
 import {
+  createUIMessageStream,
   createUIMessageStreamResponse,
   smoothStream,
   streamText,
@@ -19,6 +20,7 @@ import {
   type ToolSet,
 } from "ai";
 import type { AiSdkBackendConfig } from "@/lib/backend-adapters";
+import { guardrailPrepareStep, type TurnGuard } from "@/lib/guardrails/turn";
 import { resolveAiSdkModel, resolveAiSdkSearchTools } from "./providers";
 
 export async function createAiSdkStreamResponse({
@@ -27,6 +29,7 @@ export async function createAiSdkStreamResponse({
   responseHeaders,
   webSearch = false,
   signal,
+  guard,
 }: {
   backend: AiSdkBackendConfig;
   messages: ModelMessage[];
@@ -37,6 +40,8 @@ export async function createAiSdkStreamResponse({
    */
   webSearch?: boolean;
   signal: AbortSignal;
+  /** Set when this deployment turned a guardrail on. Absent keeps the old stream. */
+  guard?: TurnGuard;
 }): Promise<Response> {
   let model: LanguageModel;
   let tools: ToolSet | undefined;
@@ -58,24 +63,66 @@ export async function createAiSdkStreamResponse({
   // call. `google-vertex` has no env var to pre-check: it resolves Application
   // Default Credentials lazily, so an absent ADC surfaces as an upstream error
   // from `streamText` rather than through this path.
-  const result = streamText({
+  const streamOptions = {
     model,
     messages,
     ...(tools ? { tools } : {}),
     abortSignal: signal,
     experimental_transform: smoothStream({ chunking: "word" }),
-  });
+  };
 
-  return createUIMessageStreamResponse({
-    stream: toUIMessageStream({
-      stream: result.stream,
-      // Provider citations (web search, grounding, RAG) travel as `source-url` /
-      // `source-document` parts and `sendSources` is OFF by default in v7, so
-      // without this a grounded answer arrives with its citations stripped
-      // (#4552). `sendReasoning` already defaults true; pinned for intent.
-      sendSources: true,
-      sendReasoning: true,
-    }),
-    headers: responseHeaders,
+  // No guardrail: the stream the chat already consumes, unchanged.
+  if (!guard?.active) {
+    const result = streamText(streamOptions);
+    return createUIMessageStreamResponse({
+      stream: toUIMessageStream({
+        stream: result.stream,
+        // Provider citations (web search, grounding, RAG) travel as `source-url` /
+        // `source-document` parts and `sendSources` is OFF by default in v7, so
+        // without this a grounded answer arrives with its citations stripped
+        // (#4552). `sendReasoning` already defaults true; pinned for intent.
+        sendSources: true,
+        sendReasoning: true,
+      }),
+      headers: responseHeaders,
+    });
+  }
+
+  const active = guard;
+  const stream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      try {
+        const result = streamText({
+          ...streamOptions,
+          prepareStep: (step) =>
+            guardrailPrepareStep({
+              guard: active,
+              writer,
+              signal,
+              steps: step.steps,
+              messages: step.messages,
+              initialInstructions:
+                typeof step.initialInstructions === "string" ? step.initialInstructions : undefined,
+            }),
+          onFinish: (event) => {
+            active.recordUsage(event.usage);
+          },
+        });
+        writer.merge(
+          toUIMessageStream({
+            stream: result.stream,
+            sendSources: true,
+            sendReasoning: true,
+          }),
+        );
+      } catch (err) {
+        active.release();
+        throw err;
+      }
+    },
+    onFinish: () => {
+      active.release();
+    },
   });
+  return createUIMessageStreamResponse({ stream, headers: responseHeaders });
 }

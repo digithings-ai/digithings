@@ -3,6 +3,13 @@ import { SLASH_COMMANDS } from "@digithings/digichat-ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import { buildProductSlashCommands, executeSlashDef } from "./product-slash-commands";
+import {
+  embedThemePrefs,
+  embedUserThemeKey,
+  readEmbedUserTheme,
+  resolveEmbedTheme,
+  writeEmbedUserTheme,
+} from "./embed-theme-messages";
 
 function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
   return {
@@ -143,6 +150,77 @@ describe("/theme", () => {
     executeSlashDef(theme!, "", api({ openTheme }));
     executeSlashDef(theme!, "nope", api({ openTheme }));
     expect(openTheme).toHaveBeenCalledTimes(2);
+  });
+
+  it("is available on a tenant embed and routes picks through the host, not localStorage", () => {
+    const setTheme = vi.fn();
+    const openTheme = vi.fn();
+    const embed = api({
+      openTheme,
+      themeState: { preference: "dark", palette: "default", resolved: "dark" },
+      setTheme,
+    });
+    const row = buildProductSlashCommands(embed).find((r) => r.id === "theme");
+    expect(row).toBeTruthy();
+    expect(row?.description).toBe("default · dark");
+
+    executeSlashDef(theme!, "light", embed);
+    expect(setTheme).toHaveBeenLastCalledWith("light", "default");
+    executeSlashDef(theme!, "dracula", embed);
+    expect(setTheme).toHaveBeenLastCalledWith("dark", "dracula");
+    executeSlashDef(theme!, "aura light", embed);
+    expect(setTheme).toHaveBeenLastCalledWith("light", "aura");
+    executeSlashDef(theme!, "auto", embed);
+    expect(setTheme).toHaveBeenLastCalledWith("auto", "default");
+    executeSlashDef(theme!, "", embed);
+    expect(openTheme).toHaveBeenCalledTimes(1);
+
+    expect(localStorage.getItem("dt-theme")).toBeNull();
+    expect(localStorage.getItem("dt-palette")).toBeNull();
+    expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+  });
+
+  it("an embed's /theme pick reaches the painted theme through embedThemePrefs (2.6.6)", () => {
+    const session = new Map<string, string>();
+    const store = {
+      getItem: (k: string) => session.get(k) ?? null,
+      setItem: (k: string, v: string) => void session.set(k, v),
+      removeItem: (k: string) => void session.delete(k),
+    };
+    const key = embedUserThemeKey("acme");
+    const painted = () => {
+      const pick = readEmbedUserTheme(key, store);
+      return {
+        mode: resolveEmbedTheme({ pick, parent: "light", url: null, tenant: "dark" }),
+        palette: pick?.palette ?? "default",
+      };
+    };
+    const openTheme = vi.fn();
+    const embed = () =>
+      api({
+        ...embedThemePrefs({
+          theme: painted(),
+          onThemePick: (next) => writeEmbedUserTheme(key, next, store),
+          openTheme,
+        }),
+      });
+
+    // The parent's light wins over the tenant's dark until the visitor picks.
+    expect(painted()).toEqual({ mode: "light", palette: "default" });
+    expect(buildProductSlashCommands(embed()).some((r) => r.id === "theme")).toBe(true);
+
+    executeSlashDef(theme!, "aura dark", embed());
+    expect(painted()).toEqual({ mode: "dark", palette: "aura" });
+    executeSlashDef(theme!, "light", embed());
+    expect(painted()).toEqual({ mode: "light", palette: "aura" });
+    executeSlashDef(theme!, "auto", embed());
+    expect(session.has(key)).toBe(false);
+    expect(painted()).toEqual({ mode: "light", palette: "default" });
+    executeSlashDef(theme!, "", embed());
+    expect(openTheme).toHaveBeenCalledTimes(1);
+
+    expect(localStorage.getItem("dt-theme")).toBeNull();
+    expect(localStorage.getItem("dt-palette")).toBeNull();
   });
 
   it("hides the command and ignores it when the embed pins the theme", () => {

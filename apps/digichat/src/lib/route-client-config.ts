@@ -23,6 +23,7 @@ import type { StockChatPrefsConfig } from "@digithings/ui/chat/stock";
 import { isEmbedHexColor } from "./embed-accent-style";
 import { parseEmbedThemeParam } from "./embed-theme-messages";
 import { HOUSE_BACKEND_ID } from "./provider-label";
+import { toolControlFor } from "./tool-control";
 
 /**
  * One call per route: product projects the primary deployment, embed
@@ -124,6 +125,7 @@ export function toStockChatPrefsConfig(
     defaultLanguage: clientConfig.chrome.defaultLanguage,
     defaultModel: clientConfig.models.default,
     availableModels: clientConfig.models.available,
+    modelPicker: clientConfig.models.picker,
     allowModelPicker:
       clientConfig.models.allowPicker === true ||
       clientConfig.features.modelPicker === true,
@@ -142,5 +144,10 @@ export function toStockChatPrefsConfig(
     providerLabel: HOUSE_BACKEND_ID,
     allowUserServers: clientConfig.mcp.allowUserServers,
     allowAddForm: clientConfig.mcp.allowAddForm,
+    toolControl: toolControlFor({
+      backendType: clientConfig.backendType,
+      lockSessionControls: clientConfig.gate.lockSessionControls === true,
+      allowUserToggle: clientConfig.tools.allowUserToggle,
+    }),
   };
 }

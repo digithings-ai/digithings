@@ -13,7 +13,13 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
-import { SEARCH_ENGINES, type PageContextMode } from "@/lib/deploy-config/schema";
+import {
+  GuardrailsSchema,
+  SEARCH_ENGINES,
+  toolCallCapIssue,
+  type GuardrailsConfig,
+  type PageContextMode,
+} from "@/lib/deploy-config/schema";
 import {
   MAX_MCP_TOOL_ENTRIES,
   MAX_MCP_TOOL_NAME_LENGTH,
@@ -52,7 +58,16 @@ export type EmbedBackendConfig =
       /** digivault path prefix forwarded as X-Digi-Vault-Prefix */
       vaultPathPrefix?: string;
     }
-  | { type: "foundry"; projectEndpoint: string; agentName: string }
+  | {
+      type: "foundry";
+      projectEndpoint: string;
+      agentName: string;
+      /**
+       * Per-turn tool-call cap. Same key as the deployment YAML
+       * (`backend.maxToolCalls`). Omit for no cap.
+       */
+      maxToolCalls?: number;
+    }
   | {
       type: "openai-completions" | "openai-responses";
       /** https OpenAI-compatible base URL. */
@@ -122,6 +137,8 @@ export type EmbedTenantConfig = {
   slug: string;
   aliases?: string[];
   backend: EmbedBackendConfig;
+  /** Same block as the deployment YAML. Omit and every guard is off. */
+  guardrails?: GuardrailsConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   /**
@@ -166,6 +183,12 @@ export type EmbedTenantConfig = {
    * Only an explicit `false` here turns it off for this tenant.
    */
   showLanguageSelector?: boolean;
+  /**
+   * Gates the composer context meter on slugs `digithings` and
+   * `digithings-ai`. The live house publishes no models, so this release
+   * shows no bar there. Any other slug that sets the field is refused.
+   */
+  showContextMeter?: boolean;
   /**
    * When true, this tenant pins the house default model and hides the
    * per-session model/MCP/tool controls: the X-Digi-Model header is ignored
@@ -271,7 +294,29 @@ export type EmbedTenantConfig = {
       tools?: Array<{ id: string; label?: string }>;
     }>;
   };
-  models?: { default?: string; available?: string[]; allowPicker?: boolean };
+  models?: {
+    default?: string;
+    available?: string[];
+    allowPicker?: boolean;
+    catalog?: boolean;
+    /** OCC visitor picker. Off unless true. Other hosts ignore it. */
+    occPicker?: boolean;
+    priceCapUsdPerMillion?: number;
+    premiumCapUsdPerMillion?: number;
+    costPerWindow?: { usd: number; windowSeconds?: number };
+    presets?: Array<"auto" | "reasoning" | "fast" | "light" | "router">;
+    showFullList?: boolean;
+    minContextTokens?: number;
+    picker?: {
+      presets: Array<{ id: string; label: string; description: string; model: string }>;
+      groups: Array<{
+        provider: string;
+        models: Array<{ id: string; label: string }>;
+        premium?: boolean;
+      }>;
+      showFullList: boolean;
+    };
+  };
   /**
    * LLM spend policy for this embed. Independent of gateMode — digithings.ai
    * is `ungated` + `free_then_byok` so free-quota errors still open BYOK.
@@ -362,6 +407,9 @@ function validateApiKeyEnv(value: unknown, ctx: string): string {
   return value;
 }
 
+/** House product slugs. A registry entry for any other slug may not set the meter flag. */
+const HOUSE_CONTEXT_METER_SLUGS = new Set(["digithings", "digithings-ai"]);
+
 function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   const ctx = `DIGICHAT_EMBED_TENANTS["${hostKey}"]`;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -411,7 +459,24 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     if (typeof backend.agentName !== "string" || !backend.agentName.trim()) {
       throw new Error(`${ctx}: foundry backend requires an "agentName"`);
     }
-    backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
+    let maxToolCalls: number | undefined;
+    if (backend.maxToolCalls !== undefined) {
+      if (
+        typeof backend.maxToolCalls !== "number" ||
+        !Number.isInteger(backend.maxToolCalls) ||
+        backend.maxToolCalls < 1 ||
+        backend.maxToolCalls > 100
+      ) {
+        throw new Error(`${ctx}: foundry backend.maxToolCalls must be an integer from 1 to 100`);
+      }
+      maxToolCalls = backend.maxToolCalls;
+    }
+    backendCfg = {
+      type: "foundry",
+      projectEndpoint: backend.projectEndpoint,
+      agentName: backend.agentName,
+      ...(maxToolCalls !== undefined ? { maxToolCalls } : {}),
+    };
   } else if (backend?.type === "openai-completions" || backend?.type === "openai-responses") {
     // OpenAI-compatible AI-SDK backends (#4535). Same field shape for both; the
     // wire format is the only difference. `apiKeyEnv` must name a
@@ -621,6 +686,15 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
     throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
   }
+  if (v.showContextMeter !== undefined && typeof v.showContextMeter !== "boolean") {
+    throw new Error(`${ctx}: showContextMeter must be a boolean`);
+  }
+  if (typeof v.showContextMeter === "boolean" && !HOUSE_CONTEXT_METER_SLUGS.has(v.slug)) {
+    throw new Error(
+      `${ctx}: showContextMeter is only valid for slugs digithings and digithings-ai, ` +
+        `not "${v.slug}"`,
+    );
+  }
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
@@ -828,11 +902,28 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     };
   }
 
+  let guardrails: GuardrailsConfig | undefined;
+  if (v.guardrails !== undefined) {
+    const parsed = GuardrailsSchema.safeParse(v.guardrails);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "invalid guardrails";
+      throw new Error(`${ctx}: guardrails ${message}`);
+    }
+    guardrails = parsed.data;
+  }
+  const capIssue = toolCallCapIssue(
+    backendCfg.type,
+    guardrails?.maxToolCallsPerTurn ??
+      (backendCfg.type === "foundry" ? backendCfg.maxToolCalls : undefined),
+  );
+  if (capIssue) throw new Error(`${ctx}: ${capIssue}`);
+
   return {
     mcp,
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
     backend: backendCfg,
+    ...(guardrails ? { guardrails } : {}),
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
     skin:
@@ -855,6 +946,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
+    ...(typeof v.showContextMeter === "boolean" ? { showContextMeter: v.showContextMeter } : {}),
     ...(v.lockSessionControls === true ? { lockSessionControls: true } : {}),
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
     view: v.view !== undefined ? normalizeViewMode(v.view) : undefined,
@@ -940,7 +1032,9 @@ function parseTenantTools(
   };
 }
 
-/** Optional `models` session picker list (model slugs only). */
+const MODEL_PRESET_IDS = ["auto", "reasoning", "fast", "light", "router"] as const;
+
+/** Optional `models` session picker. A catalog policy is resolved later; a raw list is kept as written. */
 function parseTenantModels(
   raw: unknown,
   hostKey: string,
@@ -951,11 +1045,93 @@ function parseTenantModels(
   const available = Array.isArray(r.available)
     ? r.available.filter((m): m is string => typeof m === "string" && m.trim().length > 0).map((m) => m.trim())
     : [];
+  let presets: Array<(typeof MODEL_PRESET_IDS)[number]> | undefined;
+  if (r.presets !== undefined) {
+    if (!Array.isArray(r.presets) || r.presets.some((id) => typeof id !== "string")) {
+      throw new Error(`embed tenant "${hostKey}": models.presets must be a list of preset ids`);
+    }
+    presets = [];
+    for (const id of r.presets) {
+      if (!(MODEL_PRESET_IDS as readonly string[]).includes(id)) {
+        throw new Error(`embed tenant "${hostKey}": models.presets has unknown id ${id}`);
+      }
+      presets.push(id as (typeof MODEL_PRESET_IDS)[number]);
+    }
+  }
+  if (r.catalog !== undefined && typeof r.catalog !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.catalog must be a boolean`);
+  }
+  if (r.occPicker !== undefined && typeof r.occPicker !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.occPicker must be a boolean`);
+  }
+  if (
+    r.priceCapUsdPerMillion !== undefined &&
+    (typeof r.priceCapUsdPerMillion !== "number" ||
+      !Number.isFinite(r.priceCapUsdPerMillion) ||
+      r.priceCapUsdPerMillion <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.priceCapUsdPerMillion must be a positive number`);
+  }
+  if (
+    r.premiumCapUsdPerMillion !== undefined &&
+    (typeof r.premiumCapUsdPerMillion !== "number" ||
+      !Number.isFinite(r.premiumCapUsdPerMillion) ||
+      r.premiumCapUsdPerMillion <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.premiumCapUsdPerMillion must be a positive number`);
+  }
+  let costPerWindow: { usd: number; windowSeconds?: number } | undefined;
+  if (r.costPerWindow !== undefined) {
+    const cost = r.costPerWindow;
+    if (!cost || typeof cost !== "object" || Array.isArray(cost)) {
+      throw new Error(`embed tenant "${hostKey}": models.costPerWindow must be an object`);
+    }
+    const usd = (cost as { usd?: unknown }).usd;
+    const windowSeconds = (cost as { windowSeconds?: unknown }).windowSeconds;
+    if (typeof usd !== "number" || !Number.isFinite(usd) || usd <= 0) {
+      throw new Error(`embed tenant "${hostKey}": models.costPerWindow.usd must be a positive number`);
+    }
+    if (
+      windowSeconds !== undefined &&
+      (typeof windowSeconds !== "number" || !Number.isInteger(windowSeconds) || windowSeconds <= 0)
+    ) {
+      throw new Error(
+        `embed tenant "${hostKey}": models.costPerWindow.windowSeconds must be a positive integer`,
+      );
+    }
+    costPerWindow = {
+      usd,
+      ...(typeof windowSeconds === "number" ? { windowSeconds } : {}),
+    };
+  }
+  if (r.showFullList !== undefined && typeof r.showFullList !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.showFullList must be a boolean`);
+  }
+  if (
+    r.minContextTokens !== undefined &&
+    (typeof r.minContextTokens !== "number" ||
+      !Number.isInteger(r.minContextTokens) ||
+      r.minContextTokens <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.minContextTokens must be a positive integer`);
+  }
   return {
     models: {
       ...(typeof r.default === "string" && r.default.trim() ? { default: r.default.trim() } : {}),
       available,
       ...(typeof r.allowPicker === "boolean" ? { allowPicker: r.allowPicker } : {}),
+      ...(r.catalog === true ? { catalog: true } : {}),
+      ...(typeof r.occPicker === "boolean" ? { occPicker: r.occPicker } : {}),
+      ...(typeof r.priceCapUsdPerMillion === "number"
+        ? { priceCapUsdPerMillion: r.priceCapUsdPerMillion }
+        : {}),
+      ...(typeof r.premiumCapUsdPerMillion === "number"
+        ? { premiumCapUsdPerMillion: r.premiumCapUsdPerMillion }
+        : {}),
+      ...(costPerWindow ? { costPerWindow } : {}),
+      ...(presets ? { presets } : {}),
+      ...(typeof r.showFullList === "boolean" ? { showFullList: r.showFullList } : {}),
+      ...(typeof r.minContextTokens === "number" ? { minContextTokens: r.minContextTokens } : {}),
     },
   };
 }

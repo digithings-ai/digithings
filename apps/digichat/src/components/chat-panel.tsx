@@ -2,7 +2,7 @@
 
 /** First-party chat host: transport, persistence, BYOK. Stock Thread via ProductStockShell. */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
@@ -14,10 +14,7 @@ import {
 } from "@/components/stock/product-shell";
 import { p } from "@/lib/base-path";
 import { useBYOKKey } from "@/hooks/use-byok-key";
-import {
-  isWebSearchEnabled,
-} from "@/lib/web-search-pref";
-import { useSyncedWebSearchPref } from "@/hooks/use-synced-web-search-pref";
+import { webSearchStorageKey } from "@/lib/web-search-pref";
 import {
   takePendingForceTool,
   takePendingTurnMode,
@@ -77,9 +74,15 @@ export function ChatPanel({
     clientConfig.tools.catalog.some((t) => t.id === "web_search") ||
     (typeof process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "string" &&
       process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "1");
-  // First render is always off (SSR-agreeing); stored/default-ON syncs after mount.
-  // Send path stays gated by webSearchAllowed below.
-  const [webSearchPref, setWebSearchPref] = useSyncedWebSearchPref("auth");
+  // ChatShell has no /tools pane, so a stored opt-out has no writer. Drop the
+  // stale key and follow the deployment allow (on for the house).
+  useEffect(() => {
+    try {
+      window.localStorage.removeItem(webSearchStorageKey("auth"));
+    } catch {
+      /* private mode */
+    }
+  }, []);
 
   const transport = useMemo(
     () =>
@@ -98,10 +101,7 @@ export function ChatPanel({
             h.set("X-Digi-Force-Tool", forceTool);
           }
           h.set("X-Digi-Run-Id", crypto.randomUUID());
-          if (
-            webSearchAllowed &&
-            isWebSearchEnabled({ tenantAllows: true, userPref: webSearchPref })
-          ) {
+          if (webSearchAllowed) {
             h.set("X-Digi-Enable-Web-Search", "1");
           }
           if (byokKey) {
@@ -117,7 +117,7 @@ export function ChatPanel({
           };
         },
       }),
-    [threadId, byokKey, byokProvider, byokModel, webSearchAllowed, webSearchPref],
+    [threadId, byokKey, byokProvider, byokModel, webSearchAllowed],
   );
 
   const chat = useChat<UIMessage>({
@@ -156,10 +156,6 @@ export function ChatPanel({
         clientConfig={clientConfig}
         persistence={persistence === "server" ? "none" : persistence}
         sessionKey={threadId}
-        webSearchScope="auth"
-        onWebSearchChange={(on) => {
-          setWebSearchPref(on);
-        }}
         headerSlot={
           <>
             {headerSlot}
