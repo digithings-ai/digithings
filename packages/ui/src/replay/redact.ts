@@ -38,13 +38,21 @@ const TOKEN_SHAPES: readonly RegExp[] = [
  *
  * A `)` inside the value belongs to the secret when the value continues after
  * it, so a secret that contains a parenthesis cannot leak its tail
- * (`?token=abc)def` redacts the whole value). A `)` that closes a link
- * (`?token=abc)`) or that sits in front of sentence punctuation
- * (`?token=abc).`) stays outside the value: the continuation character must
- * look like part of a secret, not like prose.
+ * (`?token=abc)def` redacts the whole value). The character after the `)`
+ * has to be a token character — a letter, a digit, `_`, `-` or `=` — which is
+ * what keeps the closing parenthesis of a link (`?token=abc)`), a full stop
+ * (`?token=abc).`) and markdown emphasis (`?token=abc)**bold**`) outside the
+ * value.
+ *
+ * Two limits follow from the character being ambiguous. A secret whose value
+ * *ends* in a `)` still loses that character, and a word right after a
+ * closing parenthesis (`?token=abc)and more`) is eaten with the value. The
+ * rule is deliberately biased towards the secret: a redactor that eats a word
+ * is a bug in every export, and a redactor that leaves a secret tail is a
+ * leak.
  */
 const QUERY_SECRET =
-  /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key|x-amz-signature|x-amz-credential|x-amz-security-token|awsaccesskeyid|x-goog-signature|x-goog-credential|signature|sig|key-pair-id)=)(?:[^&#\s"')]|\)[^\s&#"'.,;:!?\)])*/gi;
+  /([?&](?:token|api_key|apikey|access_token|invite|invite_key|embed_token|key|x-amz-signature|x-amz-credential|x-amz-security-token|awsaccesskeyid|x-goog-signature|x-goog-credential|signature|sig|key-pair-id)=)(?:[^&#\s"')]|\)(?=[A-Za-z0-9_\-=]))*/gi;
 
 /**
  * Header-style labels whose value is replaced but whose label stays, so the
@@ -57,9 +65,12 @@ const LABELED: readonly RegExp[] = [
   /(\b(?:set-cookie|cookie|x-digichat-session)["']?[ \t]{0,8}:[ \t]{0,8}["']?)[^"'\n\r]{1,4096}/gi,
   // A backtick inside a session value belongs to the value when the value
   // continues after it, so a secret that contains a backtick cannot leak its
-  // tail (`session=abc`def`). A backtick that closes a code span
-  // (`session=abc``) stays outside the value.
-  /((?<![A-Za-z0-9_-])(?:session(?:[_-]?id)?|sid|csrftoken|connect\.sid)=)(?:[^;\s"',&`]|`[^\s;&"'.,!?:`)]){4,512}/gi,
+  // tail (`session=abc`def`). The character after the backtick has to look
+  // like part of a secret, which is what keeps the backtick that closes a
+  // code span (`session=abc``) outside the value. The lookahead keeps every
+  // unit of the value one character long, so the bound below stays 512
+  // characters.
+  /((?<![A-Za-z0-9_-])(?:session(?:[_-]?id)?|sid|csrftoken|connect\.sid)=)(?:[^;\s"',&`]|`(?=[A-Za-z0-9_\-=])){4,512}/gi,
   // scheme://user:password@host (DSNs, URLs with userinfo).
   /(\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s:/@"']{1,256}:)[^\s@/"']{1,256}(?=@)/gi,
 ];
