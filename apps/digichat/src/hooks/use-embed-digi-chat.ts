@@ -12,7 +12,6 @@ import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
 import { warmFetch } from "@/lib/warmup-gate";
-import { isTrialProofExpiredSignal } from "@/lib/embed-trial-messages";
 import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
 import { resolveLanguageCode } from "@/lib/languages";
 import { omitForcedCatalogIds } from "@/lib/deploy-config/force-tool";
@@ -217,13 +216,6 @@ type UseEmbedDigiChatOptions = {
    * a proof that arrives after mount still reaches the header.
    */
   getTrialProof?: () => string | null | undefined;
-  /**
-   * Called when a chat response says the trial proof it carried has expired
-   * (DIG-4538). The caller drops the proof it holds and asks the page for a
-   * fresh one. Fired only on that signal, so a page that does not implement
-   * the request yet cannot cause a loop.
-   */
-  onTrialProofExpired?: () => void;
   /** Send-time MCP session overlay (id+token, optional session url). */
   getMcpSession?: () => string | undefined;
   /** Send-time effort: low | medium | high. */
@@ -259,7 +251,6 @@ export function useEmbedDigiChat({
   planProof,
   getPlanProof,
   getTrialProof,
-  onTrialProofExpired,
   allowClientTurnMutation = true,
   features,
 }: UseEmbedDigiChatOptions): Omit<DigiChatController, "send"> & {
@@ -275,26 +266,12 @@ export function useEmbedDigiChat({
   armRegenerate?: () => void;
   armEditLastUser?: () => void;
 } {
-  // The server reports an expired trial proof with a response header
-  // (DIG-4538). The callback is read when the response arrives, so the
-  // transport carries the one the caller passed on this render.
-  const fetchWithTrialProofSignal = useCallback(
-    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-      const response = await warmFetch(input, init);
-      if (isTrialProofExpiredSignal(response.headers)) {
-        onTrialProofExpired?.();
-      }
-      return response;
-    },
-    [onTrialProofExpired],
-  );
-
   const transport = useMemo(
     () =>
       new AssistantChatTransport({
         api: p("/api/chat"),
         // Hold sends made during cold boot until warm-up reports ready.
-        fetch: fetchWithTrialProofSignal as typeof fetch,
+        fetch: warmFetch as typeof fetch,
         prepareSendMessagesRequest: ({ messages, body, trigger }) => {
           const urlAuth = readEmbedUrlAuth();
           const effectiveToken = urlAuth.token ?? token;
@@ -429,7 +406,6 @@ export function useEmbedDigiChat({
     // []), so its identity never changes and the transport is never rebuilt
     // on a language change — while satisfying react-hooks/exhaustive-deps.
       [
-        fetchWithTrialProofSignal,
         accent,
         token,
         host,

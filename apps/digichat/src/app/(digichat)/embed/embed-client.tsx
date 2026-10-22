@@ -89,7 +89,6 @@ import {
   readUnlockToken,
   PARENT_GATE_TIMEOUT_MS,
   resolveGateFallbackCard,
-  TRIAL_PROOF_REFRESH_MESSAGE_TYPE,
 } from "@/lib/embed-trial-messages";
 import {
   EMBED_TRIAL_TURN_LIMIT,
@@ -220,48 +219,6 @@ export function readTrialProofMessage(
   const named = data.host?.trim();
   if (named && hostKey(named) !== hostKey(options.servingHost)) return null;
   return proof;
-}
-
-/**
- * Hold the host-scoped trial proof and react to the server's expired signal.
- *
- * The proof lives in this ref only — never in storage, never in a URL — and is
- * read at send time, so a proof that arrives after mount still reaches the
- * outgoing request. When the server reports the proof expired, the held proof
- * is dropped and the page is asked to mint a fresh one over the same channel.
- *
- * Dropping first and asking second is what keeps this from looping: a signal
- * that arrives when no proof is held finds nothing to drop and asks for
- * nothing, so a page that does not implement the request cannot spin.
- */
-export function useTrialProofChannel(servingHost: string) {
-  const trialProofRef = useRef<string | null>(null);
-  const getTrialProof = useCallback(() => trialProofRef.current, []);
-  const parentOrigin = embedParentOrigin(servingHost);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    // A proof is bound to one host: drop an earlier one when the host changes.
-    trialProofRef.current = null;
-    if (!parentOrigin) return;
-    const onMessage = (event: MessageEvent) => {
-      const proof = readTrialProofMessage(event, { parentOrigin, servingHost });
-      if (proof) trialProofRef.current = proof;
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [parentOrigin, servingHost]);
-  const onTrialProofExpired = useCallback(() => {
-    const held = trialProofRef.current;
-    if (!held) return;
-    // Never present a proof the server called expired.
-    trialProofRef.current = null;
-    if (!parentOrigin) return;
-    window.parent.postMessage(
-      { type: TRIAL_PROOF_REFRESH_MESSAGE_TYPE },
-      parentOrigin,
-    );
-  }, [parentOrigin]);
-  return { getTrialProof, onTrialProofExpired };
 }
 
 /**
@@ -637,7 +594,21 @@ function EmbedChat({
   // held in memory only — never in storage, never in a URL — and read at send
   // time so a proof that arrives after mount still reaches the header.
   const servingHost = resolveEmbedHost(host);
-  const { getTrialProof, onTrialProofExpired } = useTrialProofChannel(servingHost);
+  const trialProofRef = useRef<string | null>(null);
+  const getTrialProof = useCallback(() => trialProofRef.current, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // A proof is bound to one host: drop an earlier one when the host changes.
+    trialProofRef.current = null;
+    const parentOrigin = embedParentOrigin(servingHost);
+    if (!parentOrigin) return;
+    const onMessage = (event: MessageEvent) => {
+      const proof = readTrialProofMessage(event, { parentOrigin, servingHost });
+      if (proof) trialProofRef.current = proof;
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [servingHost]);
 
   const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
   const tenantAllowsWeb = uiFlags.webSearch;
@@ -810,7 +781,6 @@ function EmbedChat({
     getSearchEngine,
     getPlanProof,
     getTrialProof,
-    onTrialProofExpired,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
     // Missing backendType (gated default) must not enable regen/edit.
