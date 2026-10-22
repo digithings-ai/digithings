@@ -30,6 +30,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -98,6 +99,22 @@ CLAIM_MAX_SECS = 28800
 # over a stale lock must not take the head of a run that is still gating, and
 # the claim is what says that run is still there.
 LOCK_MAX_AGE = 7200
+# The tick lock is a directory, and the host's liveness supervisor reads the
+# mtime of that directory to decide whether the holder is wedged: it kills a
+# live holder that has held the lock for 1800 s (com.digithings.daemon-liveness,
+# MAX_HOLDER_SECONDS). A tick that gates one PR runs far longer than that - the
+# runner's own step timeouts sum to about 17100 s - so the supervisor killed a
+# healthy runner mid-run: the receipt never landed, the head kept a `pending`
+# row and the PR lost its required check until the next tick (DIG-5135).
+# The runner renews the lock while it works. A working tick stays fresh, and a
+# runner that has really wedged stops renewing, so the supervisor still kills
+# it - the rule turns from a guess about how long a tick may take into the
+# thing it was always meant to be: proof that the holder is alive.
+LOCK_HEARTBEAT_SECS = 60
+# How often the renewal says so in the log. The supervisor also warns when the
+# log has not advanced for three intervals, so the tick says it is alive well
+# inside that window.
+LOCK_HEARTBEAT_LOG_EVERY = 5
 # The runner keeps its own checkout on origin/develop (DIG-5135). The refresh
 # is throttled so a tick every three minutes does not fetch every three
 # minutes, and it is never applied to a linked worktree: that is somebody
@@ -1443,6 +1460,83 @@ def lock_holder_alive():
     except PermissionError: return pid
     return pid
 
+def _lock_is_ours(path, inode):
+    """True only while this process still owns the lock directory it created.
+
+    The inode is the identity of the directory this process made: a lock that
+    was removed and taken over by another runner is a different directory, and
+    a runner must never renew a lock it does not hold.
+    """
+    try:
+        if os.stat(path).st_ino != inode:
+            return False
+        with open(os.path.join(path, "pid")) as f:
+            return f.read().strip() == str(os.getpid())
+    except (OSError, ValueError):
+        return False
+
+
+def renew_lock(path, inode):
+    """Touch the tick lock so a working tick never looks wedged.
+
+    True when the lock was renewed. A lock this process does not hold is never
+    touched: the renewal stops at the first sign that the lock is gone or
+    belongs to somebody else.
+    """
+    if not _lock_is_ours(path, inode):
+        return False
+    try:
+        os.utime(path, None)
+    except OSError:
+        return False
+    return True
+
+
+def _lock_heartbeat(path, inode, stop, interval):
+    """Renew the lock while the tick works, until the tick is over."""
+    renewals = 0
+    while not stop.wait(interval):
+        if not renew_lock(path, inode):
+            return  # the lock is gone or somebody else's: stop touching it
+        renewals += 1
+        if renewals % LOCK_HEARTBEAT_LOG_EVERY == 0:
+            log("lock: renewed, this tick still holds the lock")
+
+
+_lock_heartbeat_stop = None
+_lock_heartbeat_thread = None
+
+
+def _start_lock_heartbeat(path=LOCK, interval=LOCK_HEARTBEAT_SECS):
+    """Start renewing the lock this process holds."""
+    global _lock_heartbeat_stop, _lock_heartbeat_thread
+    try:
+        inode = os.stat(path).st_ino
+    except OSError:
+        return
+    stop = threading.Event()
+    thread = threading.Thread(target=_lock_heartbeat, args=(path, inode, stop, interval),
+                              name="local-ci-lock-heartbeat", daemon=True)
+    _lock_heartbeat_stop, _lock_heartbeat_thread = stop, thread
+    thread.start()
+
+
+def _stop_lock_heartbeat():
+    """Stop renewing the lock.
+
+    The thread is a daemon, so a tick that is killed without releasing the
+    lock leaves no heartbeat behind: the next runner takes the lock over
+    because its holder is gone.
+    """
+    global _lock_heartbeat_stop, _lock_heartbeat_thread
+    stop, thread = _lock_heartbeat_stop, _lock_heartbeat_thread
+    _lock_heartbeat_stop = _lock_heartbeat_thread = None
+    if stop is not None:
+        stop.set()
+    if thread is not None:
+        thread.join(timeout=2)
+
+
 def acquire_lock():
     """Take the tick lock. A lock whose holder is dead is taken over and logged, never waited on."""
     _guard()
@@ -1462,10 +1556,12 @@ def acquire_lock():
     try:
         with open(os.path.join(LOCK, "pid"), "w") as f: f.write(str(os.getpid()))
     except OSError: pass
+    _start_lock_heartbeat()
     return True
 
 def release_lock():
     """Release only a lock this process holds; never sweep another holder's."""
+    _stop_lock_heartbeat()
     try:
         with open(os.path.join(LOCK, "pid")) as f: mine = f.read().strip() == str(os.getpid())
     except (OSError, ValueError): mine = False

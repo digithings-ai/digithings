@@ -2417,3 +2417,147 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
             if "fetch" in " ".join(cmd) or "merge" in " ".join(cmd):
                 self.assertLessEqual(timeout, 600,
                                      "the refresh's git commands must not wait for ever")
+
+
+class LockHeartbeatTest(unittest.TestCase):
+    """DIG-5135: a working tick must not be killed as a wedge.
+
+    The host's liveness supervisor (com.digithings.daemon-liveness) reads the
+    mtime of the tick lock directory and kills a live holder that has held it
+    for 1800 s. A tick that gates one PR runs far longer than that - the
+    runner's own step timeouts sum to about 17100 s - so the supervisor killed
+    healthy runners mid-run. Measured on 2026-10-22: five kills between 05:39
+    and 08:01, each one a receipt that never landed and a PR that lost its
+    required check. The runner renews the lock while it works, so a working
+    tick stays fresh and a runner that has really wedged stops renewing and is
+    killed exactly as before.
+    """
+
+    # The rule the supervisor applies, named here so the test measures the same
+    # thing the host measures: the age of the lock directory.
+    SUPERVISOR_MAX_HOLDER_SECS = 1800
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._lock = _mod.LOCK
+        self._logd = _mod.LOGD
+        self._interval = _mod.LOCK_HEARTBEAT_SECS
+        _mod.LOCK = os.path.join(self.tmp, "local-ci.lock")
+        _mod.LOGD = os.path.join(self.tmp, "logs")
+        os.makedirs(_mod.LOGD, exist_ok=True)
+        _mod.LOCK_HEARTBEAT_SECS = 0.05
+
+    def tearDown(self):
+        _mod._stop_lock_heartbeat()
+        _mod.LOCK = self._lock
+        _mod.LOGD = self._logd
+        _mod.LOCK_HEARTBEAT_SECS = self._interval
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    # --- helpers -----------------------------------------------------------
+
+    def _make_lock(self, pid=None):
+        """A lock directory held by `pid` (this process by default)."""
+        os.makedirs(_mod.LOCK, exist_ok=True)
+        with open(os.path.join(_mod.LOCK, "pid"), "w") as f:
+            f.write(str(os.getpid() if pid is None else pid))
+        return os.stat(_mod.LOCK).st_ino
+
+    def _dead_pid(self):
+        """A pid that is certainly gone: a process we started and reaped."""
+        p = subprocess.Popen([sys.executable, "-c", "pass"])
+        p.wait()
+        return p.pid
+
+    def _supervisor_age(self):
+        """The age the host's supervisor reads: the mtime of the lock directory."""
+        return time.time() - os.path.getmtime(_mod.LOCK)
+
+    def _age_the_lock(self, secs):
+        """Make the lock look as old as a tick that has been gating for `secs`."""
+        stamp = time.time() - secs
+        os.utime(_mod.LOCK, (stamp, stamp))
+
+    # --- the tests ---------------------------------------------------------
+
+    def test_a_working_tick_renews_the_lock_before_the_supervisor_calls_it_wedged(self):
+        inode = self._make_lock()
+        self._age_the_lock(self.SUPERVISOR_MAX_HOLDER_SECS + 100)
+        self.assertGreater(self._supervisor_age(), self.SUPERVISOR_MAX_HOLDER_SECS,
+                           "the lock must look old before the renewal")
+        self.assertTrue(_mod.renew_lock(_mod.LOCK, inode))
+        self.assertLess(self._supervisor_age(), self.SUPERVISOR_MAX_HOLDER_SECS,
+                        "a renewed lock must not look wedged to the supervisor")
+
+    def test_the_lock_of_another_holder_is_never_renewed(self):
+        inode = self._make_lock(pid=self._dead_pid())
+        before = os.path.getmtime(_mod.LOCK)
+        self.assertFalse(_mod.renew_lock(_mod.LOCK, inode))
+        self.assertEqual(os.path.getmtime(_mod.LOCK), before,
+                         "another holder's lock must not be touched")
+
+    def test_a_lock_that_was_taken_over_is_never_renewed(self):
+        inode = self._make_lock()
+        # Somebody else took the lock over: the same path, a new directory.
+        shutil.rmtree(_mod.LOCK, ignore_errors=True)
+        self._make_lock(pid=self._dead_pid())
+        before = os.path.getmtime(_mod.LOCK)
+        self.assertFalse(_mod.renew_lock(_mod.LOCK, inode))
+        self.assertEqual(os.path.getmtime(_mod.LOCK), before,
+                         "a lock that was taken over must not be renewed by the old holder")
+
+    def test_the_heartbeat_renews_the_lock_while_the_tick_works(self):
+        self._make_lock()
+        self._age_the_lock(self.SUPERVISOR_MAX_HOLDER_SECS + 100)
+        _mod._start_lock_heartbeat(_mod.LOCK, 0.05)
+        deadline = time.time() + 5
+        while (time.time() < deadline
+               and self._supervisor_age() > self.SUPERVISOR_MAX_HOLDER_SECS):
+            time.sleep(0.05)
+        self.assertLess(self._supervisor_age(), self.SUPERVISOR_MAX_HOLDER_SECS,
+                        "the heartbeat must keep a working tick out of the wedge rule")
+
+    def test_the_heartbeat_says_so_in_the_log(self):
+        """The supervisor also warns when the log has not advanced for three
+        intervals, so the tick has to say that it is alive."""
+        self._make_lock()
+        _mod._start_lock_heartbeat(_mod.LOCK, 0.05)
+        deadline = time.time() + 5
+        said = False
+        while time.time() < deadline and not said:
+            time.sleep(0.05)
+            try:
+                with open(os.path.join(_mod.LOGD, "local-ci.log")) as f:
+                    said = "lock: renewed" in f.read()
+            except FileNotFoundError:
+                said = False
+        self.assertTrue(said, "a working tick must say that it is alive in the log")
+
+    def test_the_heartbeat_stops_when_the_tick_releases_the_lock(self):
+        self._make_lock()
+        _mod._start_lock_heartbeat(_mod.LOCK, 0.05)
+        _mod.release_lock()
+        self.assertIsNone(_mod._lock_heartbeat_thread)
+        self.assertFalse(os.path.exists(_mod.LOCK))
+        time.sleep(0.3)
+        self.assertFalse(os.path.exists(_mod.LOCK),
+                         "a released lock must not be brought back by the heartbeat")
+
+    def test_taking_the_lock_starts_the_heartbeat_and_releasing_it_stops_it(self):
+        self.assertTrue(_mod.acquire_lock())
+        self.assertIsNotNone(_mod._lock_heartbeat_thread)
+        self.assertTrue(_mod._lock_heartbeat_thread.daemon,
+                        "the heartbeat must never hold the process open")
+        _mod.release_lock()
+        self.assertIsNone(_mod._lock_heartbeat_thread)
+
+    def test_a_lock_whose_holder_is_gone_is_still_taken_over(self):
+        """The renewal keeps the lock fresh, so a dead holder must not be
+        mistaken for a busy one."""
+        self._make_lock(pid=self._dead_pid())
+        self._age_the_lock(10)
+        self.assertTrue(_mod.acquire_lock(),
+                        "a lock whose holder is gone must be taken over")
+        self.assertEqual(_mod.lock_holder_alive(), os.getpid())
+        _mod.release_lock()
+
