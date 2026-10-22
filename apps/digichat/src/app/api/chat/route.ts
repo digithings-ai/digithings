@@ -69,10 +69,7 @@ import {
 import { isPlanTierSatisfied, normalizeEmbedHost } from "@/lib/embed-tenants";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
-import {
-  inspectTrialProof,
-  TRIAL_PROOF_EXPIRED_HEADER,
-} from "@/lib/trial-proof";
+import { verifyTrialProof } from "@/lib/trial-proof";
 import {
   acquireChatRunLock,
   releaseChatRunLockOnResponseEnd,
@@ -112,93 +109,7 @@ function jsonError(
   });
 }
 
-export async function POST(req: Request): Promise<Response> {
-  const trialProof = inspectRequestTrialProof(req);
-  const res = await handleChat(req, trialProof);
-  if (!trialProof.expired) return res;
-  // The signal rides on the Response the route returns: the chat response is
-  // a stream, so there is no error path to hang it on, and the client reads
-  // the header off whatever response it actually receives.
-  return withExpiredTrialProofHeader(res);
-}
-
-/**
- * Add the expired-proof signal to a response the route is about to return.
- * The header is set on the response itself where that is allowed, and on a
- * copy otherwise (a response whose headers are immutable).
- */
-function withExpiredTrialProofHeader(res: Response): Response {
-  try {
-    res.headers.set(TRIAL_PROOF_EXPIRED_HEADER, "1");
-    return res;
-  } catch {
-    const headers = new Headers(res.headers);
-    headers.set(TRIAL_PROOF_EXPIRED_HEADER, "1");
-    return new Response(res.body, {
-      status: res.status,
-      statusText: res.statusText,
-      headers,
-    });
-  }
-}
-
-/**
- * The trial proof the client presented, resolved once per request.
- *
- * Both flags are host-scoped: a proof only counts for the embed host it
- * names. A valid proof for another host buys nothing (the same trust chain
- * as before), and an expired proof for another host is not this client's
- * proof to drop.
- */
-type RequestTrialProof = {
-  /** The host an authentic presented proof binds; null when there is none. */
-  host: string | null;
-  /** Authentic, unexpired, and for this request's embed host. */
-  accepted: boolean;
-  /** Authentic, expired, and for this request's embed host. */
-  expired: boolean;
-};
-
-function inspectRequestTrialProof(req: Request): RequestTrialProof {
-  const token = req.headers.get("x-embed-trial-proof")?.trim();
-  const secret = process.env.DIGICHAT_TRIAL_PROOF_SECRET?.trim();
-  if (!token || !secret) {
-    return { host: null, accepted: false, expired: false };
-  }
-
-  const inspection = inspectTrialProof(token, secret);
-  if (inspection.ok) {
-    return {
-      host: inspection.host,
-      accepted: matchesEmbedHost(req, inspection.host),
-      expired: false,
-    };
-  }
-  if (inspection.reason === "expired") {
-    return {
-      host: inspection.host,
-      accepted: false,
-      expired: matchesEmbedHost(req, inspection.host),
-    };
-  }
-  // Malformed or wrongly signed: invalid, not expired. The client must not
-  // treat these as re-mintable.
-  return { host: null, accepted: false, expired: false };
-}
-
-/** True when the proof's host is the embed host this request came from. */
-function matchesEmbedHost(req: Request, proofHost: string): boolean {
-  const embedHost = normalizeEmbedHost(req.headers.get("x-embed-host"));
-  const normalizedProofHost = normalizeEmbedHost(proofHost);
-  return Boolean(
-    embedHost && normalizedProofHost && normalizedProofHost === embedHost,
-  );
-}
-
-async function handleChat(
-  req: Request,
-  trialProof: RequestTrialProof,
-): Promise<Response> {
+export async function POST(req: Request) {
   // Revoked/expired license refuses before auth: a revoked deployment
   // refuses even an authenticated caller, and the check is cheaper.
   const refusal = licenseRefusal();
@@ -470,11 +381,18 @@ async function handleChat(
       // budget, so once a proof is accepted the per-IP quota below is not
       // consulted at all. No proof, no bypass: an absent, malformed, expired,
       // wrongly-signed or wrong-host proof leaves the gate exactly as it was.
-      // The verdict itself - verified host, expiry, and the host comparison -
-      // is resolved once per request in inspectRequestTrialProof, so the gate
-      // and the expiry signal can never disagree.
-      if (trialProof.accepted) {
-        quotaSatisfied = true;
+      const proofToken = req.headers.get("x-embed-trial-proof")?.trim();
+      const proofSecret = process.env.DIGICHAT_TRIAL_PROOF_SECRET?.trim();
+      if (proofToken && proofSecret) {
+        const proofHost = verifyTrialProof(proofToken, proofSecret);
+        const embedHost = normalizeEmbedHost(req.headers.get("x-embed-host"));
+        if (
+          proofHost &&
+          embedHost &&
+          normalizeEmbedHost(proofHost) === embedHost
+        ) {
+          quotaSatisfied = true;
+        }
       }
     }
 
