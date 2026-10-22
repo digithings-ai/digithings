@@ -677,14 +677,6 @@
       "count": 6,
       "ticket": "DIG-3689"
     },
-    "packages/ui/src/components/chat/stock/tool-display.test.ts": {
-      "count": 2,
-      "ticket": "DIG-3689"
-    },
-    "packages/ui/src/components/chat/stock/tool-display.ts": {
-      "count": 2,
-      "ticket": "DIG-3689"
-    },
     "renovate.json": {
       "count": 1,
       "ticket": "DIG-3689"
@@ -1044,6 +1036,10 @@
     "tests/dg/test_tenant_digisearch_tools.py": {
       "count": 8,
       "ticket": "DIG-2203"
+    },
+    "packages/ui/src/components/chat/stock/tool-display.test.ts": {
+      "count": 2,
+      "ticket": "DIG-3689"
     }
   }
 }
