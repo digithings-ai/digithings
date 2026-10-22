@@ -394,6 +394,11 @@ RULES: list[tuple[str, str, str]] = [
         "tests of vendor client luxalgo (private per Chris 01:26)",
     ),
     (
+        "tests/dq/brokers/luxalgo_mirror_cases.py",
+        "R2",
+        "tests of vendor client luxalgo (private per Chris 01:26)",
+    ),
+    (
         "tests/dq/data/test_gloomberb_agent_tools.py",
         "R2",
         "tests of vendor client gloomberb (private per Chris 01:26)",
@@ -440,6 +445,11 @@ RULES: list[tuple[str, str, str]] = [
     ),
     (
         "tests/dq/data/test_gloomberb_prediction_markets.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
+        "tests/dq/data/gloomberb_prediction_fixtures.py",
         "R2",
         "tests of vendor client gloomberb (private per Chris 01:26)",
     ),
