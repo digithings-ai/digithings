@@ -1053,14 +1053,33 @@ function applyCatalogConfig(
             kind === "occ"
               ? dep.models?.occPicker === false
               : isOccHost(host, dep.slug) && dep.models?.occPicker !== true;
-          if (occLocked) {
+          if (occLocked && kind === "occ") {
+            // OCC with the picker off: the operator model, and still no meter or TPM.
+            const locked = lockOccModels(dep.models);
+            if (locked?.costPerWindow) delete locked.costPerWindow;
             return [
               host,
               {
                 ...dep,
                 features: { ...dep.features, modelPicker: false },
-                models: lockOccModels(dep.models),
+                guardrails: withoutTpm(dep.guardrails),
+                models: locked,
               },
+            ];
+          }
+          if (occLocked) {
+            // A non-product row that shares the slug: withhold the picker, keep
+            // its own model list so the chat route still enforces it.
+            const models = applyModelCatalog(
+              dep.models,
+              `${ctx} hosts.${host}`,
+              openRouterConfigured,
+            );
+            const closed = models ? { ...models, allowPicker: false } : models;
+            if (closed) delete closed.picker;
+            return [
+              host,
+              { ...dep, features: { ...dep.features, modelPicker: false }, models: closed },
             ];
           }
           const models = applyModelCatalog(

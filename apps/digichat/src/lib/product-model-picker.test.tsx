@@ -326,4 +326,39 @@ describe("product chats open with the model picker", () => {
     expect(dep.models.available).toEqual(["vendor/model-a"]);
     expect(dep.models.allowPicker).toBeUndefined();
   });
+  it("locked OCC still drops a written meter and TPM", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      hosts: {
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          guardrails: { tokensPerMinute: { user: 1000 } },
+          models: { occPicker: false, costPerWindow: { usd: 0.01 } },
+        },
+      },
+    });
+    const dep = cfg.hosts!["occ.digithings.ai"]!;
+    expect(toolbarFor(dep).picker).toBe(false);
+    expect(dep.models.costPerWindow).toBeUndefined();
+    expect(dep.guardrails?.tokensPerMinute).toBeUndefined();
+  });
+
+  it("a customer row reusing the occ slug keeps its own model allowlist", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      hosts: {
+        "acme.example": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          models: { available: ["vendor/model-a"], default: "vendor/model-a" },
+        },
+      },
+    });
+    const dep = cfg.hosts!["acme.example"]!;
+    expect(dep.models.available).toEqual(["vendor/model-a"]);
+    expect(dep.models.default).toBe("vendor/model-a");
+    expect(dep.models.allowPicker).toBe(false);
+    expect(toolbarFor(dep).picker).toBe(false);
+  });
 });
