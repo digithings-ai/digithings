@@ -7,14 +7,9 @@
 
 import { z } from "zod";
 import { MAX_MCP_TOOL_ENTRIES, MAX_MCP_TOOL_NAME_LENGTH } from "./mcp-servers";
-import {
-  DEFAULT_LANGUAGE_CODE,
-  LANGUAGES,
-} from "@/lib/languages";
+import { DEFAULT_LANGUAGE_CODE, LANGUAGES } from "@/lib/languages";
 import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@digithings/ui/chat/skins";
-import {
-  DEFAULT_TRACE_DENSITY,
-} from "@digithings/ui/chat/trace-spacing";
+import { DEFAULT_TRACE_DENSITY } from "@digithings/ui/chat/trace-spacing";
 import { isPaletteId } from "@digithings/ui/theme";
 import {
   DEFAULT_THINKING_MODE,
@@ -60,18 +55,10 @@ export const ActivityDetailSchema = z.enum(["off", "labels", "full"]);
  * Deployment-configured; parents see the mode on `digichat:ready`.
  */
 export const PageContextModeSchema = z.enum(["off", "silent", "visible"]);
-export const LlmAccessSchema = z.enum([
-  "free_then_byok",
-  "byok_only",
-  "backend_only",
-  "operator",
-]);
+export const LlmAccessSchema = z.enum(["free_then_byok", "byok_only", "backend_only", "operator"]);
 export const UserAlignSchema = z.enum(["right", "left"]);
 
-const WelcomeBodySchema = z.union([
-  z.string().min(1),
-  z.array(z.string().min(1)).min(1),
-]);
+const WelcomeBodySchema = z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]);
 
 /** Empty-state copy. A bare string still means title-only (legacy YAML). */
 export const WelcomeCopySchema = z
@@ -111,12 +98,7 @@ export function welcomeBodyLines(welcome: WelcomeCopy | undefined): string[] {
  * Reasoning / tool-call disclosure. Booleans coerce for older YAML:
  * true → collapsed, false → off.
  */
-export const DisclosureModeSchema = z.enum([
-  "off",
-  "collapsed",
-  "expanded",
-  "locked_open",
-]);
+export const DisclosureModeSchema = z.enum(["off", "collapsed", "expanded", "locked_open"]);
 export type DisclosureMode = z.infer<typeof DisclosureModeSchema>;
 
 /**
@@ -219,16 +201,11 @@ function foldLegacyDisclosure(value: unknown): unknown {
   delete record.toolCalls;
   delete record.reasoning;
   if (record.view == null && toolCalls !== undefined) {
-    record.view =
-      toolCalls === "expanded" || toolCalls === "locked_open"
-        ? "verbose"
-        : "quiet";
+    record.view = toolCalls === "expanded" || toolCalls === "locked_open" ? "verbose" : "quiet";
   }
   if (record.thinking == null && reasoning !== undefined) {
     record.thinking =
-      reasoning === "expanded" || reasoning === "locked_open"
-        ? "open"
-        : "collapsed";
+      reasoning === "expanded" || reasoning === "locked_open" ? "open" : "collapsed";
   }
   return record;
 }
@@ -308,10 +285,10 @@ export const ModelsSchema = z
      */
     catalog: z.boolean().optional(),
     /**
-     * OCC visitor picker. Off unless true. The OCC deployment sets it true
-     * after Chris's sign-off (21 Oct 2026, 19:19 Rome): "Yes, enable the
-     * model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488
-     * lock". Other hosts ignore it. Tool and MCP locks stay closed.
+     * OCC visitor picker. On unless false, after Chris's sign-off (21 Oct
+     * 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I
+     * sign off on overriding the DIG-4488 lock". Other hosts ignore it. Tool
+     * and MCP locks stay closed.
      */
     occPicker: z.boolean().optional(),
     /** USD per million output tokens. Omit to use the catalog default. */
@@ -399,10 +376,7 @@ const OpenAiCompatibleFields = {
   model: z.string().min(1),
   apiKeyEnv: z
     .string()
-    .regex(
-      /^DIGICHAT_BACKEND_[A-Z0-9_]+$/,
-      "apiKeyEnv must name a DIGICHAT_BACKEND_* env var",
-    ),
+    .regex(/^DIGICHAT_BACKEND_[A-Z0-9_]+$/, "apiKeyEnv must name a DIGICHAT_BACKEND_* env var"),
 };
 
 /** OpenAI Chat Completions wire format (`/v1/chat/completions`). */
@@ -435,10 +409,7 @@ export const AnthropicBackendSchema = z
     model: z.string().min(1),
     apiKeyEnv: z
       .string()
-      .regex(
-        /^DIGICHAT_BACKEND_[A-Z0-9_]+$/,
-        "apiKeyEnv must name a DIGICHAT_BACKEND_* env var",
-      ),
+      .regex(/^DIGICHAT_BACKEND_[A-Z0-9_]+$/, "apiKeyEnv must name a DIGICHAT_BACKEND_* env var"),
   })
   .strict();
 
@@ -561,7 +532,10 @@ export const McpServerSchema = z
   .object({
     id: z
       .string()
-      .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "mcp server id must be a lowercase slug without underscores"),
+      .regex(
+        /^[a-z0-9][a-z0-9-]{0,63}$/,
+        "mcp server id must be a lowercase slug without underscores",
+      ),
     /** BFF-only URL — never projected to the browser */
     url: z.string().url(),
     label: z.string().optional(),
@@ -813,9 +787,10 @@ export const DeploymentSchema = z
     ctx.addIssue({
       code: "custom",
       message: issue,
-      path: deployment.guardrails?.maxToolCallsPerTurn != null
-        ? ["guardrails", "maxToolCallsPerTurn"]
-        : ["backend", "maxToolCalls"],
+      path:
+        deployment.guardrails?.maxToolCallsPerTurn != null
+          ? ["guardrails", "maxToolCallsPerTurn"]
+          : ["backend", "maxToolCalls"],
     });
   });
 
@@ -942,7 +917,50 @@ function isOccHost(host: string | undefined, slug: string | undefined): boolean 
   return host === OCC_EMBED_HOST || slug === "occ";
 }
 
-/** OCC without `occPicker` keeps the operator model: no list, no picker. */
+const HOUSE_EMBED_HOSTS: ReadonlySet<string> = new Set(["digithings.ai", "www.digithings.ai"]);
+const HOUSE_SLUGS: ReadonlySet<string> = new Set(["digithings", "digithings-ai"]);
+
+function isHouseHost(host: string | undefined, slug: string | undefined): boolean {
+  return (
+    (host !== undefined && HOUSE_EMBED_HOSTS.has(host)) ||
+    (slug !== undefined && HOUSE_SLUGS.has(slug))
+  );
+}
+
+/** Presets both product chats open with. The router stays off (2.6.6). */
+const PRODUCT_PICKER_PRESETS = ["auto", "reasoning", "fast", "light"] as const;
+
+/**
+ * digithings.ai premium allowance per visitor: three typical turns of the
+ * manual Premium group per rolling day (#6193). The house meters, OCC does not.
+ */
+const HOUSE_PREMIUM_WINDOW = { usd: 0.0125565, windowSeconds: 86_400 } as const;
+
+/**
+ * Picker defaults for the two product chats. A registry row that names no
+ * model policy used to fall back to "no list, no picker" after #6193, which
+ * hid the model chip on digithings.ai and OCC. Both now open with the catalog
+ * picker unless the row turns it off (`allowPicker: false`, or
+ * `occPicker: false` on OCC) or writes its own list or catalog policy.
+ */
+function withProductPickerDefaults(models: CatalogModels, house: boolean): CatalogModels {
+  const base: NonNullable<CatalogModels> = models ?? { available: [] };
+  if (base.allowPicker === false) return base;
+  if (base.catalog === true || (base.available?.length ?? 0) > 0 || base.picker) {
+    return base.allowPicker === undefined ? { ...base, allowPicker: true } : base;
+  }
+  return {
+    ...base,
+    available: [],
+    allowPicker: true,
+    catalog: true,
+    showFullList: base.showFullList ?? true,
+    presets: base.presets ?? [...PRODUCT_PICKER_PRESETS],
+    ...(house && !base.costPerWindow ? { costPerWindow: { ...HOUSE_PREMIUM_WINDOW } } : {}),
+  };
+}
+
+/** OCC with `occPicker: false` keeps the operator model: no list, no picker. */
 function lockOccModels(models: CatalogModels): CatalogModels {
   if (!models) return models;
   const next: CatalogModels = { ...models, available: [], allowPicker: false };
@@ -1002,7 +1020,9 @@ function applyCatalogConfig(
   const hosts = config.hosts
     ? Object.fromEntries(
         Object.entries(config.hosts).map(([host, dep]) => {
-          if (isOccHost(host, dep.slug) && dep.models?.occPicker !== true) {
+          // Chris signed off the OCC picker (21 Oct 2026, 19:19 Rome), so it is
+          // on unless the row says `occPicker: false`.
+          if (isOccHost(host, dep.slug) && dep.models?.occPicker === false) {
             return [
               host,
               {
@@ -1012,13 +1032,16 @@ function applyCatalogConfig(
               },
             ];
           }
+          const occ = isOccHost(host, dep.slug);
+          const house = !occ && isHouseHost(host, dep.slug) && dep.backend?.type !== "foundry";
           const models = applyModelCatalog(
-            dep.models,
+            occ || house ? withProductPickerDefaults(dep.models, house) : dep.models,
             `${ctx} hosts.${host}`,
             openRouterConfigured,
           );
-          if (isOccHost(host, dep.slug)) {
-            return [host, { ...dep, features: { ...dep.features, modelPicker: true }, models }];
+          if (occ) {
+            const open = models?.allowPicker !== false;
+            return [host, { ...dep, features: { ...dep.features, modelPicker: open }, models }];
           }
           return [host, { ...dep, models }];
         }),
