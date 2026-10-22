@@ -173,8 +173,10 @@ queue cannot tell your block from another seat's.
 written once:
 
 - A **marker verdict names the head through its own `scope=`** and through nothing else.
-  The provenance marker's `head=` is the fallback for a marker that carries no `scope=`,
-  and it is never a second binding for one that does. An approve whose `scope=` names a
+  The provenance marker's `head=` is the fallback for a marker that carries no `scope=`
+  field, and it is never a second binding for one that does. A `scope=` the sha pattern
+  does not read (uppercase, short, no `@`, empty) binds nothing and does not fall back.
+  An approve whose `scope=` names a
   stale head says nothing about the head the PR stands at, and must not clear a block
   because the provenance marker names the newer head. That was the hole the review on
   `#6177` found on 2026-10-21: the seat's approve named the stale commit in its own

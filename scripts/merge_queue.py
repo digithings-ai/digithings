@@ -2268,6 +2268,8 @@ def _gate_checks(pr: dict[str, Any], policy: Policy, repo: str | None = None) ->
 _MARKER_RE = re.compile(r"<!--\s*opencode-power-pack:code-review\b(?P<fields>[^>]*?)\s*-->")
 _MARKER_FIELD_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)=(?P<value>\S+)")
 _SCOPE_SHA_RE = re.compile(r"@(?P<sha>[0-9a-f]{7,40})\b")
+# The `scope=` key itself, present or not, whatever its value looks like.
+_SCOPE_KEY_RE = re.compile(r"(?:^|\s)scope\s*=", re.IGNORECASE)
 
 # `changes_needed` is read alongside `changes_requested` because DIG-1021's interim
 # discipline named the two verdicts "approve" and "changes needed"; a reviewer
@@ -2281,8 +2283,12 @@ def _normalise_verdict(value: str) -> str:
     return value.strip().strip("'\";").lower().replace("-", "_")
 
 
-def _marker_verdict(body: str) -> tuple[str, str] | None:
-    """`(verdict, scope_sha)` from a review marker in `body`, or None.
+def _marker_verdict(body: str) -> tuple[str, str, bool] | None:
+    """`(verdict, scope_sha, names_scope)` from a review marker in `body`, or None.
+
+    `names_scope` is True when the marker carries a `scope=` field at all, even
+    one whose value is not a readable sha. The field's presence, not its parse,
+    decides whether the marker names a head of its own.
 
     None means "this comment carries no marker verdict the queue can read" — a
     plain comment, or a marker whose `verdict=` is missing or misspelled. That
@@ -2297,7 +2303,8 @@ def _marker_verdict(body: str) -> tuple[str, str] | None:
         if verdict not in READABLE_VERDICTS:
             continue
         scope_sha = _SCOPE_SHA_RE.search(fields.get("scope", ""))
-        return verdict, (scope_sha.group("sha") if scope_sha else "")
+        names_scope = _SCOPE_KEY_RE.search(marker.group("fields")) is not None
+        return verdict, (scope_sha.group("sha") if scope_sha else ""), names_scope
     return None
 
 
@@ -2396,8 +2403,9 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
     prose = _prose_verdict(text)
     if marker is None and prose is None:
         return None
+    named_scope = False
     if marker is not None:
-        verdict, scope = marker
+        verdict, scope, named_scope = marker
         source = "a `verdict=` marker"
         # The marker's `scope=` is the head the verdict is about. The prose around
         # it may name any number of commits, so it is not read as a binding.
@@ -2413,15 +2421,17 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         claims = [found.group("sha") for found in _PROSE_SHA_RE.finditer(text)]
     provenance = _provenance_fields(body)
     provenance_head = str(provenance.get("head") or "")
-    if provenance_head and not scope:
+    if provenance_head and not named_scope:
         # A marker verdict names the head it is about through its own `scope=`.
         # The provenance marker's `head=` is the fallback for a marker that names
         # no scope, and never a second binding for one that does: an approve
         # whose `scope=` names a stale head says nothing about the head the PR
         # stands at, and must not clear a block just because the provenance
-        # marker names the newer head. The prose path has no `scope=`, so it
-        # keeps every sha in the comment as a candidate, the provenance head
-        # included.
+        # marker names the newer head. "Names a scope" is the field's presence:
+        # a `scope=` that does not parse as a sha (uppercase, short, no `@`)
+        # binds nothing, and must not fall back to the provenance head. The
+        # prose path has no `scope=`, so it keeps every sha in the comment as a
+        # candidate, the provenance head included.
         claims.append(provenance_head)
     bindings: list[str] = []
     for binding in claims:
