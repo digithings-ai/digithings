@@ -80,20 +80,11 @@ body {
   color: var(--ink);
 }
 
+/* Position only: the shared ThemeToggle is the kit IconButton, so its colour,
+   hover, focus ring and hit area come from the kit (and the @source above).
+   The old text-button dress (border, padding, mono size) would fight it. */
 .chatbot-theme-toggle {
   margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  color: var(--ink-mute);
-  background: transparent;
-  border: 1px solid var(--hair);
-  padding: 0.25rem 0.55rem;
-  cursor: pointer;
-}
-
-.chatbot-theme-toggle:hover {
-  color: var(--ink);
 }
 
 .reference-page {
