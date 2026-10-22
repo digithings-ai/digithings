@@ -332,7 +332,7 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
       const pending: Promise<unknown>[] = [];
       await worker.scheduled(
         {
-          cron: "17 * * * *",
+          cron: "17,47 * * * *",
           scheduledTime: Date.UTC(2026, 9, 15, hour, 17, 0),
         } as ScheduledController,
         env,
@@ -345,8 +345,8 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
   });
 
   it("claims by job, so two rows firing in one minute both dispatch", async () => {
-    // production-deploy-gate-watchdog (`17,47 * * * *`) and datatap-answer-check
-    // (`17 * * * *`) both fire at :17. They are different jobs, and the shared
+    // production-deploy-gate-watchdog (`17,47 * * * *`) and secret-staleness
+    // (`17 6 1 * *`) both fire at :17. They are different jobs, and the shared
     // workflow-file case works the same way: market_context_ingest.yml is
     // dispatched by three rows with three ids.
     const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
@@ -358,7 +358,7 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
       START_COUNTER: namespace,
     };
 
-    for (const cron of ["17,47 * * * *", "17 * * * *"]) {
+    for (const cron of ["17,47 * * * *", "17 6 1 * *"]) {
       const pending: Promise<unknown>[] = [];
       await worker.scheduled(
         { cron, scheduledTime: Date.UTC(2026, 9, 15, 0, 17, 0) } as ScheduledController,
@@ -374,7 +374,7 @@ describe("scheduled tick idempotency (DIG-4384)", () => {
     expect(events).toContain(
       "claim:17,47 * * * *\nproduction-deploy-gate-watchdog@2026-10-15T00:17",
     );
-    expect(events).toContain("claim:17 * * * *\ndatatap-answer-check@2026-10-15T00:17");
+    expect(events).toContain("claim:17 6 1 * *\nsecret-staleness@2026-10-15T00:17");
   });
 
   it("releases the claim when the dispatch fails, so a retry can still start the run", async () => {
