@@ -144,6 +144,13 @@ COMMIT_MATCH_MODES: tuple[str, ...] = (COMMIT_MATCH_ENFORCE, COMMIT_MATCH_SHADOW
 #: mode can be changed on the running host without a code change.
 PROVENANCE_MODE_ENV = "MQ_CI_PROVENANCE"
 
+#: The rollback flag, shared with the broker and the seat shim (DIG-4805).
+#: Chris writes it, as root, into the account that owns the broker: a seat can
+#: read it and cannot write it, so no seat can turn the broker off.
+AUTH_MODE_FLAG_PATH = Path("/Users/_dtbroker/.config/digithings/github-auth-mode")
+#: The value that switches the broker off and restores today's behaviour.
+AUTH_MODE_HOST = "host"
+
 #: The same for the commit comparison: the environment wins over the file.
 COMMIT_MATCH_ENV = "MQ_CI_COMMIT_MATCH"
 #: Where the shadow log goes. The launchd job's own error log keeps the line too.
@@ -874,19 +881,43 @@ def commit_match_mode(policy: Policy) -> str:
     return raw
 
 
+def _rollback_is_host() -> bool:
+    """True when Chris has switched the broker off.
+
+    The flag lives in the account that owns the broker, in a file a seat can
+    read and cannot write. An unreadable flag, or one that says something
+    else, is not `host`: the flag lowers a gate and never raises one, so a
+    switch that cannot be read leaves the gate where the policy put it.
+    """
+    try:
+        raw = AUTH_MODE_FLAG_PATH.read_text(encoding="utf-8").strip().lower()
+    except (OSError, UnicodeDecodeError):
+        return False
+    return raw == AUTH_MODE_HOST
+
+
 def provenance_mode(policy: Policy) -> str:
     """The mode in force. The environment wins over the policy file.
 
     An unreadable value is treated as `enforce`, not as `off`: a typo in the
     switch that decides whether the queue trusts a status must not silence the
     gate. `off` has to be spelled correctly to switch it off.
+
+    The rollback flag (DIG-4805) has the last word, and it can only lower
+    the gate: `host` puts an enforcing gate back into shadow, because the
+    trusted receipt this gate checks is written by the broker, and with the
+    broker off there is nothing to enforce against.
     """
     raw = str(os.environ.get(PROVENANCE_MODE_ENV) or "").strip().lower()
     if not raw:
-        return policy.ci_provenance.mode
-    if raw not in PROVENANCE_MODES:
-        return PROVENANCE_ENFORCE
-    return raw
+        mode = policy.ci_provenance.mode
+    elif raw not in PROVENANCE_MODES:
+        mode = PROVENANCE_ENFORCE
+    else:
+        mode = raw
+    if mode == PROVENANCE_ENFORCE and _rollback_is_host():
+        return PROVENANCE_SHADOW
+    return mode
 
 
 def _newest_status(entries: list[dict[str, Any]], context: str) -> dict[str, Any] | None:
