@@ -872,13 +872,27 @@ def _wt_rebuild(sha, out):
     The lock goes first: git does not prune a locked worktree, so the admin dir
     would survive the removal and the next `worktree add` would fail on a path
     that already exists.
+
+    The sentinel goes back in: with LOCAL_CI_WT set it is the only thing that
+    says the directory is the runner's, and without it a later stall could
+    never heal itself. The rebuild also takes the worktree's node_modules and
+    .venv with it - the build step installs the first again, the gates sync the
+    second - so the log says so.
     """
     _wt_unlock(out)
     shutil.rmtree(WT, ignore_errors=True)
     sh(["git", "worktree", "prune"], cwd=MAIN, out=out)
     rc, _ = sh(["git", "worktree", "add", "--detach", "-f", WT, sha], cwd=MAIN,
                timeout=WT_REBUILD_TIMEOUT, out=out)
-    return rc == 0
+    if rc != 0:
+        return False
+    out.write(f"worktree rebuilt at {sha[:12]} (its node_modules and .venv went with it)\n")
+    try:
+        with open(os.path.join(WT, ".local-ci-worktree"), "w", encoding="utf-8") as fh:
+            fh.write(sha + "\n")
+    except OSError as exc:  # a read-only worktree still works; it just cannot be rebuilt
+        out.write(f"could not mark the rebuilt worktree as ours: {exc}\n")
+    return True
 
 
 def checkout_wt(sha, out):

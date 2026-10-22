@@ -524,6 +524,28 @@ class WorktreeSelfHealTest(unittest.TestCase):
             if cmd[:2] == ["git", "checkout"]:
                 self.assertEqual(timeout, _mod.WT_CHECKOUT_TIMEOUT)
 
+    def test_the_rebuild_leaves_the_worktree_marked_as_ours(self):
+        """With LOCAL_CI_WT set the sentinel is the only thing that says the
+        directory is the runner's: without it a later stall can never heal."""
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        os.mkdir(wt)
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(wt, exist_ok=True)  # git creates the worktree
+            return 0, ""
+        saved = (_mod.sh, _mod.WT)
+        _mod.sh = fake_sh
+        _mod.WT = wt
+        try:
+            self.assertTrue(_mod._wt_rebuild(self.SHA, io.StringIO()))
+            sentinel = os.path.join(wt, ".local-ci-worktree")
+            self.assertTrue(os.path.exists(sentinel))
+            self.assertEqual(open(sentinel).read().strip(), self.SHA)
+        finally:
+            _mod.sh, _mod.WT = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
 class ReviewCoverageShallowTest(unittest.TestCase):
     """DIG-4389: a shallow clone must never yield a false-green promotion gate.
 
