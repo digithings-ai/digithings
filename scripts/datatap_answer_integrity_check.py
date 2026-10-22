@@ -37,6 +37,11 @@ without the identity the check was blind for most of every 24h window. The value
 never logged, never printed, and never written to disk by this script; it is read in
 ``build_headers`` and put straight onto the wire. Unset means no header is sent.
 
+Two more environment variables are read, and neither holds a secret:
+``ANSWER_CHECK_DISCOVERY_URL`` and ``ANSWER_CHECK_EMBED_HOST`` name the page to
+read and the host to present, and they apply only when the command line names
+no target.
+
 It goes to the embed host DataTap's own page names, and redirects are refused
 outright (``_RefuseRedirects``) so that a 3xx cannot carry it to some other host
 on top of that. The host itself is *not* validated — ``discover_embed_target``
@@ -70,6 +75,8 @@ Usage
 
     make datatap-answer-check
     python3 scripts/datatap_answer_integrity_check.py --timeout 45
+    python3 scripts/datatap_answer_integrity_check.py \
+        --discovery-url https://digithings.ai/chat --embed-host digithings.ai
 """
 
 from __future__ import annotations
@@ -124,13 +131,20 @@ OK = 0
 FAIL = 1
 COULD_NOT_RUN = 2
 
+# The default target. It stays the default until the clock that still fires
+# against it is retired (DIG-4435).
 DISCOVERY_URL = "https://datatap.stream/chat"
 EMBED_HOST = "datatap.stream"
 
-# The one environment variable this script reads, and the only secret it is
-# allowed to read. It is our sanctioned internal-monitor identity, presented to
-# our own embed gate so the hourly check is not charged for the turns it needs
-# to run. digichat matches it against DIGICHAT_MONITOR_TOKENS on
+# Two more environment variables, read only when the command line names no
+# target. They carry a URL and a host name, never a secret.
+DISCOVERY_URL_ENV_VAR = "ANSWER_CHECK_DISCOVERY_URL"
+EMBED_HOST_ENV_VAR = "ANSWER_CHECK_EMBED_HOST"
+
+# The one environment variable this script reads that holds a secret, and the
+# only secret it is allowed to read. It is our sanctioned internal-monitor
+# identity, presented to our own embed gate so the hourly check is not charged
+# for the turns it needs to run. digichat matches it against DIGICHAT_MONITOR_TOKENS on
 # ``x-embed-monitor-token`` — the constant ``EMBED_MONITOR_TOKEN_HEADER`` in
 # ``apps/digichat/src/lib/embed-monitor-token.ts``, compared with
 # ``timingSafeEqual``. The spelling below must match that constant exactly; any
@@ -203,6 +217,25 @@ class EmbedTarget:
         if base.endswith("/embed"):
             base = base[: -len("/embed")]
         return base + "/api/chat"
+
+
+@dataclass(frozen=True)
+class CheckTarget:
+    """The surface this run probes: where to discover, and which host to present."""
+
+    discovery_url: str
+    embed_host: str
+
+
+def resolve_target(discovery_url: str | None, embed_host: str | None) -> CheckTarget:
+    """The target for this run: command line, then environment, then default.
+
+    A blank value on either side counts as unset, so an exported-but-empty
+    variable cannot silently re-point the check.
+    """
+    url = (discovery_url or "").strip() or (os.environ.get(DISCOVERY_URL_ENV_VAR) or "").strip()
+    host = (embed_host or "").strip() or (os.environ.get(EMBED_HOST_ENV_VAR) or "").strip()
+    return CheckTarget(discovery_url=url or DISCOVERY_URL, embed_host=host or EMBED_HOST)
 
 
 def _to_response(status: int, headers, raw: bytes) -> HttpResponse:
@@ -388,12 +421,15 @@ def discover_embed_target(html: str) -> EmbedTarget:
     return EmbedTarget(embed_url=embed.group(1), token=token)
 
 
-def build_headers(token: str) -> dict[str, str]:
+def build_headers(token: str, target: CheckTarget) -> dict[str, str]:
     """The exact header set verified live against DataTap (spec 3.2).
 
     Dropping ``X-Embed-Host`` yields 401; losing ``Referer`` or ``Origin`` yields
     503. Neither is obvious from the answer alone, so the set is pinned by a test
     that asserts dict equality rather than by inspection here.
+
+    The host and the origin follow the target, not a hardcoded name, and the
+    referer is the page the target was discovered on.
 
     The monitor identity is appended only when ``MONITOR_TOKEN_ENV_VAR`` holds a
     non-empty value. Unset is not the same as empty on the server side, so an
@@ -413,10 +449,10 @@ def build_headers(token: str) -> dict[str, str]:
     headers = {
         "content-type": "application/json",
         "accept": "text/event-stream",
-        "X-Embed-Host": EMBED_HOST,
+        "X-Embed-Host": target.embed_host,
         "X-Embed-Token": token,
-        "Referer": DISCOVERY_URL,
-        "Origin": f"https://{EMBED_HOST}",
+        "Referer": target.discovery_url,
+        "Origin": f"https://{target.embed_host}",
     }
     monitor_token = (os.environ.get(MONITOR_TOKEN_ENV_VAR) or "").strip()
     if not monitor_token:
@@ -1169,7 +1205,8 @@ def _status_reason(name: str, response: HttpResponse) -> str:
 def run_probe(
     name: str,
     text: str,
-    target: EmbedTarget,
+    embed_target: EmbedTarget,
+    target: CheckTarget,
     *,
     timeout: float = TIMEOUT_SECONDS,
 ) -> str:
@@ -1181,8 +1218,8 @@ def run_probe(
     """
     response = http_request(
         "POST",
-        target.api_chat_url,
-        headers=build_headers(target.token),
+        embed_target.api_chat_url,
+        headers=build_headers(embed_target.token, target),
         body=json.dumps(build_payload(text)).encode("utf-8"),
         timeout=timeout,
     )
@@ -1234,12 +1271,28 @@ def _check(argv: list[str] | None = None) -> int:
         default=TIMEOUT_SECONDS,
         help=f"seconds per request (default {TIMEOUT_SECONDS:.0f})",
     )
+    parser.add_argument(
+        "--discovery-url",
+        default=None,
+        help=f"the https page to read (default: ${DISCOVERY_URL_ENV_VAR}, else datatap.stream)",
+    )
+    parser.add_argument(
+        "--embed-host",
+        default=None,
+        help=f"the host sent as X-Embed-Host and Origin (default: ${EMBED_HOST_ENV_VAR})",
+    )
     args = parser.parse_args(argv)
     timeout = args.timeout
+    target = resolve_target(args.discovery_url, args.embed_host)
 
-    print(f"DataTap answer integrity check (read-only) — discovering {DISCOVERY_URL}")
+    # A plaintext target would carry the embed token in clear, so it is refused
+    # the way a missing target is refused: exit 2, and no request is made at all.
+    if not target.discovery_url.startswith("https://"):
+        return _could_not_run("the discovery URL is not an https URL")
+
+    print(f"DataTap answer integrity check (read-only) — discovering {target.discovery_url}")
     try:
-        discovery = http_request("GET", DISCOVERY_URL, timeout=DISCOVERY_TIMEOUT_SECONDS)
+        discovery = http_request("GET", target.discovery_url, timeout=DISCOVERY_TIMEOUT_SECONDS)
         if discovery.status != 200:
             reason = f"the public /chat page came back HTTP {discovery.status}"
             if 300 <= discovery.status < 400:
@@ -1249,13 +1302,13 @@ def _check(argv: list[str] | None = None) -> int:
                 # deliberate policy as a broken client page.
                 reason += ", a redirect we refused to follow on purpose"
             raise ProbeError(reason)
-        target = discover_embed_target(discovery.body)
+        embed_target = discover_embed_target(discovery.body)
     except ProbeError as exc:
         return _could_not_run(exc.reason)
     except Exception as exc:  # DNS, TLS, timeout — all mean we cannot see
         return _could_not_run(f"discovery raised {type(exc).__name__}: {exc}")
 
-    print(f"embed target: {target.embed_url}")
+    print(f"embed target: {embed_target.embed_url}")
 
     # Each answer is printed the moment it arrives, and each is scanned before
     # the next probe is sent. A finding is a fact about an answer we did receive
@@ -1268,7 +1321,7 @@ def _check(argv: list[str] | None = None) -> int:
     could_not_run: str | None = None
     for name, text in PROBES:
         try:
-            answer = run_probe(name, text, target, timeout=timeout)
+            answer = run_probe(name, text, embed_target, target, timeout=timeout)
         except ProbeError as exc:
             could_not_run = exc.reason
             break

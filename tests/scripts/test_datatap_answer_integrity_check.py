@@ -1224,6 +1224,10 @@ def test_the_check_reads_no_credential_from_the_environment() -> None:
     # "The check does read one real secret, from one place"). The probe path
     # still takes its token from DataTap's own public page, so every env read
     # must name that one variable and no other.
+    #
+    # Widened by DIG-718: the target became an input, so the check reads two
+    # more variables — a page URL and a host name. They are named here so the
+    # allowlist stays closed: a fourth env read is still a red test.
     import ast as _ast
 
     source = SCRIPT.read_text(encoding="utf-8")
@@ -1236,7 +1240,11 @@ def test_the_check_reads_no_credential_from_the_environment() -> None:
                 reads.update(_ast.unparse(a) for a in node.args)
             elif isinstance(f, _ast.Name) and f.id == "getenv":
                 reads.update(_ast.unparse(a) for a in node.args)
-    assert reads <= {"MONITOR_TOKEN_ENV_VAR"}, f"env reads beyond the monitor token: {reads}"
+    assert reads <= {
+        "MONITOR_TOKEN_ENV_VAR",
+        "DISCOVERY_URL_ENV_VAR",
+        "EMBED_HOST_ENV_VAR",
+    }, f"env reads beyond the three named variables: {reads}"
     assert "dotenv" not in source
 
 
