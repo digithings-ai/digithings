@@ -152,8 +152,13 @@ without editing it: `LOCAL_CI_MAIN` (the checkout the checks run against) and
 `install.sh` writes the launchd plist for a checkout and starts it:
 
 ```
-scripts/local-ci/install.sh ~/Code/digithings
+scripts/local-ci/install.sh --self-update ~/Code/digithings-ci
 ```
+
+The checkout is the runner's own: the daemon runs the code in it and checks
+the pull requests against it. A dedicated clone on `develop` is the checkout to
+point it at - not a working tree, not a linked worktree (see "The producer"
+below).
 
 `--dry-run` prints the rendered plist and touches nothing: no write, no bootout.
 
@@ -166,26 +171,45 @@ seat's shell, and not from a linked worktree of somebody's checkout:
 
 ```
 git clone --branch develop git@github.com:digithings-ai/digithings.git ~/Code/digithings-ci
-scripts/local-ci/install.sh ~/Code/digithings-ci
+scripts/local-ci/install.sh --self-update ~/Code/digithings-ci
 ```
 
 `install.sh` refuses a linked worktree (`.git` is a file) unless
 `--allow-worktree` is passed: a linked worktree is a checkout somebody else
 works in, and a daemon that moved it would move their work with it.
 
-The daemon keeps that clone on `origin/develop` by itself. The refresh
-fast-forwards the checkout and does nothing else: it never touches a linked
-worktree, it only ever moves the `develop` branch, and it leaves the checkout
-alone when the update would not be a fast-forward (a local commit, or dirty
-files the incoming commits touch). A daemon running an old commit produces old
-receipts, so the runner refreshes the code that posts them.
+`--self-update` is the operator's word that the runner may keep that checkout
+on `origin/develop` by itself. It is refused for a working tree and for a
+linked worktree. The install records the word in
+`~/.config/digithings/state/local-ci-runner.json`:
+
+```json
+{"main": "/Users/<you>/Code/digithings-ci", "self_update": true}
+```
+
+Without that mark the runner never moves the checkout: `LOCAL_CI_MAIN`
+defaults to a plain working tree, and a runner that fast-forwards somebody's
+working tree moves their files with it. The mark is written by `install.sh`,
+with `self_update` true only for a real clone on `develop`.
+
+The refresh fast-forwards the checkout and does nothing else: it never touches
+a linked worktree, it only ever moves the `develop` branch of the marked
+checkout, and it leaves the checkout alone when the update would not be a
+fast-forward (a local commit, or dirty files the incoming commits touch). The
+incoming commit is checked before the switch: the runner it carries must
+compile and it must still carry the launch guard, because the next tick
+executes whatever landed on `develop` and a broken runner would stop the only
+pre-merge producer. A daemon running an old commit produces old receipts, so
+the runner refreshes the code that posts them.
 
 The seat-shaped install (`install.sh --allow-worktree`) is a temporary measure
 for the window in which the daemon is not running. It does produce receipts,
 but it depends on a seat's timing and it leaves the queue to whoever acts: it
 is not a receipt policy. It does not refresh either, because a linked
-worktree is never refreshed: the runner keeps posting receipts from the
-commit it was installed on, and the log says so on every attempt.
+worktree is never refreshed and the mark it gets says so: the runner keeps
+posting receipts from the commit it was installed on, and the log says so. A
+refusal of that kind is structural, so the log line repeats at most once every
+fifteen minutes.
 
 Two things keep a receipt from being lost when a run dies (DIG-5135):
 
@@ -196,14 +220,24 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   A holder that is alive keeps its head: an old `pending` row never takes a
   running head away, and a head whose claim is held is neither queued nor
   skipped, and its claim is released by the run that took it, not by the
-  queue. A `pending` row with no ledger entry - posted by a runner that
-  predates the ledger, or by the CI container, which keeps its own state
-  directory - is given an hour before it is treated as lost.
+  queue. Two things do take a live claim away, and both are the sign that the
+  run is no longer the run the queue waits for: a claim held for longer than
+  the life of the tick lock, and a pid the kernel has handed to another
+  process since the claim was written. A `pending` row with no ledger entry -
+  posted by a runner that predates the ledger, or by the CI container, which
+  keeps its own state directory - is given two hours before it is treated as
+  lost, which is longer than the longest gate run, so a container that is
+  still gating a head is not overtaken while it works.
 - **the fair order**: the queue is by arrival, oldest first, so the pull
   request that arrived first is served first. It used to be newest first,
   which meant a PR that arrived early waited behind every later arrival and
   could wait for days for a required check. The order is by arrival and not by
   last activity: a PR that is commented on is not pushed back to the end.
+- **a row that says the post failed is not a verdict**: a head whose only row
+  says `error` carries no receipt, so it is queued again and its claim is
+  released. The `local-ci/app` row is a second context, not the required
+  check: a refused app row is logged and the head keeps the receipt it
+  earned on `local-ci`.
 
 ## Invariants this script is built around
 
@@ -216,7 +250,13 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   so a PR that arrived early is not overtaken by every later arrival
   (DIG-5135).
 - **A running head is not taken away.** A claim held by a living run is left
-  alone, whatever age its `pending` row carries (DIG-5135).
+  alone, whatever age its `pending` row carries, unless the claim has outlived
+  the life of the tick lock or its pid now belongs to another process
+  (DIG-5135).
+- **The runner only moves the checkout it was given.** The refresh
+  fast-forwards the checkout that `install.sh` marked as the runner's own, and
+  only that one; it never touches a working tree that belongs to somebody
+  else, and it checks the incoming runner before it switches (DIG-5135).
 - **Fork code never executes here.** Fork PRs get a `failure` naming the re-push
   path a maintainer must use.
 - **Fails closed on a missing input.** If the review record or the PR body cannot

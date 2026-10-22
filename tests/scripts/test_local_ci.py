@@ -40,6 +40,34 @@ sys.modules["local_ci"] = _mod
 _spec.loader.exec_module(_mod)
 
 
+class _Clock:
+    """`time` with a `time()` that runs ahead of the wall clock.
+
+    The ageing rules ask how long something has been held. Moving the clock
+    answers that without backdating a record, which would also change what
+    the record says about the process that wrote it.
+    """
+
+    def __init__(self, now):
+        self._now = now
+
+    def time(self):
+        return self._now
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
+class _NoReplace:
+    """`os` without `os.replace`, to show what an atomic write buys."""
+
+    def __getattr__(self, name):
+        return getattr(os, name)
+
+    def replace(self, *a, **k):
+        raise OSError("the move into place did not happen")
+
+
 class _AllowedGuard:
     """The launch guard, stubbed to allow the run (DIG-4796).
 
@@ -468,6 +496,91 @@ class ReviewCoverageShallowTest(unittest.TestCase):
         self.assertIn("origin/main", cmd)
         self.assertIn(self.SHA, cmd)
         self.assertNotIn("--commits-json", cmd)
+
+
+class InstallMarkerTest(unittest.TestCase):
+    """install.sh names the checkout the runner may keep current (DIG-5135).
+
+    The runner may only move a checkout the operator marked as its own, so
+    the install is what writes the marker. A linked worktree is installed
+    with the update turned off: that checkout is somebody else's.
+    """
+
+    def _sandbox(self):
+        tmp = tempfile.mkdtemp(prefix="install-marker-")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        home = os.path.join(tmp, "home")
+        os.makedirs(home)
+        bindir = os.path.join(tmp, "bin")
+        os.makedirs(bindir)
+        stub = os.path.join(bindir, "launchctl")
+        with open(stub, "w") as f:
+            f.write("#!/bin/sh\nexit 0\n")
+        os.chmod(stub, 0o755)
+        env = dict(os.environ, HOME=home,
+                   PATH=bindir + os.pathsep + os.environ.get("PATH", ""))
+        return tmp, home, env
+
+    def _clone(self, tmp, env):
+        """A real clone on develop, with the runner in it."""
+        checkout = os.path.join(tmp, "checkout")
+        os.makedirs(checkout)
+        subprocess.check_call(["git", "init", "-q", "-b", "develop", checkout])
+        git_env = dict(env, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com",
+                       GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
+        subprocess.check_call(["git", "-C", checkout, "commit", "-q", "--allow-empty",
+                               "-m", "x"], env=git_env)
+        os.makedirs(os.path.join(checkout, "scripts", "local-ci"))
+        shutil.copy(os.path.join(_SCRIPTS, "local_ci.py"),
+                    os.path.join(checkout, "scripts", "local-ci", "local_ci.py"))
+        return checkout
+
+    def _marker(self, home):
+        path = os.path.join(home, ".config/digithings/state/local-ci-runner.json")
+        with open(path) as f:
+            return json.load(f)
+
+    def test_the_install_marks_the_checkout_as_the_runners_own(self):
+        """The operator's word is what allows the runner to move a checkout."""
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"),
+                              "--self-update", checkout], env=env)
+        self.assertEqual(rc, 0, "the install must succeed")
+        marker = self._marker(home)
+        self.assertEqual(marker.get("main"), checkout,
+                         "the marker must name the checkout the runner was installed from")
+        self.assertTrue(marker.get("self_update"),
+                        "a clone on develop may be kept current by the runner")
+
+    def test_a_clone_without_the_word_is_never_moved_by_the_runner(self):
+        """Without --self-update the runner keeps the commit it was installed on."""
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout], env=env)
+        self.assertEqual(rc, 0, "the install must succeed")
+        marker = self._marker(home)
+        self.assertEqual(marker.get("main"), checkout,
+                         "the marker must still name the checkout")
+        self.assertFalse(marker.get("self_update"),
+                         "the runner may only move a checkout the operator marked")
+
+    def test_a_linked_worktree_is_installed_with_the_update_turned_off(self):
+        """A linked worktree is somebody else's checkout: the runner may not move it."""
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        linked = os.path.join(tmp, "linked")
+        subprocess.check_call(["git", "-C", checkout, "worktree", "add", "-q",
+                               "--detach", linked], env=env)
+        os.makedirs(os.path.join(linked, "scripts", "local-ci"))
+        shutil.copy(os.path.join(_SCRIPTS, "local_ci.py"),
+                    os.path.join(linked, "scripts", "local-ci", "local_ci.py"))
+        rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"),
+                              "--self-update", "--allow-worktree", linked], env=env)
+        self.assertEqual(rc, 0, "the install must succeed")
+        marker = self._marker(home)
+        self.assertFalse(marker.get("self_update"),
+                         "a linked worktree must never be moved by the runner")
 
 
 if __name__ == "__main__":
@@ -1483,6 +1596,7 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         self._logd = _mod.LOGD
         self._gh = _mod.gh
         self._status = _mod.status
+        self._app_status = _mod.app_status
         self._prepare_wt = _mod.prepare_wt
         self._run_checks = _mod.run_checks
         _mod.CLAIMS = os.path.join(self._tmp, "claims")
@@ -1497,6 +1611,7 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         _mod.LOGD = self._logd
         _mod.gh = self._gh
         _mod.status = self._status
+        _mod.app_status = self._app_status
         _mod.prepare_wt = self._prepare_wt
         _mod.run_checks = self._run_checks
         self._unisolate()
@@ -1528,6 +1643,18 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         p = subprocess.Popen([sys.executable, "-c", "pass"])
         p.wait()
         return p.pid
+
+    def _clock(self, offset):
+        """Run the module's clock `offset` seconds ahead of the wall clock.
+
+        The ageing rules are about how long a claim has been held, and a
+        claim that is backdated names a pid the kernel has handed on - a
+        different rule. Moving the clock keeps the two apart.
+        """
+        shim = _Clock(time.time() + offset)
+        _mod.time = shim
+        self.addCleanup(setattr, _mod, "time", time)
+        return shim
 
     def _write_claim(self, sha, pid, pr=6252, started=None):
         os.makedirs(_mod.CLAIMS, exist_ok=True)
@@ -1661,11 +1788,17 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
                          "a head whose claim is held by a living run is not queued")
 
     def test_a_claim_older_than_the_lock_life_is_lost(self):
-        """A claim held past the tick lock's life names a run nobody waits for."""
+        """A claim held past the tick lock's life names a run nobody waits for.
+
+        The clock runs ahead instead of the claim being backdated: a claim
+        written in the past names a pid the kernel has handed on, which is a
+        different rule. Only the age of the claim itself can make this head
+        lose its place.
+        """
         pr = self._pr()
         self.rows[pr["headRefOid"]] = [self._row("pending", "local-ci running on Chris's Mac")]
-        self._write_claim(pr["headRefOid"], os.getpid(),
-                          started=time.time() - _mod.CLAIM_MAX_SECS - 60)
+        self._write_claim(pr["headRefOid"], os.getpid(), started=time.time())
+        self._clock(_mod.CLAIM_MAX_SECS + 60)
         self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
                          "a claim past the lock's life is lost")
 
@@ -1683,6 +1816,37 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         finally:
             p.kill()
             p.wait()
+
+    def test_the_pid_check_asks_the_system_ps_and_not_the_one_on_the_path(self):
+        """A `ps` that somebody put first on the PATH must not decide whose run this is.
+
+        launch_guard.py answers the same question the same way, for the same
+        reason: a wrong answer there lets a hand-run post a receipt, and a
+        wrong answer here lets a fake `ps` hold a head or release one.
+        """
+        seen = []
+        real_run = _mod.subprocess.run
+
+        def fake_run(cmd, *a, **kw):
+            seen.append(list(cmd))
+            return real_run(cmd, *a, **kw)
+
+        pr = self._pr()
+        p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        try:
+            time.sleep(1.2)
+            self._write_claim(pr["headRefOid"], p.pid, started=time.time() - 600)
+            _mod.subprocess.run = fake_run
+            try:
+                _mod.holder_is_the_run(pr["headRefOid"], p.pid)
+            finally:
+                _mod.subprocess.run = real_run
+        finally:
+            p.kill()
+            p.wait()
+        self.assertTrue(seen, "the pid check must ask the process table")
+        self.assertEqual(seen[0][0], "/bin/ps",
+                         "the pid check must use the system ps, not the one on the PATH")
 
     def test_a_terminal_verdict_does_not_release_a_live_claim(self):
         """The queue is not the owner of the claim and must not release it."""
@@ -1738,6 +1902,70 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         self.assertFalse(os.path.exists(path),
                          "a claim nobody can read and that nothing touched for a day is dropped")
 
+    def test_prune_claims_keeps_a_file_that_is_not_a_claim(self):
+        """Only a claim file is the ledger's to drop."""
+        os.makedirs(_mod.CLAIMS, exist_ok=True)
+        path = os.path.join(_mod.CLAIMS, "notes.txt")
+        with open(path, "w") as f:
+            f.write("not a claim\n")
+        old = time.time() - 90000
+        os.utime(path, (old, old))
+        _mod.prune_claims()
+        self.assertTrue(os.path.exists(path),
+                        "a file that is not a claim is not the ledger's to drop")
+
+    def test_a_claim_named_for_something_that_is_not_a_sha_is_refused(self):
+        """A name that is not a head sha would write outside the ledger."""
+        self.assertIsNone(_mod.claim_path("not-a-sha"),
+                          "a name that is not a sha has no place in the ledger")
+        _mod.write_claim("not-a-sha", 6252)
+        self.assertEqual(os.listdir(_mod.CLAIMS) if os.path.isdir(_mod.CLAIMS) else [],
+                         [], "a claim for a name that is not a sha must not be written")
+
+    def test_a_claim_that_cannot_be_moved_into_place_leaves_no_claim(self):
+        """The claim is written to a temporary name and moved into place.
+
+        A write that is cut in half leaves a claim file nobody can read, and
+        the head then waits for the stale window instead of being recovered.
+        """
+        sha = self._pr()["headRefOid"]
+        _mod.os = _NoReplace()
+        self.addCleanup(setattr, _mod, "os", os)
+        _mod.write_claim(sha, 6252)
+        self.assertFalse(os.path.exists(os.path.join(_mod.CLAIMS, sha)),
+                         "a claim that could not be moved into place must not exist")
+        self.assertEqual([n for n in os.listdir(_mod.CLAIMS) if n.endswith(".tmp")], [],
+                         "a failed claim write must not leave a temporary file behind")
+
+    def test_a_refused_app_row_does_not_hold_the_head(self):
+        """The app row is a second context; the required check is the repo row."""
+        pr = self._pr()
+        _mod.app_status = lambda sha, fields: False
+        self.addCleanup(setattr, _mod, "app_status", self._app_status)
+        self.assertTrue(_mod.status(pr["headRefOid"], "success", "all gates passed"),
+                        "a refused app row must not take the repo row down with it")
+
+    def test_a_refused_app_row_releases_the_claim(self):
+        """The head earned its receipt on the required context: the claim is spent."""
+        pr = self._pr()
+        _mod.app_status = lambda sha, fields: False
+        self.addCleanup(setattr, _mod, "app_status", self._app_status)
+        _mod.prepare_wt = lambda n, sha, base, out: (True, "")
+        _mod.run_checks = lambda pr, out: []
+        _mod.process(pr, False)
+        self.assertFalse(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
+                         "a refused app row must not keep a head in the queue for ever")
+
+    def test_a_row_that_says_the_post_failed_is_queued_again(self):
+        """An `error` row is not a verdict: the head is owed its receipt."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("error", "could not post the row")]
+        self._write_claim(pr["headRefOid"], self._dead_pid())
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a row that says the post failed must be queued again")
+        self.assertFalse(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
+                         "the claim of a head whose row failed is spent")
+
     # --- the order ----------------------------------------------------------
 
     def test_the_queue_is_ordered_by_arrival_and_not_by_last_activity(self):
@@ -1762,16 +1990,20 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
         self._isolate()
         self._main = _mod.MAIN
         self._refresh_state = _mod.REFRESH_STATE
+        self._runner_marker = _mod.RUNNER_MARKER
         self._sh = _mod.sh
         _mod.MAIN = os.path.join(self._tmp, "main")
         _mod.REFRESH_STATE = os.path.join(self._tmp, "state", "refresh")
+        _mod.RUNNER_MARKER = os.path.join(self._tmp, "state", "runner.json")
         self.cmds = []
+        self.timeouts = []
         self.results = {}
         _mod.sh = self._fake_sh
 
     def tearDown(self):
         _mod.MAIN = self._main
         _mod.REFRESH_STATE = self._refresh_state
+        _mod.RUNNER_MARKER = self._runner_marker
         _mod.sh = self._sh
         self._unisolate()
 
@@ -1780,6 +2012,7 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
     def _fake_sh(self, cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
         cmd = list(cmd)
         self.cmds.append(cmd)
+        self.timeouts.append(timeout)
         joined = " ".join(cmd)
         for key, res in self.results.items():
             if key in joined:
@@ -1799,11 +2032,50 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
     def _ran(self, needle):
         return [c for c in self.cmds if needle in " ".join(c)]
 
+    def _mark_runner(self, main=None, self_update=True):
+        """Write the marker install.sh writes: the runner's own checkout."""
+        os.makedirs(os.path.dirname(_mod.RUNNER_MARKER), exist_ok=True)
+        with open(_mod.RUNNER_MARKER, "w") as f:
+            json.dump({"main": main or _mod.MAIN, "self_update": self_update}, f)
+
+    def _runner_source(self, text="def main():\n    pass\n"):
+        return (0, text)
+
     # --- the tests ----------------------------------------------------------
+
+    def test_a_checkout_that_is_not_marked_is_never_touched(self):
+        """The runner moves only the checkout the operator marked as its own.
+
+        `MAIN` may point at somebody's working tree, and the runner has no
+        business moving a working tree.
+        """
+        self._clone()
+        self.results["rev-parse"] = (0, "develop\n")
+        _mod.refresh_checkout()
+        self.assertEqual(self.cmds, [], "a checkout nobody marked must not be touched")
+        self.assertTrue(any("not marked" in line for line in self.log_lines),
+                        "the runner must say that it is running the commit it was installed on")
+
+    def test_a_marker_that_names_another_checkout_is_not_touched(self):
+        """The marker names one checkout: a different one is somebody else's."""
+        self._clone()
+        self._mark_runner(main=os.path.join(self._tmp, "somewhere-else"))
+        self.results["rev-parse"] = (0, "develop\n")
+        _mod.refresh_checkout()
+        self.assertEqual(self.cmds, [], "a checkout the marker does not name must not be touched")
+
+    def test_a_marker_that_forbids_the_update_is_not_touched(self):
+        """A linked worktree is installed with the update turned off."""
+        self._clone()
+        self._mark_runner(self_update=False)
+        self.results["rev-parse"] = (0, "develop\n")
+        _mod.refresh_checkout()
+        self.assertEqual(self.cmds, [], "a checkout the marker forbids is not moved")
 
     def test_a_linked_worktree_is_never_refreshed(self):
         """That is somebody else's checkout: it is not ours to move."""
         self._linked_worktree()
+        self._mark_runner()
         _mod.refresh_checkout()
         self.assertEqual(self.cmds, [], "a linked worktree must not be touched at all")
         self.assertTrue(any("not a clone" in line for line in self.log_lines),
@@ -1812,6 +2084,7 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
     def test_a_checkout_that_is_not_on_develop_is_left_alone(self):
         """The refresh only ever moves the develop branch."""
         self._clone()
+        self._mark_runner()
         self.results["rev-parse"] = (0, "feature-x\n")
         _mod.refresh_checkout()
         self.assertEqual(self._ran("fetch"), [], "a checkout on another branch is not fetched")
@@ -1821,7 +2094,9 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
     def test_a_clone_on_develop_is_fast_forwarded(self):
         """The checkout is brought to origin/develop, and the window is recorded."""
         self._clone()
+        self._mark_runner()
         self.results["rev-parse"] = (0, "develop\n")
+        self.results["show"] = self._runner_source()
         _mod.refresh_checkout()
         self.assertEqual(len(self._ran("fetch")), 1, "the clone must be fetched")
         self.assertEqual(len(self._ran("merge")), 1, "the clone must be fast-forwarded")
@@ -1831,7 +2106,9 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
     def test_a_checkout_that_does_not_fast_forward_is_left_alone(self):
         """A local commit or an overlapping dirty file: the checkout stays."""
         self._clone()
+        self._mark_runner()
         self.results["rev-parse"] = (0, "develop\n")
+        self.results["show"] = self._runner_source()
         self.results["merge"] = (1, "not possible\n")
         _mod.refresh_checkout()
         self.assertEqual(len(self._ran("merge")), 1, "the merge must be tried")
@@ -1841,9 +2118,43 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
     def test_a_fetch_that_fails_leaves_the_checkout_alone(self):
         """No network, no update: the runner keeps the checkout it has."""
         self._clone()
+        self._mark_runner()
         self.results["rev-parse"] = (0, "develop\n")
         self.results["fetch"] = (1, "could not resolve host\n")
         _mod.refresh_checkout()
         self.assertEqual(self._ran("merge"), [], "a failed fetch must not merge anything")
         self.assertFalse(os.path.exists(_mod.REFRESH_STATE),
                          "a failed fetch must not consume the window")
+
+    def test_an_incoming_runner_that_does_not_compile_is_not_merged(self):
+        """The runner is the only producer of the receipt: it may not be broken."""
+        self._clone()
+        self._mark_runner()
+        self.results["rev-parse"] = (0, "develop\n")
+        self.results["show"] = (0, "def main(:\n    pass\n")
+        _mod.refresh_checkout()
+        self.assertEqual(self._ran("merge"), [], "a runner that does not compile is not merged in")
+        self.assertFalse(os.path.exists(_mod.REFRESH_STATE),
+                         "a refused update must not consume the window")
+
+    def test_an_incoming_commit_without_a_launch_guard_is_not_merged(self):
+        """Without the guard the next tick would post receipts unchallenged."""
+        self._clone()
+        self._mark_runner()
+        self.results["rev-parse"] = (0, "develop\n")
+        self.results["show"] = self._runner_source()
+        self.results["cat-file"] = (1, "not found\n")
+        _mod.refresh_checkout()
+        self.assertEqual(self._ran("merge"), [], "a commit without a guard is not merged in")
+
+    def test_the_refresh_git_commands_are_bounded(self):
+        """A hung fetch must not hold the tick lock for half an hour."""
+        self._clone()
+        self._mark_runner()
+        self.results["rev-parse"] = (0, "develop\n")
+        self.results["show"] = self._runner_source()
+        _mod.refresh_checkout()
+        for cmd, timeout in zip(self.cmds, self.timeouts):
+            if "fetch" in " ".join(cmd) or "merge" in " ".join(cmd):
+                self.assertLessEqual(timeout, 600,
+                                     "the refresh's git commands must not wait for ever")

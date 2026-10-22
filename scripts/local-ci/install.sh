@@ -3,9 +3,14 @@
 #
 #   scripts/local-ci/install.sh --dry-run          # print the plist, change nothing
 #   scripts/local-ci/install.sh ~/Code/digithings  # write it and start the job
+#   scripts/local-ci/install.sh --self-update ~/Code/digithings-ci
 #
 # The checkout given here becomes both the runner's location and LOCAL_CI_MAIN, the
 # tree the checks run against. Pass a dedicated clone on develop, not the working tree.
+#
+# --self-update says that the runner may keep that checkout on origin/develop by
+# itself. It is refused unless the checkout is a real clone on develop: a working
+# tree belongs to a person, and the runner must not move it (DIG-5135).
 #
 # The install is staged: the new plist is rendered and linted before the live job is
 # touched, the previous plist is kept, and a failed bootstrap puts it back. A gate that
@@ -18,10 +23,12 @@ LABEL=ai.digithings.local-ci
 CHECKOUT=""
 DRY=0
 ALLOW_WT=0
+SELF_UPDATE_OPT=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY=1 ;;
     --allow-worktree) ALLOW_WT=1 ;;
+    --self-update) SELF_UPDATE_OPT=1 ;;
     -*) echo "install.sh: unknown option: $arg" >&2; exit 2 ;;
     *) CHECKOUT="$arg" ;;
   esac
@@ -69,9 +76,25 @@ if [ -f "$DEST" ]; then
   echo "install.sh: previous plist saved as $BACKUP"
 fi
 mv "$DEST.staged" "$DEST"
+# The runner may only keep its own checkout current when this install named that
+# checkout as the runner's own. That is the operator's call (--self-update) and
+# it is refused for a working tree and for a linked worktree: a linked worktree
+# is a checkout somebody else works in, and a working tree is somebody's work
+# (DIG-5135).
+MARKER="$HOME/.config/digithings/state/local-ci-runner.json"
+mkdir -p "$HOME/.config/digithings/state"
+SELF_UPDATE=false
+if [ "$SELF_UPDATE_OPT" = 1 ] && [ -d "$CHECKOUT/.git" ] && [ "$BRANCH" = "develop" ]; then
+  SELF_UPDATE=true
+elif [ "$SELF_UPDATE_OPT" = 1 ]; then
+  echo "install.sh: --self-update needs a real clone on develop; $CHECKOUT is not one" >&2
+fi
+printf '{"main": "%s", "self_update": %s}\n' "$CHECKOUT" "$SELF_UPDATE" > "$MARKER.staged"
+mv "$MARKER.staged" "$MARKER"
 launchctl bootout "gui/$(id -u)" "$DEST" 2>/dev/null || true
 if ! launchctl bootstrap "gui/$(id -u)" "$DEST"; then
   echo "install.sh: bootstrap failed; restoring the previous job" >&2
+  rm -f "$MARKER"
   if [ -f "$BACKUP" ]; then
     cp "$BACKUP" "$DEST"
     launchctl bootstrap "gui/$(id -u)" "$DEST" \
@@ -82,4 +105,5 @@ if ! launchctl bootstrap "gui/$(id -u)" "$DEST"; then
   exit 1
 fi
 echo "install.sh: installed $LABEL from $CHECKOUT"
+echo "install.sh: the runner may update this checkout by itself: $SELF_UPDATE"
 echo "install.sh: note - this installs the runner only; dt-daemon-liveness (digiforge) keeps it loaded"

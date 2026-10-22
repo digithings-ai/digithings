@@ -78,19 +78,26 @@ PAUSE = f"{HOME}/.config/digithings/state/worktree-pause"
 CLAIMS = f"{HOME}/.config/digithings/state/local-ci-claims"
 # A `pending` row with no ledger entry - posted by a runner that predates the
 # ledger, or by the CI container, which keeps its own state directory - is given
-# this long before it is treated as lost.
-CLAIM_STALE_SECS = 3600
+# this long before it is treated as lost. The window is longer than the longest
+# gate budget the runner can spend on one head (npm ci 1800 s, uv sync 1800 s,
+# eight worker dry-runs of 300 s each), so a run that is still gating is never
+# taken away by the host.
+CLAIM_STALE_SECS = 7200
 # A claim held for longer than this is void: the tick lock is honoured for two
 # hours and then taken over, so a claim that outlives the lock names a run
 # that is no longer the run the queue is waiting for. A run that legitimately
 # takes longer than this is hung, and a hung run owes the head a receipt.
-CLAIM_MAX_SECS = 7200
+CLAIM_MAX_SECS = 14400
 # The runner keeps its own checkout on origin/develop (DIG-5135). The refresh
 # is throttled so a tick every three minutes does not fetch every three
 # minutes, and it is never applied to a linked worktree: that is somebody
 # else's checkout.
 REFRESH_STATE = f"{HOME}/.config/digithings/state/local-ci-refresh"
 REFRESH_MIN_SECS = 900
+# What install.sh writes when it installs the runner: the checkout the runner
+# may keep current, and whether the runner may move it at all. Without this
+# marker the runner never moves a checkout (DIG-5135).
+RUNNER_MARKER = f"{HOME}/.config/digithings/state/local-ci-runner.json"
 CTX = "local-ci"; MAX_PER_TICK = 2; MIN_AVAIL_MB = 2048; MIN_FREE_PCT = 20.0
 # The app's own status row, posted with the app's installation token (DIG-4809).
 # The pipeline mints the token before the worker starts and writes it to this
@@ -463,12 +470,12 @@ def status(sha, state, desc, app=True):
             log_soft(f"local-ci status: {state} was refused, {APP_CTX} not posted")
         return False
     if app:
+        # The app row is a second context, not the required check. A refused app
+        # row is logged and the head keeps the receipt it earned on `local-ci`:
+        # a head must not stay in the queue for ever because a second context
+        # refused its row. The app row is the app's own business (DIG-4809).
         if app_status(sha, fields) is False:
-            # The app row was refused, so the head is not receipted on both
-            # contexts. The caller keeps the claim and the queue gives the head
-            # its receipt again instead of waiting for a row that never came.
             log_soft(f"local-ci status: {state} is in, {APP_CTX} was refused")
-            return False
     return True
 
 
@@ -1030,7 +1037,10 @@ def holder_is_the_run(sha, pid):
     if not isinstance(started, (int, float)) or not pid:
         return True
     try:
-        out = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)],
+        # /bin/ps and not the one on the PATH: launch_guard.py answers the same
+        # question the same way, because a `ps` that somebody put first on the
+        # PATH must not decide whose run this is.
+        out = subprocess.run(["/bin/ps", "-o", "lstart=", "-p", str(pid)],
                              capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.SubprocessError):
         return True
@@ -1116,12 +1126,18 @@ def claim_is_lost(sha, created_at):
 
 
 def prune_claims():
-    """Drop ledger entries nobody holds any more and that nothing touched for a day."""
+    """Drop ledger entries nobody holds any more and that nothing touched for a day.
+
+    Only a claim file is dropped: a name that is not a head sha is somebody
+    else's file that happens to sit in the same directory.
+    """
     try:
         names = os.listdir(CLAIMS)
     except OSError:
         return
     for name in names:
+        if not re.fullmatch(r"[0-9a-f]{40}", name):
+            continue
         path = os.path.join(CLAIMS, name)
         try:
             if time.time() - os.path.getmtime(path) < 86400:
@@ -1149,6 +1165,47 @@ def _touch_refresh_state():
         pass
 
 
+def runner_marker():
+    """What the operator marked as the runner's own checkout, or None.
+
+    The marker is written by scripts/local-ci/install.sh. It names the checkout
+    the runner may keep current and says whether the runner may move it at all.
+    A checkout nobody marked is never moved: `MAIN` may point at somebody's
+    working tree, and the runner has no business moving a working tree.
+    """
+    try:
+        with open(RUNNER_MARKER) as f:
+            data = json.loads(f.read() or "{}")
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _incoming_runner_is_sane():
+    """True when the commit FETCH_HEAD names carries a runner that can run.
+
+    The runner is the code that produces the receipt, so the runner switching
+    its own code is the one switch on this host that can stop the only
+    pre-merge producer. The incoming commit must carry a runner that compiles
+    and the guard that decides who may start it.
+    """
+    rc, out = sh(["git", "-C", MAIN, "show", "FETCH_HEAD:scripts/local-ci/local_ci.py"], timeout=120)
+    if rc != 0 or not out:
+        log("refresh: the incoming commit carries no runner; the checkout is left alone")
+        return False
+    try:
+        compile(out, "local_ci.py", "exec")
+    except (SyntaxError, ValueError) as e:
+        log(f"refresh: the incoming runner does not compile ({e}); the checkout is left alone")
+        return False
+    rc, _out = sh(["git", "-C", MAIN, "cat-file", "-e",
+                   "FETCH_HEAD:scripts/local-ci/launch_guard.py"], timeout=60)
+    if rc != 0:
+        log("refresh: the incoming commit carries no launch guard; the checkout is left alone")
+        return False
+    return True
+
+
 def refresh_checkout():
     """Bring the runner's own checkout to origin/develop, when that is safe.
 
@@ -1156,17 +1213,31 @@ def refresh_checkout():
     old commit produces old receipts: the claim ledger and the fair order only
     reach the daemon once the daemon's checkout carries them (DIG-5135).
 
-    The refresh is deliberately narrow. It never touches a linked worktree -
-    that is somebody else's checkout - and it only ever fast-forwards the
-    `develop` branch of a clone. A checkout on another branch is left alone,
-    a checkout with local commits is left alone, and a checkout whose dirty
-    files the incoming commits touch is left alone.
+    The refresh is deliberately narrow. It moves a checkout only when all of
+    these hold:
+
+    - the operator marked that checkout as the runner's own (install.sh writes
+      the marker), so the runner never moves somebody's working tree;
+    - the checkout is a real clone, never a linked worktree;
+    - the checkout is on `develop`;
+    - the incoming commit carries a runner that compiles and a launch guard;
+    - the checkout fast-forwards cleanly.
+
+    Anything else leaves the checkout exactly as it is, and the runner keeps
+    running the commit it was installed on.
     """
     try:
         age = time.time() - os.path.getmtime(REFRESH_STATE)
     except OSError:
         age = REFRESH_MIN_SECS
     if age < REFRESH_MIN_SECS:
+        return
+    marker = runner_marker() or {}
+    marked = os.path.realpath(str(marker.get("main") or "")) == os.path.realpath(MAIN)
+    if not marked or not marker.get("self_update"):
+        log("refresh: this checkout is not marked as the runner's own; the runner keeps "
+            "the commit it was installed on")
+        _touch_refresh_state()
         return
     if not os.path.isdir(os.path.join(MAIN, ".git")):
         # A linked worktree is not ours to move. The runner keeps running the
@@ -1186,6 +1257,8 @@ def refresh_checkout():
     rc, _out = sh(["git", "-C", MAIN, "fetch", "-q", "origin", "develop"], timeout=600)
     if rc != 0:
         log(f"refresh: fetch failed (rc={rc}); the runner keeps its checkout")
+        return
+    if not _incoming_runner_is_sane():
         return
     rc, _out = sh(["git", "-C", MAIN, "merge", "--ff-only", "--quiet", "FETCH_HEAD"], timeout=600)
     if rc != 0:
@@ -1226,9 +1299,9 @@ def pending(prs, forks):
 
     A head is queued when it carries no `local-ci` row, when its only row is a
     re-checkable skip (DIG-3706), when its row is a gitleaks failure worth one
-    more try, or when its `pending` row belongs to a run that is gone: the
-    claim ledger names the holder, and a holder that is dead means the receipt
-    is owed again.
+    more try, when its row says the post itself failed (`error`), or when its
+    `pending` row belongs to a run that is gone: the claim ledger names the
+    holder, and a holder that is dead means the receipt is owed again.
 
     A head whose claim is held by a living run is left alone: it is not
     queued, not skipped, and its claim is not released. The run that took the
@@ -1250,10 +1323,12 @@ def pending(prs, forks):
             retry = (st == "failure" and (desc or "").startswith("local-ci failed: gitleaks")
                      and not os.path.exists(f"{LOGD}/gitleaks-recheck-{sha}"))
             lost = st == "pending" and claim_is_lost(sha, created)
-            if st in ("success", "failure"):
-                # The verdict is in: the claim is spent.
+            if st in ("success", "failure", "error"):
+                # The verdict is in, or the row says the post itself failed:
+                # the claim is spent either way.
                 clear_claim(sha)
-            if st is None or (desc or "").startswith(SKIP_PREFIX) or retry or lost:
+            if (st is None or st == "error" or (desc or "").startswith(SKIP_PREFIX)
+                    or retry or lost):
                 out.append(p)
     out.sort(key=lambda p: (p.get("createdAt") or p.get("updatedAt") or "",
                              p.get("number") or 0))
