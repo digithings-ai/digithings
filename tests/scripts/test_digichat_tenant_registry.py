@@ -158,9 +158,7 @@ def test_the_occ_only_overlay_carries_one_tenant_and_no_credential():
     assert "token" not in entry
     assert "tokenEnv" not in entry
     assert "mcp" not in entry
-    assert entry["models"]["catalog"] is True
-    assert "available" not in entry["models"]
-    assert entry["models"]["presets"] == ["auto", "reasoning", "fast", "light"]
+    assert entry["models"] == {"occPicker": True}
     backend = entry.get("backend") or {}
     assert "digisearchIndex" not in backend
     assert "vaultPathPrefix" not in backend
@@ -184,8 +182,9 @@ def test_the_occ_only_overlay_carries_the_overlay_note():
 
     composed, report = registry.compose_registry(LIVE, overlay)
     assert sorted(composed) == sorted(LIVE)
-    assert composed["occ.digithings.ai"]["models"]["catalog"] is True
-    assert "available" not in composed["occ.digithings.ai"]["models"]
+    # The overlay sets the picker switch only; the model policy is the product
+    # default the app resolves, not a copy in this file.
+    assert composed["occ.digithings.ai"]["models"] == {"occPicker": True}
     assert any(path.startswith("occ.digithings.ai.models") for path in report["changed_paths"])
 
 
@@ -198,12 +197,11 @@ def test_the_occ_only_overlay_leaves_the_digithings_tenant_alone():
     assert not [p for p in report["changed_paths"] if p.startswith("digithings.ai")]
 
 
-def test_the_occ_only_overlay_replaces_a_raw_model_list_with_the_catalog_policy():
+def test_the_occ_only_overlay_sets_only_the_picker_on_the_kv_copy():
     overlay = registry.load_registry(_occ_only_overlay(), str(OCC_ONLY))
     composed, report = registry.compose_kv_registry(KV_LIVE, overlay)
     models = composed["occ.digithings.ai"]["models"]
-    assert models["catalog"] is True
-    assert "available" not in models
+    assert models == {"occPicker": True}
     assert "occ.digithings.ai.models.available" in report["changed_paths"]
     assert composed["occ.digithings.ai"]["tokenEnv"] == "OCC_INVITE_KEY"
 
