@@ -8,6 +8,7 @@
  */
 
 import { redactString } from "../../../replay/redact";
+import { saveTextFile } from "./save-file";
 import { stripFoundryCitationMarkers } from "./activity-view";
 
 export type TranscriptSource = {
@@ -68,25 +69,9 @@ function formatSources(sources?: readonly TranscriptSource[]): string {
 }
 
 /** Iframe-safe download — always available when `document` exists. */
+/** Save a text export. See `save-file.ts` for the phone and iframe paths. */
 export function downloadTextFile(filename: string, text: string, mime: string): void {
-  if (typeof document === "undefined") {
-    throw new Error("downloadTextFile requires a document");
-  }
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Defer revoke — some browsers start the download asynchronously after click.
-  const later = globalThis.setTimeout ?? ((fn: () => void) => {
-    fn();
-    return 0;
-  });
-  later(() => URL.revokeObjectURL(url), 2_000);
+  saveTextFile(filename, text, mime);
 }
 
 export function downloadMarkdown(filename: string, text: string): void {
@@ -104,7 +89,11 @@ export function downloadPlainText(filename: string, markdown: string): void {
 }
 
 /** Minimal HTML export — pre-wrapped markdown, no renderer dependency. */
-export function downloadHtml(filename: string, markdown: string, title = "digichat transcript"): void {
+export function downloadHtml(
+  filename: string,
+  markdown: string,
+  title = "digichat transcript",
+): void {
   const name = filename.endsWith(".html") ? filename : `${filename}.html`;
   downloadTextFile(name, markdownToHtmlDocument(markdown, title), "text/html;charset=utf-8");
 }
@@ -320,9 +309,7 @@ export type PrintTranscriptResult = "print" | "download";
  * (no window, embed sandbox), fall back to a `.md` download so the action
  * is never a silent no-op.
  */
-export function printTranscriptWithFallback(
-  opts?: ExportFallbackOpts,
-): PrintTranscriptResult {
+export function printTranscriptWithFallback(opts?: ExportFallbackOpts): PrintTranscriptResult {
   const fallback = () => {
     if (opts?.fallbackMarkdown !== undefined && typeof document !== "undefined") {
       try {
