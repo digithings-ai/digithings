@@ -2873,6 +2873,7 @@ def _provenance_off_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     mq._TOKEN_CACHE.clear()
     mq._READ_CACHE.clear()
     mq._HOST_CACHE.clear()
+    mq._HOST_FAILURE.clear()
     mq._INDEX_CACHE.clear()
     mq._LOG_CACHE.clear()
 
@@ -4028,6 +4029,451 @@ def test_a_redirect_is_refused_and_the_token_stays_home() -> None:
         server.server_close()
     assert status == 0, payload
     assert seen == ["Bearer the-token"], "the token reached the server that answered"
+
+
+class _FakeWoodpeckerResponse:
+    """The answer of the Woodpecker API, as the read sees it."""
+
+    def __init__(self, status: int, body: str, url: str) -> None:
+        self.status = status
+        self._body = body.encode("utf-8")
+        self._url = url
+
+    def read(self, size: int | None = None) -> bytes:
+        """The body, in chunks of `size` when one is asked for.
+
+        The read of the production code asks for a chunk at a time, because
+        the timeout of a socket is the timeout of one operation on it and a
+        body that trickles in has to be given up on.
+        """
+        if size is None:
+            return self._body
+        chunk, self._body = self._body[:size], self._body[size:]
+        return chunk
+
+    def geturl(self) -> str:
+        return self._url
+
+    def __enter__(self) -> "_FakeWoodpeckerResponse":
+        return self
+
+    def __exit__(self, *exc: Any) -> bool:
+        return False
+
+
+class _FakeOpenerExhausted(BaseException):
+    """The fake had no answer left for a call the read made.
+
+    A `BaseException` on purpose: the read catches `Exception`, so an
+    `AssertionError` here would be folded into the reason string and the test
+    would carry on with a confusing payload instead of failing.
+    """
+
+
+class _FakeOpener:
+    """The opener the read uses, with the answers it was told to give.
+
+    `answers` is the list of answers, one per call: an answer that is an
+    exception is raised instead of returned, and the list running out is a
+    failure of the test, not of the read.
+
+    The calls are recorded with the timeout they were given and the headers
+    they carried, because a read that is clamped by a budget and a read that
+    keeps its token are both claims about the call, not about the answer.
+    """
+
+    def __init__(self, answers: list[Any]) -> None:
+        self.answers = list(answers)
+        self.calls: list[str] = []
+        self.timeouts: list[float | None] = []
+        self.headers: list[dict[str, str]] = []
+
+    def open(self, request: Any, timeout: float | None = None) -> Any:
+        self.calls.append(request.full_url)
+        self.timeouts.append(timeout)
+        self.headers.append(dict(getattr(request, "headers", {}) or {}))
+        if not self.answers:
+            raise _FakeOpenerExhausted(f"the read asked again: {request.full_url}")
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+
+class _FakeClock:
+    """`time` with a sleep that counts instead of waiting.
+
+    The clock only moves when something moves it: a sleep, or a body that
+    arrives. The read's budget is measured against it.
+    """
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.slept: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+class _TriclingResponse:
+    """A body that arrives a byte at a time, slowly.
+
+    The server answers the headers and then trickles the body: the timeout of
+    a socket is the timeout of one operation on it, so a read that is not
+    given up on can be held open for as long as the server likes.
+    """
+
+    def __init__(self, clock: _FakeClock, url: str) -> None:
+        self.status = 200
+        self._clock = clock
+        self._url = url
+        self._sent = 0
+
+    def read(self, size: int | None = None) -> bytes:
+        self._clock.now += 0.02
+        self._sent += 1
+        if self._sent > 50:
+            return b""
+        return b"x"
+
+    def geturl(self) -> str:
+        return self._url
+
+    def __enter__(self) -> "_TriclingResponse":
+        return self
+
+    def __exit__(self, *exc: Any) -> bool:
+        return False
+
+
+def _authorization(headers: dict[str, str]) -> str | None:
+    """The token a request carried, whatever case the header was stored in."""
+    for key, value in headers.items():
+        if key.lower() == "authorization":
+            return value
+    return None
+
+
+def test_a_dropped_connection_is_read_again_and_the_build_is_still_the_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dropped connection says nothing about the build behind the URL.
+
+    The read is tried again before it is believed, so a connection that drops
+    once - a busy host, a laptop that woke up - does not refuse a pull request
+    on a fact about the network.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener(
+        [
+            TimeoutError("timed out"),
+            TimeoutError("timed out"),
+            _FakeWoodpeckerResponse(200, json.dumps(_pipeline(commit="a" * 40)), url),
+        ]
+    )
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert status == 200, payload
+    assert isinstance(payload, dict) and payload.get("commit") == "a" * 40
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS
+    assert opener.calls == [url] * mq.PROVENANCE_READ_ATTEMPTS, (
+        "the retry asked another URL than the one that was dropped"
+    )
+    assert all(_authorization(h) == "Bearer the-token" for h in opener.headers), (
+        "a retry went out without the token"
+    )
+
+
+def test_a_host_that_did_not_answer_is_asked_once_more_and_not_three_times(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dead host is asked once per pull request, and not three times.
+
+    The queue asks the same host about every pull request of the tick, so a
+    host that did not answer is asked once more - briefly - and the answer it
+    gave is repeated with it. One dropped connection used to refuse every pull
+    request of the tick for a reason that had nothing to do with them, and a
+    host that is down used to cost the tick three reads per pull request.
+    The memory is of that host and not of the queue, so a host that did answer
+    is still asked.
+    """
+    other_host = "http://ci-host.test:8000/api/repos/6/pipelines/260"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(
+        "http://localhost:8000/api/repos/lookup/digithings-local/ci",
+        "the-token",
+        timeout=5,
+    )
+    assert first[0] == 0, first
+    assert "timed out" in str(first[1])
+    assert f"tried {mq.PROVENANCE_READ_ATTEMPTS} times" in str(first[1])
+    asked = len(opener.calls)
+    assert asked == mq.PROVENANCE_READ_ATTEMPTS
+    second = _REAL_WOODPECKER_READ(
+        "http://localhost:8000/api/repos/6/pipelines/259", "the-token", timeout=5
+    )
+    assert second[0] == 0, second
+    assert "timed out" in str(second[1])
+    assert "asked once more" in str(second[1])
+    assert len(opener.calls) == asked + 1, "the host that did not answer was asked again"
+    # Another host is another host: it is read with the whole budget and not
+    # with the one short ask that follows a failure somewhere else.
+    third = _REAL_WOODPECKER_READ(other_host, "the-token", timeout=5)
+    assert third[0] == 0, third
+    assert len(opener.calls) == asked + 1 + mq.PROVENANCE_READ_ATTEMPTS, (
+        "the memory of one host's failure was used against another host"
+    )
+
+
+def test_a_failed_read_is_not_the_answer_for_that_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed read is not the answer for that URL.
+
+    The URL is asked again - once more, briefly - instead of being answered
+    from the memory of the failure. And the memory has a life of its own: once
+    it has run out the URL is read with the whole budget again, and not with
+    the one short ask that follows a failure.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert first[0] == 0, first
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS
+    second = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert second[0] == 0, second
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS + 1, (
+        "the URL was answered from the memory of the failure instead of being asked"
+    )
+    # The memory has run out: the URL is read with the whole budget again.
+    monkeypatch.setattr(mq, "PROVENANCE_HOST_COOLDOWN", 0.0)
+    third = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert third[0] == 0, third
+    assert len(opener.calls) == 2 * mq.PROVENANCE_READ_ATTEMPTS + 1, (
+        "the expired memory did not give the read back to the whole budget"
+    )
+
+
+def test_a_host_that_comes_back_answers_the_one_ask(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host that was asleep for a moment answers the ask that follows.
+
+    The memory of a failure is not the answer for the rest of the tick: the
+    host is asked once more, and a host that answers is read against its build
+    and not against the memory of a failure that is no longer true.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener(
+        [
+            TimeoutError("timed out"),
+            TimeoutError("timed out"),
+            TimeoutError("timed out"),
+            _FakeWoodpeckerResponse(200, json.dumps(_pipeline(commit="a" * 40)), url),
+        ]
+    )
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert first[0] == 0, first
+    second = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert second[0] == 200, second
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS + 1, (
+        "the host that came back was not asked"
+    )
+
+
+def test_the_memory_of_a_failure_is_of_the_service_and_not_of_the_spelling() -> None:
+    """Two spellings of one address are one host for the queue.
+
+    The key is the scheme and the host in lower case with its port, so a
+    status that spells the same address two ways does not pay two retry
+    storms, and two services on one machine stay two hosts.
+    """
+    assert mq._read_host("http://LocalHost:8000/api/repos/6/pipelines/1") == (
+        "http://localhost:8000"
+    )
+    assert mq._read_host("http://localhost:8000/api") == mq._read_host(
+        "http://LOCALHOST:8000/api"
+    )
+    assert mq._read_host("http://localhost:8000/api") != mq._read_host(
+        "http://localhost:9000/api"
+    )
+    assert mq._read_host("http://localhost:8000/api") != mq._read_host(
+        "https://localhost:8000/api"
+    )
+
+
+def test_a_body_that_trickles_in_does_not_hold_the_read_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The budget is a deadline, and not a sum of timeouts.
+
+    The timeout of a socket is the timeout of one operation on it: a server
+    that answers the headers and then trickles the body keeps the read open
+    for as long as it likes, unless the read gives up when the deadline has
+    passed.
+    """
+    clock = _FakeClock()
+    monkeypatch.setattr(mq, "time", clock)
+    monkeypatch.setattr(mq, "PROVENANCE_READ_BUDGET", 0.05)
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([_TriclingResponse(clock, url)])
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert status == 0, payload
+    assert "the read exceeded its budget" in str(payload), payload
+
+
+@pytest.mark.parametrize("code", [404, 503])
+def test_a_status_code_is_an_answer_and_is_not_read_again(
+    monkeypatch: pytest.MonkeyPatch, code: int
+) -> None:
+    """A server that answered 404 answered, and one that answered 503 answered.
+
+    The answer is cached for the tick and the read is not tried again: only a
+    connection that never arrived says nothing about the build. Any status
+    code is an answer, not only the ones that read well.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener(
+        [urllib.error.HTTPError(url, code, "no such build", {}, None)]
+    )
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert first == (code, None), first
+    second = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert second == (code, None), second
+    assert len(opener.calls) == 1, "the answer of the API was asked for again"
+
+
+def test_a_refused_redirect_does_not_make_the_host_look_sick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A redirect is refused by the gate, not lost by the network.
+
+    The refusal is the same every time, so the read is not tried again, and
+    the host is not remembered as a host that could not be read: it answered.
+    """
+    opener = _FakeOpener(
+        [
+            urllib.error.HTTPError(
+                "http://localhost:8000/api/repos/6/pipelines/259", 302, "found", {}, None
+            ),
+            _FakeWoodpeckerResponse(
+                200,
+                json.dumps(_pipeline(commit="a" * 40)),
+                "http://localhost:8000/api/repos/6/pipelines/260",
+            ),
+        ]
+    )
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(
+        "http://localhost:8000/api/repos/6/pipelines/259", "the-token", timeout=5
+    )
+    assert first == (0, "the request was redirected"), first
+    assert len(opener.calls) == 1, "the redirect was followed after it was refused"
+    second = _REAL_WOODPECKER_READ(
+        "http://localhost:8000/api/repos/6/pipelines/260", "the-token", timeout=5
+    )
+    assert second[0] == 200, second
+    assert len(opener.calls) == 2, "the host that answered was treated as a dead host"
+
+
+def test_the_read_budget_bounds_the_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One read costs the budget once, not once per attempt.
+
+    The attempt is given the time that is left of the budget, never the
+    timeout it was asked with: a read that ignores the budget waits for every
+    attempt the whole timeout, and a tick of them waits for hours.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=100)
+    assert status == 0, payload
+    assert opener.timeouts, "the read was made with no timeout at all"
+    assert max(opener.timeouts) <= mq.PROVENANCE_READ_BUDGET, opener.timeouts
+
+
+def test_a_read_with_no_budget_left_is_not_attempted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A read with no budget left is not made.
+
+    The budget is what stops the loop. Without it the attempts would go on
+    until the attempts ran out, and the tick would keep a pull request waiting
+    on a host that is not there.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    monkeypatch.setattr(mq, "PROVENANCE_READ_BUDGET", 0.0)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert status == 0, payload
+    assert payload == "the read was not attempted", payload
+    assert not opener.calls, "the read was made with no budget left"
+
+
+def test_the_attempts_are_paused_between_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two attempts without a pause are a busy loop against a struggling host.
+
+    The pause is what lets a host that was busy for a moment answer the next
+    attempt, and what keeps a host that is down from being asked three times
+    in the same breath.
+    """
+    clock = _FakeClock()
+    monkeypatch.setattr(mq, "time", clock)
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert status == 0, payload
+    assert len(clock.slept) == mq.PROVENANCE_READ_ATTEMPTS - 1, clock.slept
+    assert all(0 < s <= mq.PROVENANCE_RETRY_BACKOFF for s in clock.slept), clock.slept
+
+
+def test_a_dropped_connection_refuses_the_pull_request_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The refusal names the read that failed, not a fault of the build.
+
+    The gate reads the build through the same read as everything else, so a
+    dropped connection is refused with the reason of a read that could not be
+    made. A pull request is refused for what is wrong with it, and a network
+    that dropped a connection is not a fault of the build.
+    """
+    lookup = "http://localhost:8000/api/repos/lookup/digithings-local/ci"
+    build = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener(
+        [
+            _FakeWoodpeckerResponse(200, json.dumps({"id": 6}), lookup),
+            *[TimeoutError("timed out")] * 30,
+        ]
+    )
+    monkeypatch.setattr(mq, "_woodpecker_read", _REAL_WOODPECKER_READ)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    monkeypatch.setenv("WOODPECKER_TOKEN", "test-token")
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    pr = _pr(1, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _evaluate(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any("the Woodpecker API could not be read" in r for r in verdict.reasons), (
+        verdict.reasons
+    )
+    assert not any("could not be resolved" in r for r in verdict.reasons), (
+        "the refusal names the lookup of the repository and not the read of the build"
+    )
+    assert opener.calls == [lookup] + [build] * mq.PROVENANCE_READ_ATTEMPTS, opener.calls
 
 
 def test_the_gate_verifies_the_check_it_was_asked_about(
