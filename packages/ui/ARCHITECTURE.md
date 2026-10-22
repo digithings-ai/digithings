@@ -660,7 +660,7 @@ reaches an `auto` thread as well, and since the `auto` rules hide the
 component bars, that surface paints **no bar at all**. The failure is
 silent: a missing bar reads as a quiet preference, not as a defect.
 
-Four ways to get it wrong, all of them seen in this repo: a rule not
+Five ways to get it wrong, all of them seen in this repo: a rule not
 conditioned on the mode at all; a rule keyed on `:not([data-scrollbars="auto"])`
 on an ancestor (the app shell carries `data-thread-skin` without the mode, so
 that ancestor matches the negation); a rule that reads the mode off a
