@@ -1436,6 +1436,30 @@ def test_stream_deltas_emits_reasoning_then_content() -> None:
     assert [p for k, p in seen if k == "content"] == ["answer"]
 
 
+# The chat reasoning policy as config/model-policy.json declares it. digillm ships
+# with an empty policy; the application registers the configured one at import.
+_CHAT_REASONING_POLICY = client_mod.ReasoningEffortPolicy(
+    default_sent={"deepseek-v4.1-flash-1017": "medium"},
+    configurable_prefixes=("gpt-5", "gpt-6", "gpt-oss", "gemini-3"),
+)
+
+
+@pytest.fixture(autouse=True)
+def _chat_reasoning_policy() -> Any:
+    """Register the configured chat reasoning policy for each test, then restore."""
+    previous = client_mod.get_reasoning_effort_policy()
+    client_mod.set_reasoning_effort_policy(_CHAT_REASONING_POLICY)
+    yield
+    client_mod.set_reasoning_effort_policy(previous)
+
+
+def test_no_registered_policy_sends_no_reasoning_effort() -> None:
+    """digillm's own default policy is empty: nothing gets the field, even with /effort."""
+    client_mod.set_reasoning_effort_policy(client_mod.ReasoningEffortPolicy())
+    assert "reasoning_effort" not in _streamed_kwargs("deepseek/deepseek-v4.1-flash-1017", "high")
+    assert "reasoning_effort" not in _streamed_kwargs("openai/gpt-5.6-luna", "low")
+
+
 def _streamed_kwargs(model: str, effort: str | None = None) -> dict[str, Any]:
     """Wire kwargs of one mocked streamed chat turn for ``model`` at ``effort``."""
     fake_client = MagicMock()
@@ -1561,6 +1585,24 @@ def test_stream_400_naming_a_dropped_field_again_propagates() -> None:
                 stream_deltas=True,
             )
     assert fake_client.chat.completions.create.call_count == 2
+
+
+def test_stream_unrelated_400_propagates_when_no_effort_is_sent() -> None:
+    """With no reasoning_effort on the request, a 400 naming it is not retried."""
+    reject = _bad_request("Unrecognized request argument supplied: reasoning_effort")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [reject, [_stream_chunk("hi")]]
+    client_mod.set_reasoning_effort_policy(client_mod.ReasoningEffortPolicy())
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(BadRequestError):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "hi"}],
+                [],
+                execute_tool=lambda *_: "",
+                stream_deltas=True,
+            )
+    assert fake_client.chat.completions.create.call_count == 1
 
 
 def test_non_streaming_1017_call_sends_no_reasoning_effort() -> None:

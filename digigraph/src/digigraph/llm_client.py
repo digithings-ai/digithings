@@ -52,11 +52,13 @@ from digillm import set_egress_observer as _set_egress_observer
 from digillm import set_fan_out_detach_hook as _set_fan_out_detach_hook
 from digillm import set_telemetry_observer as _set_telemetry_observer
 from digillm import set_usage_observer as _set_usage_observer
+from digillm.client import ReasoningEffortPolicy as _ReasoningEffortPolicy
+from digillm.client import set_reasoning_effort_policy as _set_reasoning_effort_policy
 from digillm.egress_record import EgressRecord
 from openai.types.chat import ChatCompletion
 
 from digigraph import usage as _usage
-from digigraph.model_config import resolve_request_model
+from digigraph.model_config import reasoning_effort_policy, resolve_request_model
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,22 @@ __all__ = [
 # module every digigraph LLM call imports.
 _set_usage_observer(_usage.record)
 _set_telemetry_observer(_usage.DETAILED_USAGE_OBSERVER)
+
+
+# Chat reasoning policy (DIG-4459): the model ids live in config/model-policy.json;
+# digillm reads no files, so the policy is registered here, once, at import.
+def _register_reasoning_policy() -> None:
+    """Hand ``reasoning_effort`` from ``config/model-policy.json`` to digillm."""
+    configured = reasoning_effort_policy()
+    _set_reasoning_effort_policy(
+        _ReasoningEffortPolicy(
+            default_sent=dict(configured.default_sent),
+            configurable_prefixes=tuple(configured.configurable_prefixes),
+        )
+    )
+
+
+_register_reasoning_policy()
 
 # Drop digigraph's own logical-call description inside every digillm parallel tool worker.
 # digillm's fan-out copies the caller's context so the request's BYOK credentials reach the
@@ -261,7 +279,8 @@ def run_tools(
 
     ``reasoning_effort`` is the chat's /effort (``X-Digi-Effort``), forwarded to
     digillm, which maps it to the model's ``reasoning_effort`` where the level is
-    configurable and keeps the model's default when it is ``None``.
+    configurable (the ``reasoning_effort`` policy in ``config/model-policy.json``,
+    registered above) and keeps the model's default when it is ``None``.
     """
     with _logical_call_scope(
         CallPurpose.TOOL_SELECTION,

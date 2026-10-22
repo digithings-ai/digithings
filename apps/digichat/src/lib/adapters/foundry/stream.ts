@@ -1573,7 +1573,8 @@ export async function createFoundryStreamResponse(opts: {
   maxToolCalls?: number;
   /**
    * The chat's /effort choice, sent as Responses `reasoning.effort`. Omit to
-   * keep the model's default level. If the agent refuses the override, the
+   * keep the model's default level. If Foundry answers 400 with any error that
+   * mentions reasoning, or with the agent reference's refusal of overrides, the
    * turn retries once without it and keeps the default for the rest of the turn.
    */
   reasoningEffort?: FoundryReasoningEffort;

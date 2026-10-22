@@ -937,20 +937,49 @@ def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
 # own default level. Models without levels reason (or not) as they always do.
 REASONING_EFFORTS: frozenset[str] = frozenset({"low", "medium", "high"})
 
-# Configurable models whose default must be SENT to turn reasoning on. The 1017
-# checkpoint answers with reasoning_tokens 0 when no effort is set; a live check
-# (2026-10-22) with ``reasoning_effort: "medium"`` streamed reasoning_content.
-_REASONING_EFFORT_DEFAULT_SENT: dict[str, str] = {
-    "deepseek-v4.1-flash-1017": "medium",
-}
-# Configurable models that already reason at their default level when the field
-# is omitted (OpenAI reasoning models, gpt-oss, Gemini 3 thinking). Matched on
-# the wire id prefix.
-_REASONING_EFFORT_PREFIXES: tuple[str, ...] = ("gpt-5", "gpt-6", "gpt-oss", "gemini-3")
+
+@dataclass(frozen=True)
+class ReasoningEffortPolicy:
+    """Which models take ``reasoning_effort``, and which need their default sent.
+
+    The ids live in ``config/model-policy.json`` (``reasoning_effort``), not here:
+    model names belong in config (#5029), and digillm reads no files at runtime,
+    so the application loads the policy and registers it with
+    :func:`set_reasoning_effort_policy` (digigraph does this in ``llm_client``).
+
+    ``default_sent`` maps a bare catalog id to the level sent when the chat set
+    no /effort, for models that only reason when a level is sent.
+    ``configurable_prefixes`` are bare-id prefixes of models that take a level
+    and already reason at their default when the field is omitted. The empty
+    default policy sends the field to no model, so a process that registers
+    nothing keeps every request unchanged.
+    """
+
+    default_sent: dict[str, str] = field(default_factory=dict)
+    configurable_prefixes: tuple[str, ...] = ()
+
+
+_reasoning_effort_policy = ReasoningEffortPolicy()
+
+
+def set_reasoning_effort_policy(policy: ReasoningEffortPolicy) -> None:
+    """Register the process-wide chat reasoning policy (see :class:`ReasoningEffortPolicy`)."""
+    global _reasoning_effort_policy
+    _reasoning_effort_policy = policy
+
+
+def get_reasoning_effort_policy() -> ReasoningEffortPolicy:
+    """Return the registered chat reasoning policy (empty until one is registered)."""
+    return _reasoning_effort_policy
 
 
 def _reasoning_wire_id(model: str) -> str:
-    """Catalog id the reasoning policy keys on: CI bare id, else the last slug segment."""
+    """Catalog id the reasoning policy keys on.
+
+    An ``openrouter/`` prefix is stripped first. A house slug then maps to its
+    Cheaper Inference bare id; anything else keeps its last slug segment, without
+    a ``:variant`` suffix.
+    """
     slug = model.removeprefix("openrouter/")
     bare = cheaperinference_bare_id_for_house_slug(slug)
     if bare is not None:
@@ -960,8 +989,11 @@ def _reasoning_wire_id(model: str) -> str:
 
 def reasoning_effort_configurable(model: str) -> bool:
     """True when ``model`` takes a ``reasoning_effort`` level (house slug or bare id)."""
+    policy = _reasoning_effort_policy
     wire = _reasoning_wire_id(model)
-    return wire in _REASONING_EFFORT_DEFAULT_SENT or wire.startswith(_REASONING_EFFORT_PREFIXES)
+    return wire in policy.default_sent or (
+        bool(policy.configurable_prefixes) and wire.startswith(policy.configurable_prefixes)
+    )
 
 
 def chat_reasoning_effort(model: str, requested: str | None = None) -> str | None:
@@ -970,14 +1002,14 @@ def chat_reasoning_effort(model: str, requested: str | None = None) -> str | Non
     ``requested`` is the chat's /effort. It is sent only to models with
     configurable levels; anything other than low/medium/high counts as unset.
     Unset keeps the model's default: omitted, except where the default has to be
-    sent to turn reasoning on at all (``_REASONING_EFFORT_DEFAULT_SENT``).
+    sent to turn reasoning on at all (the policy's ``default_sent``).
     """
     if not reasoning_effort_configurable(model):
         return None
     effort = (requested or "").strip().lower()
     if effort in REASONING_EFFORTS:
         return effort
-    return _REASONING_EFFORT_DEFAULT_SENT.get(_reasoning_wire_id(model))
+    return _reasoning_effort_policy.default_sent.get(_reasoning_wire_id(model))
 
 
 def _cheaperinference_api_base() -> str:

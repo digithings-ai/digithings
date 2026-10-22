@@ -325,8 +325,30 @@ def test_ci_overlay_lets_reasoning_effort_reach_configurable_models() -> None:
     model digillm treats as configurable; each such overlay route must allow it
     or the proxy silently drops it.
     """
-    from digillm.client import reasoning_effort_configurable
+    from digillm.client import (
+        ReasoningEffortPolicy,
+        get_reasoning_effort_policy,
+        reasoning_effort_configurable,
+        set_reasoning_effort_policy,
+    )
 
+    configured = json.loads((CONFIG / "model-policy.json").read_text(encoding="utf-8"))[
+        "reasoning_effort"
+    ]
+    previous = get_reasoning_effort_policy()
+    set_reasoning_effort_policy(
+        ReasoningEffortPolicy(
+            default_sent=dict(configured["default_sent"]),
+            configurable_prefixes=tuple(configured["configurable_prefixes"]),
+        )
+    )
+    try:
+        _assert_overlay_allows_reasoning_effort(reasoning_effort_configurable)
+    finally:
+        set_reasoning_effort_policy(previous)
+
+
+def _assert_overlay_allows_reasoning_effort(reasoning_effort_configurable: Any) -> None:
     overlay = CONFIG / "litellm.cheaperinference.yaml"
     data = yaml.safe_load(overlay.read_text(encoding="utf-8"))
     routes = [

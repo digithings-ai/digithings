@@ -81,3 +81,54 @@ def test_llm_client_run_tools_passes_reasoning_effort_to_digillm(
     )
     assert captured["reasoning_effort"] == "high"
     assert captured["stream_deltas"] is True
+
+
+def test_llm_client_registers_the_configured_reasoning_policy_with_digillm() -> None:
+    """The model ids come from config/model-policy.json; digigraph hands them to digillm."""
+    import json
+    from pathlib import Path
+
+    from digillm.client import get_reasoning_effort_policy, set_reasoning_effort_policy
+
+    from digigraph import llm_client
+
+    configured = json.loads(
+        (Path(__file__).resolve().parents[2] / "config" / "model-policy.json").read_text(
+            encoding="utf-8"
+        )
+    )["reasoning_effort"]
+    assert configured["default_sent"] and configured["configurable_prefixes"]
+    previous = get_reasoning_effort_policy()
+    set_reasoning_effort_policy(type(previous)())
+    try:
+        llm_client._register_reasoning_policy()  # what the module runs at import
+        policy = get_reasoning_effort_policy()
+        assert policy.default_sent == configured["default_sent"]
+        assert list(policy.configurable_prefixes) == configured["configurable_prefixes"]
+    finally:
+        set_reasoning_effort_policy(previous)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {"configurable_prefixes": [" "]},
+        {"default_sent": {"some-model": "max"}},
+        {"default_sent": {" ": "medium"}},
+    ],
+)
+def test_reasoning_policy_refuses_values_that_would_misroute(raw: dict[str, object]) -> None:
+    from digigraph.model_config import ReasoningEffortPolicyConfig
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ReasoningEffortPolicyConfig.model_validate(raw)
+
+
+def test_reasoning_policy_is_optional_and_empty_by_default() -> None:
+    from digigraph.model_config import ModelPolicyConfig
+
+    policy = ModelPolicyConfig.model_validate(
+        {"flagship_model_id_markers": ["x-"], "fallback_model": "m"}
+    ).reasoning_effort
+    assert policy.default_sent == {} and policy.configurable_prefixes == []
