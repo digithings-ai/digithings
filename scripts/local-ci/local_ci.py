@@ -20,6 +20,7 @@ skip (DIG-4812).
 A run that no trusted launcher started is refused before anything happens:
 the launchd daemon or the CI container only (launch_guard.py, DIG-4796).
 Usage: local_ci.py [--pr N] [--dry-run]"""
+import ast
 import io
 import json
 import os
@@ -92,6 +93,11 @@ CLAIM_STALE_SECS = 21600
 # timeouts), so a slow but alive run keeps the head it is checking and no
 # second run is started on top of it.
 CLAIM_MAX_SECS = 28800
+# The life of the tick lock: a lock whose holder is gone is taken over after
+# this. It is shorter than the life of a claim on purpose. A tick that takes
+# over a stale lock must not take the head of a run that is still gating, and
+# the claim is what says that run is still there.
+LOCK_MAX_AGE = 7200
 # The runner keeps its own checkout on origin/develop (DIG-5135). The refresh
 # is throttled so a tick every three minutes does not fetch every three
 # minutes, and it is never applied to a linked worktree: that is somebody
@@ -1134,11 +1140,13 @@ def claim_is_lost(sha, created_at):
     The holder is named in the ledger. A holder that is alive is in flight and
     the head is left alone - an old row does not take a running head away. A
     holder that is gone means the run died, so the receipt is owed again. A
-    claim held past the life of the tick lock names a run the queue is no
-    longer waiting for. A row with no ledger entry - posted by a runner that
-    predates the ledger, or by the CI container, which keeps its own state
-    directory - is treated the same way once it is older than the stale
-    window.
+    claim held past the worst case of a gate run is void: the run it names
+    cannot still be gating after that. That limit is deliberately longer than
+    the life of the tick lock, so a second tick that took over a stale lock
+    still leaves the head alone while the first run is alive. A row with no
+    ledger entry - posted by a runner that predates the ledger, or by the CI
+    container, which keeps its own state directory - is treated the same way
+    once it is older than the stale window.
     """
     state, pid = claim_state(sha)
     if state == "live":
@@ -1223,6 +1231,33 @@ def runner_marker():
     return data if isinstance(data, dict) else None
 
 
+def _guard_takes_a_runner_path(source):
+    """True when the guard source defines `enforce(runner_path, ...)`.
+
+    The check is structural. A comment, a docstring or a dead copy of the old
+    signature does not make the guard callable: the runner calls
+    `launch_guard.enforce(__file__, ctx)`, so a guard whose `enforce` takes
+    something else raises a TypeError on the next tick and stops the only
+    producer of the receipt. Reading the text with a regex could be satisfied
+    by a line in a comment, so the source is parsed and the function is looked
+    up.
+    """
+    try:
+        tree = ast.parse(source or "")
+    except (SyntaxError, ValueError):
+        return False
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name != "enforce":
+            continue
+        first = list(node.args.posonlyargs) + list(node.args.args)
+        if not first:
+            return False
+        return first[0].arg == "runner_path"
+    return False
+
+
 def _incoming_runner_is_sane():
     """True when the commit FETCH_HEAD names carries a runner that can run.
 
@@ -1249,7 +1284,7 @@ def _incoming_runner_is_sane():
         return False
     rc, guard = sh(["git", "-C", MAIN, "show", "FETCH_HEAD:scripts/local-ci/launch_guard.py"],
                    timeout=120)
-    if rc != 0 or not re.search(r"def\s+enforce\s*\(\s*runner_path\b", guard or ""):
+    if rc != 0 or not _guard_takes_a_runner_path(guard or ""):
         log("refresh: the incoming launch guard does not take a runner path; "
             "the checkout is left alone")
         return False
@@ -1417,7 +1452,7 @@ def acquire_lock():
         pid = lock_holder_alive()
         try: age = time.time() - os.path.getmtime(LOCK)
         except OSError: age = -1
-        if pid is not None and age >= 0 and age < 7200:
+        if pid is not None and age >= 0 and age < LOCK_MAX_AGE:
             log(f"lock busy (pid {pid}, age {age:.0f}s); skip tick")
             return False
         log(f"stale lock removed (pid {pid}, age {age:.0f}s)")

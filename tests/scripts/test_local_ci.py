@@ -28,6 +28,12 @@ else:
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS = os.path.abspath(os.path.join(_HERE, "..", "..", "scripts", "local-ci"))
+
+def _git_env(env):
+    """A git environment that needs no identity from the machine it runs on."""
+    return dict(env, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com",
+                GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
+
 if _SCRIPTS not in sys.path:
     # local_ci imports review_applied and pr_template from its own directory; without
     # this the repo's suite would silently exercise the ImportError branch while the
@@ -531,17 +537,26 @@ class InstallMarkerTest(unittest.TestCase):
         return tmp, home, env
 
     def _clone(self, tmp, env):
-        """A real clone on develop, with the runner in it."""
+        """A real clone on develop, with the runner in it.
+
+        A clone and not a working tree: the runner may only keep a checkout
+        current that carries nothing of its own, so the checkout here has a
+        clean tree, no commits beyond origin/develop and an `origin` to
+        compare with.
+        """
         checkout = os.path.join(tmp, "checkout")
         os.makedirs(checkout)
+        git_env = _git_env(env)
         subprocess.check_call(["git", "init", "-q", "-b", "develop", checkout])
-        git_env = dict(env, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com",
-                       GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
-        subprocess.check_call(["git", "-C", checkout, "commit", "-q", "--allow-empty",
-                               "-m", "x"], env=git_env)
         os.makedirs(os.path.join(checkout, "scripts", "local-ci"))
         shutil.copy(os.path.join(_SCRIPTS, "local_ci.py"),
                     os.path.join(checkout, "scripts", "local-ci", "local_ci.py"))
+        subprocess.check_call(["git", "-C", checkout, "add", "-A"], env=git_env)
+        subprocess.check_call(["git", "-C", checkout, "commit", "-q", "-m", "x"], env=git_env)
+        subprocess.check_call(["git", "-C", checkout, "remote", "add", "origin", checkout],
+                              env=git_env)
+        subprocess.check_call(["git", "-C", checkout, "fetch", "-q", "origin", "develop"],
+                              env=git_env)
         return checkout
 
     def _marker(self, home):
@@ -580,8 +595,8 @@ class InstallMarkerTest(unittest.TestCase):
         checkout = self._clone(tmp, env)
         linked = os.path.join(tmp, "linked")
         subprocess.check_call(["git", "-C", checkout, "worktree", "add", "-q",
-                               "--detach", linked], env=env)
-        os.makedirs(os.path.join(linked, "scripts", "local-ci"))
+                               "--detach", linked], env=_git_env(env))
+        os.makedirs(os.path.join(linked, "scripts", "local-ci"), exist_ok=True)
         shutil.copy(os.path.join(_SCRIPTS, "local_ci.py"),
                     os.path.join(linked, "scripts", "local-ci", "local_ci.py"))
         rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"),
@@ -590,6 +605,33 @@ class InstallMarkerTest(unittest.TestCase):
         marker = self._marker(home)
         self.assertFalse(marker.get("self_update"),
                          "a linked worktree must never be moved by the runner")
+
+    def test_a_working_tree_with_uncommitted_changes_is_not_moved_by_the_runner(self):
+        """A tree somebody works in must not be fast-forwarded under them."""
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        with open(os.path.join(checkout, "notes.txt"), "w") as f:
+            f.write("work in progress\n")
+        rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"),
+                              "--self-update", checkout], env=env)
+        self.assertEqual(rc, 0, "the install must succeed")
+        marker = self._marker(home)
+        self.assertFalse(marker.get("self_update"),
+                         "a tree with uncommitted changes must not be moved by the runner")
+
+    def test_a_checkout_with_commits_of_its_own_is_not_moved_by_the_runner(self):
+        """A commit of its own means the checkout is somebody's work, not the runner's home."""
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        git_env = _git_env(env)
+        subprocess.check_call(["git", "-C", checkout, "commit", "-q", "--allow-empty",
+                               "-m", "local work"], env=git_env)
+        rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"),
+                              "--self-update", checkout], env=env)
+        self.assertEqual(rc, 0, "the install must succeed")
+        marker = self._marker(home)
+        self.assertFalse(marker.get("self_update"),
+                         "a checkout with commits of its own must not be moved by the runner")
 
     def test_a_failed_bootstrap_leaves_the_previous_marker_in_place(self):
         """The marker belongs to the job that is running: a failed install must not change it."""
@@ -1817,8 +1859,8 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         self.assertEqual(_mod.pending([pr], False), [],
                          "a head whose claim is held by a living run is not queued")
 
-    def test_a_claim_older_than_the_lock_life_is_lost(self):
-        """A claim held past the tick lock's life names a run nobody waits for.
+    def test_a_claim_older_than_the_worst_case_run_is_lost(self):
+        """A claim held past the worst case of a gate run names a run nobody waits for.
 
         The clock runs ahead instead of the claim being backdated: a claim
         written in the past names a pid the kernel has handed on, which is a
@@ -1830,7 +1872,18 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         self._write_claim(pr["headRefOid"], os.getpid(), started=time.time())
         self._clock(_mod.CLAIM_MAX_SECS + 60)
         self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
-                         "a claim past the lock's life is lost")
+                         "a claim past the worst case of a run is lost")
+
+    def test_a_claim_outlives_the_tick_lock(self):
+        """The claim is void later than the lock, so a live run keeps its head.
+
+        The tick lock is taken over after two hours, the claim after the worst
+        case of a gate run. If the claim were void first, a tick that took
+        over a stale lock would hand a live run's head to a second run, and
+        two producers would write two `local-ci` rows on one head.
+        """
+        self.assertGreater(_mod.CLAIM_MAX_SECS, _mod.LOCK_MAX_AGE,
+                           "a claim must outlive the tick lock")
 
     def test_a_claim_whose_pid_was_reused_is_lost(self):
         """The pid the claim names belongs to another process now."""
@@ -2105,11 +2158,16 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
                        updated="2026-10-01T10:00:00Z")
         new = self._pr(number=2, sha="1" * 40, created="2026-10-20T10:00:00Z",
                        updated="2026-10-20T10:00:00Z")
+        # The row has to be old enough for the re-check rule, and "old enough"
+        # is measured against the clock of the machine that runs the test: a
+        # fixed date makes the test fail on a clock that lags behind it.
+        aged = (datetime.now(timezone.utc)
+                - timedelta(seconds=_mod.REVIEW_RECHECK_SECS + 60)).strftime("%Y-%m-%dT%H:%M:%SZ")
         for pr in (old, new):
             self.rows[pr["headRefOid"]] = [
                 {"context": "review-applied", "state": "failure",
                  "description": "review-applied: no review pass left comments",
-                 "created_at": "2026-10-21T00:00:00Z"}]
+                 "created_at": aged}]
         self.assertEqual([p["number"] for p in _mod.pending_applied([new, old])], [1, 2],
                          "the review-applied lane is served in arrival order")
 
@@ -2318,6 +2376,25 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
         _mod.refresh_checkout()
         self.assertEqual(self._ran("merge"), [],
                          "a guard without the runner's interface is not merged in")
+
+    def test_a_guard_that_only_names_the_interface_in_a_comment_is_not_merged(self):
+        """A comment is not an interface.
+
+        The runner calls `enforce(runner_path, ctx)`. A guard whose source
+        mentions that signature in a comment but whose callable takes
+        something else would pass a text search and raise a TypeError on the
+        next tick, so the check has to read the function, not the text.
+        """
+        self._clone()
+        self._mark_runner()
+        self.results["rev-parse"] = (0, "develop\n")
+        self.results["show"] = self._runner_source()
+        self.results["show FETCH_HEAD:scripts/local-ci/launch_guard.py"] = (
+            0, "# old interface: def enforce(runner_path, ctx)\n"
+               "def enforce(ctx):\n    return True\n")
+        _mod.refresh_checkout()
+        self.assertEqual(self._ran("merge"), [],
+                         "a guard that only names the interface in a comment is not merged in")
 
     def test_an_incoming_commit_without_a_launch_guard_is_not_merged(self):
         """Without the guard the next tick would post receipts unchallenged."""

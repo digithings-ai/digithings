@@ -179,8 +179,12 @@ scripts/local-ci/install.sh --self-update ~/Code/digithings-ci
 works in, and a daemon that moved it would move their work with it.
 
 `--self-update` is the operator's word that the runner may keep that checkout
-on `origin/develop` by itself. It is refused for a working tree and for a
-linked worktree. The install records the word in
+on `origin/develop` by itself. It is refused unless the checkout is a dedicated
+clone: its own `.git` directory (so not a linked worktree), on `develop`, a
+clean tree, and no commits of its own on top of `origin/develop`. A working
+tree that is clean and carries no local commits is not caught by a separate
+test, so point the daemon at a dedicated clone and not at the tree you work
+in. The install records the word in
 `~/.config/digithings/state/local-ci-runner.json`:
 
 ```json
@@ -264,7 +268,9 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   (DIG-5135).
 - **A running head is not taken away.** A claim held by a living run is left
   alone, whatever age its `pending` row carries, unless the claim has outlived
-  the life of the lock or its pid now belongs to another process
+  the worst case of a gate run (eight hours, deliberately longer than the life
+  of the tick lock, so a tick that took over a stale lock still leaves a live
+  head alone) or its pid now belongs to another process
   (DIG-5135).
 - **The refresh is never retried on every tick.** A refresh that fails - no
   network, a commit that does not fast-forward, an incoming runner that does
