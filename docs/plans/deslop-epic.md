@@ -1,0 +1,140 @@
+# De-slop epic — execution plan
+
+Epic: [#6327](https://github.com/digithings-ai/digithings/issues/6327)
+Epic branch: `feat/deslop-epic` (cut from `github/develop` at `d68a543048`, 2026-10-23)
+Final PR: `feat/deslop-epic` → `develop`, left merge-ready for the EM/CTO merge queue.
+
+## Why this shape
+
+The repo contains two generations of UI. The old gallery (`apps/reference`) and the
+prose design docs (`packages/ui/DESIGN.md`, `PRODUCT.md`, `packages/design/*.md`)
+predate the current work. The active generation is the new website + hero banners,
+the new digiquant desk, digichat, the dashboard, and the terminal clients.
+
+This epic spends nothing on the old generation. It fixes the new generation against
+the design language the new code actually uses — not against the stale docs.
+
+## Design invariants (apply to every UI slice)
+
+1. Preserve the **ASCII terminal feel**, hero-banner designs, wordmarks and
+   terminal motifs. These are custom work; they are not slop.
+2. Preserve the existing palette, type scale and component vocabulary where they
+   already work. No new palette, no gradient system, no glassmorphism, no
+   rounded-card SaaS look, no emoji icon set, no fabricated metrics.
+3. Every change is justified by a finding from an installed skill (file:line,
+   severity). "Looks better" is not a justification.
+4. `docs/design/CURRENT_UI_LANGUAGE.md` (slice S0) is the authority for all UI
+   slices. `packages/ui/DESIGN.md` and `PRODUCT.md` are historical.
+5. Canon guard stays green: `python3 scripts/check_frontend_canon.py`.
+6. digi names stay lowercase in prose, copy and docs.
+7. Human-gated paths are untouched: `digiquant/brokers/**`, `digikey/**`.
+
+## Slice manifest
+
+Each slice owns a disjoint path set. A slice may not edit paths owned by another
+slice; if a fix requires it, the slice stops and reports the cross-ownership need.
+
+### Foundation
+
+| ID | Branch | Owns | Skills |
+|---|---|---|---|
+| S0 | `feat/deslop-s0-design-language` | `docs/design/CURRENT_UI_LANGUAGE.md` (new) | create-design-md, impeccable (init/audit), improve-ui |
+
+S0 reconstructs the real current language from the new surfaces: hero banners,
+terminal motifs, tokens actually imported, type scale, spacing, motion, copy voice,
+and the per-surface differences. It also records what the old docs got wrong.
+
+### UI slices
+
+| ID | Branch | Owns | Primary skills |
+|---|---|---|---|
+| U1 | `feat/deslop-u1-digichat-core` | `apps/digichat/src/app/**`, `apps/digichat/src/components/{chat-shell,transcript,composer,message}*` | impeccable, baseline-ui, avoid-ai-design, make-interfaces-feel-better |
+| U2 | `feat/deslop-u2-digichat-surfaces` | `apps/digichat/src/components/{settings,tools,sidebar,onboarding,empty}*` | impeccable, baseline-ui, ui-skills/accessibility, fixing-metadata |
+| U3 | `feat/deslop-u3-dashboard-desk` | `apps/dashboard/app/**/{desk,charts,strategies,portfolio,markets}/**`, `apps/dashboard/components/{desk,charts,data}/**` | impeccable, emil-design-eng, web-quality/performance, review-animations |
+| U4 | `feat/deslop-u4-dashboard-shell` | `apps/dashboard/app/**/{settings,account,onboarding,login}/**`, `apps/dashboard/components/{shell,nav,account}/**` | impeccable, baseline-ui, make-interfaces-feel-better |
+| U5 | `feat/deslop-u5-digiquant-desk` | `apps/digiquant-web/app/app/**` | impeccable, baseline-ui, avoid-ai-design, fixing-motion-performance |
+| U6 | `feat/deslop-u6-digiquant-marketing` | `apps/digiquant-web/app/{page,pipeline,strategies,subsystems,changelog,contact}/**` | impeccable, hallmark (audit only), web-quality/seo, frontend-design |
+| U7 | `feat/deslop-u7-digiquant-atoms` | `apps/digiquant-app/**` | impeccable, baseline-ui, make-interfaces-feel-better |
+| U8 | `feat/deslop-u8-web-landing` | `apps/digithings-web/app/{page.tsx,_nav.tsx}`, `apps/digithings-web/components/{landing,chat}/**` | frontend-design, hallmark (direction only), design-taste-frontend, emil-design-eng |
+| U9 | `feat/deslop-u9-web-docs` | `apps/digithings-web/app/{docs,book,about,team,security,services,changelog,legal}/**` | impeccable, baseline-ui, fixing-metadata, avoid-ai-writing |
+| U10 | `feat/deslop-u10-web-variants` | `apps/digithings-web/app/variants/**` | impeccable, design-taste-frontend (audit only), baseline-ui |
+| U11 | `feat/deslop-u11-hero-banner` | `packages/hero-banner/**` | emil-design-eng, animation-performance, fixing-motion-performance, deslop |
+| U12 | `feat/deslop-u12-tui-clients` | `clients/{digichat-tui,digiquant-tui,digivoice-tui,digichat-devkit}/**` | emil-design-eng, animation-performance, deslop, karpathy-guidelines |
+| U13 | `feat/deslop-u13-tui-shell` | `packages/tui-frame/**`, `packages/design/{app-shell-terminal,quant-native}/**` | deslop, codebase-design, animation-performance |
+| U14 | `feat/deslop-u14-ui-kit-core` | `packages/ui/src/{components/data,components/forms,components/feedback,ui}/**` | deslop, codebase-design, impeccable, baseline-ui |
+| U15 | `feat/deslop-u15-ui-kit-chat-nav` | `packages/ui/src/{components/chat,components/landing,navigation,motion}/**` | impeccable, emil-design-eng, codebase-design |
+| U16 | `feat/deslop-u16-digichat-ui` | `packages/digichat-ui/**` | deslop, baseline-ui, avoid-ai-design |
+
+### Code slices
+
+| ID | Branch | Owns | Primary skills |
+|---|---|---|---|
+| C1 | `feat/deslop-c1-py-quant-research` | `digiquant/src/digiquant/research/**` | deslop, karpathy-guidelines, codebase-design |
+| C2 | `feat/deslop-c2-py-quant-portfolio` | `digiquant/src/digiquant/portfolio/**` | deslop, karpathy-guidelines, codebase-design |
+| C3 | `feat/deslop-c3-py-quant-core` | `digiquant/src/digiquant/**` except `brokers/`, `research/`, `portfolio/` | deslop, karpathy-guidelines, improve-codebase-architecture |
+| C4 | `feat/deslop-c4-py-digisearch` | `digisearch/**` | deslop, karpathy-guidelines, codebase-design |
+| C5 | `feat/deslop-c5-py-digigraph` | `digigraph/**` | deslop, karpathy-guidelines, codebase-design |
+| C6 | `feat/deslop-c6-py-core-libs` | `digillm/**`, `digibase/**`, `digivault/**`, `digivoice/**` | deslop, karpathy-guidelines, codebase-design |
+| C7 | `feat/deslop-c7-ts-apps-code` | non-UI code in `apps/{digichat,dashboard,digiquant-web,digithings-web}/**` (`lib`, `hooks`, `api`, `app/**/route.ts`) | deslop, codebase-design, code-review |
+
+C3 and C6 exclude human-gated paths by construction. C1–C6 do not change public
+behaviour; they remove dead code, duplicate helpers, needless abstraction, AI
+comments, unused imports, and over-defensive branches. Behaviour changes need a
+test and are out of scope for this epic.
+
+### Docs and convergence
+
+| ID | Branch | Owns | Skills |
+|---|---|---|---|
+| D1 | `feat/deslop-d1-docs` | `docs/design/**`, `docs/surfaces/**`, `apps/*/README.md`, `packages/hero-banner/README.md` | avoid-ai-writing, humanizer, no-ai-slop |
+| V1 | on epic branch | gates + visual verification | ui-skills, web-quality-audit, playwright |
+| V2 | on epic branch | fresh-context review + epic PR | code-review, interface-review, review-and-ship, make-pr-easy-to-review |
+
+D1 updates only docs that describe the current generation. Historical ADRs and
+`docs/plans/*` are not edited.
+
+## Execution order
+
+1. **S0** (1 agent). Blocks all UI fixes.
+2. **Read-only audits** (parallel with S0, 4 agents): impeccable/avoid-ai-design
+   across web apps; web-quality/accessibility/metadata; deslop/karpathy survey of
+   Python + `packages/ui`; docs writing audit. Findings to `.agent-tmp/audit/`.
+3. **Wave 1 UI** (3 concurrent): U1, U3, U5, U8, U11, U14.
+4. **Wave 2 UI** (3 concurrent): U2, U4, U6, U9, U12, U15.
+5. **Wave 3 UI** (3 concurrent): U7, U10, U13, U16.
+6. **Wave 4 code** (3 concurrent): C1, C4, C5, C6 → then C2, C3, C7.
+7. **Wave 5 docs**: D1.
+8. **Convergence**: V1 gates and visual verification, V2 review and PR.
+
+Each fix agent works in `.worktrees/deslop/<slice>/` on its own branch cut from
+`feat/deslop-epic`, commits, pushes to `github`, and merges back into the epic
+branch. Node modules are symlinked from the epic worktree; a slice does not run
+`npm ci`.
+
+## Verification
+
+Per UI slice:
+
+```bash
+python3 scripts/check_frontend_canon.py
+npm run lint -w <workspace>
+npm run typecheck -w @digithings/ui        # ui slice only
+npm run test -w <workspace>
+npm run build -w <workspace>               # where the app has a build
+```
+
+Per code slice:
+
+```bash
+.venv/bin/ruff check <component>/src
+.venv/bin/python -m pytest <component>/tests -q -m unit
+npm run lint -w <workspace>
+```
+
+Convergence runs the full set on the epic branch, plus screenshots of the changed
+pages (static apps) and a TUI frame export diff (terminal clients).
+
+## Reporting
+
+Every slice posts a findings record to the epic issue: skill, finding, file:line,
+severity, fix or "no change warranted". No slice merges without one.
