@@ -1149,8 +1149,8 @@ directly-plugged tool, no per-tool UI. `mcp_approval_request` is unmapped by
 design: trial agents auto-approve server-side.
 
 **Limits (`limits`).** The canonical gate block. Omit it and every gate is
-off. Paths, the backend matrix, and the digithings.ai, OCC, and DataTap
-examples are in [`docs/digichat/LIMITS.md`](../../docs/digichat/LIMITS.md).
+off. Paths, the backend matrix, and the digithings.ai, OCC, and Foundry
+trial examples are in [`docs/digichat/LIMITS.md`](../../docs/digichat/LIMITS.md).
 `guardrails` remains the alias of `limits.tokens.total.perMinute` and
 `limits.toolCalls.perTurn`. `models.costPerWindow` is the alias of one
 premium-only `limits.cost.usd` gate (`onExceed: fallback-auto`). A config

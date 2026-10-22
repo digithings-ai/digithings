@@ -876,7 +876,8 @@ export const DeploymentSchema = z
       if (disagree) {
         ctx.addIssue({ code: "custom", message: disagree, path: ["models", "costPerWindow"] });
       }
-      const cap = dep.limits?.models?.standard?.maxOutputUsdPerMillion ?? dep.models.priceCapUsdPerMillion;
+      const cap =
+        dep.limits?.models?.standard?.maxOutputUsdPerMillion ?? dep.models.priceCapUsdPerMillion;
       if (cap == null && !dep.limits?.models?.premium?.ids?.length) {
         ctx.addIssue({
           code: "custom",

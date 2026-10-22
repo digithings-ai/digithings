@@ -234,7 +234,7 @@ limits:
       onExceed: fallback-auto
 ```
 
-### DataTap trial on Azure
+### Foundry trial on Azure
 
 Foundry agent. The model is the agent's model. Cost and model tiers are
 rejected. One live chat per IP, a per-turn tool cap, a daily question cap,

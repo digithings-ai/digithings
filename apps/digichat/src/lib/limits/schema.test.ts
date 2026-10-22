@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
 import { parseDigichatConfig } from "@/lib/deploy-config/schema";
@@ -21,10 +21,14 @@ function deployment(backend: Record<string, unknown>, limits: unknown, extra: Re
 
 describe("limits schema", () => {
   it("leaves every shipped example with no limits and no guardrails", () => {
-    const examples = resolve(__dirname, "../../../config/examples");
-    const trial = resolve(__dirname, "../../../config/datatap-trial-foundry.yaml");
+    const configDir = resolve(__dirname, "../../../config");
+    const examples = resolve(configDir, "examples");
+    const trials = readdirSync(configDir).filter((name) => name.endsWith("-trial-foundry.yaml"));
+    expect(trials).toHaveLength(1);
+    const trialName = trials[0];
+    if (!trialName) throw new Error("foundry trial overlay missing");
     const files = [
-      trial,
+      resolve(configDir, trialName),
       resolve(examples, "digithings-ai-embed.yaml"),
       resolve(examples, "occ-embed.yaml"),
     ];
