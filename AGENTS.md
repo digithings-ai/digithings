@@ -130,6 +130,21 @@ Install, verify, rollback and the limits of this control: [`docs/ops/datatap-azu
 
 ---
 
+## GitHub access: the seat broker and the `gh` shim
+
+The broker is how a seat gets GitHub access: a daemon on a dedicated account mints a GitHub App installation token per run, scoped to the one repo the ticket names, and revokes it when the run ends. It is installed with the `_dtbroker` account and the four Apps (DIG-4804); until that install lands a seat run still holds the host credential, and this section describes the target state.
+
+- **`gh` on this machine may be the shim** (`scripts/dt_broker/ghshim.py`, installed ahead of the real `gh`). It keeps the seat guard in the chain, asks the broker for a token for that one call, and points `GH_CONFIG_DIR` at an empty directory so the host's `gh` config cannot answer for it.
+- **A broker token is scoped to one repo, one seat class and one run.** `secrets` is never grantable to anyone; `statuses` and `workflows` are never grantable to a seat or a reviewer. The token dies with the run.
+- **A refusal exits 76 and prints the reason.** It is an enforced refusal, not a bug. Do not retry it, do not look for a bypass, and do not put a run back on the host credential yourself: the rollback flag (`app` | `host`) is Chris's to write, and a seat cannot write it.
+- **The shim never talks to the real `gh` directly** — it execs the seat guard, and it refuses to run when the guard is missing.
+- **`gh api -f body=@file` sends the literal `@file`.** The shim expands a `@path` field value for both `-f` and `-F`, and refuses a body that is a bare path; read the file yourself if you write the call without the shim.
+- **A PR outside the `digithings-ai` org is refused**, by the shim and by the git credential helper. There is no upstream PR, under any identity.
+
+Install, policy, rollback and the limits of this control: [`docs/ops/dt-broker.md`](docs/ops/dt-broker.md).
+
+---
+
 ## Naming — Digi modules
 
 Every Digi product, module, package, and service name is **always lowercase** in prose, docs, agent instructions, commit messages, and PR text — including at the start of a sentence and in headings.
