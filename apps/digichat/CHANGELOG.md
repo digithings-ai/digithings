@@ -1,3 +1,31 @@
+## [2.6.8](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.7...digichat-v2.6.8) (2026-10-22)
+
+Reasoning is on for every chat, and `/effort` sets how hard the model thinks.
+The model name and picker are back on by default on digithings.ai and the OCC
+embed. Exports save on phones and inside embeds. A stopped or failed turn stops
+animating. `/tools` lists each service with its tools again. The `/chat` page
+has proper loading, 404 and failure states. Every export path is redacted.
+
+### Bug Fixes
+
+* **digichat:** the model name and picker are on by default for the house chat and the OCC embed. The house chat keeps its per-visitor Premium window. OCC carries no Premium meter and no tokens-per-minute guardrail. A tenant can still opt out with `allowPicker: false` or `occPicker: false`. 2.6.6 had made the picker opt-in ([#6237](https://github.com/digithings-ai/digithings/pull/6237))
+* **digichat:** Markdown and HTML exports save on phones and inside embedded chats. The file link now stays valid long enough for the browser's save confirm. Phones use the share sheet where the page allows it. When the tap that started the export has expired, a Save button asks for one more tap ([#6244](https://github.com/digithings-ai/digithings/pull/6244))
+* **digichat:** a stopped or failed turn stops its animations ([#6236](https://github.com/digithings-ai/digithings/pull/6236))
+* **digichat:** `/tools` lists each service as a tree with its tools under it, as before the 2.6.6 palette change ([#6233](https://github.com/digithings-ai/digithings/pull/6233))
+* **web:** the `/chat` page shows loading, not-found and failure states instead of a blank frame ([#6223](https://github.com/digithings-ai/digithings/pull/6223))
+* **digichat:** every export path is redacted. The clipboard copy, the `mailto:` body, the `.txt` export and the minimal HTML export now go through the shared redactor, as the Markdown download already did. A `)` or a backtick inside a secret no longer leaks the rest of the value ([#6238](https://github.com/digithings-ai/digithings/pull/6238), [#6257](https://github.com/digithings-ai/digithings/pull/6257))
+* **digichat:** a trial starter asks a full question instead of a fragment ([#6185](https://github.com/digithings-ai/digithings/pull/6185))
+
+### Features
+
+* **chat:** reasoning is on for every chat, and `/effort` (low/medium/high) sets the model's reasoning level where the model has one. The house model (DeepSeek V4.1 Flash 1017) only reasons when a level is sent, so with no `/effort` it gets `medium`. Foundry backends get `/effort` as `reasoning.effort` and drop it for the turn if it's refused. Which models take a level is configured in `config/model-policy.json` ([#6245](https://github.com/digithings-ai/digithings/pull/6245))
+
+### Known limits
+
+* An embedding page must allow `web-share` on the iframe for the phone share sheet. Without it, the export falls back to a download (with the extra tap when needed).
+* In the command palette, typing `/export html` and pressing Enter runs the highlighted row, which may be the Markdown export. Tapping the row works.
+* Premium spend counters are per instance, as in 2.6.7.
+
 ## [2.6.7](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.6...digichat-v2.6.7) (2026-10-22)
 
 The invite-only OCC embed loads again, a visitor who leaves or presses stop
