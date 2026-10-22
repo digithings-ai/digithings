@@ -17,9 +17,9 @@ digithings ships **self-hosted** AI infra. Clients install digichat **releases f
 
 ```bash
 docker build -f apps/digichat/Dockerfile \
-  --build-arg DIGICHAT_VERSION=2.6.7 \
+  --build-arg DIGICHAT_VERSION=2.6.8 \
   --build-arg DIGICHAT_REVISION="$(git rev-parse HEAD)" \
-  -t digichat:2.6.7 .
+  -t digichat:2.6.8 .
 ```
 
 - Git tag: `digichat-vX.Y.Z`
