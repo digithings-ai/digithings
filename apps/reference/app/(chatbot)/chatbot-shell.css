@@ -12,6 +12,10 @@
 /* Product Thread is @digithings/ui/chat/thread. Scan that family only —
    not the rest of @digithings/ui (webpack OOM). */
 @source "../../../../packages/ui/src/components/chat";
+/* The shared ThemeToggle renders IconButton, so those two files must be
+   scanned or their utilities (e.g. hover:bg-ink/6) are never emitted. */
+@source "../../../../packages/ui/src/components/ThemeProvider.tsx";
+@source "../../../../packages/ui/src/ui/icon-button.tsx";
 
 @theme inline {
   --color-background: var(--bg);

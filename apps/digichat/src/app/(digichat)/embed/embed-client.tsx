@@ -128,12 +128,14 @@ import {
   parseEmbedUserTheme,
   parseThemeMessage,
   readEmbedUserThemeRaw,
+  resolveEmbedPalette,
   resolveEmbedTheme,
   subscribeEmbedUserTheme,
   writeEmbedUserTheme,
   type EmbedTheme,
   type EmbedUserTheme,
 } from "@/lib/embed-theme-messages";
+import type { PaletteName } from "@digithings/ui/theme";
 import {
   pageContextCreateAttachment,
   parsePageContextMessage,
@@ -218,6 +220,9 @@ function EmbedPageInner({
 
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
+  // The parent's palette rides the same message; it never writes data-palette
+  // itself (that would fight the theme effect below).
+  const [parentPalette, setParentPalette] = useState<PaletteName | null>(null);
   // The visitor's own /theme pick: this tab only, per embed host (2.6.6).
   const userThemeKey = embedUserThemeKey(tenantCfg.slug);
   const userThemeRaw = useSyncExternalStore(
@@ -239,7 +244,12 @@ function EmbedPageInner({
     url: urlTheme,
     tenant: tenantCfg.theme,
   });
-  const effectivePalette = userTheme?.palette ?? "default";
+  // /theme pick > parent postMessage > default look. One channel, one writer
+  // (the theme effect below), so a parent palette cannot be reverted mid-tick.
+  const effectivePalette = resolveEmbedPalette({
+    pick: userTheme,
+    parent: parentPalette,
+  });
 
   // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
   // postMessage; we exchange it at /api/plan-proof (server verifies claims) and
@@ -320,6 +330,9 @@ function EmbedPageInner({
       const parsed = parseThemeMessage(event, themeParentOrigins);
       if (!parsed) return;
       setParentTheme(parsed.theme);
+      // A message without a palette clears the parent channel, so the pick or
+      // the default look takes over again.
+      setParentPalette(parsed.palette ?? null);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
