@@ -2598,6 +2598,14 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     const OCC_HOST = "occ.digithings.ai";
     const OCC_TOKEN = "occ-secret";
 
+    // A deployment host with NO model list. Since #6237 every product chat
+    // (the OCC host is one) resolves a catalog list even when the YAML has
+    // no `models` block, so "this tenant has no list" has to be said
+    // explicitly. `allowPicker: false` is the operator's way of saying it,
+    // and it is the shape Counsel's DIG-4486 ruling gives a locked OCC
+    // tenant: no picker, no hand list, the operator's model only.
+    const NO_MODEL_LIST = ["    models:", "      allowPicker: false"];
+
     function occYaml(opts: { host?: string[]; deployment?: string[] } = {}): string {
       return [
         "version: 1",
@@ -2703,12 +2711,41 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(allowed.status).toBe(200);
     });
 
+    it("honours the pick from a locked tenant's own curated list", async () => {
+      // The live OCC shape: the tenant is locked AND curates its own model
+      // list. The lock pins the session controls, but the picker is the
+      // operator's own list, so a pick from that list is forwarded. The
+      // deployment host in this fixture also resolves a catalog (every
+      // product chat does since #6237), so this also pins that the merge
+      // lets the tenant's hand list win instead of letting the catalog
+      // ignore it and pin the tenant's default against a catalog that does
+      // not know it.
+      installConfig(occYaml(), {
+        slug: "occ",
+        token: OCC_TOKEN,
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        lockSessionControls: true,
+        models: { default: "only-this-model", available: ["only-this-model"] },
+      });
+
+      const forwarded = captureForwardedModel();
+      const res = await POST(occReq({ "x-digi-model": "only-this-model" }));
+      expect(res.status).toBe(200);
+      expect(forwarded).toEqual(["only-this-model"]);
+    });
+
     it("honours a session lock set in the deployment config", async () => {
       // The lock is set in the deployment config only. The merged tenant
       // carries it, so the visitor's model pick is never forwarded.
       installConfig(
         occYaml({
-          host: ["    gate:", "      mode: ungated", "      lockSessionControls: true"],
+          host: [
+            "    gate:",
+            "      mode: ungated",
+            "      lockSessionControls: true",
+            ...NO_MODEL_LIST,
+          ],
         }),
         {
           slug: "occ",
@@ -2729,7 +2766,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       // The mirror image: the lock is set in the tenant registry while the
       // deployment config has a host for the same host without a lock. The
       // merge keeps the stricter of the two, so the pick is not forwarded.
-      installConfig(occYaml(), {
+      installConfig(occYaml({ host: NO_MODEL_LIST }), {
         slug: "occ",
         token: OCC_TOKEN,
         gateMode: "ungated",
@@ -2758,6 +2795,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
             "    mode: ungated",
             "    lockSessionControls: true",
           ],
+          host: NO_MODEL_LIST,
         }),
         {
           slug: "occ",

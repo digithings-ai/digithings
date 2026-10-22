@@ -356,6 +356,12 @@ function unresolveCatalog(dep: DigichatDeployment): DigichatDeployment {
  *   tenant's when it sets one, else the deployment's. The registry's own
  *   models block is spread on top, so the picker, the catalog and the
  *   premium meter still travel to a host that also has a deployment entry.
+ * - `models.catalog`: dropped when the tenant curates a list. A catalog
+ *   policy and a hand-written list cannot coexist - `applyModelCatalog`
+ *   ignores the hand list and pins the tenant's `default` against a catalog
+ *   that does not know it, which throws. The tenant's curation is the more
+ *   specific statement, so it wins, exactly as it does in
+ *   `withProductPickerDefaults`.
  *
 
  * `gate.requiredPlanTier` is NOT merged here: #3662 keeps its own rule in
@@ -381,15 +387,31 @@ function mergeEmbedTenantIntoDeployment(
   const defaultModel = tenantDefault ?? dep.models?.default;
   const allowPicker = tenantAllowPicker ?? dep.models?.allowPicker;
 
+  const models: DigichatDeployment["models"] = {
+    ...dep.models,
+    ...(fromRegistry ?? {}),
+    ...(defaultModel ? { default: defaultModel } : {}),
+    available,
+    ...(allowPicker === undefined ? {} : { allowPicker }),
+  };
+
+  // A catalog policy and a hand-written list are mutually exclusive:
+  // `applyModelCatalog` warns that the hand list is ignored, lets the
+  // catalog win, and pins the tenant's `default` against a catalog that does
+  // not know it - which throws and takes the whole config down with it. The
+  // tenant's curation is the more specific statement, so when the tenant
+  // curates a list the deployment's catalog policy is dropped and the hand
+  // list is left alone - the same precedence `withProductPickerDefaults`
+  // gives a hand-written list over the product-chat default policy. When the
+  // tenant curates nothing the deployment's catalog stays and resolves as
+  // before.
+  if (tenantAvailable.length > 0 && models.catalog) {
+    delete models.catalog;
+  }
+
   return {
     ...dep,
-    models: {
-      ...dep.models,
-      ...(fromRegistry ?? {}),
-      ...(defaultModel ? { default: defaultModel } : {}),
-      available,
-      ...(allowPicker === undefined ? {} : { allowPicker }),
-    },
+    models,
     gate: {
       ...dep.gate,
       lockSessionControls:

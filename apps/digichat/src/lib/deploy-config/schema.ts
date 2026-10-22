@@ -326,11 +326,34 @@ export const ModelsSchema = z
  * (`ModelsSchema` defaults it to `[]`); the registry leaves it optional, so
  * the shared shape keeps it optional and the allowlist treats a missing list
  * as "no restriction" — the same as an empty one.
+ *
+ * Every field is optional on purpose: this is the shape ONE artefact takes
+ * wherever it comes from — a deployment entry, a registry row, or the merged
+ * host deployment the request path reads (DIG-4589). The deployment's parsed
+ * models assign to it (`available` becomes optional, the defaulted
+ * `windowSeconds` becomes optional), so one helper serves all three.
  */
 export type ModelOffer = {
   default?: string;
   available?: string[];
   allowPicker?: boolean;
+  catalog?: boolean;
+  occPicker?: boolean;
+  priceCapUsdPerMillion?: number;
+  premiumCapUsdPerMillion?: number;
+  costPerWindow?: { usd: number; windowSeconds?: number };
+  presets?: Array<"auto" | "reasoning" | "fast" | "light" | "router">;
+  showFullList?: boolean;
+  minContextTokens?: number;
+  picker?: {
+    presets: Array<{ id: string; label: string; description: string; model: string }>;
+    groups: Array<{
+      provider: string;
+      models: Array<{ id: string; label: string }>;
+      premium?: boolean;
+    }>;
+    showFullList: boolean;
+  };
 };
 
 export const CliSchema = z
@@ -888,7 +911,7 @@ const PRESET_PREFIX = "preset:";
  * apply the deployment allowlist. An unknown preset is not allowed.
  */
 export function resolveHouseModelSelection(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
   requested: string | null | undefined,
 ): string | undefined {
   const id = requested?.trim() || undefined;
@@ -906,7 +929,7 @@ export function resolveHouseModelSelection(
  * visitor picked the router preset. The browser never supplies this list.
  */
 export function routerModelsHeader(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
   selected: string | undefined,
 ): string | undefined {
   const router = models?.picker?.presets.find((preset) => preset.id === "router");
@@ -920,7 +943,7 @@ export function routerModelsHeader(
 
 /** Comma list of manual Premium ids, so digillm can drop them from a router allowlist. */
 export function premiumModelsHeader(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
 ): string | undefined {
   const ids = premiumIdsFromGroups(models?.picker?.groups);
   return ids.length ? ids.join(",") : undefined;

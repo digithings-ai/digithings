@@ -2122,7 +2122,13 @@ and a lookup that returns the registry-only duplicate.
 `gate.lockSessionControls` is true when **either** source says true - a lock is
 a restriction, so the merge never drops one. `models.available` is the tenant's
 curated list when it is non-empty, else the deployment's list; `models.default`
-and `models.allowPicker` follow the same precedence. The deployment's own
+and `models.allowPicker` follow the same precedence. **A tenant list and a catalog
+policy are mutually exclusive**: when the tenant curates a list the merge drops the
+deployment's `models.catalog`, because `applyModelCatalog` lets the catalog win
+over a hand list ("the hand list is ignored") and pins the tenant's `default`
+against a catalog that does not know it, which throws. The tenant's curation is
+the more specific statement, and it is the same precedence
+`withProductPickerDefaults` gives a hand-written list. The deployment's own
 `models` fields are carried over, so a field added to `ModelsSchema` later is
 not dropped by the merge. `gate.requiredPlanTier` keeps its own rule (#3662).
 The client projection merges nothing: it consumes the already merged artefact
