@@ -21,7 +21,7 @@
       "models": {
         "allowPicker": true,
         "catalog": true,
-        "default": "deepseek/deepseek-v4.1-flash-1017",
+        "default": "deepseek/deepseek-v4.1-flash",
         "priceCapUsdPerMillion": 2,
         "presets": ["auto", "reasoning", "fast", "light"],
         "showFullList": true,
@@ -40,7 +40,7 @@
       "models": {
         "allowPicker": true,
         "catalog": true,
-        "default": "deepseek/deepseek-v4.1-flash-1017",
+        "default": "deepseek/deepseek-v4.1-flash",
         "priceCapUsdPerMillion": 2,
         "presets": ["auto", "reasoning", "fast", "light"],
         "showFullList": true

@@ -23,8 +23,8 @@
     {
       "id": "auto",
       "label": "Auto",
-      "description": "DeepSeek V4.1 Flash 1017, our default.",
-      "model": "deepseek/deepseek-v4.1-flash-1017"
+      "description": "DeepSeek V4.1 Flash, our default.",
+      "model": "deepseek/deepseek-v4.1-flash"
     },
     {
       "id": "reasoning",

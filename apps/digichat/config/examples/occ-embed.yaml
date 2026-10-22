@@ -42,7 +42,8 @@ hosts:
       occPicker: true
       allowPicker: true
       catalog: true
-      default: deepseek/deepseek-v4.1-flash-1017
+      # v4.1-flash streams reasoning by default; 1017 does not (2026-10-22).
+      default: deepseek/deepseek-v4.1-flash
       priceCapUsdPerMillion: 2
       # Chris, 21 Oct 2026 22:51 Rome: OCC has no token limits and no model
       # limits. The invite link is the gate. No costPerWindow, so there is

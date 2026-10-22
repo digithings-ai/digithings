@@ -119,7 +119,10 @@ describe("model picker catalog", () => {
 
   it("drops a dated checkpoint past maxAgeDays and keeps an undated one", () => {
     expect(() =>
-      resolveModelCatalog({ maxAgeDays: 3 }, { openRouterConfigured: false }),
+      resolveModelCatalog(
+        { maxAgeDays: 3, default: "deepseek/deepseek-v4.1-flash-1017" },
+        { openRouterConfigured: false },
+      ),
     ).toThrow(/current generation/);
     const aged = resolveModelCatalog(
       { maxAgeDays: 3, default: "z-ai/glm-5.3-flash", priceCapUsdPerMillion: 20 },
@@ -134,8 +137,8 @@ describe("model picker catalog", () => {
   it("picks Auto, Reasoning, Fast, and Light from the newest capped set", () => {
     const resolved = policy();
     const byId = Object.fromEntries(resolved.picker.presets.map((preset) => [preset.id, preset]));
-    expect(byId.auto?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
-    expect(byId.auto?.description).toMatch(/DeepSeek V4.1 Flash 1017/);
+    expect(byId.auto?.model).toBe("deepseek/deepseek-v4.1-flash");
+    expect(byId.auto?.description).toMatch(/DeepSeek V4.1 Flash, our default/);
     expect(byId.reasoning?.model).toBe("z-ai/glm-5.3-flash");
     expect(byId.reasoning?.description).toMatch(/Best reasoning/);
     expect(byId.fast?.model).toBe("google/gemini-3.5-flash-lite");
@@ -174,7 +177,7 @@ describe("model picker catalog", () => {
     const hidden = resolveModelCatalog({ showFullList: false }, { openRouterConfigured: false });
     expect(hidden.picker.groups).toEqual([]);
     expect(hidden.available).toEqual([
-      "deepseek/deepseek-v4.1-flash-1017",
+      "deepseek/deepseek-v4.1-flash",
       "z-ai/glm-5.3-flash",
       "google/gemini-3.5-flash-lite",
       "openai/gpt-oss-120b",

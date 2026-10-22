@@ -33,7 +33,7 @@ afterEach(() => {
   cleanup();
 });
 
-const FLASH = "deepseek/deepseek-v4.1-flash-1017";
+const FLASH = "deepseek/deepseek-v4.1-flash";
 
 function paint(model: string) {
   return render(<DigichatContextMeter model={model} toolCount={0} />);
