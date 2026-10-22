@@ -73,10 +73,6 @@ export class DigiChatContainer extends Container {
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: workerVars.DIGICHAT_PLAN_PROOF_SECRET ?? "",
     DIGICHAT_MONITOR_TOKENS: workerVars.DIGICHAT_MONITOR_TOKENS ?? "",
-    // Trial-proof mint/verify secret (DIG-4530); must reach the container process.
-    DIGICHAT_TRIAL_PROOF_SECRET: workerVars.DIGICHAT_TRIAL_PROOF_SECRET ?? "",
-    // Tenant mint credentials (DIG-4530); must reach the container process.
-    DIGICHAT_TENANT_MINT_CREDENTIALS: workerVars.DIGICHAT_TENANT_MINT_CREDENTIALS ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_URL: workerVars.DIGICHAT_DASHBOARD_SUPABASE_URL ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
       workerVars.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? "",
@@ -150,10 +146,6 @@ export interface Env {
   DIGIKEY_BFF_TOKEN?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
   DIGICHAT_MONITOR_TOKENS?: string;
-  /** HMAC secret backing the trial-proof mint/verify path (DIG-4530). */
-  DIGICHAT_TRIAL_PROOF_SECRET?: string;
-  /** Per-tenant credentials used by the mint path (DIG-4530). */
-  DIGICHAT_TENANT_MINT_CREDENTIALS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
   /** Read-only Zammad helpdesk MCP: base URL + API token, forwarded to the container. */

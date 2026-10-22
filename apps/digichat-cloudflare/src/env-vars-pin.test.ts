@@ -138,19 +138,6 @@ describe("digichat Env / envVars parity", () => {
     ).toEqual([]);
   });
 
-  it("forwards the trial-proof secrets so the proof path is live in the container", () => {
-    // DIG-4530: both handlers (mint route + chat route) read these from the
-    // container's process env, and the container env is exactly the map below.
-    // The general parity case above cannot catch a name that is declared
-    // nowhere at all, so these two are pinned by name.
-    const declared = new Set(envMembers);
-    const forwarded = new Set(forwardedKeys);
-    for (const name of ["DIGICHAT_TRIAL_PROOF_SECRET", "DIGICHAT_TENANT_MINT_CREDENTIALS"]) {
-      expect(declared.has(name), `${name} is not declared on Env`).toBe(true);
-      expect(forwarded.has(name), `${name} is not forwarded in envVars`).toBe(true);
-    }
-  });
-
   it("keeps the worker-only allowlist honest and one-way", () => {
     const declared = new Set(envMembers);
     const forwarded = new Set(forwardedKeys);
