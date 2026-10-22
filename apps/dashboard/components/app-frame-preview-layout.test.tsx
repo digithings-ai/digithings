@@ -105,10 +105,37 @@ describe('AppFrame preview placement', () => {
     let node: Element | null = preview.parentElement;
     while (node && node !== main) {
       const className = node.getAttribute('class') ?? '';
-      expect(className).not.toMatch(/\bw-\[/);
+      // Any width utility, not just `w-[…]`: `w-max`, `w-fit` and
+      // `min-w-screen` squeeze or overflow the column just as a fixed width
+      // does.
+      const widthTokens = className
+        .split(/\s+/)
+        .filter((token) => /^(min-|max-)?w-/.test(token));
+      expect(widthTokens).toEqual([]);
       expect(className).not.toContain('shrink-0');
+      expect(className).not.toContain('flex-none');
       node = node.parentElement;
     }
     expect(node).toBe(main);
+  });
+
+  it('mounts the preview directly in the column, above the page content', () => {
+    act(() => {
+      root.render(
+        createElement(AppFrame, null, createElement('p', null, 'page')),
+      );
+    });
+
+    const main = container.querySelector('main')!;
+    const preview = main.querySelector('[data-testid="d8-preview"]')!;
+    // Direct child: a wrapper between the preview and the column is where a
+    // fixed width would hide.
+    expect(preview.parentElement).toBe(main);
+    // The strip sits above the page content, so the page is not pushed down.
+    const page = container.querySelector('p')!;
+    const order = Array.from(main.children);
+    expect(order.indexOf(preview)).toBeLessThan(
+      order.indexOf(page.parentElement!),
+    );
   });
 });

@@ -31,9 +31,12 @@ const CFG: DigichatPopupConfig = {
 
 const TOKEN = 'session-access-token';
 
-function authWithToken(token: string | null): AuthContextValue {
+function authWithToken(
+  token: string | null,
+  authEnabled = true,
+): AuthContextValue {
   return {
-    authEnabled: true,
+    authEnabled,
     loading: false,
     user: null,
     session: token ? ({ access_token: token } as never) : null,
@@ -44,20 +47,15 @@ function authWithToken(token: string | null): AuthContextValue {
   } satisfies AuthContextValue;
 }
 
-/** A `digichat:ready` message from the given origin. */
-function readyEvent(origin: string): MessageEvent {
-  const event = new MessageEvent('message', {
-    data: { type: DIGICHAT_READY },
-  });
-  Object.defineProperty(event, 'origin', { value: origin });
-  return event;
-}
-
-/** A message from the given origin that is **not** a ready. */
-function otherEvent(origin: string, type: string): MessageEvent {
-  const event = new MessageEvent('message', { data: { type } });
-  Object.defineProperty(event, 'origin', { value: origin });
-  return event;
+/**
+ * The width utilities of a class list. Exact, not a substring: `w-full` and
+ * `w-max` in the same list would both satisfy `toContain('w-full')`, and
+ * `w-max`/`min-w-[900px]` is exactly how the column gets squeezed again.
+ */
+function widthUtilities(className: string): string[] {
+  return className
+    .split(/\s+/)
+    .filter((token) => /^(min-|max-)?w-/.test(token));
 }
 
 /**
@@ -81,10 +79,30 @@ describe('DigichatLivePreview', () => {
   let container: HTMLDivElement;
   let root: Root;
   let postMessage: ReturnType<typeof vi.fn>;
+  /** The frame's window. Stable, so a message can name it as its source. */
+  let frameWindow: { postMessage: ReturnType<typeof vi.fn> };
   let originalContentWindow: {
     owner: object;
     descriptor: PropertyDescriptor;
   } | null;
+
+  /** A `digichat:ready` message from the given origin, sent by this frame. */
+  function readyEvent(origin: string, source: unknown = frameWindow): MessageEvent {
+    const event = new MessageEvent('message', {
+      data: { type: DIGICHAT_READY },
+    });
+    Object.defineProperty(event, 'origin', { value: origin });
+    Object.defineProperty(event, 'source', { value: source });
+    return event;
+  }
+
+  /** A message from the given origin that is **not** a ready. */
+  function otherEvent(origin: string, type: string): MessageEvent {
+    const event = new MessageEvent('message', { data: { type } });
+    Object.defineProperty(event, 'origin', { value: origin });
+    Object.defineProperty(event, 'source', { value: frameWindow });
+    return event;
+  }
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -94,10 +112,11 @@ describe('DigichatLivePreview', () => {
     // The frame's window is mocked **before** the component mounts, so a post
     // that happens at mount time (instead of after `digichat:ready`) is seen.
     postMessage = vi.fn();
+    frameWindow = { postMessage };
     originalContentWindow = findContentWindowDescriptor();
     Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
       configurable: true,
-      get: () => ({ postMessage }),
+      get: () => frameWindow,
     });
   });
 
@@ -117,21 +136,38 @@ describe('DigichatLivePreview', () => {
 
   function render(
     tier: PlanTier,
-    opts: { token?: string | null } = {},
+    opts: { token?: string | null; authEnabled?: boolean } = {},
   ) {
     act(() => {
       root.render(
         createElement(
           AuthContext.Provider,
-          { value: authWithToken(opts.token ?? null) },
+          {
+            value: authWithToken(
+              opts.token ?? null,
+              opts.authEnabled ?? true,
+            ),
+          },
           createElement(DigichatLivePreview, { tier, config: CFG }),
         ),
       );
     });
   }
 
+  /** Open the strip: the embed mounts on the first open. */
+  function openPreview() {
+    const summary = container.querySelector('summary');
+    expect(summary).not.toBeNull();
+    act(() => {
+      summary!.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      );
+    });
+  }
+
   it('renders the live iframe on an allowed origin for entitled tiers', () => {
-    render('desk');
+    render('desk', { token: TOKEN });
+    openPreview();
     const section = container.querySelector(
       '[data-digichat-live-preview="live"]',
     );
@@ -143,34 +179,43 @@ describe('DigichatLivePreview', () => {
     expect(DIGICHAT_POPUP_FRAME_ORIGINS).toContain(origin);
   });
 
+  it('does not mount the embed before the strip is opened', () => {
+    render('desk', { token: TOKEN });
+    // A frame inside a closed <details> still loads, so an eager iframe would
+    // boot the whole digichat app on every dashboard route.
+    expect(container.querySelector('iframe')).toBeNull();
+    openPreview();
+    expect(container.querySelector('iframe')).not.toBeNull();
+  });
+
   it('keeps the strip bounded to the content column (DIG-5138)', () => {
-    render('desk');
+    render('desk', { token: TOKEN });
     const section = container.querySelector(
       '[data-digichat-live-preview="live"]',
     )!;
     // w-full: the strip takes the width of the column it lives in, never a
     // max-content width of its own. As a row sibling of <main> it took the
     // upgrade paragraph's width and squeezed the page column to 38px.
-    expect(section.className).toContain('w-full');
+    expect(widthUtilities(section.className)).toEqual(['w-full']);
     expect(section.getAttribute('style')).toBeNull();
-    // No fixed or minimum width of its own: a `min-w-[900px]` here would
-    // force a horizontal scrollbar inside the 390px phone column.
-    expect(section.className).not.toMatch(/\b(min-)?w-\[/);
   });
 
   it('sizes the embed explicitly instead of the browser default 300x150', () => {
-    render('desk');
+    render('desk', { token: TOKEN });
+    openPreview();
     const iframe = container.querySelector('iframe')!;
-    expect(iframe.className).toContain('w-full');
+    // The embed is a chat surface: it never stretches over the whole column.
+    expect(widthUtilities(iframe.className)).toEqual([
+      'w-full',
+      'max-w-[640px]',
+    ]);
     expect(iframe.className).toContain('h-[320px]');
     expect(iframe.className).toContain('md:h-[480px]');
-    // The embed is a chat surface: it never stretches over the whole column.
-    expect(iframe.className).toContain('max-w-[640px]');
     expect(iframe.getAttribute('style')).toBeNull();
   });
 
   it('ships the strip collapsed so the page is not pushed down', () => {
-    render('desk');
+    render('desk', { token: TOKEN });
     const details = container.querySelector('details')!;
     expect(details.hasAttribute('open')).toBe(false);
   });
@@ -181,20 +226,44 @@ describe('DigichatLivePreview', () => {
       '[data-digichat-live-preview="upgrade"]',
     );
     expect(upgrade).not.toBeNull();
-    expect(upgrade!.className).toContain('w-full');
-    expect(upgrade!.className).not.toMatch(/\b(min-)?w-\[/);
+    expect(widthUtilities(upgrade!.className)).toEqual(['w-full']);
     expect(container.querySelector('iframe')).toBeNull();
     expect(container.textContent).toContain(DIGICHAT_UPGRADE_TITLE);
   });
 
+  it('carries no session material into the upgrade branch', () => {
+    render('brief', { token: TOKEN });
+    // The upgrade branch is for a tier that may not chat; it must not leak
+    // the session token into the DOM.
+    expect(container.innerHTML).not.toContain(TOKEN);
+  });
+
+  it('renders nothing for an entitled tier without a session', () => {
+    // Without a session the embed never gets a plan proof and every turn
+    // answers 403 plan_tier_required: a dead chat surface. Fail closed.
+    render('desk');
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('mirrors the popup in the classic shell, which has no sessions', () => {
+    // Auth off: the dashboard models the user as entitled and the popup
+    // shows the embed. The preview shows the same surface instead of
+    // inventing a third behaviour for it.
+    render('desk', { authEnabled: false });
+    openPreview();
+    expect(container.querySelector('iframe')).not.toBeNull();
+  });
+
   it('posts nothing to the frame before the embed reports ready', () => {
     render('desk', { token: TOKEN });
+    openPreview();
     // The session token must not leave the page until the embed asks for it.
     expect(postMessage).not.toHaveBeenCalled();
   });
 
   it('posts the plan tier to the embed for entitled tiers (DIG-5139)', () => {
     render('desk', { token: TOKEN });
+    openPreview();
 
     act(() => {
       window.dispatchEvent(readyEvent(CFG.origin));
@@ -221,6 +290,7 @@ describe('DigichatLivePreview', () => {
 
   it('tells the embed which theme the dashboard runs in', () => {
     render('desk', { token: TOKEN });
+    openPreview();
 
     act(() => {
       window.dispatchEvent(readyEvent(CFG.origin));
@@ -235,6 +305,7 @@ describe('DigichatLivePreview', () => {
 
   it('sends the session tier, not a fixed one, in the plan-tier proof', () => {
     render('studio', { token: TOKEN });
+    openPreview();
 
     act(() => {
       window.dispatchEvent(readyEvent(CFG.origin));
@@ -249,19 +320,12 @@ describe('DigichatLivePreview', () => {
 
   it('sends the plan tier once the session token arrives', () => {
     render('desk');
-    act(() => {
-      window.dispatchEvent(readyEvent(CFG.origin));
-    });
-    // No token yet: only the theme message.
-    expect(postMessage).toHaveBeenCalledTimes(1);
-    expect(
-      postMessage.mock.calls.some(
-        ([message]) => (message as { type?: string })?.type === 'digichat:plan-tier',
-      ),
-    ).toBe(false);
+    // No session yet: the live arm does not render at all.
+    expect(container.innerHTML).toBe('');
 
     // The session arrives later; the next ready carries the proof.
     render('desk', { token: TOKEN });
+    openPreview();
     postMessage.mockClear();
     act(() => {
       window.dispatchEvent(readyEvent(CFG.origin));
@@ -278,6 +342,7 @@ describe('DigichatLivePreview', () => {
 
   it('ignores a ready message from another origin', () => {
     render('desk', { token: TOKEN });
+    openPreview();
 
     act(() => {
       window.dispatchEvent(readyEvent('https://evil.example'));
@@ -288,6 +353,7 @@ describe('DigichatLivePreview', () => {
 
   it('ignores a ready message from an origin that only looks like the embed', () => {
     render('desk', { token: TOKEN });
+    openPreview();
 
     act(() => {
       window.dispatchEvent(
@@ -300,9 +366,25 @@ describe('DigichatLivePreview', () => {
 
   it('ignores a message from the embed origin that is not a ready', () => {
     render('desk', { token: TOKEN });
+    openPreview();
 
     act(() => {
       window.dispatchEvent(otherEvent(CFG.origin, 'digichat:page-context'));
+    });
+
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it('ignores a ready from another frame on the embed origin', () => {
+    render('desk', { token: TOKEN });
+    openPreview();
+
+    // The DigiChat popup is on the same origin. Its ready must not mint a
+    // second proof in this frame.
+    act(() => {
+      window.dispatchEvent(
+        readyEvent(CFG.origin, { postMessage: vi.fn() } as never),
+      );
     });
 
     expect(postMessage).not.toHaveBeenCalled();
