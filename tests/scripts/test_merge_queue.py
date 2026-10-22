@@ -71,10 +71,10 @@ mq = _load()
 def reviewer_gate_off(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep the reviewer-independence gate out of every other test in this file.
 
-    The shipped policy turns the gate on in shadow mode, and shadow mode reads
+    The shipped policy turns the gate on in enforce mode, and the gate reads
     the Paperclip API. A unit test must not talk to the live control plane, so
     the gate is off by default here and switched on explicitly by the tests
-    that are about it.
+    that are about it (or by deleting the override to read the shipped policy).
     """
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "off")
 
@@ -5267,6 +5267,27 @@ def _bare_comment() -> dict[str, Any]:
     }
 
 
+def _placeholder_comment() -> dict[str, Any]:
+    """The write-up #6197 merged on: the markers, but placeholder ids.
+
+    The author pasted the house marker without filling it in, so it names no
+    seat and no run the Paperclip API could resolve. It is the second case the
+    queue has to refuse: a claim with no non-author seat marker at all.
+    """
+    return {
+        "id": "IC_kwDOplaceholder_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            "<!-- digithings-review agent=your-seat-uuid run=your-run-uuid "
+            f"head={'a' * 40} -->\n\n"
+            "Review verdict: approve\n\nThe blocker is fixed.\n"
+        ),
+    }
+
+
 def _reviewed_pr(
     comments: list[dict[str, Any]],
     *,
@@ -5351,6 +5372,91 @@ def test_the_reviewed_agent_label_does_not_carry_the_author_seats_own_review(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     assert not any("in-session review" in reason for reason in verdict.reasons)
+
+
+def test_the_shipped_gate_refuses_an_author_lane_write_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#6277: the authoring lane's own pass named the author seat and the head.
+
+    The write-up carried a real house marker, resolved through Paperclip to the
+    seat whose commits are on the PR, and it named the current head. Under the
+    old shadow setting the queue counted it as the non-author review and merged
+    `723b48de` with no other seat's look. The shipped gate has to refuse it.
+    """
+    monkeypatch.delenv("MQ_REVIEW_INDEPENDENCE", raising=False)
+    assert mq.load_policy().review_independence.mode == "enforce"
+    prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
+    pr = _reviewed_pr([_provenance_comment(agent=AUTHOR_AGENT, run=AUTHOR_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "author's own seat" in reason
+    assert AUTHOR_AGENT[:8] in reason
+    assert "a review from a different seat" in reason
+
+
+def test_the_shipped_gate_refuses_a_write_up_with_no_seat_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#6197: the author's fix write-up carried no checkable non-author seat.
+
+    It had the in-session marker and a prose approve, and no provenance marker
+    at all. GitHub says `chrizefan` wrote it — the same login as every seat — so
+    the queue cannot show another seat reviewed the head, and it must not count
+    the comment as coverage.
+    """
+    monkeypatch.delenv("MQ_REVIEW_INDEPENDENCE", raising=False)
+    prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
+    pr = _reviewed_pr([_bare_comment()])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "carries neither a seat nor a run" in reason
+    assert "a review from a different seat" in reason
+
+
+def test_a_placeholder_house_marker_is_not_real_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#6197 again: the marker was pasted, not filled in.
+
+    The house marker is a claim only when its `agent=` and `run=` are records the
+    Paperclip API can resolve. A placeholder is refused by name and never sent to
+    the API — asking about a value that is not an id turns a fact about the
+    comment into a failed read.
+    """
+    monkeypatch.delenv("MQ_REVIEW_INDEPENDENCE", raising=False)
+    prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
+    pr = _reviewed_pr([_placeholder_comment()])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "is not a run id" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_non_author_seats_pass_on_the_head_is_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The positive half: another seat's pass with real ids clears the gate.
+
+    `agent` and `run` resolve through Paperclip to the reviewer seat, and `head`
+    is the head the PR stands at. That is the evidence the queue now requires;
+    the verdict gate separately refuses a head the reviewer still blocks.
+    """
+    monkeypatch.delenv("MQ_REVIEW_INDEPENDENCE", raising=False)
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)],
+    )
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert REVIEWER_AGENT[:8] in verdict.review_evidence
 
 
 def test_the_seat_that_wrote_the_code_is_the_author_without_a_trailer(
@@ -6791,14 +6897,15 @@ def test_two_server_errors_name_the_code_and_the_attempts(
     assert len(calls) == 2
 
 
-def test_shadow_mode_merges_and_records_what_it_would_refuse(
+def test_shadow_mode_records_the_refusal_and_does_not_count_it(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The rollout DIG-4809 named: measure first, refuse later.
+    """Shadow is a log, not a licence to count a marker the gate refused.
 
-    Shadow mode is the 48-hour window. The PR merges as it would have merged
-    before, and the log says what the gate would have said — so the flip to
-    `enforce` is a switch, not a leap.
+    DIG-4809 named the 48-hour window and DIG-5220 closed it: #6277 and #6197
+    merged on the author lane's own write-up because shadow merged what it had
+    just measured. The measurement stays in the log; the merge no longer
+    happens on the refused marker, in shadow or in enforce.
     """
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "shadow")
     log = tmp_path / "reviewer-independence.log"
@@ -6809,7 +6916,8 @@ def test_shadow_mode_merges_and_records_what_it_would_refuse(
     prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
     pr = _reviewed_pr([_provenance_comment(agent=AUTHOR_AGENT, run=AUTHOR_RUN)])
     verdict = mq.evaluate(pr, policy, acting_role="cto", base="develop", prov=prov)
-    assert verdict.eligible, verdict.reasons
+    assert not verdict.eligible
+    assert "reviewer independence" in " ".join(verdict.reasons)
     text = log.read_text(encoding="utf-8")
     assert "would refuse" in text
     assert "author's own seat" in text
@@ -6828,15 +6936,16 @@ def test_the_gate_off_reads_no_provenance_at_all(monkeypatch: pytest.MonkeyPatch
     assert verdict.eligible, verdict.reasons
 
 
-def test_the_shipped_policy_turns_the_reviewer_gate_on() -> None:
-    """The gate must not ship off.
+def test_the_shipped_policy_enforces_the_reviewer_gate() -> None:
+    """The gate must not ship off, and it must not ship measuring.
 
     DIG-4809 named a 48-hour shadow window and a later flip to `enforce`. That
-    is a rollout, not a gate that never runs: the shipped policy has to have the
-    gate on in one of its two working modes.
+    flip shipped in DIG-5220 on 22 Oct 2026, after #6277 and #6197 merged on the
+    authoring lane's own in-session write-up: the shipped policy has to enforce,
+    or the refusals it logs are only a measurement.
     """
     mode = mq.load_policy().review_independence.mode
-    assert mode in ("shadow", "enforce"), mode
+    assert mode == "enforce", mode
 
 
 def test_a_policy_with_an_unreadable_reviewer_mode_is_refused(tmp_path: Path) -> None:
