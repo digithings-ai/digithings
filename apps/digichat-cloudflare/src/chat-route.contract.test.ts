@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { evaluateMcpGate } from "./mcp-gate";
 import { CONTAINER_BASE_PATH, containerPathFor } from "./paths";
 
 /**
@@ -97,9 +98,45 @@ const WORKER_OWNED_PATTERNS = [
   "digithings.ai/api/mcp/zammad*",
 ];
 
+/**
+ * Every zone route the digichat Worker declares — the whole set, exactly.
+ *
+ * A `toContain` pin cannot tell a correct route set from one that also
+ * carries a duplicate pattern or a zone-wide catch-all, and both of those
+ * are catastrophic here: a duplicate of /chat* is a second claim on the same
+ * path, and `digithings.ai/*` takes the whole apex zone away from Pages.
+ * The set is therefore pinned as a set, and the duplicates are refused
+ * explicitly.
+ */
+const EXPECTED_ZONE_PATTERNS = [
+  "digithings.ai/embed*",
+  "digithings.ai/api/chat*",
+  "digithings.ai/api/embed*",
+  "digithings.ai/api/byok*",
+  "digithings.ai/api/plan-proof*",
+  "digithings.ai/api/health",
+  "digithings.ai/_dtchat*",
+  "digithings.ai/_digichat/meta",
+  "digithings.ai/_digichat-admin*",
+  "digithings.ai/api/mcp/zammad*",
+  "digithings.ai/chat/occ*",
+  "digithings.ai/chat*",
+];
+
 describe("the /chat cutover (DIG-5121)", () => {
   it("the base path is the canonical /chat", () => {
     expect(CONTAINER_BASE_PATH).toBe("/chat");
+  });
+
+  it(`${DIGICHAT_WORKER} declares exactly these zone routes — no more, no less`, () => {
+    const patterns = routePatterns(read(DIGICHAT_WORKER));
+    const zone = patterns.filter((pattern) => pattern.startsWith("digithings.ai/"));
+    expect([...zone].sort()).toEqual([...EXPECTED_ZONE_PATTERNS].sort());
+    // No pattern is declared twice: two claims on one path is a deploy-time
+    // conflict, and the set comparison above would not see it.
+    expect(new Set(patterns).size).toBe(patterns.length);
+    // No zone-wide catch-all: it would take the apex zone from Pages.
+    expect(zone).not.toContain("digithings.ai/*");
   });
 
   it(`${DIGICHAT_WORKER} claims digithings.ai/chat*`, () => {
@@ -143,7 +180,9 @@ describe("the /chat cutover (DIG-5121)", () => {
     expect(image).toMatch(/ENV NEXT_PUBLIC_DIGICHAT_BASE_PATH=\$DIGICHAT_BASE_PATH/);
     // And the app reads exactly those two names — as code, not in a comment.
     const nextConfig = read(`${APP_DIR}/next.config.ts`);
-    expect(nextConfig).toMatch(/const serverBasePath = process\.env\.DIGICHAT_BASE_PATH/);
+    expect(nextConfig).toMatch(
+      /const serverBasePath = normaliseBasePath\(process\.env\.DIGICHAT_BASE_PATH\)/,
+    );
     expect(nextConfig).toMatch(/basePath:\s*serverBasePath/);
     expect(read(`${APP_DIR}/src/lib/base-path.ts`)).toMatch(
       /process\.env\.NEXT_PUBLIC_DIGICHAT_BASE_PATH/,
@@ -156,12 +195,25 @@ describe("the /chat cutover (DIG-5121)", () => {
     // instead of shipping that.
     const nextConfig = read(`${APP_DIR}/next.config.ts`);
     expect(nextConfig).toMatch(
-      /const clientBasePath = process\.env\.NEXT_PUBLIC_DIGICHAT_BASE_PATH/,
+      /const clientBasePath = normaliseBasePath\(process\.env\.NEXT_PUBLIC_DIGICHAT_BASE_PATH\)/,
     );
     expect(nextConfig).toMatch(
       /if \(Boolean\(serverBasePath\) !== Boolean\(clientBasePath\)\)/,
     );
     expect(nextConfig).toMatch(/throw new Error\(/);
+  });
+
+  it("the app refuses to build when the two base path names carry different values", () => {
+    // Two different values is the same broken build as one missing name: the
+    // server serves the app under one prefix and the client prefixes its own
+    // links with the other, so the two never meet.
+    const nextConfig = read(`${APP_DIR}/next.config.ts`);
+    expect(nextConfig).toMatch(/if \(serverBasePath !== clientBasePath\)/);
+    // And the comparison is on the normalised values, so "/chat" and "/chat/"
+    // are the same value rather than a mismatch.
+    expect(nextConfig).toMatch(
+      /const normaliseBasePath = \(value: string \| undefined\): string =>/,
+    );
   });
 
   it("the base path is BAKED into the image, not just defaulted", () => {
@@ -196,19 +248,51 @@ describe("the /chat cutover (DIG-5121)", () => {
     expect(guardAt).toBeLessThan(buildAt);
   });
 
-  it("both spellings of the MCP path are gated at the edge", () => {
+  it("both spellings of the MCP path are gated at the edge, fail-closed", () => {
     // The in-image trusted proxy intercepts ONLY the container-local spelling
     // (/api/mcp/zammad/…), and the app's own Next route for the base-path
     // spelling (/chat/api/mcp/zammad/…) carries no auth of its own. The edge
     // therefore gates both, and maps the base-path one back onto the
     // container-local one so the unauthenticated copy is never reached.
+    //
+    // The gate is EXECUTED here, not read: a fail-open gate reads exactly like
+    // a fail-closed one, so only the verdict can tell them apart.
+    for (const spelling of ["/api/mcp/zammad/mcp", "/chat/api/mcp/zammad/mcp"]) {
+      // No key at all.
+      expect(evaluateMcpGate(spelling, null, "edge-secret").kind).toBe("unauthorized");
+      // The wrong key.
+      expect(evaluateMcpGate(spelling, "wrong", "edge-secret").kind).toBe("unauthorized");
+      // The right key, but the Worker holds none: an unset expected key is a
+      // configuration fault and it CLOSES the endpoint.
+      expect(evaluateMcpGate(spelling, "edge-secret", undefined).kind).toBe("unauthorized");
+      expect(evaluateMcpGate(spelling, "edge-secret", "").kind).toBe("unauthorized");
+      // The right key.
+      expect(evaluateMcpGate(spelling, "edge-secret", "edge-secret").kind).toBe("authorized");
+      // Whitespace is trimmed on both sides, so a padded key still matches.
+      expect(evaluateMcpGate(spelling, " edge-secret ", " edge-secret ").kind).toBe(
+        "authorized",
+      );
+    }
+    // A path that is not an MCP path is not gated at all — the caller routes
+    // it as usual.
+    expect(evaluateMcpGate("/chat", null, "edge-secret").kind).toBe("not-mcp");
+    expect(evaluateMcpGate("/api/mcp/other", null, "edge-secret").kind).toBe("not-mcp");
+  });
+
+  it("the Worker uses that gate, and the container never sees the key", () => {
     const index = read(`${WORKER_SRC}/index.ts`);
-    expect(index).toMatch(
-      /const isZammadMcp = containerLocalMcpPath\(url\.pathname\) !== null;/,
-    );
+    expect(index).toMatch(/evaluateMcpGate\(/);
+    expect(index).toMatch(/mcpGate\.kind === "unauthorized"/);
+    expect(index).toMatch(/status: 401/);
+    // The key is dropped from the request that goes to the container.
+    expect(index).toMatch(/containerRequest\.headers\.delete\(MCP_KEY_HEADER\)/);
+    // …and the module that owns the gate is the one the Worker imports.
+    const gate = read(`${WORKER_SRC}/mcp-gate.ts`);
+    expect(gate).toMatch(/export function evaluateMcpGate\(/);
+    // The base-path spelling is mapped back onto the container-local one, so
+    // the unauthenticated Next copy is never reached.
     const paths = read(`${WORKER_SRC}/paths.ts`);
     expect(paths).toMatch(/export function containerLocalMcpPath\(pathname: string\): string \| null/);
-    // …and the mapping is what the container actually receives.
     expect(paths).toMatch(/const containerLocalMcp = containerLocalMcpPath\(pathname\);/);
     expect(paths).toMatch(/if \(containerLocalMcp\) return containerLocalMcp;/);
   });

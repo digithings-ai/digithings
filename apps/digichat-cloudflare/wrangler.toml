@@ -102,7 +102,11 @@ zone_name = "digithings.ai"
 
 # Read-only OCC helpdesk MCP (stage 1): secret-gated by x-digi-mcp-key ==
 # ZAMMAD_EDGE_KEY, then served by the in-container zammad-mcp through the
-# trusted proxy. ADDITIVE — no live traffic uses it until stage 2.
+# trusted proxy. The OCC assistant's MCP row points at
+# https://digithings.ai/api/mcp/zammad/mcp and sends that key
+# (infra/digichat-digithings/README.md). The base-path spelling
+# (/chat/api/mcp/zammad*) is gated by the same key and mapped onto this
+# container-local path (src/paths.ts).
 [[routes]]
 pattern = "digithings.ai/api/mcp/zammad*"
 zone_name = "digithings.ai"

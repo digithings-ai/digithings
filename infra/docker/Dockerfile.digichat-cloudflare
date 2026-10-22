@@ -126,7 +126,9 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 # A running container keeps its start-time env until recycled. To roll a warm
-# instance after a Worker secret change, bump SHARED_DIGICHAT_CONTAINER_ID
-# (apps/digichat-cloudflare/src/paths.ts:22) and redeploy. A rebuild
-# marker only changes the image tag, not the instance id.
+# instance after a Worker secret change, redeploy with a new
+# DIGICHAT_CONTAINER_REV: the shared Container id is derived from the rev
+# (sharedDigichatContainerId(rev), apps/digichat-cloudflare/src/paths.ts), so a
+# new rev addresses a new instance. A rebuild marker only changes the image
+# tag, not the instance id.
 CMD ["node", "apps/digichat/scripts/trusted-proxy-server.mjs"]

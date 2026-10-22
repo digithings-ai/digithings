@@ -19,7 +19,7 @@ Requires **Workers Paid** (Containers are not on Free).
 | Other paths | Pages static export | — |
 
 `/chat` is the app itself, not a Pages shell (DIG-5121 — in `develop`, live
-with the digichat deploy lane and Chris's production approval — [ADR 0018]
+with the digichat deploy lane and Chris's production approval — ADR 0018
 historical note 1): the Worker claims `digithings.ai/chat*`, and the
 Container is **built** with `DIGICHAT_BASE_PATH=/chat` — Next bakes
 `basePath` at build time — so the app answers under `/chat` and never

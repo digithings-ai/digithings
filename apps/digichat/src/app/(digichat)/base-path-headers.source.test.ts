@@ -5,6 +5,8 @@ import { DIGICHAT_APP_SECURITY_HEADERS } from "../../../src/lib/security-headers
 type HeaderRule = {
   source: string;
   headers: { key: string; value: string }[];
+  /** Next honours `basePath: false` on a custom route: it is not prefixed. */
+  basePath?: boolean;
 };
 
 async function headerRules(): Promise<HeaderRule[]> {
@@ -17,10 +19,18 @@ async function headerRules(): Promise<HeaderRule[]> {
  * Next prefixes every custom-route source with the basePath at build time
  * (next/dist/lib/load-custom-routes.js:350): the source "/" becomes the base
  * path itself, every other source gets the base path in front of it.
+ *
+ * The one exception is a route that opts out with `basePath: false`
+ * (load-custom-routes.js:327:
+ * `config.basePath && r.basePath !== false ? config.basePath : ''`) — that
+ * route is served WITHOUT the base path, so under /chat its source stays "/"
+ * and never matches the canonical "/chat". This helper reproduces that
+ * exception, so a rule that opts out cannot pass this file.
  */
-function effectiveSource(source: string, basePath?: string): string {
-  if (!basePath) return source;
-  return source === "/" ? basePath : `${basePath}${source}`;
+function effectiveSource(rule: HeaderRule, basePath?: string): string {
+  if (!basePath) return rule.source;
+  if (rule.basePath === false) return rule.source;
+  return rule.source === "/" ? basePath : `${basePath}${rule.source}`;
 }
 
 /**
@@ -70,10 +80,16 @@ describe("app security headers cover the app root", () => {
     expect(root).toBeDefined();
     // The app has a single route (the root), so under a base path the
     // canonical path IS the base path — the root rule covers it.
-    expect(effectiveSource(root?.source ?? "", "/chat")).toBe("/chat");
+    expect(effectiveSource(root!, "/chat")).toBe("/chat");
+    // The rule must NOT opt out of the base path: a rule with
+    // `basePath: false` is served without the prefix, so its source stays "/"
+    // and never matches the canonical "/chat" — the root would then be served
+    // without CSP and the rest of the hardening.
+    expect(root?.basePath).not.toBe(false);
+    expect(effectiveSource(root!, "/chat").startsWith("/chat")).toBe(true);
     // The global rule needs at least one path segment after the base path, so
     // it never covers the canonical root on its own.
     const global = rules.find((rule) => rule.source === "/((?!embed$|embed/).*)");
-    expect(effectiveSource(global?.source ?? "", "/chat")).not.toBe("/chat");
+    expect(effectiveSource(global!, "/chat")).not.toBe("/chat");
   });
 });
