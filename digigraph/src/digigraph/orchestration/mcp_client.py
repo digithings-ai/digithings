@@ -74,6 +74,13 @@ _RAW_TOOL_NAME_KEY = "x_digi_mcp_raw_tool_name"
 _PRIVATE_HOST_ALLOWLIST_ENV = "DIGIGRAPH_MCP_PRIVATE_HOST_ALLOWLIST"
 
 _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+# Servers that could not be listed, with the reason and the moment it happened.
+# A server that cannot be listed is not a server with no tools: to the model
+# the two look identical, so an outage reads as an absence of data (DIG-5187).
+# Keyed like _cache, with its own short TTL, so a recovered server is dialled
+# again without waiting for the catalog TTL.
+_failures: dict[str, tuple[float, str]] = {}
+_FAILURE_TTL_S = 10.0
 # The names the MCP servers actually advertise, captured at list time beside
 # _cache under the same key. The offered name ``<server_id>_<safe>`` is lossy:
 # every character outside [a-zA-Z0-9_-] collapses to "_" and the remainder is
@@ -866,12 +873,24 @@ def list_tools_cached(server: dict[str, str]) -> list[dict[str, Any]]:
     """
     key = mcp_list_cache_key(server)
     now = time.monotonic()
+    failed = _failures.get(key)
+    if failed and now - failed[0] < _FAILURE_TTL_S:
+        # The server was unreachable a moment ago. Do not dial it again for
+        # every call in the same turn; the failure stays recorded for the
+        # caller, so the outage is still visible.
+        return []
     hit = _cache.get(key)
     if hit and now - hit[0] < _CACHE_TTL_S:
         tools = hit[1]
     else:
         tools = _list_tools_blocking(server)
-        _cache[key] = (now, tools)
+        if key in _failures:
+            # A failed listing is not an empty catalog. Caching it as one
+            # would tell every caller for the next 60s that the server has no
+            # tools, which is how an outage becomes a silent "no data" answer.
+            _cache.pop(key, None)
+        else:
+            _cache[key] = (now, tools)
     return filter_tools_for_server(server, tools, audit_key=key)
 
 
@@ -892,7 +911,25 @@ def openai_tools_for_servers(servers: list[dict[str, str]]) -> list[dict[str, An
     return out
 
 
-def resolve_remote_tool_name(server_id: str, offered: str, raw_names: list[str]) -> str | None:
+def mcp_server_failures(servers: list[dict[str, str]]) -> dict[str, str]:
+    """Servers that could not be listed, mapped to the reason.
+
+    A remote MCP server that cannot be listed has no tools to offer, and the
+    model cannot tell that apart from a server that has none. This is the
+    difference between "there is no data" and "the integration is down", so
+    the caller has to be able to say it out loud (DIG-5187).
+    """
+    out: dict[str, str] = {}
+    now = time.monotonic()
+    for s in servers:
+        entry = _failures.get(mcp_list_cache_key(s))
+        if entry and now - entry[0] < _FAILURE_TTL_S:
+            out[str(s.get("id") or "?")] = entry[1]
+    return out
+
+
+def resolve_remote_tool_name(
+server_id: str, offered: str, raw_names: list[str]) -> str | None:
     """Recover the advertised name behind ``offered``; ``None`` when not unique.
 
     ``offered`` is the whole name the model chose, server prefix included --
@@ -976,11 +1013,15 @@ def _run_async(coro: Any) -> Any:
 
 
 def _list_tools_blocking(server: dict[str, str]) -> list[dict[str, Any]]:
+    key = mcp_list_cache_key(server)
     try:
-        return _run_async(_list_tools_async(server))
+        tools = _run_async(_list_tools_async(server))
     except Exception as exc:
         log.warning("remote MCP list_tools failed for %s: %s", server.get("id"), exc)
+        _failures[key] = (time.monotonic(), f"{type(exc).__name__}: {exc}")
         return []
+    _failures.pop(key, None)
+    return tools
 
 
 def _call_tool_blocking(server: dict[str, str], tool: str, args: dict[str, Any]) -> dict[str, Any]:
