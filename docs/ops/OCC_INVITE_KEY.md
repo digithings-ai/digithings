@@ -371,6 +371,13 @@ and it is the only proof that the whole chain (Pages route → `readInviteToken`
 → digichat → Container → model) works end to end. Do it by hand, once, and record the outcome in
 [Rotation log](SECRETS_ROTATION.md#rotation-log).
 
+**Status 2026-10-22 — this step was closed by decision, not by a run.** On 2026-10-21 Chris
+answered the DIG-4810 card with *the machine proof is enough* (card `9cbd759c`), so the OCC
+end-to-end proof stands on the machine half: `verify_occ_invite_key.sh` with `EXPECT_B2=1` →
+PASS 7/7, and the Pages gate answering 200 on `GET /chat/occ?token=<key>`. The step above stays
+the way to prove the chain end to end for a person, and a future rotation should still run it — but
+it is not outstanding on DIG-4810.
+
 **A person does this step, not an agent.** The key rides in the URL, so an agent driving the
 browser would write it into a tool call and into the run transcript, and an OCC turn can reach the
 ticket tool, whose answer can carry client ticket text. The key is in the Keychain; the person
@@ -499,5 +506,6 @@ A rotation is Act B1, but **Act B2 has since landed** (see [Status](#status--202
 the gate is already on, and `occ.digithings.ai` is not in `FIRST_PARTY_EMBED_HOSTS` any more
 (`apps/digichat/src/lib/embed-first-party.ts:4-8`). A rotation today therefore **revokes
 every outstanding invite link at once** — see [Revocation](#revocation--this-is-the-act-b2-rollback) —
-and it must replace the value in **all three copies** (Worker secret, Pages secret, registry
-`token`) or the chain breaks in one direction or the other.
+and it must replace the value in **all five places** — the legacy registry `token`, the Worker gate
+secret, the Pages gate secret, the Keychain custody copy and the local host secret store — or the
+chain breaks in one direction or the other, and the copies that were skipped keep a dead key.
