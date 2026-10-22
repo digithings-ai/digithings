@@ -107,7 +107,13 @@ npx wrangler secret put GROQ_API_KEY
 # optional base / force OR: CHEAPERINFERENCE_API_BASE DIGI_HOUSE_UPSTREAM=openrouter
 # When CHEAPERINFERENCE_API_KEY is set, container/entrypoint.sh merges the CI
 # LiteLLM overlay and exports ENV_LITELLM_CONFIG for the LiteLLM supervisor
-# (see docs/providers/cheaperinference.md). digithings.ai digichat and
+# (see docs/providers/cheaperinference.md). A failed merge, a missing overlay
+# asset, or a merged model_list without the curated house models keeps the
+# container up on the base config and names the verdict - including the
+# missing model ids - in /var/log/supervisor/stack-entrypoint.log, instead of
+# serving the base config in silence (DIG-4512). The curated tenant models
+# still answer model-not-found on that path, and /health still answers ok.
+# digithings.ai digichat and
 # digiquant.io dashboard are separate tenants — do not share one CI key expecting
 # isolated routing.
 
