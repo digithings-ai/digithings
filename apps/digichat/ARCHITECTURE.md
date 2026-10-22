@@ -1344,10 +1344,12 @@ and `/language` start on their nested lists. Keyboard: Up/Down, Enter
 to toggle, enter a nested list, or commit an exclusive pick, Left/Right on `/language` to cycle the full ISO map, Escape
 (the `escape` control) to go back or close.
 `/models` lists the modes first — Default, Reasoning, Fast, Light, and Router when
-configured — then one collapsible `/provider` header per backend provider id (the
-prefix of a model id before the first `/`), with that provider's models as raw ids
-in the `├─` / `└─` tree. Only the provider holding the current model starts
-expanded, and no row carries a description.
+configured — then a `/provider` tree built from the id path segments of each raw
+model id (every `/`-separated segment but the last is a folder, the last is the
+leaf), so ids like `deepseek/deepseek-v4.1-flash-1017` nest under `/deepseek`
+and `alpha/sub/deep` nests under `/alpha` then `/sub`. Folders and leaves sort
+alphabetically at every level, folders before leaves. Only the folders holding
+the current model start expanded, and no row carries a description.
 `/language` (alias `/lang`) plus featured English / Dutch / Italian / Spanish / French resolve
 through the mirrored ISO map (codes, English labels, and autonyms). `/provider` (aliases
 `/byok`, `/key`) opens the composer-docked provider list, then a token field, then a model

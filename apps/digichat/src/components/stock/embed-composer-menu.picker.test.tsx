@@ -561,6 +561,66 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
+  it("opens the non-first provider holding the current model by default", async () => {
+    const setModel = vi.fn();
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "zeta/thing" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/flash", label: "Alpha Flash" }] },
+        { provider: "zeta", models: [{ id: "zeta/thing", label: "Zeta Thing" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["zeta/thing"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    // The folder holding the current model (zeta) starts expanded even though
+    // alpha sorts first; alpha stays collapsed.
+    expect(screen.getByRole("menuitem", { name: "/zeta" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe("false");
+    unmount();
+  });
+
+  it("opens every folder holding a deeply nested current model by default", async () => {
+    const setModel = vi.fn();
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "a/b/c" }],
+      groups: [
+        { provider: "a", models: [{ id: "a/b/c", label: "Deep" }] },
+        { provider: "z", models: [{ id: "z/other", label: "Other" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["a/b/c"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(screen.getByRole("menuitem", { name: "/a" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("menuitem", { name: "/b" }).getAttribute("aria-expanded")).toBe("true");
+    unmount();
+  });
+
+  it("exposes the full raw id as a model row's accessible name", async () => {
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "alpha/flash" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/flash", label: "Alpha Flash" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" } })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha/flash"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    const row = screen.getByRole("menuitemradio", { name: "alpha/flash" });
+    expect(row.getAttribute("aria-label")).toBe("alpha/flash");
+    unmount();
+  });
+
   it("finds a model under a collapsed provider while a filter is typed", async () => {
     const picker = {
       showFullList: true,
@@ -581,7 +641,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     // by the part of the id after the provider.
     const radios = await screen.findAllByRole("menuitemradio");
     expect(radios.map((row) => row.textContent?.trim())).toEqual([
-      "└─think",
+      "think",
     ]);
     unmount();
   });

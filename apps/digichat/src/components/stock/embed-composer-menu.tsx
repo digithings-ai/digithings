@@ -114,6 +114,8 @@ export type MenuRow = {
   id: string;
   label: string;
   value: string;
+  /** Accessible name override (defaults to `label`); used to expose full ids. */
+  ariaLabel?: string;
   activate: () => void;
   checked?: boolean;
   /** Single-choice list: radio disc, not On/Off. */
@@ -523,7 +525,7 @@ export function EmbedComposerMenu({
   const openKey = `${kind}\0${providerSeed ?? ""}\0${mcpSeed ?? ""}`;
   const [appliedOpen, setAppliedOpen] = useState("");
   /** Provider headers the visitor opened or closed; null means the default. */
-  const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean> | null>(null);
+  const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean | undefined> | null>(null);
 
   useEffect(() => {
     mcpDraftRef.current = mcpDraft;
@@ -672,7 +674,17 @@ export function EmbedComposerMenu({
       const toggleProvider = (path: string) => {
         setExpandedProviders((prev) => {
           const base = prev ?? defaultOpen;
-          return { ...base, [path]: base[path] !== true };
+          const currentlyOpen = filtering
+            ? base[path] !== false
+            : base[path] === true;
+          // During filtering the default is open, so closing stores `false`
+          // and re-opening clears back to the (open) default.
+          const next = currentlyOpen
+            ? false
+            : filtering
+              ? undefined
+              : true;
+          return { ...base, [path]: next };
         });
       };
       const presetRows: MenuRow[] = picker.presets.map((preset) => {
@@ -709,7 +721,9 @@ export function EmbedComposerMenu({
       ): MenuRow => ({
         id: node.id,
         // The row reads the last path segment. The selected value, the API
-        // id and the toolbar name stay the full id.
+        // id and the toolbar name stay the full id. The accessible name keeps
+        // the full raw id so assistive tech keeps the provider association.
+        ariaLabel: node.id,
         label: node.name,
         value: "",
         checked: selected === node.id,
@@ -733,9 +747,13 @@ export function EmbedComposerMenu({
           // Top level has no glyph (like a /tools service or a bare id).
           const branch: MenuRow["branch"] = depth === 0 ? undefined : last ? "last" : "mid";
           const prefix = depth === 0 ? "" : rails;
-          if (node.kind === "leaf") return [leafRow(node, branch, prefix)];
+          if (node.kind === "leaf") return [leafRow(node, filtering ? undefined : branch, prefix)];
           // A typed filter searches every folder at every depth.
-          const open = filtering || opened[node.path] === true;
+          // Filtering force-opens every folder by default, but a manual toggle
+          // still wins, so the header is not a visible no-op while filtering.
+          const open = filtering
+            ? opened[node.path] !== false
+            : opened[node.path] === true;
           const header: MenuRow = {
             id: `folder:${node.path}`,
             label: `/${node.name}`,
@@ -1997,6 +2015,7 @@ export function EmbedComposerMenu({
                     role={toggle ? "menuitemcheckbox" : exclusive ? "menuitemradio" : "menuitem"}
                     aria-checked={typeof row.checked === "boolean" ? row.checked : undefined}
                     aria-expanded={typeof row.expanded === "boolean" ? row.expanded : undefined}
+                    aria-label={row.ariaLabel}
                     data-cursor={index === cursor ? "true" : undefined}
                     className={MENU_ROW_CLASS}
                     ref={(node) => {
