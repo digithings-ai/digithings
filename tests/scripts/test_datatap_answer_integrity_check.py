@@ -1889,3 +1889,126 @@ def test_discovery_never_takes_a_token_from_a_neighbouring_object() -> None:
         )
     )
     assert target.token == real, "discovery returned a token from a different object"
+
+
+# --------------------------------------------------------------------------
+# DIG-718 leaf A: the target is an input, not a hardcoded datatap.stream one.
+#
+# The check is re-pointed from a client surface we do not control to a
+# digithings-stack surface we operate (DIG-718). That only works if the target
+# is something the caller hands in, so the discovery URL and the embed host
+# become explicit inputs: the command line first, then the environment, then
+# the datatap.stream default that the still-live retired clock keeps using
+# until the DIG-4435 deploy retires it.
+#
+# These six cases are the EM's. The worker makes them pass and may not edit
+# them.
+# --------------------------------------------------------------------------
+
+DISCOVERY_URL_ENV_VAR = "ANSWER_CHECK_DISCOVERY_URL"
+EMBED_HOST_ENV_VAR = "ANSWER_CHECK_EMBED_HOST"
+
+
+@pytest.fixture(autouse=True)
+def _no_target_from_the_ambient_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A developer's shell must not decide what the check probes.
+
+    The two target variables are read by name, exactly like the monitor token.
+    A shell that happens to export them would otherwise silently re-point the
+    check, which is the one thing a run must never do on its own.
+    """
+    monkeypatch.delenv(DISCOVERY_URL_ENV_VAR, raising=False)
+    monkeypatch.delenv(EMBED_HOST_ENV_VAR, raising=False)
+
+
+def test_the_discovery_url_given_on_the_command_line_is_the_url_the_check_requests() -> None:
+    """The caller names the page the check reads. The check follows it."""
+    code, fake = _run_main(
+        _both_probes_clean(),
+        ["--discovery-url", "https://digithings.ai/chat", "--embed-host", "digithings.ai"],
+    )
+    assert code == mod.OK
+    assert fake.calls[0]["url"] == "https://digithings.ai/chat"
+
+
+def test_the_embed_host_given_on_the_command_line_lands_in_the_host_and_origin_headers() -> None:
+    """The tenant key and the origin follow the target, not a hardcoded name.
+
+    X-Embed-Host is the tenant key DigiChat resolves the assistant with, and
+    Origin is the browser-attested host it authorises a first-party tenant
+    against. Both have to name the surface that was asked for.
+    """
+    _, fake = _run_main(_both_probes_clean(), ["--embed-host", "digithings.ai"])
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == "digithings.ai"
+    assert chat["headers"]["Origin"] == "https://digithings.ai"
+
+
+def test_the_target_comes_from_the_environment_when_no_flag_is_given(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The scheduler hands the target in through the environment.
+
+    The cron clock cannot pass a command line to a Makefile target without
+    another knob, and a secret-free workflow reads its configuration from the
+    environment. Both paths have to reach the same place.
+    """
+    monkeypatch.setenv(DISCOVERY_URL_ENV_VAR, "https://digithings.ai/chat")
+    monkeypatch.setenv(EMBED_HOST_ENV_VAR, "digithings.ai")
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.OK
+    assert fake.calls[0]["url"] == "https://digithings.ai/chat"
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == "digithings.ai"
+    assert chat["headers"]["Origin"] == "https://digithings.ai"
+
+
+def test_the_command_line_wins_over_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit flag beats an inherited variable, always.
+
+    A re-point is an explicit act. If a stale variable in the environment could
+    overrule the flag, the person re-pointing the check would not be the person
+    deciding where it goes.
+    """
+    monkeypatch.setenv(DISCOVERY_URL_ENV_VAR, "https://env.example/chat")
+    monkeypatch.setenv(EMBED_HOST_ENV_VAR, "env.example")
+    _, fake = _run_main(
+        _both_probes_clean(),
+        ["--discovery-url", "https://cli.example/chat", "--embed-host", "cli.example"],
+    )
+    assert fake.calls[0]["url"] == "https://cli.example/chat"
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == "cli.example"
+    assert chat["headers"]["Origin"] == "https://cli.example"
+
+
+def test_a_non_https_discovery_url_is_refused_and_never_reports_a_pass() -> None:
+    """A plaintext target is refused before a request is made.
+
+    The check reads a page that carries an embed token. Over http that token
+    would travel in clear, so a non-https target is refused the way a missing
+    target is refused: exit 2, the check could not run, never a pass.
+    """
+    code, fake = _run_main(
+        _both_probes_clean(),
+        ["--discovery-url", "http://digithings.ai/chat"],
+    )
+    assert code == mod.COULD_NOT_RUN == 2
+    assert fake.calls == [], "a refused target must not be requested at all"
+
+
+def test_with_nothing_given_the_target_is_still_datatap_stream() -> None:
+    """The default stays where it was until the retired clock is gone.
+
+    The datatap-answer-check row in apps/digithings-cron/src/jobs.ts still
+    fires every hour until the DIG-4435 deploy lands, and until then that
+    clock has to keep reading the surface it was built for.
+    """
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.OK
+    assert fake.calls[0]["url"] == "https://datatap.stream/chat"
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == "datatap.stream"
+    assert chat["headers"]["Origin"] == "https://datatap.stream"
