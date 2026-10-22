@@ -9,10 +9,16 @@ traceback is not an answer, and the exit code a caller reads would be a crash
 rather than a refusal. It must never fall back to the built-in catalogue
 either - a contract that cannot be read is not a contract that was absent.
 
-Both catches are pinned here. Deleting either
-``except contracts.ContractParseError`` in ``scripts/dt`` leaves the rest of
-the suite green, so the arms below are the only evidence that the path is
-still there.
+The two catches that the read-only commands use are pinned here: the one in
+``cmd_status`` and the one in ``cmd_urls``. Deleting either of them leaves the
+rest of the suite green, so the arms below are the only evidence that the
+path is still there.
+
+``scripts/dt`` has a third such catch, in ``cmd_plan``, and this file does
+not reach it: it sits behind ``orchestrate.run_steps`` on the ``dt up`` path,
+which needs a real local stack to get that far. A unit test cannot pin that
+one; it is named here so a reader does not mistake this file for the proof of
+every catch in the script.
 """
 
 from __future__ import annotations
@@ -30,7 +36,7 @@ pytestmark = pytest.mark.unit
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
-from scripts.localstack import contracts  # noqa: E402
+from scripts.localstack import contracts, localenv  # noqa: E402
 
 #: A contract file that is neither YAML nor JSON: the flow sequence is never
 #: closed, so the YAML reader refuses it and the JSON reader refuses it too.
@@ -77,6 +83,21 @@ def _root_with_contract(tmp_path: Path, body: str) -> Path:
     return tmp_path
 
 
+def _pin_local_env(monkeypatch: pytest.MonkeyPatch, root: Path) -> None:
+    """Own the environment the CLI writes into.
+
+    ``localenv.apply_defaults`` writes the resolved port and the two local
+    defaults straight into ``os.environ``. Left alone, the two defaults would
+    stay in the session after the test - and the generate-cwd one would point
+    at a temporary directory pytest deletes at the end of the run. Setting
+    them here means ``apply_defaults`` finds them already in place and
+    monkeypatch undoes them at teardown.
+    """
+    monkeypatch.setenv(localenv.PORT_ENV, "55321")
+    monkeypatch.setenv(localenv.KEYCHAIN_PREFIX_ENV, localenv.DEFAULT_KEYCHAIN_PREFIX)
+    monkeypatch.setenv(localenv.GENERATE_CWD_ENV, str(root / localenv.SUPABASE_WORKDIR_REL))
+
+
 @pytest.fixture()
 def broken_root(tmp_path: Path) -> Path:
     """A root whose contract file cannot be parsed."""
@@ -87,9 +108,7 @@ def broken_root(tmp_path: Path) -> Path:
 def dt_at_broken_contract(dt: object, broken_root: Path, monkeypatch: pytest.MonkeyPatch) -> object:
     """`dt` reading a root whose contract file cannot be parsed."""
     monkeypatch.setattr(dt, "repo_root", lambda: broken_root)
-    # A usable port knob, so the local defaults stay quiet and the only thing
-    # on stderr is the contract error.
-    monkeypatch.setenv("DT_SUPABASE_PORT", "55321")
+    _pin_local_env(monkeypatch, broken_root)
     return dt
 
 
@@ -159,11 +178,16 @@ def test_a_readable_contract_still_produces_the_url_table(
 
     Without this arm the two refusal tests could pass for the wrong reason: a
     root the CLI cannot read at all would refuse just as loudly.
+
+    The arm also pins that the readable contract was actually read: the row's
+    source is the contract's own, not the built-in catalogue's, so a contract
+    that was silently ignored would fail here.
     """
     root = _root_with_contract(tmp_path, READABLE_CONTRACT)
     monkeypatch.setattr(dt, "repo_root", lambda: root)
-    monkeypatch.setenv("DT_SUPABASE_PORT", "55321")
+    _pin_local_env(monkeypatch, root)
     assert dt.main(["urls"]) == 0  # type: ignore[attr-defined]
     captured = capsys.readouterr()
     assert "digigraph" in captured.out
+    assert "config contract row 'digigraph'" in captured.out
     assert "contract error:" not in captured.err
