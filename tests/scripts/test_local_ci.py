@@ -179,15 +179,15 @@ class WorkerGateTest(unittest.TestCase):
     def test_gate_hit_pattern_major(self):
         pats = ["apps/digithings-cron/**", "package-lock.json"]
         self.assertEqual(
-            _mod.worker_gate_hit(["docs/a.md", "package-lock.json"], pats),
+            _mod.path_gate_hit(["docs/a.md", "package-lock.json"], pats),
             ("package-lock.json", "package-lock.json"))
-        self.assertIsNone(_mod.worker_gate_hit(["docs/a.md"], pats))
+        self.assertIsNone(_mod.path_gate_hit(["docs/a.md"], pats))
 
     def test_gate_hit_no_trip_for_nonworker_app(self):
         pats = list(_mod.WORKER_GATE_PATTERNS)
-        self.assertIsNone(_mod.worker_gate_hit(["apps/digichat/src/a.ts"], pats))
+        self.assertIsNone(_mod.path_gate_hit(["apps/digichat/src/a.ts"], pats))
         self.assertEqual(
-            _mod.worker_gate_hit(["apps/dashboard-api/src/i.ts"], pats),
+            _mod.path_gate_hit(["apps/dashboard-api/src/i.ts"], pats),
             ("apps/dashboard-api/**", "apps/dashboard-api/src/i.ts"))
 
     def test_parse_workers_patterns(self):

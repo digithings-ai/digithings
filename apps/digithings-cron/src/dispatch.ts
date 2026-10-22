@@ -298,8 +298,8 @@ async function dispatchContainer(
 }
 
 async function dispatchProbe(env: Env, job: Job, cron: string): Promise<DispatchResult> {
-  if (job.probe !== "site" && job.probe !== "stack") {
-    throw new Error(`job ${job.id}: probe requires probe "site" or "stack"`);
+  if (job.probe !== "site" && job.probe !== "stack" && job.probe !== "deploy") {
+    throw new Error(`job ${job.id}: probe requires probe "site", "stack" or "deploy"`);
   }
   const urls = probeUrls(job.probe);
   if (env.DRY_RUN === "1") {

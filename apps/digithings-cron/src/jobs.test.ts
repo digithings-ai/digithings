@@ -49,6 +49,8 @@ const PATH_A_ENABLED_IDS = [
   "dependency-freshness",
   "smoke-site",
   "digiquant-house-run-watch",
+  // DIG-4871: the deploy-freshness probe (production must serve main HEAD).
+  "deploy-freshness",
 ] as const;
 
 // DIG-4364: four clocks whose workflow the 2026-10-14 GitHub-exit cost lock set
@@ -243,6 +245,17 @@ describe("jobsForCron", () => {
     });
     expect(uniqueEnabledCrons()).toContain("17 6 * * *");
     expect(uniqueEnabledCrons()).toContain("27 7 * * *");
+  });
+
+  it("runs the deploy-freshness probe every second hour (DIG-4871)", () => {
+    expect(JOBS.find((job) => job.id === "deploy-freshness")).toMatchObject({
+      kind: "probe",
+      probe: "deploy",
+      cron: "23 */2 * * *",
+      ref: "develop",
+      enabled: true,
+    });
+    expect(uniqueEnabledCrons()).toContain("23 */2 * * *");
   });
 
   it("wires checkpoint-archive to digiquant-runner at 13:30 UTC", () => {

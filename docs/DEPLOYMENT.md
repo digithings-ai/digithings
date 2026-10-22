@@ -338,6 +338,21 @@ dashboard, not in this repo. `deploy-digiquant-cloudflare.yml` is the same shape
 digiquant.io. Nothing in the repo can make a Pages deployment fail before it happens, only
 fail a PR before it merges.
 
+Both of those workflows are `disabled_manually` (the 2026-10-14 Actions cost sweep), so
+digiquant.io's build check now runs on the host lane instead:
+`scripts/local-ci/local_ci.py` builds digiquant.io on a PR that touches a digiquant build
+input and asserts the same `dist/` layout and the same build stamp the disabled job asserted
+(DIG-4871). The path filter of that gate is held to the build script's own workspace
+closure by `tests/scripts/test_deploy_build_inputs.py`, so a new build input fails the
+repo's own test until the gate learns about it.
+
+Detection that the production branch and the production stamp have parted company is a
+separate check, and it is the one that would have caught the 7.8-day freeze: the
+`deploy-freshness` probe row in the `digithings-cron` Worker (`23 */2 * * *`) compares the
+served stamp's commit with the production branch's tip, read from the repository's public
+git remote, and fails when the branch has moved past the served commit. See
+[`apps/digithings-cron/README.md`](../apps/digithings-cron/README.md#deploy-freshness-probe-dig-4871).
+
 ### The two stacks have a deploy lane again
 
 | App | Worker name | Declared routes | Deploy lane |

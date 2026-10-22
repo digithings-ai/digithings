@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import stat
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -159,3 +161,34 @@ def gh_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[..., Gh
         return stub
 
     return _install
+
+
+@pytest.fixture(scope="session")
+def local_ci_module() -> Any:
+    """`scripts/local-ci/local_ci.py`, loaded with its launch guard stubbed to allow.
+
+    local_ci imports review_applied, pr_template and launch_guard from its own
+    directory, and the launch guard refuses a run that was not launched from the
+    host's launchd context. In a test there is no launch, so the guard is
+    stubbed to allow - the same stub tests/scripts/test_local_ci.py uses. The
+    module is loaded once per session: two copies would each hold their own
+    pattern list, and a test that asserted against one while the lane ran the
+    other would prove nothing.
+    """
+    scripts = str(Path(__file__).resolve().parents[2] / "scripts" / "local-ci")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    spec = importlib.util.spec_from_file_location(
+        "local_ci", os.path.join(scripts, "local_ci.py"))
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["local_ci"] = module
+    spec.loader.exec_module(module)
+
+    class _AllowedGuard:
+        @staticmethod
+        def enforce(runner_path, ctx, facts=None):
+            return True
+
+    module.launch_guard = _AllowedGuard
+    return module

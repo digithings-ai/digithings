@@ -31,7 +31,7 @@ export type Job = {
   /** Image pin. Phase 1 jobs use "main". */
   codeRef?: "main";
   /** Set when kind is "probe". Worker fetch; does not start the container. */
-  probe?: "site" | "stack";
+  probe?: "site" | "stack" | "deploy";
   /** Set when kind is "twelvex". POST /run/{route} on twelvex-runner. */
   route?: "ingest" | "heartbeat" | "session";
   /**
@@ -86,7 +86,7 @@ function pj(
   id: string,
   cron: string,
   workflow: string,
-  probe: "site" | "stack",
+  probe: "site" | "stack" | "deploy",
   opts: { enabled?: boolean } = {},
 ): Job {
   return {
@@ -599,6 +599,22 @@ export const JOBS: readonly Job[] = [
   // the deploy-config contract (wrangler.toml order == uniqueEnabledCrons()
   // order) needs no reshuffle.
   ow("occ-help-recrawl", "23 7 * * MON", "help-docs"),
+  // Deploy freshness (DIG-4871): production must serve main HEAD.
+  //
+  // The daily smoke-site probe reads the stamp's AGE only (168h limit), so a
+  // broken deploy path stayed green for 7.8 days - digiquant.io served the
+  // 2026-10-13 build until main had moved on. This row asks the other
+  // question: does the live stamp's commit equal main? The expected commit is
+  // read from the repository's public git remote (the git smart-HTTP ref
+  // advertisement), so the check needs no token and no api.github.com call.
+  //
+  // Worker-native: the `workflow` field stays for the dormant
+  // GITHUB_OVERRIDE_JOBS path only (same as the sibling probe rows, whose
+  // workflow files were deleted in #4919). Appended last so the deploy-config
+  // contract (wrangler.toml order == uniqueEnabledCrons() order) needs no
+  // reshuffle. Minute :23 is clear of the :17 cluster, :41 and :47; every
+  // second hour is enough to catch a broken deploy the same day.
+  pj("deploy-freshness", "23 */2 * * *", "smoke-site.yml", "deploy"),
 ];
 
 /**

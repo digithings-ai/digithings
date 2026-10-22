@@ -22,6 +22,13 @@ half that is not yet armed is deletion: a PR that *removes* a glob from a deploy
 touches only `.github/workflows/`, which reaches `ruff_and_scripts` only once #1964 adds
 those two files to it.
 
+GitHub Actions is off (both `Deploy: … build check` workflows are `disabled_manually`).
+digiquant.io's check moved to the local-ci gate on 2026-10-22 (DIG-4871), so the filter
+this file holds digiquant.io to is the gate's own pattern list — the lane that runs. A
+filter nobody evaluates cannot keep a build input watched: the disabled digiquant
+workflow lost `packages/hero-banner` while nobody edited it, and this file was red on
+develop until the gate was put under the same guard.
+
 Deliberately out of scope: the root ``npm install`` resolves all eight workspaces, so a
 broken manifest in any of them fails both builds before either compiles. Gating both checks
 on all eight would fire them on every unrelated workspace — the trade #1956 declines for
@@ -41,19 +48,27 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-#: (deploy build check workflow, the build script it re-runs), one per static site.
+#: (site, the build script its check runs), one per static site.
 DEPLOY_CHECKS = [
     pytest.param(
-        REPO_ROOT / ".github" / "workflows" / "deploy-digithings-cloudflare.yml",
+        "digithings.ai",
         REPO_ROOT / "scripts" / "build-digithings.sh",
         id="digithings.ai",
     ),
     pytest.param(
-        REPO_ROOT / ".github" / "workflows" / "deploy-digiquant-cloudflare.yml",
+        "digiquant.io",
         REPO_ROOT / "scripts" / "build-digiquant.sh",
         id="digiquant.io",
     ),
 ]
+
+#: The `Deploy: … build check` workflow of each site. Both are disabled with
+#: Actions, so their filters count as covers of a build input below, not as
+#: lanes that run today.
+DEPLOY_WORKFLOWS = {
+    "digithings.ai": REPO_ROOT / ".github" / "workflows" / "deploy-digithings-cloudflare.yml",
+    "digiquant.io": REPO_ROOT / ".github" / "workflows" / "deploy-digiquant-cloudflare.yml",
+}
 
 #: A line that builds a workspace. `run build:analyze` is deliberately not one.
 _BUILD_LINE = re.compile(r"\bnpm\b.*\brun\s+build(?:\s|$)")
@@ -159,23 +174,39 @@ def _trigger_paths(workflow: Path) -> list[str]:
 
 def _closure_for(site: str) -> set[str]:
     """The build-input closure of one site, selected by id rather than list position."""
-    workflow, build_script = next(p.values for p in DEPLOY_CHECKS if p.id == site)
-    assert isinstance(build_script, Path) and isinstance(workflow, Path)
+    _site, build_script = next(p.values for p in DEPLOY_CHECKS if p.id == site)
+    assert isinstance(build_script, Path)
     return _build_input_dirs(build_script)
 
 
-@pytest.mark.parametrize(("workflow", "build_script"), DEPLOY_CHECKS)
-def test_deploy_check_watches_every_workspace_it_builds(workflow: Path, build_script: Path) -> None:
-    paths = _trigger_paths(workflow)
+def _live_check_paths(site: str, local_ci: Any) -> list[str]:
+    """The path globs the build check that runs for `site` watches.
+
+    digiquant.io's check is the local-ci gate (DIG-4871): its workflow was
+    disabled on 2026-10-14 and the gate is the lane that runs the build. Its
+    filter is the gate's own pattern list, so a new build input fails this
+    guard until the gate learns about it. digithings.ai's check is still its
+    workflow's `paths:`.
+    """
+    if site == "digiquant.io":
+        return list(local_ci.DIGIQUANT_BUILD_PATTERNS)
+    return _trigger_paths(DEPLOY_WORKFLOWS[site])
+
+
+@pytest.mark.parametrize(("site", "build_script"), DEPLOY_CHECKS)
+def test_deploy_check_watches_every_workspace_it_builds(
+    site: str, build_script: Path, local_ci_module: Any
+) -> None:
+    paths = _live_check_paths(site, local_ci_module)
     missing = sorted(d for d in _build_input_dirs(build_script) if f"{d}/**" not in paths)
     assert not missing, (
-        f"{workflow.name} does not watch {missing}, which {build_script.name} compiles. "
-        f"An edit there would run neither this check nor any production `next build`. "
-        f"Add each as '<dir>/**' to the `paths:` filter."
+        f"the {site} build check does not watch {missing}, which {build_script.name} "
+        f"compiles. An edit there would run neither this check nor any production "
+        f"`next build`. Add each as '<dir>/**' to the check's path filter."
     )
 
 
-def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
+def test_every_workspace_manifest_is_watched_by_some_filter(local_ci_module: Any) -> None:
     """No workspace manifest may be orphaned — the hole the eighth one sat in.
 
     The root ``npm install`` resolves all eight workspace manifests before either site
@@ -199,7 +230,11 @@ def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
         (REPO_ROOT / "scripts" / "ci_paths.yaml").read_text(encoding="utf-8")
     )
     watched = {glob for globs in filters.values() if isinstance(globs, list) for glob in globs}
-    watched.update(glob for p in DEPLOY_CHECKS for glob in _trigger_paths(p.values[0]))
+    watched.update(glob for workflow in DEPLOY_WORKFLOWS.values() for glob in _trigger_paths(workflow))
+    # The local-ci digiquant gate is a path filter in this repo now, and it is the
+    # lane that runs the digiquant build (DIG-4871). The union must count it, or
+    # a manifest only the digiquant build resolves reopens the orphan hole.
+    watched.update(local_ci_module.DIGIQUANT_BUILD_PATTERNS)
     # The cron Worker deploys from a push-gated workflow (no pull_request trigger),
     # so its paths live under on.push.paths — a third cover the union must count,
     # or every new push-deployed workspace reopens the orphan hole.
@@ -213,7 +248,8 @@ def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
     assert not orphans, (
         f"workspace manifests watched by no path filter in this repo: {orphans}. "
         f"The root `npm install` resolves them, so a bad range there fails both "
-        f"production builds with no CI job running. Add each to both deploy checks."
+        f"production builds with no CI job running. Add each to the deploy "
+        f"checks that build these sites."
     )
 
 

@@ -102,6 +102,40 @@ somewhere else, a job that asks for one PR, a shadowed `launchctl`. The
 queue-side provenance check (DIG-4794) is what makes a `local-ci` status count
 only when it comes from the pipeline.
 
+## The digiquant.io build gate (DIG-4871)
+
+GitHub Actions is off. The workflow "Deploy: digiquant.io build check" was
+disabled on 2026-10-14, so a PR touching `scripts/build-digiquant.sh` or
+`apps/digiquant-web/**` ran no build at all: the check that proved the deploy
+path was alive only ran after the deploy had already broken (digiquant.io served
+its 2026-10-13 build for 7.8 days).
+
+This runner carries that check now. On a PR whose changed files match
+`DIGIQUANT_BUILD_PATTERNS` it runs, in the PR's own worktree:
+
+1. `python3 -m pip install --dry-run --no-deps .` - the repo is installable,
+2. `bash scripts/build-digiquant.sh` - the same build Cloudflare runs,
+3. the `dist/` layout assertions (`dist/index.html`, `dist/CNAME` holding
+   `digiquant.io`, `dist/dashboard`, `dist/build-info.json`),
+4. `scripts/check_deploy_freshness.py` on the stamp the build wrote.
+
+A failed build stops the gate before the layout steps: a build that failed
+proves nothing about the layout. It builds and deploys nothing - the real
+digiquant.io deploy is Cloudflare Pages watching `main`.
+
+The pattern list is hand-maintained here and derived by the repository's own
+tests: `tests/scripts/test_deploy_build_inputs.py` walks the workspace closure
+of `scripts/build-digiquant.sh` and fails when a workspace the build compiles is
+missing from the list, and `tests/scripts/test_local_ci_digiquant_gate.py`
+asserts the gate runs the build and the assertions above. Re-derive rather than
+mirror: a mirror goes stale silently, which is how the disabled workflow lost
+`packages/hero-banner` while nobody edited it.
+
+The gate never reads the disabled workflow's `paths:` filter. A gate that read
+its patterns from a file scheduled for deletion would lose them the day the file
+went, and the build check would vanish silently - the same failure the disabled
+workflow itself caused.
+
 ## Deploying it
 
 The guard fails closed: a runner without `launch_guard.py` next to it refuses to

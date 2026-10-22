@@ -430,6 +430,65 @@ stays one visible open issue instead of six a day. Close it when the drift is
 resolved and the next occurrence opens a fresh one. An unreadable search always
 raises rather than suppressing: a duplicate issue is recoverable, a silent
 miss is not.
+## Deploy freshness probe (DIG-4871)
+
+`deploy-freshness` (`23 */2 * * *`) is the probe row that fails when digiquant.io
+serves a build that is not the production branch's tip. It is a probe, not a
+dispatch: it reads three public URLs and decides, so it runs whether or not
+GitHub Actions is on.
+
+The daily `smoke-site` probe could not see this. It reads the stamp's **age**
+only (168 h), so a broken deploy path stayed green for 7.8 days while
+digiquant.io kept serving its 2026-10-13 build. Age is the wrong question: a
+site whose branch has moved on is fresh and stale at the same time, and only
+the second one is a defect.
+
+**The expected commit comes from the repository's public git remote, read over
+the git smart-HTTP transport:**
+
+```
+GET https://github.com/digithings-ai/digithings/info/refs?service=git-upload-pack
+```
+
+That is the advertisement `git ls-remote` reads. The probe parses the pkt-line
+for `refs/heads/main` and takes the sha in front of the ref name. No token, no
+`api.github.com`, no Contents grant: `GH_DISPATCH_TOKEN` carries none of those
+(the Worker cannot read the repository's contents with it), and the probe needs
+none.
+
+**The anchor comes from the public atom feed of the production branch:**
+
+```
+GET https://github.com/digithings-ai/digithings/commits/main.atom
+```
+
+A mismatch alone does not say how long production has been behind: `main` moves
+several times a day, so a grace measured from the tip restarts on every move and
+hides a long break. The anchor is therefore **the oldest commit on the
+production branch that production has not built** — the feed entry just older
+than the served commit, or the oldest entry newer than the stamp's `built_at`
+when the served commit has fallen out of the feed's 20-entry window. If the feed
+cannot be read, the probe falls back to the tip's own commit date
+(`GET .../commit/<sha>.patch`, first kilobyte only, the mbox `Date:` header).
+
+| state | verdict |
+|---|---|
+| the served stamp is `main`'s tip | PASS |
+| the remote cannot be read | WARN, not failed |
+| the stamp is missing or unreadable | WARN, not failed — the daily site probe owns "no stamp" |
+| mismatch, anchor not found | WARN, not failed |
+| mismatch, anchor older than the grace (6 h) | **FAIL** |
+| mismatch, anchor newer than the grace | WARN — a Pages build may still be in flight |
+
+The grace is 6 h against a measured build time of 3m08s (production) to 7m03s
+(preview): about fifty times the build, and long enough to cover a promotion PR
+prepared hours before it is merged. It is anchored on the first commit
+production missed, not on the tip, so a branch that keeps moving cannot keep
+restarting the grace.
+
+A FAIL fails the cron row, which is what the run-watch reads. The probe is
+stateless: three public reads, one verdict, no writes.
+
 ## Local
 
 ```

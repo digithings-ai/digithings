@@ -35,6 +35,17 @@ GHA `schedule:` stays off. Leftover sweep after #4970: develop YAML has
 zero `on.schedule` keys (`tests/scripts/test_no_gha_schedules.py`).
 `digisearch_parity` is not a digithings workflow.
 
+## Deploy freshness probe (DIG-4871)
+
+The `deploy-freshness` row (`23 */2 * * *`) fails when digiquant.io serves a
+build that is not the production branch's tip. The daily `smoke-site` probe
+cannot see that: it reads the stamp's age only, and a frozen deploy kept the
+site fresh for 7.8 days. The expected commit is read from the repository's
+public git remote over the git smart-HTTP transport (the advertisement
+`git ls-remote` reads, no token), and the grace is anchored on the oldest
+commit of that branch production has not built, read from the branch's public
+atom feed. Full contract: [`apps/digithings-cron/README.md`](../../apps/digithings-cron/README.md#deploy-freshness-probe-dig-4871).
+
 ## Dated snapshot backfill
 
 `POST /backfill` is the Cloudflare-native dispatch path for dated

@@ -176,6 +176,62 @@ WORKER_GATE_PATTERNS = tuple(f"apps/{a}/**" for a in WORKER_APPS) + (
 )
 # A dry-run that has not finished in 5 minutes is wedged, not slow (DIG-4453).
 WORKER_DRY_RUN_TIMEOUT = 300
+
+# digiquant.io build gate (DIG-4871). The GitHub Actions job "Deploy: digiquant.io
+# build check" was disabled on 2026-10-14 (the Actions cost sweep), so PRs touching
+# the digiquant build inputs ran no build at all: the gate that proved the deploy
+# path was alive only ran after the deploy had already broken. This is that check,
+# off GitHub: the same build script, the same dist layout assertions, the same
+# stamp evaluation.
+#
+# The patterns are the deploy build inputs of scripts/build-digiquant.sh, seeded
+# from the disabled workflow's own `paths:` filter and then derived: the repo
+# guard in tests/scripts/test_deploy_build_inputs.py walks the build script's
+# workspace closure and fails when a workspace the build compiles is missing
+# from this list. Re-derive rather than mirror: a mirror goes stale silently,
+# which is how the digithings filter lost packages/digichat-ui - and how the
+# disabled digiquant filter lost packages/hero-banner while nobody edited it.
+DIGIQUANT_BUILD_PATTERNS = (
+    "apps/digiquant-web/**",
+    # Imported from source by the digiquant-web build.
+    "clients/digiquant-tui/src/**",
+    "apps/digithings-web/components/**",
+    # apps/dashboard imports @digithings/catalog at build time.
+    "packages/catalog/**",
+    "packages/ui/**",
+    "apps/dashboard/**",
+    "packages/design/**",
+    "packages/surface-config/**",
+    # apps/digiquant-web imports @digithings/hero-banner, and @digithings/ui
+    # imports it too. The disabled workflow's filter had lost this one, which is
+    # why tests/scripts/test_deploy_build_inputs.py was red on develop: nothing
+    # edited a filter nobody evaluated.
+    "packages/hero-banner/**",
+    # The build script and its callees: watching the caller alone leaves the gap
+    # this check exists to close.
+    "scripts/build-digiquant.sh",
+    "scripts/write-build-info.sh",
+    "scripts/check_deploy_freshness.py",
+    # Root packaging manifests: Cloudflare runs `pip install .` before the build
+    # command, and the build script runs its own root `npm install`.
+    "pyproject.toml",
+    "requirements.txt",
+    "setup.py",
+    "package.json",
+    "package-lock.json",
+    # Install inputs: the root install resolves all eight workspaces before
+    # either site compiles.
+    "apps/digithings-stack-cloudflare/package.json",
+    "apps/reference/package.json",
+    # Two workspaces no path filter in the repo named (the repo-wide floor in
+    # tests/scripts/test_deploy_build_inputs.py). The digiquant build resolves
+    # them in its root install, so a bad range in either breaks this gate too.
+    "apps/digiquant-app/package.json",
+    "packages/contract/package.json",
+)
+# The build is the whole digiquant.io export: a root npm install and two Next
+# builds. It is slower than a worker dry-run and it is the point of the gate.
+DIGIQUANT_BUILD_TIMEOUT = 2400
 os.makedirs(LOGD, exist_ok=True)
 # --- VPN proxy (DIG-4453) ------------------------------------------------------
 # Measured 2026-10-19: `npm exec -- wrangler deploy --dry-run` never returns when
@@ -760,7 +816,7 @@ def glob_to_regex(pat):
     return re.compile("^" + "".join(b) + "$")
 
 
-def worker_gate_hit(files, patterns):
+def path_gate_hit(files, patterns):
     """First (pattern, path) hit of changed files against gate patterns, else None.
 
     Pattern-major: the first pattern (in ci_paths.yaml order) matching any file wins.
@@ -806,17 +862,26 @@ def changed_file_names(raw):
     return names or None
 
 
-def worker_gate(pr, wt):
-    """Path gate for the worker dry-run build. Returns (n_files, (pattern, path))
-    on a hit, (n_files, None) on a miss, (None, None) when the file list is unusable."""
+def pr_changed_files(pr):
+    """Changed file names of a PR, or None when the list is unusable (caller fails closed)."""
     raw = gh("api", f"repos/{REPO}/pulls/{pr['number']}/files", "--paginate", "--slurp")
     try:
-        files = changed_file_names(json.loads(raw or ""))
+        return changed_file_names(json.loads(raw or ""))
     except ValueError:
-        files = None
+        return None
+
+
+def worker_gate(pr, wt, files=None):
+    """Path gate for the worker dry-run build. Returns (n_files, (pattern, path))
+    on a hit, (n_files, None) on a miss, (None, None) when the file list is unusable.
+
+    `files` is the shared changed-file list; None means "fetch it".
+    """
+    if files is None:
+        files = pr_changed_files(pr)
     if files is None:
         return None, None
-    return len(files), worker_gate_hit(files, worker_patterns(wt))
+    return len(files), path_gate_hit(files, worker_patterns(wt))
 
 
 def worker_build(wt, step):
@@ -839,6 +904,45 @@ def worker_build(wt, step):
         return failed
     finally:
         shutil.rmtree(outdir, ignore_errors=True)
+
+
+def digiquant_build(wt, step):
+    """Re-run the digiquant.io deploy build on the PR head (DIG-4871).
+
+    The GitHub Actions job "Deploy: digiquant.io build check" was disabled on
+    2026-10-14, so a PR that broke the digiquant deploy path ran no build at
+    all. This is that job, off GitHub: the same build script, the same dist
+    layout assertions, the same stamp evaluation - the checks the disabled
+    workflow's `build-dist` job performed, in the same order.
+
+    Returns the failed step names (for tests/observability); run_checks discards it.
+    """
+    failed = []
+    # Cloudflare's build image runs `pip install .` BEFORE the build command, so a
+    # repo that is no longer pip-installable never reaches the build. Same step,
+    # same order, --dry-run so the runner's site-packages are not mutated.
+    if not step("digiquant-build:pip-installable",
+                ["python3", "-m", "pip", "install", "--dry-run", "--no-deps", "."],
+                DIGIQUANT_BUILD_TIMEOUT):
+        return ["digiquant-build:pip-installable"]
+    if not step("digiquant-build:build", ["bash", "scripts/build-digiquant.sh"],
+                DIGIQUANT_BUILD_TIMEOUT):
+        failed.append("digiquant-build:build")
+        return failed
+    if not step("digiquant-build:dist-layout",
+                "test -f dist/index.html && test -f dist/CNAME && test -d dist/dashboard "
+                "&& grep -q digiquant.io dist/CNAME && test -f dist/build-info.json",
+                300):
+        failed.append("digiquant-build:dist-layout")
+    # The daily probe reads this stamp off the live site, so the stamp the build
+    # just wrote is validated with the same evaluator the probe uses.
+    if not step("digiquant-build:build-stamp",
+                ["python3", "scripts/check_deploy_freshness.py",
+                 "--url", "dist/build-info.json", "--status", "200",
+                 "--body-file", "dist/build-info.json", "--max-age-hours", "1"],
+                300):
+        failed.append("digiquant-build:build-stamp")
+    return failed
 
 
 def wt_head():
@@ -936,13 +1040,22 @@ def run_checks(pr, out):
         for s in ["check_doc_links.py", "check_adr_numbering.py", "agents_init.py --check", "check_model_name_literals.py",
                   "generate_ci_path_filters.py --check"]:
             if os.path.exists(f"{WT}/scripts/{s.split()[0]}"): step(s.split()[0], U + f"python scripts/{s}", 600)
-    n_files, hit = worker_gate(pr, WT)
-    if hit is None and n_files is None:
+    # One changed-file fetch, two path gates (worker dry-run, digiquant build).
+    files = pr_changed_files(pr)
+    if files is None:
         out.write("\n===== worker-build\nchanged-files fetch failed; failing closed\n")
         fails.append("worker-build: changed-files fetch failed")
-    elif hit is not None:
-        out.write(f"\n===== worker-build\ngate hit: {hit[0]} <- {hit[1]}\n")
-        worker_build(WT, step)
+        out.write("\n===== digiquant-build\nchanged-files fetch failed; failing closed\n")
+        fails.append("digiquant-build: changed-files fetch failed")
+    else:
+        hit = worker_gate(pr, WT, files)[1]
+        if hit is not None:
+            out.write(f"\n===== worker-build\ngate hit: {hit[0]} <- {hit[1]}\n")
+            worker_build(WT, step)
+        dq_hit = path_gate_hit(files, DIGIQUANT_BUILD_PATTERNS)
+        if dq_hit is not None:
+            out.write(f"\n===== digiquant-build\ngate hit: {dq_hit[0]} <- {dq_hit[1]}\n")
+            digiquant_build(WT, step)
     return fails
 
 def process(pr, dry):
