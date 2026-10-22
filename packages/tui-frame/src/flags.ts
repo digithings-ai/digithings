@@ -21,7 +21,7 @@ export function parseFlags(
   for (let index = 0; index < argv.length; index += 1) {
     const entry = argv[index];
     if (!entry.startsWith("--")) {
-      throw new Error(`unexpected argument "${entry}"`);
+      throw new Error(`unexpected argument "${entry}" (unknown flag)`);
     }
     const equals = entry.indexOf("=");
     const name = equals === -1 ? entry : entry.slice(0, equals);
@@ -45,9 +45,11 @@ export function parseFlags(
 
 /** Read a positive integer flag value. */
 export function positiveInt(value: string, flag: string): number {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`${flag} needs a positive number, got "${value}"`);
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(
+      `${flag} needs a positive whole number (a positive number), got "${value}"`,
+    );
   }
   return parsed;
 }
