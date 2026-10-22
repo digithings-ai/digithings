@@ -37,13 +37,17 @@ export type ConnectedToolRow = {
   builtinTools?: ReadonlyArray<{ id: string; label: string }>;
 };
 
-/** The two tools digisearch offers the model (see digisearch orchestrator_tools.py). */
+/**
+ * The digisearch tools that follow the digisearch switch: the set digigraph's
+ * tool policy turns on and off with it (digigraph/src/digigraph/tool_policy.py).
+ * Not every tool the service offers; keep this list in step with that policy.
+ */
 export const DIGISEARCH_BUILTIN_TOOLS = [
   { id: "digisearch", label: "search" },
   { id: "digisearch_fetch_all", label: "fetch_all" },
 ] as const;
 
-/** The tools digivault offers the model (see digivault orchestrator_tools.py). */
+/** The digivault tools that follow the digivault switch (same policy file). */
 export const DIGIVAULT_BUILTIN_TOOLS = [
   { id: "digivault_search_notes", label: "search_notes" },
   { id: "digivault_get_note", label: "get_note" },

@@ -139,7 +139,6 @@ export function treeBranchGlyph(branch: MenuRow["branch"]): string {
   return "";
 }
 
-
 export type ComposerModelPicker = {
   presets: readonly { id: string; label: string; description: string; model: string }[];
   groups: readonly {
@@ -937,7 +936,6 @@ export function EmbedComposerMenu({
               label: sub.label,
               branch: branchAt(i),
               value: state,
-              insert: optionDraft("/tools", sub.label),
               token: sub.label,
               activate: () => {},
             }),

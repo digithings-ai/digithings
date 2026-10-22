@@ -295,4 +295,21 @@ describe("/tools tree", () => {
     expect(api.setDigisearch).not.toHaveBeenCalled();
     expect(api.setExtraTool).toHaveBeenCalledTimes(1);
   });
+
+  it("lists configured tools instead of the built-ins when the deployment names them", () => {
+    const api = prefs({
+      toolControl: "toggle",
+      hasDigisearch: true,
+      catalogTools: [{ id: "digisearch", label: "Search", tools: [{ id: "digisearch", label: "search_docs" }] }],
+    });
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="tools" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(toolsTree()).toMatchInlineSnapshot(`
+      "/digisearch                  On
+        └─ search_docs             On"
+    `);
+  });
 });
