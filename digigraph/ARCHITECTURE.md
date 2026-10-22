@@ -776,10 +776,10 @@ degrades today.
 A remote MCP server that cannot be listed — unreachable, refused (421 / 401 / 404),
 misconfigured — offers the model no tool. A server that has no tools offers the
 model no tool. The model cannot tell the two apart, so the only conclusion it can
-draw from an outage is "there is no data", and it says so. That is what the OCC
+draw from an outage is "there is no data", and it says so. That is what a tenant
 chat did in October 2026 (DIG-5187): the helpdesk MCP was unreachable, the model
-had no Zammad tool, and the answer was "no live Zammad queue data is retrievable
-in this chat" instead of "the helpdesk integration is not reachable". The only
+had no tool for it, and the answer was "no live queue data is retrievable in
+this chat" instead of "the helpdesk integration is not reachable". The only
 trace was one `log.warning`.
 
 **Where the failure lives.** `_list_tools_blocking()`
