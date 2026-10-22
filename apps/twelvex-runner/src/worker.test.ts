@@ -294,7 +294,7 @@ describe("the reason leaves the container", () => {
       const res = await handle(
         post("ingest", { job_id: "twelve-x-market-context-intraday", bucket: "intraday" }),
         env(),
-        { fetch: container } as unknown as Fetcher,
+        stubOf(container),
         github as unknown as typeof fetch,
       );
       expect(res.status).toBe(200);
@@ -322,7 +322,7 @@ describe("the reason leaves the container", () => {
     const res = await handle(
       post("ingest", { job_id: "twelve-x-market-context-daily", bucket: "daily" }),
       env(),
-      { fetch: container } as unknown as Fetcher,
+      stubOf(container),
       github as unknown as typeof fetch,
     );
     const body = (await res.json()) as RunResult;
