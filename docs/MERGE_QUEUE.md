@@ -209,6 +209,19 @@ much per pull request. The launchd job fires every 180 s and holds a lock, so a 
 that does not answer must not be able to outlast the interval: that is the reason for the
 short timeouts.
 
+**A dropped connection is not an answer about the build.** A read that never reached the
+API is tried again before it is believed — three attempts, a short pause between them,
+inside one budget, so a single path cannot cost the budget once per attempt. A read the
+API *answered* — any status code, and a refused redirect — is an answer, and it is cached
+for the life of the process like every other answer: the API answered, and its answer is
+the same until the next tick. And a host that could not be read once is not asked again
+for the next minute: the queue asks the same host about every pull request of the tick, so
+one dropped connection used to refuse every pull request of the tick for a reason that
+had nothing to do with them. The memory of a failure is of that host and not of the
+queue, and it keeps the host unasked for a minute: while it lasts, the pull requests of
+the tick are answered from it and not from the network. After it has passed the host is
+asked again, and a failed read is never filed as the answer of the URL it failed on.
+
 **It ships in `shadow`, and that is honest, not a setting to forget.** Woodpecker binds a
 pipeline to the commit it checked out, and the launcher pipeline today is the cron run of
 the launcher repo itself — its `commit` is the launcher's own sha, never a PR head. So the
