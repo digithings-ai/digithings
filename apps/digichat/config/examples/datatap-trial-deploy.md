@@ -185,7 +185,7 @@ subscription `Datatap Trials`; measured 2026-10-22, `keyVaultUrl: null`):
 
 | Container App secret | Bound env var | What it gates |
 |---|---|---|
-| `embed-token` | `DIGICHAT_EMBED_TOKEN` | the single-install `/api/chat` gate: `apps/digichat/src/lib/deploy-config/loader.ts:261-264` copies it into `deployment.token`, and `apps/digichat/src/lib/embed-chat-tenant.ts:118-125` (`installAuthorized`) matches it on every request (`apps/digichat/src/app/api/chat/route.ts:209`) |
+| `embed-token` | `DIGICHAT_EMBED_TOKEN` | the single-install `/api/chat` gate: `apps/digichat/src/lib/deploy-config/loader.ts:261-264` copies it into `deployment.token`, and `apps/digichat/src/lib/embed-chat-tenant.ts:118-125` (`installAuthorized`) matches it on the single-install path (`apps/digichat/src/app/api/chat/route.ts:209`; `installAuthorized` is consulted only when no embed tenants are configured — `apps/digichat/src/lib/embed-chat-tenant.ts:159`) |
 | `auth-secret` | `AUTH_SECRET` | this app's Auth.js session secret |
 
 The V1 sketch above does not set `embed-token`; the live app carries it (measured
@@ -204,8 +204,11 @@ The V1 sketch above does not set `embed-token`; the live app carries it (measure
   the single-install path refuses every `/api/chat`. `auth-secret`: every session on
   the app is invalidated.
 - **Handing a value to the client stays a human act** — person to person, never
-  pasted into a chat, a ticket or a link. The Azure write is a human step; DevOps
-  owns the trial deploy lane and this guide.
+  pasted into a chat, a ticket or a link. The Azure write is a human step, and the
+  trial lane's own rule is that every command against this app is a write to a
+  customer's Azure and needs the approval named in the runbook
+  (`docs/ops/digichat-datatap-aca.md`); DevOps owns the trial deploy lane and this
+  guide, and the client-facing handoff is Chris's act.
 - **This is not the OCC invite key.** The pair is the tenant's own credential and the
   two must not be confused. The client's own `datatap-dev` MCP `X-API-Key` stays
   theirs (R18) and is not in the container: in the V1 Foundry setup the MCP tool
@@ -213,12 +216,25 @@ The V1 sketch above does not set `embed-token`; the live app carries it (measure
 - **Open: no recorded fingerprint and no staleness detector for this pair.** The
   sibling ACA detector (`scripts/digichat_aca_secret_detector.py`, DIG-1344) has no
   binding for this app. Owner: Security & Risk Lead, 2026-10-22. Closing it needs a
-  write against the client's Azure, so it rides with DevOps.
-- **Why this file and not the public secrets inventory.** `docs/ops/SECRETS_INVENTORY.md`
-  is an R0 (public) path: the R0 client-literals guard (DIG-3689) keeps client names
-  and tenant data out of it, and the allowance baseline may only shrink (DIG-4577).
-  This guide is a non-R0 path, so the client's identifiers and this custody record
-  stay on the private side of the repo split.
+  read of the client's Azure secrets, which the trial lane gates behind the named
+  approval (`docs/ops/digichat-datatap-aca.md`), so it rides with DevOps and Chris.
+- **Why this file and not `docs/ops/SECRETS_INVENTORY.md`.** The R0 client-literals
+  gate (DIG-3689) checks `docs/ops/SECRETS_INVENTORY.md` — it carries a grandfathered
+  count of 4 there, and the allowance may only shrink (DIG-4577); the gate's own
+  failure message asks the author to remove the literal from the source rather than
+  allowlist it. The gate does not check this file, so the record can live here
+  without touching that allowance. No credential value or fingerprint of this pair is
+  written down here; the identifiers it names (the trial app, its resource group and
+  its subscription) are the ones the sibling runbook
+  `docs/ops/digichat-datatap-aca.md` already carries.
+- **Open: this path's R-class is contested in the repo's own artifacts.** The
+  canonical split map (`scripts/split/manifest.py`, DIG-3690) assigns **R0 (public)**
+  to this guide, to `docs/ops/SECRETS_INVENTORY.md` and to
+  `docs/ops/digichat-datatap-aca.md`; the older move lists
+  (`scripts/repo-split/move-lists/r5.paths`) put the inventory in R5, and the
+  DIG-3689 gate's prefix table treats this guide as private — while the gate's own
+  docstring says the manifest supersedes that table. Raised with the R0 owner on
+  DIG-3689; the classification is the split owner's call, not this record's.
 
 ## Traps worth knowing before the demo
 

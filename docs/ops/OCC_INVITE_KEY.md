@@ -368,8 +368,8 @@ of this table is `apps/digichat/src/lib/embed-occ-invite-key.test.ts`.
 One check the script cannot do: that a **staff user** gets a working chat session at
 `https://digithings.ai/chat/occ?token=<key>` — a real message round-trip. That is a browser step
 and it is the only proof that the whole chain (Pages route → `readInviteToken` → `X-Embed-Token`
-→ digichat → Container → model) works end to end. Do it by hand, once, and record the outcome in
-[Rotation log](SECRETS_ROTATION.md#rotation-log).
+→ digichat → Container → model) works end to end. When it is run, do it by hand, once, and
+record the outcome in [Rotation log](SECRETS_ROTATION.md#rotation-log).
 
 **Browser check — closed by decision on 2026-10-21 (this file updated 2026-10-22).** On 2026-10-21
 Chris answered the DIG-4810 card with *the machine proof is enough* (card `9cbd759c`), so the OCC
