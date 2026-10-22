@@ -180,6 +180,9 @@ def session_tool_handler(name: str) -> SessionToolHandler:
                 "ok": False,
                 "error": "pass mode (auto|collapsed|open) or enabled (true|false)",
             }
+        if name == SESSION_TOGGLE_TOOL:
+            # Tool on/off is /tools. Stay registered so lock filters still see the name.
+            return {"ok": False, "error": "Tools are changed in /tools."}
         return _handle_session_tool(raw, context)
 
     return handler

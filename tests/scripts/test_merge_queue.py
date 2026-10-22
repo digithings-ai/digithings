@@ -2195,6 +2195,10 @@ GOOD_TARGET_URL = "http://localhost:8000/repos/6/pipeline/259"
 #: outside.
 _REAL_WOODPECKER_READ = mq._woodpecker_read
 
+#: The real GitHub reader, kept for the same reason: the receipt is read from
+#: the REST endpoint, and the rest of the queue keeps reading GitHub.
+_REAL_GH_JSON = mq._gh_json
+
 #: The real reader of the deployment's configuration, kept for the same reason:
 #: the tests that check how an address is derived need the real one.
 _REAL_DEPLOYMENT_CONFIG_FILES = mq._deployment_config_files
@@ -3417,6 +3421,469 @@ def test_the_gate_verifies_the_check_it_was_asked_about(
     assert verdict.eligible, verdict.reasons
 
 
+# ── the trusted receipt: who wrote the status (DIG-4794, the second chain) ───
+#
+# The `local-ci` row is posted with a user token, so a seat that can run the
+# check can post the same green row - and can copy the build link out of any
+# recent build. The receipt is the same status posted by the CI's own GitHub
+# App installation, so the writer is the CI and nobody else, and it sits on the
+# head commit: that is what binds a check to a pull request head, which the
+# build's own `commit` field cannot do while the launcher runs one build per
+# repository.
+
+#: The status context the CI's app writes its receipt under.
+RECEIPT_CONTEXT = "local-ci/app"
+
+#: The login the CI's GitHub App installation writes under.
+RECEIPT_WRITER = "digithings-ci[bot]"
+
+
+@pytest.fixture
+def commit_statuses(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """The commit statuses on the head, answered from a fixture.
+
+    The GraphQL rollup the queue already reads carries no creator, so the
+    receipt is read from the REST endpoint; this is that endpoint. `rows` is
+    what it answers with, `problem` makes it fail, and `calls` is the record of
+    what it was asked.
+    """
+    state: dict[str, Any] = {"rows": [], "problem": "", "calls": []}
+
+    def fake_gh_json(*args: str, timeout: float | None = None) -> Any:
+        state["calls"].append(" ".join(args))
+        if len(args) >= 2 and args[0] == "api" and "/statuses" in args[1]:
+            if state["problem"]:
+                raise mq.QueueError(state["problem"])
+            return list(state["rows"])
+        return _REAL_GH_JSON(*args, timeout=timeout)
+
+    monkeypatch.setattr(mq, "_gh_json", fake_gh_json)
+    return state
+
+
+def _receipt_row(
+    *,
+    state: str = "success",
+    login: str = RECEIPT_WRITER,
+    target_url: str = GOOD_TARGET_URL,
+    created_at: str = "2026-10-21T02:07:00Z",
+) -> dict[str, Any]:
+    """A commit status row, in the shape the REST endpoint answers with."""
+    return {
+        "context": RECEIPT_CONTEXT,
+        "state": state,
+        "target_url": target_url,
+        "created_at": created_at,
+        "creator": {"login": login},
+    }
+
+
+def _receipt_policy(
+    repo: str = DIGITHINGS_REPO,
+    *,
+    require: bool = True,
+    creators: tuple[str, ...] = (RECEIPT_WRITER,),
+    commit_match: str = mq.COMMIT_MATCH_ENFORCE,
+) -> Any:
+    """The shipped policy, with the receipt switched on.
+
+    The shipped policy does not ask for a receipt yet: the CI writes none, so
+    a policy that asked for one would refuse every pull request in the org.
+    The chain is here, tested, and switched on by the policy change that comes
+    with the CI's own installation token.
+    """
+    policy = mq.load_policy()
+    prov = replace(
+        policy.ci_provenance,
+        trusted_receipt=mq.TrustedReceipt(
+            context=RECEIPT_CONTEXT, creators=creators, required=require
+        ),
+        commit_match=commit_match,
+    )
+    return replace(policy, ci_provenance=prov).for_repo(repo)
+
+
+def _receipt_verdict(pr: dict[str, Any], repo: str = DIGITHINGS_REPO) -> Any:
+    return mq.evaluate(
+        pr, _receipt_policy(repo), acting_role="cto", base="develop", repo=repo
+    )
+
+
+def test_a_receipt_written_by_the_ci_app_is_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The receipt is the row a seat cannot write, so it is evidence."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [_receipt_row()]
+    pr = _pr(1, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _receipt_verdict(pr)
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_receipt_written_by_somebody_else_is_not_a_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The writer is the whole point of the receipt."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [_receipt_row(login="chrizefan")]
+    pr = _pr(1, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _receipt_verdict(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        "was written by chrizefan, which is not a trusted CI writer" in reason
+        for reason in verdict.reasons
+    )
+
+
+def test_a_pull_request_without_a_receipt_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """No receipt is not a receipt."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = []
+    pr = _pr(1, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _receipt_verdict(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        f"no '{RECEIPT_CONTEXT}' receipt is reported on the head commit" in reason
+        for reason in verdict.reasons
+    )
+
+
+def test_a_receipt_that_is_not_green_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """A receipt that says the check failed is a failed check."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [_receipt_row(state="failure")]
+    pr = _pr(1, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _receipt_verdict(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        f"the '{RECEIPT_CONTEXT}' receipt is failure" in reason
+        for reason in verdict.reasons
+    )
+
+
+def test_a_receipt_that_names_no_build_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The receipt's own build is read back, like the status's."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [_receipt_row(target_url="")]
+    pr = _pr(1, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _receipt_verdict(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        f"the '{RECEIPT_CONTEXT}' receipt carries no target_url" in reason
+        for reason in verdict.reasons
+    )
+
+
+def test_a_receipt_whose_build_ran_another_commit_is_not_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The receipt names a build, and the build has to be the one that ran."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    woodpecker["answer"]["payload"] = _pipeline(commit="b" * 40)
+    commit_statuses["rows"] = [_receipt_row()]
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _receipt_verdict(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        "the build named by the receipt ran another commit" in reason
+        for reason in verdict.reasons
+    )
+
+
+def test_a_receipt_without_a_writer_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    commit_statuses: dict[str, Any],
+) -> None:
+    """A row with no creator has no writer the queue can name."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    row = _receipt_row()
+    row.pop("creator")
+    commit_statuses["rows"] = [row]
+    result = mq.verify_trusted_receipt(
+        _pr(1), _receipt_policy(), DIGITHINGS_REPO, mode=mq.PROVENANCE_ENFORCE
+    )
+    assert result is not None
+    assert not result.ok, result.reason
+    assert "an unknown writer" in result.reason
+
+
+def test_a_forged_row_does_not_cancel_the_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """A failing row next to the CI's own passing one is the forger's business.
+
+    The queue looks for a trusted receipt. If the newest row of the context
+    decided, a seat could hold a pull request by writing a failing status next
+    to the CI's own passing one - so the trusted row is the one that counts.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [
+        _receipt_row(
+            login="chrizefan",
+            state="failure",
+            created_at="2026-10-21T03:00:00Z",
+        ),
+        _receipt_row(),
+    ]
+    result = mq.verify_trusted_receipt(
+        _pr(1), _receipt_policy(), DIGITHINGS_REPO, mode=mq.PROVENANCE_ENFORCE
+    )
+    assert result is not None
+    assert result.ok, result.reason
+
+
+def test_the_ci_apps_own_later_failure_cancels_its_earlier_success(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The CI's last word on the head is the word.
+
+    A green receipt from ten o'clock does not survive the app's own red row
+    from noon. The app is the CI: when it reports a failure on this head, the
+    check failed on this head, and an earlier green row cannot stand in for
+    it. This is the other side of the rule above - a forged row is the
+    forger's business, the app's own row is the queue's business.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [
+        _receipt_row(created_at="2026-10-21T10:00:00Z"),
+        _receipt_row(state="failure", created_at="2026-10-21T12:00:00Z"),
+    ]
+    result = mq.verify_trusted_receipt(
+        _pr(1), _receipt_policy(), DIGITHINGS_REPO, mode=mq.PROVENANCE_ENFORCE
+    )
+    assert result is not None
+    assert not result.ok, result.reason
+    assert f"the '{RECEIPT_CONTEXT}' receipt is failure" in result.reason
+
+
+def test_the_ci_apps_own_later_success_cancels_its_earlier_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The newest row of the app decides, in both directions.
+
+    The control for the test above: a failed run followed by a green one is a
+    head that passed, because the CI re-ran it and the newer row says so. If
+    the queue looked at the oldest row, or at any green row, this would fail.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [
+        _receipt_row(state="failure", created_at="2026-10-21T10:00:00Z"),
+        _receipt_row(created_at="2026-10-21T12:00:00Z"),
+    ]
+    result = mq.verify_trusted_receipt(
+        _pr(1), _receipt_policy(), DIGITHINGS_REPO, mode=mq.PROVENANCE_ENFORCE
+    )
+    assert result is not None
+    assert result.ok, result.reason
+
+
+def test_the_commit_statuses_that_cannot_be_read_are_a_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """A read that fails is not the same as a receipt that is missing."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["problem"] = "gh api failed with exit 1: not logged in"
+    pr = _pr(1, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _receipt_verdict(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        "the commit statuses could not be read" in reason for reason in verdict.reasons
+    )
+
+
+def test_the_receipt_is_read_from_the_rest_endpoint(
+    monkeypatch: pytest.MonkeyPatch, commit_statuses: dict[str, Any]
+) -> None:
+    """The GraphQL rollup carries no creator, so the REST endpoint is read."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    mq.verify_trusted_receipt(
+        _pr(1), _receipt_policy(), DIGITHINGS_REPO, mode=mq.PROVENANCE_ENFORCE
+    )
+    assert commit_statuses["calls"] == [
+        f"api repos/{DIGITHINGS_REPO}/commits/{'a' * 40}/statuses?per_page=100"
+    ]
+
+
+def test_the_queue_reads_no_receipt_when_the_policy_asks_for_none(
+    monkeypatch: pytest.MonkeyPatch, commit_statuses: dict[str, Any]
+) -> None:
+    """A receipt the policy does not ask for is not read at all.
+
+    The queue looks at every open pull request on every tick, and a status list
+    it is not going to obey buys nothing while the CI writes none.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    result = mq.verify_trusted_receipt(
+        _pr(1), _receipt_policy(require=False), DIGITHINGS_REPO, mode=mq.PROVENANCE_ENFORCE
+    )
+    assert result is None
+    assert commit_statuses["calls"] == []
+
+
+def test_the_receipt_is_not_read_when_the_gate_is_off(
+    monkeypatch: pytest.MonkeyPatch, commit_statuses: dict[str, Any]
+) -> None:
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_OFF)
+    result = mq.verify_trusted_receipt(
+        _pr(1), _receipt_policy(), DIGITHINGS_REPO, mode=mq.PROVENANCE_OFF
+    )
+    assert result is None
+    assert commit_statuses["calls"] == []
+
+
+def test_the_shipped_policy_does_not_ask_for_a_receipt_yet() -> None:
+    """The CI writes no receipt today, so the shipped policy asks for none.
+
+    A policy that asked for one would refuse every pull request in the org the
+    moment the mode was switched to `enforce`, which is the freeze the whole
+    switch is staged to avoid. The chain ships switched off, and the policy
+    change that comes with the CI's own installation token switches it on.
+    """
+    prov = mq.load_policy().ci_provenance
+    assert prov.trusted_receipt.context == RECEIPT_CONTEXT
+    assert prov.trusted_receipt.creators == (RECEIPT_WRITER,)
+    assert prov.trusted_receipt.required is False
+
+
+def test_a_softened_commit_comparison_needs_a_trusted_receipt(tmp_path: Path) -> None:
+    """Nothing binds a status to a head without the receipt, so the file is refused.
+
+    The build's own commit cannot be the pull request head while the launcher
+    runs one build per repository, so a policy that softens that comparison
+    has to ask for the receipt that binds the status to the head instead. A
+    policy file that softens it without asking is refused rather than loaded.
+    """
+    raw = json.loads(mq.POLICY_PATH.read_text(encoding="utf-8"))
+    raw["ci_provenance"]["commit_match"] = "shadow"
+    raw["ci_provenance"]["trusted_receipt"]["require"] = False
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(mq.QueueError) as excinfo:
+        mq.load_policy(path)
+    assert "trusted receipt" in str(excinfo.value)
+
+
+def test_a_softened_commit_comparison_is_measured_and_not_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    """The receipt binds the status to the head, so the comparison can soften.
+
+    The build that runs the check today is the launcher repository's own cron
+    run, so its commit is never the pull request head. With the receipt in
+    place the binding is the receipt, and the comparison becomes a measurement.
+    """
+    log = tmp_path / "provenance.log"
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    monkeypatch.setenv(mq.PROVENANCE_LOG_ENV, str(log))
+    woodpecker["answer"]["payload"] = _pipeline(commit="b" * 40)
+    commit_statuses["rows"] = [_receipt_row()]
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = mq.evaluate(
+        pr,
+        _receipt_policy(commit_match=mq.COMMIT_MATCH_SHADOW),
+        acting_role="cto",
+        base="develop",
+        repo=DIGITHINGS_REPO,
+    )
+    assert verdict.eligible, verdict.reasons
+    written = log.read_text(encoding="utf-8")
+    # Per subject: both chains write the same words, so a loose assertion
+    # would pass with the status chain's measurement dropped - and that is
+    # the line the 48 hour window reads.
+    assert (
+        "measured 'local-ci': the build named by the status ran another commit"
+        in written
+    ), written
+    assert (
+        "measured 'local-ci/app': the build named by the receipt ran another commit"
+        in written
+    ), written
+
+
+def test_the_commit_comparison_can_be_turned_off(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    woodpecker["answer"]["payload"] = _pipeline(commit="b" * 40)
+    commit_statuses["rows"] = [_receipt_row()]
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = mq.evaluate(
+        pr,
+        _receipt_policy(commit_match=mq.COMMIT_MATCH_OFF),
+        acting_role="cto",
+        base="develop",
+        repo=DIGITHINGS_REPO,
+    )
+    assert verdict.eligible, verdict.reasons
+
+
+def test_an_unknown_commit_match_mode_fails_safe_to_enforce(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+) -> None:
+    """A misspelled switch must not silence the comparison."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    monkeypatch.setenv(mq.COMMIT_MATCH_ENV, "bogus")
+    woodpecker["answer"]["payload"] = _pipeline(commit="b" * 40)
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _evaluate(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        "the build named by the status ran another commit" in reason
+        for reason in verdict.reasons
+    )
+
+
+def test_a_softened_commit_comparison_without_a_receipt_is_refused(
+    monkeypatch: pytest.MonkeyPatch, woodpecker: dict[str, Any]
+) -> None:
+    """The environment can override the file, so the invariant is checked again.
+
+    Nothing binds a status to the head commit without the receipt, so a
+    softened comparison without one is a refusal, whatever the file says.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    monkeypatch.setenv(mq.COMMIT_MATCH_ENV, "shadow")
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _evaluate(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        "nothing binds a status to the head commit" in reason
+        for reason in verdict.reasons
+    )
+
+
 # ── reviewer independence: the review must come from another seat (DIG-4795) ───
 #
 # twelve-x #425 merged on 21 Oct 2026 with its review coverage written by its own
@@ -3479,11 +3946,16 @@ class _FakePaperclip:
         self._tickets = tickets or {}
         self._runs = runs or {}
         self._issue_runs = issue_runs or {}
+        #: Every run id the gate asked the API about, in order. The gate must
+        #: never ask about a value that cannot be a run id: the API has no
+        #: answer for one, and the failed read reads as a broken API.
+        self.asked_runs: list[str] = []
 
     def ticket(self, key: str) -> dict[str, Any] | None:
         return self._tickets.get(key)
 
     def run(self, run_id: str) -> dict[str, Any] | None:
+        self.asked_runs.append(run_id)
         return self._runs.get(run_id)
 
     def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
@@ -4320,6 +4792,289 @@ def test_a_marker_whose_seat_does_not_match_its_run_is_not_review_coverage(
     assert OTHER_AGENT[:8] in reason
 
 
+def test_a_marker_quoted_in_prose_is_not_a_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sentence that quotes the marker is prose about it, not the claim.
+
+    This is the comment that put the transport failures in the shadow log on
+    21 Oct 2026: a review comment that explained which marker the gate wants
+    and quoted it with placeholder values. Read as a claim, the gate asked the
+    Paperclip API about `…`, the read failed on a healthy API, and the gate
+    reported a broken API instead of the fact about the comment it held.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOprose_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n\n"
+            "The reviewer-independence gate wants a "
+            "`<!-- digithings-review agent=… run=… head=… -->` marker from a seat "
+            "that is not the author's. This comment cannot carry it.\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    # The comment carries no provenance at all, so the PR waits for a real
+    # review — and it waits with the truth: the gate judged the comment it
+    # held, and nothing was asked of the API.
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "carries neither a seat nor a run" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_marker_with_placeholder_values_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A placeholder is not a record, so it is never sent to the API.
+
+    The review template ships the marker with `<your Paperclip agent id>` and
+    friends. A seat that posts a marker with values it could not fill in posts
+    a claim the queue can never resolve — and the queue used to ask the API
+    about it, which turned a fact about the comment into a failed read and the
+    failed read into a broken API (DIG-4809, 21 Oct 2026).
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOplaceholder_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            "<!-- digithings-review agent=… run=… head=… -->\n\n"
+            "## Verdict: approve\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "not a run id" in reason
+    assert "not a commit SHA" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_marker_naming_a_seat_that_is_not_one_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A seat id is a uuid. A value that is not one is not checked against a run."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOseat_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            f"<!-- digithings-review agent=… run={REVIEWER_RUN} "
+            "head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "not a seat id" in reason
+    # The run is a real run id, so the run is read — the seat that claimed it
+    # is the one thing the gate could not check.
+    assert prov.asked_runs == [REVIEWER_RUN]
+
+
+def test_a_marker_naming_a_seat_and_no_run_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A seat that is not a seat id names no seat the queue could check."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOseatonly_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            "<!-- digithings-review agent=… -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "not a seat id" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_uuid_shaped_placeholder_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A uuid shape the Paperclip API would refuse is never sent to it.
+
+    The API answers 400 for an id that is not a uuid it accepts, and a 400
+    read as a failed read is a transport failure — the queue then stops every
+    merge on a healthy API. So the shape is checked here, against the rule the
+    API itself applies (measured on 21 Oct 2026: version 1 to 5 and variant 8,
+    9, a or b are accepted, everything else answers 400).
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOsha_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            "<!-- digithings-review agent=11111111-1111-4111-8111-111111111111 "
+            "run=00000000-0000-0000-0000-000000000000 "
+            "head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "not a run id" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_marker_beside_the_in_session_marker_still_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The two markers may share a line: the line carries nothing but markers."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOsameline_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            f"<!-- in-session-review --> <!-- digithings-review agent={REVIEWER_AGENT} "
+            f"run={REVIEWER_RUN} head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert prov.asked_runs == [REVIEWER_RUN]
+
+
+def test_a_marker_in_a_bullet_still_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A list bullet in front of the marker is formatting, not prose."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDObullet_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            f"- <!-- digithings-review agent={REVIEWER_AGENT} run={REVIEWER_RUN} "
+            "head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert prov.asked_runs == [REVIEWER_RUN]
+
+
+def test_a_marker_in_a_quoted_reply_is_not_a_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A quoted reply carries someone else's words, so it is not the seat's claim."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOquote_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            f"> <!-- digithings-review agent={REVIEWER_AGENT} run={REVIEWER_RUN} "
+            "head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "could not be read" not in reason
+    assert "carries neither a seat nor a run" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_run_that_carries_no_seat_is_not_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run the API knows but that names no seat proves nobody reviewed.
+
+    The marker claims a seat and a run, and neither can be checked, so the
+    gate cannot say who reviewed: that is a missing signal, not a clearance.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[{"runId": REVIEWER_RUN}])
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "carries no seat" in reason
+
+
+def test_a_marker_with_text_after_it_on_its_line_is_not_a_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The marker stands alone: a line that carries more than the marker is prose."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    comment = {
+        "id": "IC_kwDOtrailing_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            f"<!-- digithings-review agent={REVIEWER_AGENT} run={REVIEWER_RUN} "
+            "head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --> Reviewed.\n"
+        ),
+    }
+    pr = _reviewed_pr([comment])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "carries neither a seat nor a run" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_marker_on_a_line_of_its_own_still_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The rule tightens the reader, not the claim: a real marker still counts."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert prov.asked_runs == [REVIEWER_RUN]
+
+
 def test_a_ticket_the_api_does_not_know_is_not_a_crash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -4391,6 +5146,112 @@ def test_a_404_from_the_api_is_an_answer_and_not_a_failure(
     assert reader.ticket("DIG-0000") is None
     assert reader.run("00000000-0000-4000-8000-000000000000") is None
     assert reader.issue_runs("issue-0000") == []
+
+
+def test_a_400_from_the_api_is_an_answer_and_not_a_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 400 is the server refusing the address, so there is no record under it.
+
+    The live API answers 400 for a heartbeat run id that is not a uuid it
+    accepts. Read as a failed read, that answer became a transport failure,
+    and a transport failure stops every merge in the queue — over a bad id in
+    a comment, on a healthy API (DIG-4809, 21 Oct 2026).
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+
+    def _urlopen(request: Any, timeout: int | None = None) -> Any:
+        raise urllib.error.HTTPError(
+            str(request.full_url), 400, "Bad Request", {}, None
+        )
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    assert reader.ticket("DIG-0000") is None
+    assert reader.run("00000000-0000-0000-0000-000000000000") is None
+    assert reader.issue_runs("issue-0000") == []
+
+
+def test_a_commit_whose_run_trailer_is_not_a_run_id_refuses_the_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A trailer the API would refuse leaves the author unknown, so the gate refuses.
+
+    The commit names a run that is not a run id. The seat that wrote the
+    commit cannot be resolved, and an unknown seat may be the seat that
+    posted the review the gate is about to count. Dropping the trailer
+    silently would let that seat review itself; the gate refuses instead.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the work",
+                "authoredDate": COMMIT_AT,
+                "committedDate": COMMIT_AT,
+                "messageBody": (
+                    f"Paperclip-Agent-Id: {AUTHOR_AGENT}\n"
+                    "Paperclip-Run-Id: 00000000-0000-0000-0000-000000000000\n"
+                ),
+            }
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "authoring seat could not be identified" in reason
+    assert "names a run id that is not one" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_commit_whose_seat_trailer_is_not_a_seat_id_refuses_the_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The seat trailer is the author's name: a broken one leaves the author unknown."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the work",
+                "authoredDate": COMMIT_AT,
+                "committedDate": COMMIT_AT,
+                "messageBody": (
+                    "Paperclip-Agent-Id: 00000000-0000-0000-0000-000000000000\n"
+                ),
+            }
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "authoring seat could not be identified" in reason
+    assert "names a seat id that is not one" in reason
+
+
+def test_a_marker_naming_a_seat_in_another_case_is_the_same_seat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A uuid is a uuid in any case: the gate compares one spelling of it.
+
+    The API accepts an uppercase uuid, so an uppercase marker names a real
+    seat. Refusing it would refuse an honest review for a spelling.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)])
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=REVIEWER_AGENT.upper(), run=REVIEWER_RUN.upper())]
+    )
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert prov.asked_runs == [REVIEWER_RUN.lower()]
 
 
 def test_a_refused_connection_is_not_read_as_a_missing_record(
@@ -4807,3 +5668,141 @@ def test_the_merge_queue_doc_names_the_reviewer_independence_gate() -> None:
     doc = MERGE_QUEUE_DOC.read_text(encoding="utf-8")
     assert "reviewer independence" in doc.lower()
     assert "digithings-review" in doc
+
+
+def test_a_seats_failing_row_beside_the_ci_receipt_does_not_hold_the_pull_request(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The receipt chain judges the row by its writer, not by its colour.
+
+    The generic scan reads every status that is neither a required check nor
+    an ignored one, so without the receipt being carved out of it, a seat's
+    own failing `local-ci/app` row would hold the pull request next to the
+    CI's own passing one - the one thing the receipt chain exists to prevent.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [_receipt_row()]
+    forged = {
+        "__typename": "StatusContext",
+        "context": RECEIPT_CONTEXT,
+        "state": "FAILURE",
+        "targetUrl": GOOD_TARGET_URL,
+        "startedAt": "2026-10-21T03:00:00Z",
+    }
+    pr = _pr(
+        1,
+        local_ci_target_url=GOOD_TARGET_URL,
+        reviews=_approved(),
+        extra_checks=[forged],
+    )
+    verdict = _receipt_verdict(pr)
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_forged_row_still_cannot_cancel_the_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """The same scan, the other way round: a green seat row is not a receipt."""
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    commit_statuses["rows"] = [_receipt_row(login="chrizefan")]
+    forged = {
+        "__typename": "StatusContext",
+        "context": RECEIPT_CONTEXT,
+        "state": "SUCCESS",
+        "targetUrl": GOOD_TARGET_URL,
+        "startedAt": "2026-10-21T03:00:00Z",
+    }
+    pr = _pr(
+        1,
+        local_ci_target_url=GOOD_TARGET_URL,
+        reviews=_approved(),
+        extra_checks=[forged],
+    )
+    verdict = _receipt_verdict(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        "was written by chrizefan, which is not a trusted CI writer" in reason
+        for reason in verdict.reasons
+    ), verdict.reasons
+
+
+def test_a_refused_receipt_does_not_claim_the_receipt_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+) -> None:
+    """A receipt that is there and is refused says what is wrong with it.
+
+    The prefix used to say "has no trusted CI receipt" for every failure, so a
+    receipt the app wrote and whose build ran another commit was reported as
+    a missing receipt - the wrong thing to hand back.
+    """
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    woodpecker["answer"]["payload"] = _pipeline(commit="b" * 40)
+    commit_statuses["rows"] = [_receipt_row()]
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _receipt_verdict(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any(
+        "is not accepted as a trusted CI receipt" in reason for reason in verdict.reasons
+    ), verdict.reasons
+    assert not any(
+        "has no trusted CI receipt" in reason for reason in verdict.reasons
+    ), verdict.reasons
+
+
+def test_the_policy_note_says_the_switch_moves_commit_match_with_it() -> None:
+    """The note is the file an operator reads when the switch is flipped."""
+    import json
+
+    raw = json.loads(mq.POLICY_PATH.read_text(encoding="utf-8"))
+    note = str(raw.get("ci_provenance_note") or "")
+    assert "the switch to `enforce` has to move `commit_match` in the same edit" in note
+
+
+def test_a_receipt_block_without_a_require_key_is_required(tmp_path: Path) -> None:
+    """The rule is written down, and it fails closed."""
+    import json
+
+    raw = json.loads(mq.POLICY_PATH.read_text(encoding="utf-8"))
+    raw["ci_provenance"]["trusted_receipt"] = {
+        "context": RECEIPT_CONTEXT,
+        "creators": [RECEIPT_WRITER],
+    }
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    policy = mq.load_policy(path)
+    assert policy.ci_provenance.trusted_receipt.required is True
+
+
+def test_a_build_that_reports_no_commit_is_measured_not_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    woodpecker: dict[str, Any],
+    commit_statuses: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    """A build with no commit is a measurement under a softened comparison.
+
+    It used to be a hard refusal. Under `commit_match: shadow` it is measured,
+    and the rule is pinned so it cannot move without a test saying so.
+    """
+    log = tmp_path / "provenance.log"
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    monkeypatch.setenv(mq.PROVENANCE_LOG_ENV, str(log))
+    woodpecker["answer"]["payload"] = _pipeline(commit="")
+    commit_statuses["rows"] = [_receipt_row()]
+    pr = _pr(1, head_sha="a" * 40, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = mq.evaluate(
+        pr,
+        _receipt_policy(commit_match=mq.COMMIT_MATCH_SHADOW),
+        acting_role="cto",
+        base="develop",
+        repo=DIGITHINGS_REPO,
+    )
+    assert verdict.eligible, verdict.reasons
+    written = log.read_text(encoding="utf-8")
+    assert "reports no commit" in written, written

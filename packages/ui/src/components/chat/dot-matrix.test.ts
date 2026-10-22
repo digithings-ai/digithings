@@ -31,6 +31,7 @@ const CHROME: readonly DotMatrixState[] = [
   "error",
   "success",
   "thought",
+  "tools",
 ];
 
 function cells(state: DotMatrixState): number[] {
@@ -104,6 +105,11 @@ describe("DotMatrix chrome glyphs", () => {
     expect(cells("thought")).toEqual([
       1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 17, 21, 22, 23,
     ]);
+    // `{ }` on the tool-call row: middle cubes stick out, the rest tuck in.
+    expect(cells("tools")).toEqual([1, 3, 6, 8, 10, 14, 16, 18, 21, 23]);
+    expect(cells("tools")).not.toEqual(Array.from({ length: 25 }, (_, i) => i));
+    expect(signature("tools")).not.toBe(signature("thought"));
+    expect(signature("tools")).not.toBe(signature("system"));
     expect(PATTERNS.thought.length).toBe(1);
     expect(signature("thought")).not.toBe(signature("success"));
     expect(signature("thought")).not.toBe(signature("stop"));

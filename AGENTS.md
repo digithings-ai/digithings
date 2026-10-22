@@ -259,7 +259,10 @@ refute, then post survivors as a PR comment opening with
 **A review must come from a different seat, and it must name the head.** The
 in-session comment carries a second marker next to the first one —
 `<!-- digithings-review agent=<seat> run=<run> head=<sha> -->` — and the merge
-queue reads it. Two things follow. The marker must name the head the PR stands at
+queue reads it. That marker stands on a line of its own: a comment that quotes
+it to explain it is prose about the marker, not the claim, and a value that is
+not a real seat or run id is refused by name instead of being sent to the API.
+Two things follow. The marker must name the head the PR stands at
 now, so a verdict on an older head cannot pass as coverage of this one; the sha is
 read as a prefix of the head, so 7 characters bind it and fewer do not. And the
 seat that **wrote the PR's code** cannot be the seat whose review counts: the queue
