@@ -23,6 +23,7 @@ import type { StockChatPrefsConfig } from "@digithings/ui/chat/stock";
 import { isEmbedHexColor } from "./embed-accent-style";
 import { parseEmbedThemeParam } from "./embed-theme-messages";
 import { HOUSE_BACKEND_ID } from "./provider-label";
+import { toolControlFor } from "./tool-control";
 
 /**
  * One call per route: product projects the primary deployment, embed
@@ -124,11 +125,17 @@ export function toStockChatPrefsConfig(
     defaultLanguage: clientConfig.chrome.defaultLanguage,
     defaultModel: clientConfig.models.default,
     availableModels: clientConfig.models.available,
+    modelPicker: clientConfig.models.picker,
     allowModelPicker:
       clientConfig.models.allowPicker === true ||
       clientConfig.features.modelPicker === true,
     view: clientConfig.features.view,
     thinking: clientConfig.features.thinking,
+    density: clientConfig.features.density,
+    effort: clientConfig.features.effort,
+    searchEngine: clientConfig.gate.searchEngine,
+    toolbar: clientConfig.chrome.toolbar,
+    scrollbars: clientConfig.chrome.scrollbars,
     tenantAllowsWeb: clientConfig.gate.webSearch === true,
     showByok: clientConfig.gate.showByok === true,
     // These surfaces have no BYOK state of their own — the provider menu
@@ -137,5 +144,10 @@ export function toStockChatPrefsConfig(
     providerLabel: HOUSE_BACKEND_ID,
     allowUserServers: clientConfig.mcp.allowUserServers,
     allowAddForm: clientConfig.mcp.allowAddForm,
+    toolControl: toolControlFor({
+      backendType: clientConfig.backendType,
+      lockSessionControls: clientConfig.gate.lockSessionControls === true,
+      allowUserToggle: clientConfig.tools.allowUserToggle,
+    }),
   };
 }

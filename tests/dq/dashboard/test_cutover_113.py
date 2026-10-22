@@ -55,8 +55,8 @@ def sql(raw: str) -> str:
 
 def test_cutover_stays_under_cutover_dir() -> None:
     assert CUTOVER_PATH.parent.name == "cutover"
-    top_level = list(MIGRATIONS_DIR.glob("113_*.sql"))
-    assert top_level == []
+    # Exactly one 113 in the tree, and it is the cutover file (#5854 split).
+    assert sorted(MIGRATIONS_DIR.rglob("113_*.sql")) == [CUTOVER_PATH]
     assert CUTOVER_900.is_file()
 
 

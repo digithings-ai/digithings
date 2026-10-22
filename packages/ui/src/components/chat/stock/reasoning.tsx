@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix } from "../DotMatrix";
 import {
   Collapsible,
@@ -17,6 +18,7 @@ import {
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useExportKeepMounted } from "../../../replay/export-mount";
 import { OverlayScrollbar } from "../overlay-scrollbar";
 
 export const ANIMATION_DURATION = 200;
@@ -184,7 +186,7 @@ function ReasoningTrigger({
     >
       <DotMatrix
         state={active ? "thinking" : "thought"}
-        label="Reasoning"
+        decorative
         className="aui-reasoning-trigger-icon size-4 shrink-0"
       />
       <span
@@ -195,12 +197,7 @@ function ReasoningTrigger({
       >
         Reasoning{durationText}
       </span>
-      <span
-        data-slot="reasoning-trigger-chevron"
-        className="aui-reasoning-trigger-chevron mt-0.5 inline-flex shrink-0"
-      >
-        <DotMatrix state="expand" label="Toggle reasoning" className="size-4" />
-      </span>
+      <DisclosureChevron />
     </CollapsibleTrigger>
   );
 }
@@ -211,9 +208,11 @@ function ReasoningContent({
   ...props
 }: React.ComponentProps<typeof CollapsibleContent>) {
   const isPreview = useContext(ReasoningPreviewContext);
+  const keepMounted = useExportKeepMounted();
 
   return (
     <CollapsibleContent
+      keepMounted={keepMounted}
       data-slot="reasoning-content"
       className={cn(
         "aui-reasoning-content text-muted-foreground relative overflow-hidden text-sm outline-none",

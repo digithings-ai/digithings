@@ -1,14 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
-  catalogToolSlashDef,
+  applyPaletteFrame,
   formatCliSettingLine,
   isLangCode,
   LANG_LABELS,
   matchingSlashCommands,
   nextPaletteIndex,
+  optionDraft,
+  paletteFrame,
+  paletteSurfaces,
+  paneDraftForId,
   parseSlashInput,
   SLASH_COMMANDS,
   slashHelpText,
+  submenuRows,
+  VIEW_CHOICES,
+  VIEW_CODES,
+  VIEW_LABELS,
 } from "./slash-commands";
 
 describe("parseSlashInput", () => {
@@ -16,31 +24,17 @@ describe("parseSlashInput", () => {
     expect(parseSlashInput("how does auth work")).toEqual({ kind: "none" });
   });
 
-  it("treats empty /digisearch as a toggle, not incomplete", () => {
-    expect(parseSlashInput("/digisearch")).toMatchObject({
-      kind: "command",
-      command: { id: "digisearch", kind: "tool" },
-      arg: "",
-    });
+  it("does not treat /digisearch as a palette command", () => {
+    expect(parseSlashInput("/digisearch")).toEqual({ kind: "unknown", name: "/digisearch" });
+    expect(parseSlashInput("/digivault notes")).toEqual({ kind: "unknown", name: "/digivault" });
+    expect(parseSlashInput("/websearch query")).toEqual({ kind: "unknown", name: "/websearch" });
+    expect(parseSlashInput("/ledger")).toEqual({ kind: "unknown", name: "/ledger" });
   });
 
   it("drops /search /vault /docs as public names", () => {
     expect(parseSlashInput("/search RS256")).toEqual({ kind: "unknown", name: "/search" });
     expect(parseSlashInput("/vault notes")).toEqual({ kind: "unknown", name: "/vault" });
     expect(parseSlashInput("/docs notes")).toEqual({ kind: "unknown", name: "/docs" });
-  });
-
-  it("uses the remainder after /digisearch as the force query", () => {
-    const parsed = parseSlashInput("/digisearch RS256 token exchange");
-    expect(parsed).toEqual({
-      kind: "command",
-      command: expect.objectContaining({
-        id: "digisearch",
-        forceTool: "digisearch",
-        kind: "tool",
-      }),
-      arg: "RS256 token exchange",
-    });
   });
 
   it("aliases /clear onto a new-conversation command", () => {
@@ -50,13 +44,9 @@ describe("parseSlashInput", () => {
     });
   });
 
-  it("parses client-only /help /new /lang /websearch /settings /provider /mcp", () => {
+  it("parses client-only /help /new /lang /settings /provider /mcp", () => {
     expect(parseSlashInput("/help")).toMatchObject({ kind: "command", command: { id: "help" } });
     expect(parseSlashInput("/new")).toMatchObject({ kind: "command", command: { id: "new" } });
-    expect(parseSlashInput("/websearch")).toMatchObject({
-      kind: "command",
-      command: { id: "websearch", kind: "tool" },
-    });
     expect(parseSlashInput("/settings")).toMatchObject({
       kind: "command",
       command: { id: "settings" },
@@ -93,19 +83,6 @@ describe("parseSlashInput", () => {
     });
   });
 
-  it("parses extra catalog MCP tools", () => {
-    const extra = [catalogToolSlashDef({ id: "datatap", label: "DataTap" })];
-    expect(parseSlashInput("/datatap", extra)).toMatchObject({
-      kind: "command",
-      command: { id: "datatap", kind: "tool" },
-      arg: "",
-    });
-    expect(parseSlashInput("/datatap pipeline status", extra)).toMatchObject({
-      kind: "command",
-      arg: "pipeline status",
-    });
-  });
-
   it("flags unknown commands", () => {
     expect(parseSlashInput("/web")).toEqual({ kind: "unknown", name: "/web" });
   });
@@ -121,6 +98,16 @@ describe("parseSlashInput", () => {
       command: { id: "export", kind: "client" },
       arg: "",
     });
+    expect(parseSlashInput("/export html")).toMatchObject({
+      kind: "command",
+      command: { id: "export", kind: "client" },
+      arg: "html",
+    });
+    expect(parseSlashInput("/export md")).toMatchObject({
+      kind: "command",
+      command: { id: "export", kind: "client" },
+      arg: "md",
+    });
   });
 });
 
@@ -128,23 +115,14 @@ describe("matchingSlashCommands", () => {
   it("lists public copy for a bare slash including tools and settings", () => {
     const matches = matchingSlashCommands("/", { webSearch: true, byok: true });
     const ids = matches.map((c) => c.id);
-    expect(ids).toContain("digisearch");
-    expect(ids).toContain("digivault");
-    expect(ids).toContain("websearch");
+    expect(ids).not.toContain("digisearch");
+    expect(ids).not.toContain("digivault");
+    expect(ids).not.toContain("websearch");
     expect(ids).toContain("byok");
     expect(ids).toContain("settings");
     expect(ids).toContain("mcp");
     expect(ids).toContain("tools");
     expect(ids).not.toContain("sessions");
-  });
-
-  it("hides websearch unless the tenant allows it", () => {
-    expect(matchingSlashCommands("/", { webSearch: false }).map((c) => c.id)).not.toContain(
-      "websearch",
-    );
-    expect(matchingSlashCommands("/", { webSearch: true }).map((c) => c.id)).toContain(
-      "websearch",
-    );
   });
 
   it("hides search-engine unless the tenant allows web search", () => {
@@ -160,7 +138,13 @@ describe("matchingSlashCommands", () => {
   it("narrows as the user types a prefix", () => {
     expect(matchingSlashCommands("/se").map((c) => c.id)).toEqual(["settings"]);
     expect(matchingSlashCommands("/sett").map((c) => c.id)).toEqual(["settings"]);
-    expect(matchingSlashCommands("/digis").map((c) => c.id)).toEqual(["digisearch"]);
+    expect(matchingSlashCommands("/digis").map((c) => c.id)).toEqual([]);
+    expect(matchingSlashCommands("/tools").map((c) => c.id)).toEqual(["tools"]);
+  });
+
+  it("hides /theme when the embed pins the theme", () => {
+    expect(matchingSlashCommands("/", { theme: false }).map((c) => c.id)).not.toContain("theme");
+    expect(matchingSlashCommands("/theme").map((c) => c.id)).toContain("theme");
   });
 
   it("shows /sessions only when visibility.sessions is on", () => {
@@ -172,9 +156,9 @@ describe("matchingSlashCommands", () => {
 describe("slashHelpText", () => {
   it("uses public tool names, not /search or /docs", () => {
     const help = slashHelpText({ webSearch: true, byok: true });
-    expect(help).toContain("/digisearch —");
-    expect(help).toContain("/digivault —");
-    expect(help).toContain("/websearch —");
+    expect(help).not.toContain("/digisearch —");
+    expect(help).not.toContain("/digivault —");
+    expect(help).not.toContain("/websearch —");
     expect(help).toContain("/provider — API provider");
     expect(help).toContain("/settings — Settings");
     expect(help).toContain("/mcp — MCP JSON / auth / new");
@@ -239,6 +223,107 @@ describe("SLASH_COMMANDS", () => {
       names: ["/provider", "/byok", "/key"],
       hint: "API provider",
     });
+  });
+});
+
+describe("view-level wording", () => {
+  it("gives every live level a wording and no retired level a label", () => {
+    // The shared map is the one home of the wording (DIG-4665): the composer
+    // menu's /view page and the palette's /view choice options both read it.
+    // A level with no wording renders a blank description column; a retired
+    // level with one keeps a dead id alive.
+    expect(Object.keys(VIEW_LABELS).sort()).toEqual([...VIEW_CODES].sort());
+    for (const code of VIEW_CODES) {
+      expect(VIEW_LABELS[code].trim()).not.toBe("");
+    }
+    // `hidden` was retired in #6079, `compact` / `detailed` in #6034.
+    for (const retired of ["hidden", "compact", "detailed"]) {
+      expect(Object.keys(VIEW_LABELS)).not.toContain(retired);
+    }
+  });
+
+  it("builds the /view choice options from the same map", () => {
+    expect(VIEW_CHOICES).toEqual(
+      VIEW_CODES.map((code) => ({ value: code, label: VIEW_LABELS[code] })),
+    );
+    // The palette's /view command must read that list, not a list of its own.
+    // A hand-written list in the command def is a second copy of the wording
+    // inside the package that owns the wording, and nothing else would see
+    // it: the choice options are rendered by no surface today.
+    expect(SLASH_COMMANDS.find((c) => c.id === "view")?.choiceOptions).toBe(VIEW_CHOICES);
+    const density = SLASH_COMMANDS.find((c) => c.id === "density");
+    expect(density).toMatchObject({
+      id: "density",
+      names: ["/density"],
+      category: "setup",
+    });
+    expect(density?.choiceOptions?.map((choice) => choice.value)).toEqual([
+      "compact",
+      "default",
+      "airy",
+    ]);
+  });
+
+  it("prints the wording the product prints today", () => {
+    // The golden words. The map is the one home of the wording, so the words
+    // themselves are pinned here: a reworded level is a user-visible change
+    // and must be a deliberate edit, not a side effect of a rename.
+    expect(VIEW_LABELS).toEqual({
+      quiet: "Quiet \u00b7 titles only",
+      balanced: "Balanced \u00b7 open while it runs",
+      verbose: "Verbose \u00b7 everything open",
+    });
+  });
+});
+
+describe("palette frame", () => {
+  it("never opens a slash palette and a pane together", () => {
+    for (const text of ["/", "/lang", "/language", "/language ", "/language English", "/language /", "/theme dark"]) {
+      const surfaces = paletteSurfaces(text);
+      expect(Number(surfaces.slash) + Number(surfaces.menu != null)).toBe(1);
+    }
+    expect(paletteSurfaces("hello")).toEqual({ slash: false, menu: null });
+  });
+
+  it("keeps a second slash inside the open pane", () => {
+    expect(paletteSurfaces("/language ")).toEqual({ slash: false, menu: "language" });
+    expect(paletteSurfaces("/language /")).toEqual({ slash: false, menu: "language" });
+    expect(paletteFrame("/language /")).toMatchObject({ kind: "pane", filter: "/" });
+  });
+
+  it("syncs /language and /theme both ways", () => {
+    expect(paneDraftForId("language")).toBe("/language ");
+    expect(paneDraftForId("theme")).toBe("/theme ");
+    expect(optionDraft("/language", "English")).toBe("/language English");
+    expect(paletteFrame("/language")).toMatchObject({ kind: "commands", filter: "language" });
+    expect(paletteFrame("/language English")).toMatchObject({
+      kind: "pane",
+      menu: "language",
+      filter: "English",
+    });
+    expect(paletteFrame("/theme default dark")).toMatchObject({
+      kind: "pane",
+      menu: "theme",
+      filter: "default dark",
+    });
+    const back = applyPaletteFrame("pane", paletteFrame("/language"));
+    expect(back).toEqual({ kind: "commands", menu: "close", filter: "" });
+    expect(applyPaletteFrame("closed", { kind: "closed" })).toEqual({
+      kind: "closed",
+      menu: "keep",
+      filter: "",
+    });
+  });
+
+  it("filters a pane without collapsing an exact option", () => {
+    const rows = [
+      { id: "en", token: "English", label: "en  English" },
+      { id: "nl", token: "Dutch", label: "nl  Dutch" },
+      { id: "sl", token: "Slovenian", label: "sl  Slovenian" },
+    ];
+    expect(submenuRows(rows, "eng").rows.map((row) => row.id)).toEqual(["en"]);
+    expect(submenuRows(rows, "English")).toEqual({ rows, cursor: 0 });
+    expect(submenuRows(rows, "en").rows.map((row) => row.id)).toEqual(["en"]);
   });
 });
 

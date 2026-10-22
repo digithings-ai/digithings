@@ -10,7 +10,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "112_product_invite_codes.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "112_product_invite_codes.sql"
 
 
 @pytest.fixture(scope="module")
@@ -21,7 +21,7 @@ def sql() -> str:
 
 
 def test_migration_is_the_only_112() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("112_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("112_*.sql")) == [MIGRATION_PATH]
 
 
 def test_creates_hashed_invite_tables(sql: str) -> None:

@@ -356,7 +356,7 @@ function ImageGenerating({ className }: { className?: string }) {
         className,
       )}
     >
-      <DotMatrix state="loading" label="Generating image" className="size-8" />
+      <DotMatrix state="loading" decorative className="size-8" />
       <span className="sr-only">Generating image…</span>
     </div>
   );
@@ -419,7 +419,7 @@ function RegenerateButton({
     >
       <DotMatrix
         state={isRegenerating ? "loading" : "refresh"}
-        label="Regenerate image"
+        decorative
         className="size-4"
       />
     </button>
@@ -439,7 +439,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
         aria-label="Download image"
         className="hover:bg-muted inline-flex size-7 items-center justify-center rounded"
       >
-        <DotMatrix state="download" label="Download image" className="size-4" />
+        <DotMatrix state="download" decorative className="size-4" />
       </button>
       <button
         type="button"
@@ -450,7 +450,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
         aria-label="Copy image"
         className="hover:bg-muted inline-flex size-7 items-center justify-center rounded"
       >
-        <DotMatrix state="copy" label="Copy image" className="size-4" />
+        <DotMatrix state="copy" decorative className="size-4" />
       </button>
       {onRegenerate && <RegenerateButton onRegenerate={onRegenerate} />}
     </div>

@@ -11,20 +11,32 @@ deployment:
     theme: dark
     skin: digichat
     title: ask datatap
-    # Client-facing copy for the trial: this tenant is a DataTap trial, and
-    # the agent reaches the enterprise database through the DataTap MCP.
+    # Client-facing copy for the trial. The trial tenant holds a sample
+    # dataset (the public Enron email archive), not the visitor's own data,
+    # so the copy says what is actually there. The agent searches it with its
+    # own search tool and opens items with its MCP tool; the UI shows each tool
+    # call as a row, not a per-answer source list. The copy names no mechanism
+    # and promises only those rows.
+    # Attachments are not promised until a live run has opened one.
+    # Template note: the pipeline clones this file per trial, so a tenant on
+    # other data needs its own title, body and placeholder.
     welcome:
-      title: Ask about your DataTap trial.
+      title: Ask about the Enron email archive.
       body:
-        - This is a DataTap trial. The agent reaches your enterprise database
-          through the DataTap MCP, so it can answer with your own data.
+        - "This DataTap trial runs on a sample dataset: the public Enron email
+          archive."
+        - The agent searches and opens the emails, and shows each search it
+          ran and each email it opened.
+    # Starters are tested live against the trial agent (Enron sample data):
+    # each must finish with no tool error on two runs and show a different
+    # tool path. Re-test them when the trial data or agent changes.
     suggestions:
-      - Which tables hold our customer data?
-      - What feeds the revenue mart?
-      - Who owns the orders table, and how fresh is it?
-      - Which pipelines failed in the last 24 hours?
-      - How do I add a new column to the marketing model?
-    placeholder: Ask about your data, your pipelines or the platform
+      - How did email volume change through 2001 as Enron collapsed?
+      - What did Enron's traders say about the California energy crisis?
+      - Which emails mention Arthur Andersen, and what was the concern?
+      - Who sends the most email in this archive, and what about?
+      - Find an email about the Dabhol power plant and open it.
+    placeholder: Ask about the Enron emails
   persistence: none
   auth: anonymous
   features:
@@ -43,9 +55,35 @@ deployment:
     # config/examples/datatap-trial-deploy.md).
     projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/REPLACE-PROJECT
     agentName: REPLACE-AGENT-NAME
+    # Alias of guardrails.maxToolCallsPerTurn. Prefer the shared block below.
+    # maxToolCalls: 5
+    # maxToolCalls: 4
+  # Proposed guardrails for this trial. Commented, so nothing is applied.
+  # Uncomment the block and one maxToolCallsPerTurn line after confirming.
+  # tokensPerMinute.deployment is the Azure TPM for gpt-5.6-terra in
+  # westeurope. Fill that number in from Azure; do not guess it, and do not
+  # change the Azure deployment from here.
+  # guardrails:
+  #   maxToolCallsPerTurn: 5
+  #   # maxToolCallsPerTurn: 4
+  #   tokensPerMinute:
+  #     deployment: <Azure TPM for gpt-5.6-terra, westeurope>
   tools:
-    allowUserToggle: true
-    catalog: []
+    # Declared for /tools. The Foundry agent owns these tools; the page does
+    # not fetch them and the visitor cannot toggle them.
+    allowUserToggle: false
+    catalog:
+      - id: file_search
+        label: Search
+        default: true
+      - id: datatap
+        label: DataTap
+        default: true
+        tools:
+          - id: datatap__list_connections
+            label: List connections
+          - id: datatap__get_item
+            label: Open item
   gate:
     mode: ungated
     activityDetail: full

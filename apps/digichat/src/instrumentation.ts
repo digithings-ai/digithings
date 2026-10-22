@@ -7,6 +7,8 @@ export async function register() {
     "@/lib/startup-env-guards"
   );
   assertDevAuthDisabledInProduction();
+  const { warnTrustedProxiesUnset } = await import("@/lib/embed-ip-rate-limit");
+  warnTrustedProxiesUnset();
   // Fail closed on invalid digichat.yaml / DIGICHAT_EMBED_TENANTS before serving.
   const { initDigichatConfigAtStartup } = await import(
     "@/lib/deploy-config/loader"

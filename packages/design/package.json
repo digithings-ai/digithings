@@ -12,6 +12,7 @@
   },
   "exports": {
     "./tokens.css": "./tokens.css",
+    "./palettes.css": "./palettes.css",
     "./tokens": "./tokens.ts",
     "./quant-native": "./quant-native/ticker.js",
     "./quant-native/styles.css": "./quant-native/styles.css",
@@ -26,6 +27,7 @@
   },
   "files": [
     "tokens.css",
+    "palettes.css",
     "tokens.ts",
     "motion.json",
     "html-escape.js",

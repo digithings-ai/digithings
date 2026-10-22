@@ -1006,6 +1006,15 @@ env:
     - apps/digichat/.env.example
     compose_literal:
     - DIGISEARCH_INTERNAL_URL
+- name: DIGISEARCH_MCP_HOST
+  description: Bind address for the digisearch MCP server.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
 - name: DIGISEARCH_SEARXNG_URL
   description: SearxNG endpoint digisearch calls for web search.
   secret: false
@@ -1028,6 +1037,19 @@ env:
     - DIGISEARCH_URL
   wrangler_values:
     digithings-stack: http://127.0.0.1:8002
+- name: DIGISEARCH_WORKERS_AI_INDEXES
+  description: Comma-separated digisearch index names queried with Cloudflare Workers AI bge-m3
+    (1024 dims) instead of the global 384-dim provider. Every listed index must be written with
+    bge-m3 too, or the query vector does not match the stored vectors.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: occ-tickets
 - name: DIGITRACE_INTERNAL_URL
   description: digitrace base URL as called by digichat.
   secret: false
@@ -1050,6 +1072,15 @@ env:
     - DIGITRACE_URL
   wrangler_values:
     digithings-stack: ''
+- name: DIGIVAULT_MCP_HOST
+  description: Bind address for the digivault MCP server.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
 - name: DIGIVAULT_ROOT
   description: digivault storage root inside the container.
   secret: false
@@ -1175,7 +1206,7 @@ env:
     env_example_files: []
     compose_literal: []
   wrangler_values:
-    digithings-stack: deepseek/deepseek-v4.1-flash,z-ai/glm-5.3-flash,qwen/qwen3.8-flash,google/gemma-4-31b-it,xiaomi/mimo-v2.6-flash,z-ai/glm-4.7-flash
+    digithings-stack: deepseek/deepseek-v4.1-flash-1017,deepseek/deepseek-v4.1-flash,openai/gpt-oss-120b,openai/gpt-6-luna,google/gemini-3.5-flash-lite,z-ai/glm-5.3-flash,qwen/qwen3.8-flash,qwen/qwen3.8-27b,xiaomi/mimo-v2.6-flash,xiaomi/mimo-v2.6-pro,minimax/minimax-m3,google/gemini-3.8-flash,z-ai/glm-5.3
 - name: DIGI_TENANT_CORPUS_MAP
   description: Per-tenant digisearch index and digivault prefix. Value copied verbatim from the stack
     Worker.

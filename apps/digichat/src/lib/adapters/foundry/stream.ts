@@ -31,6 +31,12 @@ import {
 } from "@/lib/chat-activity";
 import type { DigiTurnMode } from "@/lib/turn-mode";
 import { isMutatingTurnMode } from "@/lib/turn-mode";
+import { abortableSleep, waitOutRateLimit } from "@/lib/rate-limit-wait";
+import {
+  TOOL_CAP_INSTRUCTION,
+  toolCallLimitNotice,
+} from "@/lib/guardrails/budget";
+import type { TurnGuard } from "@/lib/guardrails/turn";
 import {
   CONVERSATION_PART_TYPE,
   createActivityWriteContext,
@@ -131,6 +137,20 @@ export interface FoundryConversationItemsApi {
   ): Promise<unknown>;
 }
 
+/**
+ * Extra fields merged onto the Responses request beside `agent_reference`.
+ *
+ * `max_tool_calls` and `tool_choice` are both fields of the Foundry Create
+ * Response body (the same body that requires `agent_reference`). They are not
+ * on the stock OpenAI SDK params object, so they travel in `body`, the same
+ * way `agent_reference` already does.
+ */
+export interface FoundryResponsesCreateBody {
+  agent_reference: { name: string; type: "agent_reference" };
+  max_tool_calls?: number;
+  tool_choice?: "none";
+}
+
 export interface OpenAIResponsesClientLike {
   conversations: {
     create(): Promise<{ id: string }>;
@@ -144,10 +164,124 @@ export interface OpenAIResponsesClientLike {
         signal?: AbortSignal;
         /** SDK-level retries; the adapter owns capacity retries (#5979). */
         maxRetries?: number;
-        body: { agent_reference: { name: string; type: "agent_reference" } };
+        body: FoundryResponsesCreateBody;
       }
     ): Promise<AsyncIterable<FoundryStreamEvent>>;
   };
+}
+
+/**
+ * A tool invocation item, not its output and not a list/approval side event.
+ *
+ * `mcp_call` is the hosted MCP shape. `*_call` covers built-in tools
+ * (`file_search_call`, `azure_ai_search_call`, …). Outputs end in `_output`
+ * and must not count as a second call.
+ */
+export function isFoundryToolCallType(type: string | undefined): boolean {
+  if (!type) return false;
+  if (type.endsWith("_output") || type.endsWith("_call_output")) return false;
+  if (
+    type === "mcp_list_tools" ||
+    type === "mcp_approval_request" ||
+    type === "mcp_approval_response"
+  ) {
+    return false;
+  }
+  return type === "mcp_call" || type.endsWith("_call");
+}
+
+type FoundryToolCallSight = { type: string; id?: string; phase: "start" | "done" };
+
+/** The tool call a stream event opens or completes, if it is one. */
+export function foundryToolCallSight(event: FoundryStreamEvent): FoundryToolCallSight | null {
+  if (event.type === "response.file_search_call.in_progress") {
+    return { type: "file_search_call", phase: "start" };
+  }
+  // `.searching` repeats `.in_progress` for the same file_search step.
+  if (event.type === "response.file_search_call.searching") return null;
+  if (event.type !== "response.output_item.added" && event.type !== "response.output_item.done") {
+    return null;
+  }
+  const item = (event as { item?: { type?: string; id?: string; call_id?: string } }).item;
+  if (!isFoundryToolCallType(item?.type)) return null;
+  const id = item?.id || item?.call_id;
+  return {
+    type: item!.type!,
+    ...(id ? { id } : {}),
+    phase: event.type.endsWith(".added") ? "start" : "done",
+  };
+}
+
+/**
+ * Counts tool calls once per turn. A start and its matching done share an id
+ * when Foundry sends one; an id-less start is paired with the next event of
+ * the same item type so `in_progress` plus `.done` is a single call.
+ */
+export class FoundryToolCallCounter {
+  count = 0;
+  private readonly seenIds = new Set<string>();
+  private readonly unpairedStarts: string[] = [];
+
+  observe(event: FoundryStreamEvent): "new" | "known" | "ignore" {
+    const sight = foundryToolCallSight(event);
+    if (!sight) return "ignore";
+    if (sight.id) {
+      if (this.seenIds.has(sight.id)) return "known";
+      const unpaired = this.unpairedStarts.indexOf(sight.type);
+      if (unpaired >= 0) {
+        this.unpairedStarts.splice(unpaired, 1);
+        this.seenIds.add(sight.id);
+        return "known";
+      }
+      this.seenIds.add(sight.id);
+      this.count += 1;
+      return "new";
+    }
+    if (sight.phase === "start") {
+      this.unpairedStarts.push(sight.type);
+      this.count += 1;
+      return "new";
+    }
+    const unpaired = this.unpairedStarts.indexOf(sight.type);
+    if (unpaired >= 0) {
+      this.unpairedStarts.splice(unpaired, 1);
+      return "known";
+    }
+    this.count += 1;
+    return "new";
+  }
+}
+
+/** Status line shown when the adapter stops a turn at the tool-call cap. */
+export { toolCallLimitNotice };
+
+function normalizeMaxToolCalls(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 1 || value > 100) return undefined;
+  return value;
+}
+
+/**
+ * Foundry rejects some per-call overrides once `agent_reference` is set
+ * (`400 Not allowed when agent is specified` for reasoning summaries).
+ * `max_tool_calls` and `tool_choice` are documented on that same request;
+ * this matches the refusal if a deployment still rejects them.
+ */
+function isAgentOverrideRejected(err: unknown): boolean {
+  if (httpStatusOf(err) !== 400) return false;
+  const message = upstreamErrorMessage(err) ?? (err instanceof Error ? err.message : "");
+  return /not allowed when agent is specified/i.test(message);
+}
+
+function forwardAbort(parent: AbortSignal | undefined, child: AbortController): () => void {
+  if (!parent) return () => {};
+  if (parent.aborted) {
+    child.abort(parent.reason);
+    return () => {};
+  }
+  const onAbort = () => child.abort(parent.reason);
+  parent.addEventListener("abort", onAbort);
+  return () => parent.removeEventListener("abort", onAbort);
 }
 
 /** True when this OpenAI client exposes conversation item list/delete/create. */
@@ -363,6 +497,8 @@ interface OutputItemDoneEvent extends FoundryStreamEvent {
     server_label?: string;
     /** Provider call correlation id, shared by a call item and its output. */
     call_id?: string;
+    /** Output item id; `response.mcp_call_arguments.*` events name it as `item_id`. */
+    id?: string;
     /** reasoning: `{type, text}` parts — empty unless a summary is enabled. */
     summary?: unknown;
     status?: string;
@@ -547,12 +683,16 @@ export function stripFoundryCitationMarkers(text: string): string {
 /**
  * Foundry occasionally streams the azure_ai_search *tool invocation itself*
  * as `response.output_text.delta` fragments — observed live as the entire
- * assistant answer: `(remote` + `_functions` + `.azure` + `_ai` + `_search` + `)`.
- * Buffer those identifier fragments and drop the completed token so visitors
- * never see the internal tool name as a reply.
+ * assistant answer: `(remote` + `_functions` + `.azure` + `_ai` + `_search` + `)`,
+ * `remote_functions.azure_ai_search({...})`, or `(remote search in progress)`.
+ * Buffer those fragments and drop the completed token so visitors never see
+ * raw tool-call syntax as a reply. An ambiguous prefix such as `(remote` is
+ * still flushed at stream end, so a real sentence is not eaten.
  */
 export class FoundryToolLeakFilter {
   private buf = "";
+  /** Resume point for an open call. The bytes before it are not scanned again. */
+  private hold: CallHold | null = null;
 
   /**
    * @returns text that is safe to stream, or `null` when the delta was held /
@@ -562,24 +702,18 @@ export class FoundryToolLeakFilter {
     const cleaned = stripFoundryCitationMarkers(delta);
     if (!cleaned && !this.buf) return null;
 
-    const candidate = this.buf + cleaned;
-    // Still (or newly) matching the tool-leak token — hold until complete or broken.
-    if (isRemoteFunctionsLeakPrefix(candidate)) {
-      this.buf = candidate;
-      if (/^\(?remote_functions(\.[\w]+)*\)$/.test(candidate.trim())) {
-        this.buf = "";
-      }
-      return null;
-    }
-
-    if (this.buf) {
-      // Held bytes were not a leak after all — flush them ahead of this delta.
-      const flushed = this.buf;
+    const held = this.hold;
+    const drained = held
+      ? continueHeldCall(this.buf, held, cleaned)
+      : drainLeaks(this.buf + cleaned);
+    if (drained.hold.length > MAX_LEAK_HOLD) {
       this.buf = "";
-      return flushed + cleaned;
+      this.hold = null;
+      return (drained.emit + drained.hold) || null;
     }
-
-    return cleaned || null;
+    this.buf = drained.hold;
+    this.hold = drained.holdState;
+    return drained.emit || null;
   }
 
   /**
@@ -590,21 +724,274 @@ export class FoundryToolLeakFilter {
    * `push` only ever resolves a held prefix by flushing it AHEAD OF a later
    * delta, and a stream that ends here never sends one.
    *
-   * @returns the held text, or `null` if nothing was buffered.
+   * A completed tool call, an open `remote_functions.…(` argument list, and
+   * `(remote search…` past the ambiguous `(remote` prefix are not flushed:
+   * those are the leak, and the stream ended on them.
+   *
+   * @returns the held text, or `null` if nothing was buffered or it was a leak.
    */
   flush(): string | null {
     if (!this.buf) return null;
-    const flushed = this.buf;
+    const held = this.buf;
     this.buf = "";
-    return flushed;
+    this.hold = null;
+    const drained = drainLeaks(held);
+    if (!drained.hold) return drained.emit || null;
+    if (abandonedToolLeak(drained.hold)) return drained.emit || null;
+    return drained.emit + drained.hold || null;
   }
 }
 
-function isRemoteFunctionsLeakPrefix(text: string): boolean {
-  const t = text.trim();
-  if (!t) return false;
-  // Incomplete or complete `(remote_functions.azure_ai_search)` with no whitespace.
-  return /^\(?remote(_functions(\.[\w]+)*)?\)?$/.test(t);
+const REMOTE_SEARCH_STATUS = "(remote search in progress)";
+/** Past this, an unclosed call is released as prose so it cannot eat the answer. */
+const MAX_LEAK_HOLD = 8 * 1024;
+const CALL_HEAD = "remote_functions";
+
+interface CallHold {
+  i: number;
+  wrapped: boolean;
+  depth: number;
+  quote: string | null;
+  /** 1 matching the head, 2 after the head, 3 inside the argument list, 4 wrapper close. */
+  phase: 1 | 2 | 3 | 4;
+  headI: number;
+}
+
+interface Drain {
+  emit: string;
+  hold: string;
+  holdState: CallHold | null;
+}
+
+/**
+ * A drop that does not advance must not discard the text still in the buffer.
+ * `rest === null` means the caller emits `emit` and stops.
+ */
+export function consumeLeakDrop(
+  emit: string,
+  rest: string,
+  start: number,
+  end: number,
+): { emit: string; rest: string | null } {
+  if (end <= start) return { emit: emit + rest, rest: null };
+  return { emit: emit + rest.slice(0, start), rest: rest.slice(end) };
+}
+
+/**
+ * Emit text with every raw `remote_functions` call removed. A call is
+ * recognized at a word boundary anywhere in the buffer, not only at the
+ * start. After one call is dropped, the remainder is scanned again, so
+ * back-to-back calls go too. An unfinished call, including a trailing
+ * `r` / `re` / `rem` / `remo` / `remot`, is held from its start.
+ */
+function drainLeaks(raw: string): Drain {
+  let emit = "";
+  let rest = raw;
+  while (rest) {
+    const leak = findRemoteFunctionsLeak(rest);
+    if (leak?.kind === "drop") {
+      const step = consumeLeakDrop(emit, rest, leak.start, leak.end);
+      if (step.rest === null) return { emit: step.emit, hold: "", holdState: null };
+      emit = step.emit;
+      rest = step.rest;
+      continue;
+    }
+    if (leak?.kind === "hold") {
+      emit += rest.slice(0, leak.start);
+      return { emit, hold: rest.slice(leak.start), holdState: leak.hold };
+    }
+    const status = takeLeadingStatus(rest);
+    if (status?.kind === "drop") {
+      emit += status.keep;
+      rest = status.rest;
+      continue;
+    }
+    if (status?.kind === "hold") return { emit, hold: rest, holdState: null };
+    return { emit: emit + rest, hold: "", holdState: null };
+  }
+  return { emit, hold: "", holdState: null };
+}
+
+/** Append to a held call without rereading the bytes already scanned. */
+function continueHeldCall(buf: string, hold: CallHold, delta: string): Drain {
+  const combined = buf + delta;
+  if (combined.length > MAX_LEAK_HOLD) return { emit: combined, hold: "", holdState: null };
+  const call = scanRemoteFunctionsCall(combined, hold);
+  if (call?.kind === "prefix") return { emit: "", hold: combined, holdState: call.hold };
+  if (call?.kind === "complete") return drainLeaks(combined.slice(call.end));
+  return drainLeaks(combined);
+}
+
+/** `(remote search in progress)` only when it leads the remaining text. */
+function takeLeadingStatus(
+  text: string,
+): { kind: "drop"; keep: string; rest: string } | { kind: "hold" } | null {
+  let i = 0;
+  while (i < text.length && /\s/.test(text[i]!)) i++;
+  const body = text.slice(i);
+  const trimmed = body.trimEnd();
+  if (!trimmed) return null;
+  if (trimmed.startsWith(REMOTE_SEARCH_STATUS)) {
+    const after = trimmed.slice(REMOTE_SEARCH_STATUS.length) + body.slice(trimmed.length);
+    return { kind: "drop", keep: text.slice(0, i), rest: after };
+  }
+  if (REMOTE_SEARCH_STATUS.startsWith(trimmed)) return { kind: "hold" };
+  return null;
+}
+
+/**
+ * The first `remote_functions` call at a word boundary. `(` immediately
+ * before the name is part of the call. A name glued to another word is not.
+ */
+function findRemoteFunctionsLeak(
+  text: string,
+):
+  | { kind: "drop"; start: number; end: number }
+  | { kind: "hold"; start: number; hold: CallHold }
+  | null {
+  const needle = "remote";
+  let from = 0;
+  while (from < text.length) {
+    const i = text.indexOf(needle, from);
+    if (i < 0) break;
+    const prev = i === 0 ? "" : text[i - 1]!;
+    if (prev && /[\w]/.test(prev)) {
+      from = i + needle.length;
+      continue;
+    }
+    const start = prev === "(" ? i - 1 : i;
+    const call = scanRemoteFunctionsCall(text.slice(start));
+    if (call?.kind === "complete") return { kind: "drop", start, end: start + call.end };
+    if (call?.kind === "prefix") return { kind: "hold", start, hold: call.hold };
+    from = i + needle.length;
+  }
+  return trailingCallPrefix(text);
+}
+
+/**
+ * A chunk can end inside the word `remote`, before `indexOf("remote")` can
+ * see it. Hold that trailing prefix — `r` through `remot`, `(`, or `(r`
+ * through `(remote` — using the same `head.startsWith` rule as the call
+ * scanner. A trailing `(` is held so the next chunk can finish the call.
+ * A letter glued to the previous word is not a boundary.
+ */
+function trailingCallPrefix(text: string): { kind: "hold"; start: number; hold: CallHold } | null {
+  const limit = CALL_HEAD.length + 2;
+  const from = Math.max(0, text.length - (limit - 1));
+  for (let start = from; start < text.length; start++) {
+    const prev = start === 0 ? "" : text[start - 1]!;
+    if (prev && /[\w]/.test(prev)) continue;
+    const call = scanRemoteFunctionsCall(text.slice(start));
+    if (call?.kind === "prefix") return { kind: "hold", start, hold: call.hold };
+  }
+  return null;
+}
+
+/** True when a held prefix is already the leak and will not become a sentence. */
+function abandonedToolLeak(raw: string): boolean {
+  const t = raw.trim();
+  if (REMOTE_SEARCH_STATUS.startsWith(t) && t.length > "(remote".length) return true;
+  return /^\(?remote_functions(?:\.[\w]+)+\(/.test(t);
+}
+
+/**
+ * `remote_functions.<name>` with an optional wrapper and an optional
+ * argument list. A prefix is held. A finished call is dropped. Text that
+ * is not this shape returns null so the caller can pass it through.
+ */
+function scanRemoteFunctionsCall(
+  t: string,
+  held?: CallHold,
+): { kind: "prefix"; hold: CallHold } | { kind: "complete"; end: number } | null {
+  let i = held?.i ?? 0;
+  let wrapped = held?.wrapped ?? false;
+  let depth = held?.depth ?? 0;
+  let quote: string | null = held?.quote ?? null;
+  let phase: 0 | 1 | 2 | 3 | 4 = held?.phase ?? 0;
+  let headI = held?.headI ?? 0;
+  const prefix = (): { kind: "prefix"; hold: CallHold } => ({
+    kind: "prefix",
+    hold: { i, wrapped, depth, quote, phase: phase === 0 ? 1 : phase, headI },
+  });
+
+  if (phase === 0) {
+    if (i >= t.length) return null;
+    if (t[i] === "(") {
+      wrapped = true;
+      i++;
+    }
+    phase = 1;
+    headI = 0;
+  }
+  if (phase === 1) {
+    while (headI < CALL_HEAD.length) {
+      if (i >= t.length) return headI > 0 || wrapped ? prefix() : null;
+      if (t[i] !== CALL_HEAD[headI]) return null;
+      i++;
+      headI++;
+    }
+    phase = 2;
+  }
+  if (phase === 2) {
+    while (i < t.length && t[i] === ".") {
+      const dot = i;
+      const seg = i + 1;
+      i++;
+      while (i < t.length && /[\w]/.test(t[i]!)) i++;
+      if (i === seg) {
+        // Keep the dot for the next chunk so `remote_functions.` + `azure` stays one name.
+        if (i >= t.length) {
+          i = dot;
+          return prefix();
+        }
+        return null;
+      }
+    }
+    if (i >= t.length) return prefix();
+    if (t[i] === ")") {
+      // Bare token `(remote_functions.azure_ai_search)` or the same token
+      // closed with only a paren. Text after it is the answer.
+      const end = i + 1;
+      if (wrapped || end === t.length || /\s/.test(t[end] ?? "")) return { kind: "complete", end };
+      return null;
+    }
+    if (t[i] !== "(") return null;
+    i++;
+    depth = 1;
+    quote = null;
+    phase = 3;
+  }
+  if (phase === 3) {
+    while (i < t.length && depth > 0) {
+      const c = t[i]!;
+      if (quote) {
+        if (c === "\\") {
+          if (i + 1 >= t.length) return prefix();
+          i += 2;
+          continue;
+        }
+        if (c === quote) quote = null;
+        i++;
+        continue;
+      }
+      if (c === '"' || c === "'") {
+        quote = c;
+        i++;
+        continue;
+      }
+      if (c === "(" || c === "{" || c === "[") depth++;
+      else if (c === ")" || c === "}" || c === "]") depth--;
+      i++;
+    }
+    if (depth > 0 || quote) return i >= t.length ? prefix() : null;
+    phase = 4;
+  }
+  if (wrapped) {
+    if (i >= t.length) return prefix();
+    // An unclosed wrapper still hides the call. Only a real ")" is consumed.
+    if (t[i] === ")") i++;
+  }
+  return { kind: "complete", end: i };
 }
 
 /** Provider call correlation id shared by a call item and its output item. */
@@ -636,6 +1023,59 @@ function mcpErrorText(error: unknown): string | undefined {
 export interface FoundryMapState {
   /** Set once an `azure_ai_search_call_output` item has streamed this turn. */
   sawSearchOutput: boolean;
+  /**
+   * MCP call arguments streamed on `response.mcp_call_arguments.delta` /
+   * `.done`, keyed by output item id (the events' `item_id`). Foundry can
+   * stream an MCP call's input there and close the `mcp_call` item with
+   * `arguments` empty or `"{}"`, which left the row showing `{}` (the get_item
+   * display bug). The item's `.done` falls back to these and then drops them.
+   */
+  mcpArguments?: Map<string, StreamedMcpArguments>;
+}
+
+interface StreamedMcpArguments {
+  text: string;
+  /** Set by `.done`: a later delta for the same id starts a new buffer. */
+  closed: boolean;
+}
+
+/** Cap on one call's streamed arguments; the wire keeps far less anyway. */
+const MAX_STREAMED_MCP_ARGUMENTS = 64 * 1024;
+
+function hasKeys(value: Record<string, unknown> | null): value is Record<string, unknown> {
+  return value !== null && Object.keys(value).length > 0;
+}
+
+function recordMcpArgumentsDelta(state: FoundryMapState, itemId: string, delta: string): void {
+  const map = (state.mcpArguments ??= new Map());
+  const prior = map.get(itemId);
+  const entry = prior && !prior.closed ? prior : { text: "", closed: false };
+  if (entry.text.length + delta.length <= MAX_STREAMED_MCP_ARGUMENTS) entry.text += delta;
+  map.set(itemId, entry);
+}
+
+function recordMcpArgumentsDone(state: FoundryMapState, itemId: string, args: string): void {
+  const map = (state.mcpArguments ??= new Map());
+  const prior = map.get(itemId);
+  // A full `.done` replaces the fragments. An empty or `"{}"` one (the same
+  // shape that empties the item) must not throw away fragments that hold the
+  // real input.
+  if (hasKeys(parseJsonObject(args)) || !prior) {
+    map.set(itemId, { text: args.slice(0, MAX_STREAMED_MCP_ARGUMENTS), closed: true });
+  } else {
+    prior.closed = true;
+  }
+}
+
+/** Take (and forget) the arguments streamed for one MCP call item. */
+function takeStreamedMcpArguments(
+  state: FoundryMapState | undefined,
+  itemId: string | undefined,
+): Record<string, unknown> | null {
+  if (!state?.mcpArguments || !itemId) return null;
+  const entry = state.mcpArguments.get(itemId);
+  state.mcpArguments.delete(itemId);
+  return entry ? parseJsonObject(entry.text) : null;
 }
 
 function mapOutputItemDone(
@@ -690,7 +1130,9 @@ function mapOutputItemDone(
   // auto-approve server-side (first-party agent, tenant-owned data).
   if (item?.type === "mcp_call") {
     const name = mcpToolName(item);
-    const args = parseJsonObject(item.arguments);
+    const ownArgs = parseJsonObject(item.arguments);
+    const streamedArgs = takeStreamedMcpArguments(state, item.id);
+    const args = hasKeys(ownArgs) ? ownArgs : (streamedArgs ?? ownArgs);
     // A failed MCP call carries the server's complaint on `error` (string or
     // object) and usually no output. Pass it through as the tool's result so
     // the failed row shows the MCP's own words under the arguments
@@ -874,6 +1316,25 @@ export function mapFoundryEvent(
       // of a search whose row is already open.
       return null;
     }
+    // An MCP call's input can stream separately from its item. Collect it so
+    // the item's `.done` can show it when the item itself carries none.
+    case "response.mcp_call_arguments.delta": {
+      const { item_id: itemId, delta } = event as { item_id?: unknown; delta?: unknown };
+      if (state && typeof itemId === "string" && typeof delta === "string") {
+        recordMcpArgumentsDelta(state, itemId, delta);
+      }
+      return null;
+    }
+    case "response.mcp_call_arguments.done": {
+      const { item_id: itemId, arguments: args } = event as {
+        item_id?: unknown;
+        arguments?: unknown;
+      };
+      if (state && typeof itemId === "string" && typeof args === "string") {
+        recordMcpArgumentsDone(state, itemId, args);
+      }
+      return null;
+    }
     case "response.output_item.done": {
       const doneEvent = event as OutputItemDoneEvent;
       const mapped = mapOutputItemDone(doneEvent, state);
@@ -973,7 +1434,6 @@ export function capacityRetryDelayMs(
  */
 const DEFAULT_RATE_LIMIT_RESUME_DELAYS_MS = [30_000, 60_000, 60_000];
 const RATE_LIMIT_WAIT_CAP_MS = 90_000;
-const RATE_LIMIT_COUNTDOWN_STEP_MS = 5_000;
 
 const RATE_LIMIT_CODES = new Set(["rate_limit_exceeded", "too_many_requests", "429"]);
 const HARD_QUOTA_CODES = new Set(["insufficient_quota", "billing_hard_limit_reached"]);
@@ -1063,56 +1523,6 @@ export const RATE_LIMIT_EXHAUSTED_TEXT =
   "Your question and any results gathered so far are saved in this conversation: " +
   "wait a minute, then send \"continue\" to pick up where it stopped.";
 
-function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve) => {
-    if (signal?.aborted) {
-      resolve();
-      return;
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-/**
- * Waits out a rate limit with a visible countdown on the same connection part
- * the create-time capacity retry uses, so both skins render it. Each write
- * replaces the previous one (same id), and the last write clears it.
- */
-async function waitOutRateLimit(
-  writer: { write(part: unknown): void },
-  delayMs: number,
-  attempt: number,
-  maxAttempts: number,
-  signal?: AbortSignal,
-): Promise<void> {
-  const until = Date.now() + delayMs;
-  for (;;) {
-    const remaining = until - Date.now();
-    if (remaining <= 0 || signal?.aborted) break;
-    writer.write({
-      type: "data-connection",
-      id: "foundry-capacity",
-      data: {
-        state: "warming_up",
-        message:
-          `Hit the model's per-minute token limit — resuming in ${Math.max(1, Math.ceil(remaining / 1000))}s` +
-          (maxAttempts > 1 ? ` (retry ${attempt} of ${maxAttempts})` : ""),
-      },
-    });
-    await abortableSleep(Math.min(remaining, RATE_LIMIT_COUNTDOWN_STEP_MS), signal);
-  }
-  writer.write({ type: "data-connection", id: "foundry-capacity", data: { state: "ready" } });
-}
-
 export async function createFoundryStreamResponse(opts: {
   projectEndpoint: string;
   agentName: string;
@@ -1136,8 +1546,20 @@ export async function createFoundryStreamResponse(opts: {
    * tests do not spend the real minute.
    */
   rateLimitResumeDelaysMs?: readonly number[];
+  /**
+   * Per-turn tool-call cap from `backend.maxToolCalls`. Omit for no cap.
+   * Sent as Responses `max_tool_calls` and enforced here for MCP calls.
+   */
+  maxToolCalls?: number;
+  /**
+   * Shared guardrails (TPM and the tool cap). Foundry still aborts the
+   * response and sends `max_tool_calls` / `tool_choice`; the guard decides
+   * when to pause, nudge, or stop.
+   */
+  guard?: TurnGuard;
 }): Promise<Response> {
   const turnMode: DigiTurnMode = opts.turnMode ?? "send";
+  const toolCap = normalizeMaxToolCalls(opts.maxToolCalls ?? opts.guard?.toolCap);
   const openai = (opts.openAIClientFactory ?? defaultOpenAIClientFactory)(opts.projectEndpoint);
 
   // Fail closed: mutating modes need item delete/create. Do not fall through to
@@ -1246,18 +1668,37 @@ export async function createFoundryStreamResponse(opts: {
           createParams.input = createdConversation ? applyGroundingDirective(message) : message;
         }
 
+        // Set when Foundry refuses max_tool_calls / tool_choice beside
+        // agent_reference. Later creates in this turn omit those fields.
+        let apiOverrideRefused = false;
+        const responseBody = (toolChoice?: "none"): FoundryResponsesCreateBody => ({
+          agent_reference: { name: opts.agentName, type: "agent_reference" },
+          ...(!apiOverrideRefused && toolCap !== undefined ? { max_tool_calls: toolCap } : {}),
+          ...(!apiOverrideRefused && toolChoice ? { tool_choice: toolChoice } : {}),
+        });
+
         const createWithCapacityRetry = async (
           params: { conversation: string; input?: string; stream: true },
+          extras?: { toolChoice?: "none"; signal?: AbortSignal },
         ) => {
           const schedule = opts.capacityRetryDelaysMs ?? DEFAULT_CAPACITY_RETRY_DELAYS_MS;
+          const signal = extras?.signal ?? opts.signal;
+          // The agent reference already refused per-call tool controls. A
+          // follow-up that wanted tool_choice none says so in the input.
+          let requestParams = params;
+          if (apiOverrideRefused && extras?.toolChoice && requestParams.input === undefined) {
+            requestParams = { ...requestParams, input: TOOL_CAP_INSTRUCTION };
+          }
           for (let attempt = 0; ; attempt += 1) {
+            const body = responseBody(extras?.toolChoice);
+            const usedOverride = body.max_tool_calls !== undefined || body.tool_choice !== undefined;
             try {
-              const created = await openai.responses.create(params, {
-                signal: opts.signal,
+              const created = await openai.responses.create(requestParams, {
+                signal,
                 // Our schedule owns the retries; the SDK's own retries would
                 // multiply them (up to 21 POSTs for one turn).
                 maxRetries: 0,
-                body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
+                body,
               });
               if (attempt > 0) {
                 // Capacity is back: clear the waiting state before the answer
@@ -1271,7 +1712,34 @@ export async function createFoundryStreamResponse(opts: {
               }
               return created;
             } catch (err) {
-              const delay = capacityRetryDelayMs(err, attempt, schedule);
+              let failure = err;
+              if (usedOverride && isAgentOverrideRejected(err)) {
+                apiOverrideRefused = true;
+                // tool_choice was the way to force a message. If the agent
+                // reference rejects it, say so in the follow-up input instead.
+                const retryParams = extras?.toolChoice
+                  ? { ...requestParams, input: requestParams.input ?? TOOL_CAP_INSTRUCTION }
+                  : requestParams;
+                requestParams = retryParams;
+                try {
+                  const created = await openai.responses.create(retryParams, {
+                    signal,
+                    maxRetries: 0,
+                    body: responseBody(),
+                  });
+                  if (attempt > 0) {
+                    writer.write({
+                      type: "data-connection",
+                      id: "foundry-capacity",
+                      data: { state: "ready" },
+                    });
+                  }
+                  return created;
+                } catch (retryErr) {
+                  failure = retryErr;
+                }
+              }
+              const delay = capacityRetryDelayMs(failure, attempt, schedule);
               if (delay === null) {
                 if (attempt > 0) {
                   // Exhausted, or no longer retryable: clear the waiting state
@@ -1282,7 +1750,7 @@ export async function createFoundryStreamResponse(opts: {
                     data: { state: "ready" },
                   });
                 }
-                throw err;
+                throw failure;
               }
               writer.write({
                 type: "data-connection",
@@ -1296,7 +1764,7 @@ export async function createFoundryStreamResponse(opts: {
                 },
               });
               await abortableSleep(delay, opts.signal);
-              if (opts.signal?.aborted) throw err;
+              if (opts.signal?.aborted) throw failure;
             }
           }
         };
@@ -1304,60 +1772,134 @@ export async function createFoundryStreamResponse(opts: {
         const textFilter = new FoundryToolLeakFilter();
         const mapState: FoundryMapState = { sawSearchOutput: false };
         const resumeSchedule = opts.rateLimitResumeDelaysMs ?? DEFAULT_RATE_LIMIT_RESUME_DELAYS_MS;
+        const toolCalls = new FoundryToolCallCounter();
         let params = createParams;
         let wroteText = false;
         let resumeSeparatorPending = false;
-        for (let resume = 0; ; resume += 1) {
-          const responseStream = await createWithCapacityRetry(params);
-          try {
-            for await (const event of responseStream) {
-              const mapped = mapFoundryEvent(event, mapState);
-              if (!mapped) continue;
-              if (mapped.type === "text-delta") {
-                const pushed = textFilter.push(mapped.delta);
-                if (!pushed) continue;
-                // A resumed turn continues below what was already shown.
-                const delta = resumeSeparatorPending ? `\n\n${pushed}` : pushed;
-                resumeSeparatorPending = false;
-                wroteText = true;
-                openText();
-                writer.write({ type: "text-delta", id: textId, delta });
-              } else if (mapped.type === "activity") {
-                // Foundry's own event carries unbounded upstream strings (a query
-                // list, citation titles/urls); the digigraph and relay providers
-                // cap theirs before writing (see chatActivitySpan) but this path
-                // built the span literal directly and never did. Route it through
-                // the same allowlist/cap the client applies on receipt, so an
-                // oversized or over-long upstream payload never reaches the wire
-                // in the first place.
-                const sanitized = sanitizeActivitySpan(mapped.span);
-                const span = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
-                if (span) {
-                  writeStandardActivity(writer, span, activityCtx);
-                }
-              } else if (mapped.type === "rate-limit") {
-                throw new FoundryRateLimitError(mapped.message);
-              } else if (mapped.type === "error") {
-                throw new FoundryProtocolError(mapped.message);
-              } else if (mapped.type === "done") {
-                if (mapped.usage) {
-                  // Real provider-reported token usage (the Responses API counts
-                  // them on `response.completed`). The client folds it into
-                  // `metadata.custom.usage`, which is what the context meter
-                  // reads; nothing is fabricated when the API sends no counts.
-                  writer.write({
-                    type: "message-metadata",
-                    messageMetadata: {
-                      usage: mapped.usage,
-                      ...(mapped.model ? { model: mapped.model } : {}),
-                    },
-                  });
-                }
-                break;
-              }
+        let hitToolCap = false;
+
+        const pump = async (
+          responseStream: AsyncIterable<FoundryStreamEvent>,
+          mode: "capped" | "final",
+          abortCap: () => void,
+        ): Promise<"cap" | "done"> => {
+          for await (const event of responseStream) {
+            const sight = toolCap !== undefined ? toolCalls.observe(event) : "ignore";
+            if (
+              mode === "capped" &&
+              toolCap !== undefined &&
+              sight === "new" &&
+              toolCalls.count > toolCap
+            ) {
+              // The call that would exceed the cap is not rendered. Abort so
+              // Foundry stops executing it; MCP calls are not covered by
+              // max_tool_calls (built-in tools only).
+              hitToolCap = true;
+              abortCap();
+              return "cap";
             }
+            // The follow-up is one answer. A further tool call is dropped
+            // instead of starting another round.
+            if (mode === "final" && sight === "new") continue;
+            const mapped = mapFoundryEvent(event, mapState);
+            if (!mapped) continue;
+            if (mapped.type === "text-delta") {
+              const pushed = textFilter.push(mapped.delta);
+              if (!pushed) continue;
+              // A resumed turn continues below what was already shown.
+              const delta = resumeSeparatorPending ? `\n\n${pushed}` : pushed;
+              resumeSeparatorPending = false;
+              wroteText = true;
+              openText();
+              writer.write({ type: "text-delta", id: textId, delta });
+            } else if (mapped.type === "activity") {
+              // Foundry's own event carries unbounded upstream strings (a query
+              // list, citation titles/urls); the digigraph and relay providers
+              // cap theirs before writing (see chatActivitySpan) but this path
+              // built the span literal directly and never did. Route it through
+              // the same allowlist/cap the client applies on receipt, so an
+              // oversized or over-long upstream payload never reaches the wire
+              // in the first place.
+              const sanitized = sanitizeActivitySpan(mapped.span);
+              const detailed = sanitized && applyActivityDetail(sanitized, opts.activityDetail);
+              const span =
+                detailed && opts.guard?.active && detailed.toolResult !== undefined
+                  ? {
+                      ...detailed,
+                      toolResult: opts.guard.capToolPayload(
+                        detailed.toolResult,
+                      ) as typeof detailed.toolResult,
+                    }
+                  : detailed;
+              if (span) {
+                writeStandardActivity(writer, span, activityCtx);
+              }
+            } else if (mapped.type === "rate-limit") {
+              throw new FoundryRateLimitError(mapped.message);
+            } else if (mapped.type === "error") {
+              throw new FoundryProtocolError(mapped.message);
+            } else if (mapped.type === "done") {
+              if (mapped.usage) {
+                // Real provider-reported token usage (the Responses API counts
+                // them on `response.completed`). The client folds it into
+                // `metadata.custom.usage`, which is what the context meter
+                // reads; nothing is fabricated when the API sends no counts.
+                writer.write({
+                  type: "message-metadata",
+                  messageMetadata: {
+                    usage: mapped.usage,
+                    ...(mapped.model ? { model: mapped.model } : {}),
+                  },
+                });
+                opts.guard?.recordUsage(mapped.usage);
+              }
+              return "done";
+            }
+          }
+          return "done";
+        };
+
+        const clearForGuard = async (
+          next: { conversation: string; input?: string; stream: true },
+        ) => {
+          if (!opts.guard?.active) return next;
+          const clearance = await opts.guard.beforeRound({
+            writer,
+            pendingText: next.input ?? "",
+            toolCallsSoFar: toolCalls.count,
+            signal: opts.signal,
+          });
+          if (clearance.action === "proceed") return next;
+          const input = next.input
+            ? `${next.input}\n\n${clearance.instruction}`
+            : clearance.instruction;
+          return { ...next, input };
+        };
+
+        resumeLoop: for (let resume = 0; ; resume += 1) {
+          const child = new AbortController();
+          const unlink = forwardAbort(opts.signal, child);
+          // Create stays outside the resume catch. A 429 here already spent
+          // the capacity schedule; resuming it would wait out another minute
+          // on top of those retries. Mid-stream failures (the iterator) are
+          // the ones DC-18 resumes.
+          let responseStream: AsyncIterable<FoundryStreamEvent>;
+          try {
+            params = await clearForGuard(params);
+            responseStream = await createWithCapacityRetry(params, { signal: child.signal });
+          } catch (err) {
+            unlink();
+            throw err;
+          }
+          try {
+            const outcome = await pump(responseStream, "capped", () => child.abort());
+            if (outcome === "cap") break resumeLoop;
           } catch (err) {
             if (opts.signal?.aborted) throw err;
+            // The cap abort is ours. SDK abort errors do not set `name`, so
+            // matching AbortError / APIUserAbortError misses them and the
+            // turn becomes the generic outage line. The flag is enough.
+            if (hitToolCap) break resumeLoop;
             if (!isRateLimitFailure(err)) throw err;
             const delay = rateLimitResumeDelayMs(err, resume, resumeSchedule);
             if (delay === null) {
@@ -1384,8 +1926,44 @@ export async function createFoundryStreamResponse(opts: {
             // duplicate the user message.
             params = { conversation: conversationId, stream: true };
             continue;
+          } finally {
+            unlink();
           }
           break;
+        }
+
+        if (hitToolCap && toolCap !== undefined) {
+          // Status, not an error: the turn continues into a final answer.
+          // The shared guard writes the notice when it is the one enforcing
+          // the cap; otherwise this adapter writes the same line.
+          let finalParams: { conversation: string; input?: string; stream: true } = {
+            conversation: conversationId,
+            stream: true,
+          };
+          if (opts.guard?.active) {
+            finalParams = await clearForGuard(finalParams);
+          } else {
+            writer.write({
+              type: "data-notice",
+              id: "foundry-tool-call-limit",
+              data: { tone: "status", message: toolCallLimitNotice(toolCap) },
+            });
+          }
+          resumeSeparatorPending = wroteText;
+          try {
+            // No new visitor text. tool_choice none is the Responses switch
+            // that makes the model generate a message instead of another tool
+            // call, on the same request body as agent_reference.
+            const finalStream = await createWithCapacityRetry(finalParams, { toolChoice: "none" });
+            await pump(finalStream, "final", () => {});
+          } catch (err) {
+            if (opts.signal?.aborted) throw err;
+            if (isRateLimitFailure(err)) throw err;
+            console.error(
+              "[foundry] tool-cap final answer failed",
+              err instanceof Error ? err.message : String(err),
+            );
+          }
         }
         // The loop above only ever resolves a held leak-prefix by flushing it
         // ahead of a LATER delta (see FoundryToolLeakFilter.push) — a stream
@@ -1434,6 +2012,7 @@ export async function createFoundryStreamResponse(opts: {
           });
         }
       } finally {
+        opts.guard?.release();
         // Orphaned started rows settle as failed — a row whose tool never
         // returned must not render as a successful completion.
         finishStandardActivity(

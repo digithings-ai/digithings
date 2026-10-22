@@ -4,7 +4,8 @@
  * Worker-native job: crawl `help.online-compliance-center.com` and idempotently
  * upsert into the `occ_help` store keyed by URL + content hash. Vectorize
  * upsert runs only for changed docs; docs gone from source are deleted. A run
- * with unchanged source writes nothing.
+ * with unchanged source writes no document rows, but it still records the run
+ * itself - that record is what the freshness alert reads.
  *
  * The D1 + Vectorize bindings are injected as a store interface so this module
  * stays unit-testable with no Cloudflare account. Live wiring waits on the
@@ -59,6 +60,7 @@ export type FreshnessVerdict = {
 export type RecrawlResult = {
   upserted: number;
   deleted: number;
+  /** True when corpus rows were upserted or deleted - not when only the run was recorded. */
   wrote: boolean;
   dryRun: boolean;
   metric: FreshnessMetric;
@@ -66,9 +68,10 @@ export type RecrawlResult = {
 };
 
 /**
- * Non-cryptographic content hash (FNV-1a, 32-bit). Change detector only: two
- * texts with different hashes are different; equal hashes skip the Vectorize
- * write. Not a security boundary.
+ * Non-cryptographic content hash (FNV-1a, 32-bit). Change detector only:
+ * different hashes imply different text, but equal hashes do NOT imply equal
+ * text - a collision makes a changed document look unchanged, so its update
+ * is missed. Not a security boundary; widen the digest if the corpus grows.
  */
 export function hashContent(text: string): string {
   let hash = 0x811c9dc5;
@@ -96,10 +99,20 @@ export function diffDocs(
   return { upserts, deletes };
 }
 
+/**
+ * Newest source-document timestamp, compared as a parsed instant: a corpus
+ * whose timestamps mix offsets would otherwise be ordered as text and report
+ * the wrong newest document. Entries whose `updatedAt` does not parse are
+ * ignored.
+ */
 export function newestDocAt(source: readonly CrawledDoc[]): string | null {
   let newest: string | null = null;
+  let newestMs = Number.NEGATIVE_INFINITY;
   for (const doc of source) {
-    if (newest === null || doc.updatedAt > newest) {
+    const ms = Date.parse(doc.updatedAt);
+    if (Number.isNaN(ms)) continue;
+    if (ms > newestMs) {
+      newestMs = ms;
       newest = doc.updatedAt;
     }
   }
@@ -138,6 +151,15 @@ export async function runRecrawl(
     for (const url of deletes) {
       await store.remove(url);
     }
+  }
+  // The RUN is recorded on every successful non-dry run, not only on a run
+  // that changed the corpus: `lastSuccessAt` answers "when did the crawl last
+  // succeed", so a weekly run that found nothing new must advance it too.
+  // Otherwise a rarely-changing help-docs corpus reports a false
+  // stale_last_success from the ninth day on, and the alert cannot tell
+  // "the crawl broke" from "nothing changed". Written last, so a failed
+  // corpus write leaves lastSuccessAt untouched and the alert still fires.
+  if (!dryRun) {
     await store.putState({ lastSuccessAt: new Date(nowMs).toISOString() });
   }
   const state = await store.getState();

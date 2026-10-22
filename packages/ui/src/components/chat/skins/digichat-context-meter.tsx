@@ -24,7 +24,18 @@ import {
  * above 100 and the three always describe the same turn.
  */
 
+/**
+ * Tokens for a model id that has its own window. A built-in key such as
+ * `constructor` is not one.
+ */
+export function contextWindowFor(modelId: string): number | undefined {
+  const id = modelId.trim();
+  if (!id || !Object.hasOwn(CONTEXT_WINDOWS, id)) return undefined;
+  return CONTEXT_WINDOWS[id];
+}
+
 const CONTEXT_WINDOWS: Record<string, number> = {
+  "deepseek/deepseek-v4.1-flash-1017": 1_048_576,
   "deepseek/deepseek-v4.1-flash": 1_048_576,
   "z-ai/glm-5.3-flash": 1_048_576,
   "qwen/qwen3.8-flash": 1_000_000,
@@ -122,11 +133,14 @@ export function DigichatContextMeter({
     return total;
   });
 
-  // The window must be known: a bar drawn against a guessed window is a lie
-  // about how full the context is, so an unknown model gets no bar at all.
-  const window =
-    CONTEXT_WINDOWS[model] ??
-    (reportedModel ? CONTEXT_WINDOWS[reportedModel] : undefined);
+  // A report with its own window is the model that served the turn.
+  // A report with no window leaves the session model, so OCC keeps the
+  // bar. The house session is empty until digigraph reports an id.
+  const reported = reportedModel?.trim() || "";
+  const session = model.trim();
+  const activeModel =
+    reported && contextWindowFor(reported) !== undefined ? reported : session;
+  const window = contextWindowFor(activeModel);
   // No bar without a known window: the fill is a fraction of it.
   if (window === undefined) return null;
 

@@ -1,3 +1,7 @@
-# The suite needs the project virtualenv; `make test` assumes it is active.
-# sctl publish runs this command when publishing a change.
-test: uv run pytest -m unit
+# `sctl publish` runs the first `test:` line below as an argv, with the
+# repository root as its working directory and WITHOUT a shell. `uv run` on
+# its own resolves only the root virtualenv — no pytest, no workspace
+# members — so the suite could not even be collected (DIG-4593). The wrapper
+# below publishes a green, offline gate instead: install the whole workspace
+# from the committed lockfile, then run the unit lane from that environment.
+test: bash scripts/sctl-publish-gate.sh

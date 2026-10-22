@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "digichat",
-    "version": "2.6.4",
+    "version": "2.6.7",
     "description": "digichat Next.js BFF — stable HTTP routes for health, chat, conversations, and Auth.js. This spec is authored (not FastAPI-generated). Path existence is checked in tests/contracts/test_digichat_openapi_paths.py."
   },
   "servers": [

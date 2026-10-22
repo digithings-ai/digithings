@@ -17,7 +17,7 @@ export function ChatbotThreadList() {
           className="aui-chrome-thread-list-new"
           aria-label="New chat"
         >
-          <DotMatrix state="newChat" label="New chat" className="size-3.5" />
+          <DotMatrix state="newChat" decorative className="size-3.5" />
         </ThreadListPrimitive.New>
       </div>
       <ThreadListPrimitive.Root className="aui-chrome-thread-list-root">

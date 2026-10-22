@@ -5,11 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EmbedComposerMenu, cursorOnCurrentRow, type MenuRow } from "./embed-composer-menu";
+import { VIEW_MODES } from "@/lib/view-modes";
+import { VIEW_LABELS } from "@digithings/digichat-ui";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
   type EmbedChatPrefsApi,
 } from "@digithings/ui/chat/stock";
+import { resolveModelCatalog } from "@/lib/model-picker-catalog";
 
 /** Navigated row: the user-message chevron on the left. */
 function hasChevron(row: HTMLElement): boolean {
@@ -39,6 +42,7 @@ function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setSearchEngine: vi.fn(),
     setToolbar: vi.fn(),
     setScrollbars: vi.fn(),
+    setDensity: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -60,6 +64,7 @@ function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openEffort: vi.fn(),
     openSearchEngine: vi.fn(),
     openView: vi.fn(),
+    openDensity: vi.fn(),
     openThinking: vi.fn(),
     openLanguage: vi.fn(),
     openSessions: vi.fn(),
@@ -213,6 +218,53 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("renders the shared wording for every view level, so no level is left blank", async () => {
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu kind="view" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    // The page offers exactly the app's levels and nothing else: a retired id
+    // on this page is a level the product renamed away (#6034 renamed
+    // compact/detailed to quiet/verbose, #6079 retired hidden).
+    const offered = (await screen.findAllByRole("menuitemradio")).map(
+      (row) => /\/view\s+([a-z]+)/.exec(row.textContent ?? "")?.[1],
+    );
+    expect(offered).toEqual([...VIEW_MODES]);
+
+    // Every level carries the shared wording in its own column on the right
+    // of the row. A level with no wording renders a blank column, which is
+    // what the quiet and verbose rows did while the menu kept its own
+    // retired label map (DIG-4665). The wording comes from the shared map,
+    // so this test walks the app's own ids: a rename cannot leave a row
+    // unlabelled. The description must land in the description column and
+    // not in the label, so the assertion reads the row's child cells
+    // instead of its whole text.
+    for (const level of VIEW_MODES) {
+      const wording = VIEW_LABELS[level];
+      expect(wording.trim()).not.toBe("");
+
+      const row = await screen.findByRole("menuitemradio", {
+        name: new RegExp(`^/view ${level}`, "i"),
+      });
+      const cells = Array.from(row.children) as HTMLElement[];
+      const label = cells.find((cell) => cell.textContent?.trim() === `/view ${level}`);
+      expect(label).toBeDefined();
+      // The description cell is the other cell that truncates. The label cell
+      // is excluded, so a label that grows a `truncate` of its own cannot
+      // make this test read the label as the description.
+      const description = cells.find(
+        (cell) => cell !== label && cell.querySelector(".truncate"),
+      );
+      expect(description).toBeDefined();
+      expect(description).not.toBe(label);
+      expect(description?.textContent).toContain(wording);
+    }
+    unmount();
+  });
+
   it("hides the search-engine row on the main menu when the tenant disallows web", async () => {
     const onClose = vi.fn();
     const { unmount } = render(
@@ -222,6 +274,147 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     );
     expect(screen.queryByText("/search-engine")).toBeNull();
     unmount();
+  });
+
+  it("lists /theme in settings and paints the chosen palette", async () => {
+    const user = userEvent.setup();
+    // happy-dom's storage is not usable under every Node (a recent Node ships
+    // its own `localStorage` global that shadows it), so stub a Map-backed one.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
+    localStorage.setItem("dt-theme", "dark");
+    localStorage.removeItem("dt-palette");
+    document.documentElement.removeAttribute("data-palette");
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("menuitem", { name: /\/theme/ }));
+
+    const current = await screen.findByRole("menuitemradio", { name: /\/theme default dark/i });
+    expect(current).toHaveAttribute("aria-checked", "true");
+    const aura = screen.getByRole("menuitemradio", { name: /\/theme aura dark/i });
+    await user.click(aura);
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
+    expect(localStorage.getItem("dt-theme")).toBe("dark");
+    expect(localStorage.getItem("dt-palette")).toBe("aura");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    vi.unstubAllGlobals();
+  });
+
+  it("routes a /theme pick through a tenant embed's own theme, not localStorage", async () => {
+    const user = userEvent.setup();
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
+    const setTheme = vi.fn();
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider
+        value={prefs({
+          themeState: { preference: "light", palette: "default", resolved: "light" },
+          setTheme,
+        })}
+      >
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("menuitem", { name: /\/theme/ }));
+    // Opens on the tenant's own theme (light here), not on dt-theme.
+    const current = await screen.findByRole("menuitemradio", { name: /\/theme default light/i });
+    expect(current).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("menuitemradio", { name: /\/theme aura dark/i }));
+
+    expect(setTheme).toHaveBeenCalledWith("dark", "aura");
+    expect(store.size).toBe(0);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    vi.unstubAllGlobals();
+  });
+
+  it("drops the pick when an embed's checked theme row is chosen again", async () => {
+    const user = userEvent.setup();
+    const setTheme = vi.fn();
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider
+        value={prefs({
+          themeState: { preference: "light", palette: "default", resolved: "light" },
+          setTheme,
+        })}
+      >
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("menuitem", { name: /\/theme/ }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /\/theme default light/i }));
+
+    // "auto" is how an embed clears the pick (embedThemePick("auto") is null).
+    expect(setTheme).toHaveBeenCalledTimes(1);
+    expect(setTheme).toHaveBeenCalledWith("auto", "default");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it("pins the mode when the app's checked theme row is chosen with no stored theme", async () => {
+    const user = userEvent.setup();
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    });
+    document.documentElement.removeAttribute("data-palette");
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs()}>
+        <EmbedComposerMenu kind="settings" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    await user.click(await screen.findByRole("menuitem", { name: /\/theme/ }));
+    // No dt-theme: the app follows the OS, and the checked row is that mode.
+    const checked = (await screen.findAllByRole("menuitemradio")).find(
+      (row) => row.getAttribute("aria-checked") === "true",
+    );
+    expect(checked).toBeTruthy();
+    const mode = /light/i.test(checked!.textContent ?? "") ? "light" : "dark";
+    await user.click(checked!);
+
+    expect(store.get("dt-theme")).toBe(mode);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    vi.unstubAllGlobals();
   });
 
   it("shows the search-engine row on the main menu when the tenant allows web", async () => {
@@ -248,6 +441,79 @@ describe("EmbedComposerMenu exclusive pickers", () => {
       </EmbedChatPrefsProvider>,
     );
     expect(await screen.findByRole("menuitemradio", { name: /auto/ })).not.toBeNull();
+    unmount();
+  });
+
+  it("puts presets above provider groups and selects a preset token", async () => {
+    const onClose = vi.fn();
+    const setModel = vi.fn();
+    const picker = {
+      showFullList: true,
+      presets: [
+        {
+          id: "auto",
+          label: "Auto",
+          description: "DeepSeek V4.1 Flash 1017, our default.",
+          model: "alpha",
+        },
+        {
+          id: "reasoning",
+          label: "Reasoning",
+          description: "Best reasoning in this list.",
+          model: "beta",
+        },
+      ],
+      groups: [{ provider: "DeepSeek", models: [{ id: "alpha", label: "Flash" }] }],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha"]} onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+    const radios = await screen.findAllByRole("menuitemradio");
+    expect(radios.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Auto"),
+      expect.stringContaining("Reasoning"),
+      expect.stringContaining("Flash"),
+    ]);
+    expect(screen.queryByRole("menuitem", { name: "DeepSeek" })).toBeNull();
+    expect(screen.getByText("DeepSeek")).not.toBeNull();
+    expect(screen.getByText("Best reasoning in this list.")).not.toBeNull();
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /Reasoning/ }));
+    expect(setModel).toHaveBeenCalledWith("preset:reasoning");
+    unmount();
+  });
+
+  it("renders the newest-generation catalog and omits superseded models", async () => {
+    const onClose = vi.fn();
+    const resolved = resolveModelCatalog(
+      { presets: ["auto", "reasoning", "fast", "light"], showFullList: true },
+      { openRouterConfigured: false },
+    );
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" } })}>
+        <EmbedComposerMenu
+          kind="models"
+          picker={resolved.picker}
+          models={resolved.available}
+          onClose={onClose}
+        />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(await screen.findByRole("menuitemradio", { name: /Auto/ })).not.toBeNull();
+    expect(screen.getByText("GLM 5.3 Flash. Best reasoning in this list.")).not.toBeNull();
+    expect(screen.getByText("Gemini 3.5 Flash Lite. Fastest model in this list.")).not.toBeNull();
+    expect(screen.getByText("GPT-OSS 120B. Lowest price in this list.")).not.toBeNull();
+    expect(screen.getByText("Qwen 3.8 Flash")).not.toBeNull();
+    expect(screen.getByText("Premium")).not.toBeNull();
+    expect(screen.getByText("Manual selection")).not.toBeNull();
+    expect(screen.getByText("GLM 5.3")).not.toBeNull();
+    expect(screen.getByText("Gemini 3.8 Flash")).not.toBeNull();
+    expect(screen.getByText("Qwen 3.8 27B")).not.toBeNull();
+    expect(screen.queryByText("DeepSeek V4 Pro")).toBeNull();
+    expect(screen.queryByText("GLM 4.7 Flash")).toBeNull();
+    expect(screen.queryByText("GPT-5.6 Luna")).toBeNull();
+    expect(screen.queryByText("Gemini 3.1 Flash Lite")).toBeNull();
     unmount();
   });
 
@@ -364,11 +630,14 @@ describe("EmbedComposerMenu current value", () => {
 
     const balanced = await screen.findByRole("menuitemradio", { name: /\/view balanced/ });
     expect(hasChevron(balanced)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/view hidden/ }))).toBe(false);
+    // `quiet` is a level that is not the current value, so it carries no
+    // cursor. It was `hidden` before #6079 retired that level; the assertion
+    // is the same, on a level the ladder still has.
+    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/view quiet/ }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setView).toHaveBeenCalledWith("balanced");
-    expect(api.setView).not.toHaveBeenCalledWith("hidden");
+    expect(api.setView).not.toHaveBeenCalledWith("quiet");
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -540,6 +809,34 @@ describe("EmbedComposerMenu current value", () => {
 
     const openai = await screen.findByRole("menuitemradio", { name: /\/openai/ });
     expect(hasChevron(openai)).toBe(true);
+  });
+
+  it("closes a model pick when the composer writer is not bound", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const api = prefs({ setComposerDraft: vi.fn() });
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="models" models={["alpha", "beta"]} onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+    await user.click(await screen.findByRole("menuitemradio", { name: "beta" }));
+    expect(api.setModel).toHaveBeenCalledWith("beta");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the provider page on Escape when the composer writer is not bound", async () => {
+    const user = userEvent.setup();
+    const setComposerDraft = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={prefs({ setComposerDraft })}>
+        <EmbedComposerMenu kind="provider" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    await screen.findByRole("menuitemradio", { name: /\/cheaperinference/ });
+    await user.keyboard("{Escape}");
+    expect(setComposerDraft).not.toHaveBeenCalled();
+    expect(await screen.findByRole("menuitem", { name: /\/language/ })).toBeTruthy();
   });
 });
 

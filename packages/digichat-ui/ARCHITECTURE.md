@@ -16,7 +16,7 @@ Do not reintroduce a second transcript renderer here.
 
 | File | What it is |
 |---|---|
-| `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/websearch`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. |
+| `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. Bare `/export` and `/export md` are markdown; `/export html` is the rendered page. Any other format shows an unsupported-format error. The digichat host shows both `/export md` and `/export html` in the palette. |
 | `@digithings/ui/chat/transcript` (`activity-view.ts`, `transcript-markdown.ts`, `types.ts`) | Activity rows, markdown export, and `DigiChatActivity` / `DigiChatMessage` / `DigiChatController`. This package re-exports them from `src/index.ts`. There is no local `src/types.ts`. |
 | `src/components/DigiChatMark.tsx` | Brand mark / wordmark (digithings-web nav). |
 | `src/components/DocumentPane.tsx` / `MiniMarkdown.tsx` | Optional helpers. Not mounted by the stock assistant-ui Thread. `MiniMarkdown` delegates to `@digithings/ui` `ChatMarkdown`. |
@@ -28,6 +28,10 @@ Do not reintroduce a second transcript renderer here.
 - **Exports** (`src/index.ts`): `DigiChatMark`/`DigiChatWordmark`,
   activity-view helpers, transcript markdown helpers, slash-commands helpers,
   optional `DocumentPane`/`MiniMarkdown`, and the types above.
+- **The view-level wording lives here.** `VIEW_LABELS` in `src/slash-commands.ts`
+  is the one home of the wording for the view levels, and `VIEW_CHOICES` and the
+  palette's `/view` choice options are built from it. A consumer that needs the
+  wording imports it; a second copy is a drift (DIG-4665).
 - **Class names are API.** Consumers style/target `.dc-*` and `.dt-*`/`.dtc-*`
   directly. digichat layers `.dc-term-*` chrome around the stock Thread.
 - Styles read canon tokens (`--ink`, `--accent`, `--hair`, …) under the

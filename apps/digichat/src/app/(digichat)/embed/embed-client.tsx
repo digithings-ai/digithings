@@ -13,7 +13,15 @@
  * Uses stock assistant-ui Thread (ProductStockShell) against POST /api/chat.
  */
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useSearchParams } from "next/navigation";
 import { isWebSearchEnabled } from "@/lib/web-search-pref";
 import { Key, ExternalLink } from "lucide-react";
@@ -26,15 +34,27 @@ import {
   EmbedChatPrefsProvider,
   SkinCredit,
   catalogToolsFromClient,
+  chromePrefsFromDeploy,
   disabledCatalogIds,
   extraOffFromCatalog,
+  persistDensity,
+  useStoredDensityAfterMount,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
+  isStockComposerMenuKind,
 } from "@digithings/ui/chat/stock";
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
+import {
+  contextMeterEnabled,
+  contextMeterModel,
+  modelSentOnTurn,
+  sessionModelSeed,
+  showModelPicker,
+} from "@/lib/session-model-seed";
+import { toolControlFor } from "@/lib/tool-control";
 import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
   useBYOKKey,
@@ -102,9 +122,18 @@ import {
 } from "@/lib/embed-parent-error-messages";
 import {
   applyEmbedDocumentTheme,
+  applyEmbedPalette,
+  embedThemePrefs,
+  embedUserThemeKey,
   parseEmbedThemeParam,
+  parseEmbedUserTheme,
   parseThemeMessage,
+  readEmbedUserThemeRaw,
+  resolveEmbedTheme,
+  subscribeEmbedUserTheme,
+  writeEmbedUserTheme,
   type EmbedTheme,
+  type EmbedUserTheme,
 } from "@/lib/embed-theme-messages";
 import {
   pageContextCreateAttachment,
@@ -295,9 +324,28 @@ function EmbedPageInner({
 
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
-  // Parent postMessage > ?theme= URL pin > tenant registry (default dark).
-  const effectiveTheme: EmbedTheme =
-    parentTheme ?? urlTheme ?? (tenantCfg.theme === "light" ? "light" : "dark");
+  // The visitor's own /theme pick: this tab only, per embed host (2.6.6).
+  const userThemeKey = embedUserThemeKey(tenantCfg.slug);
+  const userThemeRaw = useSyncExternalStore(
+    subscribeEmbedUserTheme,
+    () => readEmbedUserThemeRaw(userThemeKey),
+    () => null,
+  );
+  const userTheme = useMemo(() => parseEmbedUserTheme(userThemeRaw), [userThemeRaw]);
+  const setUserTheme = useCallback(
+    (next: EmbedUserTheme | null) => {
+      writeEmbedUserTheme(userThemeKey, next);
+    },
+    [userThemeKey],
+  );
+  // /theme pick > parent postMessage > ?theme= URL pin > tenant registry (default dark).
+  const effectiveTheme: EmbedTheme = resolveEmbedTheme({
+    pick: userTheme,
+    parent: parentTheme,
+    url: urlTheme,
+    tenant: tenantCfg.theme,
+  });
+  const effectivePalette = userTheme?.palette ?? "default";
 
   // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
   // postMessage; we exchange it at /api/plan-proof (server verifies claims) and
@@ -390,24 +438,28 @@ function EmbedPageInner({
   // ThemeClassSync mirrors [data-theme] onto .dark/.light; the wrapper below
   // keeps its class for Tailwind `dark:` inside the subtree.
   //
-  // The app-wide ThemeProvider installs a prefers-color-scheme listener that
-  // rewrites <html data-theme> whenever there is no `dt-theme` key — always
-  // true for an anonymous embed visitor. Re-assert the effective theme via a
-  // MutationObserver so OS flips (and ThemeProvider) cannot silently override
-  // a parent- or tenant-forced theme (#1434).
+  // ThemeProvider bails on a pinned document, so it does not repaint the
+  // embed today. The MutationObserver stays as a guard: anything else that
+  // rewrites <html data-theme> (an OS-flip listener, a stray script) cannot
+  // silently override the effective theme (#1434).
   useEffect(() => {
     const el = document.documentElement;
     const desired = effectiveTheme;
+    const palette = effectivePalette === "default" ? null : effectivePalette;
     const apply = () => {
-      if (el.getAttribute("data-theme") !== desired) {
+      const modeChanged = el.getAttribute("data-theme") !== desired;
+      if (modeChanged) {
         applyEmbedDocumentTheme(desired);
+      }
+      if (modeChanged || el.getAttribute("data-palette") !== palette) {
+        applyEmbedPalette(effectivePalette, desired);
       }
     };
     apply();
     const observer = new MutationObserver(apply);
-    observer.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
+    observer.observe(el, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
     return () => observer.disconnect();
-  }, [effectiveTheme]);
+  }, [effectiveTheme, effectivePalette]);
 
   // The embedding site can theme the widget to its own brand by passing
   // `?accent=#rrggbb` (+ optional `?accentForeground=`), the same override
@@ -455,6 +507,8 @@ function EmbedPageInner({
           uiParams={urlColors}
           planProof={planProof}
           bootLab={initialBoot}
+          theme={{ mode: effectiveTheme, palette: effectivePalette }}
+          onThemePick={setUserTheme}
         />
       </div>
     </>
@@ -469,6 +523,8 @@ function EmbedChat({
   uiParams,
   planProof,
   bootLab,
+  theme,
+  onThemePick,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
@@ -477,6 +533,9 @@ function EmbedChat({
   uiParams: EmbedUiParams;
   planProof?: string | null;
   bootLab?: string | null;
+  /** What the embed paints now, and where a /theme pick goes (EmbedPageInner owns it). */
+  theme: EmbedUserTheme;
+  onThemePick: (next: EmbedUserTheme | null) => void;
 }) {
   const {
     key: byokKey,
@@ -503,18 +562,56 @@ function EmbedChat({
     ...DEFAULT_EMBED_CHAT_PREFS,
     // Start on the tenant's curated default so the first turn uses the model
     // the picker shows as selected (v4.1-flash on OCC) instead of falling
-    // through to the digigraph operator default. Only tenants that publish a
-    // list can be picked, so only they get a preselected value.
-    model:
-      stockClient.models.available.length > 0
-        ? stockClient.models.default?.trim() || stockClient.models.available[0] || ""
-        : "",
+    // through to the digigraph operator default. An empty list leaves the
+    // session model unset, even when a default is set, so the turn sends
+    // no X-Digi-Model until the user picks one. The live house publishes
+    // no models, so this release shows no house bar.
+    model: sessionModelSeed({
+      available: stockClient.models.available,
+      defaultModel: stockClient.models.default,
+    }),
     language: tenantLanguage,
     view: stockClient.features.view,
     thinking: stockClient.features.thinking,
+    // No storage on the first render (hydration); see useStoredDensityAfterMount.
+    ...chromePrefsFromDeploy(
+      {
+        density: stockClient.features.density,
+        effort: stockClient.features.effort,
+        searchEngine: stockClient.gate.searchEngine,
+        toolbar: stockClient.chrome.toolbar,
+        scrollbars: stockClient.chrome.scrollbars,
+      },
+      null,
+    ),
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
+  useStoredDensityAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const draftSink = useRef<(text: string) => void>(() => {});
+  const [composerDraftBound, setComposerDraftBound] = useState(false);
+  const syncPalette = useCallback(
+    (next: {
+      kind: "closed" | "commands" | "pane";
+      menu: "close" | "keep" | string;
+      filter: string;
+    }) => {
+      setPaletteQuery(next.filter);
+      if (next.menu === "close") setComposerMenu(null);
+      else if (next.menu !== "keep" && isStockComposerMenuKind(next.menu)) {
+        setComposerMenu(next.menu);
+      }
+    },
+    [],
+  );
+  const bindComposerDraft = useCallback((setText: (text: string) => void) => {
+    draftSink.current = setText;
+    setComposerDraftBound(true);
+  }, []);
+  const setComposerDraft = useCallback((text: string) => {
+    draftSink.current(text);
+  }, []);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
@@ -526,14 +623,10 @@ function EmbedChat({
   // eslint-disable-next-line react-hooks/refs -- see comment above
   chatPrefsRef.current = chatPrefs;
   const getResponseLanguage = useCallback(() => chatPrefsRef.current.language, []);
-  const getSelectedModel = useCallback(() => {
-    if (byokIsSet) {
-      const bound = byokModel.trim();
-      if (bound) return bound;
-    }
-    const id = chatPrefsRef.current.model.trim();
-    return id || undefined;
-  }, [byokIsSet, byokModel]);
+  const getSelectedModel = useCallback(
+    () => modelSentOnTurn(chatPrefsRef.current.model, { isSet: byokIsSet, model: byokModel }),
+    [byokIsSet, byokModel],
+  );
   const planProofRef = useRef(planProof);
   // eslint-disable-next-line react-hooks/refs -- send-time HMAC proof (#1339)
   planProofRef.current = planProof ?? null;
@@ -1128,9 +1221,11 @@ function EmbedChat({
 
   const catalog = stockClient.tools.catalog;
   const catalogTools = useMemo(() => catalogToolsFromClient(stockClient), [stockClient]);
-  const showModels =
-    (stockClient.models.allowPicker === true || stockClient.features.modelPicker === true) &&
-    stockClient.models.available.length > 0;
+  const showModels = showModelPicker({
+    allowPicker: stockClient.models.allowPicker,
+    featureModelPicker: stockClient.features.modelPicker,
+    available: stockClient.models.available,
+  });
   const prefsApi = useMemo<EmbedChatPrefsApi>(
     () => ({
       prefs: chatPrefs,
@@ -1161,12 +1256,23 @@ function EmbedChat({
       setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
       setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
       setScrollbars: (mode) => setChatPrefs((p) => ({ ...p, scrollbars: mode })),
+      setDensity: (density) => {
+        persistDensity(density);
+        setChatPrefs((p) => ({ ...p, density }));
+      },
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
+          ...chromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+          }),
           extra: extraOffFromCatalog(catalogTools),
         }),
       tenantAllowsWeb,
@@ -1179,6 +1285,13 @@ function EmbedChat({
         stockClient.backendType,
       ),
       showModels,
+      showContextMeter: contextMeterEnabled(tenantCfg.showContextMeter, tenantCfg.slug),
+      // The model the turn sends, including a bring-your-own-key binding.
+      // Not the session model alone, and not written back into the session.
+      meterModel: contextMeterModel({
+        sessionModel:
+          modelSentOnTurn(chatPrefs.model, { isSet: byokIsSet, model: byokModel }) ?? "",
+      }),
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
@@ -1219,6 +1332,18 @@ function EmbedChat({
       openView: () => {
         setComposerMenu("view");
       },
+      openDensity: () => {
+        setComposerMenu("density");
+      },
+      // /theme is open on every embed (2.6.6). The tenant's theme is the
+      // start; a pick lasts for this tab and is not written to localStorage.
+      ...embedThemePrefs({
+        theme,
+        onThemePick,
+        openTheme: () => {
+          setComposerMenu("theme");
+        },
+      }),
       openThinking: () => {
         setComposerMenu("thinking");
       },
@@ -1233,6 +1358,13 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
+          ...chromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+          }),
           extra: extraOffFromCatalog(catalogTools),
         });
         chat.reset?.();
@@ -1243,6 +1375,13 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
+          ...chromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+          }),
           extra: extraOffFromCatalog(catalogTools),
         });
         chat.reset?.();
@@ -1251,14 +1390,27 @@ function EmbedChat({
       redo: () => {
         chat.regenerate?.();
       },
+      toolControl: toolControlFor({
+        backendType: stockClient.backendType,
+        lockSessionControls: stockClient.gate.lockSessionControls === true,
+        allowUserToggle: stockClient.tools.allowUserToggle,
+      }),
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      syncPalette,
     }),
     [
       chatPrefs,
       tenantAllowsWeb,
       showByok,
       byokIsSet,
+      byokModel,
       byokProvider,
       showModels,
+      tenantCfg.showContextMeter,
+      tenantCfg.slug,
       catalog,
       catalogTools,
       gate.host,
@@ -1269,6 +1421,22 @@ function EmbedChat({
       stockClient.mcp.servers,
       stockClient.features.view,
       stockClient.features.thinking,
+      theme.mode,
+      theme.palette,
+      onThemePick,
+      stockClient.features.density,
+      stockClient.backendType,
+      stockClient.gate.lockSessionControls,
+      stockClient.tools.allowUserToggle,
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      syncPalette,
+      stockClient.features.effort,
+      stockClient.gate.searchEngine,
+      stockClient.chrome.toolbar,
+      stockClient.chrome.scrollbars,
     ],
   );
 
@@ -1410,6 +1578,7 @@ function EmbedChat({
           kind={composerMenu}
           models={stockClient.models.available}
           defaultModel={stockClient.models.default}
+          picker={stockClient.models.picker}
           onClose={() => {
             setComposerMenu(null);
             setProviderSeed(undefined);

@@ -228,6 +228,42 @@ hosts:
     expect(cfg.hosts?.["digiquant.io"]?.token).toBe("yaml-tok");
   });
 
+  it("merges registry model policy onto a YAML host that already exists", () => {
+    const tenants = JSON.stringify({
+      "digithings.ai": {
+        slug: "digithings",
+        token: "reg-tok",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+        models: {
+          catalog: true,
+          costPerWindow: { usd: 0.0125565, windowSeconds: 86400 },
+        },
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+hosts:
+  digithings.ai:
+    slug: digithings
+    token: yaml-tok
+    backend:
+      type: digigraph
+    chrome:
+      theme: light
+`,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    const host = cfg.hosts?.["digithings.ai"];
+    expect(host?.token).toBe("yaml-tok");
+    expect(host?.chrome.theme).toBe("light");
+    expect(host?.models.catalog).toBe(true);
+    expect((host?.models.available ?? []).length).toBeGreaterThan(0);
+    expect(host?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
+    expect(host?.models.picker?.presets[0]?.id).toBe("auto");
+  });
+
   it("overlays DIGICHAT_EMBED_TOKEN onto deployment", () => {
     const cfg = loadDigichatConfig({
       fileContents: `
@@ -375,8 +411,8 @@ deployment:
     expect(cfg.deployment?.chrome.theme).toBe("dark");
     expect(cfg.deployment?.features.attachments).toBe(true);
     expect(cfg.deployment?.tools?.catalog ?? []).toEqual([]);
-    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash");
-    expect(cfg.deployment?.models.available).toHaveLength(14);
+    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
+    expect(cfg.deployment?.models.available).toHaveLength(13);
     expect(cfg.deployment?.models.allowPicker).toBe(true);
     expect(cfg.deployment?.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
     // Least-privilege fallback: an unconfigured container must not expose BYOK,
@@ -503,6 +539,25 @@ describe("force-tool allowlist", () => {
     expect(filterForceToolHeader(dep, "digisearch")).toBe("digisearch");
     expect(filterForceToolHeader(dep, "digivault")).toBe("digivault");
     expect(filterForceToolHeader(dep, "not-a-tool")).toBeUndefined();
+  });
+
+  it("keeps a resolved tenant's picker so preset picks still resolve", () => {
+    const picker = {
+      showFullList: true,
+      groups: [],
+      presets: [{ id: "reasoning", label: "Reasoning", description: "", model: "m/reason" }],
+    };
+    const dep = embedTenantToDeployment({
+      slug: "x",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      attribution: false,
+      activityDetail: "labels",
+      models: { default: "m/reason", available: ["m/reason"], catalog: true, picker },
+    });
+    expect(dep.models?.picker).toEqual(picker);
   });
 
   it("denies digisearch/digivault when catalog empty (fail-closed, #3806)", () => {

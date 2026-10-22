@@ -96,7 +96,7 @@ export const guides: Guide[] = [
       },
       {
         kind: "p",
-        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat has no published image yet — the publish workflow builds one per `digichat-vX.Y.Z` tag, and no tag after `digichat-v2.3.2` has been cut, so digichat builds from source here.",
+        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat's published image is private: the publish workflow builds one per `digichat-vX.Y.Z` tag, and `v2.6.4` is the first since `digichat-v2.3.2` (2026-10-21), so without a `ghcr.io` credential digichat builds from source here.",
       },
       { kind: "h", text: "Profiles" },
       {
@@ -137,13 +137,13 @@ export const guides: Guide[] = [
       {
         kind: "code",
         lang: "bash",
-        code: "docker build -f apps/digichat/Dockerfile \\\n  --build-arg DIGICHAT_VERSION=2.6.4 \\\n  --build-arg DIGICHAT_REVISION=\"$(git rev-parse HEAD)\" \\\n  -t digichat:2.6.4 .",
+        code: "docker build -f apps/digichat/Dockerfile \\\n  --build-arg DIGICHAT_VERSION=2.6.7 \\\n  --build-arg DIGICHAT_REVISION=\"$(git rev-parse HEAD)\" \\\n  -t digichat:2.6.7 .",
       },
       {
         kind: "list",
         items: [
           "Git tag: `digichat-vX.Y.Z`",
-          "Published image: not yet. The publish workflow is back and builds an image from each `digichat-vX.Y.Z` tag, but no tag after `digichat-v2.3.2` has been cut, so there is nothing published to pull. Until the next release, digichat builds from source.",
+          "Published image: `ghcr.io/digithings-ai/digichat:vX.Y.Z`, from `v2.6.4` on (first published 2026-10-21; private, pull with a `ghcr.io` credential). The publish workflow builds one from each `digichat-vX.Y.Z` tag; the `v2.4.x`–`v2.6.3` tags have no image. Without registry access, build from source.",
           "Changelog: `apps/digichat/CHANGELOG.md`",
           "Pin by digest once you publish the image yourself — do not rely on `:latest`.",
         ],

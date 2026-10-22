@@ -10,11 +10,10 @@ the typed-error paths), and the client's cache/breaker locks.
 
 from __future__ import annotations
 
+import inspect
 import json
-import re
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-from typing import Any, get_args, get_type_hints
+from typing import Any, Literal, get_args, get_origin, get_type_hints
 
 import httpx
 import pytest
@@ -39,7 +38,9 @@ from digiquant.data.gloomberb import (  # noqa: E402
     available_digifetch_tools,
     build_digifetch_tool_dispatcher,
 )
+from digiquant.data.gloomberb.models import DigifetchEnvelope  # noqa: E402
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
+from digiquant.tool_names import canonical_tool_name  # noqa: E402
 from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
@@ -52,8 +53,13 @@ MANIFEST = {t["function"]["name"]: t for t in build_orchestrator_tool_manifest()
 REFUSED_DIGIFETCH = {name for name in REFUSED_TOOLS if name.startswith("digifetch_")}
 LIVE_ENTITLEMENTS = {n: v for n, v in TOOL_ENTITLEMENTS.items() if n not in REFUSED_DIGIFETCH}
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-
+#: Entitlements whose tools were retired with the session-cookie path (DIG-3907).
+#: The server keeps the same set as a function-local of ``create_mcp_server``
+#: (``digiquant/src/digiquant/mcp_server.py:692``), so it cannot be imported
+#: here; a drift in either direction fails the wrapper test below, which
+#: expects a retired-entitlement row to be unregistered and a live row to be
+#: registered.
+RETIRED_ENTITLEMENTS = {"session", "preview", "pro"}
 
 AAPL_QUOTE = {
     "symbol": "AAPL",
@@ -162,36 +168,97 @@ def test_dispatch_rows_match_the_client_methods() -> None:
         assert models == [spec.input_model], f"{name}: GloomberbClient.{spec.client_method}"
 
 
-def _mcp_envelope_contract() -> dict[str, tuple[str | None, bool]]:
-    """Parse the MCP wrappers' §7 envelope choices: ``name -> (symbol, attributed)``.
+class _StubGloomberbClient:
+    """Client stub: every method answers with an empty digifetch envelope."""
 
-    Reads ``mcp_server.py`` instead of duplicating the contract as a hand table,
-    so a wrapper that changes its deep-link/attribution choice fails this test
-    until the dispatch row matches (#4146 review F4). Whitespace is flattened so
-    a reformatted (wrapped) call still parses.
+    def __getattr__(self, name: str) -> Any:
+        def _call(request: Any = None) -> Any:
+            return DigifetchEnvelope(data={"echo": "stub"})
+
+        return _call
+
+
+def _sentinel(param_name: str) -> str:
+    """A recognisable stand-in value for one wrapper parameter."""
+    return "SNT" + param_name.replace("_", "").upper()
+
+
+def _argument_value(param_name: str, annotation: Any) -> Any:
+    """A harmless value for one wrapper parameter, picked from its annotation."""
+    origin = get_origin(annotation)
+    if origin is Literal:
+        return get_args(annotation)[0]
+    if origin in (list, tuple, set):
+        args = get_args(annotation)
+        return [_argument_value(param_name, args[0] if args else str)]
+    if origin is dict:
+        return {}
+    if annotation is int:
+        return 1
+    if annotation is float:
+        return 1.0
+    if annotation is bool:
+        return True
+    if annotation is str and "json" in param_name.lower():
+        # ``digifetch_custom_chart``/``digifetch_options_scenario`` parse this.
+        return "[]"
+    return _sentinel(param_name)
+
+
+def _wrapper_arguments(wrapper: Any) -> dict[str, Any]:
+    """Every parameter of one MCP wrapper, each carrying a harmless value."""
+    try:
+        hints = get_type_hints(wrapper)
+    except Exception:  # pragma: no cover - unresolvable forward reference
+        hints = {}
+    return {
+        name: _argument_value(name, hints.get(name, str))
+        for name in inspect.signature(wrapper).parameters
+    }
+
+
+def test_dispatch_link_and_attribution_match_the_mcp_wrappers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live MCP wrappers honour their dispatch row's §7 envelope choices.
+
+    Behavioural, not a source scrape: every live ``digifetch_*`` tool the MCP
+    server registers is called against a stub client, and the envelope it
+    returns must carry the attribution block exactly when the row says
+    ``attributed`` and a deep link exactly when the row names a symbol field
+    (#4146 review F4). A wrapper that changes its choice fails here.
+
+    The lane that runs this file installs ``--extra mcp``, so a missing mcp is
+    a broken lane, not a reason to skip the §7 contract.
     """
-    source = (_REPO_ROOT / "digiquant/src/digiquant/mcp_server.py").read_text()
-    contract: dict[str, tuple[str | None, bool]] = {}
-    for chunk in source.split('@_maybe_tool("')[1:]:
-        name, _, body = chunk.partition('"')
-        if not name.startswith("digifetch_"):
+    try:
+        import mcp.server.fastmcp  # noqa: F401
+    except ImportError:
+        pytest.fail(
+            "mcp is not installed: the digiquant lane must sync `--extra mcp` "
+            "(see .github/workflows/test-digiquant.yml), otherwise the §7 "
+            "envelope contract is not gated in CI"
+        )
+    from digiquant import mcp_server
+
+    monkeypatch.setattr(mcp_server, "_build_gloomberb_client", lambda: _StubGloomberbClient())
+    manager = mcp_server.create_mcp_server(scope="full")._tool_manager
+    for name, spec in sorted(DIGIFETCH_DISPATCH.items()):
+        tool = manager.get_tool(canonical_tool_name(name))
+        if TOOL_ENTITLEMENTS.get(name) in RETIRED_ENTITLEMENTS or name in REFUSED_DIGIFETCH:
+            assert tool is None, name
             continue
-        flat = " ".join(body.split())
-        call = re.search(r"_gloomberb_envelope_json\(([^)]*)\)", flat)
-        assert call is not None, name
-        args = call.group(1)
-        symbol = re.search(r"symbol=(\w+)", args)
-        contract[name] = (symbol.group(1) if symbol else None, "attributed=False" not in args)
-    return contract
-
-
-def test_dispatch_link_and_attribution_match_the_mcp_wrappers() -> None:
-    contract = _mcp_envelope_contract()
-    assert set(contract) == set(DIGIFETCH_DISPATCH)
-    for name, spec in DIGIFETCH_DISPATCH.items():
-        assert spec.symbol_field == contract[name][0], name
-        assert spec.attributed is contract[name][1], name
+        assert tool is not None, name
+        payload = json.loads(tool.fn(**_wrapper_arguments(tool.fn)))
+        assert "error" not in payload, f"{name}: {payload}"
+        assert ("attribution" in payload) is spec.attributed, name
+        assert ("delay_notice" in payload) is spec.attributed, name
+        if spec.attributed:
+            assert payload["attribution"] == GLOOMBERB_ATTRIBUTION, f"{name}: {payload}"
+            assert payload["delay_notice"] == GLOOMBERB_DELAY_NOTICE, f"{name}: {payload}"
+        assert ("source_url" in payload) is (spec.symbol_field is not None), name
         if spec.symbol_field is not None:
+            assert _sentinel(spec.symbol_field) in payload["source_url"], f"{name}: {payload}"
             assert spec.symbol_field in spec.input_model.model_fields, name
 
 

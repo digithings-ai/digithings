@@ -1,6 +1,30 @@
 import { readFileSync } from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
-import { forwardHeaders, resolveDigichatVersion } from "../../scripts/trusted-proxy-server.mjs";
+import {
+  forwardHeaders,
+  nextChildEnv,
+  nextUpstreamHost,
+  proxyToUpstream,
+  resolveDigichatVersion,
+} from "../../scripts/trusted-proxy-server.mjs";
+
+function listen(server: http.Server): Promise<number> {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address() as AddressInfo;
+      resolve(address.port);
+    });
+  });
+}
+
+function closeServer(server: http.Server): Promise<void> {
+  return new Promise((resolve) => {
+    server.close(() => resolve());
+  });
+}
 
 const packageVersion = JSON.parse(
   readFileSync(new URL("../../package.json", import.meta.url), "utf8")
@@ -20,6 +44,21 @@ describe("trusted-proxy server", () => {
     expect(headers["cf-connecting-ip"]).toBe("198.51.100.1");
   });
 
+  it("strips a caller-supplied peer and stamp, then writes the socket and our stamp", () => {
+    const headers = forwardHeaders(
+      {
+        "x-digichat-peer-ip": "198.51.100.1",
+        "x-digichat-peer-stamp": "caller-chose-this",
+        "cf-connecting-ip": "203.0.113.5",
+      },
+      "10.0.0.7",
+      "server-stamp",
+    );
+    expect(headers["x-digichat-peer-ip"]).toBe("10.0.0.7");
+    expect(headers["x-digichat-peer-stamp"]).toBe("server-stamp");
+    expect(headers["cf-connecting-ip"]).toBe("203.0.113.5");
+  });
+
   it("does not forward hop-by-hop headers to the loopback server", () => {
     const headers = forwardHeaders(
       {
@@ -37,6 +76,197 @@ describe("trusted-proxy server", () => {
     expect(headers).not.toHaveProperty("transfer-encoding");
     expect(headers).not.toHaveProperty("upgrade");
     expect(headers["x-forwarded-for"]).toBe("198.51.100.1");
+  });
+
+  it("returns a finished upstream body", async () => {
+    const upstream = http.createServer((_req, res) => {
+      res.end("ok");
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = http.createServer((req, res) => {
+      proxyToUpstream(req, res, {
+        headers: forwardHeaders(req.headers, "127.0.0.1", "stamp"),
+        host: "127.0.0.1",
+        path: req.url ?? "/",
+        port: upstreamPort,
+      });
+    });
+    const proxyPort = await listen(proxy);
+    try {
+      const body = await new Promise<string>((resolve, reject) => {
+        http
+          .get({ host: "127.0.0.1", port: proxyPort, path: "/" }, (res) => {
+            const chunks: Buffer[] = [];
+            res.on("data", (chunk: Buffer) => chunks.push(chunk));
+            res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+          })
+          .on("error", reject);
+      });
+      expect(body).toBe("ok");
+    } finally {
+      await closeServer(proxy);
+      await closeServer(upstream);
+    }
+  });
+
+  it("destroys the upstream request when the client aborts", async () => {
+    let upstreamClosedEarly = false;
+    let markOpen: () => void = () => {};
+    let markClosed: () => void = () => {};
+    const opened = new Promise<void>((resolve) => {
+      markOpen = resolve;
+    });
+    const closed = new Promise<void>((resolve) => {
+      markClosed = resolve;
+    });
+    const upstream = http.createServer((req, upRes) => {
+      markOpen();
+      req.on("close", () => {
+        if (!upRes.writableFinished) {
+          upstreamClosedEarly = true;
+          markClosed();
+        }
+      });
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = http.createServer((req, res) => {
+      proxyToUpstream(req, res, {
+        headers: forwardHeaders(req.headers, "127.0.0.1", "stamp"),
+        host: "127.0.0.1",
+        path: req.url ?? "/",
+        port: upstreamPort,
+      });
+    });
+    const proxyPort = await listen(proxy);
+    try {
+      const client = http.request({
+        host: "127.0.0.1",
+        method: "POST",
+        path: "/api/chat",
+        port: proxyPort,
+      });
+      client.on("error", () => {});
+      client.end("{}");
+      await opened;
+      client.destroy();
+      await Promise.race([
+        closed,
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("upstream request stayed open after client abort")), 1000);
+        }),
+      ]);
+      expect(upstreamClosedEarly).toBe(true);
+    } finally {
+      await closeServer(proxy);
+      await closeServer(upstream);
+    }
+  });
+
+  it("destroys the upstream request when the client stops mid-answer", async () => {
+    let upstreamClosedEarly = false;
+    let markClosed: () => void = () => {};
+    const closed = new Promise<void>((resolve) => {
+      markClosed = resolve;
+    });
+    const upstream = http.createServer((req, upRes) => {
+      req.on("close", () => {
+        if (!upRes.writableFinished) {
+          upstreamClosedEarly = true;
+          markClosed();
+        }
+      });
+      upRes.writeHead(200, { "content-type": "text/event-stream" });
+      upRes.write("data: hello\n\n");
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = http.createServer((req, res) => {
+      proxyToUpstream(req, res, {
+        headers: forwardHeaders(req.headers, "127.0.0.1", "stamp"),
+        host: "127.0.0.1",
+        path: req.url ?? "/",
+        port: upstreamPort,
+      });
+    });
+    const proxyPort = await listen(proxy);
+    try {
+      const firstEvent = new Promise<string>((resolve, reject) => {
+        const client = http.request(
+          {
+            host: "127.0.0.1",
+            method: "POST",
+            path: "/api/chat",
+            port: proxyPort,
+          },
+          (res) => {
+            res.once("data", (chunk: Buffer) => {
+              resolve(chunk.toString("utf8"));
+              client.destroy();
+            });
+            res.on("error", () => {});
+          },
+        );
+        client.on("error", () => {});
+        client.on("timeout", () => reject(new Error("client timed out before the first event")));
+        client.setTimeout(1000);
+        client.end("{}");
+      });
+      await expect(firstEvent).resolves.toContain("hello");
+      await Promise.race([
+        closed,
+        new Promise((_, reject) => {
+          setTimeout(
+            () => reject(new Error("upstream request stayed open after a mid-answer stop")),
+            1000,
+          );
+        }),
+      ]);
+      expect(upstreamClosedEarly).toBe(true);
+    } finally {
+      await closeServer(proxy);
+      await closeServer(upstream);
+    }
+  });
+});
+
+describe("Next child address", () => {
+  it("starts Next on localhost and the internal port", () => {
+    const env = nextChildEnv({ HOSTNAME: "0.0.0.0", PORT: "3000", KEEP: "1" }, 3001);
+    expect(env.HOSTNAME).toBe("localhost");
+    expect(env.PORT).toBe("3001");
+    expect(env.KEEP).toBe("1");
+  });
+
+  it("names a host NextRequest keeps verbatim, so proxy.ts rewrites stay internal", () => {
+    // NextRequest rewrites 127.x and [::1] to localhost; the router does not.
+    expect(nextUpstreamHost).toBe("localhost");
+    expect(new URL(`http://${nextUpstreamHost}:3001/`).hostname).toBe("localhost");
+  });
+
+  it("reaches a loopback upstream through the localhost name", async () => {
+    const upstream = http.createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end("<!DOCTYPE html><p>ok</p>");
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, nextUpstreamHost, () => resolve()));
+    const port = (upstream.address() as AddressInfo).port;
+    const front = http.createServer((req, res) => {
+      proxyToUpstream(req, res, {
+        headers: forwardHeaders(req.headers, "198.51.100.7", "stamp"),
+        host: nextUpstreamHost,
+        path: req.url,
+        port,
+      });
+    });
+    const frontPort = await listen(front);
+    try {
+      const res = await fetch(`http://127.0.0.1:${frontPort}/embed?host=occ.example.com`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/html");
+      expect(await res.text()).toContain("<!DOCTYPE html>");
+    } finally {
+      await closeServer(front);
+      await closeServer(upstream);
+    }
   });
 });
 
