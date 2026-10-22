@@ -341,6 +341,29 @@ describe("a cause that cannot be described", () => {
     expect(causeDetail(failure)).toContain("Network connection lost.");
   });
 
+  it("keeps the query string of a URL out of the description", () => {
+    // The value of a rejected hop can be the request line of the request that
+    // failed, and the embed token of that request rides in the query string
+    // (run-watch DIG-4928, 2026-10-21: 16 error rows on digithings-digichat
+    // whose message was the raw value). The description goes into the Worker
+    // log, so the token must not be in it.
+    const described = describeValue(
+      "GET https://digithings.ai/embed?host=occ.digithings.ai&token=s3cret",
+    );
+    expect(described).not.toContain("s3cret");
+    expect(described).not.toContain("token=");
+    // The path stays, so the operator still reads which request failed.
+    expect(described).toContain("https://digithings.ai/embed");
+  });
+
+  it("keeps the query string of a URL out of the cause detail", () => {
+    const detail = causeDetail(
+      new Error("failed to GET https://digithings.ai/embed?token=s3cret"),
+    );
+    expect(detail).not.toContain("s3cret");
+    expect(detail).toContain("https://digithings.ai/embed");
+  });
+
   it("answers the retryable 503 for a cause with a hostile toString", async () => {
     const logged: string[] = [];
     const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {

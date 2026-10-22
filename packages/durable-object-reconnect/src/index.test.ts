@@ -8,6 +8,7 @@ import {
   isDurableObjectGone,
   isNonErrorRejection,
   RECONNECT_RETRY_AFTER_SECONDS,
+  stripUrlQuery,
 } from "./index";
 
 /** The platform's own wording, quoted from the run-watch findings. */
@@ -124,6 +125,59 @@ describe("errorMessage", () => {
         },
       }),
     ).toBe("[object Object]");
+  });
+
+  it("keeps the query string of a URL out of the description", () => {
+    // The value of a rejected hop can be the request line of the request that
+    // failed, and the embed token of that request rides in the query string
+    // (run-watch DIG-4928, 2026-10-21: 16 error rows on digithings-digichat
+    // whose message was the raw value). The description goes into the log, so
+    // the token must not be in it.
+    const described = errorMessage(
+      "GET https://digithings.ai/embed?host=occ.digithings.ai&token=s3cret",
+    );
+    expect(described).not.toContain("s3cret");
+    expect(described).not.toContain("token=");
+    // The path stays, so the operator still reads which request failed.
+    expect(described).toContain("https://digithings.ai/embed");
+  });
+
+  it("keeps the query string of a URL out of the message of an Error", () => {
+    const described = errorMessage(
+      new Error("failed to GET https://digithings.ai/embed?token=s3cret"),
+    );
+    expect(described).not.toContain("s3cret");
+    expect(described).toContain("https://digithings.ai/embed");
+  });
+});
+
+describe("stripUrlQuery", () => {
+  it("keeps the scheme, the host and the path", () => {
+    expect(stripUrlQuery("GET https://digithings.ai/embed?host=x&token=s3cret")).toBe(
+      "GET https://digithings.ai/embed?[redacted]",
+    );
+  });
+
+  it("leaves a URL without a query string alone", () => {
+    expect(stripUrlQuery("see https://digithings.ai/embed for the page")).toBe(
+      "see https://digithings.ai/embed for the page",
+    );
+  });
+
+  it("drops the fragment as well", () => {
+    expect(stripUrlQuery("https://digithings.ai/embed#token=s3cret")).toBe(
+      "https://digithings.ai/embed#[redacted]",
+    );
+  });
+
+  it("strips every URL in the text", () => {
+    const stripped = stripUrlQuery(
+      "first https://a.example/p?token=alpha then https://b.example/q?token=beta",
+    );
+    expect(stripped).not.toContain("alpha");
+    expect(stripped).not.toContain("beta");
+    expect(stripped).toContain("https://a.example/p");
+    expect(stripped).toContain("https://b.example/q");
   });
 });
 

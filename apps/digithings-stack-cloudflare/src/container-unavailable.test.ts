@@ -80,6 +80,29 @@ describe("describeValue", () => {
     revoked.revoke();
     expect(describeValue(revoked.proxy)).not.toBe("");
   });
+
+  it("keeps the query string of a URL out of the description", () => {
+    // The value of a rejected hop can be the request line of the request that
+    // failed, and a token of that request rides in the query string (run-watch
+    // DIG-4928, 2026-10-21: 16 error rows on digithings-digichat whose message
+    // was the raw value). The description goes into the log and into the
+    // answer, so the token must not be in it.
+    const described = describeValue(
+      "GET https://digithings.ai/embed?host=occ.digithings.ai&token=s3cret",
+    );
+    expect(described).not.toContain("s3cret");
+    expect(described).not.toContain("token=");
+    // The path stays, so the operator still reads which request failed.
+    expect(described).toContain("https://digithings.ai/embed");
+  });
+
+  it("keeps the query string of a URL out of the message", () => {
+    const message = safeErrorMessage(
+      "failed to GET https://digithings.ai/embed?token=s3cret",
+    );
+    expect(message).not.toContain("s3cret");
+    expect(message).toContain("https://digithings.ai/embed");
+  });
 });
 
 describe("containerUnavailableResponse", () => {

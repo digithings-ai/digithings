@@ -80,16 +80,50 @@ export class DurableObjectUnavailableError extends Error {
 const UNREADABLE_VALUE = "[unreadable value]";
 
 /**
+ * A URL inside free text.
+ *
+ * The scheme, the host and the path are kept; the query string and the
+ * fragment are not, because that is where a secret rides (an embed token, a
+ * signed link). Punctuation that ends a sentence is not part of the URL, so it
+ * is not matched either.
+ */
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s"'<>()[\],]+/g;
+
+/**
+ * The text of a description, with the query string of every URL removed.
+ *
+ * A hop can reject with a value that is not an Error, and one of the shapes
+ * measured in production is the request line of the request that failed, with
+ * the embed token in its query string (run-watch DIG-4928, 2026-10-21: 16
+ * error rows on digithings-digichat whose message was the raw value). The
+ * description of a value goes into the log, so the query string is removed
+ * before the text is written: the log store is not the place for a token.
+ *
+ * Nothing else in the text changes. The operator still reads which request
+ * failed, and the text of a value that carries no URL is untouched.
+ */
+export function stripUrlQuery(text: string): string {
+  return text.replace(URL_IN_TEXT, (url) => {
+    const cut = url.search(/[?#]/);
+    if (cut === -1) return url;
+    return `${url.slice(0, cut)}${url[cut]}[redacted]`;
+  });
+}
+
+/**
  * A description of a value that is neither an Error nor a string.
  *
  * `String(value)` is what the platform itself shows when it records an
  * uncaught exception, so this is what an operator reads in the log. It can
  * throw (a hostile `toString`, a revoked proxy) and a description that throws
  * would turn a caught failure back into an uncaught one, so it falls back.
+ *
+ * The description never carries the query string of a URL: the value can be a
+ * request line, and the log is not the place for the token it carries.
  */
 function describeValue(value: unknown): string {
   try {
-    return String(value);
+    return stripUrlQuery(String(value));
   } catch {
     try {
       return Object.prototype.toString.call(value);
@@ -118,9 +152,9 @@ export function errorMessage(error: unknown): string {
   try {
     if (error instanceof Error) {
       const message = error.message;
-      return typeof message === "string" ? message : describeValue(message);
+      return typeof message === "string" ? stripUrlQuery(message) : describeValue(message);
     }
-    if (typeof error === "string") return error;
+    if (typeof error === "string") return stripUrlQuery(error);
   } catch {
     // A value that cannot be inspected, or that cannot hand over its message,
     // has no message to read: it is described below instead. A guard that

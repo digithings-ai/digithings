@@ -143,6 +143,37 @@ export const CONTAINER_UNAVAILABLE_BODY = JSON.stringify({
 });
 
 /**
+ * A URL inside free text.
+ *
+ * The scheme, the host and the path are kept; the query string and the
+ * fragment are not, because that is where a secret rides (an embed token, a
+ * signed link). Punctuation that ends a sentence is not part of the URL, so it
+ * is not matched either.
+ */
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s"'<>()[\],]+/g;
+
+/**
+ * The text of a description, with the query string of every URL removed.
+ *
+ * The value of a rejected hop can be the request line of the request that
+ * failed, and the embed token of that request rides in the query string
+ * (run-watch DIG-4928, 2026-10-21: 16 error rows on digithings-digichat whose
+ * message was the raw value). The description goes into the Worker log, so the
+ * query string is removed before the text is written: the log store is not the
+ * place for a token.
+ *
+ * Nothing else in the text changes, so the operator still reads which request
+ * failed.
+ */
+export function stripUrlQuery(text: string): string {
+  return text.replace(URL_IN_TEXT, (url) => {
+    const cut = url.search(/[?#]/);
+    if (cut === -1) return url;
+    return `${url.slice(0, cut)}${url[cut]}[redacted]`;
+  });
+}
+
+/**
  * A description of a thrown value, for the Worker log only.
  *
  * `String(value)` is what the platform shows for a value it cannot classify,
@@ -152,11 +183,12 @@ export const CONTAINER_UNAVAILABLE_BODY = JSON.stringify({
  *
  * Only the description is logged, never the value: the cause of a non-Error
  * stays inside the Worker, the same way the Worker log handles the cause of
- * a container that could not be reached.
+ * a container that could not be reached. The description never carries the
+ * query string of a URL: see `stripUrlQuery`.
  */
 export function describeValue(value: unknown): string {
   try {
-    return String(value);
+    return stripUrlQuery(String(value));
   } catch {
     try {
       return Object.prototype.toString.call(value);
@@ -177,7 +209,8 @@ export function describeValue(value: unknown): string {
 function safeErrorMessage(value: unknown): string {
   try {
     if (value instanceof Error) {
-      return value.message;
+      const message = value.message;
+      return typeof message === "string" ? stripUrlQuery(message) : describeValue(message);
     }
   } catch {
     // A value that cannot be inspected is described by describeValue below.
@@ -203,7 +236,8 @@ function innerCauseDetail(cause: unknown): string {
   }
   try {
     if (inner instanceof Error) {
-      return inner.message;
+      const message = inner.message;
+      return typeof message === "string" ? stripUrlQuery(message) : "";
     }
   } catch {
     // Not an Error we can read: no inner detail.
