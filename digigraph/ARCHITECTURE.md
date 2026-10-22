@@ -791,6 +791,15 @@ header. It has its own TTL (`_FAILURE_TTL_S`, 10 s), shorter than the catalog's
 remembering for a minute, and the short TTL is what makes a recovered server
 dialled again on the next turn. A successful listing clears the entry.
 
+**Every TTL is read through one clock.** The failure TTL and the catalog TTL in
+`list_tools_cached()`, the failure TTL in `mcp_server_failures()`, and the
+timestamp a failure is stamped with all go through `_now()`, a module-level
+seam over `time.monotonic()`. The recovery behaviour is therefore provable at a
+known offset instead of being approximated with a sleep, and the test that pins
+it drives the same function the production path reads. A test that read the
+clock anywhere else would prove nothing about the path that decides whether a
+failed server is dialled again.
+
 **A failed listing is never cached as an empty catalog.** `list_tools_cached()`
 drops the cache entry when the listing failed instead of writing `[]` into it.
 Caching the failure as an empty catalog is the defect itself: for the next 60 s
@@ -801,12 +810,33 @@ what survives a failure.
 **How the failure reaches the model.** `mcp_server_failures(servers)` returns
 the servers whose listing failed, with the reason. `graph/research.py` reads it
 in `_run_document_rag_path` — the only turn path that offers MCP tools — and
-`mcp_failure_note()` turns it into a short "Unreachable integrations" line that
-is prepended to the **user message**. The model then reports an outage instead
-of an absence of data. The read has to happen after the listing that records the
-failure; `extra_tool_names_for_servers()` is what dials the server.
+`mcp_failure_note()` turns it into a short "Unreachable integrations" line. The
+note is appended to the turn's request as its own **user message**, after
+compaction has produced `llm_messages` and before the request is sent. The model
+then reports an outage instead of an absence of data. The read has to happen
+after the listing that records the failure; `extra_tool_names_for_servers()` is
+what dials the server.
 
-**Why the user message and not the system prompt.** The system prompt is a
+**Decision: the note is request-scoped, never part of the conversation.**
+*Reason.* The note is a fact about one turn: at the moment it is built, these
+servers are unreachable. Persisted into the conversation, it stops being a fact
+and becomes an instruction that is replayed on every later turn — so a server
+that has recovered still reads as unreachable, and the model keeps reporting an
+outage that is over (DIG-5245). The note is therefore appended after
+compaction, to the copy of the message list that is sent, and never to the list
+that is persisted: `out_state["llm_messages"]` is `compaction.llm_messages`,
+which never saw the note. The next turn rebuilds the note from the current
+`mcp_server_failures()`, so the note is there exactly while the outage lasts.
+*Alternatives rejected.* Prepending the note to the user message — the shape
+this section had before DIG-5245 — puts it inside the compacted list, and the
+compacted list is what the next turn replays as `prior`. Tier-1 compaction
+drops no message and tier-2 summarisation only runs above the 80,000-token
+threshold, so the stale instruction survives ordinary turns. Tagging the note
+and stripping it from `prior` when the failures are empty would need a marker
+that survives compaction and summarisation; the request-only placement needs no
+marker at all, because the note is never in the thing that has to be stripped.
+
+**Why a user message and not the system prompt.** The system prompt is a
 tenant-wide constant: the tenant `researchSystemPrompt` in
 `DIGI_TENANT_CORPUS_MAP` is copied byte for byte into six deployment files
 (`apps/digithings-stack-cloudflare/wrangler.toml`,
@@ -815,8 +845,8 @@ tenant-wide constant: the tenant `researchSystemPrompt` in
 `infra/digichat-release/compose.profile-a-bundle.override.yml`,
 `infra/digichat-release/DIG-3556-staged-prod-tenant-config.json`). A per-request
 fact does not belong in a constant that has to be edited in six places to stay
-true; the user message is per-turn by construction. The note is prepended, so the
-model reads it before the question.
+true; a user message is per-turn by construction. The note is a user-role
+message, so it is read with the question and never with the constant.
 
 **Why the note names servers and not reasons.** The reason is the failed call's
 exception text, and it can carry an internal URL or a token. The prompt goes to
@@ -825,16 +855,28 @@ a model provider and is kept in the debug log; the reason stays in the
 where an operator goes looking for the cause.
 
 **A healthy server changes nothing.** With no failure recorded, `mcp_failures` is
-empty, no note is built, and the user message is byte-identical to the prompt
-the turn would have had before.
+empty, no note is built, and the request is byte-identical to the request the
+turn would have had before — the note is an extra message, and no extra
+message is added.
 
-**What pins it.** `tests/dg/test_mcp_client.py` pins the cache and the reader.
+**What pins it.** `tests/dg/test_mcp_client.py` pins the cache, the reader and
+the clock. `test_a_recovered_server_is_listed_again` steps the clock across the
+failure TTL and asserts the number of dials: one while the server is down, no
+further dial inside the TTL, a second dial once the TTL has expired, the tools
+back, and the failure map empty. The dial count carries the weight — a
+regression that never retries a failed server returns the same tools, and only
+the number of dials tells the two apart. The TTL itself is asserted at 10 s,
+because the number is part of the promise this section makes.
 `tests/dg/test_research_mcp_failure_note.py` pins the turn: an unreachable
-server puts "Unreachable integrations: helpdesk" into the turn's user message;
-a healthy server leaves the user message exactly as it was and still gets its
-tool. The turn test is the one that matters — without it the note could be
-dropped from `research.py` and the whole suite would stay green, which is how
-the wiring would have rotted.
+server puts "Unreachable integrations: helpdesk" into the turn's request, a
+healthy server leaves the request exactly as it was and still gets its tool, and
+`test_a_recovered_server_is_not_described_as_unreachable_on_the_next_turn` runs
+two turns through the real state plumbing — turn 1 down, turn 2 healthy after
+the TTL — asserting that no persisted message carries the note and that the
+turn-2 request does not repeat it. The turn test is the one that matters:
+without it the note could be dropped from `research.py`, or moved back into the
+persisted history, and the whole suite would stay green, which is how the
+wiring would have rotted.
 
 ### 6.3 Code Execution Gate
 

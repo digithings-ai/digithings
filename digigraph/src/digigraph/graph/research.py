@@ -570,8 +570,6 @@ def _run_document_rag_path(
         return result
 
     user_content = str(prompt)
-    if mcp_failures:
-        user_content = mcp_failure_note(mcp_failures) + "\n\n" + user_content
     if mcp_force:
         # MCP tool names are ``{server_id}_{tool}`` (mcp_client.prefixed_tool_name);
         # the trailing separator is the id boundary, not the retired ``__`` form.
@@ -653,6 +651,14 @@ def _run_document_rag_path(
         session_id=state.get("session_id"),
     )
     llm_messages = list(compaction.llm_messages)
+    if mcp_failures:
+        # The outage note is turn-scoped (DIG-5245). It is appended here, after
+        # compaction, so it reaches this turn's request and nothing else: the
+        # persisted history is ``compaction.llm_messages`` (see out_state
+        # below), which never saw the note. The next turn rebuilds the note
+        # from the current failures, so a recovered server stops being described
+        # as unreachable instead of carrying a stale instruction for ever.
+        llm_messages.append({"role": "user", "content": mcp_failure_note(mcp_failures)})
     forced = resolve_force_tool(state.get("force_tool"))
     force_query = last_user_turn(str(prompt))
     # Skip inject when the tenant allowlist excludes the tool. execute() would

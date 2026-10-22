@@ -743,10 +743,25 @@ def test_mcp_server_failures_reports_the_unreachable_server(
 
 @pytest.mark.unit
 def test_a_recovered_server_is_listed_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failed listing is retried once the failure TTL expires, and not before.
+
+    Through the public path (``list_tools_cached``), with a non-zero TTL and a
+    clock the test steps. The server is dialled once while it is down, not
+    dialled again inside the TTL, and dialled a second time once the TTL has
+    expired. The dial count is the assertion that matters: a regression that
+    never retries a failed server still returns the same tools, so only the
+    number of dials tells the two apart (DIG-5245).
+    """
     from digigraph.orchestration import mcp_client
 
-    server = {"id": "helpdesk", "url": "https://mcp.example.test/mcp"}
+    server = {
+        "id": "helpdesk",
+        "url": "https://mcp.example.test/mcp",
+        "allowedTools": ["search"],
+    }
     calls: list[int] = []
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(mcp_client, "_now", lambda: clock["t"])
 
     async def flaky(_server: dict[str, str]) -> list[dict[str, object]]:
         calls.append(1)
@@ -760,16 +775,33 @@ def test_a_recovered_server_is_listed_again(monkeypatch: pytest.MonkeyPatch) -> 
                     "description": "",
                     "parameters": {},
                 },
+                mcp_client._RAW_TOOL_NAME_KEY: "search",
             }
         ]
 
     monkeypatch.setattr(mcp_client, "_list_tools_async", flaky)
     monkeypatch.setattr(mcp_client, "_cache", {})
     monkeypatch.setattr(mcp_client, "_failures", {})
-    monkeypatch.setattr(mcp_client, "_FAILURE_TTL_S", 0.0)
 
+    # The TTL the ADR documents, pinned on purpose: a change to the number is a
+    # change to the promise, and the offsets below are relative to it.
+    ttl = mcp_client._FAILURE_TTL_S
+    assert ttl == 10.0
+
+    # The server is down: one dial, no tools, the outage is visible.
     assert mcp_client.list_tools_cached(server) == []
-    assert mcp_client.mcp_server_failures([server]) == {}
+    assert len(calls) == 1
+    assert "helpdesk" in mcp_client.mcp_server_failures([server])
 
-    assert mcp_client._list_tools_blocking(server)
+    # Inside the TTL: not dialled again, and the outage still stands.
+    clock["t"] += ttl - 1.0
+    assert mcp_client.list_tools_cached(server) == []
+    assert len(calls) == 1
+    assert "helpdesk" in mcp_client.mcp_server_failures([server])
+
+    # Past the TTL: dialled again, and the tools are back.
+    clock["t"] += 2.0
+    tools = mcp_client.list_tools_cached(server)
+    assert len(calls) == 2
+    assert [str(t["function"]["name"]) for t in tools] == ["helpdesk_search"]
     assert mcp_client.mcp_server_failures([server]) == {}

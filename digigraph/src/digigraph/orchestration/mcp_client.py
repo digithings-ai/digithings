@@ -81,6 +81,20 @@ _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 # again without waiting for the catalog TTL.
 _failures: dict[str, tuple[float, str]] = {}
 _FAILURE_TTL_S = 10.0
+
+
+def _now() -> float:
+    """The clock both TTLs read.
+
+    A seam, not a convenience. The recovery test steps time through this
+    function, so "the failure TTL expires and the server is dialled again"
+    is asserted at a known offset instead of being approximated with a sleep
+    (DIG-5245). Every TTL read goes through here: a test that reads the
+    clock somewhere else proves nothing about the path that decides it.
+    """
+    return time.monotonic()
+
+
 # The names the MCP servers actually advertise, captured at list time beside
 # _cache under the same key. The offered name ``<server_id>_<safe>`` is lossy:
 # every character outside [a-zA-Z0-9_-] collapses to "_" and the remainder is
@@ -872,7 +886,7 @@ def list_tools_cached(server: dict[str, str]) -> list[dict[str, Any]]:
     allowlist is a property of the row, so it is read per call.
     """
     key = mcp_list_cache_key(server)
-    now = time.monotonic()
+    now = _now()
     failed = _failures.get(key)
     if failed and now - failed[0] < _FAILURE_TTL_S:
         # The server was unreachable a moment ago. Do not dial it again for
@@ -920,7 +934,7 @@ def mcp_server_failures(servers: list[dict[str, str]]) -> dict[str, str]:
     the caller has to be able to say it out loud (DIG-5187).
     """
     out: dict[str, str] = {}
-    now = time.monotonic()
+    now = _now()
     for s in servers:
         entry = _failures.get(mcp_list_cache_key(s))
         if entry and now - entry[0] < _FAILURE_TTL_S:
@@ -1017,7 +1031,7 @@ def _list_tools_blocking(server: dict[str, str]) -> list[dict[str, Any]]:
         tools = _run_async(_list_tools_async(server))
     except Exception as exc:
         log.warning("remote MCP list_tools failed for %s: %s", server.get("id"), exc)
-        _failures[key] = (time.monotonic(), f"{type(exc).__name__}: {exc}")
+        _failures[key] = (_now(), f"{type(exc).__name__}: {exc}")
         return []
     _failures.pop(key, None)
     return tools
