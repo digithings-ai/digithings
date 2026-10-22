@@ -20,7 +20,7 @@ import {
 import { MCP_KEY_HEADER, evaluateMcpGate } from "./mcp-gate";
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { resolveEmbedTenants } from "./tenants-kv";
-import { isOccShellPath, occGate } from "./occ-gate";
+import { isOccShellPath, occEmbedGate, occGate } from "./occ-gate";
 import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
 import { fetchContainerWithRetry } from "./container-retry";
@@ -164,6 +164,10 @@ export default {
     if (isOccShellPath(url.pathname)) {
       return occGate(request, workerEnv.OCC_INVITE_KEY);
     }
+    // The /embed?host=<invite-only tenant> form without its key: the site 404,
+    // byte-for-byte, before the container is ever asked.
+    const embedGate = await occEmbedGate(request, workerEnv.OCC_INVITE_KEY);
+    if (embedGate) return embedGate;
     // Worker-owned reset lever: intercepted here, before any container proxy,
     // and fail-closed with a 404 that never discloses the route. The instance
     // it destroys is the same derived id the proxy below addresses, computed
