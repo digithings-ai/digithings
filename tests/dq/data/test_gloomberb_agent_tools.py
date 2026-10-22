@@ -54,8 +54,12 @@ REFUSED_DIGIFETCH = {name for name in REFUSED_TOOLS if name.startswith("digifetc
 LIVE_ENTITLEMENTS = {n: v for n, v in TOOL_ENTITLEMENTS.items() if n not in REFUSED_DIGIFETCH}
 
 #: Entitlements whose tools were retired with the session-cookie path (DIG-3907).
+#: The server keeps the same set as a function-local of ``create_mcp_server``
+#: (``digiquant/src/digiquant/mcp_server.py:692``), so it cannot be imported
+#: here; a drift in either direction fails the wrapper test below, which
+#: expects a retired-entitlement row to be unregistered and a live row to be
+#: registered.
 RETIRED_ENTITLEMENTS = {"session", "preview", "pro"}
-
 
 AAPL_QUOTE = {
     "symbol": "AAPL",
@@ -223,8 +227,18 @@ def test_dispatch_link_and_attribution_match_the_mcp_wrappers(
     returns must carry the attribution block exactly when the row says
     ``attributed`` and a deep link exactly when the row names a symbol field
     (#4146 review F4). A wrapper that changes its choice fails here.
+
+    The lane that runs this file installs ``--extra mcp``, so a missing mcp is
+    a broken lane, not a reason to skip the §7 contract.
     """
-    pytest.importorskip("mcp.server.fastmcp")
+    try:
+        import mcp.server.fastmcp  # noqa: F401
+    except ImportError:
+        pytest.fail(
+            "mcp is not installed: the digiquant lane must sync `--extra mcp` "
+            "(see .github/workflows/test-digiquant.yml), otherwise the §7 "
+            "envelope contract is not gated in CI"
+        )
     from digiquant import mcp_server
 
     monkeypatch.setattr(mcp_server, "_build_gloomberb_client", lambda: _StubGloomberbClient())
@@ -236,11 +250,15 @@ def test_dispatch_link_and_attribution_match_the_mcp_wrappers(
             continue
         assert tool is not None, name
         payload = json.loads(tool.fn(**_wrapper_arguments(tool.fn)))
-        assert "error" not in payload, name
+        assert "error" not in payload, f"{name}: {payload}"
         assert ("attribution" in payload) is spec.attributed, name
+        assert ("delay_notice" in payload) is spec.attributed, name
+        if spec.attributed:
+            assert payload["attribution"] == GLOOMBERB_ATTRIBUTION, f"{name}: {payload}"
+            assert payload["delay_notice"] == GLOOMBERB_DELAY_NOTICE, f"{name}: {payload}"
         assert ("source_url" in payload) is (spec.symbol_field is not None), name
         if spec.symbol_field is not None:
-            assert _sentinel(spec.symbol_field) in payload["source_url"], name
+            assert _sentinel(spec.symbol_field) in payload["source_url"], f"{name}: {payload}"
             assert spec.symbol_field in spec.input_model.model_fields, name
 
 
