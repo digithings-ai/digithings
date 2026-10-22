@@ -32,7 +32,7 @@ const zammadPort = Number(process.env.ZAMMAD_MCP_PORT ?? "8770");
 // EVERY public spelling of it - including the base-path one - back onto this
 // container-local spelling, so the copy Next would answer without the edge key
 // is never reached. Change one, change the other.
-const zammadPrefix = "/api/mcp/zammad";
+export const helpdeskMcpPath = "/api/mcp/zammad";
 // Container/repo root: this script lives at <root>/apps/digichat/scripts/, and
 // `python3 -m scripts.zammad_mcp.server` needs the root on its path.
 const appRoot = fileURLToPath(new URL("../../..", import.meta.url));
@@ -79,6 +79,33 @@ export function forwardHeaders(headers, peerIp, stamp = process.env.DIGICHAT_PEE
     forwarded["x-digichat-peer-stamp"] = stamp.trim();
   }
   return forwarded;
+}
+
+/**
+ * The upstream for one public request.
+ *
+ * The in-image helpdesk MCP is a loopback service, so it has to see its own
+ * loopback Host and not the public one the edge sent. The MCP SDK's
+ * DNS-rebinding guard (mcp >= 1.26) answers 421 "Invalid Host header" to a
+ * Host it cannot allow-list, and the public Host is not on that list: the
+ * entrypoint would otherwise forward `Host: digithings.ai` to 127.0.0.1:8770
+ * and every helpdesk tool would fail. Next keeps the public Host: it is the
+ * app that serves the site.
+ *
+ * `helpdeskPort` is the port the in-image helpdesk MCP listens on. It is a
+ * parameter so a test can stand the MCP up on a free port; production always
+ * uses the configured one.
+ */
+export function upstreamTarget(url, headers, upstreamPort, helpdeskPort = zammadPort) {
+  if ((url ?? "").startsWith(helpdeskMcpPath)) {
+    return {
+      headers: { ...headers, host: `${helpdeskMcpHost}:${helpdeskPort}` },
+      host: helpdeskMcpHost,
+      path: "/mcp",
+      port: helpdeskPort,
+    };
+  }
+  return { headers, host: nextUpstreamHost, path: url, port: upstreamPort };
 }
 
 /**
@@ -257,13 +284,11 @@ function start() {
     }
     // /api/mcp/zammad* is served by the in-image zammad-mcp, not Next: keep the
     // method/headers/body and rewrite the path to the MCP endpoint.
-    const isZammadMcp = (req.url ?? "").startsWith(zammadPrefix);
-    proxyToUpstream(req, res, {
-      headers: forwardHeaders(req.headers, peerIp),
-      ...(isZammadMcp
-        ? { host: helpdeskMcpHost, path: "/mcp", port: zammadPort }
-        : { host: nextUpstreamHost, path: req.url, port: upstreamPort }),
-    });
+    proxyToUpstream(
+      req,
+      res,
+      upstreamTarget(req.url, forwardHeaders(req.headers, peerIp), upstreamPort),
+    );
   });
 
   waitForNext()
