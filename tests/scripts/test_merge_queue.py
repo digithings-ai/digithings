@@ -1870,6 +1870,60 @@ def test_a_marker_with_no_scope_still_binds_the_provenance_head() -> None:
     assert verdict.eligible, verdict.reasons
 
 
+@pytest.mark.parametrize(
+    "scope_field",
+    [
+        "@" + "D" * 40,  # uppercase: not a sha the queue reads
+        "@dddd",  # too short to bind a head
+        "d" * 40,  # no `@`
+        "@",  # empty
+    ],
+)
+def test_a_scope_that_does_not_parse_does_not_fall_back_to_the_provenance_head(
+    scope_field: str,
+) -> None:
+    """A `scope=` the queue cannot read binds nothing; it does not fall back.
+
+    The field's presence decides whether a marker names a head. A stale approve
+    whose `scope=` is written in a form the sha pattern misses used to lose its
+    scope, fall back to the provenance marker's `head=`, and clear the block.
+    """
+    head = "c" * 40
+    stale = "d" * 40
+    approve = {
+        "id": "IC_unparsed_scope",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "body": (
+            f"<!-- digithings-review agent={REVIEWER_SEAT} "
+            "run=00000000-0000-0000-0000-000000000000 "
+            f"head={head} -->\n"
+            f"<!-- opencode-power-pack:code-review verdict=approve scope={scope_field} -->\n\n"
+            "Review verdict: approve\n"
+        ),
+        "createdAt": "2026-10-21T14:50:24Z",
+    }
+    pr = _pr(
+        6177,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=stale,
+                created="2026-10-21T12:28:36Z",
+            ),
+            approve,
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(REVIEWER_SEAT in r and "changes_requested" in r for r in verdict.reasons)
+
+
 def test_a_block_whose_seat_cannot_be_read_is_judged_by_the_newest_verdict() -> None:
     """The limitation, pinned: no seat marker, no seat-scoped rule.
 
