@@ -27,17 +27,30 @@ function retrySource() {
 }
 
 describe("every container hop answers a rejection that is not an Error", () => {
-  it("guards both container classes' containerFetch catch", () => {
-    // One guard per container class (DigiStackContainer, DigiQuantMcpContainer).
+  it("classifies the failure in one place in both container classes", () => {
+    // One classification per container class (DigiStackContainer,
+    // DigiQuantMcpContainer), and both call the same helper: the order of the
+    // checks — a value that is not an Error before the eviction and the
+    // failed vocabulary — is decided there, so it cannot drift between them.
     const source = stackSource();
-    expect(source.split("isNonErrorRejection(err)").length - 1).toBe(2);
+    expect(source.split("classifyContainerHopFailure(err)").length - 1).toBe(2);
   });
 
   it("answers the unavailable 503 in both container classes", () => {
     const source = stackSource();
     for (const service of ["stack", "mcp"]) {
-      const needle = `return containerUnavailableResponse("${service}", description);`;
+      const needle = `return containerUnavailableResponse("${service}");`;
       expect(source.split(needle).length - 1).toBe(1);
+    }
+  });
+
+  it("keeps the cause of the failure out of the answer", () => {
+    // The answer carries the service and the fixed detail, never the
+    // description of the rejected value: internal detail does not leave the
+    // Worker (the shared package holds the same contract).
+    const source = stackSource();
+    for (const service of ["stack", "mcp"]) {
+      expect(source).not.toContain(`containerUnavailableResponse("${service}",`);
     }
   });
 
@@ -49,7 +62,7 @@ describe("every container hop answers a rejection that is not an Error", () => {
     const source = stackSource();
     for (const service of ["stack", "mcp"]) {
       const guard = source.indexOf(
-        `return containerUnavailableResponse("${service}", description);`,
+        `return containerUnavailableResponse("${service}");`,
       );
       const hop = source.indexOf("this.containerFetch(");
       expect(guard).toBeGreaterThan(hop);
@@ -61,8 +74,8 @@ describe("every container hop answers a rejection that is not an Error", () => {
     // 503, and the rethrow of anything else.
     const source = stackSource();
     for (const service of ["stack", "mcp"]) {
-      expect(source).toContain(`return containerEvictedResponse("${service}", message);`);
-      expect(source).toContain(`return containerFailedResponse("${service}", message);`);
+      expect(source).toContain(`return containerEvictedResponse("${service}", failure.message);`);
+      expect(source).toContain(`return containerFailedResponse("${service}", failure.message);`);
     }
     expect(source.split("throw err;").length - 1).toBe(2);
   });
@@ -71,7 +84,7 @@ describe("every container hop answers a rejection that is not an Error", () => {
 describe("the Worker-side retry helper answers a rejection that is not an Error", () => {
   it("guards the catch of the retry loop", () => {
     const source = retrySource();
-    expect(source).toContain("isNonErrorRejection(error)");
+    expect(source).toContain("classifyContainerHopFailure(error)");
     expect(source).toContain("containerUnavailableResponse(");
   });
 
@@ -81,10 +94,15 @@ describe("the Worker-side retry helper answers a rejection that is not an Error"
     // container, so a second attempt could submit it twice.
     const source = retrySource();
     const catchStart = source.indexOf("} catch (error) {");
-    const guard = source.indexOf("if (isNonErrorRejection(error)) {", catchStart);
+    const guard = source.indexOf('if (failure.kind === "unavailable") {', catchStart);
     const retry = source.indexOf("attemptIndex += 1;", guard);
     expect(catchStart).toBeGreaterThan(-1);
     expect(guard).toBeGreaterThan(catchStart);
     expect(retry).toBeGreaterThan(guard);
+  });
+
+  it("keeps the cause of the failure out of the answer", () => {
+    const source = retrySource();
+    expect(source).not.toContain("containerUnavailableResponse(options.service ?? \"stack\",");
   });
 });

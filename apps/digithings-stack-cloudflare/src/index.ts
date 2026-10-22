@@ -38,14 +38,13 @@ import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
 import {
   CONTAINER_RETRY_AFTER_SECONDS,
+  classifyContainerHopFailure,
   containerEvictedResponse,
   containerFailedResponse,
   containerRestartMessage,
   containerUnavailableResponse,
-  describeValue,
   isContainerEvictedError,
   isContainerFailedError,
-  isNonErrorRejection,
   safeErrorMessage,
 } from "./container-errors";
 import { fetchWithContainerRetry } from "./container-retry";
@@ -275,20 +274,24 @@ export class DigiStackContainer extends Container {
       // not replayed either (a value that came out of the hop says nothing
       // about whether the request reached the container). The client is told
       // to come back instead.
-      if (isNonErrorRejection(err)) {
-        const description = describeValue(err);
+      //
+      // The classification is decided in ONE place (classifyContainerHopFailure),
+      // so the order of the checks cannot drift between the two container
+      // classes: a value that is not an Error is read before the eviction and
+      // the failed vocabulary, whatever its text says.
+      const failure = classifyContainerHopFailure(err);
+      if (failure.kind === "unavailable") {
         console.error(
           "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
-          description,
+          failure.description,
         );
-        return containerUnavailableResponse("stack", description);
+        return containerUnavailableResponse("stack");
       }
-      const message = safeErrorMessage(err);
-      if (isContainerEvictedError(message)) {
-        return containerEvictedResponse("stack", message);
+      if (failure.kind === "evicted") {
+        return containerEvictedResponse("stack", failure.message);
       }
-      if (isContainerFailedError(message)) {
-        return containerFailedResponse("stack", message);
+      if (failure.kind === "failed") {
+        return containerFailedResponse("stack", failure.message);
       }
       throw err;
     }
@@ -397,20 +400,24 @@ export class DigiQuantMcpContainer extends Container {
       // not replayed either (a value that came out of the hop says nothing
       // about whether the request reached the container). The client is told
       // to come back instead.
-      if (isNonErrorRejection(err)) {
-        const description = describeValue(err);
+      //
+      // The classification is decided in ONE place (classifyContainerHopFailure),
+      // so the order of the checks cannot drift between the two container
+      // classes: a value that is not an Error is read before the eviction and
+      // the failed vocabulary, whatever its text says.
+      const failure = classifyContainerHopFailure(err);
+      if (failure.kind === "unavailable") {
         console.error(
           "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
-          description,
+          failure.description,
         );
-        return containerUnavailableResponse("mcp", description);
+        return containerUnavailableResponse("mcp");
       }
-      const message = safeErrorMessage(err);
-      if (isContainerEvictedError(message)) {
-        return containerEvictedResponse("mcp", message);
+      if (failure.kind === "evicted") {
+        return containerEvictedResponse("mcp", failure.message);
       }
-      if (isContainerFailedError(message)) {
-        return containerFailedResponse("mcp", message);
+      if (failure.kind === "failed") {
+        return containerFailedResponse("mcp", failure.message);
       }
       throw err;
     }

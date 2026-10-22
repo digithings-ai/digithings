@@ -35,12 +35,11 @@ import {
   CONTAINER_EVSCITED_CODE,
   CONTAINER_FAILED_CODE,
   CONTAINER_UNAVAILABLE_CODE,
+  classifyContainerHopFailure,
   containerRestartMessage,
   containerUnavailableResponse,
-  describeValue,
   isContainerEvictedError,
   isContainerFailedError,
-  isNonErrorRejection,
 } from "./container-errors";
 
 /**
@@ -182,13 +181,17 @@ export async function fetchWithContainerRetry(
       // of the hop says nothing about whether the request reached the
       // container, so a second attempt could submit it twice. The client is
       // told to come back instead.
-      if (isNonErrorRejection(error)) {
-        const description = describeValue(error);
+      //
+      // The classification is decided in ONE place (classifyContainerHopFailure):
+      // a value that is not an Error is read before the eviction and the
+      // failed vocabulary, whatever its text says.
+      const failure = classifyContainerHopFailure(error);
+      if (failure.kind === "unavailable") {
         console.error(
           "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
-          description,
+          failure.description,
         );
-        return containerUnavailableResponse(options.service ?? "stack", description);
+        return containerUnavailableResponse(options.service ?? "stack");
       }
       if (attemptIndex >= retries || !isContainerRecycledError(error)) {
         throw error;

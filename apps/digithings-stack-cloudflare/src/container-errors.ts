@@ -319,6 +319,19 @@ export function containerFailedResponse(
 export const CONTAINER_UNAVAILABLE_CODE = "container_unavailable";
 
 /**
+ * The detail the client gets when a container hop rejected with a value that
+ * is not an Error.
+ *
+ * The cause of the failure is deliberately NOT in the answer: a rejected
+ * value can carry internal detail and a platform error can carry a stack
+ * trace, and neither leaves the Worker. It is logged instead, where the
+ * operator reads it. The shared package holds the same contract
+ * (packages/durable-object-reconnect, `durableObjectUnavailableResponse`).
+ */
+export const CONTAINER_UNAVAILABLE_DETAIL =
+  "the container hop rejected with a value that could not be classified";
+
+/**
  * 503 for a container hop that rejected with a value that is not an Error.
  *
  * Carries `Retry-After` like the other 503 answers (the client may retry)
@@ -326,18 +339,75 @@ export const CONTAINER_UNAVAILABLE_CODE = "container_unavailable";
  * failed in a way we cannot classify" from "the container is gone" without
  * parsing the message text — and so the retry-once wrapper does not replay
  * the request.
+ *
+ * The answer carries the service and the fixed detail, never the cause: the
+ * cause stays in the log (see `CONTAINER_UNAVAILABLE_DETAIL`).
  */
 export function containerUnavailableResponse(
   service: "stack" | "mcp" | "digichat",
-  message: string,
 ): Response {
   return Response.json(
-    { code: CONTAINER_UNAVAILABLE_CODE, message: `${service} container unavailable: ${message}` },
+    {
+      code: CONTAINER_UNAVAILABLE_CODE,
+      message: `${service} container unavailable: ${CONTAINER_UNAVAILABLE_DETAIL}`,
+    },
     {
       status: 503,
       headers: { "Retry-After": String(CONTAINER_RETRY_AFTER_SECONDS) },
     },
   );
+}
+
+/**
+ * How a failure that came out of a container hop is classified.
+ *
+ * `unavailable` — the hop rejected with a value that is not an Error. The
+ * value states no failure of its own, so it is neither an eviction nor a
+ * failed container, and it is not replayed.
+ * `evicted` — a real Error that names a confirmed eviction of the instance.
+ * `failed` — a real Error that names a container that exited or was taken
+ * away; a fresh instance can serve the request, so it is worth one retry.
+ * `unknown` — a real Error that names neither. The caller rethrows it
+ * unchanged, so an unrelated failure is never masked.
+ */
+export type ContainerHopFailure =
+  | { kind: "unavailable"; description: string }
+  | { kind: "evicted"; message: string }
+  | { kind: "failed"; message: string }
+  | { kind: "unknown" };
+
+/**
+ * Classify a failure that came out of a container hop, in ONE place.
+ *
+ * The order of the checks is the contract, and it is decided here rather
+ * than at each call site so that it cannot drift between the two container
+ * classes and the Worker-side retry helper:
+ *
+ *   1. A value that is not an Error comes FIRST. Such a value states no
+ *      failure of its own, so it is never read as an eviction or as a failed
+ *      container: a value that merely *renders* like one — a thrown string
+ *      that names a Durable Object, for example — must not talk its way into
+ *      a classification it does not carry. It is answered with the retryable
+ *      `container_unavailable` and it is not replayed.
+ *   2. Only a real Error is read for its message, and only then are the
+ *      eviction and the failed vocabulary matched against it.
+ *
+ * Read the eviction first and that thrown string would be answered as an
+ * eviction — a different answer for a different condition (run-watch
+ * DIG-4928).
+ */
+export function classifyContainerHopFailure(error: unknown): ContainerHopFailure {
+  if (isNonErrorRejection(error)) {
+    return { kind: "unavailable", description: describeValue(error) };
+  }
+  const message = safeErrorMessage(error);
+  if (isContainerEvictedError(message)) {
+    return { kind: "evicted", message };
+  }
+  if (isContainerFailedError(message)) {
+    return { kind: "failed", message };
+  }
+  return { kind: "unknown" };
 }
 
 /**

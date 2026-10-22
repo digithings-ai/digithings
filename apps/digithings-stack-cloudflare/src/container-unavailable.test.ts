@@ -27,6 +27,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   CONTAINER_UNAVAILABLE_CODE,
+  CONTAINER_UNAVAILABLE_DETAIL,
+  classifyContainerHopFailure,
   containerFailedResponse,
   containerUnavailableResponse,
   describeValue,
@@ -187,12 +189,113 @@ describe("describeValue", () => {
 
 describe("containerUnavailableResponse", () => {
   it("answers a retryable 503 with the machine-readable code", async () => {
-    const response = containerUnavailableResponse("stack", "the hop failed");
+    const response = containerUnavailableResponse("stack");
     expect(response.status).toBe(503);
     expect(response.headers.get("Retry-After")).toBe("5");
     const body = (await response.json()) as { code?: string; message?: string };
     expect(body.code).toBe(CONTAINER_UNAVAILABLE_CODE);
-    expect(body.message).toContain("the hop failed");
+    expect(body.message).toContain("stack container unavailable");
+    expect(body.message).toContain(CONTAINER_UNAVAILABLE_DETAIL);
+  });
+
+  it("does not carry the cause of the failure in the body", async () => {
+    // The contract of the shared package (packages/durable-object-reconnect):
+    // the cause of the failure is not in the body — a platform error can
+    // carry a stack trace and a rejected value can carry internal detail, and
+    // neither leaves the Worker. It is logged instead.
+    const response = containerUnavailableResponse("stack");
+    const text = await response.text();
+    expect(text).not.toContain("token=");
+    expect(text).not.toContain("s3cret");
+    expect(text).not.toContain("the hop failed");
+  });
+});
+
+describe("the answer keeps the rejected value out of the body", () => {
+  it("does not carry the value the hop rejected with", async () => {
+    // The value the hop rejected with is the cause. It goes into the log,
+    // where the operator reads it, and it stays out of the answer the client
+    // receives.
+    const response = await fetchWithContainerRetry(async () => {
+      throw "GET https://digithings.ai/embed?token=s3cret";
+    });
+    const text = await response.text();
+    expect(text).not.toContain("s3cret");
+    expect(text).not.toContain("digithings.ai");
+    expect(text).not.toContain("embed");
+  });
+
+  it("does not carry the bare date the hop rejected with", async () => {
+    // The production value (DIG-4928): a Date instance. Its rendering is the
+    // bare date, and that is what the platform logs. The answer carries the
+    // fixed detail, not the value.
+    const response = await fetchWithContainerRetry(async () => {
+      throw OPAQUE_REJECTION;
+    });
+    const text = await response.text();
+    expect(text).not.toContain("Oct 21 2026");
+    expect(text).not.toContain("2026");
+  });
+});
+
+describe("the classification of a hop failure", () => {
+  it("reads a value that is not an Error as unavailable, whatever its text says", () => {
+    // The order of the checks is the contract, and it is pinned here
+    // behaviourally. A thrown string that names a Durable Object renders like
+    // an eviction, and a thrown string that names a rollout exit renders like
+    // a failed container: neither is one. A value that is not an Error states
+    // no failure of its own, so it is answered with the retryable
+    // `container_unavailable` and it is not replayed.
+    const evictionText =
+      "Connection closed: this Durable Object instance is no longer active. Reconnect or retry the request.";
+    expect(classifyContainerHopFailure(evictionText).kind).toBe("unavailable");
+    expect(
+      classifyContainerHopFailure("runtime signalled the container to exit: 143").kind,
+    ).toBe("unavailable");
+    expect(classifyContainerHopFailure(OPAQUE_REJECTION).kind).toBe("unavailable");
+    expect(classifyContainerHopFailure({ code: "whatever" }).kind).toBe("unavailable");
+  });
+
+  it("does not read the message of a value that is not an Error", () => {
+    // A plain object that carries a `message` property must not talk its way
+    // into a classification it does not carry.
+    const failure = classifyContainerHopFailure({
+      message: "this Durable Object instance is no longer active",
+    });
+    expect(failure.kind).toBe("unavailable");
+  });
+
+  it("still reads a real Error that names an eviction as an eviction", () => {
+    // The counterpart of the pin above: the eviction path is untouched for a
+    // real Error, which is the shape the platform raises it in.
+    const failure = classifyContainerHopFailure(
+      new Error(
+        "Connection closed: this Durable Object instance is no longer active. Reconnect or retry the request.",
+      ),
+    );
+    expect(failure.kind).toBe("evicted");
+  });
+
+  it("still reads a real Error that names a failed container as failed", () => {
+    const failure = classifyContainerHopFailure(
+      new Error("Runtime signalled the container to exit due to a new version rollout: 143"),
+    );
+    expect(failure.kind).toBe("failed");
+  });
+
+  it("leaves a real Error that names neither alone", () => {
+    // An unrelated failure is never masked: the caller rethrows it.
+    expect(classifyContainerHopFailure(new Error("boom")).kind).toBe("unknown");
+  });
+
+  it("describes the value of an unavailable failure without its query string", () => {
+    const failure = classifyContainerHopFailure(
+      "GET https://digithings.ai/embed?token=s3cret",
+    );
+    expect(failure.kind).toBe("unavailable");
+    if (failure.kind !== "unavailable") return;
+    expect(failure.description).not.toContain("s3cret");
+    expect(failure.description).toContain("digithings.ai/embed");
   });
 });
 
@@ -255,7 +358,7 @@ describe("the machine-readable code is pinned", () => {
   });
 
   it("is what the answer carries on the wire", async () => {
-    const response = containerUnavailableResponse("stack", "the hop failed");
+    const response = containerUnavailableResponse("stack");
     const body = (await response.json()) as { code?: string };
     expect(body.code).toBe("container_unavailable");
   });
@@ -267,7 +370,7 @@ describe("an unavailable answer is never a recycle signal", () => {
     // `container_unavailable`, and that answer must never be replayed: a
     // value that came out of the hop says nothing about whether the request
     // reached the container, so a second attempt could submit it twice.
-    const response = containerUnavailableResponse("stack", "the hop failed");
+    const response = containerUnavailableResponse("stack");
     expect(await isContainerRecycledResponse(response)).toBe(false);
   });
 
@@ -275,7 +378,7 @@ describe("an unavailable answer is never a recycle signal", () => {
     let attempts = 0;
     const response = await fetchWithContainerRetry(async () => {
       attempts += 1;
-      return containerUnavailableResponse("stack", "the hop failed");
+      return containerUnavailableResponse("stack");
     });
     expect(attempts).toBe(1);
     expect(response.status).toBe(503);
@@ -321,6 +424,17 @@ describe("safeErrorMessage", () => {
   it("gives an Error its own message and a string itself", () => {
     expect(safeErrorMessage(new Error("boom"))).toBe("boom");
     expect(safeErrorMessage("boom")).toBe("boom");
+  });
+
+  it("describes an Error whose message is not a string", () => {
+    // The text is matched on, so it has to be a string. A message that is not
+    // one must be described, not read: reading it would throw inside a catch
+    // and turn the caught failure back into an uncaught one. The shared
+    // package pins the same guard (packages/durable-object-reconnect).
+    const odd = Object.assign(new Error("boom"), { message: 42 });
+    expect(safeErrorMessage(odd)).toBe("42");
+    const oddObject = Object.assign(new Error("boom"), { message: { code: 1 } });
+    expect(safeErrorMessage(oddObject)).toBe("[object Object]");
   });
 
   it("describes a value that cannot be rendered without throwing", () => {
