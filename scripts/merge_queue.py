@@ -281,10 +281,15 @@ class Authority:
     note: str = ""
 
 
-#: The three ways the reviewer-independence gate can run. `shadow` measures what
-#: the gate would refuse and merges anyway; `enforce` refuses. DIG-4809 named the
-#: two-step rollout: 48 hours of shadow, then a separate small PR that flips the
-#: switch to `enforce`.
+#: The three ways the reviewer-independence gate can run. `off` reads no
+#: provenance at all. `shadow` and `enforce` both refuse a marker the gate
+#: dropped; `shadow` additionally records the refusal (and what the row would
+#: have said with every comment counted) in the shadow log, while `enforce`
+#: decides without it. DIG-4809 named the two-step rollout: 48 hours of shadow,
+#: then a separate small PR that flips the switch to `enforce`. The flip shipped
+#: in DIG-5220 (22 Oct 2026), and the same change closed the shadow loophole:
+#: #6277 and #6197 merged while an author-lane write-up stood in for the
+#: non-author review, because shadow merged what it had just measured.
 REVIEW_INDEPENDENCE_MODES = ("off", "shadow", "enforce")
 
 
@@ -3818,10 +3823,11 @@ def _log_shadow(
     repo: str | None,
     lines: Sequence[str],
 ) -> None:
-    """Write what the gate would have refused, to the shadow log.
+    """Write what the gate refused, and what the row would have merged on.
 
     A shadow log that cannot be written is a lost measurement, not a reason to
-    stop merging: the gate is measuring, so it keeps its hands off the merge.
+    change a verdict: the gate already decided, so it keeps its hands off the
+    merge.
     """
     if cfg is None:
         return
@@ -3874,8 +3880,13 @@ def _review_coverage(
     * This is the review gate. Both reopen cases merged attested by `qa` with
       zero reviews and zero comments; attestation is an assertion, and an
       assertion with no artifact is exactly what the promotion gate refuses.
-      `--attest-review` is gone (2026-10-17), and no non-author approval is
-      required on top of this evidence (Chris's 2026-10-15 definition).
+      `--attest-review` is gone (2026-10-17), and no separate formal approval is
+      demanded on top of the evidence (Chris's 2026-10-15 definition). But an
+      in-session pass is only evidence when another seat wrote it: the reviewer
+      independence gate (DIG-4795) drops a comment whose provenance marker names
+      the PR's author seat or cannot be checked at all, and DIG-5220 shipped that
+      gate in `enforce` mode after #6277 and #6197 merged on the authoring lane's
+      own write-up.
     * The comments this gate scores are supplied by `fetch_queue` and, when the
       row arrives without them, completed by `_ensure_comments` — which runs
       before this function precisely because an unreadable review record must
@@ -3935,14 +3946,15 @@ def _review_coverage(
         )
         return state
 
-    if mode == "enforce":
-        reviewed, why = crc.verdict_for(state_for(kept))
-    else:
-        # Shadow mode scores the row as it stands, then scores it again without the
-        # markers the gate would drop. The difference between the two answers is the
-        # measurement: "this PR would have been refused".
-        reviewed, why = crc.verdict_for(state_for(counted))
-        would_review, would_why = crc.verdict_for(state_for(kept))
+    # The gate always decides on the comments it accepted. Shadow mode keeps the
+    # measurement — it records what the gate refused, and what the row would have
+    # said with every comment counted — but it is no longer a licence to merge on
+    # the marker the gate just refused. DIG-5220 made that change after #6277 and
+    # #6197: in both, the authoring lane's own write-up was counted as the review
+    # and the PR merged with no other seat's look at the final head.
+    reviewed, why = crc.verdict_for(state_for(kept))
+    if mode == "shadow":
+        would_review, would_why = crc.verdict_for(state_for(counted))
         if independence.unverifiable:
             _log_shadow(
                 cfg,
@@ -3950,18 +3962,13 @@ def _review_coverage(
                 repo,
                 [f"could not check the review seats: {independence.unverifiable}"],
             )
-        elif independence.problems and not would_review:
-            _log_shadow(cfg, pr, repo, list(independence.problems))
         elif independence.problems:
-            _log_shadow(
-                cfg,
-                pr,
-                repo,
-                [
-                    f"dropped {len(independence.disqualified)} review marker(s) that "
-                    f"did not count; the PR would still have merged on {would_why}"
-                ],
-            )
+            lines = list(independence.problems)
+            if would_review:
+                # The measurement that matters: without this gate the row would
+                # have merged on the evidence it just refused.
+                lines.append(f"without this gate the row would have merged on {would_why}")
+            _log_shadow(cfg, pr, repo, lines)
 
     if reviewed:
         evidence = why
@@ -3974,9 +3981,9 @@ def _review_coverage(
             )
         return [], evidence
 
-    if mode == "enforce" and independence.unverifiable:
+    if independence.unverifiable:
         return [f"reviewer independence: {independence.unverifiable}"], ""
-    if mode == "enforce" and independence.problems:
+    if independence.problems:
         head = str(pr.get("headRefOid") or "")[:12]
         return [
             "reviewer independence: "
