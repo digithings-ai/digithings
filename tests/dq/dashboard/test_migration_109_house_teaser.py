@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "109_authenticated_house_teaser_read.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "109_authenticated_house_teaser_read.sql"
 HOUSE_UUID = "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 
 
@@ -27,7 +27,7 @@ def sql(raw: str) -> str:
 
 
 def test_migration_is_the_only_109() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("109_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("109_*.sql")) == [MIGRATION_PATH]
 
 
 def test_does_not_touch_anon_read(sql: str) -> None:

@@ -20,13 +20,13 @@ describe("embed-parent-error-messages", () => {
   });
 
   describe("formatParentErrorLine", () => {
-    it("prefixes with error: and uses Containers-oriented default copy", () => {
-      const line = formatParentErrorLine("ready_timeout");
-      expect(line.startsWith("error: ")).toBe(true);
-      expect(line).toContain("DIGICHAT_EMBED_ORIGIN");
-      expect(line).toContain("Container");
-      expect(line).not.toContain("tunnel");
-      expect(line).not.toContain("DIGICHAT_EMBED_HOSTS");
+    it("prefixes with error: and keeps the default copy visitor-facing", () => {
+      for (const code of ["ready_timeout", "embed_unloadable", "ready_target_missing"] as const) {
+        const line = formatParentErrorLine(code);
+        expect(line.startsWith("error: ")).toBe(true);
+        // Rendered in the chat: no env names, origins or internals.
+        expect(line).not.toMatch(/DIGICHAT_|Container|ancestorOrigins|referrer|origin|tunnel/);
+      }
     });
 
     it("accepts an override message", () => {
@@ -37,7 +37,7 @@ describe("embed-parent-error-messages", () => {
 
     it("formats ready_target_missing for embed self-report", () => {
       expect(formatParentErrorLine("ready_target_missing")).toContain(
-        "ancestorOrigins",
+        "could not connect",
       );
     });
   });
