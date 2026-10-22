@@ -41,6 +41,7 @@ from .core import (
     BrokerError,
     Policy,
     RefusedError,
+    TokenError,
     agent_ids_from_commit_message,
     audit,
     last4,
@@ -63,6 +64,17 @@ ALERT_AFTER_FAILURES = 2
 SOCKET_MODE = 0o660
 #: The group the seats are in.
 SOCKET_GROUP = "_dtseats"
+
+
+def _as_pr_number(value: Any) -> int | None:
+    """A pull request number, when the request carries one."""
+    if value is None:
+        return None
+    try:
+        number = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
 
 
 @dataclass
@@ -123,6 +135,10 @@ class BrokerService:
         # A run may hold more than one: a token is kept per repository and
         # permission set, and every one of them is revoked together.
         self._issued: dict[str, list[_Issued]] = {}
+        #: The credential each run presented, kept in memory so the daemon
+        #: can ask whether that run is still running and revoke what it
+        #: minted for it. It is never written down and never logged.
+        self._run_credentials: dict[str, str] = {}
         self._lock = threading.Lock()
         #: Set when the socket could not be given to the seat group. A seat
         #: that cannot connect to a broker that looks healthy is the worst
@@ -192,8 +208,8 @@ class BrokerService:
             asked = str(asked_for).strip()
             if asked.lower() != repo.lower():
                 raise RefusedError(
-                    f"{asked} is not the repository this run is working on ({repo}); "
-                    "a token is scoped to the ticket's own repository"
+                    "the repository asked for is not the repository this run is working on "
+                    f"({repo}); a token is scoped to the ticket's own repository"
                 )
 
         permissions = self.policy.select_permissions(
@@ -201,8 +217,15 @@ class BrokerService:
         )
 
         head_sha = str(request.get("head_sha") or "").strip()
+        pr: int | None = None
         if self.policy.is_review_class(seat_class):
-            self._check_review_independence(context, app, repo, head_sha)
+            pr, head_sha = self._check_review_independence(
+                context,
+                app,
+                repo,
+                _as_pr_number(request.get("pr_number")),
+                head_sha,
+            )
 
         now = time.time()
         existing = self._reusable_token(context.run_id, repo, permissions, now)
@@ -225,6 +248,8 @@ class BrokerService:
                     )
                 )
             reused = False
+        with self._lock:
+            self._run_credentials[context.run_id] = run_jwt
 
         self._log(
             "github-token",
@@ -249,6 +274,13 @@ class BrokerService:
             "seat_class": seat_class.name,
             "run_id": context.run_id,
         }
+        if pr is not None:
+            # The token is bound to one pull request, and the head commit is
+            # the one GitHub says that pull request has. The caller is told
+            # both so it can check that the call it makes is about that
+            # pull request.
+            answer["pr_number"] = pr
+            answer["head_sha"] = head_sha
         return answer
 
     def _reusable_token(
@@ -296,34 +328,54 @@ class BrokerService:
         context: RunContext,
         app: Any,
         repo: str,
+        pr_number: int | None,
         head_sha: str,
-    ) -> None:
+    ) -> tuple[int, str]:
         """Refuse a seat that would review its own change.
 
-        The change owner is read from the trailers of the head commit, which
-        is where every seat writes the seat and the run that wrote it. Only
-        the `Paperclip-Agent-Id` trailer counts: the `Paperclip-Seat` trailer
-        names the App, and every seat that uses that App writes the same
-        name there.
+        The change under review is a pull request, and the pull request is
+        read from GitHub. The head commit comes from the pull request
+        itself, not from the caller: a caller that named the commit would
+        be naming the commit it wanted a token for.
+
+        The owner is read from the trailers of that head commit, which is
+        where every seat writes the seat and the run that wrote it. Only
+        the `Paperclip-Agent-Id` trailer counts: the `Paperclip-Seat`
+        trailer names the App, and every seat that uses that App writes the
+        same name there.
         """
-        if not head_sha:
+        if not pr_number:
             raise RefusedError(
-                "a review token needs the head commit of the change under review"
+                "a review token needs the pull request it is for, so the head commit "
+                "can be read from it"
             )
-        message = self.github.commit_message(app, repo, head_sha)
+        pull = self.github.pull_request(app, repo, pr_number)
+        head = pull.get("head")
+        actual = str(head.get("sha") or "") if isinstance(head, Mapping) else ""
+        if not actual:
+            raise RefusedError(
+                f"pull request {pr_number} in {repo} names no head commit, so there is "
+                "nothing to review"
+            )
+        if head_sha and head_sha != actual:
+            raise RefusedError(
+                f"the commit asked for is not the head of pull request {pr_number}"
+            )
+        message = self.github.commit_message(app, repo, actual)
         owners = agent_ids_from_commit_message(message)
         requester = context.agent_id.strip().lower()
         if not owners:
             raise RefusedError(
-                f"the commit at {head_sha} names no agent id, so its author cannot be told "
-                "apart from the reviewer; a review token needs a commit with a "
-                "Paperclip-Agent-Id trailer"
+                "the head commit of that pull request names no agent id, so its author "
+                "cannot be told apart from the reviewer; a review token needs a commit "
+                "with a Paperclip-Agent-Id trailer"
             )
         if any(owner.strip().lower() == requester for owner in owners):
             raise RefusedError(
-                f"seat {context.agent_id} wrote the change at {head_sha}; "
-                "a seat may not review its own change"
+                f"seat {context.agent_id} wrote the change under review; a seat may not "
+                "review its own change"
             )
+        return pr_number, actual
 
     def op_revoke(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """Revoke the tokens this daemon minted for a run.
@@ -332,6 +384,11 @@ class BrokerService:
         way a mint is: a run id read out of an unverified credential is not
         a run id, and a revocation that trusted one would let any caller
         kill another run's token.
+
+        A token GitHub will not revoke is still live at GitHub, so it stays
+        in the ledger and the next revocation tries again. Dropping it here
+        would leave it alive for the rest of its hour with nobody left to
+        revoke it.
         """
         run_jwt = str(request.get("run_jwt") or "")
         if not run_jwt:
@@ -341,13 +398,18 @@ class BrokerService:
         except PaperclipError as exc:
             raise AuthError(f"the run credential was refused: {exc}") from exc
         with self._lock:
-            entries = self._issued.pop(run_id, [])
+            entries = list(self._issued.get(run_id, []))
         if not entries:
             self._log("revoke-noop", run_id=run_id, agent_id=agent_id)
             return {"ok": True, "revoked": False, "run_id": run_id}
         revoked = 0
+        failed: list[_Issued] = []
         for entry in entries:
-            self.github.revoke_installation_token(entry.token.token)
+            try:
+                self.github.revoke_installation_token(entry.token.token)
+            except TokenError:
+                failed.append(entry)
+                continue
             revoked += 1
             self._log(
                 "revoke",
@@ -357,7 +419,62 @@ class BrokerService:
                 expires_at=entry.token.expires_at,
                 token_last4=last4(entry.token.token),
             )
-        return {"ok": True, "revoked": True, "run_id": run_id, "tokens": revoked}
+        with self._lock:
+            remaining = self._issued.get(run_id, [])
+            kept = [
+                entry for entry in remaining if any(entry is item for item in failed)
+            ]
+            if kept:
+                self._issued[run_id] = kept
+            else:
+                self._issued.pop(run_id, None)
+        return {
+            "ok": True,
+            "revoked": bool(revoked),
+            "run_id": run_id,
+            "tokens": revoked,
+            "failed": len(failed),
+        }
+
+    def sweep_finished_runs(self) -> int:
+        """Revoke what was minted for the runs that have ended.
+
+        The daemon promises that it revokes what it minted when the run
+        ends, so it has to ask whether the run is still running. The run is
+        asked with the credential the run itself presented, which the
+        Paperclip API accepts after the run is over -- the same reason a
+        revocation is allowed at the end of a run at all.
+
+        A run that cannot be asked about is left alone. A token expires at
+        GitHub within the hour anyway, and a sweep that revoked on a failed
+        read would take away a live run's token.
+        """
+        with self._lock:
+            runs = {
+                run_id: list(entries)
+                for run_id, entries in self._issued.items()
+                if entries
+            }
+            credentials = dict(self._run_credentials)
+        revoked = 0
+        for run_id in runs:
+            credential = credentials.get(run_id)
+            if not credential:
+                continue
+            try:
+                run = self._paperclip(credential).heartbeat_run(run_id)
+            except (PaperclipError, BrokerError):
+                continue
+            status = str(run.get("status") or "").strip().lower()
+            if not status or status == "running":
+                continue
+            try:
+                answer = self.op_revoke({"run_jwt": credential})
+            except (AuthError, BrokerError):
+                continue
+            if answer.get("revoked"):
+                revoked += int(answer.get("tokens") or 0)
+        return revoked
 
     def op_health(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """How the daemon is.
@@ -409,6 +526,10 @@ class BrokerService:
         failures = 0
         detail = ""
         self._prune(time.time())
+        try:
+            self.sweep_finished_runs()
+        except (BrokerError, OSError):  # pragma: no cover - the sweep is best effort
+            pass
         if self.policy_path is not None:
             try:
                 Policy.load(self.policy_path)

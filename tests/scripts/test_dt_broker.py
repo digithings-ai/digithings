@@ -149,9 +149,16 @@ class StrictPaperclip(FakePaperclip):
 class FakeGitHub:
     """The GitHub calls the broker makes."""
 
-    def __init__(self, *, commit_message: str = "", token: str = MINTED_TOKEN) -> None:
+    def __init__(
+        self,
+        *,
+        commit_message: str = "",
+        token: str = MINTED_TOKEN,
+        head_sha: str = "abc123",
+    ) -> None:
         self.commit_message = commit_message
         self.token = token
+        self.head_sha = head_sha
         self.calls: list[tuple[str, str]] = []
         self.headers: list[dict[str, str]] = []
         self.minted: list[dict[str, Any]] = []
@@ -178,6 +185,13 @@ class FakeGitHub:
         if "/users/" in url:
             return github.HttpResponse(
                 status=200, body=json.dumps({"id": 4242, "login": "digithings-seat[bot]"}).encode("utf-8")
+            )
+        if "/pulls/" in url:
+            return github.HttpResponse(
+                status=200,
+                body=json.dumps(
+                    {"number": 42, "head": {"sha": self.head_sha}}
+                ).encode("utf-8"),
             )
         if "/commits/" in url:
             return github.HttpResponse(
@@ -534,6 +548,7 @@ def test_a_reviewer_may_not_review_its_own_change(tmp_path: Path, rsa_key: Path)
         {
             "op": "github-token",
             "run_jwt": run_jwt(),
+            "pr_number": 42,
             "head_sha": "abc123",
         }
     )
@@ -551,18 +566,22 @@ def test_a_reviewer_may_review_somebody_elses_change(tmp_path: Path, rsa_key: Pa
         {
             "op": "github-token",
             "run_jwt": run_jwt(),
+            "pr_number": 42,
             "head_sha": "abc123",
         }
     )
     assert answer["ok"] is True
     assert answer["app"] == "digithings-review"
+    assert answer["pr_number"] == 42
+    assert answer["head_sha"] == "abc123"
 
 
-def test_a_review_without_the_head_commit_is_refused(tmp_path: Path, rsa_key: Path) -> None:
+def test_a_review_without_the_pull_request_is_refused(tmp_path: Path, rsa_key: Path) -> None:
+    """The head commit is read from the pull request, so the pull request is needed."""
     broker = review_broker(tmp_path, rsa_key, commit_message="a change")
     answer = broker.handle({"op": "github-token", "run_jwt": run_jwt()})
     assert answer["ok"] is False
-    assert "head commit" in answer["error"]
+    assert "pull request" in answer["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -666,7 +685,7 @@ def test_a_review_of_a_commit_with_no_agent_id_is_refused(
     """An author whose id cannot be read cannot be told from the reviewer."""
     broker = review_broker(tmp_path, rsa_key, commit_message="a change with no trailer")
     answer = broker.handle(
-        {"op": "github-token", "run_jwt": run_jwt(), "head_sha": "abc123"}
+        {"op": "github-token", "run_jwt": run_jwt(), "pr_number": 42, "head_sha": "abc123"}
     )
     assert answer["ok"] is False
     assert "names no agent id" in answer["error"]
@@ -683,7 +702,7 @@ def test_a_review_with_a_decoy_trailer_is_refused(tmp_path: Path, rsa_key: Path)
         ),
     )
     answer = broker.handle(
-        {"op": "github-token", "run_jwt": run_jwt(), "head_sha": "abc123"}
+        {"op": "github-token", "run_jwt": run_jwt(), "pr_number": 42, "head_sha": "abc123"}
     )
     assert answer["ok"] is False
     assert "may not review its own change" in answer["error"]
@@ -706,7 +725,7 @@ def test_the_commit_is_read_with_the_apps_own_jwt(tmp_path: Path, rsa_key: Path)
         paperclip_transport=FakePaperclip().transport,
     )
     assert broker.handle(
-        {"op": "github-token", "run_jwt": run_jwt(), "head_sha": "abc123"}
+        {"op": "github-token", "run_jwt": run_jwt(), "pr_number": 42, "head_sha": "abc123"}
     )["ok"] is True
     commit_calls = [
         headers
@@ -818,3 +837,93 @@ def test_the_client_waits_longer_than_the_server_can_take() -> None:
     """
     worst_case = 3 * paperclip.DEFAULT_TIMEOUT + 2 * github.DEFAULT_TIMEOUT
     assert client.DEFAULT_TIMEOUT >= worst_case
+
+
+# ---------------------------------------------------------------------------
+# the rules the review of 22 October found
+# ---------------------------------------------------------------------------
+
+
+def test_a_revocation_github_refuses_keeps_the_token_in_the_ledger(
+    service, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A token that is still live at GitHub has to stay revokable."""
+    broker, _, github_fake = service
+    assert ask(broker)["ok"] is True
+    state = {"calls": 0}
+
+    def _refuse(token: str) -> None:
+        state["calls"] += 1
+        if state["calls"] == 1:
+            raise core.TokenError("GitHub refused to revoke the token")
+
+    monkeypatch.setattr(broker.github, "revoke_installation_token", _refuse)
+    answer = broker.handle({"op": "revoke", "run_jwt": run_jwt()})
+    assert answer["revoked"] is False
+    assert answer["failed"] == 1
+    monkeypatch.undo()
+    answer = broker.handle({"op": "revoke", "run_jwt": run_jwt()})
+    assert answer["revoked"] is True
+    assert github_fake.revoked == [f"token {MINTED_TOKEN}"]
+
+
+def test_the_daemon_revokes_what_it_minted_when_the_run_ends(service) -> None:
+    """The promise in the runbook is a promise the daemon keeps."""
+    broker, paperclip_fake, github_fake = service
+    assert ask(broker)["ok"] is True
+    assert broker.sweep_finished_runs() == 0
+    paperclip_fake.run_status = "succeeded"
+    assert broker.sweep_finished_runs() == 1
+    assert github_fake.revoked == [f"token {MINTED_TOKEN}"]
+    assert broker.sweep_finished_runs() == 0
+
+
+def test_the_sweep_leaves_a_live_run_alone(service) -> None:
+    """A run that is still running keeps its token."""
+    broker, _, github_fake = service
+    assert ask(broker)["ok"] is True
+    assert broker.sweep_finished_runs() == 0
+    assert github_fake.revoked == []
+
+
+def test_a_review_token_is_refused_when_the_head_commit_is_not_the_pull_requests(
+    tmp_path: Path, rsa_key: Path
+) -> None:
+    """The head commit comes from the pull request, not from the caller."""
+    broker = review_broker(
+        tmp_path,
+        rsa_key,
+        commit_message=f"a change\n\nPaperclip-Agent-Id: {OTHER_AGENT_ID}\n",
+    )
+    answer = broker.handle(
+        {
+            "op": "github-token",
+            "run_jwt": run_jwt(),
+            "pr_number": 42,
+            "head_sha": "a-different-sha",
+        }
+    )
+    assert answer["ok"] is False
+    assert "head of pull request" in answer["error"]
+
+
+def test_a_refusal_does_not_echo_the_repository_the_caller_asked_for(service) -> None:
+    """A caller that sent a token by mistake does not have it written down."""
+    broker, _, _ = service
+    secret = "ghp_" + "A" * 20
+    answer = broker.handle(
+        {"op": "github-token", "run_jwt": run_jwt(), "repo": secret}
+    )
+    assert answer["ok"] is False
+    assert secret not in answer["error"]
+
+
+def test_a_refusal_does_not_echo_the_permission_the_caller_asked_for(service) -> None:
+    """The same rule for a permission name."""
+    broker, _, _ = service
+    secret = "ghp_" + "A" * 20
+    answer = broker.handle(
+        {"op": "github-token", "run_jwt": run_jwt(), "permissions": [secret]}
+    )
+    assert answer["ok"] is False
+    assert secret not in answer["error"]

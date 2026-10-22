@@ -189,6 +189,29 @@ The zsh aliases in the same hook (`/opt/homebrew/bin/gh` and `/usr/local/bin/gh`
 to `$_SEAT_GH_GUARD`) then route through the shim as well, which is what they are
 for.
 
+**This change is for the seat shells, not for Chris's own shell.** The hook is
+loaded by the seat runs. If Chris's own interactive shell loads it as well, keep
+`_SEAT_GH_GUARD` pointing at the guard in his shell: in `app` mode the shim
+refuses a call that has no run credential (exit 66), and a person at the keyboard
+has none, so routing his `gh` through the shim would break his own commands.
+The seat shells are the ones that get the broker.
+
+### The shim asks the broker on one socket, and it needs a run credential
+
+Two things about the shim are fixed in the program and not configurable, on
+purpose:
+
+- **The socket is `/Users/_dtbroker/run/dt-broker.sock`**, the same path the daemon
+  binds. There is no environment variable for it: a seat that named its own socket
+  would have asked its own broker for a token, and the one-repository wall, the
+  run-scoped lifetime and the audit trail would have gone with it. So the daemon
+  has to bind that exact path, or the seats cannot reach it.
+- **The run credential decides.** In `app` mode the shim mints only for a call
+  that carries a run credential (`PAPERCLIP_API_KEY`), which the broker verifies
+  against the Paperclip API for every mint. A call with no run credential is
+  refused with exit 66 instead of being passed through with the host's own
+  credential. `host` mode passes everything through unchanged.
+
 ### The PATH, for the calls that are not a seat shell
 
 A script that calls `gh` by name, without the seat's shell hook, reads the PATH.

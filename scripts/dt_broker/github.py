@@ -238,6 +238,27 @@ class GitHubClient:
             raise TokenError(f"GitHub did not answer with an id for {login}")
         return str(value)
 
+    def pull_request(self, app: AppConfig, repo: str, number: int) -> dict[str, Any]:
+        """The pull request, as GitHub sees it.
+
+        The head commit of the pull request is read from here, and not from
+        the caller: a caller that named the commit would be naming the
+        commit it wanted a token for. The App's own JWT is used, for the
+        same reason as the commit read: an unauthenticated read of a
+        private repository is answered with a 404.
+        """
+        payload = self._json(
+            "GET",
+            f"/repos/{repo}/pulls/{int(number)}",
+            headers={"Authorization": f"Bearer {self._app_jwt(app)}"},
+        )
+        head = payload.get("head")
+        if not isinstance(head, Mapping) or not str(head.get("sha") or ""):
+            raise TokenError(
+                f"GitHub did not answer with a head commit for pull request {number}"
+            )
+        return payload
+
     def commit_message(self, app: AppConfig, repo: str, sha: str) -> str:
         """The message of a commit, which is where its trailers are.
 

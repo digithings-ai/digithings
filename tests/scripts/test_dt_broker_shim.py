@@ -40,7 +40,7 @@ from typing import Any
 
 import pytest
 
-from scripts.dt_broker import ghshim, github, paperclip, server
+from scripts.dt_broker import client, ghshim, github, paperclip, server
 from scripts.dt_broker.core import Policy
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -191,15 +191,18 @@ def app_key(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def seat_env(tmp_path: Path) -> dict[str, str]:
+def seat_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """The environment of a seat run."""
+    # The scratch directory is named by the shim, not by the caller: a
+    # caller that could name it could point it at the host's own `gh`
+    # configuration and have it emptied.
+    monkeypatch.setattr(ghshim, "RUN_TMP_ROOT", tmp_path / "run-tmp")
     return {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(tmp_path),
         "PAPERCLIP_AGENT_ID": AGENT_ID,
         "PAPERCLIP_RUN_ID": RUN_ID,
         "PAPERCLIP_API_KEY": run_jwt(),
-        "DT_BROKER_RUN_TMP": str(tmp_path / "run"),
         "GITHUB_TOKEN": "the-host-token",
     }
 
@@ -543,7 +546,7 @@ def test_app_mode_gives_the_guard_a_per_run_token(
     captured: list[dict[str, Any]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(ghshim, "request_token", lambda env: "the-minted-token")
+    monkeypatch.setattr(ghshim, "request_token", lambda env, pr=None: ("the-minted-token", {}))
     assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_OK
     assert len(captured) == 1
     call = captured[0]
@@ -561,7 +564,7 @@ def test_app_mode_keeps_the_host_tokens_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The only credential in the room is the one the broker minted."""
-    monkeypatch.setattr(ghshim, "request_token", lambda env: "the-minted-token")
+    monkeypatch.setattr(ghshim, "request_token", lambda env, pr=None: ("the-minted-token", {}))
     assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_OK
     child = captured[0]["env"]
     assert "GITHUB_TOKEN" not in child
@@ -577,7 +580,7 @@ def test_app_mode_sends_the_rewritten_call_to_the_guard(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(ghshim, "request_token", lambda env: "the-minted-token")
+    monkeypatch.setattr(ghshim, "request_token", lambda env, pr=None: ("the-minted-token", {}))
     body = tmp_path / "review.md"
     body.write_text(BODY, encoding="utf-8")
     ghshim.main(
@@ -600,7 +603,7 @@ def test_a_missing_flag_reads_as_app(
 ) -> None:
     """A flag that cannot be read must not turn the broker off."""
     monkeypatch.setattr(ghshim, "AUTH_MODE_PATH", tmp_path / "not-there")
-    monkeypatch.setattr(ghshim, "request_token", lambda env: "the-minted-token")
+    monkeypatch.setattr(ghshim, "request_token", lambda env, pr=None: ("the-minted-token", {}))
     assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_OK
     assert captured[0]["env"]["GH_TOKEN"] == "the-minted-token"
 
@@ -614,7 +617,7 @@ def test_host_mode_passes_the_call_through_unchanged(
 ) -> None:
     """`host` restores today's behaviour: the broker is not even asked."""
 
-    def _not_asked(env: dict[str, str]) -> str:
+    def _not_asked(env: dict[str, str], pr: int | None = None) -> tuple[str, dict[str, Any]]:
         raise AssertionError("the broker must not be asked in host mode")
 
     monkeypatch.setattr(ghshim, "request_token", _not_asked)
@@ -657,7 +660,7 @@ def test_a_missing_broker_stops_the_call(
 ) -> None:
     """No broker is not a reason to fall back to the host's credentials."""
 
-    def _unavailable(env: dict[str, str]) -> str:
+    def _unavailable(env: dict[str, str], pr: int | None = None) -> tuple[str, dict[str, Any]]:
         raise ghshim.BrokerUnavailable("the broker did not answer")
 
     monkeypatch.setattr(ghshim, "request_token", _unavailable)
@@ -674,7 +677,7 @@ def test_a_refusal_costs_nothing(
 ) -> None:
     """A refusal happens before the broker is asked for anything."""
 
-    def _not_asked(env: dict[str, str]) -> str:
+    def _not_asked(env: dict[str, str], pr: int | None = None) -> tuple[str, dict[str, Any]]:
         raise AssertionError("the broker must not be asked for a refused call")
 
     monkeypatch.setattr(ghshim, "request_token", _not_asked)
@@ -695,17 +698,48 @@ def test_a_shim_that_is_already_in_the_chain_refuses(
     assert captured == []
 
 
-def test_a_process_that_is_not_a_seat_is_left_to_the_guard(
+def test_a_process_with_no_run_credential_is_refused(
     tmp_path: Path,
     guard: Path,
     app_mode: Path,
     captured: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The guard decides who is a seat, and so does the shim."""
-    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
-    assert ghshim.main(["pr", "list"], env) == ghshim.EXIT_OK
-    assert captured[0]["argv"] == ["pr", "list"]
-    assert "GH_TOKEN" not in captured[0]["env"]
+    """The host's own credential is never the fallback.
+
+    The guard decides who is a seat, and the shim does not decide that with
+    three environment variables a caller controls: the broker decides it,
+    from the run credential, against the Paperclip API. A caller that
+    shows no credential gets no token -- and no host credential either.
+    """
+    monkeypatch.setattr(ghshim, "RUN_TMP_ROOT", tmp_path / "run-tmp")
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(tmp_path),
+        "GITHUB_TOKEN": "the-host-token",
+    }
+    assert ghshim.main(["pr", "list"], env) == ghshim.EXIT_AUTH
+    assert captured == []
+
+
+def test_a_process_with_no_run_credential_keeps_the_host_token_out(
+    tmp_path: Path,
+    guard: Path,
+    app_mode: Path,
+    captured: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Even a caller that unsets the seat markers does not get the host token."""
+    monkeypatch.setattr(ghshim, "RUN_TMP_ROOT", tmp_path / "run-tmp")
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(tmp_path),
+        "PAPERCLIP_AGENT_ID": AGENT_ID,
+        "PAPERCLIP_RUN_ID": RUN_ID,
+        "GITHUB_TOKEN": "the-host-token",
+    }
+    assert ghshim.main(["pr", "list"], env) == ghshim.EXIT_AUTH
+    assert captured == []
 
 
 # ---------------------------------------------------------------------------
@@ -775,18 +809,28 @@ def _recording_guard(tmp_path: Path) -> Path:
 
 
 def _run_shim(
-    env: dict[str, str], guard: Path, *arguments: str
+    env: dict[str, str],
+    guard: Path,
+    socket: Path | None = None,
+    run_tmp: Path | None = None,
+    *arguments: str,
 ) -> subprocess.CompletedProcess[str]:
     """Run the shim as a process, the way a seat run would.
 
-    The guard's path is a constant in the shim, and the test changes it the
-    way a caller of the module would: in the process that runs the shim.
+    The guard's path and the broker's socket are constants in the shim, and
+    the test changes them the way a caller of the module would: in the
+    process that runs the shim. There is no environment variable that names
+    either of them, because a seat that could name them would have taken
+    the guard or the broker out of the chain.
     """
     code = (
         "import os, sys\n"
+        "from pathlib import Path\n"
         "from scripts.dt_broker import ghshim\n"
         f"ghshim.GUARD_PATH = {str(guard)!r}\n"
-        "sys.exit(ghshim.main(sys.argv[1:], dict(os.environ)))\n"
+        + (f"ghshim.BROKER_SOCKET = {str(socket)!r}\n" if socket is not None else "")
+        + (f"ghshim.RUN_TMP_ROOT = Path({str(run_tmp)!r})\n" if run_tmp is not None else "")
+        + "sys.exit(ghshim.main(sys.argv[1:], dict(os.environ)))\n"
     )
     return subprocess.run(
         [sys.executable, "-c", code, *arguments],
@@ -813,12 +857,17 @@ def test_the_guard_is_exec_ed_with_the_rewritten_call(
         "PAPERCLIP_AGENT_ID": AGENT_ID,
         "PAPERCLIP_RUN_ID": RUN_ID,
         "PAPERCLIP_API_KEY": run_jwt(),
-        "DT_BROKER_SOCKET": str(socket_path),
-        "DT_BROKER_RUN_TMP": str(tmp_path / "run"),
         "GITHUB_TOKEN": "the-host-token",
     }
     proc = _run_shim(
-        env, guard, "api", f"repos/{REPO}/issues/1/comments", "-f", f"body=@{body}"
+        env,
+        guard,
+        socket_path,
+        tmp_path / "run-tmp",
+        "api",
+        f"repos/{REPO}/issues/1/comments",
+        "-f",
+        f"body=@{body}",
     )
     assert proc.returncode == 0, proc.stderr
 
@@ -857,11 +906,224 @@ def test_the_shim_refuses_a_pull_request_outside_the_organization(
         "PAPERCLIP_AGENT_ID": AGENT_ID,
         "PAPERCLIP_RUN_ID": RUN_ID,
         "PAPERCLIP_API_KEY": run_jwt(),
-        "DT_BROKER_SOCKET": str(socket_path),
-        "DT_BROKER_RUN_TMP": str(tmp_path / "run"),
     }
-    proc = _run_shim(env, guard, "pr", "create", "--repo", "someone-else/their-project")
+    proc = _run_shim(
+        env,
+        guard,
+        socket_path,
+        tmp_path / "run-tmp",
+        "pr",
+        "create",
+        "--repo",
+        "someone-else/their-project",
+    )
     assert proc.returncode == ghshim.EXIT_REFUSED
     assert "digithings-ai" in proc.stderr
     assert not (tmp_path / "guard-record.json").exists()
     assert github_fake.minted == []
+
+
+# ---------------------------------------------------------------------------
+# the rules the review of 22 October found
+# ---------------------------------------------------------------------------
+
+
+def test_the_broker_socket_is_not_an_environment_variable(
+    seat_env: dict[str, str], captured: list[dict[str, Any]]
+) -> None:
+    """A seat that named the socket would be talking to a broker of its own."""
+    seat_env["DT_BROKER_SOCKET"] = "/tmp/a-socket-of-my-own.sock"
+    assert ghshim.socket_path(seat_env) == ghshim.BROKER_SOCKET
+    assert captured == []
+
+
+def test_the_scratch_directory_is_not_named_by_the_caller(
+    seat_env: dict[str, str],
+) -> None:
+    """A caller that named the directory could have the host's own emptied."""
+    seat_env["DT_BROKER_RUN_TMP"] = str(Path.home())
+    path = ghshim.run_tmp(seat_env)
+    assert Path(ghshim.RUN_TMP_ROOT) in path.parents
+
+
+def test_a_scratch_directory_that_is_a_symlink_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A symlink is not followed: the shim empties only what it made."""
+    real = tmp_path / "real"
+    real.mkdir()
+    monkeypatch.setattr(ghshim, "RUN_TMP_ROOT", tmp_path / "run")
+    env = {"PAPERCLIP_RUN_ID": RUN_ID}
+    base = ghshim.run_tmp(env)
+    base.parent.mkdir(parents=True, exist_ok=True)
+    base.symlink_to(real)
+    with pytest.raises(ghshim.Refusal):
+        ghshim.empty_gh_config_dir(env)
+    assert list(real.iterdir()) == []
+
+
+def test_a_configuration_directory_that_is_a_symlink_is_not_followed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host's own `gh` configuration is not unlinked by a seat."""
+    host = tmp_path / "host-gh"
+    host.mkdir()
+    (host / "hosts.yml").write_text("the host's own credential", encoding="utf-8")
+    monkeypatch.setattr(ghshim, "RUN_TMP_ROOT", tmp_path / "run")
+    env = {"PAPERCLIP_RUN_ID": RUN_ID}
+    base = ghshim.run_tmp(env)
+    base.mkdir(parents=True, exist_ok=True)
+    (base / "gh").symlink_to(host)
+    target = ghshim.empty_gh_config_dir(env)
+    assert target.is_dir()
+    assert not target.is_symlink()
+    assert (host / "hosts.yml").read_text(encoding="utf-8") == "the host's own credential"
+
+
+def test_the_run_credential_decides_and_not_the_markers(
+    seat_env: dict[str, str],
+    app_mode: Path,
+    captured: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The broker decides who is a seat, from the credential it checks."""
+    monkeypatch.setattr(ghshim, "request_token", lambda env, pr=None: ("the-minted-token", {}))
+    for name in ("PAPERCLIP_AGENT_ID", "PAPERCLIP_RUN_ID", "PAPERCLIP_TASK_ID"):
+        seat_env.pop(name, None)
+    assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_OK
+    assert captured[0]["env"]["GH_TOKEN"] == "the-minted-token"
+
+
+def test_app_mode_removes_the_host_variable_too(
+    seat_env: dict[str, str],
+    app_mode: Path,
+    captured: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`GH_HOST` chooses the host, and the token goes to the host."""
+    monkeypatch.setattr(ghshim, "request_token", lambda env, pr=None: ("the-minted-token", {}))
+    seat_env["GH_HOST"] = "github.example.com"
+    assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_OK
+    assert "GH_HOST" not in captured[0]["env"]
+
+
+def test_a_call_that_names_another_host_is_refused(
+    seat_env: dict[str, str], captured: list[dict[str, Any]]
+) -> None:
+    """The token is a credential for one host."""
+    code = ghshim.main(["api", "--hostname", "github.example.com", "user"], seat_env)
+    assert code == ghshim.EXIT_REFUSED
+    assert captured == []
+
+
+def test_printing_the_token_is_refused(
+    seat_env: dict[str, str],
+    app_mode: Path,
+    captured: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A token in a file is a token out of the chain."""
+    monkeypatch.setattr(ghshim, "request_token", lambda env, pr=None: ("the-minted-token", {}))
+    assert ghshim.main(["auth", "token"], seat_env) == ghshim.EXIT_REFUSED
+    assert captured == []
+
+
+def test_the_organization_rule_does_not_care_about_case(
+    seat_env: dict[str, str], captured: list[dict[str, Any]]
+) -> None:
+    """`REPOS/evilorg/evil/pulls` is the same endpoint as the lower case."""
+    code = ghshim.main(["api", "-X", "POST", "REPOS/evilorg/evil/pulls"], seat_env)
+    assert code == ghshim.EXIT_REFUSED
+    assert captured == []
+
+
+def test_the_organization_rule_resolves_a_path_that_walks_out(
+    seat_env: dict[str, str], captured: list[dict[str, Any]]
+) -> None:
+    """`repos/digithings-ai/../evilorg/evil/pulls` names the repository it reaches."""
+    code = ghshim.main(
+        ["api", "-X", "POST", "repos/digithings-ai/../evilorg/evil/pulls"], seat_env
+    )
+    assert code == ghshim.EXIT_REFUSED
+    assert captured == []
+
+
+def test_a_nul_byte_in_a_field_is_refused(
+    seat_env: dict[str, str], captured: list[dict[str, Any]]
+) -> None:
+    """A NUL byte cannot be passed to a program, and the shim says so."""
+    code = ghshim.main(["api", "repos/o/r/issues/1", "-f", "body=with\x00nul"], seat_env)
+    assert code == ghshim.EXIT_REFUSED
+    assert captured == []
+
+
+def test_the_answer_must_be_about_this_run(
+    seat_env: dict[str, str],
+    app_mode: Path,
+    captured: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An answer about another run is not this run's token."""
+    monkeypatch.setattr(
+        client,
+        "github_token",
+        lambda run_jwt, **kwargs: {
+            "ok": True,
+            "token": "the-minted-token",
+            "run_id": "a-different-run",
+        },
+    )
+    assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_REFUSED
+    assert captured == []
+
+
+def test_a_token_for_one_pull_request_is_not_used_for_another(
+    seat_env: dict[str, str],
+    app_mode: Path,
+    captured: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A review token is bound to one pull request."""
+    monkeypatch.setattr(
+        ghshim,
+        "request_token",
+        lambda env, pr=None: ("the-minted-token", {"run_id": RUN_ID, "pr_number": 42}),
+    )
+    assert ghshim.main(["pr", "review", "99"], seat_env) == ghshim.EXIT_REFUSED
+    assert captured == []
+
+
+def test_a_token_for_a_pull_request_needs_a_call_about_one(
+    seat_env: dict[str, str],
+    app_mode: Path,
+    captured: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A token that is bound to a pull request is not used on anything else."""
+    monkeypatch.setattr(
+        ghshim,
+        "request_token",
+        lambda env, pr=None: ("the-minted-token", {"run_id": RUN_ID, "pr_number": 42}),
+    )
+    assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_REFUSED
+    assert captured == []
+
+
+def test_a_refusal_does_not_echo_a_credential(
+    seat_env: dict[str, str], captured: list[dict[str, Any]], capsys: pytest.CaptureFixture
+) -> None:
+    """A caller that sent a token by mistake does not have it written down."""
+    secret = "ghp_" + "A" * 20
+    code = ghshim.main(["api", "repos/o/r/issues/1", "-f", secret], seat_env)
+    assert code == ghshim.EXIT_REFUSED
+    assert secret not in capsys.readouterr().err
+
+
+def test_the_pull_request_is_read_out_of_the_call(
+    seat_env: dict[str, str], app_mode: Path, captured: list[dict[str, Any]]
+) -> None:
+    """The shim says which pull request the call is about."""
+    assert ghshim.pr_number(["pr", "review", "42"]) == 42
+    assert ghshim.pr_number(["pr", "review", "--repo", "o/r", "42"]) == 42
+    assert ghshim.pr_number(["api", "repos/o/r/pulls/42/reviews"]) == 42
+    assert ghshim.pr_number(["pr", "list"]) is None

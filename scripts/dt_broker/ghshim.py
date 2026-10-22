@@ -28,15 +28,25 @@ guard" would have taken the guard out of the chain.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from .core import APP_MODE, DEFAULT_SOCKET_PATH, read_auth_mode
+from .core import (
+    APP_MODE,
+    DEFAULT_SOCKET_PATH,
+    AuthError,
+    decode_jwt_claims,
+    read_auth_mode,
+    redact_secrets,
+)
 
 #: The exit codes the shim uses. They are distinct so a caller can tell a
 #: refusal from a crash from a missing broker.
@@ -60,9 +70,32 @@ REAL_GH_PATHS: tuple[str, ...] = ("/opt/homebrew/bin/gh", "/usr/local/bin/gh")
 #: Every repository in it is allowed; every repository outside it is refused.
 ORG = "digithings-ai"
 
-#: The socket the broker listens on. `DT_BROKER_SOCKET` overrides it, which
-#: is how the tests point the shim at a broker of their own.
-DEFAULT_SOCKET = str(DEFAULT_SOCKET_PATH)
+#: The socket the broker listens on. There is deliberately no environment
+#: override: a seat that could point the shim at a socket of its own would be
+#: talking to a broker it wrote, and the one-repo wall, the run-scoped
+#: lifetime and the audit trail would all be its own. The tests change the
+#: module constant instead.
+BROKER_SOCKET = str(DEFAULT_SOCKET_PATH)
+
+#: The host's own credentials. They are removed from the environment the
+#: guard and the real `gh` run with, so a seat cannot fall back to the host's
+#: token when the broker is in charge.
+HOST_CREDENTIAL_ENV: tuple[str, ...] = (
+    "GITHUB_TOKEN",
+    "GH_ENTERPRISE_TOKEN",
+    "GITHUB_ENTERPRISE_TOKEN",
+    "GH_HOST",
+)
+
+#: The prefix of the per-run scratch directory. The shim makes this
+#: directory itself; a caller that could name it could point it at the
+#: host's own configuration and have it emptied.
+RUN_TMP_PREFIX = "dt-broker-"
+
+#: Where the per-run scratch directories live. A constant for the same
+#: reason as the socket: a caller that could name the directory could name
+#: the host's own configuration directory.
+RUN_TMP_ROOT = Path(tempfile.gettempdir())
 
 #: The rollback flag, read from the account that owns the broker. There is
 #: deliberately no environment override for the path: a seat that could point
@@ -111,6 +144,10 @@ class Refusal(Exception):
     """A call the shim will not make, with the reason it will not make it."""
 
 
+class AuthRefusal(Refusal):
+    """A call the shim will not make because there is nothing to sign it with."""
+
+
 @dataclass
 class Plan:
     """What the shim decided to do with one call."""
@@ -155,10 +192,13 @@ def guard_path(env: dict[str, str]) -> Path:
 
 
 def is_seat_process(env: dict[str, str]) -> bool:
-    """True when this process is a seat run.
+    """True when this process looks like a seat run.
 
     The guard uses the same three variables to decide whether it is talking
-    to a seat, so the two agree about who is being protected.
+    to a seat, so the two agree about who is being protected. The shim
+    decides nothing on this: what the shim decides on is the run
+    credential, which the broker hands to the Paperclip API, and the API
+    answers for the agent, the run and the ticket.
     """
     return any(
         str(env.get(name) or "").strip()
@@ -166,22 +206,41 @@ def is_seat_process(env: dict[str, str]) -> bool:
     )
 
 
+def run_credential(env: dict[str, str]) -> str:
+    """The run credential this process carries, if it carries one.
+
+    This is what decides whether a token can be minted. It is not a name
+    the caller chose: the broker hands it to the Paperclip API and the API
+    answers for the agent, the run and the ticket. A caller that shows
+    nothing gets no token, and -- while the broker is in charge -- no host
+    credential either.
+    """
+    return str(env.get("PAPERCLIP_API_KEY") or "").strip()
+
+
 def socket_path(env: dict[str, str]) -> str:
-    """Where the broker listens."""
-    return str(env.get("DT_BROKER_SOCKET") or DEFAULT_SOCKET)
+    """Where the broker listens.
+
+    The path is a constant of the program. A caller that could name the
+    socket could point the shim at a broker it wrote itself, and then the
+    one-repo wall, the run-scoped lifetime and the audit trail would be its
+    own.
+    """
+    return BROKER_SOCKET
 
 
 def run_tmp(env: dict[str, str]) -> Path:
     """The scratch directory for this run.
 
     `GH_CONFIG_DIR` points inside it, so the `gh` that runs reads an empty
-    configuration and not the host's.
+    configuration and not the host's. The shim names the directory: the run
+    id is hashed into the name, so a run id with a path in it cannot send
+    the directory somewhere else, and a caller cannot choose where a
+    configuration is emptied.
     """
-    explicit = env.get("DT_BROKER_RUN_TMP")
-    if explicit:
-        return Path(explicit).expanduser()
     run_id = str(env.get("PAPERCLIP_RUN_ID") or "no-run")
-    return Path(tempfile.gettempdir()) / f"dt-broker-{run_id}"
+    digest = hashlib.sha256(run_id.encode("utf-8", "replace")).hexdigest()[:16]
+    return Path(RUN_TMP_ROOT) / f"{RUN_TMP_PREFIX}{digest}"
 
 
 def auth_mode(env: dict[str, str]) -> str:
@@ -206,6 +265,30 @@ def _split_field(argument: str) -> tuple[str, str] | None:
         return None
     key, _, value = argument.partition("=")
     return key, value
+
+
+def _safe(value: object) -> str:
+    """A value the caller sent, with anything credential-shaped taken out.
+
+    The shim's refusals and notes are read in a seat's run log. A caller
+    that sent a token by mistake must not have it written down because the
+    shim quoted it back.
+    """
+    return redact_secrets(str(value))
+
+
+def _no_nul(value: str, what: str) -> str:
+    """Refuse a value that carries a NUL byte.
+
+    A NUL byte cannot be passed to a program: `execve` refuses it, and the
+    refusal arrives as a crash rather than as a message. The shim says so
+    instead.
+    """
+    if "\x00" in value:
+        raise Refusal(
+            f"{what} carries a NUL byte, which cannot be passed to a program"
+        )
+    return value
 
 
 @dataclass
@@ -243,7 +326,9 @@ def _parse_field_arg(argv: list[str], index: int) -> tuple[_FieldArg, int] | Non
             raise Refusal(f"{argument} was given without a value")
         parts = _split_field(argv[index + 1])
         if parts is None:
-            raise Refusal(f"{argument} needs a key=value pair, not {argv[index + 1]!r}")
+            raise Refusal(
+                f"{argument} needs a key=value pair, not {_safe(argv[index + 1])!r}"
+            )
         key, raw = parts
         return _FieldArg(flag=FIELD_FLAGS[argument], key=key, raw=raw, shape="spaced"), index + 1
     if argument.startswith("--") and "=" in argument:
@@ -253,7 +338,7 @@ def _parse_field_arg(argv: list[str], index: int) -> tuple[_FieldArg, int] | Non
             return None
         parts = _split_field(tail)
         if parts is None:
-            raise Refusal(f"{head} needs a key=value pair, not {tail!r}")
+            raise Refusal(f"{head} needs a key=value pair, not {_safe(tail)!r}")
         key, raw = parts
         return _FieldArg(flag=canonical, key=key, raw=raw, shape="long"), index
     if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
@@ -263,7 +348,7 @@ def _parse_field_arg(argv: list[str], index: int) -> tuple[_FieldArg, int] | Non
             return None
         parts = _split_field(argument[2:])
         if parts is None:
-            raise Refusal(f"{head} needs a key=value pair, not {argument[2:]!r}")
+            raise Refusal(f"{head} needs a key=value pair, not {_safe(argument[2:])!r}")
         key, raw = parts
         return _FieldArg(flag=canonical, key=key, raw=raw, shape="attached"), index
     return None
@@ -299,13 +384,18 @@ def _read_field_file(path_text: str) -> str:
     try:
         size = path.stat().st_size
     except OSError as exc:
-        raise Refusal(f"the file {path} cannot be read: {exc}") from exc
+        raise Refusal(f"the file {_safe(path)} cannot be read: {exc}") from exc
     if size > MAX_FIELD_BYTES:
-        raise Refusal(f"the file {path} is too large to send as a field ({size} bytes)")
+        raise Refusal(
+            f"the file {_safe(path)} is too large to send as a field ({size} bytes)"
+        )
     try:
-        return path.read_text(encoding="utf-8")
+        content = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
-        raise Refusal(f"the file {path} is not readable text: {exc}") from exc
+        raise Refusal(
+            f"the file {_safe(path)} is not readable text: {exc}"
+        ) from exc
+    return _no_nul(content, f"the file {_safe(path)}")
 
 
 def rewrite_fields(argv: list[str]) -> tuple[list[str], list[str]]:
@@ -335,17 +425,18 @@ def rewrite_fields(argv: list[str]) -> tuple[list[str], list[str]]:
             index += 1
             continue
         field_arg, index = parsed
+        _no_nul(field_arg.raw, f"the {field_arg.key} field")
         if field_arg.raw.startswith("@"):
             content = _read_field_file(field_arg.raw[1:])
             out.extend(field_arg.render(TEXT_FLAGS.get(field_arg.flag, "-f"), content))
-            notes.append(f"expanded {field_arg.key} from {field_arg.raw}")
+            notes.append(f"expanded {field_arg.key} from {_safe(field_arg.raw)}")
             index += 1
             continue
         if field_arg.key in BODY_KEYS and _looks_like_a_file(field_arg.raw):
             raise Refusal(
-                f"the {field_arg.key} field is a path to a file ({field_arg.raw}); the shim "
-                "will not post a path where a body belongs. Use `@<path>` to send the "
-                "file's contents."
+                f"the {field_arg.key} field is a path to a file ({_safe(field_arg.raw)}); "
+                "the shim will not post a path where a body belongs. Use `@<path>` to send "
+                "the file's contents."
             )
         out.extend(field_arg.render(field_arg.flag, field_arg.raw))
         index += 1
@@ -368,16 +459,17 @@ def rewrite_body_flags(argv: list[str]) -> tuple[list[str], list[str]]:
             if index + 1 >= len(argv):
                 raise Refusal(f"{argument} was given without a value")
             value = argv[index + 1]
+            _no_nul(value, f"the {argument} body")
             if value.startswith("@"):
                 content = _read_field_file(value[1:])
                 out.extend([argument, content])
-                notes.append(f"expanded the body from {value}")
+                notes.append(f"expanded the body from {_safe(value)}")
                 index += 2
                 continue
             if _looks_like_a_file(value):
                 raise Refusal(
-                    f"the body is a path to a file ({value}); the shim will not post a path "
-                    "where a body belongs. Use `--body-file <path>` to send the file."
+                    f"the body is a path to a file ({_safe(value)}); the shim will not post "
+                    "a path where a body belongs. Use `--body-file <path>` to send the file."
                 )
             out.extend([argument, value])
             index += 2
@@ -477,17 +569,51 @@ def _check_org(repo: str, what: str) -> None:
         )
 
 
-#: The pulls endpoint of the REST API, wherever it sits in an argument. The
-#: endpoint of `gh api` is a positional argument, and it may sit behind a
-#: flag, so every argument is scanned rather than only the first one.
-_PULLS_PATH_RE = re.compile(
-    r"(?:^|/)repos/(?P<owner>[^/\s]+)/(?P<repo>[^/\s]+)/pulls(?:/|$|\?)"
-)
-
 #: The GraphQL mutation that opens a pull request. The repository it names
 #: is inside a query string and cannot be checked honestly, so it is refused
 #: outright.
 _CREATE_PULL_REQUEST = "createPullRequest"
+
+#: The `gh pr` subcommands that take the number of a pull request.
+_PR_SUBCOMMANDS: frozenset[str] = frozenset(
+    {
+        "assign",
+        "checkout",
+        "close",
+        "comment",
+        "diff",
+        "edit",
+        "labels",
+        "merge",
+        "ready",
+        "reopen",
+        "review",
+        "view",
+    }
+)
+
+#: The number of a pull request in a REST path.
+_PULLS_NUMBER_RE = re.compile(r"(?:^|/)pulls/(?P<number>\d+)(?:/|$|\?)")
+
+
+def _path_segments(text: str) -> list[str]:
+    """The path segments of an argument, with `.` and `..` resolved.
+
+    A path that walks out of its own directory is resolved before it is
+    read, so `repos/digithings-ai/../evilorg/evil/pulls` is read as the
+    repository it actually names. The comparison is on the path as GitHub
+    will see it, not on the text as it was typed.
+    """
+    segments: list[str] = []
+    for segment in str(text).replace("\\", "/").split("/"):
+        if segment in ("", "."):
+            continue
+        if segment == "..":
+            if segments:
+                segments.pop()
+            continue
+        segments.append(segment)
+    return segments
 
 
 def _input_files(argv: list[str]) -> list[Path]:
@@ -531,9 +657,17 @@ def check_pull_request_target(argv: list[str], env: dict[str, str]) -> list[str]
         return notes
 
     for argument in argv[1:]:
-        for match in _PULLS_PATH_RE.finditer(argument):
-            owner = match.group("owner")
-            repo_name = match.group("repo")
+        segments = _path_segments(argument)
+        for index, segment in enumerate(segments):
+            if segment.lower() != "repos":
+                continue
+            if index + 2 >= len(segments):
+                continue
+            owner = segments[index + 1]
+            repo_name = segments[index + 2]
+            rest = segments[index + 3] if index + 3 < len(segments) else ""
+            if not rest.lower().startswith("pulls"):
+                continue
             if owner.startswith("{"):
                 repo = current_repo(argv, env)
                 if not repo:
@@ -564,27 +698,132 @@ def check_pull_request_target(argv: list[str], env: dict[str, str]) -> list[str]
 
 
 # ---------------------------------------------------------------------------
+# the host and the pull request
+# ---------------------------------------------------------------------------
+
+
+def check_host_flags(argv: list[str]) -> None:
+    """Refuse a call that names a host we do not control.
+
+    The token the broker mints is a credential for one host. A call that
+    chooses the host itself can carry that credential somewhere it does not
+    belong, so the flag that chooses it is refused rather than honoured.
+    """
+    for argument in argv:
+        if argument == "--hostname" or argument.startswith("--hostname="):
+            raise Refusal(
+                "this call names a GitHub host of its own; the broker's token only ever "
+                "goes to the one host we control"
+            )
+
+
+def refuse_token_print(argv: list[str]) -> None:
+    """Refuse `gh auth token`.
+
+    The token the broker minted is in the environment of the call. Printing
+    it puts it in a file, a log or a paste, where it is no longer scoped to
+    the run and no longer in the chain that keeps it scoped.
+    """
+    if len(argv) > 1 and argv[0] == "auth" and argv[1] == "token":
+        raise Refusal(
+            "the token in this environment is scoped to this run; printing it takes it "
+            "out of that scope, so the shim will not print it"
+        )
+
+
+def _as_pr_number(text: str) -> int | None:
+    """A pull request number, when the text is one."""
+    stripped = str(text).strip()
+    if stripped.isdigit():
+        try:
+            return int(stripped)
+        except ValueError:  # pragma: no cover - isdigit already answered
+            return None
+    return None
+
+
+def pr_number(argv: list[str]) -> int | None:
+    """The pull request a call is about, when the call names one.
+
+    A review token is bound to one pull request, so the shim has to say
+    which one it is about, and it has to check afterwards that the call it
+    makes is about that same pull request.
+    """
+    if not argv:
+        return None
+    if argv[0] == "pr" and len(argv) > 1 and argv[1] in _PR_SUBCOMMANDS:
+        skip = False
+        for argument in argv[2:]:
+            if skip:
+                skip = False
+                continue
+            if argument.startswith("-"):
+                # `--repo` takes a value; the other flags of these
+                # subcommands do not.
+                if argument in ("--repo", "-R"):
+                    skip = True
+                continue
+            return _as_pr_number(argument)
+        return None
+    if argv[0] == "api":
+        for argument in argv[1:]:
+            for match in _PULLS_NUMBER_RE.finditer(argument):
+                return int(match.group("number"))
+    return None
+
+
+# ---------------------------------------------------------------------------
 # the token
 # ---------------------------------------------------------------------------
 
 
-def request_token(env: dict[str, str]) -> str:
-    """Ask the broker for a token for this run."""
-    run_jwt = str(env.get("PAPERCLIP_API_KEY") or "")
+def _credential_run_id(run_jwt: str) -> str:
+    """The run a credential names, read without verifying it.
+
+    The broker verifies the credential against the Paperclip API; this only
+    says which run the shim asked about, so that an answer about another run
+    is refused.
+    """
+    try:
+        claims = decode_jwt_claims(run_jwt)
+    except (AuthError, ValueError, TypeError):
+        return ""
+    return str(claims.get("run_id") or "")
+
+
+def request_token(env: dict[str, str], *, pr: int | None = None) -> tuple[str, dict[str, Any]]:
+    """Ask the broker for a token for this run.
+
+    The answer is checked before it is used: it has to be an answer at all,
+    it has to carry a token, and it has to be an answer about *this* run.
+    The run is read out of the credential the shim presented, not out of
+    anything the caller wrote, so an answer about another run is refused.
+    """
+    run_jwt = run_credential(env)
     if not run_jwt:
-        raise Refusal("no run credential is in the environment, so no token can be asked for")
+        raise AuthRefusal(
+            "no run credential is in the environment, so no token can be asked for"
+        )
     from . import client as broker_client
 
     try:
-        answer = broker_client.github_token(run_jwt, socket_path=socket_path(env))
+        answer = broker_client.github_token(
+            run_jwt,
+            socket_path=BROKER_SOCKET,
+            pr_number=pr,
+        )
     except Exception as exc:  # the client raises a BrokerError of its own
         raise BrokerUnavailable(f"the broker did not answer: {exc}") from exc
     if not answer.get("ok"):
-        raise Refusal(str(answer.get("error") or "the broker refused"))
+        raise Refusal(_safe(answer.get("error") or "the broker refused"))
     token = str(answer.get("token") or "")
     if not token:
         raise Refusal("the broker answered without a token")
-    return token
+    expected = _credential_run_id(run_jwt)
+    answered = str(answer.get("run_id") or "")
+    if expected and answered and expected != answered:
+        raise Refusal("the broker answered for a different run")
+    return token, answer
 
 
 class BrokerUnavailable(Exception):
@@ -597,20 +836,49 @@ def empty_gh_config_dir(env: dict[str, str]) -> Path:
     `gh` reads its configuration from here. An empty directory means it reads
     none: the host's own `gh` configuration -- with whatever credentials the
     host keeps in it -- is not in the room.
+
+    The directory is emptied by taking it away and making it again, not by
+    unlinking what is inside it. A symlink inside it is removed rather than
+    followed, and a directory that is not ours is refused rather than
+    emptied: the shim never deletes a file it did not make.
     """
-    target = run_tmp(env) / "gh"
-    target.mkdir(parents=True, exist_ok=True)
+    base = run_tmp(env)
+    if base.is_symlink():
+        raise Refusal(
+            f"the run scratch directory {_safe(base)} is a symlink; the shim will not "
+            "use a directory it did not make"
+        )
     try:
-        target.chmod(0o700)
-    except OSError:
-        pass
-    for child in target.iterdir():
+        base.mkdir(parents=True, exist_ok=True)
+        base.chmod(0o700)
+    except OSError as exc:
+        raise Refusal(
+            f"the run scratch directory {_safe(base)} cannot be made: {exc}"
+        ) from exc
+    target = base / "gh"
+    if target.is_symlink():
+        # Unlinking a symlink costs the caller the link and nothing else:
+        # the path it pointed at is not touched.
         try:
-            if child.is_dir():
-                continue
-            child.unlink()
-        except OSError:
-            continue
+            target.unlink()
+        except OSError as exc:
+            raise Refusal(
+                f"the configuration directory {_safe(target)} cannot be replaced: {exc}"
+            ) from exc
+    elif target.exists():
+        try:
+            shutil.rmtree(target)
+        except OSError as exc:
+            raise Refusal(
+                f"the configuration directory {_safe(target)} cannot be emptied: {exc}"
+            ) from exc
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        target.chmod(0o700)
+    except OSError as exc:
+        raise Refusal(
+            f"the configuration directory {_safe(target)} cannot be made: {exc}"
+        ) from exc
     return target
 
 
@@ -622,34 +890,53 @@ def empty_gh_config_dir(env: dict[str, str]) -> Path:
 def plan_call(argv: list[str], env: dict[str, str], *, mint: bool = True) -> Plan:
     """Decide what to do with one `gh` call.
 
-    The rewrite and the refusals always happen. The token is only asked for
-    when this is a seat run in `app` mode: a call that is not a seat run has
-    no run to be scoped to, and `host` mode is the rollback.
+    The rewrite and the refusals always happen. While the broker is in
+    charge, the host's own credentials are not in the room whatever the
+    caller looks like, and the only credential a call runs with is the one
+    the broker minted for this run. A caller that cannot show a run
+    credential gets no credential at all, rather than the host's. In `host`
+    mode the call is passed through unchanged: that mode is the rollback,
+    and the flag that turns it on belongs to Chris.
     """
     rewritten, field_notes = rewrite_fields(argv)
     rewritten, body_notes = rewrite_body_flags(rewritten)
     notes = field_notes + body_notes
     notes.extend(check_pull_request_target(rewritten, env))
+    check_host_flags(rewritten)
 
     plan = Plan(argv=rewritten, notes=notes)
-    if not mint:
-        plan.notes.append("not a seat run: the call is passed through unchanged")
-        return plan
     if auth_mode(env) != APP_MODE:
         plan.notes.append("host auth mode: the call is passed through unchanged")
         return plan
 
-    token = request_token(env)
+    if not mint:
+        raise AuthRefusal(
+            "the broker is in charge and this call carries no run credential, so the "
+            "host's own credential is not used either"
+        )
+
+    # The host's own tokens are removed and `gh` is pointed at an empty
+    # configuration, so the only credential in the room is the one the
+    # broker minted for this run.
+    plan.removed_env = HOST_CREDENTIAL_ENV
     config_dir = empty_gh_config_dir(env)
-    plan.env["GH_TOKEN"] = token
     plan.env["GH_CONFIG_DIR"] = str(config_dir)
-    # The host's own tokens are removed, so the call cannot fall back to
-    # them: the only credential in the room is the one the broker minted.
-    plan.removed_env = (
-        "GITHUB_TOKEN",
-        "GH_ENTERPRISE_TOKEN",
-        "GITHUB_ENTERPRISE_TOKEN",
-    )
+
+    refuse_token_print(rewritten)
+    pr = pr_number(rewritten)
+    token, answer = request_token(env, pr=pr)
+    bound_pr = answer.get("pr_number")
+    if bound_pr is not None:
+        if pr is None:
+            raise Refusal(
+                "the token is for a pull request and this call is not about one"
+            )
+        if int(bound_pr) != int(pr):
+            raise Refusal(
+                f"the token is for pull request {int(bound_pr)} and this call is about "
+                f"pull request {int(pr)}"
+            )
+    plan.env["GH_TOKEN"] = token
     plan.notes.append("app auth mode: the call runs with a per-run token from the broker")
     return plan
 
@@ -673,6 +960,12 @@ def exec_guard(guard: Path, argv: list[str], env: dict[str, str]) -> int:
         return EXIT_INTERNAL
     try:
         os.execve(str(guard), [str(guard), *argv], env)
+    except ValueError as exc:
+        sys.stderr.write(
+            f"dt-broker: refusing: the call carries something that cannot be passed to a "
+            f"program: {exc}\n"
+        )
+        return EXIT_USAGE
     except OSError as exc:
         sys.stderr.write(f"dt-broker: the gh guard could not be run: {exc}\n")
         return EXIT_INTERNAL
@@ -697,7 +990,10 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
         return EXIT_REFUSED
 
     try:
-        plan = plan_call(call, environment, mint=is_seat_process(environment))
+        plan = plan_call(call, environment, mint=bool(run_credential(environment)))
+    except AuthRefusal as exc:
+        sys.stderr.write(f"dt-broker: refusing: {exc}\n")
+        return EXIT_AUTH
     except Refusal as exc:
         sys.stderr.write(f"dt-broker: refusing: {exc}\n")
         return EXIT_REFUSED
@@ -724,13 +1020,18 @@ __all__ = [
     "EXIT_REFUSED",
     "EXIT_UNAVAILABLE",
     "EXIT_USAGE",
+    "AuthRefusal",
     "Refusal",
     "auth_mode",
+    "check_host_flags",
     "check_pull_request_target",
     "current_repo",
     "is_seat_process",
     "main",
     "plan_call",
+    "pr_number",
+    "refuse_token_print",
     "rewrite_body_flags",
     "rewrite_fields",
+    "run_credential",
 ]

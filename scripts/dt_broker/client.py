@@ -82,6 +82,7 @@ def github_token(
     repo: str | None = None,
     permissions: list[str] | None = None,
     head_sha: str | None = None,
+    pr_number: int | None = None,
 ) -> dict[str, Any]:
     """Ask the broker for a token for this run."""
     payload: dict[str, Any] = {"op": "github-token", "run_jwt": run_jwt}
@@ -91,6 +92,8 @@ def github_token(
         payload["permissions"] = list(permissions)
     if head_sha:
         payload["head_sha"] = head_sha
+    if pr_number is not None:
+        payload["pr_number"] = int(pr_number)
     return request(payload, socket_path)
 
 

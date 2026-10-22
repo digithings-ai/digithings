@@ -198,6 +198,34 @@ def looks_secret(value: str) -> bool:
     return bool(_GITHUB_TOKEN_RE.match(value) or _JWT_RE.match(value))
 
 
+#: A credential anywhere inside a longer text. A refusal that quotes what
+#: the caller sent is refused text, and a caller that sent a token by
+#: mistake must not have it echoed back into a log.
+_SECRET_INSIDE_RE = re.compile(
+    r"gh[pousr]_[A-Za-z0-9]{16,}"
+    r"|ey[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*"
+)
+
+
+def contains_secret(text: str) -> bool:
+    """True when a text carries something that looks like a credential."""
+    if not text:
+        return False
+    return bool(_SECRET_INSIDE_RE.search(text))
+
+
+def redact_secrets(text: str, replacement: str = "[redacted]") -> str:
+    """A text with anything that looks like a credential taken out of it.
+
+    A refusal is read by a person in a run log. If the reason quotes what
+    the caller sent, and what the caller sent was a credential, then the
+    refusal is the leak.
+    """
+    if not text:
+        return text
+    return _SECRET_INSIDE_RE.sub(replacement, text)
+
+
 def scrub(fields: Mapping[str, Any]) -> dict[str, Any]:
     """Redact anything that looks like a credential out of a log record."""
     clean: dict[str, Any] = {}
@@ -548,7 +576,8 @@ class Policy:
                 key = str(name)
                 if key not in held:
                     raise RefusedError(
-                        f"seat class {seat_class.name!r} may not hold {key!r}; "
+                        f"seat class {seat_class.name!r} may not hold "
+                        f"{redact_secrets(key)!r}; "
                         "the request asked for a permission it does not have"
                     )
                 selected[key] = held[key]

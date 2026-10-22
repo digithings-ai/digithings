@@ -129,12 +129,37 @@ as well; a mutation hidden in an `--input` file is read and refused too. This
 holds in both authentication modes, and for a process that is not a seat run: no
 upstream pull request, ever, under any identity.
 
-In `app` mode the shim then asks the broker for a token, sets `GH_TOKEN` for that one
-call, and removes `GITHUB_TOKEN`, `GH_ENTERPRISE_TOKEN` and `GITHUB_ENTERPRISE_TOKEN`
-from the environment, so the call cannot fall back to the host's credentials. In
-`host` mode the call is passed through unchanged.
+The organization is compared without regard to case, and the path is resolved
+before it is compared, so `REPOS/evilorg/evil/pulls` and
+`repos/digithings-ai/../evilorg/evil/pulls` are refused as well.
 
-The three refusals are the same in both modes. The rollback turns off the broker, not
+**It asks the broker on the broker's socket, and nowhere else.** The socket path is
+a constant of the program (`/Users/_dtbroker/run/dt-broker.sock`), not something
+the environment can move: a seat that named its own socket would have asked its own
+broker for a token, and the one-repository wall, the run-scoped lifetime and the
+audit trail would have gone with it. The answer must also be about this run — the
+broker returns the run it minted for, and the shim refuses an answer about
+another run.
+
+**It decides on the credential, not on the markers.** What tells the shim that this
+is a seat run is the run credential in the environment (`PAPERCLIP_API_KEY`), which
+the broker verifies against the Paperclip API for every mint. The seat markers are
+not the switch: a process that has no run credential is refused in `app` mode
+(exit 66) instead of being passed through with the host's own credentials.
+
+**It never hands the host's credentials through.** In `app` mode the shim removes
+`GITHUB_TOKEN`, `GH_ENTERPRISE_TOKEN`, `GITHUB_ENTERPRISE_TOKEN` and `GH_HOST`
+from the environment, points `GH_CONFIG_DIR` at an empty directory it makes itself,
+and sets `GH_TOKEN` for that one call. The host's `~/.config/gh` is never read and
+the host's token is never inherited. `--hostname` is refused, so a minted token
+cannot be presented to a host nobody controls, and `gh auth token` is refused, so
+it cannot be printed out of the guard's chain.
+
+In `app` mode the shim asks the broker for a token, sets `GH_TOKEN` for that one
+call, and removes the host's credentials from the environment, so the call cannot
+fall back to them. In `host` mode the call is passed through unchanged.
+
+The refusals are the same in both modes. The rollback turns off the broker, not
 the rules.
 
 ## The credential helper
@@ -173,6 +198,19 @@ installation token, not ten. When the run ends, every token the broker minted fo
 that run is revoked, so nothing outlives the work. A token that has expired on
 GitHub's side is pruned and a fresh one is minted.
 
+The revocation does not wait for the seat to remember it. Every tick the daemon
+asks Paperclip about the runs it has tokens for and revokes the tokens of the runs
+that are no longer `running`, so a run that comments on a pull request and never
+pushes loses its token when it ends, like any other run. A revocation GitHub
+refuses does not drop the token: it stays in the ledger and the next tick tries
+again.
+
+The one hole in this is a restart of the daemon. The ledger of what it minted
+lives in the daemon's memory, so a daemon that restarts forgets the tokens it
+issued, and those can only be left to expire on GitHub's side — an hour, and not
+one minute. The tokens a restart forgets are the ones minted in the hour before
+it.
+
 The rule that makes this safe is the same one that makes it useless to steal: the
 token is scoped to the repository of the ticket, it carries only the permissions
 of the seat's class, and it dies with the run.
@@ -191,19 +229,34 @@ of the seat's class, and it dies with the run.
 | `secrets`, ever | No seat holds it. |
 | `statuses` and `workflows`, for a seat or a reviewer | Not part of the job. |
 | A reviewer reviewing its own change | The head commit names the requesting seat as an owner, or names nobody at all. |
+| A reviewer that did not name a pull request | The head commit is read from the pull request, not from the caller. |
+| A review token used on another pull request | A review token is bound to one pull request. |
 | A mint while the flag says `host` | The rollback is on: the broker hands out nothing. |
 
 A refusal is an answer, not an error: the broker says what it refused and why, and
-the caller sees it.
+the caller sees it. A refusal never repeats back what the caller asked for: the
+value is redacted before it reaches the message, so a credential-shaped value that
+was refused does not land in the run log.
 
 ## The review path
 
 A seat of the `reviewer` class gets a `digithings-review` token only for a change
-somebody else wrote. The broker reads the head commit's trailers, finds every
-owner it names, and refuses when one of them is the requesting seat. It also
-refuses when the commit names **no** owner at all: a change with no author trailer
-is not a change somebody else wrote, it is a change nobody can be compared with.
-The head commit's sha has to be supplied: a review without one is refused.
+somebody else wrote, and only for one pull request.
+
+The pull request has to be named: a review without one is refused. The broker reads
+the pull request from GitHub and takes **its own head commit** as the commit under
+review, not the sha the caller wrote down. A caller that names a different sha is
+refused, so a reviewer cannot point the broker at a commit that is not the head of
+the pull request it is about.
+
+The broker then reads that head commit's trailers, finds every owner it names, and
+refuses when one of them is the requesting seat. It also refuses when the commit
+names **no** owner at all: a change with no author trailer is not a change somebody
+else wrote, it is a change nobody can be compared with.
+
+The token that comes back is bound to that pull request, and the shim refuses to
+use it on another one: a review token is for one pull request and not for the next
+one.
 
 The commit is read with the App's own credentials, not anonymously, so the check
 works on the private repositories of the organization.
@@ -239,6 +292,9 @@ not sign anything in Chris's name. The alert file is what a Board-side watcher r
 | `dt-broker: the broker did not answer ...` | The daemon is down. Exit 69. The call is not made with host credentials, on purpose. |
 | `dt-broker: refusing: ... is outside the digithings-ai organization` | The shim caught a pull request outside the organization. Exit 76. |
 | `dt-broker: refusing: a body that is a path` | The shim caught a body that would have been posted as a path. Exit 76. |
+| `dt-broker: refusing: ... --hostname ...` | The shim caught a call aimed at a host nobody controls. Exit 76. |
+| `dt-broker: refusing: gh auth token` | The shim caught a call that would have printed the token. Exit 76. |
+| `dt-broker: refusing: no run credential` | `app` mode, and the environment has no run credential. Exit 66. The call is not made with the host's credential, on purpose. |
 | `dt-broker: the gh guard is not at ...` | The guard is gone or moved. Exit 70. The shim refuses rather than calling the real `gh` without it. |
 | `gh` is not the shim | The seat's shell hook still points `_SEAT_GH_GUARD` at the guard, or the PATH does not have `/usr/local/lib/dt-broker/bin` in front of the guard's directory. |
 | `git` asks for a username | The credential helper could not reach the broker, or the repository is outside the policy. |
@@ -251,13 +307,21 @@ helper will happily push with the host's credential, so neither entry is optiona
 ## The tests
 
 `tests/scripts/test_dt_broker.py` covers the broker: the refusals in the table
-above, the token never reaching a log, the revoke at the end of a run, the forged
-credential that cannot revoke another run, the reviewer that cannot review its own
-change, the host mode that mints nothing, and the launchd arguments as they are
-really parsed.
+above, the token never reaching a log, the revoke at the end of a run, the sweep
+that revokes what it minted when the run ends, the revocation GitHub refuses being
+retried rather than lost, the forged credential that cannot revoke another run,
+the reviewer that cannot review its own change, the reviewer that cannot point the
+broker at a commit that is not the head of the pull request, the host mode that
+mints nothing, and the launchd arguments as they are really parsed.
 `tests/scripts/test_dt_broker_shim.py` covers the shim: the `@path` expansion for
 both spellings, the refused bare path, the refused out-of-organization pull request
-(including the endpoint behind a flag and the mutation in a file), the guard in the
-chain, and the host-mode pass-through.
+(including the endpoint behind a flag, the mutation in a file, an organization name
+in another case and a `..` in the path), the guard in the chain, the socket that
+cannot be named by the environment, the scratch directory that cannot be named by
+the environment and cannot be made to point at the host's own configuration, the
+run credential that decides, the host's token that never reaches the child, the
+refused `--hostname` and `gh auth token`, the answer that has to be about this run,
+the token that cannot be used on another pull request, and the host-mode
+pass-through.
 `tests/scripts/test_merge_queue.py` covers the flag's effect on the provenance
 gate: it lowers a gate, and it never raises one.
