@@ -88,7 +88,7 @@ export async function ensureWarm(): Promise<void> {
   }
 }
 
-const TRANSIENT_RE = /container|not running|disconnected|digraph unreachable|upstream_auth|service_unavailable/i;
+const TRANSIENT_RE = /container|not running|disconnected|digraph unreachable|upstream_auth|upstream_unavailable|service_unavailable/i;
 
 /**
  * fetch for chat requests: waits out sleeping services first, and if the

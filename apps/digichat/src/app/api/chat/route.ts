@@ -24,7 +24,9 @@ import {
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
 import {
+  DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
+  DigigraphUpstreamUnavailableError,
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
@@ -807,7 +809,27 @@ async function handleChat(
     upstreamBearer = up.bearer;
     litellmProxyApiKey = up.litellmProxyApiKey;
   } catch (e) {
-    runLock.release();
+    // The upstream exchange failed before any turn was produced, so the run id
+    // must not refuse the retry: the client replays the same X-Digi-Run-Id
+    // when it repeats the send, and the cold case is answered with a
+    // Retry-After (DIG-4424).
+    runLock.release({ forgetRunId: true });
+    if (e instanceof DigigraphUpstreamUnavailableError) {
+      // digikey was cold, asleep or down: the request is retryable, so it is
+      // answered 503 with a Retry-After and NOT as an upstream_auth failure.
+      // A 502 upstream_auth here told the operator to check the token for a
+      // dependency that was only asleep (DIG-4424).
+      return new Response(
+        JSON.stringify({ error: "upstream_unavailable", message: e.message }),
+        {
+          status: 503,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": String(DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS),
+          },
+        }
+      );
+    }
     const msg =
       e instanceof DigigraphUpstreamAuthError
         ? e.message

@@ -11,9 +11,17 @@ export type DigikeyTokenExchange = {
 };
 
 function parseTokenPayload(data: TokenJson): DigikeyTokenExchange | null {
-  const accessToken = data.access_token?.trim();
+  // The wire is not typed: a field that is not a string must not throw out of
+  // the exchange. A token digikey issued is kept even when the optional
+  // litellm key is malformed; a missing or malformed access_token is a refusal.
+  if (!data || typeof data !== "object") return null;
+  const accessToken =
+    typeof data.access_token === "string" ? data.access_token.trim() : "";
   if (!accessToken) return null;
-  const k = data.litellm_proxy_api_key?.trim();
+  const k =
+    typeof data.litellm_proxy_api_key === "string"
+      ? data.litellm_proxy_api_key.trim()
+      : "";
   return {
     accessToken,
     litellmProxyApiKey: k && k.length ? k : null,
@@ -66,6 +74,54 @@ export const DIGIKEY_BFF_RETRY_DELAYS_MS = [
 export const DIGIKEY_BFF_RETRY_BUDGET_MS = 100_000;
 
 /**
+ * Why a digikey bff_session exchange failed.
+ *
+ * `rejected` — digikey answered and issued no token: the credential was
+ * refused (401/403), or the request itself was wrong (400/422). This is a
+ * configuration problem and it says so.
+ *
+ * `not_configured` — digikey answered that the bff_session grant is not
+ * configured on its own side (it has no DIGIKEY_BFF_TOKEN in its env). It
+ * answers 503 for this, the same status it uses while its container is still
+ * waking, so the status alone cannot tell the two apart. This one is
+ * permanent: no retry and no wait installs the missing secret.
+ *
+ * `unreachable` — digikey never gave an answer we could use: every attempt
+ * errored, timed out, or hit a transient status while the sleep-on-idle
+ * container was waking. This is a cold dependency, and a retry fixes it.
+ *
+ * The three used to collapse into one `null`, so a cold digikey was reported as
+ * "check DIGIKEY_BFF_TOKEN" and a real one-sided rotation looked the same
+ * (DIG-4424).
+ */
+export type DigikeyBffSessionFailureReason = "rejected" | "not_configured" | "unreachable";
+
+/**
+ * digikey's own answer when its bff_session grant is not configured:
+ * `503 {"detail":"bff_session grant not configured (DIGIKEY_BFF_TOKEN)"}`
+ * (digikey/src/digikey/server.py, the `bff_session` branch of
+ * `/v1/oauth/token`).
+ *
+ * It is matched on the answer, not on the status, because 503 is also what a
+ * waking stack container answers. If digikey ever rewords the detail, the
+ * match stops and the case falls back to `unreachable` — the retryable
+ * answer, which is the safe side to fall back to.
+ */
+const DIGIKEY_GRANT_NOT_CONFIGURED_RE = /bff_session.*not configured/i;
+
+/**
+ * The outcome of one bff_session exchange: the token, or why there is none.
+ */
+export type DigikeyBffSessionOutcome =
+  | { ok: true; exchange: DigikeyTokenExchange }
+  | {
+      ok: false;
+      reason: DigikeyBffSessionFailureReason;
+      /** The status digikey answered with, when it answered at all. */
+      status: number | null;
+    };
+
+/**
  * OIDC-backed session exchange (digichat BFF → digikey). Requires DIGIKEY_BFF_TOKEN on digikey.
  */
 export async function exchangeDigikeyBffSession(
@@ -73,7 +129,7 @@ export async function exchangeDigikeyBffSession(
   bffToken: string,
   tenantSlug: string,
   subject: string
-): Promise<DigikeyTokenExchange | null> {
+): Promise<DigikeyBffSessionOutcome> {
   const base = digikeyBaseUrl.replace(/\/$/, "");
   // digikey runs in a sleep-on-idle container: the first call after idle can
   // 5xx / time out for ~50s while it boots. Retry transient failures with
@@ -89,6 +145,10 @@ export async function exchangeDigikeyBffSession(
   const BUDGET_MS = DIGIKEY_BFF_RETRY_BUDGET_MS;
   const delays = DIGIKEY_BFF_RETRY_DELAYS_MS;
   const startedAt = Date.now();
+  // The last transient status digikey answered with, if any. It is kept so a
+  // caller that reports "digikey never became ready" can name the status it
+  // kept answering with, without exposing the body.
+  let lastTransientStatus: number | null = null;
   for (let i = 0; i < delays.length; i++) {
     const beforeWait = BUDGET_MS - (Date.now() - startedAt);
     if (beforeWait <= 0) break;
@@ -122,13 +182,59 @@ export async function exchangeDigikeyBffSession(
     }
     if (!res) continue;
     if (res.ok) {
-      const data = (await res.json()) as TokenJson;
-      return parseTokenPayload(data);
+      let data: TokenJson;
+      try {
+        data = (await res.json()) as TokenJson;
+      } catch {
+        // digikey answered, but not with a token payload. It did answer, so
+        // this is a refusal of the request, not a cold dependency.
+        return { ok: false, reason: "rejected", status: res.status };
+      }
+      const exchange = parseTokenPayload(data);
+      if (exchange) return { ok: true, exchange };
+      // A 200 without an access_token is digikey refusing to issue one.
+      return { ok: false, reason: "rejected", status: res.status };
     }
     const transient = res.status >= 500 || res.status === 429 || res.status === 408;
-    if (!transient) return null;
+    if (!transient) {
+      // digikey answered and refused: 401/403 is a rejected token, 400 a
+      // rejected request. Neither is fixed by waiting.
+      return { ok: false, reason: "rejected", status: res.status };
+    }
+    // digikey answers 503 when the grant is not configured on its own side,
+    // the same status it uses while the stack container is still waking. The
+    // body is read to tell the two apart and is never echoed back.
+    if (DIGIKEY_GRANT_NOT_CONFIGURED_RE.test(await readBodyText(res))) {
+      return { ok: false, reason: "not_configured", status: res.status };
+    }
+    lastTransientStatus = res.status;
   }
-  return null;
+  // The loop ran out of attempts or out of budget with no usable answer:
+  // digikey was cold, asleep, or down. Not a token problem.
+  return { ok: false, reason: "unreachable", status: lastTransientStatus };
+}
+
+/**
+ * Read a response body as text, bounded in time and never throwing.
+ *
+ * It is only used to recognise one known answer, so a body that is slow or
+ * broken is read as "no answer" — the caller then keeps the retryable
+ * classification, which is the safe side to fall back to.
+ */
+async function readBodyText(res: Response, timeoutMs = 2_000): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      res.text(),
+      new Promise<string>((resolve) => {
+        timer = setTimeout(() => resolve(""), timeoutMs);
+      }),
+    ]);
+  } catch {
+    return "";
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export function isDigikeyApiKeyMaterial(token: string): boolean {

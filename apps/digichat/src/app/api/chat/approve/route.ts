@@ -41,7 +41,9 @@ import { licenseRefusal } from "@/lib/license/state";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import {
+  DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
+  DigigraphUpstreamUnavailableError,
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
 
@@ -197,6 +199,22 @@ export async function POST(req: Request): Promise<Response> {
     const up = await resolveDigigraphUpstreamAuth(req, tenantSlug, ownerUserSub);
     upstreamBearer = up.bearer;
   } catch (err) {
+    if (err instanceof DigigraphUpstreamUnavailableError) {
+      // digikey is cold or down: retryable, so it is not an auth failure.
+      return new Response(
+        JSON.stringify({
+          error: "upstream_unavailable",
+          message: err.message,
+        }),
+        {
+          status: 503,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": String(DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS),
+          },
+        }
+      );
+    }
     if (err instanceof DigigraphUpstreamAuthError) {
       return jsonError(401, "upstream_auth_failed", "Could not authenticate to digigraph.");
     }

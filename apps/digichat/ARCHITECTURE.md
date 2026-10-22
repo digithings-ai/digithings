@@ -524,7 +524,9 @@ On every `/api/chat` call:
 2. Otherwise, if `DIGIKEY_URL` and `DIGIKEY_BFF_TOKEN` are set, the BFF calls
    `POST {DIGIKEY_URL}/v1/oauth/token` with `grant_type=bff_session`, the BFF token,
    tenant slug, and OIDC subject. digikey returns a short-lived JWT scoped to that
-   tenant+subject.
+   tenant+subject. When that exchange fails, the answer names which failure it was
+   — a refused token, a digikey with no `bff_session` grant, or an unreachable
+   digikey — see "Cold digikey vs a rejected token" below.
 3. Fallback: `DIGIGRAPH_UPSTREAM_API_KEY` static bearer (bootstrap only).
 4. The resulting JWT is forwarded as `Authorization: Bearer <JWT>` to digigraph,
    along with `X-digichat-Tenant`, `X-Digi-Caller: digichat`, `X-Session-Id`,
@@ -582,9 +584,11 @@ is exported and pinned by a test instead of being asserted in a comment.
   token, unknown tenant); retrying it only holds the chat request longer for the
   same answer.
 - **What a caller sees.** The chat upstream-auth path
-  (`src/lib/digigraph-upstream.ts`) calls this before digigraph, so a down
-  digikey holds the chat request for up to the whole budget (~100s) and then
-  raises `DigigraphUpstreamAuthError`.
+  (`src/lib/digigraph-upstream.ts`) calls this before digigraph. A down digikey
+  holds the chat request for up to the whole budget (~100s) and then raises
+  `DigigraphUpstreamUnavailableError` (cold/unreachable); a refused token fails
+  fast, after one attempt, and raises `DigigraphUpstreamAuthError` (refused) —
+  see "Cold digikey vs a rejected token" below.
 - **What the budget does and does not bound.** The per-attempt abort timer
   covers the request up to the response headers: the timer is released when
   the headers arrive, so a response that then stalls its body is **not**
@@ -598,9 +602,60 @@ is exported and pinned by a test instead of being asserted in a comment.
   on its own, but the two budgets together still exceed it; tightening either
   one is a request-owner decision.
 
+### Cold digikey vs a rejected token (DIG-4424)
+
+The exchange returns a **discriminated outcome**, not one `null`:
+
+| outcome | when | error raised | answer on the wire |
+|---|---|---|---|
+| `ok` | digikey issued a token | — | the request continues |
+| `rejected` | digikey answered and refused: a non-transient status (401/403/400/422), a 200 with no usable `access_token`, or a 200 with a body that is not a token payload | `DigigraphUpstreamAuthError` | chat route: `502 {"error":"upstream_auth",…}` — "digikey rejected the bff_session exchange (answered 401). Check DIGIKEY_BFF_TOKEN and digikey configuration." · decision route: `401 {"error":"upstream_auth_failed",…}` |
+| `not_configured` | digikey answered that its own side has no `bff_session` grant: `503 {"detail":"bff_session grant not configured (DIGIKEY_BFF_TOKEN)"}` | `DigigraphUpstreamAuthError` | same as `rejected` — the copy on the digichat side is not the one that is wrong, so the message says "digikey has no DIGIKEY_BFF_TOKEN configured (the bff_session grant is not set on the digikey side). Check the digikey side, not only the digichat copy." |
+| `unreachable` | digikey never answered usefully: every attempt errored or timed out, or the retries were used up on transient statuses (7 attempts over ~56 s, or the 100 s budget) | `DigigraphUpstreamUnavailableError` | chat route and decision route: `503 {"error":"upstream_unavailable",…}` with `Retry-After: 5` — "digikey did not answer the bff_session exchange — it is cold or unreachable (last answer: 503). This is not a DIGIKEY_BFF_TOKEN problem; retry in a few seconds." |
+
+Before this, every failure returned `null` and every one surfaced as `502
+upstream_auth` with the message "digikey bff_session exchange failed (check
+DIGIKEY_BFF_TOKEN and digikey configuration)." A cold digikey therefore read as
+a token problem, and a genuine one-sided rotation read as a cold dependency.
+The failures need different answers — a rejected token is a configuration
+problem an operator must fix, a cold digikey clears on a retry — so they are
+separate statuses and separate messages now.
+
+`not_configured` is a third case, not a flavour of `rejected`: digikey answers
+`503` for it, the same status a waking stack container answers with, so the
+body is read to tell the two apart. It is permanent: no retry and no wait
+installs the missing secret, and the secret that is missing is the one on the
+digikey side.
+
+Where the distinction lands:
+
+- The chat route (`src/app/api/chat/route.ts`) answers
+  `DigigraphUpstreamUnavailableError` with `503` and
+  `Retry-After: DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS` (5 s).
+- The decision route (`src/app/api/chat/approve/route.ts`) answers it the same
+  way, so a cold digikey is never reported as `401 upstream_auth_failed`.
+- The chat route releases the run lock with `forgetRunId` on this path: the
+  request failed before it produced a turn, and the client replays the same
+  `X-Digi-Run-Id` when it obeys the `Retry-After`, so the run id must not
+  refuse that retry with `409 run_id_replay`.
+- The browser retry path (`src/lib/warmup-gate.ts`) lists
+  `upstream_unavailable` as transient, so the cold case keeps the client-side
+  retry it had while the answer was `upstream_auth`.
+- The embed error surface (`src/lib/embed-chat-error.ts`) lists
+  `upstream_unavailable` as an upstream failure, so it is shown as an
+  infrastructure problem and not as a BYOK prompt.
+
+The `Retry-After` value matches the stack Worker’s own
+`CONTAINER_RETRY_AFTER_SECONDS` and the digichat Worker’s
+`RETRY_AFTER_SECONDS`: one cold-start window for the whole chain.
+
 Coverage: `src/lib/digikey-exchange.test.ts` drives a transient status, each
-arm of the transient set, a 4xx, a thrown attempt and an abort, and pins the
-attempt count, the timer cleanup, the schedule and the stated budget.
+arm of the transient set, a 4xx, a 200 without a token, a 200 with a body that
+is not JSON, a 503 that says the grant is not configured, a 503 that is a
+booting container, a thrown attempt and an abort, and pins the attempt count,
+the timer cleanup, the schedule and the stated budget.
+`src/lib/warmup-gate.test.ts` pins that both the cold body and the refused
+body are retried on the client.
 
 ### Drizzle migration approach
 
