@@ -41,6 +41,10 @@ from digillm import (
     get_provider_api_key_env,
     is_registered_provider,
 )
+from digillm.client import pop_premium_models as _pop_premium_models
+from digillm.client import pop_router_models as _pop_router_models
+from digillm.client import push_premium_models as _push_premium_models
+from digillm.client import push_router_models as _push_router_models
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -231,6 +235,52 @@ class DigiquantModelsConfig(BaseModel):
     phase_capability_prefixes: dict[str, str] = Field(default_factory=dict)
 
 
+_REASONING_LEVELS = frozenset({"low", "medium", "high"})
+
+
+class ReasoningEffortPolicyConfig(BaseModel):
+    """``reasoning_effort`` in ``config/model-policy.json``: the chat reasoning policy.
+
+    Optional and lenient in the safe direction: absent or empty means no model gets
+    ``reasoning_effort``, which is how every request looked before the policy
+    existed. What it refuses is a value that would misroute quietly: a blank prefix
+    (``wire.startswith("")`` is true for every model) or a level digillm does not
+    know. digigraph registers it with digillm (:func:`digillm.client.set_reasoning_effort_policy`).
+    """
+
+    default_sent: dict[str, str] = {}
+    configurable_prefixes: list[str] = []
+
+    @field_validator("default_sent")
+    @classmethod
+    def _check_default_sent(cls, v: dict[str, str]) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for model_id, level in v.items():
+            key = model_id.strip()
+            lvl = level.strip().lower()
+            if not key:
+                raise ValueError("reasoning_effort.default_sent has a blank model id")
+            if lvl not in _REASONING_LEVELS:
+                raise ValueError(
+                    f"reasoning_effort.default_sent[{key!r}] is {level!r}; use low, medium or high"
+                )
+            out[key] = lvl
+        return out
+
+    @field_validator("configurable_prefixes")
+    @classmethod
+    def _check_prefixes(cls, v: list[str]) -> list[str]:
+        out: list[str] = []
+        for prefix in v:
+            cleaned = prefix.strip()
+            if not cleaned:
+                raise ValueError(
+                    "reasoning_effort.configurable_prefixes has a blank prefix, which would match every model"
+                )
+            out.append(cleaned)
+        return out
+
+
 class ModelPolicyConfig(BaseModel):
     """Parsed ``config/model-policy.json`` — the model *policy* routing reads from.
 
@@ -259,6 +309,7 @@ class ModelPolicyConfig(BaseModel):
     flagship_model_id_markers: list[str]
     balanced_flagship_markers: list[str] = []
     fallback_model: str
+    reasoning_effort: ReasoningEffortPolicyConfig = ReasoningEffortPolicyConfig()
 
     @field_validator("flagship_model_id_markers")
     @classmethod
@@ -338,6 +389,11 @@ def _load_model_policy(path: Path) -> ModelPolicyConfig:
 # that fails, in whichever worker thread happened to get there first.
 _MODEL_POLICY_PATH = _resolve_model_policy_path()
 _MODEL_POLICY = _load_model_policy(_MODEL_POLICY_PATH)
+
+
+def reasoning_effort_policy() -> ReasoningEffortPolicyConfig:
+    """The chat reasoning policy from ``config/model-policy.json`` (``reasoning_effort``)."""
+    return _MODEL_POLICY.reasoning_effort
 
 
 _EMPTY_MODEL_MODES = ModelModesConfig()
@@ -825,6 +881,39 @@ def pop_house_model(token: Token[str | None]) -> None:
 
 def get_house_model_override() -> str | None:
     return _house_model_override.get()
+
+
+def push_router_models(value: str | None) -> Token[tuple[str, ...] | None]:
+    """Bind the OpenRouter router allowlist, intersected with the session list.
+
+    An empty session allowlist binds nothing, so a caller cannot widen the
+    router past what the operator published. At most 64 ids.
+    """
+    allow = session_model_allowlist()
+    raw = (value or "").strip()
+    if not allow or not raw:
+        return _push_router_models(None)
+    ids: list[str] = []
+    for part in raw.split(","):
+        slug = part.strip()
+        if slug and slug in allow and slug not in ids:
+            ids.append(slug)
+        if len(ids) >= 64:
+            break
+    return _push_router_models(",".join(ids) if ids else None)
+
+
+def pop_router_models(token: Token[tuple[str, ...] | None]) -> None:
+    _pop_router_models(token)
+
+
+def push_premium_models(value: str | None) -> Token[frozenset[str]]:
+    """Bind manual Premium ids so the OpenRouter router cannot spend them."""
+    return _push_premium_models(value)
+
+
+def pop_premium_models(token: Token[frozenset[str]]) -> None:
+    _pop_premium_models(token)
 
 
 def get_model_for_mode() -> str:

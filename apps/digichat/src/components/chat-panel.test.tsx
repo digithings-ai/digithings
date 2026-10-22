@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { type ReactNode } from "react";
 import { render } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UIMessage } from "ai";
 import {
   BYOK_PROVIDER_LIST,
@@ -136,6 +136,7 @@ import {
   takePendingForceTool,
   takePendingTurnMode,
 } from "@/lib/pending-chat-headers";
+import { webSearchStorageKey } from "@/lib/web-search-pref";
 
 function baseProps() {
   return {
@@ -263,5 +264,73 @@ describe("ChatPanel prepareSendMessagesRequest — turn mode vs force-tool", () 
     });
     expect(headers.get("X-Digi-Force-Tool")).toBe("digisearch");
     expect(headers.has("X-Digi-Turn-Mode")).toBe(false);
+  });
+});
+
+const HOUSE_WEB_SEARCH = "NEXT_PUBLIC_DIGICHAT_WEB_SEARCH";
+
+function stubStorage(initial: Record<string, string> = {}): () => void {
+  const store = new Map(Object.entries(initial));
+  const previous = Object.getOwnPropertyDescriptor(window, "localStorage");
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (k: string) => (store.has(k) ? (store.get(k) ?? null) : null),
+      setItem: (k: string, v: string) => {
+        store.set(k, String(v));
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+    },
+  });
+  return () => {
+    if (previous) Object.defineProperty(window, "localStorage", previous);
+  };
+}
+
+describe("ChatPanel web search follows the deployment allow", () => {
+  const idle: BYOKKeyState = { key: "", provider: "openrouter", model: "", isSet: false };
+  const previousEnv = process.env[HOUSE_WEB_SEARCH];
+  let restoreStorage: (() => void) | undefined;
+
+  beforeEach(() => {
+    mockByokState = idle;
+    capturedTransportConfig = undefined;
+    delete process.env[HOUSE_WEB_SEARCH];
+  });
+
+  afterEach(() => {
+    restoreStorage?.();
+    restoreStorage = undefined;
+    if (previousEnv === undefined) delete process.env[HOUSE_WEB_SEARCH];
+    else process.env[HOUSE_WEB_SEARCH] = previousEnv;
+  });
+
+  async function sendHeaders(): Promise<Headers> {
+    render(<ChatPanel {...baseProps()} />);
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by ChatPanel");
+    }
+    const result = await config.prepareSendMessagesRequest({ messages: [], id: "t1" });
+    return new Headers(result.headers);
+  }
+
+  it("clears a stored opt-out and asks for web search when the house flag is on", async () => {
+    process.env[HOUSE_WEB_SEARCH] = "1";
+    const key = webSearchStorageKey("auth");
+    restoreStorage = stubStorage({ [key]: "0" });
+    const headers = await sendHeaders();
+    expect(window.localStorage.getItem(key)).toBeNull();
+    expect(headers.get("X-Digi-Enable-Web-Search")).toBe("1");
+  });
+
+  it("does not ask for web search when the deployment leaves it off", async () => {
+    const key = webSearchStorageKey("auth");
+    restoreStorage = stubStorage({ [key]: "0" });
+    const headers = await sendHeaders();
+    expect(window.localStorage.getItem(key)).toBeNull();
+    expect(headers.has("X-Digi-Enable-Web-Search")).toBe(false);
   });
 });

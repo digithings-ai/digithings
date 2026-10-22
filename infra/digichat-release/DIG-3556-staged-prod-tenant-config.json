@@ -12,24 +12,14 @@
       "lockSessionControls": true
     }
   },
-  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json. This file carries no token and no mcp rows: the OCC token is a client secret and lives only in the host secret store. Never write this file to the worker secret. The digigraph half (DIGI_TENANT_CORPUS_MAP) still goes to the digigraph env.",
+  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json. This file carries no token and no mcp rows: the OCC token is a client secret and lives only in the host secret store. Never write this file to the worker secret. The only registry change in this file is the digithings.ai tools.catalog rows (DigiSearch and DigiVault): web search, models, corpus routing and the OCC tenant are not set here. The digigraph half (DIGI_TENANT_CORPUS_MAP) still goes to the digigraph env.",
   "DIGICHAT_EMBED_TENANTS": {
     "digithings.ai": {
-      "slug": "digithings",
-      "gateMode": "ungated",
-      "webSearch": false,
-      "backend": {
-        "type": "digigraph",
-        "digisearchIndex": "digithings_docs",
-        "vaultPathPrefix": "clients/digithings"
-      }
-    },
-    "occ.digithings.ai": {
-      "slug": "occ",
-      "gateMode": "ungated",
-      "webSearch": false,
-      "backend": {
-        "type": "digigraph"
+      "tools": {
+        "catalog": [
+          { "id": "digisearch", "label": "DigiSearch", "default": true },
+          { "id": "digivault", "label": "DigiVault", "default": true }
+        ]
       }
     }
   }

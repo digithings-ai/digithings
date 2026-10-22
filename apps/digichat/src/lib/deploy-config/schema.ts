@@ -7,11 +7,10 @@
 
 import { z } from "zod";
 import { MAX_MCP_TOOL_ENTRIES, MAX_MCP_TOOL_NAME_LENGTH } from "./mcp-servers";
-import {
-  DEFAULT_LANGUAGE_CODE,
-  LANGUAGES,
-} from "@/lib/languages";
+import { DEFAULT_LANGUAGE_CODE, LANGUAGES } from "@/lib/languages";
 import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@digithings/ui/chat/skins";
+import { DEFAULT_TRACE_DENSITY } from "@digithings/ui/chat/trace-spacing";
+import { isPaletteId } from "@digithings/ui/theme";
 import {
   DEFAULT_THINKING_MODE,
   DEFAULT_VIEW_MODE,
@@ -20,6 +19,7 @@ import {
   VIEW_MODES,
 } from "@/lib/view-modes";
 import { HEX_COLOR } from "@/lib/hex-color";
+import { premiumIdsFromGroups, resolveModelCatalog } from "@/lib/model-picker-catalog";
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
@@ -28,6 +28,18 @@ export const ChromeModeSchema = z.enum(["app", "embed", "modal", "sidebar"]);
 export const PersistenceSchema = z.enum(["none", "memory", "server"]);
 export const AuthModeSchema = z.enum(["anonymous", "session"]);
 export const ThemeSchema = z.enum(["dark", "light"]);
+export const ScrollbarSchema = z.enum(["always", "auto"]);
+export const EffortSchema = z.enum(["low", "medium", "high"]);
+export const DensitySchema = z.enum(["compact", "default", "airy"]);
+export const SEARCH_ENGINES = [
+  "auto",
+  "internal",
+  "exa",
+  "tavily",
+  "parallel",
+  "firecrawl",
+  "tinyfish",
+] as const;
 export const ThreadSkinSchema = z.enum(THREAD_SKINS);
 const ThreadSkinInputSchema = z.preprocess(
   (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
@@ -43,18 +55,10 @@ export const ActivityDetailSchema = z.enum(["off", "labels", "full"]);
  * Deployment-configured; parents see the mode on `digichat:ready`.
  */
 export const PageContextModeSchema = z.enum(["off", "silent", "visible"]);
-export const LlmAccessSchema = z.enum([
-  "free_then_byok",
-  "byok_only",
-  "backend_only",
-  "operator",
-]);
+export const LlmAccessSchema = z.enum(["free_then_byok", "byok_only", "backend_only", "operator"]);
 export const UserAlignSchema = z.enum(["right", "left"]);
 
-const WelcomeBodySchema = z.union([
-  z.string().min(1),
-  z.array(z.string().min(1)).min(1),
-]);
+const WelcomeBodySchema = z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]);
 
 /** Empty-state copy. A bare string still means title-only (legacy YAML). */
 export const WelcomeCopySchema = z
@@ -94,18 +98,14 @@ export function welcomeBodyLines(welcome: WelcomeCopy | undefined): string[] {
  * Reasoning / tool-call disclosure. Booleans coerce for older YAML:
  * true → collapsed, false → off.
  */
-export const DisclosureModeSchema = z.enum([
-  "off",
-  "collapsed",
-  "expanded",
-  "locked_open",
-]);
+export const DisclosureModeSchema = z.enum(["off", "collapsed", "expanded", "locked_open"]);
 export type DisclosureMode = z.infer<typeof DisclosureModeSchema>;
 
 /**
  * Chain-of-thought view mode (reasoning + tool calls). See view-modes.ts.
- * Retired ids `compact` / `detailed` fold forward to `quiet` / `verbose`;
- * every other unknown value still fails the enum (fail closed).
+ * `quiet` | `balanced` | `verbose`; the retired ids `hidden` / `compact` /
+ * `detailed` fold forward (`hidden` and `compact` → `quiet`, `detailed` →
+ * `verbose`). Every other unknown value still fails the enum (fail closed).
  */
 export const ViewModeSchema = z.preprocess(
   (value) =>
@@ -146,6 +146,20 @@ export const ChromeSchema = z
     mode: ChromeModeSchema.default("embed"),
     theme: ThemeSchema.default("light"),
     /**
+     * Named palette. Omitted means the digichat skin palette. A user's
+     * `dt-palette` choice still wins in the browser.
+     */
+    palette: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .refine((value) => value === "default" || isPaletteId(value), "unknown palette")
+      .optional(),
+    /** Composer model/tools row. Default on. */
+    toolbar: z.boolean().default(true),
+    /** `always` reserves the gutter; `auto` shows bars on scroll. */
+    scrollbars: ScrollbarSchema.default("always"),
+    /**
      * Which Thread to mount (11 official catalog ids + first-party `digichat`).
      * Overlay: `DIGICHAT_CHROME_SKIN`. Catalog default remains `base`.
      * First-party hosts default omitted `skin` to `digichat` in the tenants
@@ -172,8 +186,10 @@ export const ChromeSchema = z
  * Legacy `features.reasoning` / `features.toolCalls` disclosure keys fold
  * forward onto the view-mode pair so older YAML keeps loading. Per-field:
  * a new-style value always wins; a legacy value maps to the closest mode
- * (toolCalls off→hidden / expanded→verbose / collapsed→quiet; reasoning
- * expanded→thinking open, anything else→pinned collapsed).
+ * (toolCalls off→quiet / expanded→verbose / collapsed→quiet; reasoning
+ * expanded→thinking open, anything else→pinned collapsed). `off` lands on
+ * `quiet` because the retired `hidden` level is gone: the least a client sees
+ * is the folded chain and its status line.
  */
 function foldLegacyDisclosure(value: unknown): unknown {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -185,18 +201,11 @@ function foldLegacyDisclosure(value: unknown): unknown {
   delete record.toolCalls;
   delete record.reasoning;
   if (record.view == null && toolCalls !== undefined) {
-    record.view =
-      toolCalls === false || toolCalls === "off"
-        ? "hidden"
-        : toolCalls === "expanded" || toolCalls === "locked_open"
-          ? "verbose"
-          : "quiet";
+    record.view = toolCalls === "expanded" || toolCalls === "locked_open" ? "verbose" : "quiet";
   }
   if (record.thinking == null && reasoning !== undefined) {
     record.thinking =
-      reasoning === "expanded" || reasoning === "locked_open"
-        ? "open"
-        : "collapsed";
+      reasoning === "expanded" || reasoning === "locked_open" ? "open" : "collapsed";
   }
   return record;
 }
@@ -212,6 +221,10 @@ export const FeaturesSchema = z.preprocess(
       view: ViewModeSchema.default(DEFAULT_VIEW_MODE),
       /** Reasoning-only override on top of `view`. */
       thinking: ThinkingModeSchema.default(DEFAULT_THINKING_MODE),
+      /** Worked-chain rhythm. `default` is the fixed spacing. */
+      density: DensitySchema.default(DEFAULT_TRACE_DENSITY),
+      /** Model effort for this deployment. The palette can override it for the session. */
+      effort: EffortSchema.default("medium"),
       sources: z.boolean().default(true),
       /**
        * Legacy alias for `models.allowPicker` (#4532). Kept for config
@@ -226,6 +239,36 @@ export const FeaturesSchema = z.preprocess(
     .strict(),
 );
 
+const ModelPickerPresetSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    description: z.string(),
+    model: z.string().min(1),
+  })
+  .strict();
+
+const ModelPickerGroupSchema = z
+  .object({
+    provider: z.string().min(1),
+    models: z.array(z.object({ id: z.string().min(1), label: z.string().min(1) }).strict()),
+    /** Manual Premium group. Presets and the router never select these ids. */
+    premium: z.boolean().optional(),
+  })
+  .strict();
+
+/**
+ * Resolved picker. Deployments do not write this; `parseDigichatConfig`
+ * fills it when `catalog` is set. A hand-written copy is dropped.
+ */
+const ModelPickerSchema = z
+  .object({
+    presets: z.array(ModelPickerPresetSchema),
+    groups: z.array(ModelPickerGroupSchema),
+    showFullList: z.boolean(),
+  })
+  .strict();
+
 export const ModelsSchema = z
   .object({
     default: z.string().min(1).optional(),
@@ -235,8 +278,83 @@ export const ModelsSchema = z
      * `features.modelPicker` alias is folded into this during projection.
      */
     allowPicker: z.boolean().optional(),
+    /**
+     * When true, `available` is filled from the model catalog (price cap,
+     * tool support, context floor). A hand-written `available` list beside
+     * it is refused, so the catalog is the list.
+     */
+    catalog: z.boolean().optional(),
+    /**
+     * OCC visitor picker. On unless false, after Chris's sign-off (21 Oct
+     * 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I
+     * sign off on overriding the DIG-4488 lock". Other hosts ignore it. Tool
+     * and MCP locks stay closed.
+     */
+    occPicker: z.boolean().optional(),
+    /** USD per million output tokens. Omit to use the catalog default. */
+    priceCapUsdPerMillion: z.number().positive().optional(),
+    /**
+     * Manual Premium tier: above the standard cap, at or under this cap.
+     * Omit to use the catalog default. Presets do not select these models.
+     */
+    premiumCapUsdPerMillion: z.number().positive().optional(),
+    /**
+     * Per-user premium spend, USD over a rolling window. Omit to leave
+     * premium picks unmetered. Fold into guardrails beside tokensPerMinute
+     * when #6182 lands; that block is not on this branch.
+     */
+    costPerWindow: z
+      .object({
+        usd: z.number().positive(),
+        windowSeconds: z.number().int().positive().default(86400),
+      })
+      .strict()
+      .optional(),
+    /** Which preset rows the picker offers. Omit to offer every catalog preset. */
+    presets: z.array(z.enum(["auto", "reasoning", "fast", "light", "router"])).optional(),
+    /** When false, the picker shows presets only and the allowlist is those models. */
+    showFullList: z.boolean().optional(),
+    /** Minimum context window. Omit to use the catalog default. */
+    minContextTokens: z.number().int().positive().optional(),
+    picker: ModelPickerSchema.optional(),
   })
   .strict();
+
+/**
+ * The model offer both the deployment config and the embed tenant registry
+ * describe (DIG-4589). The deployment config always carries `available`
+ * (`ModelsSchema` defaults it to `[]`); the registry leaves it optional, so
+ * the shared shape keeps it optional and the allowlist treats a missing list
+ * as "no restriction" — the same as an empty one.
+ *
+ * Every field is optional on purpose: this is the shape ONE artefact takes
+ * wherever it comes from — a deployment entry, a registry row, or the merged
+ * host deployment the request path reads (DIG-4589). The deployment's parsed
+ * models assign to it (`available` becomes optional, the defaulted
+ * `windowSeconds` becomes optional), so one helper serves all three.
+ */
+export type ModelOffer = {
+  default?: string;
+  available?: string[];
+  allowPicker?: boolean;
+  catalog?: boolean;
+  occPicker?: boolean;
+  priceCapUsdPerMillion?: number;
+  premiumCapUsdPerMillion?: number;
+  costPerWindow?: { usd: number; windowSeconds?: number };
+  presets?: Array<"auto" | "reasoning" | "fast" | "light" | "router">;
+  showFullList?: boolean;
+  minContextTokens?: number;
+  picker?: {
+    presets: Array<{ id: string; label: string; description: string; model: string }>;
+    groups: Array<{
+      provider: string;
+      models: Array<{ id: string; label: string }>;
+      premium?: boolean;
+    }>;
+    showFullList: boolean;
+  };
+};
 
 export const CliSchema = z
   .object({
@@ -264,6 +382,11 @@ export const FoundryBackendSchema = z
       .url()
       .refine((u) => u.startsWith("https:"), "projectEndpoint must be https"),
     agentName: z.string().min(1),
+    /**
+     * Back-compat alias of `guardrails.maxToolCallsPerTurn` for Foundry
+     * deployments that already set it. The shared key wins when both are set.
+     */
+    maxToolCalls: z.number().int().positive().max(100).optional(),
   })
   .strict();
 
@@ -289,10 +412,7 @@ const OpenAiCompatibleFields = {
   model: z.string().min(1),
   apiKeyEnv: z
     .string()
-    .regex(
-      /^DIGICHAT_BACKEND_[A-Z0-9_]+$/,
-      "apiKeyEnv must name a DIGICHAT_BACKEND_* env var",
-    ),
+    .regex(/^DIGICHAT_BACKEND_[A-Z0-9_]+$/, "apiKeyEnv must name a DIGICHAT_BACKEND_* env var"),
 };
 
 /** OpenAI Chat Completions wire format (`/v1/chat/completions`). */
@@ -325,10 +445,7 @@ export const AnthropicBackendSchema = z
     model: z.string().min(1),
     apiKeyEnv: z
       .string()
-      .regex(
-        /^DIGICHAT_BACKEND_[A-Z0-9_]+$/,
-        "apiKeyEnv must name a DIGICHAT_BACKEND_* env var",
-      ),
+      .regex(/^DIGICHAT_BACKEND_[A-Z0-9_]+$/, "apiKeyEnv must name a DIGICHAT_BACKEND_* env var"),
   })
   .strict();
 
@@ -451,7 +568,10 @@ export const McpServerSchema = z
   .object({
     id: z
       .string()
-      .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "mcp server id must be a lowercase slug without underscores"),
+      .regex(
+        /^[a-z0-9][a-z0-9-]{0,63}$/,
+        "mcp server id must be a lowercase slug without underscores",
+      ),
     /** BFF-only URL — never projected to the browser */
     url: z.string().url(),
     label: z.string().optional(),
@@ -540,15 +660,18 @@ export const GateSchema = z
     lockedContact: z.string().optional(),
     showByok: z.boolean().optional(),
     showLanguageSelector: z.boolean().optional(),
+    /**
+     * Gates the composer context meter. Only the house slugs may set it.
+     * The live house publishes no models, so this release shows no bar.
+     */
+    showContextMeter: z.boolean().optional(),
     lockSessionControls: z.boolean().optional(),
     /** Legacy embed field — also implies tools.catalog web_search when true */
     webSearch: z.boolean().optional(),
     /** Default web_search engine for this tenant (projected to the browser as
      * a fallback when the user picks nothing). Engine NAME only — never keys.
      * Unknown values fail closed at deploy-config load (#4724). */
-    searchEngine: z
-      .enum(["auto", "internal", "exa", "tavily", "parallel", "firecrawl", "tinyfish"])
-      .optional(),
+    searchEngine: z.enum(SEARCH_ENGINES).optional(),
     /**
      * Minimum Desk+ plan for this embed. Server-only (#3662 HMAC X-Embed-Plan-Proof).
      * Never projected to the browser.
@@ -556,6 +679,95 @@ export const GateSchema = z
     requiredPlanTier: z.enum(["desk", "studio", "enterprise"]).optional(),
   })
   .strict();
+
+const GuardrailFraction = z.number().gt(0).max(1);
+const GuardrailTpm = z.number().int().positive().max(10_000_000);
+
+/**
+ * How far `maxToolCallsPerTurn` can actually go on a backend.
+ * Matches the tool-call column of the limits backend matrix: Foundry and the
+ * AI SDK backends stop the loop; digigraph, langgraph, and ag-ui are
+ * notice/best-effort; a2a has no tool-call hook.
+ */
+export type ToolCallCapSupport = "enforce" | "best-effort" | "unsupported";
+
+export function toolCallCapSupport(backendType: string): ToolCallCapSupport {
+  switch (backendType) {
+    case "foundry":
+    case "openai-completions":
+    case "openai-responses":
+    case "anthropic":
+    case "google-vertex":
+      return "enforce";
+    case "digigraph": // notice only: records the cap and does not abort the loop
+    case "langgraph":
+    case "ag-ui":
+      return "best-effort";
+    default:
+      return "unsupported";
+  }
+}
+
+/**
+ * Refuse a cap the backend cannot apply. A notice/best-effort backend still
+ * loads, and validation warns so the limit is not silent.
+ * Returns the refusal message, or null when the config may load.
+ */
+export function toolCallCapIssue(backendType: string, cap: number | undefined): string | null {
+  if (cap == null) return null;
+  const support = toolCallCapSupport(backendType);
+  if (support === "unsupported") {
+    return "maxToolCallsPerTurn is not enforced on this backend (no tool-call hook)";
+  }
+  if (support === "best-effort") {
+    console.warn(
+      `guardrails.maxToolCallsPerTurn on ${backendType} is notice/best-effort; the adapter cannot abort the upstream tool loop`,
+    );
+  }
+  return null;
+}
+
+/**
+ * Optional turn guardrails. Omit the block, or any key, and that guard is off.
+ * Fractions default to 0.7 (`answerAt`) and 0.9 (`pauseAt`) when a TPM is set.
+ * `answerAt` must stay below `pauseAt`.
+ */
+export const GuardrailsSchema = z
+  .object({
+    /**
+     * Tool calls allowed in one user turn. Enforced on Foundry and the AI SDK
+     * backends. notice/best-effort on digigraph, langgraph, and ag-ui.
+     * Refused on a2a, which has no tool-call hook.
+     */
+    maxToolCallsPerTurn: z.number().int().positive().max(100).optional(),
+    /** Fraction of the TPM where the model is asked to answer with what it has. */
+    answerAt: GuardrailFraction.optional(),
+    /** Fraction of the TPM where the turn waits for the rolling window. */
+    pauseAt: GuardrailFraction.optional(),
+    tokensPerMinute: z
+      .object({
+        /** Shared by every turn on this deployment. Match an upstream TPM. */
+        deployment: GuardrailTpm.optional(),
+        /** Per user id, else the server-derived client IP. */
+        user: GuardrailTpm.optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const answer = value.answerAt ?? 0.7;
+    const pause = value.pauseAt ?? 0.9;
+    if (answer >= pause) {
+      ctx.addIssue({
+        code: "custom",
+        message: "answerAt must be below pauseAt",
+        path: ["answerAt"],
+      });
+    }
+  });
+
+export type GuardrailsConfig = z.infer<typeof GuardrailsSchema>;
 
 export const DeploymentSchema = z
   .object({
@@ -565,6 +777,8 @@ export const DeploymentSchema = z
       mode: "embed",
       theme: "light",
       skin: DEFAULT_THREAD_SKIN,
+      toolbar: true,
+      scrollbars: "always",
       defaultLanguage: DEFAULT_LANGUAGE_CODE,
       transcript: { userAlign: "right" },
     }),
@@ -576,6 +790,8 @@ export const DeploymentSchema = z
       speech: false,
       view: DEFAULT_VIEW_MODE,
       thinking: DEFAULT_THINKING_MODE,
+      density: DEFAULT_TRACE_DENSITY,
+      effort: "medium",
       sources: true,
       modelPicker: false,
       branchPicker: true,
@@ -584,6 +800,8 @@ export const DeploymentSchema = z
     models: ModelsSchema.default({ available: [] }),
     cli: CliSchema.default({ enabled: false }),
     backend: BackendSchema,
+    /** Off unless a key is set. See ARCHITECTURE.md, Guardrails. */
+    guardrails: GuardrailsSchema.optional(),
     tools: ToolsSchema.optional(),
     mcp: McpSchema.optional(),
     gate: GateSchema.default({ mode: "ungated", activityDetail: "labels" }),
@@ -593,7 +811,24 @@ export const DeploymentSchema = z
      */
     token: z.string().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((deployment, ctx) => {
+    const alias =
+      deployment.backend.type === "foundry" ? deployment.backend.maxToolCalls : undefined;
+    const issue = toolCallCapIssue(
+      deployment.backend.type,
+      deployment.guardrails?.maxToolCallsPerTurn ?? alias,
+    );
+    if (!issue) return;
+    ctx.addIssue({
+      code: "custom",
+      message: issue,
+      path:
+        deployment.guardrails?.maxToolCallsPerTurn != null
+          ? ["guardrails", "maxToolCallsPerTurn"]
+          : ["backend", "maxToolCalls"],
+    });
+  });
 
 export const DigichatConfigSchema = z
   .object({
@@ -646,9 +881,13 @@ export function disclosureIsLocked(mode: DisclosureMode): boolean {
  * Empty `available` → no restriction (requested or `default`).
  * Non-empty list → requested must be listed; missing request uses `default`
  * if listed, else first available entry.
+ *
+ * The offer may come from the deployment config or from the embed tenant
+ * registry (DIG-4589) — one artefact decides it, so the caller passes the
+ * merged offer and this function stays the only place that reads it.
  */
 export function allowlistModelId(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
   requested: string | null | undefined,
 ): string | undefined {
   const id = requested?.trim() || undefined;
@@ -665,8 +904,259 @@ export function allowlistModelId(
   return available.includes(id) ? id : undefined;
 }
 
+const PRESET_PREFIX = "preset:";
+
+/**
+ * Map a picker token (`preset:reasoning`) onto its concrete catalog id, then
+ * apply the deployment allowlist. An unknown preset is not allowed.
+ */
+export function resolveHouseModelSelection(
+  models: ModelOffer | undefined,
+  requested: string | null | undefined,
+): string | undefined {
+  const id = requested?.trim() || undefined;
+  if (id?.startsWith(PRESET_PREFIX)) {
+    const presetId = id.slice(PRESET_PREFIX.length);
+    const hit = models?.picker?.presets.find((preset) => preset.id === presetId);
+    if (!hit) return undefined;
+    return allowlistModelId(models, hit.model);
+  }
+  return allowlistModelId(models, requested);
+}
+
+/**
+ * Comma list of concrete models for the OpenRouter router. Empty unless the
+ * visitor picked the router preset. The browser never supplies this list.
+ */
+export function routerModelsHeader(
+  models: ModelOffer | undefined,
+  selected: string | undefined,
+): string | undefined {
+  const router = models?.picker?.presets.find((preset) => preset.id === "router");
+  if (!router || !selected || router.model !== selected) return undefined;
+  const premium = new Set(premiumIdsFromGroups(models?.picker?.groups));
+  const ids = (models?.available ?? [])
+    .filter((id) => id !== router.model && !premium.has(id))
+    .slice(0, 64);
+  return ids.length ? ids.join(",") : undefined;
+}
+
+/** Comma list of manual Premium ids, so digillm can drop them from a router allowlist. */
+export function premiumModelsHeader(
+  models: ModelOffer | undefined,
+): string | undefined {
+  const ids = premiumIdsFromGroups(models?.picker?.groups);
+  return ids.length ? ids.join(",") : undefined;
+}
+
+type CatalogModels = DigichatDeployment["models"];
+
+const OCC_EMBED_HOST = "occ.digithings.ai";
+
+function isOccHost(host: string | undefined, slug: string | undefined): boolean {
+  return host === OCC_EMBED_HOST || slug === "occ";
+}
+
+const HOUSE_EMBED_HOSTS: ReadonlySet<string> = new Set(["digithings.ai", "www.digithings.ai"]);
+
+/**
+ * The two product chats are named by their host key, never by slug: a
+ * customer row may carry any slug, and these rules grant a picker.
+ */
+function productChat(host: string, dep: DigichatDeployment): "occ" | "house" | null {
+  if (dep.backend?.type === "foundry") return null;
+  if (host === OCC_EMBED_HOST) return "occ";
+  if (HOUSE_EMBED_HOSTS.has(host)) return "house";
+  return null;
+}
+
+/** Presets both product chats open with. The router stays off (2.6.6). */
+const PRODUCT_PICKER_PRESETS = ["auto", "reasoning", "fast", "light"] as const;
+
+/**
+ * digithings.ai premium allowance per visitor: three typical turns of the
+ * manual Premium group per rolling day (#6193). A written window wins.
+ */
+const HOUSE_PREMIUM_WINDOW = { usd: 0.0125565, windowSeconds: 86_400 } as const;
+
+/**
+ * Picker defaults for the two product chats. A registry row that names no
+ * model policy used to fall back to "no list, no picker" after #6193, which
+ * hid the model chip on digithings.ai and OCC. Both now open with the catalog
+ * picker unless the row turns it off (`allowPicker: false`, or
+ * `occPicker: false` on OCC). A hand-written list is left alone.
+ *
+ * The house always keeps a premium window. OCC never carries one: Chris,
+ * 21 Oct 2026 22:51 Rome, "OCC has no token limits and no premium meter".
+ */
+function withProductPickerDefaults(models: CatalogModels, kind: "occ" | "house"): CatalogModels {
+  const base: NonNullable<CatalogModels> = models ?? { available: [] };
+  const limits = (next: NonNullable<CatalogModels>): NonNullable<CatalogModels> => {
+    if (kind === "house") {
+      return next.costPerWindow ? next : { ...next, costPerWindow: { ...HOUSE_PREMIUM_WINDOW } };
+    }
+    if (!next.costPerWindow) return next;
+    const open = { ...next };
+    delete open.costPerWindow;
+    return open;
+  };
+  if (base.allowPicker === false) return limits(base);
+  if ((base.available?.length ?? 0) > 0 && base.catalog !== true) return limits(base);
+  if (base.catalog === true) {
+    return limits(base.allowPicker === undefined ? { ...base, allowPicker: true } : base);
+  }
+  return limits({
+    ...base,
+    available: [],
+    allowPicker: true,
+    catalog: true,
+    showFullList: base.showFullList ?? true,
+    presets: base.presets ?? [...PRODUCT_PICKER_PRESETS],
+  });
+}
+
+/** OCC has no token-per-minute limit. The tool-call cap and answer guard stay. */
+function withoutTpm(
+  guardrails: DigichatDeployment["guardrails"],
+): DigichatDeployment["guardrails"] {
+  if (!guardrails?.tokensPerMinute) return guardrails;
+  const next = { ...guardrails };
+  delete next.tokensPerMinute;
+  return next;
+}
+
+/** OCC with `occPicker: false` keeps the operator model: no list, no picker. */
+function lockOccModels(models: CatalogModels): CatalogModels {
+  if (!models) return models;
+  const next: CatalogModels = { ...models, available: [], allowPicker: false };
+  delete next.picker;
+  delete next.default;
+  return next;
+}
+
+function applyModelCatalog(
+  models: CatalogModels,
+  ctx: string,
+  openRouterConfigured: boolean,
+): CatalogModels {
+  if (!models?.catalog) {
+    if (!models?.picker) return models;
+    const rest = { ...models };
+    delete rest.picker;
+    return rest;
+  }
+  if ((models.available?.length ?? 0) > 0) {
+    // One bad registry row must not fail the whole container's config: the
+    // catalog wins and the hand list is ignored.
+    console.warn(
+      `${ctx}: models.catalog is set together with models.available; the hand list is ignored`,
+    );
+  }
+  const resolved = resolveModelCatalog(
+    {
+      default: models.default,
+      priceCapUsdPerMillion: models.priceCapUsdPerMillion,
+      premiumCapUsdPerMillion: models.premiumCapUsdPerMillion,
+      presets: models.presets,
+      showFullList: models.showFullList,
+      minContextTokens: models.minContextTokens,
+    },
+    { openRouterConfigured },
+  );
+  return {
+    ...models,
+    available: resolved.available,
+    default: resolved.default,
+    picker: resolved.picker,
+  };
+}
+
+function applyCatalogConfig(
+  config: DigichatConfig,
+  ctx: string,
+  openRouterConfigured: boolean,
+): DigichatConfig {
+  const deployment = config.deployment
+    ? {
+        ...config.deployment,
+        models: applyModelCatalog(config.deployment.models, ctx, openRouterConfigured),
+      }
+    : config.deployment;
+  const hosts = config.hosts
+    ? Object.fromEntries(
+        Object.entries(config.hosts).map(([host, dep]) => {
+          // Chris signed off the OCC picker (21 Oct 2026, 19:19 Rome), so the
+          // OCC host is on unless its row says `occPicker: false`. Another row
+          // that only shares the slug keeps the old rule: locked unless true.
+          const kind = productChat(host, dep);
+          const occLocked =
+            kind === "occ"
+              ? dep.models?.occPicker === false
+              : isOccHost(host, dep.slug) && dep.models?.occPicker !== true;
+          if (occLocked && kind === "occ") {
+            // OCC with the picker off: the operator model, and still no meter or TPM.
+            const locked = lockOccModels(dep.models);
+            if (locked?.costPerWindow) delete locked.costPerWindow;
+            return [
+              host,
+              {
+                ...dep,
+                features: { ...dep.features, modelPicker: false },
+                guardrails: withoutTpm(dep.guardrails),
+                models: locked,
+              },
+            ];
+          }
+          if (occLocked) {
+            // A non-product row that shares the slug: withhold the picker, keep
+            // its own model list so the chat route still enforces it.
+            const models = applyModelCatalog(
+              dep.models,
+              `${ctx} hosts.${host}`,
+              openRouterConfigured,
+            );
+            const closed = models ? { ...models, allowPicker: false } : models;
+            if (closed) delete closed.picker;
+            return [
+              host,
+              { ...dep, features: { ...dep.features, modelPicker: false }, models: closed },
+            ];
+          }
+          const models = applyModelCatalog(
+            kind ? withProductPickerDefaults(dep.models, kind) : dep.models,
+            `${ctx} hosts.${host}`,
+            openRouterConfigured,
+          );
+          if (kind) {
+            const open = models?.allowPicker === true;
+            return [
+              host,
+              {
+                ...dep,
+                features: { ...dep.features, modelPicker: open },
+                ...(kind === "occ" ? { guardrails: withoutTpm(dep.guardrails) } : {}),
+                models,
+              },
+            ];
+          }
+          if (isOccHost(host, dep.slug)) {
+            // A non-product row that only shares the OCC slug keeps the
+            // pre-2.6.8 rule: its own occPicker opens the picker.
+            return [host, { ...dep, features: { ...dep.features, modelPicker: true }, models }];
+          }
+          return [host, { ...dep, models }];
+        }),
+      )
+    : config.hosts;
+  return { ...config, deployment, hosts };
+}
+
 /** Parse + validate unknown JSON/YAML object. Throws on failure (fail closed). */
-export function parseDigichatConfig(input: unknown, ctx = "digichat config"): DigichatConfig {
+export function parseDigichatConfig(
+  input: unknown,
+  ctx = "digichat config",
+  opts?: { openRouterConfigured?: boolean },
+): DigichatConfig {
   const result = DigichatConfigSchema.safeParse(input);
   if (!result.success) {
     const detail = result.error.issues
@@ -674,5 +1164,5 @@ export function parseDigichatConfig(input: unknown, ctx = "digichat config"): Di
       .join("; ");
     throw new Error(`${ctx}: ${detail}`);
   }
-  return result.data;
+  return applyCatalogConfig(result.data, ctx, opts?.openRouterConfigured === true);
 }

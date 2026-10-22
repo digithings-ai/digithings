@@ -113,10 +113,53 @@ It reconciles:
 |---|---|---|
 | `.github/policy-checks.yml` | the jobs the workflows actually define | a renamed or dropped check; a policy surface nobody declared |
 | `.github/policy-checks.yml` | develop's required contexts | a check the gate does not hold, and a gate the inventory does not own |
-| develop's required contexts | whether each can report on every develop PR | **the stall** — a required check that never arrives hangs every merge |
+| every context the gate holds **or** the inventory declares | whether each can report on every develop PR | **the stall** — a required check that never arrives hangs every merge |
 
-`ci.yml`'s in-file `needs` staleness check is **kept**, not replaced. The three
-reconciliations do not overlap; dropping the old one would leave a real hole.
+That third row covers both sets on purpose, and the second half of it is
+[DIG-2237](https://github.com/digithings-ai/digithings/issues/2237), because the original
+guard only asked about the live gate. A workflow whose checks are all `advisory` reports
+nothing that anyone is waiting for, so a workflow-level `paths-ignore` added to one was a
+**false green**: no failing check, and a PR shape the check would never cover. The moment
+DIG-1952 child B promotes such an entry, every PR it skips hangs. The guard now reports that
+as a finding before the promotion, not after.
+
+"Whether it can report" is decided from the `pull_request:` trigger alone, and all four
+filters matter, not two of them:
+
+| trigger filter | why it can stop the check arriving |
+|---|---|
+| `paths:` / `paths-ignore:` | a skipped **workflow** reports nothing — only a skipped *job* reports Success |
+| `branches:` | the workflow never starts for a PR into another branch |
+| `branches-ignore:` | the same filter spelled as an exclusion; matching globs |
+| `types:` | for `pull_request`, `GITHUB_SHA` is the **last merge commit on the PR merge branch**, and a required context has to report against that commit for the PR to ever leave "Waiting for status to be reported": `opened` covers the first report, `synchronize` every later push, `reopened` a re-open, so all three or the context is not safe to require. A workflow on `types: [opened]` reports for the opening push and never again, so after the first push the PR waits on "Waiting for status to be reported" forever with no failing check to explain it. |
+
+An **absent** `types:` key is GitHub's default (`opened`, `synchronize`, `reopened`), which
+includes `synchronize` and is therefore reachable. A `types:` key that is present but
+unreadable is treated as empty, so the rule fails closed rather than passing on a value
+nobody could read.
+
+`ci.yml`'s in-file `needs` staleness check is **kept**, not replaced. The reconciliations do
+not overlap; dropping the old one would leave a real hole.
+
+### Completeness: `tracked_workflows` is an allowlist, not the scope
+
+`.github/policy-checks.yml` tracks 8 of the 66 workflow files — the ones with policy
+surfaces. That is the right size, but an allowlist nobody checks for completeness is not an
+inventory: a brand-new workflow carrying a real gate would be out of scope by construction,
+and `policy.untracked-producer` would never be raised.
+
+So the guard also scans every `*.yml` under `.github/workflows/` for a named job matching a
+live or declared context, and fails when the producer is untracked — including when the
+producer is untracked *and* cannot report, which previously drew `policy.undeclared-gate`
+and then stopped, giving the wrong diagnosis on exactly the case `gitleaks-scan` exists to
+exercise. Adding a workflow is therefore not free: either name it in `tracked_workflows`, or
+do not give any of its jobs a `name:`. Migrating all 66 is not the answer and is not
+required.
+
+An untracked file that will not parse is reported (`policy.unreadable-workflow`), not
+raised — otherwise any of the 58 untracked workflows could take the guard down with an
+unreadable error instead of a diagnosis. A **tracked** file that will not parse still
+raises, because a tracked file is a declared surface.
 
 **Check the gate, at any time:**
 
@@ -132,6 +175,52 @@ workflow can read it. The snapshot is only trustworthy if it is updated in the s
 change as the protection itself — run `--live` after any manual branch-protection edit
 and commit the difference, or the guard is checking a fiction.
 
+### Keeping the snapshot true
+
+Doing that by hand leaves one gap: nothing catches a branch-protection edit that nobody ran
+`--live` after. The PR path cannot close it, because `GITHUB_TOKEN` cannot read branch
+protection at all, so putting the read on the PR path would mean putting a human-only
+credential in front of every merge.
+
+**Nothing closes that gap today, and this section says so instead of pretending otherwise.**
+An earlier draft of this work carried a `policy-gate-live` job in
+[`ci-pr-hygiene.yml`](../.github/workflows/ci-pr-hygiene.yml) that was meant to run the
+`--live` read on a clock. It was removed, for three reasons that are all still true:
+
+- **It could never run.** The workflow it lived in is `disabled_manually` on GitHub since
+  the 2026-10-14 cost lock, and its `digithings-cron` row is `enabled: false`
+  (`apps/digithings-cron/src/jobs.ts`). A job on a lane that is deliberately silent is a job
+  that reports nothing.
+- **Its credential design was rejected.** It read `POLICY_CHECK_APP_PRIVATE_KEY` /
+  `POLICY_CHECK_APP_ID` / `POLICY_CHECK_INSTALLATION_ID` and called
+  `scripts/mint_policy_check_token.py` — the GitHub App design that was **rejected on
+  2026-10-07**, whose manifest, minting script and tests were deleted by that same change.
+  The credential the registry actually names is a fine-grained PAT stored as
+  `POLICY_CHECK_READER_TOKEN` (see
+  [`docs/ops/policy-check-credential.md`](../docs/ops/policy-check-credential.md)), and it
+  needs no app id and no installation id.
+- **It would have been a red run, not a check.** The secret it read is not provisioned (the
+  `cron` environment holds no secrets at all) and creating it needs `Administration: write`,
+  which is Chris-only on this one-member org. A canary that starts red because it cannot
+  read its own secret is how a check becomes a silent stop.
+
+**What the guard does check, mechanically.** `scripts/check_required_policy_checks.py` always
+compares the committed snapshot against `scripts/set-branch-protection.sh` — the writer that
+applies it — and fails when the two disagree, so the snapshot and the writer cannot drift
+apart. What it does *not* do is compare the snapshot with the live gate: under `--live` the
+guard reconciles the **live** context set against the **inventory** in
+`.github/policy-checks.yml` (in both directions — a required context that is missing from
+the gate, and a live context that the inventory never declares), and separately checks the
+snapshot against the writer. So a hand edit of branch protection shows up as a drift between
+the live set and the inventory, while a hand edit of the snapshot alone shows up as a drift
+between the snapshot and the writer. Only the combination of both checks is a proof that the
+three agree, and running them is a human step today.
+
+**When the credential is provisioned**, the automated live read belongs in its own workflow
+with its own clock row, against the PAT the registry names — not in a job riding a disabled
+lane. That is a separate piece of work with a human gate, not a follow-up hidden in this
+change.
+
 ### Declaring a new policy check
 
 Add it to `.github/policy-checks.yml` with one of three `enforcement` values:
@@ -140,6 +229,33 @@ Add it to `.github/policy-checks.yml` with one of three `enforcement` values:
   The guard fails both if it is absent and if it could be skipped.
 - `advisory` — runs and reports but deliberately does not gate. **Requires a `reason`.**
 - `other-branch` — gates another branch (`main`), not develop.
+
+### Every non-`required` entry needs an owner
+
+A `reason` records what was true when it was written. On its own it is indistinguishable
+from what is true now, forever — which is what makes `advisory` an escape hatch nobody owns
+([DIG-2237](https://github.com/digithings-ai/digithings/issues/2237)). So:
+
+| field | required on | meaning |
+|---|---|---|
+| `owner:` | every non-`required` entry | who answers for it. Missing → `GuardError` |
+| `review_by:` | *or* one of the two below, on `advisory` | a date to revisit the decision |
+| `issue:` | | the issue tracking the gap (`DIG-NNNN`) |
+| `gated_by:` | | a context that is `required` in this inventory **and** present in the live gate |
+
+`gated_by:` is validated, not trusted: naming a context the inventory does not declare is a
+`GuardError`, and naming one that is declared but not actually in the live gate is a
+`policy.bad-gated-by` finding. Otherwise "it is gated by the aggregator" would be a citation
+rather than a fact. `advisory` with none of the three raises.
+
+There is a separate, narrower field for a gap that is **accepted on purpose**: `known_gap:`.
+It suppresses the reachability finding for that entry while the entry is ungated, and stops
+applying the moment the entry reaches the live gate — at that point the check really does
+have to report, so the accepted gap has expired. **`Workflow secret references (PR reporter)`
+is the only entry with one today**: it lives in its own path-filtered workflow, so it does
+not report on every PR shape while it stays advisory, and the day it is promoted the gap
+closes. (`gitleaks-scan` used to be the carrier; its own `paths-ignore` was removed upstream
+in #5318, so that gap is gone.)
 
 A job counts as a policy surface when it has an explicit `name:`. A job without one
 reports under its job id and is folded into an aggregator instead. Naming a job makes it

@@ -60,7 +60,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "063_prices_live_table.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "engine" / "063_prices_live_table.sql"
 
 TABLE = "public.prices_live"
 PUBLICATION = "supabase_realtime"
@@ -225,7 +225,7 @@ def test_migration_file_exists_and_is_the_only_063() -> None:
     db-migrate.yml keys ``olympus_schema_migrations`` on the full filename and only emits a
     ``::warning::`` for duplicate numeric prefixes, so nothing upstream stops the split.
     """
-    numbered = sorted(MIGRATIONS_DIR.glob("063_*.sql"))
+    numbered = sorted(MIGRATIONS_DIR.rglob("063_*.sql"))
     assert numbered == [MIGRATION_PATH], f"expected exactly {MIGRATION_PATH.name}, found {numbered}"
 
 
@@ -237,7 +237,7 @@ def test_the_withdrawn_062_is_not_resurrected() -> None:
     transaction rolls back, and no ledger row is written — for 062 and for everything
     numbered after it in the same run.
     """
-    assert not list(MIGRATIONS_DIR.glob("062_*.sql")), (
+    assert not list(MIGRATIONS_DIR.rglob("062_*.sql")), (
         "062 is back. It targets realtime.messages, which is owned by "
         "supabase_realtime_admin — a role with zero members that nobody can grant. Applying "
         "it raises 42501 and takes the whole migration run down with it."

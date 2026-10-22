@@ -73,7 +73,9 @@ digithings' own architecture docs are published into a [[digivault]] vault hoste
 | `/api/chat*`, `/api/byok*`, `/api/plan-proof*`, `/api/embed*` | digichat BFF in the same Container |
 | `/api/health` | digichat health: reports `version` equal to `apps/digichat/package.json` and `digraph: ok` |
 
-`POST /api/chat` without a credential answers `401` from digichat's own `requireDigiChatAuth`, which names the digichat machine-key prefix — not the retired Pages Function, which answers `410`. The Worker's own unrouted-path reply is `digichat Worker: path not routed. Marketing /chat shells are on Pages.`
+`POST /api/chat` without a credential answers `401` from digichat's own `requireDigiChatAuth`, which names the digichat machine-key prefix — not the retired Pages Function, which answers `410`. The Worker's own unrouted-path reply is `digichat Worker: path not routed. The digichat app is at /chat; marketing is on Pages.`
+
+The table above is the live production snapshot, verified 2026-10-11. DIG-5121 moves `/chat` to the digichat app in develop: the digichat Worker claims `digithings.ai/chat*` and the Container is built with `DIGICHAT_BASE_PATH=/chat`, while the legacy `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*` and `/api/health` routes stay as compatibility routes for the ADR-0018 window. The live map changes when the digichat deploy lane (DIG-5120) lands.
 
 digiquant.io — investment profiling:
 Entry flow powered by a proprietary investment profiling sub-graph. User inputs investment preferences → digichat builds and saves an investment profile to digistore (user acquisition + personalization). Shows what strategies and allocations could be constructed for their profile. Paywall trigger: "Ready to build your first strategy? Start with execution." Free taste → paid conversion.

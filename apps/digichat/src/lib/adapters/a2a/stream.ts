@@ -20,6 +20,7 @@ import {
   type UiStreamWriter,
 } from "@/lib/ui-stream-parts";
 import { toChatMessages } from "@/lib/adapters/shared/messages";
+import { guardRound, type TurnGuard } from "@/lib/guardrails/turn";
 import {
   createTextWriter,
   isRecord,
@@ -131,6 +132,7 @@ export async function createA2aStreamResponse(opts: {
   /** Resolved by the caller from `backend.apiKeyEnv`; null when unset. */
   apiKey: string | null;
   signal?: AbortSignal;
+  guard?: TurnGuard;
 }): Promise<Response> {
   const headers = protocolJsonHeaders({
     apiKey: opts.apiKey,
@@ -160,10 +162,23 @@ export async function createA2aStreamResponse(opts: {
       const text = createTextWriter(writer, ctx);
       const artifacts = new Map<string, string>();
       try {
+        const instruction = await guardRound(opts.guard, {
+          writer,
+          pendingText: body,
+          signal: opts.signal,
+        });
+        let requestBody = body;
+        if (instruction) {
+          const parsed = JSON.parse(body) as {
+            params: { message: { parts: { kind: string; text: string }[] } };
+          };
+          parsed.params.message.parts.push({ kind: "text", text: instruction });
+          requestBody = JSON.stringify(parsed);
+        }
         const res = await fetch(opts.backend.baseUrl, {
           method: "POST",
           headers,
-          body,
+          body: requestBody,
           signal: opts.signal,
         });
         if (!res.ok) {
@@ -209,6 +224,7 @@ export async function createA2aStreamResponse(opts: {
           }
         }
       } finally {
+        opts.guard?.release();
         text.close();
         finishStandardActivity(writer, ctx);
       }

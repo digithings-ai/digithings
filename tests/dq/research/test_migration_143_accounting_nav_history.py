@@ -24,8 +24,8 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION = MIGRATIONS / "143_accounting_nav_history_finalized_only.sql"
-PRIOR = MIGRATIONS / "141_accounting_nav_history_house_scope.sql"
+MIGRATION = MIGRATIONS / "prod" / "143_accounting_nav_history_finalized_only.sql"
+PRIOR = MIGRATIONS / "prod" / "141_accounting_nav_history_house_scope.sql"
 HOUSE_ID = "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 
 # The column list CREATE OR REPLACE VIEW may not change: names and order.
@@ -84,7 +84,7 @@ def _selected_columns(body: str) -> list[str]:
 
 
 def test_migration_143_is_only_143() -> None:
-    assert sorted(MIGRATIONS.glob("143_*.sql")) == [MIGRATION]
+    assert sorted(MIGRATIONS.rglob("143_*.sql")) == [MIGRATION]
 
 
 def test_history_view_reads_only_the_finalized_series(sql: str) -> None:

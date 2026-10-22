@@ -231,7 +231,7 @@ describe("parity with the web leaf - source conformance, no duplicate registry",
       "utf8",
     );
     // Firing control: the matcher must find a known def too, or every assert below is vacuous.
-    expect(src).toContain('names: ["/websearch"]');
+    expect(src).toContain('names: ["/tools"]');
     expect(src).toContain(`id: "artifacts"`);
     expect(src).toContain(`names: ["${ARTIFACTS_COMMAND_NAME}"]`);
     expect(src).toContain(`hint: "${ARTIFACTS_COMMAND_HINT}"`);

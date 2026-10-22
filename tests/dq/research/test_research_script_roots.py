@@ -71,7 +71,7 @@ def test_run_db_first_preflight_paths_exist() -> None:
 def test_generate_snapshot_reads_package_config_and_schema() -> None:
     from lib.roots import DIGIQUANT_ROOT
 
-    mod = _load("generate_snapshot", "generate-snapshot.py")
+    mod = _load("generate_snapshot")
     assert mod.PORTFOLIO_JSON.is_file()
     assert mod.SCHEMA_PATH.is_file()
     assert mod.DAILY_DIR == DIGIQUANT_ROOT / "data" / "agent-cache" / "daily"

@@ -16,6 +16,7 @@ import {
   ReasoningContent,
   ReasoningRoot,
   ReasoningText,
+  ReasoningTrigger,
 } from "../stock/reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
 import { WorkChain } from "./work-chain";
@@ -24,6 +25,7 @@ import {
   resolveWorkDisclosure,
   type WorkVisibility,
 } from "../stock/skin-types";
+import { BackendNotice } from "../stock/chat-notice";
 import { ToolFallback } from "../stock/tool-fallback.aui";
 import {
   ToolGroupContent,
@@ -37,6 +39,11 @@ import {
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
+import { downloadMessageSnapshot, showSnapshotError } from "../../../replay/browser";
+import { messageAnchor } from "../../../replay/snapshot";
+import { downloadMarkdown } from "../transcript";
+import { connectionStatusText } from "../connection-status";
+import { WorkStatusLead } from "../work-status-lead";
 import { Skeleton } from "../../../ui/skeleton";
 import { cn } from "./cn";
 import { SkinCredit } from "../stock/skin-credit";
@@ -173,10 +180,10 @@ export type ThreadProps = {
   /** Disclosure mode for grouped tool-call runs. Default collapsed. */
   toolCallsMode?: GroupDisclosureMode | undefined;
   /**
-   * How much of the agent's work the user sees: `quiet` (one summary line),
-   * `balanced` (open while it runs, collapsed when it finishes) or `verbose`
-   * (stays open). The client's `features.view` picks the default; the user can
-   * change it per session.
+   * How much of the agent's work the user sees: `quiet` (the titles only,
+   * with the folded header as a live status line), `balanced` (open while it
+   * runs, collapsed when it finishes) or `verbose` (stays open). The client's
+   * `features.view` picks the default; the user can change it per session.
    */
   workVisibility?: WorkVisibility | undefined;
   /**
@@ -187,6 +194,8 @@ export type ThreadProps = {
   composerToolbar?: ReactNode;
   /** `always` reserves a scrollbar gutter; `auto` shows bars only on scroll. */
   scrollbars?: "always" | "auto";
+  /** Worked-chain rhythm. `default` is the fixed spacing. */
+  density?: "compact" | "default" | "airy";
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -203,6 +212,44 @@ export type ThreadMentionTrigger = {
   directive: NonNullable<SlashPopoverProps["directive"]>;
   iconMap?: SlashPopoverProps["iconMap"];
 };
+
+/**
+ * The chain grouping.
+ *
+ * A source or a status part between two work runs must not split the chain:
+ * only text ends a work run, so two runs with nothing but a source between
+ * them are one chain, not two. The library's helper covers the part types it
+ * knows; the status parts (`data-*`) are matched here, and the memo
+ * fingerprint is kept so the tree is not rebuilt on every render.
+ */
+const chainGroupBy = (() => {
+  const base = groupPartByType({
+    reasoning: ["group-chainOfThought", "group-reasoning"],
+    "tool-call": ["group-chainOfThought", "group-tool"],
+    "standalone-tool-call": [],
+    source: ["group-chainOfThought", "group-tool"],
+  });
+  const fn = (part: { type: string; name?: string }, context?: unknown) => {
+    const dataName =
+      part.type === "data"
+        ? part.name
+        : part.type.startsWith("data-")
+          ? part.type.slice("data-".length)
+          : undefined;
+    // A data-notice (tool-call limit, and any other status notice) stays
+    // outside the chain. The chain folds once the answer arrives, which would
+    // hide the notice inside the collapsed work block.
+    if (dataName === "notice") return base(part as never, context as never);
+    if (part.type === "data" || part.type.startsWith("data-")) {
+      return ["group-chainOfThought", "group-tool"] as const;
+    }
+    return base(part as never, context as never);
+  };
+  (fn as unknown as Record<symbol, string>)[
+    Symbol.for("@assistant-ui/groupBy.memoKey")
+  ] = "digichat:chain-v3";
+  return fn;
+})();
 
 const DEFAULT_THREAD_ACTIONS: Required<ThreadActions> = {
   undo: true,
@@ -405,6 +452,7 @@ export const Thread: FC<ThreadProps> = ({
   workVisibility = "balanced",
   composerToolbar,
   scrollbars = "always",
+  density = "default",
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -438,6 +486,7 @@ export const Thread: FC<ThreadProps> = ({
                   composerLayout={composerLayout}
                   composerToolbar={composerToolbar}
                   scrollbars={scrollbars}
+                  density={density}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -464,7 +513,8 @@ const ThreadRoot: FC<{
   composerLayout: ComposerLayout;
   composerToolbar?: ReactNode;
   scrollbars: "always" | "auto";
-}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars }) => {
+  density: "compact" | "default" | "airy";
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -490,6 +540,7 @@ const ThreadRoot: FC<{
       // of each surface having to remember to wrap the Thread.
       data-thread-skin="digichat"
       data-scrollbars={scrollbars}
+      data-density={density}
       style={{
         ["--thread-max-width" as string]: "44rem",
         // `--card` (not `--color-card`) so a scoped palette wins: the
@@ -660,7 +711,7 @@ const ThreadScrollToBottom: FC = () => {
         variant="outline"
         className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
-        <DotMatrix state="scroll" label="Scroll to bottom" className="size-3.5" />
+        <DotMatrix state="scroll" decorative className="size-3.5" />
       </TooltipIconButton>
     </ThreadPrimitive.ScrollToBottom>
   );
@@ -724,7 +775,7 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
       <span className="aui-msg-marker" aria-hidden="true">
         <DotMatrix
           state="example"
-          label="Example"
+          decorative
           className="aui-thread-welcome-suggestion-mark size-3.5"
         />
       </span>
@@ -742,7 +793,7 @@ const ThreadSuggestionItem: FC = () => {
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix
             state="example"
-            label="Example"
+            decorative
             className="aui-thread-welcome-suggestion-mark size-3.5"
           />
         </span>
@@ -972,7 +1023,7 @@ const ComposerSendControls: FC = () => {
             >
               <DotMatrix
                 state="dictate"
-                label="Voice input"
+                decorative
                 className="aui-composer-dictate-icon size-3.5"
               />
             </TooltipIconButton>
@@ -991,7 +1042,7 @@ const ComposerSendControls: FC = () => {
             >
               <DotMatrix
                 state="stop"
-                label="Stop dictation"
+                decorative
                 className="aui-composer-stop-dictation-icon size-3.5"
               />
             </TooltipIconButton>
@@ -1013,7 +1064,7 @@ const ComposerSendControls: FC = () => {
         >
           <DotMatrix
             state="send"
-            label="Send"
+            decorative
             className="aui-composer-send-icon size-3.5"
           />
         </Button>
@@ -1029,7 +1080,7 @@ const ComposerSendControls: FC = () => {
           >
             <DotMatrix
               state="stop"
-              label="Stop generating"
+              decorative
               className="aui-composer-cancel-icon size-3.5"
             />
           </Button>
@@ -1046,49 +1097,23 @@ const AssistantWorkingIndicator: FC = () => {
       (part) => part.type === "tool-call" && part.status.type === "running",
     ),
   );
-  // Latest data-connection state wins: the BFF replaces `connecting` with
-  // `warming_up` while it retries a booting upstream (#4753) and with
-  // `connected` once the stream starts.
-  const connectionState = useAuiState((s) => {
-    let state: string | undefined;
-    for (const part of s.message.parts) {
-      if (part.type === "data" && part.name === "connection") {
-        const next = (part.data as { state?: string } | undefined)?.state;
-        if (typeof next === "string") state = next;
-      }
-    }
-    return state;
-  });
-  const connectionMessage = useAuiState((s) => {
-    let message: string | undefined;
-    for (const part of s.message.parts) {
-      if (part.type !== "data" || part.name !== "connection") continue;
-      const data = (part.data ?? {}) as { state?: string; message?: unknown };
-      if (data.state === "warming_up" && typeof data.message === "string" && data.message.length > 0) {
-        message = data.message;
-      }
-    }
-    return message;
-  });
+  // Text only when the server sent a status message (DIG-4459): a bare
+  // `connecting` is the plain wait for a response, so the row is the
+  // animation alone. No client-side default copy.
+  const statusText = useAuiState((s) => connectionStatusText(s.message.parts));
   const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
+  const statusLabel = wakePhase === "waking" ? "Waking up services…" : statusText;
   return (
     <span
       data-slot="aui_assistant-message-indicator"
-      className="flex items-center gap-2"
+      className="aui-work-status"
     >
-      <DotMatrix
-        state="loading"
-        label="Assistant is working"
-        className="size-3.5"
+      <WorkStatusLead
+        marker="loading"
+        markerLabel="Assistant is working"
+        label={statusLabel}
       />
-      {wakePhase === "waking" ? (
-        <span className="text-sm text-muted-foreground">Waking up services…</span>
-      ) : connectionState === "warming_up" ? (
-        <span className="text-sm text-muted-foreground">{connectionMessage ?? "Warming up…"}</span>
-      ) : connectionState === "connecting" ? (
-        <span className="text-sm text-muted-foreground">Connecting…</span>
-      ) : null}
     </span>
   );
 };
@@ -1108,6 +1133,28 @@ const AssistantMessage: FC = () => {
   // The whole turn, not just the group: the tools answer faster than the
   // chain can fold, and a group that closes between two of them flickers.
   const turnRunning = useAuiState((s) => s.thread.isRunning);
+  // The message parts, to tell a chain that holds real work from one that
+  // only holds a source or a status part.
+  const messageParts = useAuiState((s) => s.message.parts);
+  // Only text ends a work run: a chain with a text part after it has
+  // answered, so its work is over. A chain without one is still the agent's
+  // current work, even if the model streams another run of tool calls.
+  const hasWork = messageParts.some(
+    (part) => part.type === "reasoning" || part.type === "tool-call",
+  );
+  // Anything real that arrived from the agent — reasoning, a tool call, the
+  // answer itself. A status part (the connection state) is not content: it is
+  // the pre-response phase, which is exactly when the loading row belongs.
+  const hasContent = messageParts.some((part) => part.type !== "data");
+  const followedByText = (indices: readonly number[]) => {
+    const last = indices.length > 0 ? indices[indices.length - 1] : -1;
+    return messageParts.some((part, index) => {
+      if (index <= last) return false;
+      if (part.type !== "text") return false;
+      const text = (part as { text?: unknown }).text;
+      return typeof text === "string" && text.trim() !== "";
+    });
+  };
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -1124,17 +1171,36 @@ const AssistantMessage: FC = () => {
         className="aui-assistant-message-content text-foreground min-w-0 leading-relaxed wrap-break-word"
       >
         <MessagePrimitive.GroupedParts
-          groupBy={groupPartByType({
-            reasoning: ["group-chainOfThought", "group-reasoning"],
-            "tool-call": ["group-chainOfThought", "group-tool"],
-            "standalone-tool-call": [],
-          })}
+          groupBy={chainGroupBy}
         >
           {({ part, children }) => {
             switch (part.type) {
-              case "group-chainOfThought":
-                // Quiet clients see one line for the whole chain instead of
-                // the two collapsibles.
+              case "group-chainOfThought": {
+                // A status part is not work. The grouping puts the
+                // connection state into the chain, so without this guard the
+                // chain header appears before the model has said anything —
+                // right next to the loading row, which is the double
+                // animation we do not want. No reasoning and no tool call in
+                // the group means no work block: the loading row covers that
+                // phase on its own.
+                const holdsWork = part.indices.some((index) => {
+                  const kind = messageParts[index]?.type;
+                  return kind === "reasoning" || kind === "tool-call";
+                });
+                // The parts still render bare: a backend notice (DIG-4459)
+                // rides a data part and must not vanish with the header.
+                if (!holdsWork) return <>{children}</>;
+                // The chain is the one disclosure boundary: every work part
+                // nests under it (see `chainGroupBy`), so the level's fold
+                // rule here reaches a reasoning-only, a tool-only and a
+                // combined turn alike. The rows inside take their own rule
+                // from the same disclosure. See the decision note in
+                // packages/ui/ARCHITECTURE.md.
+                //
+                // The `hidden` level this branch served is retired: the
+                // `summaryOnly` field is always false now, and a quiet
+                // client gets the folded chain below instead of a summary
+                // line. The branch stays until the field goes.
                 if (disclosure.summaryOnly) {
                   return (
                     <div data-slot="aui_chain-of-thought">
@@ -1147,13 +1213,17 @@ const AssistantMessage: FC = () => {
                 return (
                   <div data-slot="aui_chain-of-thought">
                     <WorkChain
-                      defaultOpen={disclosure.openAtRest}
+                      indices={part.indices}
+                      openAtRest={disclosure.openAtRest}
+                      foldOnAnswer={disclosure.foldOnAnswer}
                       running={part.status.type === "running"}
+                      followedByText={followedByText(part.indices)}
                     >
                       {children}
                     </WorkChain>
                   </div>
                 );
+              }
               case "group-tool": {
                 if (toolCallsMode === "off") return null;
                 if (ToolGroup) {
@@ -1161,6 +1231,14 @@ const AssistantMessage: FC = () => {
                 }
                 const locked = toolCallsMode === "locked_open";
                 const running = part.status.type === "running";
+                // The group can hold the source and status parts that sit
+                // between two tool runs; the count is the tool calls only.
+                const toolCount = part.indices.filter(
+                  (index) => messageParts[index]?.type === "tool-call",
+                ).length;
+                if (toolCount === 0) {
+                  return <div data-slot="aui_chain-of-thought">{children}</div>;
+                }
                 return (
                   <ToolGroupRoot
                     variant="ghost"
@@ -1174,7 +1252,7 @@ const AssistantMessage: FC = () => {
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
                     <ToolGroupTrigger
-                      count={part.indices.length}
+                      count={toolCount}
                       active={part.status.type === "running"}
                       disabled={locked}
                     />
@@ -1222,7 +1300,9 @@ const AssistantMessage: FC = () => {
                 if (toolCallsMode === "off") return null;
                 return part.toolUI ?? <ToolFallbackComponent {...part} />;
               case "data":
-                return part.dataRendererUI;
+                // DIG-4459: a backend notice (data-notice, or a data-status
+                // with a message) shows as a boxed status/error line.
+                return part.dataRendererUI ?? <BackendNotice part={part} />;
               case "file":
                 return (
                   <div data-slot="aui_assistant-message-file" className="py-1">
@@ -1236,7 +1316,13 @@ const AssistantMessage: FC = () => {
                   </div>
                 );
               case "indicator":
-                return <AssistantWorkingIndicator />;
+                // One loading affordance per turn. Before the agent answers,
+                // the row stands alone (with the phase text when we know it:
+                // waking, connecting, warming up). The moment anything real
+                // arrives — reasoning, a tool call, the answer — the work
+                // block takes over and this row is gone, so the two never
+                // stack.
+                return hasContent ? null : <AssistantWorkingIndicator />;
               case "source":
                 // Citations are inline markdown links in the answer (DIG-1210);
                 // rendering source parts here stacked duplicate rows between
@@ -1272,6 +1358,10 @@ const AssistantMessage: FC = () => {
 
 const AssistantActionBar: FC = () => {
   const { undo, feedback } = useContext(ThreadActionsContext);
+  const messageId = useAuiState((s) => s.message.id);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const exportMessage = useRef<HTMLElement | null>(null);
+  const exportHtmlAfterClose = useRef(false);
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -1296,34 +1386,51 @@ const AssistantActionBar: FC = () => {
         >
           <BranchPickerPrimitive.Previous asChild>
             <TooltipIconButton tooltip="Undo">
-              <DotMatrix state="prev" label="Undo" className="size-3.5" />
+              <DotMatrix state="prev" decorative className="size-3.5" />
             </TooltipIconButton>
           </BranchPickerPrimitive.Previous>
         </AuiIf>
       ) : null}
       <ActionBarPrimitive.Reload asChild>
         <TooltipIconButton tooltip="Redo">
-          <DotMatrix state="refresh" label="Redo" className="size-3.5" />
+          <DotMatrix state="refresh" decorative className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Reload>
       {feedback ? (
         <>
           <ActionBarPrimitive.FeedbackPositive asChild>
             <TooltipIconButton tooltip="Good response">
-              <DotMatrix state="thumbsUp" label="Good response" className="size-3.5" />
+              <DotMatrix state="thumbsUp" decorative className="size-3.5" />
             </TooltipIconButton>
           </ActionBarPrimitive.FeedbackPositive>
           <ActionBarPrimitive.FeedbackNegative asChild>
             <TooltipIconButton tooltip="Bad response">
-              <DotMatrix state="thumbsDown" label="Bad response" className="size-3.5" />
+              <DotMatrix state="thumbsDown" decorative className="size-3.5" />
             </TooltipIconButton>
           </ActionBarPrimitive.FeedbackNegative>
         </>
       ) : null}
-      <ActionBarMorePrimitive.Root>
-        <ActionBarMorePrimitive.Trigger asChild>
+      <ActionBarMorePrimitive.Root
+        onOpenChange={(open) => {
+          if (open || !exportHtmlAfterClose.current) return;
+          exportHtmlAfterClose.current = false;
+          const doc = document;
+          const message = exportMessage.current;
+          exportMessage.current = null;
+          const id = messageId;
+          requestAnimationFrame(() => {
+            void downloadMessageSnapshot(doc, new Date().toISOString(), id, message).catch(
+              (error: unknown) => {
+                const message = error instanceof Error ? error.message : "HTML export failed.";
+                showSnapshotError(doc, message);
+              },
+            );
+          });
+        }}
+      >
+        <ActionBarMorePrimitive.Trigger asChild ref={triggerRef}>
           <TooltipIconButton tooltip="More">
-            <DotMatrix state="more" label="More" className="size-3.5" />
+            <DotMatrix state="more" decorative className="size-3.5" />
           </TooltipIconButton>
         </ActionBarMorePrimitive.Trigger>
         <ActionBarMorePrimitive.Content
@@ -1332,12 +1439,27 @@ const AssistantActionBar: FC = () => {
           sideOffset={6}
           className="aui-action-bar-more-content z-[110] min-w-[8rem] overflow-hidden border p-1"
         >
-          <ActionBarPrimitive.ExportMarkdown asChild>
+          <ActionBarPrimitive.ExportMarkdown
+            asChild
+            onExport={(content) => {
+              downloadMarkdown("digichat.md", content);
+            }}
+          >
             <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink">
-              <DotMatrix state="export" label="Export" className="size-3.5" />
+              <DotMatrix state="export" decorative className="size-3.5" />
               Export as Markdown
             </ActionBarMorePrimitive.Item>
           </ActionBarPrimitive.ExportMarkdown>
+          <ActionBarMorePrimitive.Item
+            className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink"
+            onClick={() => {
+              exportMessage.current = messageAnchor(triggerRef.current, messageId);
+              exportHtmlAfterClose.current = true;
+            }}
+          >
+            <DotMatrix state="export" decorative className="size-3.5" />
+            Export as HTML
+          </ActionBarMorePrimitive.Item>
         </ActionBarMorePrimitive.Content>
       </ActionBarMorePrimitive.Root>
       <MessageTiming />
@@ -1412,7 +1534,7 @@ const UserActionBar: FC = () => {
         className="aui-user-action-edit"
         onClick={onEdit}
       >
-        <DotMatrix state="edit" label="Edit" className="size-3.5" />
+        <DotMatrix state="edit" decorative className="size-3.5" />
       </TooltipIconButton>
     </ActionBarPrimitive.Root>
   );
@@ -1433,7 +1555,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
     >
       <BranchPickerPrimitive.Previous asChild>
         <TooltipIconButton tooltip="Previous">
-          <DotMatrix state="prev" label="Previous" className="size-3.5" />
+          <DotMatrix state="prev" decorative className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Previous>
       <span className="aui-branch-picker-state font-medium">
@@ -1441,7 +1563,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
       </span>
       <BranchPickerPrimitive.Next asChild>
         <TooltipIconButton tooltip="Next">
-          <DotMatrix state="next" label="Next" className="size-3.5" />
+          <DotMatrix state="next" decorative className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Next>
     </BranchPickerPrimitive.Root>

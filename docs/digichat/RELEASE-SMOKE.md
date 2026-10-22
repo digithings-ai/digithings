@@ -1,22 +1,22 @@
 # digichat release smoke checklist
 
-> **Steps 1–2 below assume a published image, and there is not one yet.**
-> `publish-digichat-image.yml` is back (DIG-1294) and publishes on a
-> `digichat-vX.Y.Z` tag, but the tag ladder stops at `digichat-v2.3.2`, so
-> `ghcr.io/digithings-ai/digichat` does not exist yet (verified 2026-10-06) and
-> no image has been published. Substitute a local build until the next tag
-> lands. The steps themselves — probe, health, embed, Foundry — remain correct
-> for whatever image you built.
+> **Correction (2026-10-21): an image is published.** `publish-digichat-image.yml`
+> (DIG-1294) publishes on a `digichat-vX.Y.Z` tag, and `v2.6.4` and `:latest`
+> were pushed to `ghcr.io/digithings-ai/digichat` on 2026-10-21 (run 94; private
+> package, pull with a `ghcr.io` credential). The `v2.4.x`–`v2.6.3` tags still
+> have no image behind them; for those, or without registry access, substitute a
+> local build. The steps themselves — probe, health, embed, Foundry — remain
+> correct for whatever image you run.
 
 ## Identity
 
 | Artifact | Value |
 |---|---|
 | Git tag | `digichat-vX.Y.Z` |
-| Published image | **none yet** — build locally, or import to your own registry |
+| Published image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` from `v2.6.4` on (private) — or build locally, or import to your own registry |
 | Changelog | `apps/digichat/CHANGELOG.md` |
 | Install unit | **a built image** — not npm (`private: true`) |
-| Current app version | `2.5.1` (`apps/digichat/package.json` on `develop`) |
+| Current app version | `2.6.8` (`apps/digichat/package.json` on `develop`) |
 
 Existing clients (DataTap and others) run digichat images already imported into
 their own Azure registry (`datatapchatregistry.azurecr.io`). Those copies are

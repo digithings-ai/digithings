@@ -1,0 +1,22 @@
+{
+  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json. This file carries no token and no mcp rows: the OCC token is a client secret and lives only in the host secret store. Never write this file to the worker secret. This overlay carries the OCC tenant alone: it sets no corpus routing. Chris, 21 Oct 2026 19:19 Rome: \"Yes, enable the model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488 lock\". occPicker turns that picker on. A raw model id list is still refused. Tool and MCP locks are unchanged. Chris, 21 Oct 2026 22:50 Rome: \"Yes, I confirm no Counsel ruling is needed for the OCC model picker\". 22:51 Rome: OCC has no token limits and no premium meter; the invite link is the gate. The #6182 tool-call cap and answer guard stay.",
+  "DIGICHAT_EMBED_TENANTS": {
+    "occ.digithings.ai": {
+      "slug": "occ",
+      "gateMode": "ungated",
+      "webSearch": false,
+      "models": {
+        "occPicker": true,
+        "allowPicker": true,
+        "catalog": true,
+        "default": "deepseek/deepseek-v4.1-flash-1017",
+        "priceCapUsdPerMillion": 2,
+        "presets": ["auto", "reasoning", "fast", "light"],
+        "showFullList": true
+      },
+      "backend": {
+        "type": "digigraph"
+      }
+    }
+  }
+}

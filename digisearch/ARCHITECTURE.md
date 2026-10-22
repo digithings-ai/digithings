@@ -1715,6 +1715,23 @@ pattern so the caller can tell the two apart; it does not implement real
 pagination against Vectorize (that needs `Query.skip` support the backend
 does not have — a design decision, not fixed here).
 
+Fifth, the embedding model is per index, not only global.
+`DIGISEARCH_WORKERS_AI_INDEXES` is a comma list of indexes that are queried with
+Cloudflare Workers AI `@cf/baai/bge-m3` (1024 dims); every other index keeps the
+configured default provider. `search/_stub.py`'s `_workers_ai_indexes` reads the list
+per query (not cached at import), and `_embedding_provider_for` swaps the provider for
+exactly those indexes — so an index written with bge-m3 and queried with the default
+provider gets a 384-dim vector against 1024-dim vectors and matches nothing. The list
+ships in `apps/digithings-stack-cloudflare/wrangler.toml` [vars] and reaches the
+digisearch process through the container `envVars` whitelist in
+`apps/digithings-stack-cloudflare/src/index.ts` (DIG-4657); before that the override was
+code with no configuration path, so the list was always empty and every index was
+queried with the default provider. Two rules keep the pairing honest: every index in
+the list must be written with bge-m3, and every index written with bge-m3 must be in
+the list. The 384-dim indexes that `scripts/vectorize_sync.py` maintains are underscore
+form, and the corpus-index worker only accepts dash-form names
+(`apps/corpus-index/src/config.ts`), so the two sets cannot overlap by accident.
+
 ### Embedding cache layer
 
 `EmbeddingCache` wraps any `EmbeddingProvider`. On each `embed()` call:
@@ -2278,6 +2295,9 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
 | `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` \| model id (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`) — explicit provider or model (fails loud if unloadable) |
+| `DIGISEARCH_WORKERS_AI_INDEXES` | _(unset)_ | Comma-separated index names queried with Cloudflare Workers AI `@cf/baai/bge-m3` (1024 dims) instead of the configured default provider; every other index keeps the default. Every listed index must be **written** with bge-m3 too (the corpus-index worker writes those), or the query vector does not match the stored vectors and retrieval silently misses. The stack container forwards it from `apps/digithings-stack-cloudflare/wrangler.toml` [vars] (DIG-4657) |
+| `DIGISEARCH_BGE_M3_EMBED_URL` | _(unset)_ | Optional dedicated embed endpoint for the bge-m3 indexes above (used instead of the account-scoped Workers AI URL when **both** this and `DIGISEARCH_BGE_M3_EMBED_TOKEN` are set); a deployment that uses it must forward both into the digisearch process — the stack container's `envVars` whitelist forwards neither today |
+| `DIGISEARCH_BGE_M3_EMBED_TOKEN` | _(unset)_ | Bearer token for `DIGISEARCH_BGE_M3_EMBED_URL`; unset ⇒ the bge-m3 indexes are queried through the account-scoped Workers AI URL with the Vectorize credential (`CLOUDFLARE_API_TOKEN`), which then needs Workers AI permission |
 | `DIGISEARCH_MULTILINGUAL_MODEL_DIR` | _(unset)_ | Directory holding a pre-downloaded multilingual ONNX model (`onnx/model_quantized.onnx` + `tokenizer.json`), used instead of fetching from the HuggingFace Hub on first embed. Resolved **per provider load**, local `stat()`s only — `huggingface_hub` is never imported when it is set; unset and unreachable ⇒ `RuntimeError`. The stack image bakes it and sets `HF_HUB_OFFLINE=1` after the bake, so a missing bake fails the image build rather than the first cold start on the request path (#5045) |
 | `HF_HUB_OFFLINE` | _(unset)_ | Set `1` to forbid HuggingFace Hub downloads. The stack image sets it **after** the bake layer, so the build can fetch the weights but the running container cannot egress to fetch them lazily (#5045) |
 | `DIGISEARCH_EMBED_CACHE` | `1` | Wrap BatchEmbedder in EmbeddingCache |

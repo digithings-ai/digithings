@@ -1,7 +1,8 @@
 # Repo-split workflow map
 
 No `.github/workflows` file moves into a private repo. Each path below is a
-Cloudflare cron, a local-ci job, or a deletion. The record the test reads is
+Cloudflare cron, a local-ci job, a manual-dispatch workflow with no clock, or
+a deletion. The record the test reads is
 `scripts/repo_split_workflow_map.py`. This page is the same table for people.
 
 Source: Chris, 2026-10-14, on DIG-3605. R5's three names are the ones that
@@ -33,7 +34,7 @@ files stay until DIG-3608. DIG-3697 owns `scripts/deploy/runner.sh` and
 | R4 | `.github/workflows/deploy-digithings-cloudflare.yml` | local-ci | `scripts/build-digithings.sh`. Pages watching `main` is the publish. |
 | R4 | `.github/workflows/refresh-repo-activity.yml` | cloudflare-cron | `refresh-repo-activity`. |
 | R4 | `.github/workflows/test-web.yml` | local-ci | `ci.yml` workflow_call. Runner: DIG-3561. |
-| R6 | `.github/workflows/datatap-answer-check.yml` | cloudflare-cron | `datatap-answer-check`. |
+| R6 | `.github/workflows/datatap-answer-check.yml` | manual-dispatch | No clock: retired 2026-10-18 (DIG-4435). The file stays; a human can still start it. |
 | R6 | `.github/workflows/occ-invite-key-rollout.yml` | local-ci | `scripts/check_occ_rollout_auth_guard.py`. |
 | R5 | `.github/workflows/deploy-digithings-cron.yml` | local-ci | Signed-tag job `scripts/deploy/cron.sh` (DIG-3697). |
 | R5 | `.github/workflows/publish-digichat-image.yml` | local-ci | Tag `digichat-v*`. Image publish, not the Worker deploy. |

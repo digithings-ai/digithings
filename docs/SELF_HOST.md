@@ -178,8 +178,10 @@ Path A is the recommended path for anything you want to keep. Path B is the fast
 
 ### 7.1 Root `.env`
 
+- **The root `.env` is yours.** `dt up` writes it (mode 600, git-ignored) so docker compose can read it, and it keeps the values you put in it: a value you set survives the next bring-up, also when the rendered secrets carry the same name. The rendered `.dev.vars` fill in the keys you have not set, so a rotated secret still reaches compose. The local values below always win over both. Which values are yours is remembered in a managed block at the bottom of the same file (digests only, never values). The block is written with the values in one atomic write, so it can never describe a file that is no longer there; delete it and the render decides for the names it claims - the values it does not claim stay yours.
 - **digikey:** `DIGIKEY_ADMIN_TOKEN`, `DIGIKEY_BFF_TOKEN` (random), and `DIGIKEY_ALLOW_EPHEMERAL_KEY=1` so the local JWKS rotates on restart.
 - **Local-only digikey database:** `dt up` writes a per-checkout root `.env` (mode 600, git-ignored) that pins `DIGIKEY_DATABASE_URL` to the container-local SQLite path `sqlite:////data/digikey.db` and sets `DIGIKEY_ALLOW_EPHEMERAL_KEY=1`. These local values **always win** over the rendered ones, so a local stack never picks up the shared Postgres DSN from the config contract. The SQLite file itself lives in the Compose project's named `digikey_data` volume: it survives restarts, is shared with any other stack in the same Compose project, and `docker compose down -v` resets it.
+- **Local-only digisearch monitor store:** the same per-checkout `.env` pins `DIGISEARCH_MONITORS_DB` to the container-local SQLite path `/data/monitors/.digisearch/monitors.sqlite3` — the store the digisearch service resolves through `DIGI_WORKSPACE=/data/monitors`, kept on the `digisearch_monitors` volume. The `digisearch-mcp` service resolves the same store on the same volume, so a watch created through MCP is the same watch. The config contract renders a Postgres DSN on port 54329 for this key, which the SQLite monitor store cannot open and which is not a service the local stack owns, so the local override wins.
 - **LiteLLM:** [`config/litellm.yaml`](../config/litellm.yaml) points at local Ollama on `http://ollama:11434` and, if you want it, at Ollama Cloud through `OLLAMA_API_KEY`. Set `LITELLM_MASTER_KEY` and `LITELLM_PROXY_API_KEY` for the digigraph to proxy Bearer. If neither a proxy key nor `OPENAI_API_KEY` is set, a declared trusted local LiteLLM base (the `:4000` defaults) sends the development sentinel `sk-no-key-required`, so a no-auth loopback stack still runs; a direct or vendor base fails fast instead (#3788 / #3939).
 - **Optional funnel:** set `DIGIKEY_LITELLM_PROXY_KEY` to the same value as `LITELLM_MASTER_KEY` (Compose defaults this when unset).
 - **Local Ollama models only:** set `DIGI_MODEL_MODES_FILE=model_modes.local.yaml` and mount `DIGI_CONFIG_PATH` at `/app/config` for digigraph (see [`config/model_modes.local.yaml`](../config/model_modes.local.yaml)).
@@ -314,6 +316,20 @@ Run these after the stack comes up. All six are cheap and none of them needs a p
 
 The plan replaces this manual list with `dt status` / `make local-stack-health`, which also covers the database, every Worker `/healthz`, `dashboard-api`, MCP `tools/list`, a digitrace ingest round trip and an R2/KV/D1 put-and-get, and which exits non-zero on failure so CI can reuse it. That is S7.
 
+The digigraph probe follows the port the digigraph really serves, through `DT_DIGIGRAPH_PORT` (default `8000`, the port compose publishes). On a host where `8000` already belongs to another stack the probe reads that other service and reports a healthy digigraph as FAIL — measured on a Mac with another stack on `8000`: `8000` answered `204` (a woodpecker server) while the real digigraph on `18000` answered `200`. Point the probe at the right port:
+
+```bash
+DT_DIGIGRAPH_PORT=18000 make local-stack-health
+```
+
+Three things about the knob. The gate reads the **process environment**, not the root `.env`, so export it or prefix the command as above. It takes a port number: plain decimal digits, `1`–`65535`, no sign and no surrounding whitespace, so `" 18000 "` is **not** a port and is refused like any other value that is not one. An empty value keeps the default `8000`. A value that is not one is **refused** — the gate fails and names `DT_DIGIGRAPH_PORT` — because a value that is not a port does not make the URL unparseable, it makes it point somewhere else: `8000@evil.com` would send the probe to `evil.com`, with `127.0.0.1:8000` read as userinfo. The refused value is never templated and never silently replaced by `8000`. The resolved URL is then checked to still be the loopback probe on that port, so a template that pointed elsewhere would be refused too. And it is not the `DIGIGRAPH_PORT` in the root `.env` — that contract key ("the port the digigraph dev server binds to") is a different name, and nothing reads it today.
+
+The port digigraph actually listens on is set elsewhere, so the two have to agree: the host dev server takes `DG_PORT` (`scripts/run_local.sh`, default `18000`), and the no-Docker stack takes `PORT_GRAPH` (`scripts/run_stack_local.sh`, default `8000`, the same ports as compose).
+
+One rule, wherever the port comes from: a port is plain decimal digits, `1`–`65535`, no sign and no surrounding whitespace. A contract row in `config/contract/services.yaml` that carries its own `port:` is read by the same validator, so a row whose port is not one is **refused** the same way — the row **fails** the gate and names the row and the value, it never falls back to a built-in URL, and it never crashes the gate with a stack trace. A row without a `port:` keeps the built-in URL and its knob.
+
+The contract is read as the text that was written, so the YAML resolver cannot turn a bad port into a good one: `port: 8_000` is the text `8_000` and is refused, not the number `8000` that YAML 1.1 would have made of it. A port also has to read back the way it is written, so `port: 017` is refused — the file would otherwise mean two different ports. A row that carries a `port:` is checked even when it also carries a `url:`, and when both are valid the `url:` wins. A row whose `url:` points off the machine is refused, because the gate only probes `127.0.0.1`, and a row whose `url:`, `health_path:` or `requires:` is not text is refused rather than guessed at. A refused row is checked in **every** profile, so a bad row cannot hide behind a profile, and a row the contract does not name is still reported, as `contract row <n>`. A contract file that is neither readable YAML nor JSON is a clean error, not a stack trace.
+
 ---
 
 ## 12. digichat configuration
@@ -338,6 +354,18 @@ The plan replaces this manual list with `dt status` / `make local-stack-health`,
 ## 13. Optional MCP servers and optional model gateways
 
 **digisearch MCP:** `docker compose --profile digisearch-mcp up`, on port **8765**. For IDE and OpenClaw clients; digigraph and digichat normally speak HTTP to digisearch directly.
+
+**digivault MCP:** `docker compose --profile digivault-mcp up`, on port **8769**.
+
+Both MCP servers bind every interface **inside** their container: `DIGISEARCH_MCP_HOST` and `DIGIVAULT_MCP_HOST`, default `0.0.0.0`, set in `docker-compose.yml` the same way the other MCP services set theirs. A process that listens on `127.0.0.1` inside the container is unreachable through a published port: the host curl answers nothing at all, and the other containers cannot reach `http://digisearch-mcp:8765/mcp`, the URL the OCC embed config uses. The host side of both published ports stays on the loopback (`127.0.0.1:8765`, `127.0.0.1:8769`).
+
+To bind elsewhere, write the variable in the root `.env` — compose interpolates it from there and it wins over the default:
+
+```bash
+DIGIVAULT_MCP_HOST=127.0.0.1   # in the root .env
+```
+
+The servers answer on the FastMCP allowlist: `127.0.0.1`, `localhost` and the service name (`digisearch-mcp`, `digivault-mcp`). A request carrying any other `Host` header is refused, so the machine's LAN name does not reach them — use the loopback address or the service name.
 
 **OmniRoute (optional):** `docker compose --profile omniroute up`, on loopback **20128**. It needs `OMNIROUTE_AUTH_PASSWORD` at start — never the vendor default, and note that the default `docker compose config` does not supply it. Overlay: [`config/litellm.omniroute.yaml`](../config/litellm.omniroute.yaml). The house model pins stay on the OpenRouter slugs in `config/litellm.yaml`. See [providers/omniroute.md](providers/omniroute.md).
 

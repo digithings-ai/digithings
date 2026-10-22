@@ -27,8 +27,8 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-M124 = MIGRATIONS_DIR / "124_drop_market_data_tables.sql"
-M121 = MIGRATIONS_DIR / "121_checkpoint_blobs_nullable.sql"
+M124 = MIGRATIONS_DIR / "prod" / "124_drop_market_data_tables.sql"
+M121 = MIGRATIONS_DIR / "engine" / "121_checkpoint_blobs_nullable.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 _DROP_TABLE = re.compile(
@@ -51,7 +51,7 @@ def raw() -> str:
 
 
 def test_migration_124_is_only_124_file() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("124_*.sql")) == [M124]
+    assert sorted(MIGRATIONS_DIR.rglob("124_*.sql")) == [M124]
 
 
 def test_header_convention_matches_119_to_121(raw: str) -> None:

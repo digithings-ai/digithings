@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { p, stripBasePath } from "../../../lib/base-path";
 
 /** The list route the server already ships (see `.../artifacts/route.ts`). */
 export type ArtifactRow = {
@@ -37,9 +38,15 @@ export type ArtifactRow = {
   viewable: boolean;
 };
 
-/** `GET /api/conversations/[id]/artifacts` - the panel's only read. */
+/**
+ * `GET /api/conversations/[id]/artifacts` - the panel's only read.
+ *
+ * The path carries the base path the app is served under (DIG-5121): the app
+ * answers under /chat/api/conversations/… and nowhere else, so a
+ * root-absolute path would 404 the moment the app moves.
+ */
 export function artifactListPath(conversationId: string): string {
-  return `/api/conversations/${encodeURIComponent(conversationId)}/artifacts`;
+  return p(`/api/conversations/${encodeURIComponent(conversationId)}/artifacts`);
 }
 
 /** The link target, carrying the token the store minted. */
@@ -54,11 +61,15 @@ const BLOB_PATH = /^\/api\/conversations\/[^/]+\/artifacts\/blob$/;
  * so it runs identically in the browser and in a test - `new URL(href, base)`
  * would make an href without a scheme host-dependent, and a link that is
  * "maybe an artifact" depending on where it was parsed is not a predicate.
+ *
+ * The base path is stripped first: the app hands out the link already
+ * prefixed (/chat/api/conversations/…), and the predicate is about the app's
+ * own path, not about where the app happens to be served.
  */
 export function isArtifactBlobHref(href: string | undefined | null): boolean {
   if (!href) return false;
   const path = href.split(/[?#]/, 1)[0] ?? "";
-  return BLOB_PATH.test(path);
+  return BLOB_PATH.test(stripBasePath(path));
 }
 
 /** Deterministic, locale-free size label. Never used to decide anything. */

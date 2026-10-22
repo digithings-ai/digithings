@@ -22,7 +22,7 @@ import {
 import { createPortal } from "react-dom";
 import { DotMatrix } from "@digithings/ui/chat/dot-matrix";
 import { Button, Input, Label } from "@digithings/ui/ui";
-import { nextPaletteIndex } from "@digithings/digichat-ui";
+import { nextPaletteIndex, optionDraft, paneDraftForId, submenuRows, VIEW_LABELS } from "@digithings/digichat-ui";
 import { useEmbedChatPrefs } from "@digithings/ui/chat/stock";
 import {
   applyWellKnownMcp,
@@ -46,7 +46,12 @@ import {
   toolsMenuSummary,
   type SessionMcpConfig,
 } from "@/components/stock/embed-mcp-flow";
-import { buildProductSlashCommands, languageSelectOptions } from "@/lib/product-slash-commands";
+import {
+  applyThemePick,
+  buildProductSlashCommands,
+  currentThemeState,
+  languageSelectOptions,
+} from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
 import {
   byokRequiresModel,
@@ -55,6 +60,7 @@ import {
   type BYOKProvider,
 } from "@/hooks/use-byok-key";
 import { byokActivationGate, pingByokKey } from "@/lib/byok-ping";
+import { HOUSE_BACKEND_ID } from "@/lib/provider-label";
 import {
   CUSTOM_PROVIDER_MODEL,
   PROVIDER_MENU_ORDER,
@@ -68,6 +74,8 @@ import {
 } from "@/components/stock/embed-provider-flow";
 import { listenMcpOAuthResult, startMcpOAuth } from "@/components/stock/embed-mcp-oauth";
 import { THINKING_MODES, VIEW_MODES } from "@/lib/view-modes";
+import { TRACE_DENSITIES, TRACE_DENSITY_LABELS } from "@digithings/ui/chat/trace-spacing";
+import { matchThemeStep, themeCycle } from "@digithings/ui/theme";
 
 export type ComposerMenuKind =
   | "settings"
@@ -78,6 +86,8 @@ export type ComposerMenuKind =
   | "effort"
   | "search-engine"
   | "view"
+  | "density"
+  | "theme"
   | "thinking"
   | "provider"
   | "help";
@@ -89,6 +99,8 @@ type MenuView =
   | "effort"
   | "search-engine"
   | "view"
+  | "density"
+  | "theme"
   | "thinking"
   | "tools"
   | "mcp"
@@ -98,7 +110,7 @@ type MenuView =
   | "provider-model"
   | "help";
 
-type MenuRow = {
+export type MenuRow = {
   id: string;
   label: string;
   value: string;
@@ -106,7 +118,77 @@ type MenuRow = {
   checked?: boolean;
   /** Single-choice list: radio disc, not On/Off. */
   exclusive?: boolean;
+  /** Provider label. Not a control, so arrows and Home/End skip it. */
+  heading?: boolean;
+  /** Composer text while this row is selected (`/language English`). */
+  insert?: string;
+  /** Option text the pane filter matches (`English`, `default dark`). */
+  token?: string;
+  aliases?: readonly string[];
+  /**
+   * /tools tree: a tool row under its service. `mid` draws `├─`, `last` draws
+   * `└─`, like a file listing under its folder.
+   */
+  branch?: "mid" | "last";
 };
+
+/** The /tools tree branch glyph for a row under a service. */
+export function treeBranchGlyph(branch: MenuRow["branch"]): string {
+  if (branch === "last") return "└─";
+  if (branch === "mid") return "├─";
+  return "";
+}
+
+export type ComposerModelPicker = {
+  presets: readonly { id: string; label: string; description: string; model: string }[];
+  groups: readonly {
+    provider: string;
+    models: readonly { id: string; label: string }[];
+    premium?: boolean;
+  }[];
+  showFullList: boolean;
+};
+
+/**
+ * The cursor is the row Enter commits, so a page that has a current value
+ * opens on it. The index is read from the rows the page renders, so the list
+ * a page shows and the list it indexes are the same list by construction and
+ * no separate order constant can drift out of step with the rendering.
+ *
+ * A page without a current value (the root, the on/off toggles, the tool and
+ * server lists) has no row to land on and starts at the top.
+ */
+export function cursorOnCurrentRow(rows: readonly MenuRow[]): number {
+  const index = rows.findIndex(
+    (row) => row.exclusive === true && row.checked === true && row.heading !== true,
+  );
+  if (index >= 0) return index;
+  const first = rows.findIndex((row) => row.heading !== true);
+  return first >= 0 ? first : 0;
+}
+
+function selectableIndexes(rows: readonly MenuRow[]): number[] {
+  const indexes: number[] = [];
+  rows.forEach((row, index) => {
+    if (row.heading !== true) indexes.push(index);
+  });
+  return indexes;
+}
+
+function stepSelectable(current: number, delta: number, rows: readonly MenuRow[]): number {
+  const selectable = selectableIndexes(rows);
+  if (!selectable.length) return 0;
+  const pos = selectable.indexOf(current);
+  if (pos < 0) {
+    // On a heading (or past the end): one step lands on the nearest selectable
+    // row in that direction, without applying the delta a second time.
+    if (delta > 0) return selectable.find((index) => index > current) ?? selectable[0] ?? 0;
+    return [...selectable].reverse().find((index) => index < current) ?? selectable[selectable.length - 1] ?? 0;
+  }
+  return selectable[nextPaletteIndex(pos, delta, selectable.length)] ?? selectable[0] ?? 0;
+}
+
+export const stepSelectableForTests = stepSelectable;
 
 /**
  * The menu is a tree, not a set of modes: every page has exactly one parent.
@@ -120,6 +202,8 @@ const MENU_PARENT: Record<MenuView, MenuView | null> = {
   effort: "main",
   "search-engine": "main",
   view: "main",
+  density: "main",
+  theme: "main",
   thinking: "main",
   tools: "main",
   mcp: "main",
@@ -128,6 +212,22 @@ const MENU_PARENT: Record<MenuView, MenuView | null> = {
   "provider-key": "provider",
   "provider-model": "provider",
   help: "main",
+};
+
+/** Escape from a pane writes the command without the trailing space. */
+const PANE_BACK_TOKEN: Partial<Record<MenuView, string>> = {
+  language: "/language",
+  models: "/models",
+  effort: "/effort",
+  "search-engine": "/search-engine",
+  view: "/view",
+  density: "/density",
+  theme: "/theme",
+  thinking: "/thinking",
+  tools: "/tools",
+  mcp: "/mcp",
+  provider: "/provider",
+  help: "/help",
 };
 
 const EFFORTS = ["low", "medium", "high"] as const;
@@ -150,13 +250,6 @@ const SEARCH_ENGINE_LABELS: Record<string, string> = {
   parallel: "Parallel",
   firecrawl: "Firecrawl",
   tinyfish: "Tinyfish",
-};
-
-const VIEW_LABELS: Record<string, string> = {
-  hidden: "Hidden · answer only",
-  compact: "Compact · closed",
-  balanced: "Balanced · collapse when done",
-  detailed: "Detailed · stays open",
 };
 
 const THINKING_LABELS: Record<string, string> = {
@@ -183,6 +276,8 @@ function initialView(kind: ComposerMenuKind): MenuView {
   if (kind === "effort") return "effort";
   if (kind === "search-engine") return "search-engine";
   if (kind === "view") return "view";
+  if (kind === "density") return "density";
+  if (kind === "theme") return "theme";
   if (kind === "thinking") return "thinking";
   if (kind === "tools") return "tools";
   if (kind === "mcp") return "mcp";
@@ -271,6 +366,7 @@ export function EmbedComposerMenu({
   kind,
   models,
   defaultModel,
+  picker,
   onClose,
   onActivateProvider,
   onClearProvider,
@@ -284,6 +380,8 @@ export function EmbedComposerMenu({
   models?: readonly string[];
   /** Deployment default: `auto` (or empty) makes Auto the checked first row. */
   defaultModel?: string;
+  /** Catalog presets and provider groups. Absent keeps the id list. */
+  picker?: ComposerModelPicker;
   onClose: () => void;
   onActivateProvider?: (key: string, provider: BYOKProvider, model: string) => void;
   onClearProvider?: () => void;
@@ -322,10 +420,11 @@ export function EmbedComposerMenu({
     () => connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom),
     [api.mcpServers, api.prefs.mcpCustom],
   );
-  const languageCodes = useMemo(() => languages.map((o) => o.value), [languages]);
 
   const [view, setView] = useState<MenuView>(() => initialView(kind));
   const [cursor, setCursor] = useState(0);
+  /** The page the cursor was last seeded for; a page change seeds it again. */
+  const [seededView, setSeededView] = useState<MenuView | null>(null);
   const [providerPick, setProviderPick] = useState<BYOKProvider>(
     () =>
       tryResolveProviderInput(providerSeed ?? "") ??
@@ -344,9 +443,18 @@ export function EmbedComposerMenu({
   const [mcpOAuthBusy, setMcpOAuthBusy] = useState(false);
   const [mcpSuggestIndex, setMcpSuggestIndex] = useState(-1);
   const [mcpIdDropdownOpen, setMcpIdDropdownOpen] = useState(false);
+  // The suggestion list overlays the menu, so it is portalled out of the menu
+  // body's scroll box. This box is the anchor the list follows.
+  const [mcpIdAnchor, setMcpIdAnchor] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  const mcpIdFieldRef = useRef<HTMLDivElement | null>(null);
   const keyInputRef = useRef<HTMLInputElement>(null);
   const customModelRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
+  const echoArmed = useRef(false);
   const mcpDraftRef = useRef(mcpDraft);
   const keyFormId = useId();
   const openKey = `${kind}\0${providerSeed ?? ""}\0${mcpSeed ?? ""}`;
@@ -372,41 +480,19 @@ export function EmbedComposerMenu({
     if (providerSeeded) {
       setView("provider-key");
       setProviderPick(providerSeeded);
-      setCursor(0);
     } else if (mcpOpened === "new") {
       setMcpDraft(emptyMcpConfig());
       setView("mcp-edit");
-      setCursor(0);
     } else if (typeof mcpOpened === "string") {
       const hit =
         connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom).find((s) => s.id === mcpOpened) ??
         applyWellKnownMcp({ ...emptyMcpConfig(), label: mcpOpened }, mcpOpened);
       setMcpDraft(hit);
       setView("mcp-edit");
-      setCursor(0);
     } else {
       setView(next);
-      if (kind === "language") {
-        setCursor(Math.max(0, languageCodes.indexOf(api.prefs.language)));
-      } else if (kind === "effort") {
-        setCursor(Math.max(0, EFFORTS.indexOf(api.prefs.effort as (typeof EFFORTS)[number])));
-      } else if (kind === "search-engine") {
-        setCursor(
-          Math.max(
-            0,
-            SEARCH_ENGINES.indexOf(api.prefs.searchEngine as (typeof SEARCH_ENGINES)[number]),
-          ),
-        );
-      } else if (kind === "view") {
-        setCursor(Math.max(0, VIEW_MODES.indexOf(api.prefs.view)));
-      } else if (kind === "thinking") {
-        setCursor(Math.max(0, THINKING_MODES.indexOf(api.prefs.thinking)));
-      } else if (kind === "provider") {
-        const current = defaultProviderPick(providerActive?.provider, initialProvider);
-        setProviderPick(current);
-        setCursor(Math.max(0, PROVIDER_MENU_ORDER.indexOf(current)));
-      } else {
-        setCursor(0);
+      if (kind === "provider") {
+        setProviderPick(defaultProviderPick(providerActive?.provider, initialProvider));
       }
     }
     setKeyDraft("");
@@ -421,6 +507,15 @@ export function EmbedComposerMenu({
     setMcpIdDropdownOpen(false);
   }
 
+  const commitExclusive = useCallback(
+    (apply: () => void) => {
+      apply();
+      if (api.composerDraftBound) queueMicrotask(() => api.setComposerDraft?.(""));
+      else onClose();
+    },
+    [api, onClose],
+  );
+
   /**
    * The root is the same command list the `/` palette filters — one source of
    * truth, so going back never lands on a second, shorter "main". Rows that
@@ -433,6 +528,8 @@ export function EmbedComposerMenu({
       tools: "tools",
       language: "language",
       view: "view",
+      density: "density",
+      theme: "theme",
       thinking: "thinking",
       effort: "effort",
       "search-engine": "search-engine",
@@ -443,17 +540,20 @@ export function EmbedComposerMenu({
       .filter((command) => command.id !== "settings")
       .map((command) => {
         const node = NODE_BY_ID[command.id];
+        const draft = node ? paneDraftForId(command.id) : null;
         return {
           id: command.id,
           label: command.label ?? `/${command.id}`,
           value: command.description ?? "",
+          ...(draft ? { insert: draft } : {}),
           activate: node
             ? () => {
-                setCursor(0);
-                setView(node);
+                if (api.composerDraftBound && draft) api.setComposerDraft?.(draft);
+                else setView(node);
               }
             : () => {
                 command.execute();
+                if (api.composerDraftBound) api.setComposerDraft?.("");
                 onClose();
               },
         };
@@ -471,16 +571,73 @@ export function EmbedComposerMenu({
           value: native,
           checked: selected,
           exclusive: true,
+          insert: optionDraft("/language", o.label),
+          token: o.label,
+          ...(native ? { aliases: [native] } : {}),
           activate: () => {
-            api.setLanguage(o.value);
-            onClose();
+            commitExclusive(() => api.setLanguage(o.value));
           },
         };
       }),
-    [languages, api, onClose],
+    [languages, api, commitExclusive],
   );
 
   const modelRows = useMemo((): MenuRow[] => {
+    // A connected BYOK provider replaces the house catalog with that
+    // provider's own models. The catalog picker is the house list.
+    if (picker && !providerActive) {
+      const selected = api.prefs.model;
+      const presetRows: MenuRow[] = picker.presets.map((preset) => {
+        const token = `preset:${preset.id}`;
+        const checked =
+          preset.id === "auto"
+            ? !selected || selected === "auto" || selected === token
+            : selected === token;
+        return {
+          id: token,
+          label: preset.label,
+          value: preset.description,
+          checked,
+          exclusive: true,
+          insert: optionDraft("/models", preset.label),
+          token: preset.label,
+          activate: () => {
+            const next = preset.id === "auto" ? "" : token;
+            commitExclusive(() => {
+              api.setModel(next);
+              onPickSessionModel?.(next);
+            });
+          },
+        };
+      });
+      const groupRows: MenuRow[] = picker.showFullList
+        ? picker.groups.flatMap((group) => [
+            {
+              id: `heading:${group.provider}`,
+              label: group.provider,
+              value: group.premium ? "Manual selection" : "",
+              heading: true,
+              activate: () => {},
+            },
+            ...group.models.map((model) => ({
+              id: model.id,
+              label: model.label,
+              value: "",
+              checked: selected === model.id,
+              exclusive: true,
+              insert: optionDraft("/models", model.label),
+              token: model.label,
+              activate: () => {
+                commitExclusive(() => {
+                  api.setModel(model.id);
+                  onPickSessionModel?.(model.id);
+                });
+              },
+            })),
+          ])
+        : [];
+      if (presetRows.length || groupRows.length) return [...presetRows, ...groupRows];
+    }
     // Auto is only a real option when the deployment default is Auto (no
     // pinned model); a tenant that pins a default should not offer a way to
     // silently leave it.
@@ -496,9 +653,10 @@ export function EmbedComposerMenu({
             value: "deployment default",
             checked: !api.prefs.model || api.prefs.model === "auto",
             exclusive: true,
+            insert: optionDraft("/models", "auto"),
+            token: "auto",
             activate: () => {
-              api.setModel("");
-              onClose();
+              commitExclusive(() => api.setModel(""));
             },
           },
         ]
@@ -512,7 +670,6 @@ export function EmbedComposerMenu({
           value: "",
           activate: () => {
             setView("main");
-            setCursor(0);
           },
         },
       ];
@@ -525,14 +682,17 @@ export function EmbedComposerMenu({
         value: "",
         checked: (providerActive?.model || api.prefs.model) === id,
         exclusive: true,
+        insert: optionDraft("/models", id),
+        token: id,
         activate: () => {
-          api.setModel(id);
-          onPickSessionModel?.(id);
-          onClose();
+          commitExclusive(() => {
+            api.setModel(id);
+            onPickSessionModel?.(id);
+          });
         },
       })),
     ];
-  }, [available, api, defaultModel, onClose, onPickSessionModel, providerActive]);
+  }, [available, api, commitExclusive, defaultModel, onPickSessionModel, picker, providerActive]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
@@ -542,12 +702,13 @@ export function EmbedComposerMenu({
         value: "",
         checked: api.prefs.effort === id,
         exclusive: true,
+        insert: optionDraft("/effort", id),
+        token: id,
         activate: () => {
-          api.setEffort(id);
-          onClose();
+          commitExclusive(() => api.setEffort(id));
         },
       })),
-    [api, onClose],
+    [api, commitExclusive],
   );
 
   const engineRows = useMemo(
@@ -558,12 +719,13 @@ export function EmbedComposerMenu({
         value: SEARCH_ENGINE_LABELS[id] ?? "",
         checked: (api.prefs.searchEngine || "auto") === id,
         exclusive: true,
+        insert: optionDraft("/search-engine", id),
+        token: id,
         activate: () => {
-          api.setSearchEngine(id);
-          onClose();
+          commitExclusive(() => api.setSearchEngine(id));
         },
       })),
-    [api, onClose],
+    [api, commitExclusive],
   );
 
   const viewRows = useMemo(
@@ -571,16 +733,61 @@ export function EmbedComposerMenu({
       VIEW_MODES.map((id) => ({
         id,
         label: slashName(`view ${id}`),
-        value: VIEW_LABELS[id] ?? "",
+        value: VIEW_LABELS[id],
         checked: api.prefs.view === id,
         exclusive: true,
+        insert: optionDraft("/view", id),
+        token: id,
         activate: () => {
-          api.setView(id);
-          onClose();
+          commitExclusive(() => api.setView(id));
         },
       })),
-    [api, onClose],
+    [api, commitExclusive],
   );
+
+  const densityRows = useMemo(
+    (): MenuRow[] =>
+      TRACE_DENSITIES.map((id) => ({
+        id,
+        label: slashName(`density ${id}`),
+        value: TRACE_DENSITY_LABELS[id],
+        checked: api.prefs.density === id,
+        exclusive: true,
+        insert: optionDraft("/density", id),
+        token: id,
+        activate: () => {
+          commitExclusive(() => api.setDensity(id));
+        },
+      })),
+    [api, commitExclusive],
+  );
+
+  const themeRows = useMemo((): MenuRow[] => {
+    const state = currentThemeState(api);
+    const current = matchThemeStep(state.preference, state.palette, state.resolved);
+    return themeCycle().map((step) => ({
+      id: step.id,
+      label: slashName(`theme ${step.palette} ${step.mode}`),
+      value: step.label,
+      checked: current.id === step.id,
+      exclusive: true,
+      insert: slashName(`theme ${step.palette} ${step.mode}`),
+      token: `${step.palette} ${step.mode}`,
+      activate: () => {
+        commitExclusive(() => {
+          if (api.setTheme && current.id === step.id) {
+            // On a host that owns the theme (an embed), the checked row drops
+            // the visitor's pick, so the chat follows the parent / tenant again.
+            applyThemePick(api, "auto", step.palette);
+          } else {
+            // Document theme (the app): any row, the checked one included,
+            // pins that mode and palette, as before 2.6.6.
+            applyThemePick(api, step.mode, step.palette);
+          }
+        });
+      },
+    }));
+  }, [api, commitExclusive]);
 
   const thinkingRows = useMemo(
     (): MenuRow[] =>
@@ -590,12 +797,13 @@ export function EmbedComposerMenu({
         value: THINKING_LABELS[id] ?? "",
         checked: api.prefs.thinking === id,
         exclusive: true,
+        insert: optionDraft("/thinking", id),
+        token: id,
         activate: () => {
-          api.setThinking(id);
-          onClose();
+          commitExclusive(() => api.setThinking(id));
         },
       })),
-    [api, onClose],
+    [api, commitExclusive],
   );
 
   const toggleTool = useCallback(
@@ -674,47 +882,92 @@ export function EmbedComposerMenu({
             if (kind === "tools") onClose();
             else {
               setView("main");
-              setCursor(0);
             }
           },
         },
       ];
     }
-    // Each group row is followed by its individual tools (per-tool toggles).
+    const readOnly = api.toolControl === "agent" || api.toolControl === "locked";
+    const agent = api.toolControl === "agent";
+    // A file-system-like tree: the service as `/slash`, its tools under it.
     return toolRows.flatMap((t): MenuRow[] => {
       const on = connectedToolIsOn(t.id, toolOnInput);
+      const state = agent ? "Managed by the agent" : on ? "On" : "Off";
       const group: MenuRow = {
         id: t.id,
         label: slashName(t.slash),
-        value: on ? "On" : "Off",
-        checked: on,
-        activate: () => toggleTool(t.id),
+        value: state,
+        ...(agent ? {} : { checked: on }),
+        insert: optionDraft("/tools", t.slash),
+        token: t.slash,
+        aliases: t.label && t.label !== t.slash ? [t.label] : [],
+        activate: () => {
+          if (readOnly) return;
+          toggleTool(t.id);
+        },
       };
-      const subs = (t.tools ?? []).map((sub): MenuRow => {
+      const configured = t.tools ?? [];
+      const count = configured.length || (t.builtinTools?.length ?? 0);
+      const branchAt = (i: number): MenuRow["branch"] => (i === count - 1 ? "last" : "mid");
+      const subs = configured.map((sub, i): MenuRow => {
         const subOn = on && api.extraToolOn(sub.id);
+        const subLabel = sub.label?.trim() || sub.id;
         return {
           id: `${t.id}::${sub.id}`,
-          label: `  ../${sub.id}`,
-          value: subOn ? "On" : "Off",
-          checked: subOn,
+          label: subLabel,
+          branch: branchAt(i),
+          value: agent ? "Managed by the agent" : subOn ? "On" : "Off",
+          ...(agent ? {} : { checked: subOn }),
+          insert: optionDraft("/tools", subLabel),
+          token: subLabel,
           activate: () => {
-            if (!on) return;
+            if (readOnly || !on) return;
             api.setExtraTool(sub.id, !api.extraToolOn(sub.id));
           },
         };
       });
-      return [group, ...subs];
+      // Built-in tools follow the service switch, so they carry its state but
+      // no switch of their own.
+      const builtins = configured.length
+        ? []
+        : (t.builtinTools ?? []).map(
+            (sub, i): MenuRow => ({
+              id: `${t.id}::${sub.id}`,
+              label: sub.label,
+              branch: branchAt(i),
+              value: state,
+              token: sub.label,
+              activate: () => {},
+            }),
+          );
+      return [group, ...subs, ...builtins];
     });
   }, [api, kind, onClose, toggleTool, toolOnInput, toolRows]);
 
   const mcpRows = useMemo((): MenuRow[] => {
+    const readOnly = api.toolControl === "agent" || api.toolControl === "locked";
+    const agent = api.toolControl === "agent";
+    if (agent && mcpConfigs.length === 0) {
+      return toolRows.map((t) => ({
+        id: t.id,
+        label: t.label,
+        value: "Managed by the agent",
+        insert: optionDraft("/mcp", t.label),
+        token: t.label,
+        activate: () => {},
+      }));
+    }
     const rows: MenuRow[] = mcpConfigs.map((s) => {
       const status = mcpStatus(s, api.extraToolOn(s.id));
+      const label = s.label || s.id;
       return {
         id: s.id,
-        label: slashName(s.id),
-        value: mcpStatusLabel(status),
+        label,
+        value: agent ? "Managed by the agent" : mcpStatusLabel(status),
+        insert: optionDraft("/mcp", label),
+        token: label,
         activate: () => {
+          if (readOnly) return;
           setMcpDraft(s);
           setMcpError(null);
           setMcpSuggestIndex(-1);
@@ -723,7 +976,7 @@ export function EmbedComposerMenu({
         },
       };
     });
-    if (api.allowAddMcp) {
+    if (api.allowAddMcp && !readOnly) {
       rows.push({
         id: "mcp-new",
         label: slashName("mcp new"),
@@ -738,7 +991,7 @@ export function EmbedComposerMenu({
       });
     }
     return rows;
-  }, [api, mcpConfigs]);
+  }, [api, mcpConfigs, toolRows]);
 
   const mcpSuggestions = useMemo(
     () => (mcpDraft.source === "session" ? wellKnownMcpSuggestions(mcpDraft.id) : []),
@@ -809,7 +1062,6 @@ export function EmbedComposerMenu({
     }
     setView("provider-model");
     setCustomModel(false);
-    setCursor(0);
     if (wantsProviderKeyPing(providerPick)) {
       setProviderPending(true);
       void pingByokKey(keyDraft, providerPick, "", { requireModel: false }).then((result) => {
@@ -825,8 +1077,8 @@ export function EmbedComposerMenu({
     // key and returns routing to Cheaper Inference.
     const rows: MenuRow[] = [
       {
-        id: "cheaperinference",
-        label: slashName("cheaperinference"),
+        id: HOUSE_BACKEND_ID,
+        label: slashName(HOUSE_BACKEND_ID),
         value: "Default · no key",
         checked: !providerActive,
         exclusive: true,
@@ -880,23 +1132,42 @@ export function EmbedComposerMenu({
           ? effortRows
           : view === "view"
             ? viewRows
-            : view === "thinking"
+            : view === "density"
+              ? densityRows
+              : view === "thinking"
               ? thinkingRows
-              : view === "tools"
-                ? toolsRows
-                : view === "mcp"
-                  ? mcpRows
-                  : view === "mcp-edit"
-                    ? []
-                    : view === "provider"
-                      ? providerRows
-                      : view === "provider-model"
-                        ? providerModelRows
-                        : view === "provider-key"
-                          ? []
-                          : view === "search-engine"
-                            ? engineRows
-                            : modelRows;
+              : view === "theme"
+                ? themeRows
+                : view === "tools"
+                    ? toolsRows
+                    : view === "mcp"
+                      ? mcpRows
+                      : view === "mcp-edit"
+                        ? []
+                        : view === "provider"
+                          ? providerRows
+                          : view === "provider-model"
+                            ? providerModelRows
+                            : view === "provider-key"
+                              ? []
+                              : view === "search-engine"
+                                ? engineRows
+                                : view === "help"
+                                  ? []
+                                  : modelRows;
+  const paletteFilter =
+    view === "main" ||
+    view === "help" ||
+    view === "mcp-edit" ||
+    view === "provider-key" ||
+    (view === "provider-model" && customModel)
+      ? ""
+      : (api.paletteQuery ?? "");
+  const selection = submenuRows(
+    rows.map((row) => ({ ...row, token: row.token ?? row.label })),
+    paletteFilter,
+  );
+  const shown = selection.rows;
   const title =
     view === "language"
       ? "/language"
@@ -906,37 +1177,82 @@ export function EmbedComposerMenu({
           ? "/effort"
           : view === "view"
             ? "/view"
-            : view === "thinking"
-              ? "/thinking"
-              : view === "tools"
-                ? "/tools"
-                : view === "mcp" || view === "mcp-edit"
-                  ? "/mcp"
-                  : view === "provider" || view === "provider-key" || view === "provider-model"
-                    ? "/provider"
-                    : view === "search-engine"
-                      ? "/search-engine"
-                      : view === "help"
-                        ? "/help"
-                        : "Settings";
+            : view === "density"
+              ? "/density"
+              : view === "theme"
+              ? "/theme"
+              : view === "thinking"
+                ? "/thinking"
+                : view === "tools"
+                  ? "/tools"
+                  : view === "mcp" || view === "mcp-edit"
+                    ? "/mcp"
+                    : view === "provider" || view === "provider-key" || view === "provider-model"
+                      ? "/provider"
+                      : view === "search-engine"
+                        ? "/search-engine"
+                        : view === "help"
+                          ? "/help"
+                          : "Settings";
 
-  const safeCursor = rows.length ? Math.min(cursor, rows.length - 1) : 0;
+  const safeCursor = shown.length ? Math.min(cursor, shown.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);
+
+  /**
+   * The cursor belongs to the page, not to the moment the menu opened: a
+   * page with a current value opens on it, so Enter commits what is set
+   * instead of the first row. The seed is read from the rows the page
+   * renders, so the list a page shows and the list it indexes are the same
+   * list by construction.
+   */
+  if (seededView !== view) {
+    const from = seededView;
+    setSeededView(view);
+    let seed = cursorOnCurrentRow(shown);
+    if (view === "provider" && (from === "provider-key" || from === "provider-model")) {
+      // Back from a provider form: land on the provider the user opened, not
+      // on the one that happens to be connected.
+      const picked = providerRows.findIndex((row) => row.id === providerPick);
+      if (picked >= 0) seed = picked;
+    }
+    setCursor(seed);
+  }
+  const filterKey = `${view}\0${paletteFilter}`;
+  const [appliedFilter, setAppliedFilter] = useState(filterKey);
+  if (appliedFilter !== filterKey) {
+    setAppliedFilter(filterKey);
+    if (selection.cursor >= 0) setCursor(selection.cursor);
+  }
 
   // Form pages own the arrow keys and read-only pages have no rows; neither
   // can advertise "↑↓ navigate". Only the back gesture is true there.
   const formPage =
-    view === "provider-key" ||
-    (view === "provider-model" && customModel) ||
-    view === "mcp-edit";
-  const canNavigate = rows.length > 0 && !formPage && view !== "help";
+    view === "provider-key" || (view === "provider-model" && customModel) || view === "mcp-edit";
+  const canNavigate = shown.length > 0 && !formPage && view !== "help";
+
+  const runRow = useCallback(
+    (row: MenuRow | undefined) => {
+      if (!row) return;
+      if (row.insert) api.setComposerDraft?.(row.insert);
+      row.activate();
+    },
+    [api],
+  );
+
+  useEffect(() => {
+    if (!echoArmed.current) return;
+    echoArmed.current = false;
+    const row = shown[cursor];
+    if (row?.insert) api.setComposerDraft?.(row.insert);
+  }, [api, cursor, shown]);
 
   const move = useCallback(
     (delta: number) => {
-      if (!rows.length) return;
-      setCursor((c) => nextPaletteIndex(c, delta, rows.length));
+      if (!shown.length) return;
+      echoArmed.current = true;
+      setCursor((c) => stepSelectable(c, delta, shown));
     },
-    [rows.length],
+    [shown],
   );
 
   const goBack = useCallback(() => {
@@ -947,7 +1263,16 @@ export function EmbedComposerMenu({
     }
     const parent = MENU_PARENT[view];
     if (!parent) {
+      if (api.composerDraftBound && kind === "settings") {
+        api.setComposerDraft?.("/settings");
+        return;
+      }
       onClose();
+      return;
+    }
+    const back = PANE_BACK_TOKEN[view];
+    if (parent === "main" && api.composerDraftBound && back) {
+      api.setComposerDraft?.(back);
       return;
     }
     if (view === "mcp-edit") {
@@ -955,11 +1280,10 @@ export function EmbedComposerMenu({
       setMcpSuggestIndex(-1);
       setMcpError(null);
     }
+    // The page we land on seeds its own cursor (the current value, or the
+    // provider row the user drilled into).
     setView(parent);
-    setCursor(
-      parent === "provider" ? Math.max(0, PROVIDER_MENU_ORDER.indexOf(providerPick)) : 0,
-    );
-  }, [customModel, onClose, providerPick, view]);
+  }, [api, customModel, kind, onClose, view]);
 
   useEffect(() => {
     if (view === "provider-key") keyInputRef.current?.focus();
@@ -997,7 +1321,7 @@ export function EmbedComposerMenu({
       if (event.key === "ArrowRight") {
         event.preventDefault();
         event.stopPropagation();
-        rows[cursor]?.activate();
+        runRow(shown[cursor]);
         return;
       }
       if (event.key === "ArrowLeft") {
@@ -1009,33 +1333,25 @@ export function EmbedComposerMenu({
       if (event.key === "Home") {
         event.preventDefault();
         event.stopPropagation();
-        setCursor(0);
+        echoArmed.current = true;
+        setCursor(selectableIndexes(shown)[0] ?? 0);
         return;
       }
       if (event.key === "End") {
         event.preventDefault();
         event.stopPropagation();
-        setCursor(Math.max(0, rows.length - 1));
+        echoArmed.current = true;
+        const selectable = selectableIndexes(shown);
+        setCursor(selectable[selectable.length - 1] ?? Math.max(0, shown.length - 1));
         return;
       }
       if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        rows[cursor]?.activate();
+        runRow(shown[cursor]);
       }
     },
-    [
-      api,
-      closeMcpIdDropdown,
-      cursor,
-      formPage,
-      goBack,
-      languageCodes.length,
-      mcpIdDropdownOpen,
-      move,
-      rows,
-      view,
-    ],
+    [closeMcpIdDropdown, cursor, formPage, goBack, mcpIdDropdownOpen, move, runRow, shown, view],
   );
 
   useEffect(() => {
@@ -1060,15 +1376,113 @@ export function EmbedComposerMenu({
     }
   }, [cursor, view]);
 
+  // The suggestion list is absolutely positioned against its own anchor, so
+  // it has to follow the id field: the field scrolls inside the menu body
+  // and the page scrolls under the menu.
+  const placeMcpIdDropdown = useCallback(() => {
+    const field = mcpIdFieldRef.current;
+    if (!field) return;
+    const rect = field.getBoundingClientRect();
+    setMcpIdAnchor((prev) => {
+      const top = Math.round(rect.bottom);
+      const left = Math.round(rect.left);
+      const width = Math.round(rect.width);
+      if (prev && prev.top === top && prev.left === left && prev.width === width) return prev;
+      return { top, left, width };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!mcpIdListOpen) return;
+    placeMcpIdDropdown();
+    window.addEventListener("scroll", placeMcpIdDropdown, true);
+    window.addEventListener("resize", placeMcpIdDropdown);
+    return () => {
+      window.removeEventListener("scroll", placeMcpIdDropdown, true);
+      window.removeEventListener("resize", placeMcpIdDropdown);
+    };
+  }, [mcpIdListOpen, placeMcpIdDropdown]);
+
   const onRowKey = (event: ReactKeyboardEvent, index: number) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      rows[index]?.activate();
+      runRow(shown[index]);
     }
   };
 
   const formView =
     view === "provider-key" || (view === "provider-model" && customModel) || view === "mcp-edit";
+
+  // The suggestion list lives in a zero-height anchor that follows the id
+  // field, so it overlays the menu instead of being clipped by the menu
+  // body's scroll box. The anchor is a direct child of the document body, so
+  // no ancestor of the menu can clip the list.
+  const mcpIdSuggestions =
+    mcpIdListOpen && mcpIdAnchor && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            data-mcp-id-anchor
+            className="fixed z-[60]"
+            style={{
+              top: mcpIdAnchor.top,
+              left: mcpIdAnchor.left,
+              width: mcpIdAnchor.width,
+              height: 0,
+            }}
+          >
+            <div
+              id="mcp-id-suggestions"
+              role="listbox"
+              aria-labelledby="mcp-id-label"
+              data-mcp-id-dropdown
+              className="border-border bg-background absolute inset-x-0 top-full z-20 mt-px max-h-40 overflow-y-auto overscroll-contain rounded-none border"
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {mcpSuggestionGroups.map((g) => (
+                <div key={g.group}>
+                  <div className="text-muted-foreground px-3 py-1 text-xs">{g.group}</div>
+                  {g.servers.map((row) => {
+                    const index = mcpSuggestions.findIndex((s) => s.id === row.id);
+                    const highlighted = index === mcpSuggestIndex;
+                    return (
+                      <button
+                        key={row.id}
+                        id={`mcp-suggest-${row.id}`}
+                        type="button"
+                        role="option"
+                        tabIndex={-1}
+                        aria-label={row.id}
+                        aria-selected={highlighted}
+                        data-cursor={highlighted ? "true" : undefined}
+                        className={`${MCP_SUGGEST_ROW_CLASS} ${highlighted ? "bg-muted/50" : ""}`}
+                        ref={(node) => {
+                          if (!highlighted || !node) return;
+                          const root = node.closest("[data-mcp-id-dropdown]");
+                          if (!(root instanceof HTMLElement)) return;
+                          const n = node.getBoundingClientRect();
+                          const r = root.getBoundingClientRect();
+                          if (n.bottom > r.bottom) root.scrollTop += n.bottom - r.bottom;
+                          else if (n.top < r.top) root.scrollTop -= r.top - n.top;
+                        }}
+                        onMouseEnter={() => setMcpSuggestIndex(index)}
+                        onClick={() => applyMcpSuggestion(row.id)}
+                      >
+                        <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">
+                          {row.id}
+                        </span>
+                        <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
+                          {wellKnownMcpHost(row.url) || row.auth}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   const body = (
     <div
@@ -1079,7 +1493,6 @@ export function EmbedComposerMenu({
       role={formView ? "dialog" : "menu"}
       aria-label={title}
     >
-
       <div className="relative min-h-0">
         <div
           ref={menuBodyRef}
@@ -1143,7 +1556,7 @@ export function EmbedComposerMenu({
                 <span className="text-muted-foreground text-xs" id="mcp-id-label">
                   id
                 </span>
-                <div className="relative z-10" data-mcp-id-field>
+                <div className="relative z-10" data-mcp-id-field ref={mcpIdFieldRef}>
                   <Input
                     type="text"
                     value={mcpDraft.id}
@@ -1163,7 +1576,9 @@ export function EmbedComposerMenu({
                     }
                     className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none disabled:opacity-60 h-auto"
                     onFocus={() => {
-                      if (mcpDraft.source === "session") setMcpIdDropdownOpen(true);
+                      if (mcpDraft.source !== "session") return;
+                      placeMcpIdDropdown();
+                      setMcpIdDropdownOpen(true);
                     }}
                     onBlur={(e) => {
                       const root = e.currentTarget.closest("[data-mcp-id-field]");
@@ -1173,7 +1588,10 @@ export function EmbedComposerMenu({
                     }}
                     onChange={(e) => {
                       setMcpSuggestIndex(-1);
-                      if (mcpDraft.source === "session") setMcpIdDropdownOpen(true);
+                      if (mcpDraft.source === "session") {
+                        placeMcpIdDropdown();
+                        setMcpIdDropdownOpen(true);
+                      }
                       commitMcpDraft(applyWellKnownMcp(mcpDraft, e.target.value));
                     }}
                     onKeyDown={(e) => {
@@ -1183,6 +1601,7 @@ export function EmbedComposerMenu({
                         e.preventDefault();
                         e.stopPropagation();
                         if (!mcpIdDropdownOpen) {
+                          placeMcpIdDropdown();
                           setMcpIdDropdownOpen(true);
                           setMcpSuggestIndex(e.key === "ArrowDown" ? 0 : mcpSuggestions.length - 1);
                           return;
@@ -1205,57 +1624,7 @@ export function EmbedComposerMenu({
                       }
                     }}
                   />
-                  {mcpIdListOpen ? (
-                    <div
-                      id="mcp-id-suggestions"
-                      role="listbox"
-                      aria-labelledby="mcp-id-label"
-                      data-mcp-id-dropdown
-                      className="border-border bg-background absolute inset-x-0 top-full z-20 mt-px max-h-40 overflow-y-auto overscroll-contain rounded-none border"
-                      onMouseDown={(e) => e.preventDefault()}
-                    >
-                      {mcpSuggestionGroups.map((g) => (
-                        <div key={g.group}>
-                          <div className="text-muted-foreground px-3 py-1 text-xs">{g.group}</div>
-                          {g.servers.map((row) => {
-                            const index = mcpSuggestions.findIndex((s) => s.id === row.id);
-                            const highlighted = index === mcpSuggestIndex;
-                            return (
-                              <button
-                                key={row.id}
-                                id={`mcp-suggest-${row.id}`}
-                                type="button"
-                                role="option"
-                                tabIndex={-1}
-                                aria-label={row.id}
-                                aria-selected={highlighted}
-                                data-cursor={highlighted ? "true" : undefined}
-                                className={`${MCP_SUGGEST_ROW_CLASS} ${
-                                  highlighted ? "bg-muted/50" : ""
-                                }`}
-                                ref={(node) => {
-                                  if (!highlighted || !node) return;
-                                  const root = node.closest("[data-mcp-id-dropdown]");
-                                  if (!(root instanceof HTMLElement)) return;
-                                  const n = node.getBoundingClientRect();
-                                  const r = root.getBoundingClientRect();
-                                  if (n.bottom > r.bottom) root.scrollTop += n.bottom - r.bottom;
-                                  else if (n.top < r.top) root.scrollTop -= r.top - n.top;
-                                }}
-                                onMouseEnter={() => setMcpSuggestIndex(index)}
-                                onClick={() => applyMcpSuggestion(row.id)}
-                              >
-                                <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.id}</span>
-                                <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
-                                  {wellKnownMcpHost(row.url) || row.auth}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
+                  {mcpIdSuggestions}
                 </div>
               </div>
               <Label className="flex flex-col items-stretch gap-1">
@@ -1454,7 +1823,7 @@ export function EmbedComposerMenu({
                   Commands
                 </span>
                 <span className="font-mono">
-                  /models · /language · /tools · /mcp · /settings · /new
+                  /models · /language · /tools · /mcp · /settings · /theme · /new
                 </span>
               </div>
               <span className="text-muted-foreground">Enter sends · Shift+Enter adds a line</span>
@@ -1470,7 +1839,21 @@ export function EmbedComposerMenu({
           !(view === "provider-model" && customModel) &&
           view !== "mcp-edit" &&
           view !== "help"
-            ? rows.map((row, index) => {
+            ? shown.map((row, index) => {
+                if (row.heading) {
+                  return (
+                    <div
+                      key={row.id}
+                      role="presentation"
+                      className="text-muted-foreground flex items-baseline gap-2 px-2 pt-2 pb-0.5 text-[11px] uppercase tracking-wide"
+                    >
+                      <span>{row.label}</span>
+                      {row.value ? (
+                        <span className="normal-case tracking-normal">{row.value}</span>
+                      ) : null}
+                    </div>
+                  );
+                }
                 const toggle =
                   typeof row.checked === "boolean" && (view === "main" || view === "tools");
                 const exclusive = Boolean(row.exclusive);
@@ -1486,8 +1869,11 @@ export function EmbedComposerMenu({
                     ref={(node) => {
                       if (index === cursor) node?.scrollIntoView({ block: "nearest" });
                     }}
-                    onMouseEnter={() => setCursor(index)}
-                    onClick={() => row.activate()}
+                    onMouseEnter={() => {
+                      echoArmed.current = true;
+                      setCursor(index);
+                    }}
+                    onClick={() => runRow(row)}
                     onKeyDown={(e) => onRowKey(e, index)}
                   >
                     {/* The user-message chevron marks the cursor on every page,
@@ -1498,7 +1884,24 @@ export function EmbedComposerMenu({
                         <DotMatrix state="user" className="size-3.5" />
                       </span>
                     ) : null}
-                    <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.label}</span>
+                    {row.branch ? (
+                      <span
+                        data-slot="tools-tree-branch"
+                        className="text-muted-foreground shrink-0 ps-3 font-mono"
+                        aria-hidden
+                      >
+                        {treeBranchGlyph(row.branch)}
+                      </span>
+                    ) : null}
+                    <span
+                      className={
+                        view === "tools"
+                          ? "min-w-0 flex-1 font-mono font-medium break-words [overflow-wrap:anywhere]"
+                          : "min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]"
+                      }
+                    >
+                      {row.label}
+                    </span>
                     {row.value || (exclusive && row.checked) ? (
                       <span className="text-muted-foreground ml-auto flex min-w-0 max-w-[45%] items-center justify-end gap-2 truncate text-right text-xs">
                         {row.value ? <span className="truncate">{row.value}</span> : null}

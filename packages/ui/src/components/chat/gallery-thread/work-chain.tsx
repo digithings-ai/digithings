@@ -7,8 +7,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../../../ui/collapsible";
-import { DotMatrix } from "../DotMatrix";
+import { DisclosureChevron } from "../disclosure-chevron";
+import { WorkStatusLead } from "../work-status-lead";
 import { cn } from "./cn";
+import { workStatusText } from "./work-status";
+import { turnCutShort, useTurnOutcome } from "../turn-outcome";
 
 /**
  * How long the chain waits before it folds away once the turn is over.
@@ -31,39 +34,106 @@ const ANIMATION_DURATION = 200;
  * between two tool calls.
  *
  * The first manual toggle wins, as it does upstream.
+ *
+ * Folded, the header is a live status line: it names the tool that is
+ * running, or counts what the chain did once it is done. Expanded, it goes
+ * back to the plain "Working" / "Worked" title, because the reasoning and the
+ * tool calls are right there underneath — the header no longer has to
+ * describe them.
  */
 export function WorkChain({
   children,
-  defaultOpen = false,
+  indices,
+  openAtRest = false,
+  foldOnAnswer = false,
   running = false,
+  followedByText = false,
   className,
 }: {
   children: ReactNode;
-  /** Open at rest (the verbose level). */
-  defaultOpen?: boolean;
+  /**
+   * The message-part indices this chain holds. The folded header describes
+   * them ("Working — digisearch", "Used 3 tools"); without them the header
+   * has nothing to describe and keeps the plain title.
+   */
+  indices?: readonly number[];
+  /**
+   * The chain stays open for good: nothing ever folds (the verbose level).
+   * The balanced level instead opens the chain while the turn runs and folds
+   * it away when the turn ends.
+   */
+  openAtRest?: boolean;
+  /**
+   * Fold as soon as the answer starts streaming, rather than when the turn
+   * ends (the quiet level: the titles are there while the agent works, then
+   * they get out of the way of the answer).
+   */
+  foldOnAnswer?: boolean;
   /** The chain group is running (a tool or the reasoning is streaming). */
   running?: boolean;
+  /**
+   * A text part follows this chain in the message: the agent wrote
+   * something, so the work that came before it is finished. Only the answer
+   * ends a work run — a second run of tool calls and reasoning without text
+   * in between belongs to the same block.
+   */
+  followedByText?: boolean;
   className?: string;
 }) {
-  const turnRunning = useAuiState((s) => s.thread.isRunning);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const [settled, setSettled] = useState(false);
 
+  // The work of this block is over when text follows it: the agent wrote
+  // something, so it stopped reasoning and stopped calling tools for that
+  // run. Until then the block is still working — a second run of tool calls
+  // and reasoning without text in between is the same block, not a new one.
+  // The marker and the title follow the work; the disclosure follows it too.
+  //
+  // A turn that was stopped or failed before any text is over too: nothing
+  // more will arrive, so the marker stops and the title says how it ended.
+  const outcome = useTurnOutcome();
+  const cutShort = !followedByText && turnCutShort(outcome);
+  const working = !followedByText && !cutShort;
+
   useEffect(() => {
-    if (running || turnRunning) {
+    if (working) {
       setSettled(false);
       return;
     }
     const id = setTimeout(() => setSettled(true), SETTLE_MS);
     return () => clearTimeout(id);
-  }, [running, turnRunning]);
+  }, [working]);
 
-  const busy = running || turnRunning;
-  const open = userOpen ?? (defaultOpen || (!settled && busy));
+  const open = userOpen ?? (
+    openAtRest ? true : foldOnAnswer ? working : !settled && working
+  );
+
+  // Folded, the header is a live status line — the same sentence the retired
+  // summary level showed. Expanded, the plain title is enough: the reasoning
+  // and the tool calls are underneath it.
+  const parts = useAuiState((s) => s.message.parts);
+  const status = !open && indices ? workStatusText(parts, indices) : undefined;
+  const endedTitle = outcome === "failed" ? "Failed" : "Stopped";
+  const title = cutShort
+    ? endedTitle
+    : status
+      ? status.label
+      : working
+        ? "Working"
+        : "Worked";
+  const markerRunning = !cutShort && (status ? status.running : working);
+  const marker = cutShort
+    ? outcome === "failed"
+      ? "error"
+      : "stop"
+    : markerRunning
+      ? "loading"
+      : "idle";
 
   return (
     <Collapsible
       data-slot="aui_work-chain"
+      data-outcome={cutShort ? outcome : working ? "running" : "done"}
       open={open}
       onOpenChange={setUserOpen}
       className={cn("aui-work-chain", className)}
@@ -71,31 +141,12 @@ export function WorkChain({
     >
       <CollapsibleTrigger
         data-slot="aui_work-chain-trigger"
-        className="aui-work-chain-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]"
+        className="aui-work-chain-trigger aui-work-status group/trigger"
       >
-        {/* The loading matrix while the chain works; nothing when it is done —
-            the check mark belongs to the tool rows, not to the chain. */}
-        {busy ? (
-          <DotMatrix state="loading" label="Working" className="size-3 shrink-0" />
-        ) : (
-          <span aria-hidden className="size-3 shrink-0" />
-        )}
-        <span
-          data-slot="aui_work-chain-label"
-          className="aui-work-chain-label inline-block leading-none"
-        >
-          Reasoning
-        </span>
-        <span
-          data-slot="aui_work-chain-chevron"
-          className="aui-work-chain-chevron inline-flex shrink-0"
-        >
-          <DotMatrix
-            state="expand"
-            label="Toggle the work"
-            className="size-3 shrink-0"
-          />
-        </span>
+        {/* Same lead as the pre-response loader: the marker and the label
+            keep their slots, so the handoff reads as the words changing. */}
+        <WorkStatusLead marker={marker} label={title} />
+        <DisclosureChevron />
       </CollapsibleTrigger>
       <CollapsibleContent
         // Kept mounted: the rows inside keep their own state (and the DOM

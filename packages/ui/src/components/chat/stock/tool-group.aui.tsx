@@ -8,6 +8,7 @@ import {
   type FC,
   type PropsWithChildren,
 } from "react";
+import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix } from "../DotMatrix";
 import { cva, type VariantProps } from "class-variance-authority";
 import { useScrollLock } from "@assistant-ui/react";
@@ -17,6 +18,7 @@ import {
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useExportKeepMounted } from "../../../replay/export-mount";
 
 const ANIMATION_DURATION = 200;
 
@@ -121,37 +123,32 @@ function ToolGroupTrigger({
         "group-data-[variant=muted]/tool-group-root:w-full group-data-[variant=muted]/tool-group-root:px-4",
         className,
       )}
+      // The group is collapsed while the tools run, so the trigger is the only
+      // thing on screen that knows about it. The state is on the control, not
+      // in a second copy of its name.
+      aria-busy={active || undefined}
       {...props}
     >
-      {active && (
-        <span data-slot="tool-group-trigger-loader" className="aui-tool-group-trigger-loader inline-flex shrink-0">
-          <DotMatrix state="loading" label="Tools running" className="size-3.5" />
-        </span>
-      )}
+      {/* Pixel braces, the same 5×5 grid and the same box as the reasoning
+          bulb, still in both states so the label does not shift. */}
+      <span data-slot="tool-group-trigger-loader" className="aui-tool-group-trigger-loader inline-flex shrink-0">
+        {/* The chain header carries the running state. The trigger is named
+            by its text, so the glyph carries no name of its own, and the
+            running state is exposed on the trigger as aria-busy. */}
+        <DotMatrix state="tools" decorative className="!size-3 shrink-0" />
+      </span>
       <span
         data-slot="tool-group-trigger-label"
         className={cn(
-          "aui-tool-group-trigger-label-wrapper inline-block text-start text-xs leading-none font-medium",
+          "aui-tool-group-trigger-label-wrapper inline-block min-w-[4rem] text-start text-xs leading-none font-medium",
           "group-data-[variant=ghost]/tool-group-root:font-normal",
           "group-data-[variant=outline]/tool-group-root:grow",
           "group-data-[variant=muted]/tool-group-root:grow",
-          active && "shimmer motion-reduce:animate-none",
         )}
       >
         {text}
       </span>
-      <span
-        data-slot="tool-group-trigger-chevron"
-        className={cn(
-          "aui-tool-group-trigger-chevron inline-flex shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          "-rotate-90",
-          "group-data-open/trigger:rotate-0",
-          "group-data-panel-open/trigger:rotate-0",
-        )}
-      >
-        <DotMatrix state="expand" label="Toggle tools" className="size-3.5" />
-      </span>
+      <DisclosureChevron />
     </CollapsibleTrigger>
   );
 }
@@ -161,8 +158,10 @@ function ToolGroupContent({
   children,
   ...props
 }: React.ComponentProps<typeof CollapsibleContent>) {
+  const keepMounted = useExportKeepMounted();
   return (
     <CollapsibleContent
+      keepMounted={keepMounted}
       data-slot="tool-group-content"
       className={cn(
         "aui-tool-group-content relative overflow-hidden text-sm outline-none",

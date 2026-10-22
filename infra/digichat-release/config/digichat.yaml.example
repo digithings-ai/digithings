@@ -76,9 +76,9 @@ deployment:
     pageContext: visible
 
   # models:
-  #   default: deepseek/deepseek-v4-flash
+  #   default: deepseek/deepseek-v4.1-flash-1017
   #   available:
-  #     - deepseek/deepseek-v4-flash
+  #     - deepseek/deepseek-v4.1-flash-1017
   #     - openai/gpt-oss-120b
   #   allowPicker: true
 

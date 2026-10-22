@@ -1,10 +1,18 @@
-"""Unit tests for scripts/check_required_policy_checks.py (DIG-1982).
+"""Unit tests for scripts/check_required_policy_checks.py (DIG-1982, DIG-2237).
 
 The guard that lived in ``ci.yml`` alone compared ``required-checks.needs`` to
 the jobs in ``ci.yml`` — so it was structurally incapable of failing on any
 policy check that lives in another workflow file. These tests pin the two
 failure modes the replacement has to catch, and the two it must *not* raise on
 the repository's correct current setup.
+
+DIG-2237 hardened that guard after review found three checks that did not cover
+the properties they were relied on for: ``types:`` and ``branches-ignore:`` were
+never parsed (so a workflow that stops re-reporting on the merge commit looked
+reachable), ``tracked_workflows`` was a closed allowlist with no completeness
+check, and ``advisory`` entries needed only a free-text reason and no owner. The
+tests in the DIG-2237 sections below are those three, plus the two cheap ones
+from the same review.
 
 Every test here is written so that removing the corresponding guard rule makes
 it fail. That is the only reason to believe a green run means anything: a test
@@ -32,6 +40,7 @@ SCRIPT = REPO_ROOT / "scripts" / "check_required_policy_checks.py"
 INVENTORY = REPO_ROOT / ".github" / "policy-checks.yml"
 CONTEXTS = REPO_ROOT / ".github" / "required-contexts.txt"
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 
 #: The live required contexts on develop as of 2026-10-07, read from
 #: GET /repos/digithings-ai/digithings/branches/develop/protection. Two of
@@ -52,16 +61,48 @@ def _load() -> Any:
 guard = _load()
 
 
-def _real_facts() -> dict[str, Any]:
+def _real_facts(workflows_dir: Path | None = None) -> dict[str, Any]:
     """Parse every tracked workflow from the actual repository."""
+    root = workflows_dir or guard.WORKFLOWS_DIR
     _inventory, tracked = guard.load_inventory(INVENTORY)
-    return {
-        name: guard.read_workflow_facts(guard.WORKFLOWS_DIR / name, "develop") for name in tracked
-    }
+    return {name: guard.read_workflow_facts(root / name, "develop") for name in tracked}
 
 
-def _run(inventory: list[Any], tracked: list[str], contexts: list[str], branch: str = "develop"):
-    return guard.reconcile(inventory, tracked, _real_facts(), contexts, branch)
+def _run(
+    inventory: list[Any],
+    tracked: list[str],
+    contexts: list[str],
+    branch: str = "develop",
+    workflows_dir: Path | None = None,
+    untracked_facts: dict[str, Any] | None = None,
+):
+    root = workflows_dir or guard.WORKFLOWS_DIR
+    facts = {name: guard.read_workflow_facts(root / name, branch) for name in tracked}
+    return guard.reconcile(
+        inventory,
+        tracked,
+        facts,
+        contexts,
+        branch,
+        untracked_facts or {},
+        root,
+    )
+
+
+def _workflows_copy(tmp_path: Path) -> Path:
+    """A writable copy of the whole workflows directory, for mutation."""
+    import shutil
+
+    target = tmp_path / "workflows"
+    shutil.copytree(WORKFLOWS_DIR, target)
+    return target
+
+
+def _untracked_scan(tmp_path: Path, tracked: list[str] | None = None):
+    root = _workflows_copy(tmp_path)
+    if tracked is None:
+        _inventory, tracked = guard.load_inventory(INVENTORY)
+    return root, guard.scan_untracked_workflows(tracked, "develop", workflows_dir=root)
 
 
 def _codes(findings: list[Any]) -> set[str]:
@@ -82,10 +123,19 @@ def test_passes_on_this_repository_unchanged() -> None:
     assert findings == [], [str(f) for f in findings]
 
 
-def test_committed_contexts_match_the_live_gate() -> None:
-    """The snapshot is the guard's CI input, so it has to equal reality. If this
-    fails, someone changed branch protection without updating the file — which
-    is precisely the drift class this leaf exists to catch."""
+def test_committed_contexts_match_the_dated_live_gate_read() -> None:
+    """The snapshot is the guard's CI input, so it has to match reality. If this
+    fails, someone changed branch protection without updating the file.
+
+    Stated honestly, because the name used to claim more than it does: this
+    compares the committed file to a *dated literal* transcribed on 2026-10-07.
+    It makes no network call and cannot detect drift that happened after that
+    date. Nothing re-verifies the snapshot against the live gate on a clock —
+    the guard compares the snapshot with the writer script that applies it, and
+    the ``--live`` read against the inventory — so the literal above is a dated
+    statement of what was true then, and a human runs the live read. See
+    ``test_the_rejected_app_credential_design_stays_deleted``.
+    """
     assert guard.read_contexts_file(CONTEXTS) == LIVE_CONTEXTS
 
 
@@ -128,9 +178,7 @@ def test_declaring_a_check_required_that_the_gate_does_not_hold_fails() -> None:
     merge and branch protection disagrees."""
     inventory, tracked = guard.load_inventory(INVENTORY)
     mutated = [
-        dataclasses.replace(c, enforcement="required")
-        if c.context == "gitleaks-scan"
-        else c
+        dataclasses.replace(c, enforcement="required") if c.context == "gitleaks-scan" else c
         for c in inventory
     ]
 
@@ -186,9 +234,7 @@ def test_requiring_gitleaks_without_a_path_filter_does_not_stall() -> None:
     findings = _run(*guard.load_inventory(INVENTORY), contexts)
 
     assert "policy.stall" not in _codes(findings)
-    facts = guard.read_workflow_facts(
-        guard.WORKFLOWS_DIR / "security-gitleaks.yml", "develop"
-    )
+    facts = guard.read_workflow_facts(guard.WORKFLOWS_DIR / "security-gitleaks.yml", "develop")
     assert facts.path_filter is None
 
 
@@ -306,6 +352,479 @@ def test_duplicate_contexts_are_rejected(tmp_path: Path) -> None:
         guard.load_inventory(path)
 
 
+# ── DIG-2237: the guard must cover the properties it is relied on for ─────────
+#
+# Three holes, in the order the brief puts them. Each test below fails if its
+# rule is deleted, which is the standard this file states for itself.
+
+
+def _synthetic_workflow(root: Path, name: str, trigger: str, job: str = "gate") -> Path:
+    """Write a minimal but genuine workflow, so trigger parsing is exercised on a
+    shape the repository does not currently contain — which is the whole point of
+    the `types` and `branches-ignore` rules."""
+    path = root / name
+    path.write_text(
+        f"name: t\non:\n  pull_request:\n{trigger}jobs:\n  {job}:\n"
+        "    name: Synthetic gate\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+# `types` — the GATE. For `pull_request`, `GITHUB_SHA` is the last merge commit on
+# the PR merge branch and a required context has to report against that commit, so
+# a workflow that never re-reports on `synchronize` stalls the PR forever while
+# looking, to a trigger-only reader, perfectly reachable.
+
+
+def test_a_types_filter_without_synchronize_is_not_reachable(tmp_path: Path) -> None:
+    path = _synthetic_workflow(tmp_path, "t.yml", "    types: [opened]\n")
+    facts = guard.read_workflow_facts(path, "develop")
+    assert facts.pr_types == ["opened"]
+
+    reachable, reason = facts.reports_on_develop_pr("develop")
+    assert not reachable
+    # The message has to teach, or the fix is a guess: which type is missing,
+    # why it matters, and what the PR looks like while it is missing.
+    assert "synchronize" in reason
+    # The rationale the message has to carry: the commit a required context must
+    # report against is the PR merge branch's merge commit, not the per-PR commit
+    # the message used to name. Assert the corrected text and the removed text,
+    # so a future edit cannot quietly put the false claim back.
+    assert "GITHUB_SHA" in reason
+    assert "merge commit" in reason
+    assert "head SHA" not in reason
+    assert "Waiting for status to be reported" in reason
+
+
+def test_a_types_filter_missing_reopened_is_not_reachable(tmp_path: Path) -> None:
+    """A-1 widening: the old gate only demanded `synchronize`, so
+    `types: [opened, synchronize]` used to pass. Missing `reopened` must now
+    fail, naming the missing type."""
+    path = _synthetic_workflow(tmp_path, "t.yml", "    types: [opened, synchronize]\n")
+    reachable, reason = guard.read_workflow_facts(path, "develop").reports_on_develop_pr("develop")
+    assert not reachable
+    assert "`reopened`" in reason
+    assert "Waiting for status to be reported" in reason
+
+
+@pytest.mark.parametrize(
+    "types_line",
+    [
+        "    types: [opened, synchronize, reopened]\n",
+        "    types: [opened, edited, synchronize, reopened]\n",
+    ],
+)
+def test_a_types_filter_with_synchronize_is_reachable(tmp_path: Path, types_line: str) -> None:
+    """The rule must not fire on the repo's own filters, so pin the two shapes
+    that are actually safe today."""
+    path = _synthetic_workflow(tmp_path, "t.yml", types_line)
+    assert guard.read_workflow_facts(path, "develop").reports_on_develop_pr("develop") == (True, "")
+
+
+def test_an_absent_types_filter_is_git_hubs_default_and_is_reachable(tmp_path: Path) -> None:
+    """No `types:` key means [opened, synchronize, reopened], which includes
+    synchronize. Reading an absent key as "no types" would fire on ci.yml."""
+    path = _synthetic_workflow(tmp_path, "t.yml", "")
+    facts = guard.read_workflow_facts(path, "develop")
+    assert facts.pr_types is None
+    assert facts.reports_on_develop_pr("develop") == (True, "")
+
+
+def test_a_types_filter_narrowed_on_a_real_workflow_is_a_stall(tmp_path: Path) -> None:
+    """The brief's trap, on the file it names: drop `edited` from ci-pr-title.yml,
+    fix the title, push nothing. The check never re-runs."""
+    root = _workflows_copy(tmp_path)
+    path = root / "ci-pr-title.yml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "    types: [opened, edited, synchronize, reopened]",
+            "    types: [opened, edited]",
+        ),
+        encoding="utf-8",
+    )
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    findings = _run(inventory, tracked, LIVE_CONTEXTS, workflows_dir=root)
+    assert "Validate PR title" in _subjects(findings, "policy.stall")
+
+
+def test_a_branches_ignore_filter_that_excludes_the_branch_is_not_reachable(tmp_path: Path) -> None:
+    path = _synthetic_workflow(tmp_path, "t.yml", "    branches-ignore: [develop]\n")
+    reachable, reason = guard.read_workflow_facts(path, "develop").reports_on_develop_pr("develop")
+    assert not reachable
+    assert "branches-ignore" in reason
+
+
+def test_a_branches_ignore_glob_that_does_not_match_is_reachable(tmp_path: Path) -> None:
+    """`branches-ignore` takes globs, so an exact-match reader would call
+    `feature/*` a match for develop."""
+    path = _synthetic_workflow(tmp_path, "t.yml", "    branches-ignore: ['feature/*']\n")
+    assert guard.read_workflow_facts(path, "develop").reports_on_develop_pr("develop") == (True, "")
+
+
+def test_an_unreadable_branches_ignore_filter_fails_closed(tmp_path: Path) -> None:
+    """A filter nobody could read is a filter nobody can rule out, so the rule
+    fails closed the same way an unreadable `types:` value does. Reading it as
+    "absent" would call the check reachable on the strength of a value that was
+    never understood."""
+    path = _synthetic_workflow(tmp_path, "t.yml", "    branches-ignore: develop\n")
+    reachable, reason = guard.read_workflow_facts(path, "develop").reports_on_develop_pr("develop")
+    assert not reachable
+    assert "unreadable" in reason
+
+
+def test_a_branches_ignore_filter_on_a_required_context_is_a_stall(tmp_path: Path) -> None:
+    """`branches` was already checked; `branches-ignore` is the same filter spelled
+    as an exclusion, and skipping it left a required check silently unreportable."""
+    root = _workflows_copy(tmp_path)
+    path = root / "ci-docs.yml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "  pull_request: {}", "  pull_request:\n    branches-ignore: [develop]"
+        ),
+        encoding="utf-8",
+    )
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    findings = _run(inventory, tracked, LIVE_CONTEXTS, workflows_dir=root)
+    assert "doc-links + agents-init" in _subjects(findings, "policy.stall")
+
+
+# Untracked-workflow completeness.
+
+
+def test_every_workflow_file_outside_the_allowlist_is_still_read(tmp_path: Path) -> None:
+    """`tracked_workflows` may stay a short allowlist, but the directory is still
+    scanned, so a new workflow is not invisible by construction."""
+    _root, (facts, findings) = _untracked_scan(tmp_path)
+    _inventory, tracked = guard.load_inventory(INVENTORY)
+    on_disk = {p.name for p in WORKFLOWS_DIR.iterdir() if p.suffix in (".yml", ".yaml")}
+    assert set(facts) == on_disk - set(tracked)
+    assert findings == []
+    assert len(tracked) < len(on_disk), "the allowlist is not actually narrower than the directory"
+
+
+def test_a_new_untracked_workflow_carrying_a_gate_is_a_finding(tmp_path: Path) -> None:
+    """`security-scc.yml` arrives with a real gate and an untracked name. Today
+    that is out of scope entirely."""
+    root = _workflows_copy(tmp_path)
+    (root / "security-scc.yml").write_text(
+        "name: scc\non:\n  pull_request:\njobs:\n  scc:\n    name: SCA policy gate\n"
+        "    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
+        encoding="utf-8",
+    )
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    untracked, unreadable = guard.scan_untracked_workflows(tracked, "develop", workflows_dir=root)
+    assert "security-scc.yml" in untracked
+    assert unreadable == []
+    findings = _run(
+        inventory,
+        tracked,
+        [*LIVE_CONTEXTS, "SCA policy gate"],
+        workflows_dir=root,
+        untracked_facts=untracked,
+    )
+    assert "SCA policy gate" in _subjects(findings, "policy.untracked-producer")
+
+
+def test_an_untracked_producers_reachability_is_still_checked(tmp_path: Path) -> None:
+    """The finding is not a substitute for the diagnosis: an untracked producer
+    that cannot report is still a stall, and the message names the file."""
+    root = _workflows_copy(tmp_path)
+    (root / "security-scc.yml").write_text(
+        "name: scc\non:\n  pull_request:\n    paths-ignore: ['**.md']\njobs:\n  scc:\n"
+        "    name: SCA policy gate\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
+        encoding="utf-8",
+    )
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    untracked, _ = guard.scan_untracked_workflows(tracked, "develop", workflows_dir=root)
+    findings = _run(
+        inventory,
+        tracked,
+        [*LIVE_CONTEXTS, "SCA policy gate"],
+        workflows_dir=root,
+        untracked_facts=untracked,
+    )
+    stalls = [f for f in findings if f.code == "policy.stall" and f.subject == "SCA policy gate"]
+    assert len(stalls) == 1
+    assert "security-scc.yml" in stalls[0].message
+
+
+def test_an_inventory_entry_naming_an_untracked_workflow_is_a_finding(tmp_path: Path) -> None:
+    """Declaring the check is not the same as tracking the workflow, and the gap
+    used to be a silent pass."""
+    root = _workflows_copy(tmp_path)
+    (root / "security-scc.yml").write_text(
+        "name: scc\non:\n  pull_request:\njobs:\n  scc:\n    name: SCA policy gate\n"
+        "    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
+        encoding="utf-8",
+    )
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    entry = dataclasses.replace(
+        inventory[4], context="SCA policy gate", workflow="security-scc.yml", job="scc"
+    )
+    findings = _run([*inventory, entry], tracked, LIVE_CONTEXTS, workflows_dir=root)
+    assert "SCA policy gate" in _subjects(findings, "policy.untracked-producer")
+
+
+def test_an_untracked_workflow_that_cannot_be_parsed_is_reported_not_raised(tmp_path: Path) -> None:
+    """Raising would hand any untracked workflow file a veto over the guard — and
+    most of the 58 untracked files are not policy surfaces."""
+    root = _workflows_copy(tmp_path)
+    (root / "broken.yml").write_text("on: [this is not a mapping\n", encoding="utf-8")
+    _inventory, tracked = guard.load_inventory(INVENTORY)
+    facts, findings = guard.scan_untracked_workflows(tracked, "develop", workflows_dir=root)
+    assert "broken.yml" not in facts
+    assert "broken.yml" in _subjects(findings, "policy.unreadable-workflow")
+
+
+def test_a_tracked_workflow_that_cannot_be_parsed_still_raises(tmp_path: Path) -> None:
+    """The asymmetry is deliberate: a tracked file is a declared surface, so an
+    unreadable one is a hard error, not a finding."""
+    root = _workflows_copy(tmp_path)
+    (root / "ci.yml").write_text("on: [this is not a mapping\n", encoding="utf-8")
+    with pytest.raises(guard.GuardError):
+        guard.read_workflow_facts(root / "ci.yml", "develop")
+
+
+# Ownership: an escape hatch nobody owns is indistinguishable from one that is
+# still justified, forever.
+
+
+def test_every_non_required_entry_names_an_owner() -> None:
+    inventory, _tracked = guard.load_inventory(INVENTORY)
+    unowned = [c.context for c in inventory if c.enforcement != "required" and not c.owner]
+    assert unowned == []
+
+
+def test_every_advisory_entry_is_dated_tracked_or_provably_gated() -> None:
+    """`reason:` records what was true when it was written. These three record who
+    has to look again."""
+    inventory, _tracked = guard.load_inventory(INVENTORY)
+    for check in inventory:
+        if check.enforcement == "advisory":
+            assert check.needs_review_date, f"{check.context} has nobody on the hook"
+
+
+def test_an_advisory_entry_without_an_owner_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "policy-checks.yml"
+    path.write_text(
+        "tracked_workflows: [ci.yml]\nchecks:\n  - context: b\n    workflow: ci.yml\n"
+        "    job: required-checks\n    enforcement: advisory\n    reason: r\n"
+        "    issue: DIG-1952\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(guard.GuardError, match="owner"):
+        guard.load_inventory(path)
+
+
+def test_an_advisory_entry_with_noone_on_the_hook_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "policy-checks.yml"
+    path.write_text(
+        "tracked_workflows: [ci.yml]\nchecks:\n  - context: b\n    workflow: ci.yml\n"
+        "    job: required-checks\n    enforcement: advisory\n    reason: r\n    owner: DevOps\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(guard.GuardError, match="review_by"):
+        guard.load_inventory(path)
+
+
+def test_gated_by_must_name_a_declared_check(tmp_path: Path) -> None:
+    """`gated_by:` is only honest if the named context is a real gate, so the
+    reference is validated at load time rather than trusted. Pointing it at a
+    context the inventory does not declare is the mistake worth catching first."""
+    path = tmp_path / "policy-checks.yml"
+    path.write_text(
+        "tracked_workflows: [ci.yml]\n"
+        "checks:\n"
+        "  - context: Required checks passed\n    workflow: ci.yml\n    job: required-checks\n"
+        "    enforcement: required\n    reason: r\n    owner: DevOps\n"
+        "  - context: b\n    workflow: ci.yml\n    job: actionlint\n    enforcement: advisory\n"
+        "    reason: r\n    owner: DevOps\n    gated_by: Required context not in this file\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(guard.GuardError, match="gated_by"):
+        guard.load_inventory(path)
+
+
+# Reachability has to cover declared checks, not just the ones in the gate.
+
+
+def test_reachability_is_checked_for_advisory_entries_not_just_live_ones(tmp_path: Path) -> None:
+    """The brief's false green: a workflow-level `paths-ignore` on a tracked
+    advisory workflow. Nothing reports it, because nothing was waiting for it."""
+    root = _workflows_copy(tmp_path)
+    path = root / "ci-pr-title.yml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "    types: [opened, edited, synchronize, reopened]",
+            "    paths-ignore: ['**.md']\n    types: [opened, edited, synchronize, reopened]",
+        ),
+        encoding="utf-8",
+    )
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    findings = _run(inventory, tracked, LIVE_CONTEXTS, workflows_dir=root)
+    assert "Validate PR title" in _subjects(findings, "policy.stall")
+
+
+def test_a_known_gap_suppresses_reachability_only_while_the_entry_is_ungated() -> None:
+    """The `known_gap:` mechanism, pinned on the one entry that carries a real
+    gap.
+
+    `Workflow secret references (PR reporter)` runs from
+    `security-workflow-secret-refs.yml`, which is path-filtered at the workflow
+    level on the workflow tree, the manifest and the script. So it reports on
+    the PRs that touch those paths and on no others, and it can never be a
+    required context: GitHub would block every other PR on a status that never
+    arrives. That is exactly what `known_gap:` records — an accepted gap while
+    the entry stays advisory. Promote it and the gap becomes a `policy.stall`
+    again, which is the whole point: the acceptance expires at promotion."""
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    reporter = next(c for c in inventory if c.context == "Workflow secret references (PR reporter)")
+    assert reporter.known_gap, "the gap this workflow really has must be recorded"
+    facts = guard.read_workflow_facts(
+        guard.WORKFLOWS_DIR / "security-workflow-secret-refs.yml", "develop"
+    )
+    assert facts.path_filter is not None, "the gap is really there"
+
+    assert _run(inventory, tracked, LIVE_CONTEXTS) == []
+
+    promoted = _run(
+        inventory, tracked, [*LIVE_CONTEXTS, "Workflow secret references (PR reporter)"]
+    )
+    stalls = [
+        f
+        for f in promoted
+        if f.code == "policy.stall" and f.subject == "Workflow secret references (PR reporter)"
+    ]
+    assert len(stalls) == 1, [str(f) for f in promoted]
+
+
+def test_a_gated_by_that_is_not_in_the_live_gate_is_a_finding() -> None:
+    """`gated_by:` pointing at an advisory check is the same escape hatch with a
+    citation on it."""
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    assert _run(inventory, tracked, LIVE_CONTEXTS) == []
+
+    swapped = [
+        dataclasses.replace(c, gated_by="Validate PR title") if c.context == "actionlint" else c
+        for c in inventory
+    ]
+    findings = _run(swapped, tracked, LIVE_CONTEXTS)
+    assert "actionlint" in _subjects(findings, "policy.bad-gated-by")
+
+
+# The live gate is read by a human, not by a job. Nothing may quietly put the
+# rejected credential design back.
+
+
+def test_the_rejected_app_credential_design_stays_deleted() -> None:
+    """The GitHub App design was rejected on 2026-10-07: its manifest, its
+    minting script and its tests were deleted by that same change. The
+    credential the registry actually names is a fine-grained PAT
+    (`POLICY_CHECK_READER_TOKEN`, docs/ops/policy-check-credential.md), and it
+    needs no app id and no installation id.
+
+    A job that reads the deleted design can never work: the minting script does
+    not exist, and the secret it wanted was never provisioned. So no workflow
+    may name any of it again.
+    """
+    banned = (
+        "mint_policy_check_token",
+        "POLICY_CHECK_APP_PRIVATE_KEY",
+        "POLICY_CHECK_APP_ID",
+        "POLICY_CHECK_INSTALLATION_ID",
+    )
+    for path in sorted(WORKFLOWS_DIR.glob("*.yml")):
+        text = path.read_text(encoding="utf-8")
+        for name in banned:
+            assert name not in text, f"{path.name} still uses the rejected design: {name}"
+    assert not (REPO_ROOT / "scripts" / "mint_policy_check_token.py").exists()
+
+
+def test_no_workflow_claims_to_re_read_the_live_gate() -> None:
+    """The gap is real and is named in prose, not papered over with a job that
+    cannot run: the workflow that would carry it is disabled on GitHub by the
+    2026-10-14 cost lock and its digithings-cron row is `enabled: false`. A
+    check that rides a deliberately silent lane reports nothing, and the
+    `secrets_audit.py` red it caused is a canary that is red for the wrong
+    reason.
+    """
+    for path in sorted(WORKFLOWS_DIR.glob("*.yml")):
+        text = path.read_text(encoding="utf-8")
+        assert "check_required_policy_checks.py --live" not in text, (
+            f"{path.name} runs the live gate; nothing re-reads it on a clock today"
+        )
+    cron = (REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts").read_text(encoding="utf-8")
+    assert 'wd("ci-pr-hygiene"' in cron, "the dispatch row itself must still be there"
+    assert "ci-pr-hygiene" in cron and "enabled: false" in cron, (
+        "the ci-pr-hygiene clock is held off; a job added to it would never run"
+    )
+
+
+def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() -> None:
+    """DoD "exits 0 with the inventory unchanged" means the policy decisions are
+    unchanged: same contexts, same workflows, same enforcement. Only the metadata
+    this leaf adds (owner, issue, gated_by, known_gap) is new.
+
+    The census is develop's current inventory, not the one DIG-1982 first
+    wrote: the base moved on while this leaf sat on the older
+    `feat/dig-1982-policy-drift-guard` tip, and it dropped DCO sign-off
+    entirely (DIG-3845), added the ci.yml lanes below, and added the
+    path-filtered PR reporter. Reconciling the base's evolved files is the
+    rebase-with-resolution this leaf owes the branch — the policy decisions in
+    it are still develop's, and this leaf adds only metadata to them."""
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    assert [(c.context, c.workflow, c.job, c.enforcement) for c in inventory] == [
+        ("Required checks passed", "ci.yml", "required-checks", "required"),
+        ("doc-links + agents-init", "ci-docs.yml", "docs-and-agents-init", "required"),
+        ("mypy — digibase + digikey", "ci-type-check.yml", "mypy", "required"),
+        ("gitleaks-scan", "security-gitleaks.yml", "scan", "advisory"),
+        (
+            "All agent-task issues in TSV with real phase and valid model",
+            "ci-pr-hygiene.yml",
+            "coverage",
+            "advisory",
+        ),
+        ("Validate PR title", "ci-pr-title.yml", "lint-pr-title", "advisory"),
+        (
+            "Every commit reaching main was reviewed",
+            "ci-review-coverage.yml",
+            "review-coverage",
+            "other-branch",
+        ),
+        ("Frontend canon guard", "ci.yml", "frontend-canon", "advisory"),
+        ("actionlint", "ci.yml", "actionlint", "advisory"),
+        ("GLOOMBERB deployed-config guard", "ci.yml", "gloomberb-ci-guard", "advisory"),
+        ("Vendor-content gate", "ci.yml", "vendor-content-gate", "advisory"),
+        ("Example-credentials guard", "ci.yml", "example-credentials-guard", "advisory"),
+        ("Plaintext credential guard", "ci.yml", "plaintext-credential-guard", "advisory"),
+        (
+            "R0 client-literal baseline growth guard",
+            "ci.yml",
+            "r0-client-literals-baseline-growth",
+            "advisory",
+        ),
+        ("Workflow secret references", "ci.yml", "workflow-secret-refs", "advisory"),
+        (
+            "Workflow secret references (PR reporter)",
+            "security-workflow-secret-refs.yml",
+            "check",
+            "advisory",
+        ),
+        ("wrangler deploy --dry-run", "ci.yml", "worker-build", "advisory"),
+    ]
+    assert sorted(tracked) == [
+        "ci-docs.yml",
+        "ci-pr-hygiene.yml",
+        "ci-pr-title.yml",
+        "ci-review-coverage.yml",
+        "ci-type-check.yml",
+        "ci.yml",
+        "security-gitleaks.yml",
+        "security-workflow-secret-refs.yml",
+    ]
+
+
 # ── the pre-existing in-file check is kept, not replaced ─────────────────────
 
 
@@ -373,6 +892,15 @@ def test_script_exits_nonzero_when_the_inventory_is_mutated(tmp_path: Path) -> N
                         "job": c.job,
                         "enforcement": c.enforcement,
                         "reason": c.reason,
+                        # Carried through so this test keeps asserting what it is
+                        # about — a dropped declaration, not an unowned entry.
+                        **{
+                            "owner": c.owner,
+                            "review_by": c.review_by,
+                            "issue": c.issue,
+                            "gated_by": c.gated_by,
+                            "known_gap": c.known_gap,
+                        },
                     }
                     for c in stripped
                 ],
@@ -391,6 +919,7 @@ def test_script_exits_nonzero_when_the_inventory_is_mutated(tmp_path: Path) -> N
     )
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "policy.ungated" in proc.stdout
+
     assert "gitleaks-scan" in proc.stdout
 
 
@@ -545,3 +1074,70 @@ def test_the_cli_fails_when_the_writer_and_snapshot_drift(tmp_path: Path) -> Non
     )
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "writer.snapshot-drift" in proc.stdout
+
+
+# ── DIG-2237 C-1: review horizons on the issue-alone advisories ───────────────
+
+#: The three advisory entries whose only support is `issue:` (DIG-2098 rev 8,
+#: correction 1). The ci.yml lanes carry `gated_by:` and the PR reporter
+#: carries `known_gap:`, so neither class takes a date. `gitleaks-scan` used to
+#: carry a `known_gap:` too, and stopped when the workflow-level
+#: `paths-ignore` was removed upstream (#5318) — the gap went with the filter,
+#: so the entry is issue-alone now and takes a date like the others.
+REVIEW_BY_CONTEXTS = [
+    "gitleaks-scan",
+    "All agent-task issues in TSV with real phase and valid model",
+    "Validate PR title",
+]
+
+
+def test_exactly_three_issue_alone_advisories_carry_review_by() -> None:
+    """Correction 1 as a pin: the dates land on exactly these three entries."""
+    inventory, _tracked = guard.load_inventory(INVENTORY)
+    dated = {c.context: c.review_by for c in inventory if c.review_by}
+    assert sorted(dated) == sorted(REVIEW_BY_CONTEXTS), dated
+    assert set(dated.values()) == {"2027-04-13"}, dated
+    by_context = {c.context: c for c in inventory}
+    assert by_context["gitleaks-scan"].issue == "DIG-1952"
+    assert by_context["gitleaks-scan"].known_gap is None
+    assert by_context["Frontend canon guard"].review_by is None
+    assert by_context["actionlint"].review_by is None
+    assert by_context["Workflow secret references (PR reporter)"].review_by is None
+
+
+def test_a_past_review_by_is_a_warning_not_a_finding() -> None:
+    """Staged rollout: staleness surfaces as a `::warning::` line while the
+    guard stays green. Removing the warning emission must fail this test."""
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    assert _run(inventory, tracked, LIVE_CONTEXTS) == []
+    aged = [
+        dataclasses.replace(c, review_by="2000-01-01") if c.context == "Validate PR title" else c
+        for c in inventory
+    ]
+    assert guard.stale_advisories(aged) != []
+    assert _run(aged, tracked, LIVE_CONTEXTS) == []
+    text = guard.report([], aged, LIVE_CONTEXTS)
+    assert "::warning::[policy.stale-advisory]" in text, text
+    assert "Validate PR title" in text
+
+
+def test_a_future_review_by_is_silent() -> None:
+    """A horizon that has not passed changes nothing in the output."""
+    inventory, _tracked = guard.load_inventory(INVENTORY)
+    assert guard.stale_advisories(inventory) == []
+    text = guard.report([], inventory, LIVE_CONTEXTS)
+    assert "policy.stale-advisory" not in text, text
+    assert "policy gate agrees" in text
+
+
+def test_a_malformed_review_by_is_rejected_at_load(tmp_path: Path) -> None:
+    """A horizon nobody can parse would read as "not yet due" forever."""
+    path = tmp_path / "policy-checks.yml"
+    path.write_text(
+        "tracked_workflows: [ci.yml]\nchecks:\n  - context: b\n    workflow: ci.yml\n"
+        "    job: required-checks\n    enforcement: advisory\n    reason: r\n"
+        "    owner: DevOps\n    review_by: soon\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(guard.GuardError, match="review_by"):
+        guard.load_inventory(path)

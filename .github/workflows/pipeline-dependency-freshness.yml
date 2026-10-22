@@ -15,7 +15,7 @@
 # (tests/scripts/test_no_gha_schedules.py). The clock is the
 # `dependency-freshness` wd() row in apps/digithings-cron/src/jobs.ts, plus its
 # `[triggers] crons` entry in wrangler.toml. Same precedent as
-# secret-staleness-check.yml and datatap-answer-check.yml.
+# secret-staleness-check.yml.
 
 name: "Pipeline: dependency freshness radar"
 

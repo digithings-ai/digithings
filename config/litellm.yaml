@@ -55,6 +55,16 @@ model_list:
       configurable_clientside_auth_params: *byok_auth_openrouter
   - model_name: openrouter/openai/gpt-oss-120b
     litellm_params: *or_openai_gpt_oss_120b
+  # House DeepSeek flash pin (2026-10-21). Cheaper Inference serves the 1017
+  # checkpoint (config/litellm.cheaperinference.yaml); OpenRouter has no separate
+  # 1017 id, so this non-CI route uses OpenRouter's deepseek-v4.1-flash.
+  - model_name: deepseek/deepseek-v4.1-flash-1017
+    litellm_params: &or_deepseek_deepseek_v4_1_flash_1017
+      model: openrouter/deepseek/deepseek-v4.1-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/deepseek/deepseek-v4.1-flash-1017
+    litellm_params: *or_deepseek_deepseek_v4_1_flash_1017
   - model_name: deepseek/deepseek-v4-flash-0731
     litellm_params: &or_deepseek_deepseek_v4_flash_0731
       model: openrouter/deepseek/deepseek-v4-flash-0731

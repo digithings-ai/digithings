@@ -10,7 +10,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "078_attention_plan_category.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "engine" / "078_attention_plan_category.sql"
 
 
 def test_migration_078_registers_planner_category() -> None:
@@ -20,4 +20,4 @@ def test_migration_078_registers_planner_category() -> None:
     assert "'planner'" in raw
     assert "'learning'" in raw
     assert "chk_documents_category" in raw
-    assert sorted(MIGRATIONS_DIR.glob("078_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("078_*.sql")) == [MIGRATION_PATH]

@@ -7,7 +7,7 @@ import {
   useAuiState,
 } from "@assistant-ui/react";
 import type { FC } from "react";
-import { DotMatrix } from "../DotMatrix";
+import { ChatNoticeContent, ChatNoticeDetail, chatNoticeRootProps } from "../stock/chat-notice";
 
 function messageStatusErrorText(status: {
   type?: string;
@@ -67,33 +67,38 @@ export const MessageError: FC = () => {
   const raw = useAuiState((s) => messageStatusErrorText(s.message.status ?? {}));
   const { title, detail, code } = splitError(raw);
 
+  // DIG-4459: the backend's own words, whole, in the boxed error notice the
+  // tool errors and status lines share. The headline is the parsed message;
+  // the detail (or the raw payload when it says more) sits under it.
+  const rawDetail = raw && raw.trim() !== title ? raw : undefined;
+
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex items-start gap-2.5 rounded-2xl bg-destructive/5 px-4 py-3 text-sm dark:bg-destructive/10">
-        <DotMatrix
-          state="error"
-          label="Error"
-          className="mt-0.5 size-4 shrink-0 text-destructive/80"
+      <ErrorPrimitive.Root
+        {...chatNoticeRootProps("error", "aui-message-error-root mt-2")}
+      >
+        <ChatNoticeContent
+          tone="error"
+          title={
+            <ErrorPrimitive.Message className="aui-message-error-message whitespace-pre-wrap">
+              {title}
+            </ErrorPrimitive.Message>
+          }
+          detail={detail}
+          extra={
+            code || (rawDetail && !detail) ? (
+              <div className="aui-message-error-details mt-1 text-muted-foreground">
+                {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
+                {rawDetail && !detail ? <ChatNoticeDetail text={rawDetail} /> : null}
+              </div>
+            ) : null
+          }
+          action={
+            <ActionBarPrimitive.Reload className="aui-message-error-retry ms-auto flex shrink-0 items-center gap-1.5 rounded-full border border-destructive/25 px-3 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50">
+              Retry
+            </ActionBarPrimitive.Reload>
+          }
         />
-        <div className="min-w-0 flex-1">
-          <ErrorPrimitive.Message className="aui-message-error-message whitespace-pre-wrap text-destructive">
-            {title}
-          </ErrorPrimitive.Message>
-          {detail || code ? (
-            <details className="mt-2 text-xs opacity-90">
-              <summary className="cursor-pointer select-none">API details</summary>
-              {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
-              {detail ? (
-                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono">
-                  {detail}
-                </pre>
-              ) : null}
-            </details>
-          ) : null}
-        </div>
-        <ActionBarPrimitive.Reload className="aui-message-error-retry ms-auto flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50">
-          Retry
-        </ActionBarPrimitive.Reload>
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );

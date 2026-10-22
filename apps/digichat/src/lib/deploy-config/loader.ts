@@ -11,6 +11,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { load as loadYaml } from "js-yaml";
+import { DEFAULT_PREMIUM_WINDOW_SECONDS } from "@/lib/premium-budget/budget";
 // js-yaml v4 — default safe schema via load() with no schema override.
 import {
   parseDigichatConfig,
@@ -95,6 +96,8 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       accent: cfg.accent,
       attribution: cfg.attribution,
       defaultLanguage: cfg.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
+      toolbar: cfg.toolbar !== false,
+      scrollbars: cfg.scrollbars ?? "always",
       transcript: { userAlign: "right" },
     },
     persistence: "none",
@@ -108,6 +111,8 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       speech: cfg.speech === true,
       view: cfg.view ?? DEFAULT_VIEW_MODE,
       thinking: cfg.thinking ?? DEFAULT_THINKING_MODE,
+      density: cfg.density ?? "default",
+      effort: cfg.effort ?? "medium",
       sources: cfg.sources !== false,
       modelPicker: false,
       branchPicker: cfg.branchPicker !== false,
@@ -119,9 +124,37 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       ...(typeof cfg.models?.allowPicker === "boolean"
         ? { allowPicker: cfg.models.allowPicker }
         : {}),
+      ...(cfg.models?.catalog === true ? { catalog: true as const } : {}),
+      ...(typeof cfg.models?.occPicker === "boolean" ? { occPicker: cfg.models.occPicker } : {}),
+      ...(typeof cfg.models?.priceCapUsdPerMillion === "number"
+        ? { priceCapUsdPerMillion: cfg.models.priceCapUsdPerMillion }
+        : {}),
+      ...(typeof cfg.models?.premiumCapUsdPerMillion === "number"
+        ? { premiumCapUsdPerMillion: cfg.models.premiumCapUsdPerMillion }
+        : {}),
+      ...(cfg.models?.costPerWindow
+        ? {
+            costPerWindow: {
+              usd: cfg.models.costPerWindow.usd,
+              windowSeconds:
+                cfg.models.costPerWindow.windowSeconds ?? DEFAULT_PREMIUM_WINDOW_SECONDS,
+            },
+          }
+        : {}),
+      ...(cfg.models?.presets ? { presets: [...cfg.models.presets] } : {}),
+      ...(typeof cfg.models?.showFullList === "boolean"
+        ? { showFullList: cfg.models.showFullList }
+        : {}),
+      ...(typeof cfg.models?.minContextTokens === "number"
+        ? { minContextTokens: cfg.models.minContextTokens }
+        : {}),
+      // A resolved tenant carries its picker; without it a preset:<id> pick
+      // through the fallback deployment would be refused.
+      ...(cfg.models?.picker ? { picker: structuredClone(cfg.models.picker) } : {}),
     },
     cli: { enabled: false },
     backend: cfg.backend,
+    ...(cfg.guardrails ? { guardrails: cfg.guardrails } : {}),
     ...(catalog.length
       ? { tools: { allowUserToggle: cfg.tools?.allowUserToggle ?? true, catalog } }
       : {}),
@@ -138,8 +171,12 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       lockedContact: cfg.lockedContact,
       showByok: cfg.showByok,
       showLanguageSelector: cfg.showLanguageSelector,
+      ...(typeof cfg.showContextMeter === "boolean"
+        ? { showContextMeter: cfg.showContextMeter }
+        : {}),
       lockSessionControls: cfg.lockSessionControls,
       webSearch: cfg.webSearch,
+      ...(cfg.searchEngine ? { searchEngine: cfg.searchEngine } : {}),
       requiredPlanTier: cfg.requiredPlanTier,
     },
     token: cfg.token,
@@ -152,6 +189,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     slug: dep.slug,
     aliases: dep.aliases,
     backend: dep.backend,
+    ...(dep.guardrails ? { guardrails: dep.guardrails } : {}),
     gateMode: dep.gate.mode,
     theme: dep.chrome.theme,
     skin: dep.chrome.skin,
@@ -166,6 +204,9 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     activityDetail: dep.gate.activityDetail,
     showByok: dep.gate.showByok,
     showLanguageSelector: dep.gate.showLanguageSelector,
+    ...(typeof dep.gate.showContextMeter === "boolean"
+      ? { showContextMeter: dep.gate.showContextMeter }
+      : {}),
     lockSessionControls: dep.gate.lockSessionControls,
     attachments: dep.features.attachments === true,
     // Feature parity (#4532): the reverse direction must carry the same flags,
@@ -183,6 +224,14 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     pageContext: dep.features.pageContext,
     view: dep.features.view,
     thinking: dep.features.thinking,
+    ...(dep.features.density !== "default" ? { density: dep.features.density } : {}),
+    ...(dep.features.effort !== "medium" ? { effort: dep.features.effort } : {}),
+    ...(dep.chrome.toolbar === false ? { toolbar: false as const } : {}),
+    ...(dep.chrome.scrollbars === "auto" ? { scrollbars: "auto" as const } : {}),
+    ...(dep.chrome.palette && dep.chrome.palette !== "default"
+      ? { palette: dep.chrome.palette }
+      : {}),
+    ...(dep.gate.searchEngine ? { searchEngine: dep.gate.searchEngine } : {}),
     webSearch:
       dep.gate.webSearch === true ||
       dep.tools?.catalog?.some((t) => t.id === "web_search") === true,
@@ -276,9 +325,107 @@ function resolveMcpServerTokens(
   return changed ? { ...dep, mcp: { ...dep.mcp!, servers: next } } : dep;
 }
 
+function openRouterConfigured(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): boolean {
+  const key = env["OPENROUTER_API_KEY"];
+  return typeof key === "string" && key.trim().length > 0;
+}
+
+/** Drop a resolved catalog so a second parse fills it again instead of refusing the list. */
+function unresolveCatalog(dep: DigichatDeployment): DigichatDeployment {
+  if (!dep.models?.catalog) return dep;
+  const models = { ...dep.models, available: [] };
+  delete models.picker;
+  return { ...dep, models };
+}
+
+/**
+ * Merge one registry tenant onto a deployment so that ONE artefact decides
+ * both the session lock and the model allowlist (DIG-4589).
+ *
+ * Rules, each chosen so a merge can never drop a restriction:
+ * - `gate.lockSessionControls`: true when EITHER source says true. A lock is
+ *   a restriction, so the merge keeps the stricter of the two.
+ * - `models.available`: the tenant's curated list when it is non-empty, else
+ *   the deployment's list. A parsed tenant list is always an array (possibly
+ *   empty), so "non-empty wins" is the only usable rule. The projection in
+ *   `embed-bridge.ts` consumes THIS merged artefact, so the list the client
+ *   is shown is the list the server enforces.
+ * - `models.default` / `models.allowPicker` and every other model field: the
+ *   tenant's when it sets one, else the deployment's. The registry's own
+ *   models block is spread on top, so the picker, the catalog and the
+ *   premium meter still travel to a host that also has a deployment entry.
+ * - `models.catalog`: dropped when the tenant curates a list. A catalog
+ *   policy and a hand-written list cannot coexist - `applyModelCatalog`
+ *   ignores the hand list and pins the tenant's `default` against a catalog
+ *   that does not know it, which throws. The tenant's curation is the more
+ *   specific statement, so it wins, exactly as it does in
+ *   `withProductPickerDefaults`.
+ *
+
+ * `gate.requiredPlanTier` is NOT merged here: #3662 keeps its own rule in
+ * `mergeEmbedTenantsOverlay` (the registry fills it in only when the
+ * deployment omitted it).
+ */
+function mergeEmbedTenantIntoDeployment(
+  dep: DigichatDeployment,
+  cfg: EmbedTenantConfig,
+): DigichatDeployment {
+  // The registry's models block is only meaningful when the tenant has one:
+  // `embedTenantToDeployment` always fills `available`, so spreading an
+  // absent block would wipe the deployment's own list.
+  const fromRegistry = cfg.models ? embedTenantToDeployment(cfg).models : undefined;
+  const tenantAvailable = cfg.models?.available ?? [];
+  const tenantDefault = cfg.models?.default?.trim() || undefined;
+  const tenantAllowPicker = cfg.models?.allowPicker;
+
+  const available =
+    tenantAvailable.length > 0
+      ? [...tenantAvailable]
+      : [...(dep.models?.available ?? [])];
+  const defaultModel = tenantDefault ?? dep.models?.default;
+  const allowPicker = tenantAllowPicker ?? dep.models?.allowPicker;
+
+  const models: DigichatDeployment["models"] = {
+    ...dep.models,
+    ...(fromRegistry ?? {}),
+    ...(defaultModel ? { default: defaultModel } : {}),
+    available,
+    ...(allowPicker === undefined ? {} : { allowPicker }),
+  };
+
+  // A catalog policy and a hand-written list are mutually exclusive:
+  // `applyModelCatalog` warns that the hand list is ignored, lets the
+  // catalog win, and pins the tenant's `default` against a catalog that does
+  // not know it - which throws and takes the whole config down with it. The
+  // tenant's curation is the more specific statement, so when the tenant
+  // curates a list the deployment's catalog policy is dropped and the hand
+  // list is left alone - the same precedence `withProductPickerDefaults`
+  // gives a hand-written list over the product-chat default policy. When the
+  // tenant curates nothing the deployment's catalog stays and resolves as
+  // before.
+  if (tenantAvailable.length > 0 && models.catalog) {
+    delete models.catalog;
+  }
+
+  return {
+    ...dep,
+    models,
+    gate: {
+      ...dep.gate,
+      lockSessionControls:
+        dep.gate.lockSessionControls === true || cfg.lockSessionControls === true
+          ? true
+          : dep.gate.lockSessionControls,
+    },
+  };
+}
+
 function mergeEmbedTenantsOverlay(
   config: DigichatConfig | null,
   tenantsRaw: string | undefined,
+  openRouter: boolean,
 ): DigichatConfig {
   const registry = parseEmbedTenants(tenantsRaw);
   if (registry.size === 0) {
@@ -287,21 +434,50 @@ function mergeEmbedTenantsOverlay(
   }
 
   const hosts: Record<string, DigichatDeployment> = {
-    ...(config?.hosts ? structuredClone(config.hosts) : {}),
+    ...(config?.hosts
+      ? Object.fromEntries(
+          Object.entries(structuredClone(config.hosts)).map(([host, dep]) => [
+            host,
+            unresolveCatalog(dep),
+          ]),
+        )
+      : {}),
   };
 
+  // Index the config hosts by NORMALISED host. `matchHostDeployment` looks a
+  // host up the same way, so a config key written as an origin
+  // (`https://occ.digithings.ai`) or with a port has to merge with the
+  // registry key for the same host. Without this index one host ended up with
+  // two entries and the lookup returned the registry-only duplicate, so the
+  // deployment's own gate and model list were silently dropped (DIG-4589).
+  const configKeyByHost = new Map<string, string>();
+  for (const key of Object.keys(hosts)) {
+    const normalized = normalizeConfigHost(key);
+    if (normalized && !configKeyByHost.has(normalized)) {
+      configKeyByHost.set(normalized, key);
+    }
+  }
+
   // Registry is host → config. New hosts hydrate fully. Existing YAML hosts
-  // keep chrome, but copy `requiredPlanTier` when YAML omitted it so a baked
-  // example file cannot drop the live DIGICHAT_EMBED_TENANTS Desk+ gate (#3662).
+  // keep chrome, but the session lock and the model allowlist are merged so
+  // one artefact decides both (DIG-4589). `requiredPlanTier` is still copied
+  // when YAML omitted it so a baked example file cannot drop the live
+  // DIGICHAT_EMBED_TENANTS Desk+ gate (#3662).
   for (const [host, cfg] of registry) {
-    if (!hosts[host]) {
+    const normalized = normalizeConfigHost(host) ?? host;
+    // An exact key match wins: `matchHostDeployment` returns the exact
+    // normalised key before it scans the entries.
+    const existingKey = hosts[host] ? host : configKeyByHost.get(normalized);
+    if (!existingKey) {
       hosts[host] = embedTenantToDeployment(cfg);
+      configKeyByHost.set(normalized, host);
       continue;
     }
-    if (cfg.requiredPlanTier && !hosts[host].gate.requiredPlanTier) {
-      hosts[host] = {
-        ...hosts[host],
-        gate: { ...hosts[host].gate, requiredPlanTier: cfg.requiredPlanTier },
+    hosts[existingKey] = mergeEmbedTenantIntoDeployment(hosts[existingKey], cfg);
+    if (cfg.requiredPlanTier && !hosts[existingKey].gate.requiredPlanTier) {
+      hosts[existingKey] = {
+        ...hosts[existingKey],
+        gate: { ...hosts[existingKey].gate, requiredPlanTier: cfg.requiredPlanTier },
       };
     }
   }
@@ -309,10 +485,11 @@ function mergeEmbedTenantsOverlay(
   return parseDigichatConfig(
     {
       version: 1,
-      ...(config?.deployment ? { deployment: config.deployment } : {}),
+      ...(config?.deployment ? { deployment: unresolveCatalog(config.deployment) } : {}),
       hosts,
     },
     "digichat config (tenants merge)",
+    { openRouterConfigured: openRouter },
   );
 }
 
@@ -400,7 +577,9 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
 
   if (contents != null && contents.trim()) {
     const parsed = parseYamlOrJson(contents, path);
-    fromFile = parseDigichatConfig(parsed, path);
+    fromFile = parseDigichatConfig(parsed, path, {
+      openRouterConfigured: openRouterConfigured(env),
+    });
   } else if (contents != null && !contents.trim()) {
     throw new Error(`${path}: empty file`);
   } else if (!allowMissing && opts.fileContents === undefined && !existsSync(path)) {
@@ -410,7 +589,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
   const tenantsRaw = env.DIGICHAT_EMBED_TENANTS;
   let merged: DigichatConfig;
   if (tenantsRaw?.trim()) {
-    merged = mergeEmbedTenantsOverlay(fromFile, tenantsRaw);
+    merged = mergeEmbedTenantsOverlay(fromFile, tenantsRaw, openRouterConfigured(env));
   } else if (fromFile) {
     merged = fromFile;
   } else {
@@ -448,6 +627,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
         },
       },
       "digichat config (dev default)",
+      { openRouterConfigured: openRouterConfigured(env) },
     );
   }
 

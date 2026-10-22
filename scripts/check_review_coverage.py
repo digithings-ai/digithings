@@ -209,14 +209,38 @@ def _gh_json(args: list[str]) -> dict | list:
 
 
 def _gh_graphql(query: str, variables: dict | None = None) -> dict:
-    """One `gh api graphql` round-trip. Tests mock this; CI never hits live GitHub."""
+    """One `gh api graphql` round-trip. Tests mock this; CI never hits live GitHub.
+
+    stderr is CAPTURED, not inherited. GitHub answers a field it does not know
+    with one error per occurrence, and the batch query repeats the same field
+    for every PR alias -- so a broken query printed one error line per alias
+    of the rejected chunk, straight past the caller, while the caller only saw
+    a non-zero exit and fell back to REST. The text is kept on the exception
+    instead, so `prefetch_pr_states` can name the cause ONCE.
+    """
     args = ["api", "graphql", "-f", f"query={query}"]
     if variables:
         args.extend(["-F", f"variables={json.dumps(variables)}"])
-    data = _gh_json(args)
+    proc = subprocess.run(["gh", *args], capture_output=True, text=True, cwd=REPO_ROOT)
+    if proc.returncode != 0:
+        # The command is named with its `gh` prefix, so the message says which
+        # command failed rather than starting at "api".
+        raise subprocess.CalledProcessError(
+            proc.returncode, ["gh", *args], proc.stdout, proc.stderr
+        )
+    data = json.loads(proc.stdout)
     if not isinstance(data, dict):
         raise json.JSONDecodeError("graphql envelope was not an object", "", 0)
     return data
+
+
+def _graphql_failure_reason(exc: BaseException) -> str:
+    """One line naming why the GraphQL path failed, for a human reading a log."""
+    stderr = getattr(exc, "stderr", "") or ""
+    lines = stderr.strip().splitlines()
+    if lines:
+        return lines[0].strip()
+    return f"{type(exc).__name__}: {exc}"
 
 
 def _chunks(items: list, size: int) -> list[list]:
@@ -261,15 +285,42 @@ commits(last: 1) {
   nodes {
     commit {
       statusCheckRollup {
-        nodes {
-          ... on CheckRun { name conclusion }
-          ... on StatusContext { context state }
+        state
+        contexts(first: 100) {
+          nodes {
+            __typename
+            ... on CheckRun { name conclusion }
+            ... on StatusContext { context state }
+          }
         }
       }
     }
   }
 }
 """
+# `StatusCheckRollup` is an OBJECT, not a union: it has the fields `commit`,
+# `contexts`, `id` and `state`, and it has NO `nodes` field -- asking for one
+# is `undefinedField, fieldName nodes, typeName StatusCheckRollup`. Its
+# `contexts` field is a `StatusCheckRollupContextConnection`, and that
+# connection's `nodes` are of the union type
+# `StatusCheckRollupContext = CheckRun | StatusContext`. The fragments must
+# sit inside `nodes`: spreading `... on CheckRun` on the connection itself is
+# `cannotSpreadFragment, parentName StatusCheckRollupContextConnection`. The
+# one form GitHub accepts is
+#
+#     statusCheckRollup { contexts(first: 100) { nodes { ... on CheckRun { ... } } } }
+#
+# and the reader below must then walk `contexts.nodes`, not `nodes`.
+#
+# Both wrong forms shipped at some point (#6029 changed `contexts` to `nodes`;
+# before that the fragments were spread on the object itself), and neither was
+# caught: `gh api graphql` exits 1 when the response carries errors, the batch
+# call raised, and the REST fallback quietly answered instead -- so the gate
+# kept reporting verdicts from a query that had never run, and printed one
+# error line per alias of the rejected chunk (25 for a 25-alias chunk) that
+# nobody read. The old code wrapped the whole chunk loop in one try/except,
+# so the FIRST rejected chunk aborted it and the remaining chunks never
+# reached GraphQL at all. See `_gh_graphql` and `prefetch_pr_states`.
 
 
 def _pr_batch_query(numbers: list[int]) -> str:
@@ -398,6 +449,12 @@ def _apply_reviews_checks_comments(
     checks: list[dict],
     comments: list[dict],
 ) -> dict:
+    # The parsed check list is kept on the state, not only distilled into
+    # `bugbot`/`agent_tool`. It is the one thing the gate's own coverage test
+    # has to look at: "the parsed check list is not empty" is only observable
+    # if the list itself is observable, and the state dict is the public shape
+    # `verdict_for` judges. Both paths (GraphQL and the REST fallback) fill it.
+    state["checks"] = list(checks)
     state["approvals"] = [
         _author_login(review)
         for review in reviews
@@ -437,6 +494,25 @@ def _apply_reviews_checks_comments(
     return state
 
 
+def _rollup_checks(node: dict) -> list[dict]:
+    """The check runs on a PR's HEAD commit, in GitHub's real GraphQL shape.
+
+    `statusCheckRollup` is an object with a `contexts` connection; it has no
+    `nodes` field of its own. The connection's `nodes` are the union
+    `StatusCheckRollupContext = CheckRun | StatusContext`, so the path is
+
+        commits.nodes[0].commit.statusCheckRollup.contexts.nodes
+
+    Reading `nodes` off the object (or a flat list off `contexts`) yields an
+    empty list for every real PR, which is what kept the bot-check arms dead.
+    See the note on `_PR_GRAPHQL_FIELDS`.
+    """
+    commits = (node.get("commits") or {}).get("nodes") or []
+    commit = (commits[0].get("commit") or {}) if commits else {}
+    rollup = commit.get("statusCheckRollup") or {}
+    return ((rollup.get("contexts") or {}).get("nodes") or [])
+
+
 def state_from_graphql_pr(node: dict) -> dict:
     """Map a GraphQL pullRequest node onto the dict `verdict_for` already judges."""
     labels = {
@@ -447,9 +523,7 @@ def state_from_graphql_pr(node: dict) -> dict:
     reviews = (node.get("reviews") or {}).get("nodes") or []
     comments = (node.get("comments") or {}).get("nodes") or []
     labeled = (node.get("timelineItems") or {}).get("nodes") or []
-    commits = (node.get("commits") or {}).get("nodes") or []
-    rollup = ((commits[0].get("commit") or {}).get("statusCheckRollup") if commits else None) or {}
-    checks = rollup.get("nodes") or []
+    checks = _rollup_checks(node)
     state = {
         "labels": labels,
         "approvals": [],
@@ -480,7 +554,18 @@ def prefetch_pr_states(numbers: list[int], cache: dict[int, dict], invalid: set[
                     invalid.add(number)
                 else:
                     cache[number] = state_from_graphql_pr(node)
-    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError):
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        # Fall back to REST, but SAY SO. A GraphQL query that GitHub rejects
+        # exits 1 and used to be swallowed here, so the gate answered from REST
+        # while its own query had never run -- and the error lines went to the
+        # terminal unread, one per alias of the rejected chunk. One line naming
+        # the cause is the difference between a visible failure and a silent
+        # one.
+        print(
+            "review coverage: the batched GraphQL query failed "
+            f"({_graphql_failure_reason(exc)}); falling back to one REST call per PR",
+            file=sys.stderr,
+        )
         _prefetch_pr_states_rest(pending, cache, invalid)
 
 
@@ -514,7 +599,12 @@ def prefetch_associated_prs(shas: list[str]) -> dict[str, int | None]:
             for index, sha in enumerate(chunk):
                 found[sha] = _merged_number_from_associated(repo.get(f"c{index}"))
         return found
-    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError):
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        print(
+            "review coverage: the batched GraphQL commit lookup failed "
+            f"({_graphql_failure_reason(exc)}); falling back to one REST call per commit",
+            file=sys.stderr,
+        )
         with ThreadPoolExecutor(max_workers=_REST_POOL) as pool:
             return dict(zip(pending, pool.map(associated_pr_number, pending), strict=True))
 

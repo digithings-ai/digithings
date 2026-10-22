@@ -228,6 +228,14 @@ Static Pages shells (`DtNav` + iframe) load
 `…?host=occ.digithings.ai` — **one** digichat Node/Container, two tenants.
 The Pages Function OpenRouter digivault loop is **retired**.
 
+After the `/chat` cutover (DIG-5121, in `develop` — live with the digichat
+deploy lane and Chris's production approval): `/chat` is the digichat **app**
+served by the digichat Worker under the base path `/chat`, and `/chat/occ`
+stays a Pages shell behind the invite gate. The legacy `/embed*` route stays
+for good — the OCC shell iframe above still points at
+`digithings.ai/embed?host=…` — while the legacy `/api/*` spellings (the
+pre-cutover form of `/chat/api/*`) are reviewed once the cutover is live.
+
 ## CSP verification
 
 | Side | Header | digithings.ai |

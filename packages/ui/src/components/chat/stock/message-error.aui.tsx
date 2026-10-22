@@ -7,6 +7,7 @@ import {
   useAuiState,
 } from "@assistant-ui/react";
 import type { FC } from "react";
+import { ChatNoticeContent, ChatNoticeDetail, chatNoticeRootProps } from "./chat-notice";
 import { Button } from "@digithings/ui/ui";
 import { useSkinRuntime, type SkinErrorParsers } from "./skin-runtime";
 
@@ -29,7 +30,6 @@ function messageStatusErrorText(status: {
   return error != null ? String(error) : undefined;
 }
 
-const SUMMARY_CLASS = "cursor-pointer select-none"; // canon-allow: native <details>/<summary>; the kit owns no disclosure-summary part
 
 /** assistant-ui error banner: short copy plus optional API-detail disclosure. */
 export const MessageError: FC<Partial<SkinErrorParsers>> = ({
@@ -51,36 +51,43 @@ export const MessageError: FC<Partial<SkinErrorParsers>> = ({
   const detail = parsed?.detail;
   const code = parsed?.code;
 
+  const rawDetail = raw && raw.trim() !== title ? raw : undefined;
+
+  // DIG-4459: the boxed, red-tinted notice shared with tool errors and status
+  // lines, on assistant-ui's ErrorPrimitive.Root.
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root mt-2 rounded-md border border-hair bg-surface p-3 text-sm text-ink">
-        <div className="min-w-0 flex-1">
-          <ErrorPrimitive.Message className="aui-message-error-message whitespace-pre-wrap">
-            {title}
-          </ErrorPrimitive.Message>
-          {detail || code ? (
-            <details className="mt-2 text-xs opacity-90">
-              <summary className={SUMMARY_CLASS}>API details</summary>
-              {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
-              {detail ? (
-                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono">
-                  {detail}
-                </pre>
+      <ErrorPrimitive.Root {...chatNoticeRootProps("error", "aui-message-error-root mt-2")}>
+        <ChatNoticeContent
+          tone="error"
+          title={
+            <ErrorPrimitive.Message className="aui-message-error-message whitespace-pre-wrap">
+              {title}
+            </ErrorPrimitive.Message>
+          }
+          detail={detail}
+          extra={
+            <>
+              {code || (rawDetail && !detail) ? (
+                <div className="aui-message-error-details mt-1 text-muted-foreground">
+                {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
+                {rawDetail && !detail ? <ChatNoticeDetail text={rawDetail} /> : null}
+              </div>
               ) : null}
-            </details>
-          ) : null}
-        </div>
-        {/* #3910: the errored turn must offer retry where the copy shows. */}
-        <ActionBarPrimitive.Reload asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="aui-message-error-retry mt-2 shrink-0 items-center self-start border-hair bg-surface text-ink hover:bg-muted"
-          >
-            Retry
-          </Button>
-        </ActionBarPrimitive.Reload>
+              {/* #3910: the errored turn must offer retry where the copy shows. */}
+              <ActionBarPrimitive.Reload asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="aui-message-error-retry mt-2 shrink-0 items-center self-start border-destructive/25 bg-transparent text-destructive hover:bg-destructive/10"
+                >
+                  Retry
+                </Button>
+              </ActionBarPrimitive.Reload>
+            </>
+          }
+        />
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );

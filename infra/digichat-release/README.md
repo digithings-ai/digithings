@@ -201,10 +201,19 @@ Host must supply Azure identity for Foundry; do not put a Foundry API key in dig
 
 ## The tenant registry is composed, never applied from the repo
 
-The digichat Worker reads its tenant registry (`DIGICHAT_EMBED_TENANTS`) from a
-Worker secret. Every tenant entry carries a `token`, and the operator MCP rows
-carry their own credentials. The OCC token is a client secret, so the registry
-lives only in the host secret store, never in this repository.
+The digichat Worker reads its tenant registry from two places and merges them
+host by host:
+
+- **Workers KV** — key `embed-tenants`, binding `DIGICHAT_TENANTS_KV`. This copy
+  holds **references by name only** (`tokenEnv`, `mcp.servers[].tokenEnv`), never
+  a credential value.
+- **Worker secret** — `DIGICHAT_EMBED_TENANTS`. This copy holds the credential
+  values.
+
+A KV host whose credential references all resolve replaces the secret entry for
+that host; a KV host with an unresolved reference keeps the secret entry, and a
+KV change then changes nothing in production for that host. So **the KV copy
+wins** for every host whose references resolve, and only for those hosts.
 
 The repository may carry an **overlay**: the non-secret tenant fields (slug,
 corpus routing, presentation). The overlay is merged onto the live registry at
@@ -215,10 +224,12 @@ a token.
 # plan only: offline, prints no secret value
 python3 scripts/digichat_tenant_registry.py compose \
   --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
+  --kv-from <file-with-the-live-kv-copy> \
   --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
 
-# write the Worker secret and recycle the container (human-gated, asks for a
-# typed confirmation before it writes)
+# write the KV key, then the Worker secret, then recycle the container
+# (human-gated, asks for a typed confirmation before it writes). The apply
+# always reads the live KV itself.
 python3 scripts/digichat_tenant_registry.py apply \
   --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
   --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
@@ -228,7 +239,38 @@ The compose refuses, and names the reason: an overlay that drops a tenant, an
 overlay that carries a `token` or `mcp` rows, an overlay that adds a tenant the
 live registry does not have, an overlay key the runtime does not read, and a
 composed registry that routes a tenant to the retired OCC ticket corpus. The
-composed registry can also not be written inside the repository.
+composed registry can also not be written inside the repository. The KV copy
+additionally refuses a base that carries a credential value: it carries
+references only.
+
+The KV copy refuses four more things, because the Worker replaces the secret
+entry for a host whose references resolve:
+
+- a tenant with no credential reference. Such a tenant is served without its
+  token, and the container then refuses the whole registry, every tenant.
+- a credential reference the runtime cannot resolve, such as a name that does
+  not start with a capital. An unresolved reference keeps the secret entry, so
+  the write would have no effect.
+- a copy that drops a field the secret copy carries. The plan prints the
+  credential references the copy needs, so the operator can check that the
+  Worker has every secret the copy names.
+- a corpus index that is not a string.
+
+The apply always reads the live KV copy, because the write replaces the whole
+document: a copy read earlier would drop every tenant another operator added
+since. `--kv-from` in an apply is therefore a staleness check, and the apply
+refuses when the copy names other tenants than the live one. `--plan-only`
+writes nothing at all: no file, no KV key, no secret, no recycle. If the
+secret write fails after the KV write, the apply puts the previous KV copy
+back, so the two copies never disagree about a tenant.
+
+The OCC tenant may carry a catalog policy (`catalog`, price cap, presets,
+`showFullList`, `default`, `allowPicker`) and must not carry a raw
+`models.available` id list. DIG-4750 refused an open id list; the curated
+catalog is the picker. An overlay that sets `models.available` for that host
+is refused. Compose strips `available` from a live copy and removes the
+section only when nothing else remains. With the catalog policy set, the embed
+shows presets and the price-capped list, and the visitor's pick is allowlisted.
 
 The container reads its environment at boot, so a registry change needs the
 container recycle the script performs. A digichat release that carries
@@ -238,6 +280,47 @@ See [`DIG-3556-digithings-tenant-prompt.md`](DIG-3556-digithings-tenant-prompt.m
 for the staged overlay, and
 [`docs/ops/SECRETS_ROTATION.md`](../../docs/ops/SECRETS_ROTATION.md) for the
 rotation runbook.
+
+### The OCC-only overlay
+
+`DIG-4488-occ-tenant-overlay.json` carries the OCC tenant alone. It sets the
+catalog policy and no raw model id list. The overlay does not touch the
+`digithings.ai` tenant.
+
+The overlay pins `slug`, `gateMode`, `webSearch`, the `backend` type, and the
+catalog policy. Corpus routing stays on the live copy. A live entry that
+already matches those four fields still changes in `models` when the live copy
+has no catalog policy, or when it still carries a raw `available` list.
+
+The staged overlay `DIG-3556-staged-prod-tenant-config.json` carries both
+tenants and the same catalog policy on each. It also sends the `digithings.ai`
+tenant to the `digithings_docs` corpus and turns its web search off. That
+switch waits for the DIG-3556 rollout steps: the merged `DIGI_TENANT_CORPUS_MAP`
+prompt for `digithings`, and the corpus backfill.
+
+| Scope | Overlay | Change to the `digithings.ai` tenant |
+|---|---|---|
+| OCC only | `DIG-4488-occ-tenant-overlay.json` | none |
+| Full staged | `DIG-3556-staged-prod-tenant-config.json` | corpus routing, web search, and the catalog policy |
+
+Both scopes write the same KV key and the same OCC catalog policy. The
+`digithings.ai` tenant differs.
+
+```sh
+# scope A: the OCC tenant only
+python3 scripts/digichat_tenant_registry.py apply \
+  --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
+  --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json
+
+# scope B: the OCC tenant and the staged digithings.ai corpus switch.
+# Run it only after the DIG-3556 prompt merge and the corpus backfill.
+python3 scripts/digichat_tenant_registry.py apply \
+  --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
+  --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
+```
+
+A human runs the apply. The script asks for a typed confirmation before it
+writes the KV key, the Worker secret, or recycles the container.
 
 ## Command matrix
 
@@ -251,7 +334,8 @@ rotation runbook.
 | Profile B (Foundry) | `docker compose -f infra/digichat-release/compose.profile-b.yml --env-file infra/digichat-release/.env.profile-b up -d` |
 | Local monorepo build | `make up-digichat` |
 | Validate the deployment config | `make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml` |
-| Plan the digichat tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json` |
+| Plan the digichat tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json` |
+| Plan the OCC-only tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json` |
 | Client install guide | [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) |
 | Populate client docs (offline) | [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../docs/digichat/CLIENT-DOCS-ONBOARD.md) |
 | Post-publish smoke | [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md) |

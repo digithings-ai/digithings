@@ -42,20 +42,21 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import datetime
+import http.client
 import json
+import os
 import re
 import subprocess
 import sys
-from collections.abc import Mapping
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
-
-# The "what is not a review pass" rules (DIG-4631) live beside this script so
-# the host CI producer applies the same rules. The module is imported by path,
-# not by package, because `scripts/` is not a package.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import review_pass_filter as rpf
 
 POLICY_PATH = Path(__file__).resolve().parent / "merge_queue_policy.json"
 
@@ -85,6 +86,181 @@ STALE_MERGE_STATES: frozenset[str] = frozenset({"BLOCKED", "BEHIND", "DIRTY", "U
 # it is left out of the audit comment's check list.
 IGNORED_STATUS_CONTEXTS: frozenset[str] = frozenset({"qa/gate"})
 
+# --- CI provenance (DIG-4794) -------------------------------------------------
+#
+# `local-ci` is a commit status, and GitHub's own documentation says what that is
+# worth: "any person or integration with write permissions can set the state of
+# any status check". Both repositories the queue manages name `local-ci` as their
+# required check, and neither has a server-side branch protection on the private
+# plan, so this queue is the only gate between a seat and a merge it approved
+# itself.
+#
+# The gate therefore asks a second question. Not "is the status green" but "which
+# build made it green, and did that build check this commit". The CI worker runs
+# inside Woodpecker, so the status it posts names the build that ran it
+# (`target_url`), and the queue reads that build back from the Woodpecker API
+# before it counts the status as evidence. A status with no URL, a URL on another
+# host, a build that is not there, a build that did not succeed, a build that did
+# not run this repository's check, and a build that ran another commit are all the
+# same answer: no evidence.
+#
+# The gate ships in shadow mode, because the launcher pipeline that runs the check
+# is bound to the launcher's own commit rather than to the pull request head, so a
+# strict commit comparison refuses every pull request until the launcher runs one
+# build per pull request. DIG-4809 owns that window and the switch to `enforce`.
+
+#: The three modes. `off` is today's behaviour: the status is trusted as written.
+PROVENANCE_OFF = "off"
+#: Log what the gate would have refused, and merge anyway.
+PROVENANCE_SHADOW = "shadow"
+#: Refuse the pull request when the build cannot be verified.
+PROVENANCE_ENFORCE = "enforce"
+PROVENANCE_MODES: tuple[str, ...] = (PROVENANCE_OFF, PROVENANCE_SHADOW, PROVENANCE_ENFORCE)
+
+#: The three ways the comparison between the build's own commit and the pull
+#: request head can be applied.
+#:
+#: The launcher pipeline that runs the check is bound to the commit its own
+#: repository checked out - the launcher's `main` commit, never the pull request
+#: head - so that comparison can never succeed while the launcher runs one
+#: build for the whole repository (DIG-4809). `enforce` is today's behaviour: a
+#: build that ran another commit is a refusal. `shadow` measures it: the
+#: mismatch is written to the log and the queue merges anyway. `off` does not
+#: look at the commit at all.
+#:
+#: The comparison is the only thing that ties a build to a pull request head,
+#: so it cannot be softened on its own: a queue that no longer compares the
+#: commit and still trusts a `local-ci` row would accept a row that says
+#: nothing about this head. The trusted receipt is what replaces it - a status
+#: written by the CI's own GitHub App installation, on the head commit, which
+#: no seat can write. A policy that softens the comparison without asking for
+#: that receipt is refused when the policy file is read.
+COMMIT_MATCH_ENFORCE = "enforce"
+COMMIT_MATCH_SHADOW = "shadow"
+COMMIT_MATCH_OFF = "off"
+COMMIT_MATCH_MODES: tuple[str, ...] = (COMMIT_MATCH_ENFORCE, COMMIT_MATCH_SHADOW, COMMIT_MATCH_OFF)
+
+#: DIG-4809 names this switch: the environment wins over the policy file, so the
+#: mode can be changed on the running host without a code change.
+PROVENANCE_MODE_ENV = "MQ_CI_PROVENANCE"
+
+#: The same for the commit comparison: the environment wins over the file.
+COMMIT_MATCH_ENV = "MQ_CI_COMMIT_MATCH"
+#: Where the shadow log goes. The launchd job's own error log keeps the line too.
+PROVENANCE_LOG_ENV = "MQ_CI_PROVENANCE_LOG"
+PROVENANCE_LOG_PATH = Path.home() / ".config" / "digithings" / "merge-queue" / "ci-provenance.log"
+
+#: The path segments that say "this is a pipeline". Woodpecker's own pipeline
+#: link is a web link and its shape has changed across versions - 3.19 documents
+#: `CI_PIPELINE_URL` as `<system url>/repos/<id>/pipeline/<number>`, while older
+#: builds and the API use `/api/repos/<id>/pipelines/<number>` and the web UI
+#: uses `/repo/<owner>/<name>/pipelines/<number>` - so the path is read by
+#: shape rather than matched against one exact form.
+_PIPELINE_PATH_WORDS: frozenset[str] = frozenset({"pipelines", "pipeline"})
+
+#: A build in one of these states has not finished, so nothing it says about a
+#: step is final yet. The launcher pipeline runs both repositories' checks side
+#: by side, so the build's own status is not decisive - one repository's check
+#: can fail while the other one passes - and the step that answers for the
+#: repository is. What the build's status does decide is whether the run is
+#: over: a step can be green while the rest of the build is still going.
+#:
+#: The list is Woodpecker's own vocabulary (3.19): `created`, `pending`,
+#: `running`, `blocked` and `skipped` are the states in which a build has not
+#: reached a verdict. The states that end a build badly - `failure`, `killed`,
+#: `canceled`, `error`, `declined` - are caught by the step requirement instead,
+#: because the build as a whole is not what answers for a repository.
+_PIPELINE_UNFINISHED_STATES: frozenset[str] = frozenset(
+    {"created", "pending", "running", "started", "waiting", "blocked", "skipped"}
+)
+
+#: How long the queue waits for one Woodpecker read. The queue evaluates up to
+#: 200 pull requests per tick and the launchd job fires every three minutes, so
+#: a read that blocks for its full timeout can outlast the tick. Shadow mode is
+#: given less: there the read is a measurement, not a verdict.
+PROVENANCE_READ_TIMEOUT = 5.0
+PROVENANCE_READ_TIMEOUT_SHADOW = 2.0
+#: The read of the commit statuses, which is a GitHub call rather than a call
+#: to the deployment's own network. It gets its own limit because a read that
+#: hangs is a tick that hangs, and the queue reads one commit per pull request.
+PROVENANCE_STATUS_TIMEOUT = 10.0
+
+#: How many times one URL is read before the read is called a failed read. A
+#: dropped connection says nothing about the build behind the URL, so the read
+#: is tried again: one dropped connection used to refuse a pull request on a
+#: transport fact that had nothing to do with the build. The read is a GET, so
+#: the question is the same every time, and a question that was not answered
+#: is not an answer.
+PROVENANCE_READ_ATTEMPTS = 3
+
+#: The pause before the next attempt, in seconds. The pause is short because
+#: the queue has a tick to finish, and it is there so the second attempt does
+#: not arrive while the first one is still being answered.
+PROVENANCE_RETRY_BACKOFF = 0.5
+
+#: The whole cost of one URL, attempts and pauses together. The pause before
+#: an attempt and the attempt itself both happen inside it, so one path costs
+#: the budget once and not once per attempt. It is a deadline and not only a
+#: sum of timeouts: the body is read in chunks and the read gives up when the
+#: deadline has passed, so a server that answers the headers and then trickles
+#: the body cannot hold the read open past the budget. It is the budget of ONE
+#: URL read, not of the tick.
+PROVENANCE_READ_BUDGET = 20.0
+
+#: How long a host that could not be read is remembered, in seconds. The queue
+#: asks the same host about every pull request of the tick, so a host that
+#: could not be read is asked once more - briefly - and the rest of the tick
+#: is answered from the memory instead of waiting for a host that is not
+#: answering. The memory does not outlive its minute: after it the host is
+#: read again with the whole budget.
+PROVENANCE_HOST_COOLDOWN = 60.0
+
+#: How long the host is asked again after it did not answer, in seconds. The
+#: ask is one attempt and not three, and it is brief: the host either answers
+#: or it does not, and a host that was asleep for a moment answers at once.
+#: The queue asks the host once per pull request, so this is the cost of a
+#: dead host per pull request, and it has to stay small: the tick has an
+#: interval to keep.
+PROVENANCE_REPROBE_TIMEOUT = 2.0
+
+#: The provenance log grows by one line per pull request per tick, so it is
+#: capped: the oldest file is dropped when the log passes this size.
+PROVENANCE_LOG_MAX_BYTES = 1_000_000
+
+#: Where the shadow log's index goes. The index is what keeps the log readable.
+#: The queue looks at every open pull request on every tick, so a log with one
+#: line per refusal per tick grows by tens of thousands of lines a day and the
+#: 48 hour window stops being a file a human can read. The index remembers which
+#: refusals the log already holds, so a refusal that repeats says so in the
+#: index instead of writing the same line again.
+PROVENANCE_INDEX_ENV = "MQ_CI_PROVENANCE_INDEX"
+PROVENANCE_INDEX_PATH = (
+    Path.home() / ".config" / "digithings" / "merge-queue" / "ci-provenance.index.json"
+)
+
+#: The index is a memory of the log, not a log of its own: it is capped, and an
+#: entry that has not been seen for this long is dropped, so a window that ends
+#: does not leave the index growing forever.
+PROVENANCE_INDEX_MAX_ENTRIES = 2000
+PROVENANCE_INDEX_MAX_AGE_DAYS = 14
+
+#: The token and the build reads are read once per queue run, not once per pull
+#: request.
+_TOKEN_CACHE: dict[tuple[str, str], str] = {}
+_READ_CACHE: dict[str, tuple[int, Any]] = {}
+#: The hosts that could not be read, with the answer they gave and the moment
+#: they gave it. The key is the scheme and the host, because two services on
+#: one machine are two hosts and one of them can answer while the other does
+#: not.
+_HOST_FAILURE: dict[str, tuple[float, tuple[int, Any]]] = {}
+#: The allowed hosts, read once per queue run from the deployment's own files.
+_HOST_CACHE: dict[tuple[Any, ...], tuple[tuple[str, ...], str]] = {}
+#: The log index, by the path it is written to.
+_INDEX_CACHE: dict[str, dict[str, Any]] = {}
+#: The lines the provenance log holds, by the path it is written to, with the
+#: size of the file they were read from.
+_LOG_CACHE: dict[str, tuple[int, set[str]]] = {}
+
 EXIT_OK = 0
 EXIT_OPERATIONAL = 1
 EXIT_NOT_AUTHORISED = 2
@@ -105,6 +281,141 @@ class Authority:
     note: str = ""
 
 
+#: The three ways the reviewer-independence gate can run. `off` reads no
+#: provenance at all. `shadow` and `enforce` both refuse a marker the gate
+#: dropped; `shadow` additionally records the refusal (and what the row would
+#: have said with every comment counted) in the shadow log, while `enforce`
+#: decides without it. DIG-4809 named the two-step rollout: 48 hours of shadow,
+#: then a separate small PR that flips the switch to `enforce`. The flip shipped
+#: in DIG-5220 (22 Oct 2026), and the same change closed the shadow loophole:
+#: #6277 and #6197 merged while an author-lane write-up stood in for the
+#: non-author review, because shadow merged what it had just measured.
+REVIEW_INDEPENDENCE_MODES = ("off", "shadow", "enforce")
+
+
+@dataclass(frozen=True)
+class ReviewIndependence:
+    """How the queue treats a review marker that may come from the author's seat.
+
+    `mode` is the switch: `off` reads no provenance at all, `shadow` measures
+    what the gate would refuse and merges anyway, `enforce` refuses. The env
+    var `MQ_REVIEW_INDEPENDENCE` overrides the policy file, and a value that is
+    not one of the three is read as `enforce`: a misspelled switch must never
+    turn a gate off.
+    """
+
+    mode: str = "off"
+    api_url: str = "http://127.0.0.1:3100"
+    keychain_service: str = ""
+    keychain_account: str = ""
+    log_path: str = "~/.config/digithings/merge-queue/reviewer-independence.log"
+
+
+def _effective_mode(cfg: ReviewIndependence) -> str:
+    """The mode this gate runs in: the env var wins over the policy file."""
+    raw = os.environ.get("MQ_REVIEW_INDEPENDENCE")
+    if raw is None:
+        mode = str(cfg.mode or "off").strip().lower()
+        return mode if mode in REVIEW_INDEPENDENCE_MODES else "enforce"
+    mode = raw.strip().lower()
+    return mode if mode in REVIEW_INDEPENDENCE_MODES else "enforce"
+
+
+@dataclass(frozen=True)
+class TrustedReceipt:
+    """The receipt a seat cannot write: a status written by a known CI writer.
+
+    A commit status is worth exactly what its writer is worth: "any person or
+    integration with write permissions can set the state of any status check"
+    (GitHub's commit status documentation). The `local-ci` row is written with a
+    user token, so it is a statement - anybody with a token can write it, and
+    the queue cannot tell that statement from the CI's own.
+
+    A row written by the GitHub App installation is a receipt. The app's token
+    is the CI's own and nobody else's, so a row it wrote on a commit says that
+    the CI ran on that commit. That is what binds a check to a pull request
+    head, which the build's own `commit` field cannot do while the launcher
+    runs one build for a whole repository.
+
+    `creators` are the logins allowed to write the receipt. A `Bot` login is
+    the shape an app installation writes under; a human login in that list
+    would make the receipt forgeable again, so the list is the trust decision
+    and it is read from the policy file rather than guessed.
+    """
+
+    #: The status context the trusted receipt is written under.
+    context: str = ""
+    #: The logins allowed to write the trusted receipt.
+    creators: tuple[str, ...] = ()
+    #: Whether the queue asks for a receipt at all. A policy that does not ask
+    #: for one does not read the status list: the chain is switched on by the
+    #: policy change that comes with the CI's own installation token.
+    required: bool = False
+
+
+@dataclass(frozen=True)
+class CiProvenance:
+    """How the queue decides that a `local-ci` status came from a real build.
+
+    `woodpecker_repos` maps a GitHub repository to the numeric Woodpecker
+    repository that runs its check, `woodpecker_names` gives that repository's
+    `owner/name` so a URL in the web shape can be resolved, and `steps` names the
+    step inside the build that answers for that repository. The step is what
+    binds a build to a repository: the launcher pipeline runs the digithings check
+    and the twelve-x check side by side, so the pipeline on its own says nothing
+    about which repository it answered for.
+
+    Two of these settings are deployment facts rather than choices, so they are
+    read rather than written down: the hosts a build link may name come from the
+    deployment's own configuration (`host_files`, `host_url_keys`), and the
+    numeric repository id comes from the repository's name (`woodpecker_repo_names`)
+    resolved against the Woodpecker API. A file that carries an address that has
+    moved, or an id that a recreated repository has changed, is how a gate ends
+    up refusing every pull request or reading the wrong repository's build.
+    """
+
+    mode: str = PROVENANCE_OFF
+    #: Hosts a build URL may name. Empty means "any host", which is not a setting
+    #: worth shipping: the point of the check is that the URL points at our
+    #: Woodpecker and nowhere else. This list is the part that never changes -
+    #: the addresses the deployment actually uses are read from the deployment's
+    #: own configuration, so a change of local IP is not a change of this file.
+    hosts: tuple[str, ...] = ()
+    #: Files the deployment's own addresses are read from, as `KEY=value` lines.
+    #: The queue reads only the keys named in `host_url_keys`, so pointing this
+    #: at a file that holds other secrets is safe.
+    host_files: tuple[str, ...] = ()
+    #: The keys in `host_files` whose values are the deployment's URLs. The
+    #: host and port of each URL are hosts a build link may name.
+    host_url_keys: tuple[str, ...] = ()
+    #: Whether the deployment configuration must be readable for the gate to
+    #: have an answer. Without it a stale allow-list is trusted silently, and a
+    #: stale allow-list under `enforce` refuses every pull request.
+    require_config: bool = False
+    #: The environment variable that carries the Woodpecker API token.
+    token_env: str = "WOODPECKER_TOKEN"
+    #: A file to read the token from when the environment does not carry it. The
+    #: value never leaves the file: the queue uses it and forgets it.
+    token_file: str = ""
+    #: The status context the gate reads.
+    context: str = "local-ci"
+    woodpecker_repos: Mapping[str, str] = field(default_factory=dict)
+    woodpecker_names: Mapping[str, str] = field(default_factory=dict)
+    #: The Woodpecker repository that runs a repository's check, named as
+    #: `owner/name`. The numeric id is resolved from this name at check time, so
+    #: a repository that is recreated under a new id does not make the gate read
+    #: the wrong repository.
+    woodpecker_repo_names: Mapping[str, str] = field(default_factory=dict)
+    steps: Mapping[str, str] = field(default_factory=dict)
+    #: The receipt the queue trusts in addition to the build check. Empty means
+    #: no receipt is asked for, which is today's state: the CI worker writes the
+    #: app row only when it holds an app installation token, and it does not
+    #: hold one yet (DIG-4803, DIG-4809).
+    trusted_receipt: TrustedReceipt = field(default_factory=TrustedReceipt)
+    #: How the comparison between the build's commit and the head is applied.
+    commit_match: str = COMMIT_MATCH_ENFORCE
+
+
 @dataclass(frozen=True)
 class Policy:
     """The merge-path policy, loaded from scripts/merge_queue_policy.json."""
@@ -117,19 +428,8 @@ class Policy:
     ignored_checks: frozenset[str] = frozenset()
     required_checks_by_repo: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     status_context_checks: frozenset[str] = frozenset()
-    #: The local-ci status that says the review was applied (DIG-3842). Required
-    #: SUCCESS on the exact head the queue merges; "" switches the gate off for a
-    #: repo whose CI does not post it (twelve-x, see the policy note).
-    review_applied_context: str = "review-applied"
-    review_applied_by_repo: Mapping[str, str] = field(default_factory=dict)
-    #: Whether same-login review evidence must prove it came from a different
-    #: seat. Off by default (DIG-4646): the identity a strict check needs is
-    #: written by nothing yet, so demanding it refused every same-login review
-    #: in the fleet and emptied the queue. The overlap check — a review that
-    #: names the authoring seat itself — always runs, so a proven self-review
-    #: is refused either way.
-    seat_independence: bool = False
-    seat_independence_by_repo: Mapping[str, bool] = field(default_factory=dict)
+    ci_provenance: CiProvenance = field(default_factory=CiProvenance)
+    review_independence: ReviewIndependence = field(default_factory=ReviewIndependence)
 
     def authority(self, role: str) -> Authority | None:
         return next((a for a in self.merge_authorities if a.role == role), None)
@@ -157,28 +457,6 @@ class Policy:
         """
         return tuple(self.required_checks_by_repo.get(repo, ())) or self.required_checks
 
-    def review_applied_for(self, repo: str) -> str:
-        """The review-applied context this repo must report on its head, or "".
-
-        An unlisted repo falls back to the default, so a new repo gets the gate
-        rather than silently losing it; only an explicit "" entry switches it off.
-        """
-        if repo in self.review_applied_by_repo:
-            return self.review_applied_by_repo[repo]
-        return self.review_applied_context
-
-    def seat_independence_for(self, repo: str | None) -> bool:
-        """Whether this repo's review evidence must prove a different seat.
-
-        Off unless a repo asks for it. A repo's own entry switches it on for
-        that repo when its marker producer lands (DIG-4632 / DIG-4631); until
-        then the strict rule refuses every same-login review, and the queue
-        stops being a queue.
-        """
-        if repo and repo in self.seat_independence_by_repo:
-            return bool(self.seat_independence_by_repo[repo])
-        return self.seat_independence
-
     def for_repo(self, repo: str) -> Policy:
         """A copy whose `required_checks` are this repo's.
 
@@ -187,11 +465,7 @@ class Policy:
         and `_audit_body` both read `policy.required_checks`, so the check the merge
         depended on and the check the audit comment names cannot come from two places.
         """
-        return replace(
-            self,
-            required_checks=self.required_for(repo),
-            review_applied_context=self.review_applied_for(repo),
-        )
+        return replace(self, required_checks=self.required_for(repo))
 
 
 @dataclass
@@ -221,18 +495,6 @@ class Verdict:
         queue silently becomes a race the loudest PR always wins.
         """
         return (self.created_at, self.number)
-
-
-def _policy_bool(raw: Any, where: str) -> bool:
-    """A policy flag, read as a boolean or refused.
-
-    A string "false" is truthy, so a typo'd flag would switch a gate the wrong
-    way without anything saying so. The same care as the required-check names
-    (DIG-690): a flag that cannot be read must not be guessed.
-    """
-    if isinstance(raw, bool):
-        return raw
-    raise QueueError(f"{where}: expected a boolean, got {raw!r}")
 
 
 def load_policy(path: Path = POLICY_PATH) -> Policy:
@@ -265,23 +527,189 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
             str(repo): tuple(str(name) for name in names)
             for repo, names in (raw.get("required_checks_by_repo") or {}).items()
         },
-        review_applied_context=str(defaults.get("review_applied_context", "review-applied")),
-        review_applied_by_repo={
-            str(repo): str(name)
-            for repo, name in (raw.get("review_applied_context_by_repo") or {}).items()
-        },
-        seat_independence=_policy_bool(
-            defaults.get("seat_independence", False), f"{path}: defaults.seat_independence"
-        ),
-        seat_independence_by_repo={
-            str(repo): _policy_bool(value, f"{path}: seat_independence_by_repo[{repo}]")
-            for repo, value in (raw.get("seat_independence_by_repo") or {}).items()
-        },
+        ci_provenance=_load_ci_provenance(raw.get("ci_provenance"), path),
+        review_independence=_load_review_independence(raw, path),
     )
 
 
-def _gh_json(*args: str) -> Any:
-    proc = subprocess.run(["gh", *args], capture_output=True, text=True)
+def _load_ci_provenance(raw: Mapping[str, Any] | None, path: Path) -> CiProvenance:
+    """Read the `ci_provenance` block of the policy file.
+
+    No block at all means no gate: a policy file written before this gate
+    existed must still load, and the gate is off until somebody writes the
+    block. A block without a mode means the gate is wanted but nobody has
+    chosen a mode yet, and that is `shadow` - the mode that measures without
+    refusing - rather than `off`, which would turn the gate off because a key
+    was left out.
+
+    A mode that is not one of the three names is refused here rather than
+    defaulted: this switch decides whether the queue trusts a status, and a
+    misspelled mode that silently meant "off" would turn the gate off without
+    anybody deciding to.
+    """
+    if raw is None:
+        return CiProvenance()
+    mode = str(raw.get("mode") or PROVENANCE_SHADOW)
+    if mode not in PROVENANCE_MODES:
+        raise QueueError(
+            f"{path}: ci_provenance.mode is {mode!r}; it must be one of "
+            f"{', '.join(PROVENANCE_MODES)}"
+        )
+    hosts_raw = raw.get("hosts")
+    if isinstance(hosts_raw, str) or (
+        hosts_raw is not None and not isinstance(hosts_raw, list)
+    ):
+        raise QueueError(
+            f"{path}: ci_provenance.hosts must be a list of host names, not a string"
+        )
+    for key in ("host_files", "host_url_keys"):
+        value = raw.get(key)
+        if isinstance(value, str) or (value is not None and not isinstance(value, list)):
+            raise QueueError(
+                f"{path}: ci_provenance.{key} must be a list, not a string"
+            )
+    require_config = raw.get("require_config")
+    if require_config is not None and not isinstance(require_config, bool):
+        raise QueueError(
+            f"{path}: ci_provenance.require_config must be true or false"
+        )
+    commit_match = str(raw.get("commit_match") or COMMIT_MATCH_ENFORCE).strip().lower()
+    if commit_match not in COMMIT_MATCH_MODES:
+        raise QueueError(
+            f"{path}: ci_provenance.commit_match is {commit_match!r}; it must be one of "
+            f"{', '.join(COMMIT_MATCH_MODES)}"
+        )
+    receipt = _load_trusted_receipt(raw.get("trusted_receipt"), path)
+    if commit_match != COMMIT_MATCH_ENFORCE and not receipt.required:
+        # The commit comparison is the only thing that ties a build to a pull
+        # request head, and it cannot succeed while the launcher runs one build
+        # for a whole repository. A policy that softens it without asking for a
+        # trusted receipt would leave the queue trusting a row that says nothing
+        # about this head - so the policy file is refused rather than loaded.
+        raise QueueError(
+            f"{path}: ci_provenance.commit_match is {commit_match!r}, so the queue needs "
+            "a trusted receipt to bind a status to the head commit, but "
+            "ci_provenance.trusted_receipt does not require one"
+        )
+    return CiProvenance(
+        mode=mode,
+        hosts=tuple(str(host) for host in (hosts_raw or [])),
+        host_files=tuple(str(item) for item in (raw.get("host_files") or [])),
+        host_url_keys=tuple(str(item) for item in (raw.get("host_url_keys") or [])),
+        require_config=bool(require_config),
+        token_env=str(raw.get("token_env") or "WOODPECKER_TOKEN"),
+        token_file=str(raw.get("token_file") or ""),
+        context=str(raw.get("context") or "local-ci"),
+        woodpecker_repos={
+            str(repo): str(repo_id)
+            for repo, repo_id in (raw.get("woodpecker_repos") or {}).items()
+        },
+        woodpecker_names={
+            str(repo_id): str(name)
+            for repo_id, name in (raw.get("woodpecker_names") or {}).items()
+        },
+        woodpecker_repo_names={
+            str(repo): str(name)
+            for repo, name in (raw.get("woodpecker_repo_names") or {}).items()
+        },
+        steps={str(repo): str(step) for repo, step in (raw.get("steps") or {}).items()},
+        trusted_receipt=receipt,
+        commit_match=commit_match,
+    )
+
+
+def _load_trusted_receipt(raw: Any, path: Path) -> TrustedReceipt:
+    """Read the `trusted_receipt` block of the policy file.
+
+    No block at all means no receipt is asked for: the CI worker writes the app
+    row only when it holds an app installation token, and it does not hold one
+    yet, so a policy that demanded the receipt today would refuse every pull
+    request for a reason nobody could fix.
+
+    A block that is present but incomplete is refused rather than ignored. A
+    receipt with no context names nothing, and a receipt with no trusted
+    writer is a receipt anybody can write - the two failures of this gate
+    would come back as a queue that trusts the wrong thing.
+    """
+    if raw is None:
+        return TrustedReceipt()
+    if not isinstance(raw, Mapping):
+        raise QueueError(f"{path}: ci_provenance.trusted_receipt must be an object")
+    context = str(raw.get("context") or "").strip()
+    creators_raw = raw.get("creators")
+    if isinstance(creators_raw, str) or (
+        creators_raw is not None and not isinstance(creators_raw, list)
+    ):
+        raise QueueError(
+            f"{path}: ci_provenance.trusted_receipt.creators must be a list of logins, "
+            "not a string"
+        )
+    creators = tuple(
+        str(login).strip() for login in (creators_raw or []) if str(login).strip()
+    )
+    require = raw.get("require")
+    if require is not None and not isinstance(require, bool):
+        raise QueueError(
+            f"{path}: ci_provenance.trusted_receipt.require must be true or false"
+        )
+    # A block with no `require` key at all means the receipt is required. That
+    # is the fail-closed direction: a hand edit that drops the key must not
+    # turn a security gate off. The price is a loud refusal of every pull
+    # request until the CI writes a receipt, so the key is written down in the
+    # policy note and in docs/MERGE_QUEUE.md and the rule is pinned by a test.
+    required = True if require is None else bool(require)
+    if required and (not context or not creators):
+        raise QueueError(
+            f"{path}: ci_provenance.trusted_receipt must name a context and at least one "
+            "creator when it is required"
+        )
+    return TrustedReceipt(context=context, creators=creators, required=required)
+
+
+def _load_review_independence(raw: Mapping[str, Any], path: Path) -> ReviewIndependence:
+    """The reviewer-independence block of the policy file.
+
+    A mode that is not one of the three is a broken policy file, and a broken
+    policy file stops the queue rather than quietly turning a security gate
+    off: the queue refuses to start on a policy it cannot read.
+    """
+    block = raw.get("review_independence")
+    if not isinstance(block, Mapping):
+        # No block at all. The gate still measures: shadow never refuses, so a
+        # policy file that lost the block keeps the measurement instead of
+        # silently turning the gate off. `off` has to be written down to be
+        # meant.
+        block = {}
+        mode = "shadow"
+    else:
+        mode = str(block.get("mode") or "shadow").strip().lower()
+    if mode not in REVIEW_INDEPENDENCE_MODES:
+        raise QueueError(
+            f"{path}: review_independence.mode must be one of "
+            f"{', '.join(REVIEW_INDEPENDENCE_MODES)}, not {mode!r}"
+        )
+    return ReviewIndependence(
+        mode=mode,
+        api_url=str(block.get("api_url") or "http://127.0.0.1:3100"),
+        keychain_service=str(block.get("keychain_service") or ""),
+        keychain_account=str(block.get("keychain_account") or ""),
+        log_path=str(
+            block.get("log_path")
+            or "~/.config/digithings/merge-queue/reviewer-independence.log"
+        ),
+    )
+
+
+def _gh_json(*args: str, timeout: float | None = None) -> Any:
+    try:
+        proc = subprocess.run(
+            ["gh", *args], capture_output=True, text=True, timeout=timeout
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise QueueError(
+            f"gh {' '.join(args[:2])} timed out after {timeout} seconds "
+            "(retryable transport error; retry the read)"
+        ) from exc
     if proc.returncode != 0:
         # A non-zero exit is an operational transport failure (auth, rate
         # limit, 504 deadline), never a parse problem: name the exit status
@@ -321,8 +749,7 @@ def fetch_queue(repo: str, base: str, limit: int) -> list[dict[str, Any]]:
         "--limit",
         str(limit),
         "--json",
-        # `body` carries the authoring seat's identity (see `_author_identity`).
-        "number,title,body,headRefName,headRefOid,baseRefName,isDraft,mergeable,"
+        "number,title,headRefName,headRefOid,baseRefName,isDraft,mergeable,"
         "mergeStateStatus,statusCheckRollup,reviewDecision,author,createdAt,reviews,"
         "comments,commits,labels",
     )
@@ -414,7 +841,1358 @@ def unmatched_required_checks(
     return tuple(r for r in required if r not in reported), tuple(sorted(reported))
 
 
-def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
+@dataclass(frozen=True)
+class Provenance:
+    """The outcome of reading one status as evidence of a build.
+
+    `reason` says what is wrong in words that do not change from tick to tick.
+    The live driver keys its handback comment on the reason text, so a reason
+    that carried the build's number would post a fresh comment on the pull
+    request every time the CI ran. `detail` holds the volatile part - the build
+    number, the shas, the URL - and it goes to the log, never to the verdict.
+
+    `measured` is a condition that was found and deliberately not refused: the
+    commit comparison in `shadow` mode finds a build that ran another commit
+    and writes it down instead of blocking on it. It is the same kind of text
+    as `reason` and it goes to the log under its own verb, so a measurement is
+    never read as a verdict.
+    """
+
+    ok: bool
+    reason: str
+    detail: str = ""
+    target_url: str = ""
+    measured: str = ""
+
+
+def commit_match_mode(policy: Policy) -> str:
+    """How the build's commit is compared with the head. The environment wins.
+
+    An unreadable value is read as `enforce`, not as `off`: a typo in the
+    switch that decides what the queue trusts must not silence it.
+    """
+    raw = str(os.environ.get(COMMIT_MATCH_ENV) or "").strip().lower()
+    if not raw:
+        return policy.ci_provenance.commit_match
+    if raw not in COMMIT_MATCH_MODES:
+        return COMMIT_MATCH_ENFORCE
+    return raw
+
+
+def provenance_mode(policy: Policy) -> str:
+    """The mode in force. The environment wins over the policy file.
+
+    An unreadable value is treated as `enforce`, not as `off`: a typo in the
+    switch that decides whether the queue trusts a status must not silence the
+    gate. `off` has to be spelled correctly to switch it off.
+    """
+    raw = str(os.environ.get(PROVENANCE_MODE_ENV) or "").strip().lower()
+    if not raw:
+        return policy.ci_provenance.mode
+    if raw not in PROVENANCE_MODES:
+        return PROVENANCE_ENFORCE
+    return raw
+
+
+def _newest_status(entries: list[dict[str, Any]], context: str) -> dict[str, Any] | None:
+    """The newest status reported under one context.
+
+    The rollup carries one row per context, but a status posted twice can arrive
+    twice, and the newest row is the one that answers for the head commit.
+    GitHub timestamps a commit status with `startedAt` and, on the other
+    spelling of the same row, with `createdAt`; both are read, in that order,
+    because the field GitHub sends depends on the API version in front of us.
+    """
+    rows = [entry for entry in entries if _check_name(entry) == context]
+    if not rows:
+        return None
+
+    def stamp(entry: dict[str, Any]) -> str:
+        return str(
+            entry.get("startedAt") or entry.get("createdAt") or entry.get("completedAt") or ""
+        )
+
+    return max(enumerate(rows), key=lambda pair: (stamp(pair[1]), pair[0]))[1]
+
+
+def _status_target_url(entry: dict[str, Any]) -> str:
+    """The build URL a status names, if it names one.
+
+    `targetUrl` is GitHub's field for a commit status; `target_url` is the shape
+    the API itself uses. A CheckRun's `detailsUrl` is deliberately not read here:
+    that is a workflow run, not a build, and the gate is about builds.
+    """
+    for key in ("targetUrl", "target_url"):
+        value = str(entry.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _parse_pipeline_url(path: str) -> tuple[str, str, str] | None:
+    """Read a Woodpecker pipeline URL path as `(kind, repository, number)`.
+
+    `kind` is `id` when the path names the repository by its numeric Woodpecker
+    id, `name` when it names it as `owner/name`, and empty when the path names
+    no repository at all. The number is the pipeline number.
+
+    The path is read by shape rather than matched against one exact form,
+    because the same Woodpecker release publishes the pipeline link in more than
+    one shape and the worker posts whatever `CI_PIPELINE_URL` holds. A path
+    that is not a pipeline link at all returns None.
+
+    The number has to be ASCII digits: the URL comes from a commit status, so
+    it is written by whoever posted the status, and a Unicode digit would
+    otherwise reach the API call as a byte that cannot be encoded.
+    """
+    segments = [part for part in path.strip("/").split("/") if part]
+    if len(segments) < 2:
+        return None
+    number = segments[-1]
+    if not (number.isascii() and number.isdigit()):
+        return None
+    if segments[-2] not in _PIPELINE_PATH_WORDS:
+        return None
+    head = segments[:-2]
+    if "repos" in head:
+        index = head.index("repos")
+        if index + 1 < len(head):
+            return ("id", head[index + 1], number)
+    if "repo" in head:
+        index = head.index("repo")
+        name = "/".join(head[index + 1 :])
+        if name:
+            # A repository named by its number is named by its id, not by its name.
+            return ("id", name, number) if name.isdigit() else ("name", name, number)
+    if len(head) >= 2:
+        return ("name", "/".join(head), number)
+    return ("", "", number)
+
+
+def _value_from_text(text: str, key: str) -> str:
+    """The value of one key in a `KEY=value` file's text.
+
+    The text is read as a list of `KEY=value` lines and only the key asked for
+    is taken, so a file that holds other secrets is safe to point at. The value
+    goes back to the caller and to nobody else: it is never logged, never
+    written to disk, and never part of a refusal message.
+    """
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        name = name.strip()
+        words = name.split(None, 1)
+        if words and words[0] == "export":
+            # `export KEY=value` is the same line in a different dialect. A file
+            # that uses it says the value under a name the key does not match,
+            # so the key would never be found.
+            name = words[1].strip() if len(words) > 1 else ""
+        if name == key:
+            return value.strip().strip("'\"")
+    return ""
+
+
+def _token_from_file(path: str, key: str) -> str:
+    """The value of one key in a `KEY=value` file, or an empty string.
+
+    The file is read as a list of `KEY=value` lines and only the key asked for
+    is taken, so a file that holds other secrets is safe to point at. The value
+    is returned to the caller and to nobody else: it is never logged, never
+    written to disk, and never part of a refusal message.
+    """
+    try:
+        text = Path(path).expanduser().read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+    return _value_from_text(text, key)
+
+
+def _deployment_config_files(prov: CiProvenance) -> tuple[str, ...]:
+    """The files the deployment's own addresses are read from.
+
+    The deployment's address is a fact about the machine the queue runs on, so
+    it is read from the machine rather than written down here. This is the one
+    place that knows where the files are, so the test suite can point it at a
+    fixture without the gate reading the real deployment.
+    """
+    return prov.host_files
+
+
+def _host_of_url(value: str) -> str:
+    """The `host:port` an URL names, or an empty string.
+
+    The host and the port are read apart, so an URL that carries a user name
+    (`http://user:pass@host:8000`) names the host and not the credentials, and
+    the credentials never reach the allow-list.
+    """
+    parsed = urllib.parse.urlparse(value.strip())
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return ""
+    try:
+        port = parsed.port
+    except ValueError:
+        return ""
+    if ":" in host:
+        host = f"[{host}]"
+    return f"{host}:{port}" if port else host
+
+
+def _redacted_url(value: str) -> str:
+    """An URL without its credentials.
+
+    The status writer chose the URL, so it may carry a user name and a password
+    or a token in its query. The gate compares the host, and the host is all
+    that anybody reading the log needs: the log outlives the tick and the
+    launchd error log is kept, so a credential that was written into it stays
+    there.
+    """
+    text = (value or "").strip()
+    try:
+        parsed = urllib.parse.urlparse(text)
+    except ValueError:
+        return text
+    if not parsed.scheme:
+        return text
+    host = _host_of_url(text)
+    if not host:
+        return text
+    return urllib.parse.urlunparse((parsed.scheme, host, parsed.path, "", "", ""))
+
+
+def _allowed_hosts(prov: CiProvenance) -> tuple[tuple[str, ...], str]:
+    """The hosts a build link may name, and why the deployment is unknown.
+
+    The static list in the policy is the part that never changes. The
+    deployment's own addresses are read from the files the policy names, so a
+    change of local IP is a change of the deployment and not a change of this
+    repository: an allow-list that carries a DHCP address goes stale, and under
+    `enforce` a stale allow-list refuses every pull request.
+
+    The second value is why the configuration could not be read, or an empty
+    string when it could.
+    """
+    cache_key = (prov.hosts, _deployment_config_files(prov), prov.host_url_keys)
+    cached = _HOST_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    hosts = {host.lower() for host in prov.hosts}
+    found = False
+    problems: list[str] = []
+    for path_str in _deployment_config_files(prov):
+        path = Path(path_str).expanduser()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            problems.append(
+                f"{path_str} could not be read "
+                f"({getattr(exc, 'strerror', None) or type(exc).__name__})"
+            )
+            continue
+        for key in prov.host_url_keys:
+            value = _value_from_text(text, key)
+            if not value:
+                continue
+            host = _host_of_url(value)
+            if host:
+                hosts.add(host)
+                found = True
+    if found:
+        result = (tuple(sorted(hosts)), "")
+    elif problems:
+        result = (tuple(sorted(hosts)), "; ".join(problems))
+    else:
+        result = (
+            tuple(sorted(hosts)),
+            "the deployment configuration names no Woodpecker address",
+        )
+    _HOST_CACHE[cache_key] = result
+    return result
+
+
+def _woodpecker_token(prov: CiProvenance) -> str:
+    """The Woodpecker API token, or an empty string.
+
+    The token is read from the environment, or from the file the policy names
+    when the environment does not carry it. The launchd job that runs the queue
+    carries only `HOME` and `PATH`, so on that host the file is the source.
+
+    The answer is remembered for the run: the queue evaluates up to 200 pull
+    requests per tick, and reading a file once per pull request is a queue that
+    spends its tick on the file.
+    """
+    key = (prov.token_env, prov.token_file)
+    if key in _TOKEN_CACHE:
+        return _TOKEN_CACHE[key]
+    token = str(os.environ.get(prov.token_env) or "").strip()
+    if not token and prov.token_file:
+        token = _token_from_file(prov.token_file, prov.token_env)
+    _TOKEN_CACHE[key] = token
+    return token
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse a redirect.
+
+    `urllib` copies every request header to the redirect target except
+    `content-length` and `content-type`, so a redirect would hand the
+    Woodpecker token to a host the allow-list never approved, and the answer
+    that comes back would be the answer of that host.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # The name is the one the base class uses.
+        raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
+
+
+_WOODPECKER_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def _woodpecker_read(
+    url: str, token: str, timeout: float = PROVENANCE_READ_TIMEOUT
+) -> tuple[int, Any]:
+    """One read-only GET against the Woodpecker API, read again if it is dropped.
+
+    Returns the HTTP status and the decoded body. A transport failure is
+    reported as status 0, because "the API could not be read" and "the build is
+    not there" are different answers and an operator needs to tell them apart.
+
+    Nothing a posted status can put in the URL may kill the tick: the read
+    catches everything, because a queue that dies on a crafted `target_url`
+    stops merging for everybody.
+
+    Three things are true of a read that could not be made, and each of them
+    used to be false:
+
+    - A dropped connection is not an answer about the build, so the read is
+      tried again before it is believed.
+    - A host that could not be read is remembered for a short while, so the
+      queue does not ask a dead host three times per pull request of the tick.
+      One dropped connection used to refuse every pull request of the tick,
+      for a reason that had nothing to do with them.
+    - A failed read is not cached as the answer for that URL, so the URL is
+      read again once the memory of the failure has passed. The memory is of
+      that host and not of the queue: it keeps that host unasked for a minute,
+      and after that the host is asked again.
+
+    An answer the API gave - any status code, and a refused redirect - is
+    cached for the tick: the API answered, and its answer is the same until
+    the next tick.
+    """
+    cached = _READ_CACHE.get(url)
+    if cached is not None:
+        return cached
+    host = _read_host(url)
+    remembered = _HOST_FAILURE.get(host)
+    if remembered is not None:
+        failed_at, answer = remembered
+        if time.monotonic() - failed_at < PROVENANCE_HOST_COOLDOWN:
+            # The host did not answer a moment ago. It is asked once more, and
+            # briefly: a host that was asleep for a moment answers, and the
+            # tick carries on with the build instead of with the memory of a
+            # failure that is no longer true. One ask and not three, so a host
+            # that is down costs the tick one short read per pull request.
+            status, payload, dropped = _woodpecker_read_once(
+                url, token, PROVENANCE_REPROBE_TIMEOUT
+            )
+            if not dropped:
+                _HOST_FAILURE.pop(host, None)
+                _READ_CACHE[url] = (status, payload)
+                return (status, payload)
+            return (
+                0,
+                f"{answer[1]} (the host was asked once more and did not answer)",
+            )
+        # The memory of the failure has run out: the host is read again with
+        # the whole budget.
+        _HOST_FAILURE.pop(host, None)
+    status, payload, dropped = _woodpecker_read_attempts(url, token, timeout)
+    if dropped:
+        _HOST_FAILURE[host] = (time.monotonic(), (status, payload))
+    else:
+        _READ_CACHE[url] = (status, payload)
+    return (status, payload)
+
+
+def _read_host(url: str) -> str:
+    """The scheme and the host of a URL, which is what a read of it shares.
+
+    Two URLs on one host are one host for the queue: a host that could not be
+    read could not be read for either of them. The key is normalised the way
+    the allow-list is - the host in lower case, with its port - so that two
+    spellings of one address do not each pay their own retry storm.
+    """
+    parts = urllib.parse.urlsplit(url)
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    host = (parts.hostname or "").lower()
+    if port:
+        return f"{parts.scheme}://{host}:{port}"
+    return f"{parts.scheme}://{host}"
+
+
+def _woodpecker_read_attempts(
+    url: str, token: str, timeout: float
+) -> tuple[int, Any, bool]:
+    """The read, tried again while the API cannot be reached.
+
+    The third value says whether the API could not be reached at all, which is
+    the only failure worth trying again: a server that answered 404 answered,
+    and its answer is the same until the next tick.
+
+    The budget bounds the attempts of one read, so one path costs the budget
+    once and not once per attempt. It is a deadline and not a sum of timeouts:
+    the deadline is handed to the attempt, so a server that answers the
+    headers and then trickles the body cannot hold the read open past it.
+    """
+    deadline = time.monotonic() + PROVENANCE_READ_BUDGET
+    reason = ""
+    attempts = 0
+    for attempt in range(1, PROVENANCE_READ_ATTEMPTS + 1):
+        if attempt > 1:
+            time.sleep(
+                min(PROVENANCE_RETRY_BACKOFF, max(0.0, deadline - time.monotonic()))
+            )
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        attempts = attempt
+        status, payload, dropped = _woodpecker_read_once(
+            url, token, min(timeout, remaining), deadline
+        )
+        if not dropped:
+            return (status, payload, False)
+        reason = f"{payload} (tried {attempt} times)"
+    return (0, reason, True) if attempts else (0, "the read was not attempted", True)
+
+
+def _woodpecker_read_once(
+    url: str, token: str, timeout: float, deadline: float | None = None
+) -> tuple[int, Any, bool]:
+    """One attempt at the read.
+
+    The third value says whether the API could not be reached, so that the
+    caller can tell a dropped connection from an answer the API gave.
+
+    The body is read in chunks and the deadline is checked between them. The
+    timeout of a socket is the timeout of one operation on it, so a server
+    that answers the headers and then trickles the body would hold the read
+    open for as long as it liked.
+    """
+    request = urllib.request.Request(
+        url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    )
+    try:
+        with _WOODPECKER_OPENER.open(request, timeout=timeout) as response:
+            chunks: list[bytes] = []
+            while True:
+                if deadline is not None and time.monotonic() > deadline:
+                    raise TimeoutError("the read exceeded its budget")
+                chunk = response.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            body = b"".join(chunks).decode("utf-8", "replace")
+            status = int(response.status)
+            final_url = response.geturl()
+    except urllib.error.HTTPError as exc:
+        code = int(exc.code)
+        if code in (301, 302, 303, 307, 308):
+            # The redirect was refused: the answer of another host is not the
+            # answer of ours, and the token would have gone with it. The answer
+            # is the same every time, so the read is not tried again.
+            return (0, "the request was redirected", False)
+        return (code, None, False)
+    except Exception as exc:  # a status must never kill a tick
+        # The API could not be reached. This is the one failure that says
+        # nothing about the build, so it is the one failure worth trying again.
+        return (0, f"{type(exc).__name__}: {exc}", True)
+    if final_url != url:
+        return (0, "the request was redirected", False)
+    try:
+        return (status, json.loads(body or "null"), False)
+    except json.JSONDecodeError:
+        return (status, None, False)
+
+
+def _build_steps(pipeline: Mapping[str, Any]) -> dict[str, frozenset[str]]:
+    """Every step of a build, by name, with the states it was seen in.
+
+    A name with more than one state is ambiguous - two workflows can carry a
+    step of the same name - and the gate refuses an ambiguous step rather than
+    pick one.
+    """
+    steps: dict[str, set[str]] = {}
+    for workflow in pipeline.get("workflows") or []:
+        if not isinstance(workflow, Mapping):
+            continue
+        for child in workflow.get("children") or []:
+            if not isinstance(child, Mapping):
+                continue
+            name = str(child.get("name") or "")
+            if name:
+                steps.setdefault(name, set()).add(str(child.get("state") or ""))
+    return {name: frozenset(states) for name, states in steps.items()}
+
+
+def _resolve_woodpecker_repo_id(
+    name: str,
+    static_id: str,
+    base_url: str,
+    token: str,
+    timeout: float,
+) -> tuple[str, str]:
+    """The numeric id of a Woodpecker repository, and why it is not known.
+
+    The name is the authority and it is resolved against the Woodpecker API on
+    every check, because a repository that was recreated carries a new id: a
+    number written down in the policy then points at a different repository, or
+    at nothing, and the gate reads the wrong build.
+
+    The number in the policy is used only when the policy names no repository
+    by name, because then there is nothing to resolve. It is never a
+    substitute for a name that could not be resolved. A number that cannot be
+    confirmed names a repository the gate does not know, and the build of an
+    unknown repository says nothing about this pull request - so the gate
+    refuses instead of reading it. The lookup adds no new way for the tick to
+    fail: the build behind the status is read from the same API, so an API
+    that cannot answer the lookup cannot answer that either.
+
+    The lookup is refused on a redirect for the same reason the build read is:
+    the token must not travel to a host the allow-list never named.
+    """
+    if name:
+        url = f"{base_url}/api/repos/lookup/{name}"
+        status, payload = _woodpecker_read(url, token, timeout=timeout)
+        if status == 200 and isinstance(payload, Mapping):
+            resolved = str(payload.get("id") or "").strip()
+            if resolved:
+                return resolved, ""
+        if status == 0:
+            problem = "the Woodpecker API could not be read"
+        else:
+            problem = f"the Woodpecker API answered HTTP {status}"
+        return "", f"the Woodpecker repository {name} could not be resolved ({problem})"
+    if static_id:
+        return static_id, ""
+    return "", "the policy names no Woodpecker repository"
+
+
+def verify_ci_provenance(
+    pr: Mapping[str, Any],
+    policy: Policy,
+    repo: str | None,
+    *,
+    mode: str | None = None,
+    context: str = "",
+    commit_match: str | None = None,
+) -> Provenance:
+    """Check the pull request's status against the build it names.
+
+    Every refusal names what is wrong, because the queue is the only gate and
+    an unexplained refusal is a queue nobody trusts. The reason is written in
+    words that stay the same from tick to tick; the volatile facts about the
+    build are in `detail`, which goes to the log and never to the verdict.
+    """
+    prov = policy.ci_provenance
+    active = mode or provenance_mode(policy)
+    if active == PROVENANCE_OFF:
+        return Provenance(True, "the CI provenance gate is off")
+
+    ctx = context or prov.context
+    entry = _newest_status(_rollup(dict(pr)), ctx)
+    if entry is None:
+        return Provenance(False, f"no '{ctx}' status is reported on the head commit")
+    target = _status_target_url(entry)
+    if not target:
+        return Provenance(
+            False, f"the '{ctx}' status carries no target_url, so it names no build"
+        )
+    match = commit_match or commit_match_mode(policy)
+    return _verify_build(
+        target,
+        prov,
+        repo,
+        str(pr.get("headRefOid") or ""),
+        active,
+        match,
+        subject="status",
+    )
+
+
+def _verify_build(
+    target: str,
+    prov: CiProvenance,
+    repo: str | None,
+    head: str,
+    active: str,
+    match: str,
+    subject: str,
+) -> Provenance:
+    """Read the build a status names and say whether it answers for this head.
+
+    `subject` is what named the build - a `status` or a `receipt` - so the
+    reason says which of the two it was. The reason text is what the live
+    driver keys its handback comment on, so it never carries the build number.
+    """
+    parsed = urllib.parse.urlparse(target)
+    host = _host_of_url(target)
+    if not parsed.scheme or not host:
+        return Provenance(
+            False, "the target_url is not an absolute URL", target_url=target
+        )
+    scheme = parsed.scheme.lower()
+    if scheme not in ("http", "https"):
+        return Provenance(
+            False,
+            f"the target_url scheme {scheme!r} is not http or https",
+            target_url=target,
+        )
+
+    allowed, config_problem = _allowed_hosts(prov)
+    if prov.require_config and config_problem:
+        return Provenance(
+            False,
+            "the deployment configuration could not be read, so the Woodpecker "
+            f"hosts cannot be confirmed ({config_problem})",
+            target_url=target,
+        )
+    if not allowed:
+        return Provenance(
+            False,
+            "no Woodpecker host is configured, so no build can be checked",
+            target_url=target,
+        )
+    if host not in allowed:
+        return Provenance(
+            False, f"the target_url host {host!r} is not a Woodpecker host", target_url=target
+        )
+
+    shape = _parse_pipeline_url(parsed.path)
+    if shape is None:
+        return Provenance(
+            False, "the target_url does not name a Woodpecker pipeline", target_url=target
+        )
+    kind, named_repo, number = shape
+
+    repo_key = repo or ""
+    static_id = prov.woodpecker_repos.get(repo_key, "")
+    expected_name = prov.woodpecker_repo_names.get(repo_key, "")
+    if not expected_name and static_id:
+        expected_name = prov.woodpecker_names.get(static_id, "")
+    if not expected_name and not static_id:
+        return Provenance(
+            False,
+            f"no Woodpecker repository is configured for {repo or 'this repository'}",
+            target_url=target,
+        )
+    if kind == "name":
+        if not expected_name:
+            return Provenance(
+                False,
+                "the policy names no Woodpecker repository for "
+                f"{repo or 'this repository'}, so the URL cannot be checked",
+                target_url=target,
+            )
+        if named_repo != expected_name:
+            return Provenance(
+                False,
+                f"the target_url names the Woodpecker repository {named_repo!r}, "
+                f"not {expected_name!r}",
+                target_url=target,
+            )
+    elif kind != "id":
+        return Provenance(
+            False,
+            "the target_url names no Woodpecker repository, so it cannot be checked "
+            "against this repository's build",
+            target_url=target,
+        )
+
+    token = _woodpecker_token(prov)
+    if not token:
+        return Provenance(
+            False,
+            f"no Woodpecker token is available ({prov.token_env} is unset and no "
+            "token file is configured), so the build cannot be read",
+            target_url=target,
+        )
+
+    timeout = (
+        PROVENANCE_READ_TIMEOUT_SHADOW
+        if active == PROVENANCE_SHADOW
+        else PROVENANCE_READ_TIMEOUT
+    )
+    base = f"{scheme}://{host}"
+    expected_id, resolve_problem = _resolve_woodpecker_repo_id(
+        expected_name,
+        static_id,
+        base,
+        token,
+        timeout,
+    )
+    if not expected_id:
+        return Provenance(
+            False,
+            "the Woodpecker repository for "
+            f"{repo or 'this repository'} could not be resolved: {resolve_problem}",
+            target_url=target,
+        )
+    if kind == "id" and named_repo != expected_id:
+        return Provenance(
+            False,
+            f"the target_url names the Woodpecker repository {named_repo!r}, "
+            f"not {expected_id!r}",
+            target_url=target,
+        )
+
+    api_url = f"{base}/api/repos/{expected_id}/pipelines/{number}"
+    status, payload = _woodpecker_read(api_url, token, timeout=timeout)
+    build = f"{expected_id}#{number}"
+    detail = f"build {build} at {_redacted_url(target)}"
+    if status == 0:
+        return Provenance(
+            False,
+            "the Woodpecker API could not be read",
+            detail=f"{detail}: {payload}",
+            target_url=target,
+        )
+    if status == 404:
+        return Provenance(
+            False,
+            f"the build named by the {subject} does not exist",
+            detail=detail,
+            target_url=target,
+        )
+    if status != 200:
+        return Provenance(
+            False,
+            f"the Woodpecker API answered HTTP {status}",
+            detail=detail,
+            target_url=target,
+        )
+    if not isinstance(payload, Mapping):
+        return Provenance(
+            False,
+            "the Woodpecker API answered with something that is not a build",
+            detail=detail,
+            target_url=target,
+        )
+
+    build_status = str(payload.get("status") or "").strip().lower()
+    if not build_status or build_status in _PIPELINE_UNFINISHED_STATES:
+        return Provenance(
+            False,
+            f"the build named by the {subject} has not finished",
+            detail=f"{detail} (status {build_status or 'unknown'})",
+            target_url=target,
+        )
+
+    step = prov.steps.get(repo or "")
+    if not step:
+        return Provenance(
+            False,
+            f"no check step is configured for {repo or 'this repository'}",
+            detail=detail,
+            target_url=target,
+        )
+    states = _build_steps(payload).get(step)
+    if states is None:
+        return Provenance(
+            False,
+            f"the build named by the {subject} has no '{step}' step, so it says nothing "
+            f"about {repo or 'this repository'}",
+            detail=detail,
+            target_url=target,
+        )
+    if len(states) > 1:
+        return Provenance(
+            False,
+            f"the build named by the {subject} has more than one '{step}' step, so it "
+            f"says nothing about {repo or 'this repository'}",
+            detail=detail,
+            target_url=target,
+        )
+    state = next(iter(states))
+    if state != "success":
+        return Provenance(
+            False,
+            f"the '{step}' step of the build named by the {subject} is {state}",
+            detail=detail,
+            target_url=target,
+        )
+
+    label = repo or "this repository"
+    ok_reason = f"the build named by the {subject} ran '{step}' for {label}"
+    if match == COMMIT_MATCH_OFF:
+        # The commit comparison is off: the build is read, and nothing is said about
+        # which commit it ran. Only for a policy that has another way of tying a
+        # status to the head - the trusted receipt.
+        return Provenance(
+            True,
+            ok_reason,
+            detail=f"{detail} (build status {build_status})",
+            target_url=target,
+        )
+
+    commit = str(payload.get("commit") or "").strip().lower()
+    head = str(head or "").strip().lower()
+    mismatch = ""
+    if not head:
+        mismatch = "the pull request head sha is unknown, so no build can be matched to it"
+    elif not commit:
+        mismatch = (
+            f"the build named by the {subject} reports no commit, so it cannot be "
+            "matched to the head"
+        )
+    elif commit != head:
+        mismatch = f"the build named by the {subject} ran another commit"
+        detail = f"{detail} ran commit {commit[:12]}, not the head {head[:12]}"
+    if mismatch and match == COMMIT_MATCH_ENFORCE:
+        return Provenance(
+            False,
+            mismatch,
+            detail=detail,
+            target_url=target,
+        )
+    if mismatch:
+        # The comparison is measured, not enforced: the build is reported as what it
+        # is, and the reason it did not match the head is kept for the log.
+        return Provenance(
+            True,
+            ok_reason,
+            detail=detail,
+            target_url=target,
+            measured=mismatch,
+        )
+
+    return Provenance(
+        True,
+        f"the build named by the {subject} ran '{step}' for {label} at the head commit",
+        detail=f"{detail} at commit {head[:12]} (build status {build_status})",
+        target_url=target,
+    )
+
+
+def _status_writer(row: Mapping[str, Any]) -> str:
+    """The login of the account that wrote a status row.
+
+    The REST endpoint answers with a `creator` object; a row without one, or
+    with one that is not an object, has no writer the queue can name.
+    """
+    creator = row.get("creator")
+    if not isinstance(creator, Mapping):
+        return ""
+    return str(creator.get("login") or "").strip()
+
+
+def _newest_receipt_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """The newest of the rows, by the time GitHub stamped it.
+
+    The REST endpoint spells the times `created_at` and `updated_at`; the
+    GraphQL rollup spells them `startedAt` and `createdAt`. Both are read,
+    because which one comes depends on the endpoint in front of us.
+    """
+
+    def stamp(row: Mapping[str, Any]) -> str:
+        for key in (
+            "created_at",
+            "updated_at",
+            "started_at",
+            "startedAt",
+            "createdAt",
+            "completedAt",
+        ):
+            value = row.get(key)
+            if value:
+                return str(value)
+        return ""
+
+    return max(enumerate(rows), key=lambda pair: (stamp(pair[1]), pair[0]))[1]
+
+
+def _commit_statuses(repo: str | None, sha: str) -> tuple[list[dict[str, Any]], str]:
+    """The commit statuses on one commit, with the writer of each.
+
+    The GraphQL rollup the queue already reads carries no creator: a status
+    context says what the status was and which build it names, not who wrote
+    it. That one fact is what a trusted receipt is made of, so the receipt is
+    read from the REST endpoint, which does say it.
+
+    A read that fails is a problem, not an absence: the queue cannot tell "no
+    receipt" from "no way to read the receipts", so it says so and stops.
+    """
+    if not repo:
+        return [], "the repository is unknown"
+    try:
+        rows = _gh_json(
+            "api",
+            f"repos/{repo}/commits/{sha}/statuses?per_page=100",
+            timeout=PROVENANCE_STATUS_TIMEOUT,
+        )
+    except QueueError as exc:
+        return [], str(exc)
+    if not isinstance(rows, list):
+        return [], "the API answered with something that is not a list of statuses"
+    return [dict(row) for row in rows if isinstance(row, Mapping)], ""
+
+
+def verify_trusted_receipt(
+    pr: Mapping[str, Any],
+    policy: Policy,
+    repo: str | None,
+    *,
+    mode: str | None = None,
+    commit_match: str | None = None,
+) -> Provenance | None:
+    """The receipt that a seat cannot write.
+
+    `None` means the policy asks for no receipt, which is different from a
+    receipt that is missing.
+
+    A `local-ci` status is worth only its writer's worth: it is posted with a
+    user token, so a seat that runs the check itself can post the same green
+    row. The receipt is the same status posted by the CI's own GitHub App
+    installation, so the writer is the CI and nobody else. It also answers the
+    question the build's own commit cannot answer today: it sits on the head
+    commit, so it binds the receipt to the head.
+
+    A row that was written by somebody else does not cancel a receipt that was
+    written by the app. The queue looks for a trusted receipt; a forged row
+    beside a real one is the forged writer's business, not the pull request's.
+    That way a seat cannot hold a pull request by writing a failing status
+    next to the CI's own passing one.
+    """
+    prov = policy.ci_provenance
+    receipt = prov.trusted_receipt
+    if not receipt.context or not receipt.creators:
+        return None
+    if not receipt.required:
+        # A receipt the policy does not require is not read. The queue looks at
+        # every open pull request on every tick, and a status list it is not
+        # going to obey buys nothing while the CI writes none. The chain is
+        # switched on by the policy change that comes with the CI's own token.
+        return None
+    active = mode or provenance_mode(policy)
+    if active == PROVENANCE_OFF:
+        return None
+
+    head = str(pr.get("headRefOid") or "").strip().lower()
+    if not head:
+        return Provenance(
+            False,
+            "the pull request head sha is unknown, so the trusted receipt cannot be read",
+        )
+
+    rows, problem = _commit_statuses(repo, head)
+    if problem:
+        return Provenance(
+            False,
+            "the commit statuses could not be read",
+            detail=problem,
+        )
+    mine = [row for row in rows if str(row.get("context") or "") == receipt.context]
+    if not mine:
+        return Provenance(
+            False, f"no '{receipt.context}' receipt is reported on the head commit"
+        )
+
+    trusted = [row for row in mine if _status_writer(row) in receipt.creators]
+    if trusted:
+        # The newest row the CI itself wrote is the CI's own verdict on the
+        # head, and it is the only one that counts. An earlier green row does
+        # not survive a later red one: the app is the CI, so its last word on
+        # this head is the word. A row somebody else wrote is left out
+        # entirely, which is what keeps a forged row from cancelling the
+        # receipt.
+        row = _newest_receipt_row(trusted)
+        state = str(row.get("state") or "").strip().lower() or "unknown"
+        if state != "success":
+            return Provenance(False, f"the '{receipt.context}' receipt is {state}")
+    else:
+        successful = [
+            row for row in mine if str(row.get("state") or "").strip().lower() == "success"
+        ]
+        if successful:
+            newest = _newest_receipt_row(successful)
+            writer = _status_writer(newest)
+            return Provenance(
+                False,
+                f"the '{receipt.context}' receipt was written by "
+                f"{writer or 'an unknown writer'}, which is not a trusted CI writer",
+                detail=f"the trusted writers are {', '.join(receipt.creators)}",
+            )
+        newest = _newest_receipt_row(mine)
+        state = str(newest.get("state") or "").strip().lower() or "unknown"
+        return Provenance(False, f"the '{receipt.context}' receipt is {state}")
+
+    row = _newest_receipt_row(trusted)
+    target = _status_target_url(row)
+    if not target:
+        return Provenance(
+            False,
+            f"the '{receipt.context}' receipt carries no target_url, so it names no build",
+        )
+    match = commit_match or commit_match_mode(policy)
+    return _verify_build(
+        target,
+        prov,
+        repo,
+        head,
+        active,
+        match,
+        subject="receipt",
+    )
+
+
+def _provenance_index_path() -> Path:
+    return Path(os.environ.get(PROVENANCE_INDEX_ENV) or PROVENANCE_INDEX_PATH)
+
+
+def _provenance_index() -> dict[str, dict[str, Any]]:
+    """What the log already holds, by the path it is written to.
+
+    The index is a memory of the log, not a second log: it says which refusals
+    the log already carries, so a refusal that repeats is counted instead of
+    written again.
+    """
+    path = _provenance_index_path()
+    key = str(path)
+    cached = _INDEX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    index: dict[str, dict[str, Any]] = {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raw = None
+    if isinstance(raw, Mapping) and isinstance(raw.get("entries"), Mapping):
+        for entry_key, entry in raw["entries"].items():
+            if isinstance(entry, Mapping):
+                index[str(entry_key)] = dict(entry)
+    _INDEX_CACHE[key] = index
+    return index
+
+
+def _prune_index(index: dict[str, dict[str, Any]]) -> None:
+    """Drop the entries the log no longer needs to remember.
+
+    An entry that has not been seen for a fortnight is a window that ended, and
+    the index is not a history. The cap is the same idea for a busy day: the
+    index holds the recent refusals, not every refusal the queue ever made.
+    """
+    oldest_allowed = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        days=PROVENANCE_INDEX_MAX_AGE_DAYS
+    )
+    stale: list[str] = []
+    for entry_key, entry in index.items():
+        stamp = str(entry.get("last_seen") or entry.get("first_seen") or "")
+        try:
+            seen = datetime.datetime.fromisoformat(stamp)
+        except ValueError:
+            stale.append(entry_key)
+            continue
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=datetime.timezone.utc)
+        if seen < oldest_allowed:
+            stale.append(entry_key)
+    for entry_key in stale:
+        index.pop(entry_key, None)
+    if len(index) > PROVENANCE_INDEX_MAX_ENTRIES:
+        ordered = sorted(
+            index.items(), key=lambda item: str(item[1].get("last_seen") or "")
+        )
+        for entry_key, _ in ordered[: len(index) - PROVENANCE_INDEX_MAX_ENTRIES]:
+            index.pop(entry_key, None)
+
+
+def _flush_provenance_index() -> None:
+    """Write the index out, so the next tick knows what the log already holds."""
+    for path_str, index in list(_INDEX_CACHE.items()):
+        path = Path(path_str)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(path.name + ".tmp")
+            handle = os.fdopen(
+                os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600),
+                "w",
+                encoding="utf-8",
+            )
+            with handle:
+                json.dump({"entries": index}, handle, indent=2, sort_keys=True)
+                handle.write("\n")
+            tmp.replace(path)
+            os.chmod(path, 0o600)
+        except OSError:
+            # The index is a convenience, never a gate: a queue that cannot
+            # write it must still merge and still say why on stderr.
+            pass
+
+
+def _log_lines(path: Path) -> set[str]:
+    """The lines the log holds, without their timestamps.
+
+    The index says which refusals the log already carries, and that claim is
+    only true while the log carries them: a log that was rotated away, or
+    emptied, or edited, no longer holds what the index remembers. So the log
+    is read once per run and a refusal is looked for in it, rather than
+    trusting the index on its own.
+
+    The lines are held without their timestamps. When the refusal was first
+    seen is the index's business; the line itself is what has to be there.
+
+    The file is only read again when its size says it changed, so an operator
+    who empties the log between two ticks sees the refusals written again.
+    """
+    key = str(path)
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = -1
+    cached = _LOG_CACHE.get(key)
+    if cached is not None and cached[0] == size:
+        return cached[1]
+    lines: set[str] = set()
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    for raw in text.splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        _, _, rest = raw.partition(" ")
+        lines.add(rest if rest else raw)
+    _LOG_CACHE[key] = (size, lines)
+    return lines
+
+
+def _index_count(entry: Mapping[str, Any]) -> int:
+    """How often a refusal was seen.
+
+    A count that is not a number is a count of one. The index is a convenience
+    and a corrupted one must not stop the tick.
+    """
+    try:
+        return int(entry.get("count") or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
+def _log_provenance(
+    pr: Mapping[str, Any],
+    repo: str | None,
+    required: str,
+    reason: str,
+    detail: str,
+    mode: str,
+    verb: str = "",
+) -> None:
+    """Record what the gate found.
+
+    DIG-4809 runs this in shadow mode and reads the log to see whether the gate
+    would have refused a pull request that should have merged. The line goes to
+    stderr, which the launchd job keeps, and to a file of its own, so the window
+    is one file to read. The file is written for the owner of the queue alone
+    and is capped, because a file nobody rotates is a file that eventually
+    fills the disk the queue lives on.
+
+    The file holds one line per refusal, not one per refusal per tick. The
+    queue looks at every open pull request on every tick, so writing the line
+    again each time is how the 48 hour window turns into tens of thousands of
+    lines nobody reads. A refusal that repeats is counted in the index instead,
+    and the count says how often the gate saw it.
+
+    A measurement is written under its own verb, so a line that says what the
+    gate would have said cannot be read as a verdict.
+    """
+    if not verb:
+        verb = "would refuse" if mode == PROVENANCE_SHADOW else "refuses"
+    line = (
+        f"CI provenance ({mode}): PR #{pr.get('number', 0)} {repo or '?'} — "
+        f"{verb} '{required}': {reason}"
+    )
+    if detail:
+        line += f" — {detail}"
+    print(line, file=sys.stderr)
+    path = Path(os.environ.get(PROVENANCE_LOG_ENV) or PROVENANCE_LOG_PATH)
+    # The mode is part of the key: a refusal in shadow mode and the same
+    # refusal in enforce mode are two different lines, and the switch to
+    # enforce is exactly the moment the log has to start carrying the new ones.
+    key = f"{mode}|{repo or '?'}|{pr.get('number', 0)}|{required}|{reason}"
+    index = _provenance_index()
+    stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    entry = index.get(key)
+    if entry is not None and line in _log_lines(path):
+        entry["count"] = _index_count(entry) + 1
+        entry["last_seen"] = stamp
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if _rotate_provenance_log(path):
+            # The file was replaced, so what it held is in the rotated file now
+            # and the lines this run read are no longer the ones in it.
+            _LOG_CACHE.pop(str(path), None)
+        handle = os.fdopen(
+            os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a",
+            encoding="utf-8",
+        )
+        with handle:
+            handle.write(f"{stamp} {line}\n")
+        os.chmod(path, 0o600)
+    except OSError:
+        # The log is a convenience, never a gate. A queue that cannot write it
+        # must still refuse, and must still say why on stderr. The index must
+        # not remember a line the log does not hold, so nothing is recorded.
+        return
+    _log_lines(path).add(line)
+    index[key] = {"count": 1, "first_seen": stamp, "last_seen": stamp, "reason": reason}
+    _prune_index(index)
+    _flush_provenance_index()
+
+
+def _rotate_provenance_log(path: Path) -> bool:
+    """Keep the provenance log to one file of one size.
+
+    The log grows by one line per pull request per tick, so an uncapped file
+    grows without bound. The oldest file is dropped, not the newest: what the
+    window needs is the recent lines.
+    """
+    try:
+        if path.stat().st_size < PROVENANCE_LOG_MAX_BYTES:
+            return False
+    except OSError:
+        return False
+    try:
+        path.replace(path.with_name(path.name + ".1"))
+    except OSError:
+        return False
+    return True
+
+
+def _gate_ci_provenance(
+    pr: Mapping[str, Any], policy: Policy, repo: str | None, required: str
+) -> list[str]:
+    """The reasons a status is not evidence. Empty when it is.
+
+    There are two chains and they answer different questions.
+
+    The first chain asks whether the status names a build, and whether that
+    build really ran this repository's check and passed. It is what DIG-4794
+    shipped, and it is the chain that measured the wrong commit on a live pull
+    request.
+
+    The second chain asks who wrote the status. The `local-ci` row is posted
+    with a user token, so the build it names can be copied from any recent
+    build, and the writer of the row is the only thing that says whether the
+    check ran on this head. The receipt is the same status posted by the CI's
+    own GitHub App installation, and it sits on the head commit.
+
+    The commit comparison is governed by its own switch, because it is the one
+    check that cannot pass with the launcher as it is today: the pipeline the
+    worker runs in is the launcher repository's own cron run, so the build's
+    commit is never the pull request's head. Turning the comparison off without
+    the receipt would leave nothing binding a status to a head, so the policy
+    that asks for the softer comparison has to ask for the receipt too.
+    """
+    mode = provenance_mode(policy)
+    if mode == PROVENANCE_OFF:
+        return []
+    reasons: list[str] = []
+    match = commit_match_mode(policy)
+    receipt = policy.ci_provenance.trusted_receipt
+    if match != COMMIT_MATCH_ENFORCE and not receipt.required:
+        # The environment can override the policy file, so the invariant the
+        # policy loader checks is checked again here: without the receipt,
+        # softening the comparison would let any green row through.
+        _log_provenance(
+            pr,
+            repo,
+            required,
+            "the policy does not require a trusted CI receipt, so nothing binds a "
+            "status to the head commit",
+            f"the commit comparison is {match!r}",
+            mode,
+        )
+        if mode != PROVENANCE_SHADOW:
+            return [
+                f"required check '{required}' has no trusted CI receipt: the policy "
+                "does not require one, so nothing binds a status to the head commit"
+            ]
+
+    result = verify_ci_provenance(pr, policy, repo, mode=mode, context=required)
+    if not result.ok:
+        _log_provenance(pr, repo, required, result.reason, result.detail, mode)
+        if mode != PROVENANCE_SHADOW:
+            reasons.append(
+                f"required check '{required}' has no verified Woodpecker provenance: "
+                f"{result.reason}"
+            )
+    elif result.measured:
+        _log_provenance(
+            pr, repo, required, result.measured, result.detail, mode, "measured"
+        )
+
+    receipt_result = verify_trusted_receipt(pr, policy, repo, mode=mode)
+    if receipt_result is None:
+        return reasons
+    context = receipt.context or "the trusted CI receipt"
+    if not receipt_result.ok:
+        _log_provenance(
+            pr, repo, context, receipt_result.reason, receipt_result.detail, mode
+        )
+        # The receipt is required by the policy, so a missing or untrusted one
+        # is a refusal - in shadow mode it is the refusal the gate would make.
+        if mode != PROVENANCE_SHADOW and receipt.required:
+            reasons.append(
+                f"required check '{context}' is not accepted as a trusted CI "
+                f"receipt: {receipt_result.reason}"
+            )
+    elif receipt_result.measured:
+        _log_provenance(
+            pr,
+            repo,
+            context,
+            receipt_result.measured,
+            receipt_result.detail,
+            mode,
+            "measured",
+        )
+    return reasons
+
+
+def _governed_receipt_context(policy: Policy) -> str:
+    """The receipt context, when the chain that reads it is the one in force.
+
+    The receipt is the CI's own row, and the chain that reads it asks who
+    wrote it. The generic scan in `_gate_checks` reads every status that is
+    neither a required check nor an ignored one, so without this a seat's own
+    failing `local-ci/app` row would hold a pull request next to the CI's own
+    passing one - which is the one thing the receipt chain exists to prevent.
+
+    The context is only left to the receipt chain while that chain reads it: a
+    receipt the policy does not require, a gate that is off, and a policy with
+    no required status check all mean nobody reads the row, so the scan keeps
+    it and a red row still holds the pull request.
+    """
+    receipt = policy.ci_provenance.trusted_receipt
+    context = str(receipt.context or "").strip()
+    if not context or not receipt.required:
+        return ""
+    if provenance_mode(policy) == PROVENANCE_OFF:
+        return ""
+    if not any(
+        check in policy.status_context_checks for check in policy.required_checks
+    ):
+        return ""
+    return context
+
+
+def _gate_checks(pr: dict[str, Any], policy: Policy, repo: str | None = None) -> list[str]:
     """Required checks must have reported, and must have passed. No exceptions."""
     rollup = _rollup(pr)
     reasons: list[str] = []
@@ -445,6 +2223,12 @@ def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
         # billing is blocked (DIG-4454). For those a SUCCESS status is the strongest
         # evidence that exists - and on twelve-x it is the only one.
         if required in policy.status_context_checks:
+            # A commit status is only as strong as whoever posted it, and a
+            # StatusContext is the one report any writer can type. The provenance
+            # gate asks the status to name the build that made it, and checks
+            # that build (DIG-4794). In shadow mode it only records what it would
+            # have refused.
+            reasons.extend(_gate_ci_provenance(pr, policy, repo, required))
             continue
         if not any(_is_check_run(e) for e in entries):
             reasons.append(
@@ -454,8 +2238,14 @@ def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
 
     # A non-required check that failed is still a red build. The base branch has a
     # CI contract whether or not GitHub enforces it.
+    receipt_context = _governed_receipt_context(policy)
     for name, entries in by_name.items():
         if name in policy.required_checks or name in policy.ignored_checks:
+            continue
+        if name == receipt_context:
+            # The receipt is the CI's own row, and the chain that reads it asks
+            # who wrote it. A seat's failing row beside the CI's own passing
+            # one is the seat's business, not a red build.
             continue
         for entry in entries:
             state = str(entry.get("conclusion") or entry.get("state") or "")
@@ -472,34 +2262,43 @@ def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
 # requested — one finding blocks approval" at 22:07:11Z and merged at 22:13:57Z on
 # an attestation, because the queue only ever fetched `reviews`.
 #
-# Only the marker's `key=value` fields are read. The prose is not a contract: a
-# matcher on `## Verdict: changes requested (narrow)` would have to survive a
-# reviewer reformatting a heading, and a heading someone forgets to update is
-# indistinguishable from a verdict someone forgot to post.
+# Only the marker's `key=value` fields are read, and one line of prose beside it:
+# `Review verdict: changes requested`. The prose is not a contract *about the
+# findings* — a matcher on `## Verdict: changes requested (narrow)` would have to
+# survive a reviewer reformatting a heading, and a heading someone forgets to
+# update is indistinguishable from a verdict someone forgot to post. The review
+# rule's own token is different: it is how a reviewer says which way the review
+# went, and a queue that cannot read it cannot see the verdict at all (DIG-4878).
 
 _MARKER_RE = re.compile(r"<!--\s*opencode-power-pack:code-review\b(?P<fields>[^>]*?)\s*-->")
 _MARKER_FIELD_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)=(?P<value>\S+)")
 _SCOPE_SHA_RE = re.compile(r"@(?P<sha>[0-9a-f]{7,40})\b")
+# The `scope=` key itself, present or not, whatever its value looks like.
+_SCOPE_KEY_RE = re.compile(r"(?:^|\s)scope\s*=", re.IGNORECASE)
 
 # `changes_needed` is read alongside `changes_requested` because DIG-1021's interim
 # discipline named the two verdicts "approve" and "changes needed"; a reviewer
 # writing that spelling must not slip past the gate.
 BLOCKING_VERDICTS = frozenset({"changes_requested", "changes_needed"})
-READABLE_VERDICTS = BLOCKING_VERDICTS | {"approved", "approve"}
+APPROVE_VERDICTS = frozenset({"approved", "approve"})
+READABLE_VERDICTS = BLOCKING_VERDICTS | APPROVE_VERDICTS
 
 
 def _normalise_verdict(value: str) -> str:
     return value.strip().strip("'\";").lower().replace("-", "_")
 
 
-def _posted_verdict(comment: dict[str, Any]) -> tuple[str, str] | None:
-    """`(verdict, scope_sha)` from a review marker comment, or None.
+def _marker_verdict(body: str) -> tuple[str, str, bool] | None:
+    """`(verdict, scope_sha, names_scope)` from a review marker in `body`, or None.
 
-    None means "this comment is not a verdict the queue can read" — which covers
-    both a plain comment and a marker whose `verdict=` is missing or misspelled.
-    That is a missing signal, not a clearance, and it must not be treated as one.
+    `names_scope` is True when the marker carries a `scope=` field at all, even
+    one whose value is not a readable sha. The field's presence, not its parse,
+    decides whether the marker names a head of its own.
+
+    None means "this comment carries no marker verdict the queue can read" — a
+    plain comment, or a marker whose `verdict=` is missing or misspelled. That
+    is a missing signal, not a clearance, and it must not be treated as one.
     """
-    body = str(comment.get("body") or "")
     for marker in _MARKER_RE.finditer(body):
         fields = {
             m.group("key").lower(): m.group("value")
@@ -509,85 +2308,337 @@ def _posted_verdict(comment: dict[str, Any]) -> tuple[str, str] | None:
         if verdict not in READABLE_VERDICTS:
             continue
         scope_sha = _SCOPE_SHA_RE.search(fields.get("scope", ""))
-        return verdict, (scope_sha.group("sha") if scope_sha else "")
+        names_scope = _SCOPE_KEY_RE.search(marker.group("fields")) is not None
+        return verdict, (scope_sha.group("sha") if scope_sha else ""), names_scope
     return None
 
 
-def _on_pr_history(pr: dict[str, Any], sha: str) -> bool:
-    """Whether `sha` is the PR head, or a commit behind it.
+# The review rule's own format is a line carrying the token `Review verdict:`.
+# The queue reads it as well as the marker: a reviewer who posts the line and no
+# marker has still delivered a verdict, and reading only the marker leaves that
+# verdict invisible — which is how a "changes requested" written in prose came
+# to be read as no verdict at all (DIG-4878).
+#
+# The value list is explicit and longest-first. A loose `(?P<verdict>[\w -]+?)`
+# reads one character and stops, which turns "changes requested" into "c" —
+# unreadable, and the block goes with it. "no review owed" and "NO REVIEW —
+# non-answer" are not on the list on purpose: they are the review rule's
+# non-answers, and a non-answer is not a verdict.
+_PROSE_VERDICT_RE = re.compile(
+    r"review\s+verdict\s*:\s*[*_`\s]*"
+    r"(?P<verdict>changes\s+requested|changes\s+needed|changes_requested|changes_needed"
+    r"|approved|approve)\b",
+    re.IGNORECASE,
+)
 
-    Every commit GitHub lists for a PR is an ancestor of its head, so the commit
-    list is the ancestry proof the gate needs — without a repository or a network
-    round trip, which is what keeps `evaluate` a pure function the tests can pin.
+# A sha written in prose, read as a prefix of the head at 7 characters or more —
+# the same width the reviewer-independence gate reads. The token has to stand
+# alone: a hex run inside a word is a word, not a commit, and a hex run joined
+# to another by a dash is a uuid group, not a commit.
+_PROSE_SHA_RE = re.compile(r"(?<![0-9a-zA-Z-])(?P<sha>[0-9a-f]{7,40})(?![0-9a-zA-Z-])")
+
+# The markers are read from the raw comment; the prose is what is left. A hex run
+# inside a marker is not prose: `agent=54a431af-501a-47d9-...` is a seat uuid,
+# and reading its first group as a commit would name a head nobody reviewed.
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+# The seat a verdict belongs to. Every seat on this org pushes under one GitHub
+# login, so `author.login` cannot tell two reviewers apart — the seat id is the
+# provenance marker's `agent=` field, and it is the only place it is written.
+# A verdict whose seat cannot be read is judged by the newest-verdict rule
+# instead of by seat (see `_standing_seat_blocks`).
+_SEAT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$")
+
+
+def _comment_text(body: str) -> str:
+    """The comment body with its HTML comments taken out."""
+    return _HTML_COMMENT_RE.sub(" ", body)
+
+
+def _line_at(body: str, index: int) -> str:
+    """The line of `body` that contains `index`."""
+    start = body.rfind("\n", 0, index) + 1
+    end = body.find("\n", index)
+    return body[start:] if end == -1 else body[start:end]
+
+
+def _prose_verdict(body: str) -> tuple[str, str] | None:
+    """`(verdict, the line it was read from)` from a `Review verdict:` line."""
+    match = _PROSE_VERDICT_RE.search(body)
+    if match is None:
+        return None
+    return match.group("verdict").lower().replace(" ", "_"), _line_at(body, match.start())
+
+
+@dataclass(frozen=True)
+class PostedVerdict:
+    """The verdict the queue reads on a PR, and the head it names."""
+
+    verdict: str
+    source: str
+    scope: str
+    bindings: tuple[str, ...]
+    comment_id: str
+    author: str
+    at: str
+    # The seat that posted it, read from the provenance marker. Empty when the
+    # comment carries no readable seat: every seat shares one GitHub login, so
+    # there is nothing else to tell them apart by.
+    seat: str = ""
+
+
+def _comment_seat(provenance: Mapping[str, str]) -> str:
+    """The seat that posted this comment, or "" when it cannot be read."""
+    agent = str(provenance.get("agent") or "").strip()
+    return agent if agent and _SEAT_ID_RE.match(agent) else ""
+
+
+def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
+    """The verdict one comment carries, with the head it names, or None.
+
+    The marker wins inside a comment: it is the contract, and the prose around
+    it is what a reviewer reads. The prose line is read when the comment carries
+    no marker verdict at all — a marker whose `verdict=` is missing or
+    misspelled is skipped, and the line beside it still says what the reviewer
+    decided.
     """
-    if not sha:
+    body = str(comment.get("body") or "")
+    text = _comment_text(body)
+    marker = _marker_verdict(body)
+    prose = _prose_verdict(text)
+    if marker is None and prose is None:
+        return None
+    named_scope = False
+    if marker is not None:
+        verdict, scope, named_scope = marker
+        source = "a `verdict=` marker"
+        # The marker's `scope=` is the head the verdict is about. The prose around
+        # it may name any number of commits, so it is not read as a binding.
+        claims = [scope] if scope else []
+    else:
+        verdict, _line = prose
+        source = "a `Review verdict:` line"
+        scope = ""
+        # A prose verdict names the head it covers somewhere in the comment — on
+        # the verdict line, in the sentence after it, or in the scope line the
+        # review opens with. The question this gate asks is "does this comment
+        # name the head the PR stands at", so every sha in it is a candidate.
+        claims = [found.group("sha") for found in _PROSE_SHA_RE.finditer(text)]
+    provenance = _provenance_fields(body)
+    provenance_head = str(provenance.get("head") or "")
+    if provenance_head and not named_scope:
+        # A marker verdict names the head it is about through its own `scope=`.
+        # The provenance marker's `head=` is the fallback for a marker that names
+        # no scope, and never a second binding for one that does: an approve
+        # whose `scope=` names a stale head says nothing about the head the PR
+        # stands at, and must not clear a block just because the provenance
+        # marker names the newer head. "Names a scope" is the field's presence:
+        # a `scope=` that does not parse as a sha (uppercase, short, no `@`)
+        # binds nothing, and must not fall back to the provenance head. The
+        # prose path has no `scope=`, so it keeps every sha in the comment as a
+        # candidate, the provenance head included.
+        claims.append(provenance_head)
+    bindings: list[str] = []
+    for binding in claims:
+        if binding and binding not in bindings:
+            bindings.append(binding)
+    author = comment.get("author")
+    login = "?"
+    if isinstance(author, Mapping):
+        login = str(author.get("login") or "?")
+    return PostedVerdict(
+        verdict=verdict,
+        source=source,
+        scope=scope,
+        bindings=tuple(bindings),
+        comment_id=str(comment.get("id") or ""),
+        author=login,
+        at=str(comment.get("createdAt") or ""),
+        seat=_comment_seat(provenance),
+    )
+
+
+def _readable_verdicts(pr: dict[str, Any]) -> list[PostedVerdict]:
+    """Every verdict the queue can read on this PR, oldest first.
+
+    A verdict the queue cannot read is skipped rather than counted: a typo'd
+    marker, a comment with no verdict, or a reviewer's non-answer is a missing
+    signal, not a clearance, and letting it displace a real block would hand
+    anyone who can comment a way to unlock the queue.
+    """
+    verdicts: list[PostedVerdict] = []
+    for comment in pr.get("comments") or []:
+        if not isinstance(comment, Mapping):
+            continue
+        parsed = _comment_verdict(comment)
+        if parsed is None:
+            continue
+        verdicts.append(parsed)
+    verdicts.sort(key=lambda verdict: verdict.at)
+    return verdicts
+
+
+def _covers_head(verdict: PostedVerdict, head: str) -> bool:
+    """True when the verdict names the head the PR stands at.
+
+    A binding of 7 characters or more that prefixes the head binds it — the
+    same width the reviewer-independence gate reads.
+    """
+    if not head:
         return False
-    head = str(pr.get("headRefOid") or "")
-    if head and sha == head:
-        return True
-    return sha in {str(c.get("oid") or "") for c in (pr.get("commits") or [])}
+    return any(
+        len(binding) >= 7 and head.lower().startswith(binding.lower())
+        for binding in verdict.bindings
+    )
 
 
-def _latest_readable_verdict(pr: dict[str, Any]) -> tuple[dict[str, Any], str, str] | None:
-    """The newest comment carrying a verdict the queue can read, with its scope.
+def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
+    """The blocks the seats who posted them have not cleared, oldest first.
+
+    A blocking verdict belongs to the seat that posted it: that seat's own
+    later approve naming the head the PR stands at clears it, and nothing else
+    does. An approve by the same seat that names another head clears nothing —
+    it says nothing about this head. Another seat's approve clears nothing
+    either: `#6170` (DIG-4911) merged into `develop` on 2026-10-21 with the
+    security desk's `changes requested` on the branch, because the code
+    reviewer's later approve on the head was the newest readable verdict.
+
+    A verdict whose seat cannot be read is not judged here: the seat is
+    unknown, so the newest-verdict rule (`_latest_posted_verdict`) judges it.
+    That is a known limitation, not a choice — 33 of the 40 readable verdicts
+    on the open PRs carried no seat marker when this rule was measured.
+    """
+    by_seat: dict[str, list[PostedVerdict]] = {}
+    for verdict in _readable_verdicts(pr):
+        if verdict.seat:
+            by_seat.setdefault(verdict.seat, []).append(verdict)
+    standing: list[PostedVerdict] = []
+    for verdicts in by_seat.values():
+        newest = verdicts[-1]
+        if newest.verdict in BLOCKING_VERDICTS:
+            standing.append(newest)
+            continue
+        if newest.verdict in APPROVE_VERDICTS and _covers_head(newest, head):
+            # This seat approved the head the PR stands at: its block is cleared.
+            continue
+        # The seat's newest verdict does not clear this head. A block it posted
+        # earlier therefore still stands.
+        for verdict in reversed(verdicts[:-1]):
+            if verdict.verdict in BLOCKING_VERDICTS:
+                standing.append(verdict)
+                break
+    standing.sort(key=lambda verdict: verdict.at)
+    return standing
+
+
+def _latest_posted_verdict(pr: dict[str, Any]) -> PostedVerdict | None:
+    """The newest comment carrying a verdict the queue can read.
 
     Newest wins, so a reviewer who blocked and then came back and approved clears
     their own block. Comments the queue cannot read are skipped rather than
     counted as the newest: letting a typo'd marker displace a real block would
     hand anyone who can comment a way to unlock the queue.
     """
-    best: tuple[dict[str, Any], str, str] | None = None
-    best_at = ""
-    for comment in pr.get("comments") or []:
-        if not isinstance(comment, Mapping):
-            continue
-        parsed = _posted_verdict(comment)
-        if parsed is None:
-            continue
-        verdict, scope_sha = parsed
-        posted_at = str(comment.get("createdAt") or "")
-        if best is None or posted_at >= best_at:
-            best, best_at = (comment, verdict, scope_sha), posted_at
-    return best
+    verdicts = _readable_verdicts(pr)
+    return verdicts[-1] if verdicts else None
 
 
-def _posted_verdict_reason(pr: dict[str, Any]) -> list[str]:
-    """A refusal when the newest readable posted verdict blocks this PR.
+def _sha_text(sha: str) -> str:
+    """A sha as the queue names it in a refusal."""
+    return f"`{sha[:12]}`" if sha else "no commit"
 
-    A block stands while the commit it names is still on the branch, which is what
-    `_on_pr_history` answers from `pr["commits"]`. When the row carries no commit
-    list that question cannot be answered at all, and answering "gone" would retire a
-    live block — the second leg of the `#5903` hole, where a verdict scoped to a
-    commit that was still on the branch was cleared by a row that never said which
-    commits the branch had. Unverifiable blocks; only a branch that is *known* not to
-    carry the commit spends the verdict.
+
+def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
+    """A refusal when the newest readable verdict does not clear this PR.
+
+    DIG-4878. A blocking verdict used to be spent the moment the commit it named
+    left the branch: the gate asked `pr["commits"]` whether that commit was still
+    there, and a new commit, a rebase or a merge from develop rewrites that list.
+    The block was retired, the coverage gate then carried the merge on
+    `reviewed:agent`, and a PR whose latest verdict was "changes requested" landed
+    with no approve on the head it merged. Six digithings PRs did it between
+    2026-10-20 and 2026-10-21 (#6115, #6074, #6071, #6019, #5968, #5761).
+
+    The rule reads the verdict now, not the branch, and it is one rule with two
+    clauses, in this order. It is written down once, in
+    `docs/MERGE_QUEUE.md` ("The verdict rule"), so no two seats read it
+    differently:
+
+    1. **A seat's own block stands until that seat clears it.** A blocking
+       verdict belongs to the seat that posted it. That seat's later approve
+       naming the head the PR stands at clears it; an approve naming another
+       head does not, and no other seat's approve does either. `#6170`
+       (DIG-4911) merged into `develop` on 2026-10-21 with the security desk's
+       `changes requested` still on the branch, because the code reviewer's
+       later approve on the head was the newest readable verdict — a second
+       sign-off was never asked for, so the queue never held the PR for it.
+    2. **Everything else is judged by the newest readable verdict.** The newest
+       readable verdict is the one that counts, whatever it is scoped to — a
+       blocking verdict blocks, and only a later approve clears it; an approve
+       clears only when it names the head the PR stands at; a verdict the queue
+       cannot read is skipped, not read as a clearance.
+
+    Clause 1 needs the seat, and the seat is written only in the provenance
+    marker (`agent=`): every seat pushes under one GitHub login, so a comment's
+    author cannot say who wrote it. A verdict whose seat cannot be read is
+    judged by clause 2 — the newest-verdict rule — because there is no seat to
+    hold it to. That is a known limitation of what the marker carries, not a
+    second policy.
+
+    This is the value gate. Whether a review happened at all, and whether it came
+    from another seat, is the coverage gate's question (`_review_coverage`), and
+    the two stay apart on purpose (DIG-4795).
     """
-    latest = _latest_readable_verdict(pr)
+    head = str(pr.get("headRefOid") or "")
+    standing = _standing_seat_blocks(pr, head)
+    if standing:
+        return [_standing_seat_reason(pr, standing[-1], head)]
+    latest = _latest_posted_verdict(pr)
     if latest is None:
+        # No verdict the queue can read is not a verdict. The coverage gate
+        # decides this PR, on its own evidence.
         return []
-    comment, verdict, scope_sha = latest
-    if verdict not in BLOCKING_VERDICTS:
+    head_text = f"`{head[:12]}`" if head else "an unknown head"
+    where = f"comment {latest.comment_id}" if latest.comment_id else "a comment"
+    if latest.verdict in BLOCKING_VERDICTS:
+        if latest.scope:
+            scope_text = f", scoped to `{latest.scope[:12]}`"
+        elif latest.bindings:
+            scope_text = f", naming `{latest.bindings[0][:12]}`"
+        else:
+            scope_text = ""
+        return [
+            f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
+            f"({latest.source}, posted by {latest.author} in {where}){scope_text}; "
+            f"the PR now stands at {head_text}, and a blocking "
+            f"verdict stands until a later approve names the head it covers"
+        ]
+    if _covers_head(latest, head):
         return []
-    on_history = _on_pr_history(pr, scope_sha)
-    if not on_history and pr.get("commits") is not None:
-        return []
-    login = str((comment.get("author") or {}).get("login") or "?")
-    where = (
-        f"comment {comment.get('id') or '?'}" if comment.get("id") else f"a comment from {login}"
-    )
-    scope = scope_sha[:12] if scope_sha else "an unstated commit"
-    still = (
-        "and that commit is still on this branch"
-        if on_history
-        else (
-            "and this row carries no commit list, so that commit could not be "
-            "checked against the branch"
-        )
-    )
     return [
-        f"a code-review verdict of '{verdict}' was posted on this PR by {login} "
-        f"({where}) against {scope}, {still}; a new review must clear it"
+        f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
+        f"({latest.source}, posted by {latest.author} in {where}) but it names "
+        f"{_sha_text(latest.bindings[0] if latest.bindings else '')}, and the PR now "
+        f"stands at {head_text}; an approve counts only when it names the head it covers"
     ]
+
+
+def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -> str:
+    """The refusal for a block the seat that posted it has not cleared."""
+    head_text = f"`{head[:12]}`" if head else "an unknown head"
+    where = f"comment {block.comment_id}" if block.comment_id else "a comment"
+    if block.scope:
+        scope_text = f", scoped to `{block.scope[:12]}`"
+    elif block.bindings:
+        scope_text = f", naming `{block.bindings[0][:12]}`"
+    else:
+        scope_text = ""
+    return (
+        f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+        f"({block.source}, in {where}){scope_text}, and the PR now stands at "
+        f"{head_text}; a blocking verdict stands until that seat posts a later "
+        f"approve naming the head it covers"
+    )
 
 
 def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
@@ -608,23 +2659,12 @@ def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
     (`_apply_reviews_checks_comments`) that both the queue and the promotion gate
     call: bot logins are excluded from `approvals` there, while listed
     reviewer-bot reviews still flow through to the `REVIEW_BOTS` hatch.
-
-    A review whose verdict is CHANGES_REQUESTED is dropped too, whatever form the
-    verdict takes (a formal review state, a `Verdict:` line under the in-session
-    marker, or a power-pack `verdict=` field): it blocks, and it never counts.
     """
     author = str((pr.get("author") or {}).get("login") or "")
     kept: list[dict[str, Any]] = []
     for review in pr.get("reviews") or []:
-        if not isinstance(review, dict):
-            continue
         login = str((review.get("author") or {}).get("login") or "")
         if login and login == author:
-            continue
-        # A review that requests changes blocks (`_gate_review`); it is never also
-        # the evidence that the PR was reviewed. Before #5863's follow-up a bot's
-        # CHANGES_REQUESTED fed the REVIEW_BOTS hatch as a completed agent review.
-        if _review_state(review) == "CHANGES_REQUESTED":
             continue
         kept.append(review)
     return kept
@@ -633,7 +2673,7 @@ def _evidence_reviews(pr: dict[str, Any]) -> list[dict[str, Any]]:
 def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
     """Give the row its comments, or say why it cannot. Returns a refusal, or None.
 
-    `_posted_verdict_reason` reads `pr["comments"]`, and a PR can carry a
+    `_verdict_value_reason` reads `pr["comments"]`, and a PR can carry a
     `changes_requested` verdict with **no label at all** — so this is not the
     `reviewed:agent` lazy fetch's client, and it runs before both review gates rather
     than inside the coverage one.
@@ -641,13 +2681,13 @@ def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
     `#5903` merged on 2026-10-19T08:23:06Z with four review passes on it and the
     newest a `changes_requested` verdict. The gate was not wrong: run against the
     real payload it refuses. The *row* was wrong — the host tick fetched it with a
-    field list that left `comments` out, so `_posted_verdict_reason` read nothing,
+    field list that left `comments` out, so `_verdict_value_reason` read nothing,
     `_gate_review` stayed silent, and `_gate_review_coverage` authorised the merge on
     a label. The queue's own audit comment says which gate carried it:
     `review: review evidence via the coverage gate (_gate_review_coverage)`.
 
     An absent comment list is a missing signal, not a clearance — the sentence
-    `_posted_verdict` already applies to a marker it cannot parse. So the row is
+    `_marker_verdict` already applies to a marker it cannot parse. So the row is
     completed here when it can be, and refused when it cannot: with no repo there is
     nothing to read, and a failed read is not an empty one.
     """
@@ -706,359 +2746,18 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
     The review that counts is the board's own review pass, read by
     `_gate_review_coverage`, with its comments addressed (`_gate_review_threads`)
     — Chris's 2026-10-15 definition. A human approval still counts there.
+
+    `_verdict_value_reason` is the value gate, and it runs here, before the
+    coverage gate: a PR whose newest verdict blocks must not be carried to a
+    merge by a `reviewed:agent` label (DIG-4878).
     """
     reasons: list[str] = []
     if str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
         reasons.append("review has outstanding change requests")
     # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
     # requested". A posted blocking verdict stays a block until a newer one clears it.
-    reasons.extend(_posted_verdict_reason(pr))
-    # #5863 merged with review-applied green over an in-session review whose
-    # latest verdict read CHANGES: the gate counted the pass and its threads but
-    # never read what the pass concluded.
-    reasons.extend(_reviewer_verdict_reasons(pr))
+    reasons.extend(_verdict_value_reason(pr))
     return reasons
-
-
-# --- each reviewer's change request --------------------------------------------
-#
-# A review pass is evidence only if its conclusion is read. Every reviewer's
-# change request is taken in time order across formal reviews (humans and bots
-# alike) and in-session review comments, and a change request blocks until
-# something clears it. What clears it is not "the same login" — every seat
-# posts under one login — but the seat the verdict names: the same seat's
-# later APPROVED or COMMENTED review clears its own change request, a review
-# that named no seat is cleared by an approval that names one, and a
-# dismissal clears the review it dismisses (GitHub reports a dismissed review
-# with state DISMISSED). Another seat's approval clears nothing: the author's
-# own approval must not clear a reviewer's block (DIG-4646).
-#
-# An in-session review is read from its `Review verdict:` line, and only in a
-# comment that carries the in-session marker, so ordinary prose never becomes
-# a verdict.
-
-IN_SESSION_REVIEW_MARKER = "<!-- in-session-review -->"
-# A verdict line is read in one place, in scripts/review_pass_filter.py: the
-# QA lane writes "Review verdict: changes requested - #5994 @ `abc`", not
-# "Verdict:", so a parser anchored on the bare word read every real verdict as
-# no verdict at all (DIG-4646). The queue and the local-ci producer share that
-# parser, so they cannot disagree about what the fleet wrote.
-_REVIEW_STATES = frozenset({"APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"})
-
-
-def _reviewer_key(login: Any) -> str:
-    """One key per reviewer: case-folded, `[bot]` suffix dropped (REST and
-    `gh pr view` disagree on the suffix for the same bot)."""
-    key = str(login or "").strip().lower()
-    return key[: -len("[bot]")] if key.endswith("[bot]") else key
-
-
-def _in_session_state(body: str) -> str:
-    """CHANGES_REQUESTED / APPROVED / COMMENTED for an in-session review body.
-
-    The verdict line is read by the shared parser in
-    ``scripts/review_pass_filter.py``, so the queue and the local-ci producer
-    read the fleet's verdicts the same way.
-    """
-    return rpf.in_session_verdict_state(body)
-
-
-def _review_events(pr: dict[str, Any]) -> list[tuple[str, int, str, tuple[str, str], str, str]]:
-    """(at, seq, login, identity, state, where) for every readable review act, oldest first.
-
-    `seq` keeps GitHub's own order for rows without a timestamp. The identity
-    is kept beside the login instead of being folded into it: every board seat
-    posts under one login, so the login alone cannot say which seat spoke
-    (DIG-4646)."""
-    events: list[tuple[str, int, str, tuple[str, str], str, str]] = []
-    seq = 0
-    for review in pr.get("reviews") or []:
-        seq += 1
-        if not isinstance(review, Mapping):
-            continue
-        state = str(review.get("state") or "").upper()
-        body = str(review.get("body") or "")
-        if state == "COMMENTED" and IN_SESSION_REVIEW_MARKER in body:
-            state = _in_session_state(body)
-        if state not in _REVIEW_STATES:
-            continue  # PENDING and unknown states are not a submitted verdict
-        login = (review.get("author") or review.get("user") or {}).get("login")
-        at = str(review.get("submittedAt") or review.get("submitted_at") or "")
-        events.append(
-            (
-                at,
-                seq,
-                _reviewer_key(login),
-                _verdict_identity(body, review.get("author") or review.get("user")),
-                state,
-                f"review {review.get('id') or seq}{_seat_suffix(body)}",
-            )
-        )
-    for comment in pr.get("comments") or []:
-        seq += 1
-        if not isinstance(comment, Mapping):
-            continue
-        body = str(comment.get("body") or "")
-        if IN_SESSION_REVIEW_MARKER not in body:
-            continue
-        login = (comment.get("author") or comment.get("user") or {}).get("login")
-        at = str(comment.get("createdAt") or comment.get("created_at") or "")
-        events.append(
-            (
-                at,
-                seq,
-                _reviewer_key(login),
-                _verdict_identity(body, comment.get("author") or comment.get("user")),
-                _in_session_state(body),
-                f"in-session review comment {comment.get('id') or seq}{_seat_suffix(body)}",
-            )
-        )
-    events.sort(key=lambda e: (e[0], e[1]))
-    return events
-
-
-def _clears_change_request(
-    state: str, identity: tuple[str, str], request_identity: tuple[str, str]
-) -> bool:
-    """Whether a later review act clears an outstanding change request.
-
-    The rule lives in ``scripts/review_pass_filter.py`` so the queue and the
-    local-ci producer clear a change request the same way (DIG-4646).
-    """
-    return rpf.clears_change_request(state, identity, request_identity)
-
-
-def _reviewer_verdict_reasons(pr: dict[str, Any]) -> list[str]:
-    """A refusal per change request that nothing since has cleared."""
-    # One change request per reviewer and seat: a later one from the same seat
-    # replaces the earlier one, so a reviewer who asks twice is one block, not
-    # two. The walk itself is shared with the local-ci producer.
-    open_requests = rpf.outstanding_change_requests(_review_events(pr))
-    reasons: list[str] = []
-    for login, identity, where, at in open_requests:
-        kind, values = identity
-        at_part = f" at {at}" if at else ""
-        if kind:
-            how = (
-                f"a later approval or comment-review from the same {kind} ({values}), "
-                "or a dismissal of that review"
-            )
-        else:
-            how = (
-                "a later approval or comment-review that names a seat, or a dismissal "
-                "of that review"
-            )
-        reasons.append(
-            f"review verdict: {login or '?'} requested changes ({where}{at_part}) and "
-            f"nothing since has cleared it: it is cleared by {how}"
-        )
-    return reasons
-
-
-def _verdict_identity(body: str, author: Any = None) -> tuple[str, str]:
-    """The seat (else the session) a verdict names; ("", "") when it names neither.
-
-    Every board seat posts under one GitHub login, so the login cannot tell
-    two seats apart. What tells them apart is what a verdict writes about
-    itself: a `<!-- dt-seat ... -->` marker or a `Paperclip-Agent-Id:` /
-    `Session-Id:` trailer. An unnamed verdict names no seat, and an unnamed
-    verdict may not clear another seat's change request (DIG-4646).
-
-    A bot is the one reviewer that needs no marker: it has no seats, so its
-    login is its own identity and a later review by that bot clears the
-    change request the bot made. `check_review_coverage.is_bot_login` is the
-    one rule for "this login is a bot", so the queue, the promotion gate and
-    the local-ci producer read a bot the same way.
-    """
-    return rpf.verdict_identity(body, author)
-
-
-def _seat_suffix(body: str) -> str:
-    seats = _identity(body).get("seat")
-    return f" by seat {','.join(sorted(seats))}" if seats else ""
-
-
-# --- review evidence: never a change request, never the author's own seat ----
-#
-# Follow-up to #5863 (QA review monitor, 2026-10-20). Three ways a review record
-# could still authorise a merge it should not:
-#
-# (a) A CHANGES_REQUESTED verdict was read by the verdict gate as a block, but the
-#     very same comment or review was also handed to the coverage gate as evidence
-#     that a review ran. A change request now only blocks; it is dropped from the
-#     evidence wherever it appears (formal review, in-session `Verdict:` line, or
-#     power-pack `verdict=` field).
-# (b) Every board seat posts as `chrizefan`, so an in-session review comment on a
-#     `chrizefan` PR could be the authoring session attesting its own work (the
-#     DIG-4459 chat PRs were "reviewed" seconds after they were opened). The login
-#     cannot tell seats apart, so the identity is read from what the seat writes:
-#     a `<!-- dt-seat agent=<PAPERCLIP_AGENT_ID> run=<PAPERCLIP_RUN_ID>
-#     session=<id> -->` marker, or `Paperclip-Agent-Id:` / `Paperclip-Seat:` /
-#     `Paperclip-Run-Id:` / `Session-Id:` trailer lines, in the PR body and commit
-#     messages (the author) and in the review comment (the reviewer). The rule
-#     that a same-login review counts only when it names a seat (or, for a PR
-#     authored outside Paperclip, a session) that is provably not the author's
-#     sits behind the `seat_independence` policy switch: it is off until a
-#     producer writes those markers, because with no producer the rule refused
-#     every agent PR (DIG-4646). The overlap check -- a review naming a seat,
-#     session or run the author also names -- always runs, whatever the switch
-#     says.
-# (c) `review-applied` is posted per commit. The queue now requires it SUCCESS on
-#     the exact head it merges (`_gate_review_applied`); `merge_one` pins that
-#     same head with `--match-head-commit`.
-
-
-def _identity(text: str) -> dict[str, frozenset[str]]:
-    """{kind: values} for the seat identity a body names; kinds: seat, session, run.
-
-    The vocabulary lives in `review_pass_filter` (DIG-4631) so the merge queue
-    and the host CI producer read one implementation of it.
-    """
-    return rpf.identity_from_text(text)
-
-
-def _author_identity(pr: dict[str, Any]) -> dict[str, frozenset[str]]:
-    """Every seat, session and run the PR's body and commits name as their author."""
-    return rpf.author_identity(pr)
-
-
-def _show(identity: dict[str, frozenset[str]]) -> str:
-    return rpf.show_identity(identity)
-
-
-def _not_independent(
-    author: dict[str, frozenset[str]],
-    reviewer: dict[str, frozenset[str]],
-    require_markers: bool = True,
-) -> str | None:
-    """Why a same-login review cannot be shown to come from another seat, or None.
-
-    The rule lives in `review_pass_filter` (DIG-4631) so the merge queue and
-    the host CI producer apply one version of it. `require_markers` is the
-    policy switch: with it off, only a review that names the authoring seat
-    itself is refused (DIG-4646).
-    """
-    return rpf.independence_reason(author, reviewer, require_markers=require_markers)
-
-
-def _comment_verdict(body: str) -> str | None:
-    """CHANGES_REQUESTED / APPROVED / COMMENTED for a review comment, or None.
-
-    A power-pack marker's `verdict=` is read first, then the in-session marker's
-    `Verdict:` line; a comment carrying neither is not a review verdict.
-    """
-    for marker in _MARKER_RE.finditer(body or ""):
-        fields = {
-            m.group("key").lower(): m.group("value")
-            for m in _MARKER_FIELD_RE.finditer(marker.group("fields"))
-        }
-        verdict = _normalise_verdict(fields.get("verdict", ""))
-        if verdict in BLOCKING_VERDICTS:
-            return "CHANGES_REQUESTED"
-        if verdict in READABLE_VERDICTS:
-            return "APPROVED"
-    if IN_SESSION_REVIEW_MARKER in (body or ""):
-        return _in_session_state(body)
-    return None
-
-
-def _review_state(review: Mapping[str, Any]) -> str:
-    """A formal review's effective state, reading a verdict carried in its body."""
-    state = str(review.get("state") or "").upper()
-    if state == "COMMENTED":
-        return _comment_verdict(str(review.get("body") or "")) or state
-    return state
-
-
-def _evidence_comments(
-    pr: dict[str, Any], enforce_independence: bool = False
-) -> tuple[list[dict[str, Any]], list[str]]:
-    """(comments the coverage gate may score, why each dropped one was dropped).
-
-    Dropped: any comment whose verdict is a change request (a), and any in-session
-    review comment under the PR author's own login that does not prove it came
-    from a different seat (b). Everything else passes through untouched, so the
-    CodeRabbit and marker matching in check_review_coverage stays the one source
-    of truth for what counts.
-
-    `enforce_independence` is the policy switch (DIG-4646). Off, a same-login
-    review is not dropped for naming no seat: nothing writes a seat marker yet,
-    and demanding one refused every same-login review in the fleet. A review
-    that names the author's own seat is still dropped either way.
-    """
-    author_login = _reviewer_key((pr.get("author") or {}).get("login"))
-    author_id: dict[str, frozenset[str]] | None = None
-    kept: list[dict[str, Any]] = []
-    dropped: list[str] = []
-    for comment in pr.get("comments") or []:
-        if not isinstance(comment, Mapping):
-            continue
-        body = str(comment.get("body") or "")
-        where = f"comment {comment.get('id') or comment.get('createdAt') or '?'}"
-        if _comment_verdict(body) == "CHANGES_REQUESTED":
-            dropped.append(f"{where} requests changes, which blocks and is never review evidence")
-            continue
-        if IN_SESSION_REVIEW_MARKER in body:
-            login = _reviewer_key((comment.get("author") or comment.get("user") or {}).get("login"))
-            if not login or login == author_login:
-                if author_id is None:
-                    author_id = _author_identity(pr)
-                why = _not_independent(author_id, _identity(body), enforce_independence)
-                if why:
-                    dropped.append(f"{where}: {why}")
-                    continue
-        kept.append(dict(comment))
-    return kept, dropped
-
-
-def _gate_review_applied(pr: dict[str, Any], policy: Policy, repo: str | None) -> list[str]:
-    """`review-applied` must be SUCCESS on the exact head this merge would land.
-
-    local-ci posts the status per commit, so a green verdict on an earlier push
-    says nothing about the commits pushed after it. The row's rollup is read
-    first (it is the head commit's); when a repo is given, the head's own combined
-    status is then read by SHA and must name that same SHA, so a stale row or a
-    moved head cannot carry an older green. `merge_one` pins the same SHA with
-    `--match-head-commit`. Every read that fails refuses.
-    """
-    ctx = policy.review_applied_context
-    if not ctx:
-        return []
-    head = str(pr.get("headRefOid") or "")
-    if not head:
-        return [f"'{ctx}': the row names no head SHA, so it cannot be checked on the merged tip"]
-    entries = [e for e in _rollup(pr) if _check_name(e) == ctx]
-    if not entries:
-        return [
-            f"'{ctx}' has not reported on the head {head[:12]}; a {ctx} verdict on an "
-            "earlier commit does not cover the commits pushed after it"
-        ]
-    states = sorted({str(e.get("conclusion") or e.get("state") or "?").upper() for e in entries})
-    if states != ["SUCCESS"]:
-        return [f"'{ctx}' is {', '.join(states)} on the head {head[:12]}"]
-    if repo is None:
-        return []
-    try:
-        data = _gh_json("api", f"repos/{repo}/commits/{head}/status?per_page=100")
-    except (QueueError, ValueError, OSError):
-        return [f"'{ctx}': the head {head[:12]}'s statuses could not be read"]
-    if not isinstance(data, dict) or str(data.get("sha") or "") != head:
-        got = str((data or {}).get("sha") or "") if isinstance(data, dict) else ""
-        return [
-            f"'{ctx}': the status read for {head[:12]} came back for "
-            f"{got[:12] or 'no commit'}, so it is not evidence about the merged tip"
-        ]
-    on_head = [
-        s
-        for s in (data.get("statuses") or [])
-        if isinstance(s, Mapping) and s.get("context") == ctx
-    ]
-    if not on_head:
-        return [f"'{ctx}' has not reported on the head {head[:12]}"]
-    head_states = sorted({str(s.get("state") or "?").lower() for s in on_head})
-    if head_states != ["success"]:
-        return [f"'{ctx}' is {', '.join(head_states)} on the head {head[:12]}"]
-    return []
 
 
 # --- review comments addressed -----------------------------------------------
@@ -1077,13 +2776,7 @@ query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) {
       reviewThreads(first: 100) {
         totalCount
-        nodes {
-          isResolved
-          isOutdated
-          path
-          resolvedBy { login }
-          comments(first: 3) { nodes { author { login } body createdAt } }
-        }
+        nodes { isResolved isOutdated path comments(first: 1) { nodes { author { login } } } }
       }
     }
   }
@@ -1115,61 +2808,15 @@ def _fetch_review_threads(repo: str, number: int) -> list[dict[str, Any]]:
         # More than one page. Treat the unread tail as unanswered rather than
         # paging: a PR with 100+ review threads is not one a cron should merge.
         nodes = nodes + [{"isResolved": False, "isOutdated": False, "path": "(unread page)"}]
-    return [_normalise_thread(node) for node in nodes]
+    return nodes
 
 
-def _normalise_thread(node: Any) -> Any:
-    """A thread node with the resolver and the replies in the shape the filters read."""
-    if not isinstance(node, Mapping):
-        return node
-    out = dict(node)
-    resolved_by = node.get("resolvedBy")
-    if isinstance(resolved_by, Mapping):
-        out["resolved_by_login"] = str(resolved_by.get("login") or "")
-    comments = node.get("comments")
-    listed = comments.get("nodes") or [] if isinstance(comments, Mapping) else (comments or [])
-    out["comments"] = [
-        {
-            "author_login": str((c.get("author") or {}).get("login") or "")
-            if isinstance(c.get("author"), Mapping)
-            else str(c.get("author") or ""),
-            "body": str(c.get("body") or ""),
-            "created_at": str(c.get("createdAt") or ""),
-        }
-        for c in listed
-        if isinstance(c, Mapping)
+def _open_threads(threads: list[Any]) -> list[dict[str, Any]]:
+    return [
+        t
+        for t in threads
+        if isinstance(t, dict) and not t.get("isResolved") and not t.get("isOutdated")
     ]
-    return out
-
-
-def _open_threads(
-    threads: list[Any], pr: dict[str, Any] | None = None
-) -> list[dict[str, Any]]:
-    """Threads that are not addressed: unresolved, or resolved by the PR's own author.
-
-    Every seat posts under one GitHub login, so a thread resolved under the
-    author's own login is not evidence that the reviewer was answered. Such a
-    thread stays open (DIG-4631).
-    """
-    author_login = ""
-    author_identity: dict[str, frozenset[str]] = {}
-    if isinstance(pr, Mapping):
-        author = pr.get("author")
-        if isinstance(author, Mapping):
-            author_login = str(author.get("login") or "")
-        author_identity = rpf.author_identity(pr)
-    out: list[dict[str, Any]] = []
-    for t in threads:
-        if not isinstance(t, dict):
-            continue
-        if t.get("isOutdated"):
-            continue
-        if t.get("isResolved") and not rpf.thread_resolved_by_author(
-            t, author_login, author_identity
-        ):
-            continue
-        out.append(t)
-    return out
 
 
 def _gate_review_threads(pr: dict[str, Any], repo: str | None) -> list[str]:
@@ -1191,145 +2838,16 @@ def _gate_review_threads(pr: dict[str, Any], repo: str | None) -> list[str]:
                 "review comments: the PR's review threads could not be read, so the "
                 "queue cannot tell they were addressed"
             ]
-    open_threads = _open_threads(threads if isinstance(threads, list) else [], pr)
+    open_threads = _open_threads(threads if isinstance(threads, list) else [])
     if not open_threads:
         return []
     paths = sorted({str(t.get("path") or "?") for t in open_threads})
     shown = ", ".join(paths[:3]) + (f" and {len(paths) - 3} more" if len(paths) > 3 else "")
-    author = pr.get("author")
-    author_login = str(author.get("login") or "") if isinstance(author, Mapping) else ""
-    author_identity = rpf.author_identity(pr)
-    author_resolved = sum(
-        1
-        for t in open_threads
-        if t.get("isResolved")
-        and rpf.thread_resolved_by_author(t, author_login, author_identity)
-    )
-    extra = (
-        f"; {author_resolved} of them were resolved by the PR's own author, which does "
-        "not show the reviewer was answered"
-        if author_resolved
-        else ""
-    )
     return [
         f"review comments not addressed: {len(open_threads)} unresolved review "
-        f"thread(s) on the current code ({shown}){extra}; resolve them, or push the fix "
+        f"thread(s) on the current code ({shown}); resolve them, or push the fix "
         "that makes them outdated"
     ]
-
-
-def _push_times(pr: dict[str, Any]) -> dict[str, str]:
-    """{commit oid: the time that commit was pushed} from the PR's commit list."""
-    pushes: dict[str, str] = {}
-    for commit in pr.get("commits") or []:
-        if not isinstance(commit, Mapping):
-            continue
-        oid = str(commit.get("oid") or "")
-        at = str(commit.get("committedDate") or "")
-        if oid and at:
-            pushes[oid] = at
-    return pushes
-
-
-def _review_evidence_items(pr: dict[str, Any]) -> list[dict[str, Any]]:
-    """Every review and comment on the PR, as {body, at, commit, where} items."""
-    items: list[dict[str, Any]] = []
-    for review in pr.get("reviews") or []:
-        if not isinstance(review, Mapping):
-            continue
-        body = str(review.get("body") or "")
-        if not body.strip():
-            continue
-        commit = review.get("commit")
-        oid = str(commit.get("oid") or "") if isinstance(commit, Mapping) else ""
-        items.append(
-            {
-                "body": body,
-                "at": str(review.get("submittedAt") or review.get("submitted_at") or ""),
-                "commit": oid,
-                "where": "review",
-            }
-        )
-    for comment in pr.get("comments") or []:
-        if not isinstance(comment, Mapping):
-            continue
-        body = str(comment.get("body") or "")
-        if not body.strip():
-            continue
-        items.append(
-            {
-                "body": body,
-                "at": str(comment.get("createdAt") or comment.get("created_at") or ""),
-                "commit": "",
-                "where": "comment",
-            }
-        )
-    return items
-
-
-def _gate_review_pass_evidence(
-    pr: dict[str, Any], corpus: list[Mapping[str, Any]] | None = None
-) -> list[str]:
-    """The review evidence has to survive the DIG-4631 filters.
-
-    Two classes are refused: a review posted within 60 s of the push it claims
-    to cover, and a review whose text repeats a review on another PR. When every
-    piece of evidence on the PR falls in one of those classes, the PR has no
-    review pass and the queue says why.
-    """
-    items = _review_evidence_items(pr)
-    if not items:
-        return []
-    pushes = _push_times(pr)
-    number = pr.get("number")
-    survivors: list[dict[str, Any]] = []
-    refusals: list[str] = []
-    for item in items:
-        pushed = pushes.get(item["commit"]) if item["commit"] else None
-        if pushed and rpf.review_too_close_to_push(item["at"], pushed):
-            gap = int(
-                (rpf.parse_ts(item["at"]) or 0) - (rpf.parse_ts(pushed) or 0)
-            )
-            refusals.append(
-                f"the {item['where']} was posted {gap}s after the push it claims to cover"
-            )
-            continue
-        copies = rpf.duplicate_reviews(
-            rpf.normalise_review_text(item["body"]), number, corpus
-        )
-        if copies:
-            refusals.append(
-                f"the {item['where']} repeats the review on #{copies[0].get('pr')} "
-                f"(text similarity {copies[0].get('ratio')})"
-            )
-            continue
-        survivors.append(item)
-    if survivors or not refusals:
-        return []
-    return ["review evidence is not a review pass: " + "; ".join(refusals[:2]) + " (DIG-4631)"]
-
-
-def _review_corpus(prs: list[dict[str, Any]]) -> list[Mapping[str, Any]]:
-    """Every review seen on the queued PRs, plus the rolling store.
-
-    A review copied from another PR is only recognisable against reviews seen
-    elsewhere, so the queue keeps a rolling corpus of the review text it has
-    seen (DIG-4631). The corpus is a cache of public review text and decides
-    nothing on its own.
-    """
-    entries: list[Mapping[str, Any]] = list(rpf.load_corpus())
-    for pr in prs:
-        texts = [
-            (item["at"], item["body"])
-            for item in _review_evidence_items(pr)
-            if item["where"] == "review"
-        ]
-        if not texts:
-            continue
-        author = pr.get("author")
-        login = str(author.get("login") or "") if isinstance(author, Mapping) else ""
-        entries.extend(rpf.corpus_entries(pr.get("number"), texts, login=login))
-    return entries
 
 
 def _coverage_module() -> Any:
@@ -1358,14 +2876,992 @@ def _label_names(pr: dict[str, Any]) -> set[str]:
     return names
 
 
-def _gate_review_coverage(
-    pr: dict[str, Any], repo: str | None, policy: Policy | None = None
-) -> list[str]:
-    return _review_coverage(pr, repo, policy)[0]
+def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
+    return _review_coverage(pr, repo)[0]
+
+
+# --- reviewer independence: the review must come from another seat ------------
+#
+# DIG-4795. Every seat in this org pushes and comments under one GitHub login
+# (`chrizefan`), so GitHub cannot say which seat wrote a review comment, and a
+# comment that says "Review verdict: approve" carries no seat either. The seat
+# identity has to travel inside the artifact, and the queue has to check it.
+#
+# Two facts decide whether a review marker counts as coverage:
+#
+#   1. It names the head it reviewed, and that head is the PR's current head.
+#      A marker written against an older head says nothing about the code that
+#      is about to merge. The release lane measured this on #5994: the only
+#      marker on the PR named head `22d4b3126` while the PR stood at
+#      `15414f011d`.
+#
+#   2. It did not come from a seat that wrote the PR — not that seat itself,
+#      and not a marker that seat posted while its own run on that ticket was
+#      still active. That window covers the author's own subagents and
+#      same-session reviewers, which is how twelve-x #369 got its "in-session
+#      review" and how #425 merged with review coverage from its author seat.
+#      It is not a veto on other seats: a review from another seat posted while
+#      the author was still working is that seat's review. The author is read
+#      from the branch — the commit trailers and the runs on the PR's own ticket
+#      that were open when the commits were committed — not from the ticket's
+#      assignee: ownership is not authorship.
+#
+# Both halves are one question — "did a different seat look at this head?" —
+# so they live in one gate and one marker.
+#
+# The marker is `<!-- digithings-review agent=<uuid> run=<uuid> head=<sha> -->`.
+# `agent` and `run` are Paperclip identities: the queue resolves the run
+# through the Paperclip API to the agent (the seat) that ran it, so the seat a
+# marker claims is checked against the seat that actually ran. `head` is the
+# reviewed head. A marker with no provenance is a missing signal, not a
+# clearance: it cannot be shown to come from another seat, so it does not count.
+#
+# Two rules keep the claim honest. The marker stands alone on its own line, so
+# a sentence that quotes the marker is prose about it and not the claim. And a
+# value that cannot be a record — a placeholder, a typo — is refused by name,
+# never sent to the API: the API answers questions about records, and a value
+# that is not one has no answer to give.
+#
+# The `<!-- in-session-review -->` marker stays exactly as it is. It is what
+# `scripts/check_review_coverage.py` matches, and putting the provenance in a
+# second marker keeps every other consumer of that literal working — including
+# the other repos that share this policy.
+#
+# What this gate cannot do: prove that the comment was written by the seat it
+# names. All seats share one GitHub login, so GitHub's own record says nothing.
+# The queue checks the claim against the Paperclip side — a run id that the API
+# does not know is refused, and a run that belongs to another seat than the
+# marker claims is refused too — and the remaining gap is closed by the
+# per-seat GitHub identity DIG-4803 is for.
+
+REVIEW_PROVENANCE_MARKER = "digithings-review"
+
+# The provenance marker is a claim, and a claim is a line of its own: nothing
+# but the marker (and the in-session marker beside it) may share the line. A
+# marker quoted inside a sentence is prose about the marker, not the claim.
+# The queue used to read it as the claim — a review comment that explained the
+# marker ("the gate wants a `<!-- digithings-review agent=… run=… head=… -->`
+# marker") handed the queue placeholder values as if they were a seat and a
+# run. The queue then asked the Paperclip API about `…`, the read failed on a
+# healthy API, and the gate reported a transport failure instead of the fact
+# about the marker it had in hand (DIG-4809, 21 Oct 2026).
+#
+# A blockquote is not a claim either: a quoted reply carries someone else's
+# words, so a marker inside one says nothing about the seat that replied.
+_PROVENANCE_RE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?"
+    r"(?:<!--[ \t]*in-session-review[ \t]*-->[ \t]*)?"
+    r"<!--\s*digithings-review\b(?P<fields>[^>]*?)\s*-->"
+    r"(?:[ \t]*<!--[ \t]*in-session-review[ \t]*-->)?[ \t\r]*$",
+    re.MULTILINE,
+)
+
+#: A seat id and a run id are Paperclip uuids, and the Paperclip API accepts
+#: only the RFC 4122 shapes it accepts: version 1 to 5, variant 8, 9, a or b.
+#: A value outside that shape is refused by the server with a 400, and a 400
+#: read as a failed read is a transport failure — so the queue checks the shape
+#: itself and never sends a value the server would refuse (DIG-4809, 21 Oct
+#: 2026, measured against the live API: `11111111-1111-1111-1111-…` answers
+#: 400, `11111111-1111-4111-8111-…` answers 404 for a run nobody has).
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}"
+    r"-[0-9a-fA-F]{12}$"
+)
+
+#: A head sha, at any length git accepts as an abbreviation.
+_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
+_VERDICT_LINE_RE = re.compile(r"^[ \t]*Review verdict:", re.MULTILINE)
+_ISSUE_KEY_RE = re.compile(r"\bDIG-(?P<number>\d+)\b", re.IGNORECASE)
+_AGENT_TRAILER_RE = re.compile(
+    r"^Paperclip-Agent-Id:\s*(?P<agent>[0-9a-fA-F-]{36})\s*$", re.MULTILINE
+)
+#: The run that wrote the commit. Resolved through the API to the seat that
+#: owned that run, so it names the author exactly.
+_RUN_TRAILER_RE = re.compile(
+    r"^Paperclip-Run-Id:\s*(?P<run>[0-9a-fA-F-]{36})\s*$", re.MULTILINE
+)
+
+
+class _PaperclipUnavailable(RuntimeError):
+    """The queue could not read the Paperclip facts the reviewer gate needs."""
+
+
+class _PaperclipMissing(_PaperclipUnavailable):
+    """The API answered, and the answer is "no such record".
+
+    This is a fact about the world, not a failure to read it: a ticket key
+    that names no issue, or a run id nobody has ever heard of, is something
+    the gate has to judge. It is kept apart from `_PaperclipUnavailable` so a
+    missing record is never read as "the API is down".
+    """
+
+
+class _AuthorUnidentified(RuntimeError):
+    """A commit names a run the API would refuse, so its seat is unknown.
+
+    A commit trailer that carries something which is not a run id cannot be
+    resolved to the seat that wrote the commit. That seat is then an author
+    the gate does not know about, and a seat it does not know about can post
+    the review the gate is about to count as independent. The gate refuses
+    rather than guesses: an author it cannot name is not an author it can
+    clear.
+    """
+
+
+@dataclass(frozen=True)
+class ReviewMarker:
+    """One review comment the queue reads as review evidence."""
+
+    comment_id: str
+    at: str
+    agent: str
+    run: str
+    head: str
+
+
+@dataclass(frozen=True)
+class Independence:
+    """What the reviewer gate decided about one PR's review markers."""
+
+    #: Comment ids that must not count as review coverage.
+    disqualified: frozenset[str] = frozenset()
+    #: One line per marker that does not count, and why.
+    problems: tuple[str, ...] = ()
+    #: The reviewer the gate accepted, for the audit comment.
+    note: str = ""
+    #: A failure to judge at all — the facts could not be read, or the author's
+    #: seat could not be identified. Nothing was concluded about any marker.
+    unverifiable: str = ""
+
+
+#: How long one read of the Paperclip API may take, and how many times it may
+#: be tried.
+#:
+#: The queue reads Paperclip over a link that is sometimes slow: on 2026-10-21
+#: the Code Reviewer measured `GET /api/issues/{id}` at 31.5 s, 36.5 s and
+#: 30.7 s in a slow window, `GET /api/heartbeat-runs/{id}` at 12.6 s to 27.7 s,
+#: and `GET /api/issues/{id}/runs` with no answer at all in 60 s. The old
+#: 10-second read turned every one of those into a refusal, and a refusal for
+#: a transport reason is indistinguishable from a refusal for a real one — so
+#: in `enforce` mode a slow API would have blocked pull requests for a reason
+#: that has nothing to do with review independence.
+#:
+#: The read is a GET, so it is safe to try again: a second attempt asks the
+#: same question, and a question that was not answered is not an answer. The
+#: budget bounds the attempts of one read: the pause before the second attempt
+#: and the attempt itself both happen inside it, so one path costs the budget
+#: once and not once per attempt. It is a budget per path and not per tick:
+#: the gate reads a ticket, a run and a pull request's runs, so a control plane
+#: that does not answer costs that much again for each of them.
+#:
+#: The timeout is the socket timeout of one request. That is what covers the
+#: case that was measured: a control plane that thinks for half a minute
+#: before it answers. A server that answers slowly instead of late is a
+#: different shape, and a socket timeout does not bound it.
+#:
+#: The four numbers are the fix, and the suite pins them: a timeout below the
+#: slowest answer measured turns a slow API back into a refusal, a budget
+#: below the timeout leaves no room for the second attempt, and a backoff that
+#: hammers a struggling control plane makes the second attempt likelier to
+#: fail than the first.
+PAPERCLIP_READ_TIMEOUT = 45
+PAPERCLIP_READ_BUDGET = 60.0
+PAPERCLIP_READ_ATTEMPTS = 2
+PAPERCLIP_RETRY_BACKOFF = 3.0
+
+
+class ReviewerProvenance:
+    """The Paperclip facts the reviewer gate needs: tickets, seats and runs.
+
+    The queue runs from launchd with no Paperclip credential in its
+    environment, so the key is read from the macOS keychain — the same
+    credential `kit/bin/dt-paperclip-key` manages and the same one
+    `com.digithings.decide-poll.plist` exports. The key is a header value and
+    nothing else: it is never printed, logged or written anywhere.
+    """
+
+    def __init__(self, cfg: ReviewIndependence) -> None:
+        self._cfg = cfg
+        self._token = ""
+        self._cache: dict[str, Any] = {}
+
+    def _bearer(self) -> str:
+        if self._token:
+            return self._token
+        from_env = os.environ.get("PAPERCLIP_API_KEY", "").strip()
+        if from_env:
+            self._token = from_env
+            return from_env
+        if not self._cfg.keychain_service or not self._cfg.keychain_account:
+            raise _PaperclipUnavailable(
+                "no Paperclip credential is configured for the reviewer gate"
+            )
+        try:
+            proc = subprocess.run(
+                [
+                    "security",
+                    "find-generic-password",
+                    "-s",
+                    self._cfg.keychain_service,
+                    "-a",
+                    self._cfg.keychain_account,
+                    "-w",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise _PaperclipUnavailable(
+                f"the Paperclip credential could not be read: {exc}"
+            ) from exc
+        if proc.returncode != 0:
+            raise _PaperclipUnavailable(
+                "the Paperclip credential could not be read from the keychain"
+            )
+        token = proc.stdout.strip()
+        if not token:
+            raise _PaperclipUnavailable(
+                "the Paperclip credential in the keychain is empty"
+            )
+        self._token = token
+        return token
+
+    def _get(self, path: str) -> Any:
+        cached = self._cache.get(path)
+        if cached is not None:
+            return cached
+        url = f"{self._cfg.api_url.rstrip('/')}{path}"
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {self._bearer()}",
+                "Accept": "application/json",
+            },
+        )
+        deadline = time.monotonic() + PAPERCLIP_READ_BUDGET
+        attempts = 0
+        failure: Exception | None = None
+        for attempt in range(1, PAPERCLIP_READ_ATTEMPTS + 1):
+            if attempt > 1:
+                # The pause is inside the budget, not on top of it: a retry
+                # that starts after the deadline spends the read on a question
+                # that was never going to be asked in time.
+                pause = min(
+                    PAPERCLIP_RETRY_BACKOFF, max(0.0, deadline - time.monotonic())
+                )
+                if pause <= 0:
+                    break
+                time.sleep(pause)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            attempts += 1
+            try:
+                with urllib.request.urlopen(
+                    request, timeout=min(PAPERCLIP_READ_TIMEOUT, remaining)
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                if exc.code in (400, 404):
+                    # A fact, not a failure: the API answered, and the answer is
+                    # "no such record". A ticket key that names no issue, or a run
+                    # id nobody has ever heard of, is exactly what the gate has to
+                    # judge — it must not be read as "the API is down".
+                    #
+                    # A 400 is the server refusing the address: an id that is not
+                    # a shape it accepts. There is no record under that address
+                    # either, so it is the same fact as the 404. Reading it as a
+                    # failed read would turn a bad id in a comment into a
+                    # transport failure, and a transport failure stops every
+                    # merge in the queue on a healthy API (DIG-4809, 21 Oct 2026).
+                    raise _PaperclipMissing(f"Paperclip has no {path}") from exc
+                if exc.code < 500:
+                    # 401 and 403 are the credential talking, not the record: the
+                    # queue cannot read anything, so it says so.
+                    raise _PaperclipUnavailable(
+                        f"Paperclip answered {exc.code} for {path}"
+                    ) from exc
+                # A server-side error can be transient, so it earns one more try.
+                failure = exc
+            except OSError as exc:
+                # A timeout and a refused connection are both transport facts and
+                # neither is a fact about the world: nothing was answered, so
+                # nothing was judged, and both earn one more try.
+                failure = exc
+            except (http.client.HTTPException, ValueError) as exc:
+                # The answer was cut off or was not JSON: a truncated or proxied
+                # response. It is not the fact the gate needs, so it earns one
+                # more try.
+                failure = exc
+            else:
+                self._cache[path] = payload
+                return payload
+        if failure is None:
+            raise _PaperclipUnavailable(
+                f"Paperclip could not be read for {path}: the read budget was spent"
+            )
+        if isinstance(failure, urllib.error.HTTPError):
+            detail = f"Paperclip answered {failure.code} for {path}"
+        else:
+            detail = f"Paperclip could not be read for {path}: {failure}"
+        plural = "attempt" if attempts == 1 else "attempts"
+        raise _PaperclipUnavailable(f"{detail} (after {attempts} {plural})") from failure
+
+    def ticket(self, key: str) -> dict[str, Any] | None:
+        """The Paperclip issue behind a ticket key, or None when there is none."""
+        try:
+            data = self._get(f"/api/issues/{key}")
+        except _PaperclipMissing:
+            return None
+        return data if isinstance(data, dict) else None
+
+    def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+        """Every run that happened on one issue."""
+        try:
+            data = self._get(f"/api/issues/{issue_id}/runs")
+        except _PaperclipMissing:
+            return []
+        return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
+
+    def run(self, run_id: str) -> dict[str, Any] | None:
+        """One run by id — the record that says which seat ran it.
+
+        None means the API does not know that run: a marker naming it is
+        refused, not a marker that passes because the lookup failed.
+        """
+        try:
+            data = self._get(f"/api/heartbeat-runs/{run_id}")
+        except _PaperclipMissing:
+            return None
+        return data if isinstance(data, dict) else None
+
+
+#: One provenance reader per policy, shared across the PRs of a tick: the
+#: credential is read once and every answer is cached for the tick.
+_PROVENANCE: dict[tuple[str, str, str], ReviewerProvenance] = {}
+
+
+def _provenance_for(cfg: ReviewIndependence) -> ReviewerProvenance:
+    """The shared provenance reader for this policy."""
+    key = (cfg.api_url, cfg.keychain_service, cfg.keychain_account)
+    reader = _PROVENANCE.get(key)
+    if reader is None:
+        reader = ReviewerProvenance(cfg)
+        _PROVENANCE[key] = reader
+    return reader
+
+
+def _provenance_fields(body: str) -> dict[str, str]:
+    """The `digithings-review` marker's fields, lower-cased keys."""
+    fields: dict[str, str] = {}
+    for marker in _PROVENANCE_RE.finditer(body):
+        for match in _MARKER_FIELD_RE.finditer(marker.group("fields")):
+            fields[match.group("key").lower()] = match.group("value")
+    return fields
+
+
+def _marker_fields(marker: re.Match[str]) -> dict[str, str]:
+    """One marker's `key=value` fields, lower-cased keys."""
+    return {
+        match.group("key").lower(): match.group("value")
+        for match in _MARKER_FIELD_RE.finditer(marker.group("fields"))
+    }
+
+
+def _scope_head(body: str) -> str:
+    """The head sha a posted verdict names, if it names one.
+
+    The power-pack marker carries the reviewed commit as
+    `scope=owner/repo#12@<sha>`. That is a real head binding, so it counts as
+    one when the comment carries no provenance marker of its own.
+    """
+    head = ""
+    for marker in _MARKER_RE.finditer(body):
+        found = _SCOPE_SHA_RE.search(_marker_fields(marker).get("scope", ""))
+        if found:
+            head = found.group("sha")
+    return head
+
+
+def _carries_review_evidence(body: str, marker_literal: str) -> bool:
+    """Whether a comment is review evidence the queue reads.
+
+    Three shapes count: the in-session marker, a `Review verdict:` line, and a
+    posted verdict marker. The first is the coverage hatch, the second is the
+    review rule's own format, and the third is the marker the queue reads for
+    a blocking verdict.
+    """
+    if marker_literal in body:
+        return True
+    if _VERDICT_LINE_RE.search(body):
+        return True
+    for marker in _MARKER_RE.finditer(body):
+        verdict = _normalise_verdict(_marker_fields(marker).get("verdict", ""))
+        if verdict in READABLE_VERDICTS:
+            return True
+    return False
+
+
+def _review_markers(comments: list[Any]) -> list[ReviewMarker]:
+    """Every comment on the PR that carries review evidence."""
+    crc = _coverage_module()
+    literal = str(getattr(crc, "AGENT_REVIEW_MARKER", "<!-- in-session-review -->"))
+    markers: list[ReviewMarker] = []
+    for comment in comments:
+        if not isinstance(comment, Mapping):
+            continue
+        body = str(comment.get("body") or "")
+        if not _carries_review_evidence(body, literal):
+            continue
+        fields = _provenance_fields(body)
+        markers.append(
+            ReviewMarker(
+                comment_id=str(comment.get("id") or ""),
+                at=str(comment.get("createdAt") or ""),
+                # A uuid is the same uuid whatever case it is written in, and
+                # the API accepts either, so the gate compares one spelling.
+                agent=str(fields.get("agent") or "").lower(),
+                run=str(fields.get("run") or "").lower(),
+                head=str(fields.get("head") or _scope_head(body)),
+            )
+        )
+    return markers
+
+
+def _ticket_key(pr: dict[str, Any]) -> str:
+    """The one Paperclip ticket this PR is about.
+
+    The title comes first, then the branch: the ticket a PR is about is named
+    in its title or its branch. The body is not read, because `fetch_queue`
+    does not fetch it — a key taken from the body would be a key the gate can
+    never see in production, so the body branch was dead code that read as
+    a rule. And only one ticket is taken: a PR that names two tickets does not
+    have two authors, and the ticket that decides who wrote the code is the
+    ticket the PR ships.
+    """
+    for source in (pr.get("title"), pr.get("headRefName")):
+        match = _ISSUE_KEY_RE.search(str(source or ""))
+        if match:
+            return f"DIG-{match.group('number')}"
+    return ""
+
+
+def _author_dates(pr: dict[str, Any]) -> list[str]:
+    """When each of this PR's own commits was written.
+
+    A merge commit is not one of the PR's own commits: merging `develop` into
+    a branch is branch maintenance, and the seat that ran the merge did not
+    write the code the PR carries. Counting it makes the seat that merged
+    `develop` an author of every PR it rebased — measured on #6145, whose
+    merge of `develop` landed inside the QA Lead's run window.
+
+    The stamp is the commit's **author date**, never its committer date. A
+    rebase rewrites the commits it replays: the author date and the message
+    stay, the committer date becomes the rebasing seat's. So the committer
+    date names whoever rebased the branch last, and the author date names
+    whoever wrote the code — which is the question this gate asks. Read from
+    the committer date, the seat that rebased a branch became the PR's
+    author, the real author's own review counted as coverage, and a rebase
+    that landed outside every run window left the PR with no author at all
+    and no way to merge (the QA Lead's finding on #6145, 21 Oct).
+
+    A commit that carries no author date says nothing about who wrote it, so
+    it is left out. Nothing is guessed from the committer date: that is
+    exactly the date a rewrite moves.
+    """
+    stamps: list[str] = []
+    for commit in pr.get("commits") or []:
+        if not isinstance(commit, Mapping):
+            continue
+        headline = str(commit.get("messageHeadline") or "").strip().lower()
+        if headline.startswith("merge "):
+            continue
+        stamp = str(commit.get("authoredDate") or "").strip()
+        if stamp:
+            stamps.append(stamp)
+    return stamps
+
+
+def _author_context(
+    pr: dict[str, Any], prov: ReviewerProvenance
+) -> tuple[set[str], list[tuple[str, str, str]]]:
+    """The seats that wrote this PR, and their runs on this PR's ticket.
+
+    Ownership is not authorship. The seat a ticket is assigned to is the seat
+    that is asked to move the ticket along; the seat that wrote the code is
+    the seat whose commits are on the branch. Reading the assignee as the
+    author refused the review of the very seat that owns the ticket (the QA
+    Lead's finding on #6145, 21 Oct) and — worse — let the author seat's own
+    review through on every branch that carried no provenance trailer, which
+    was 28 of the 30 open develop PRs.
+
+    So the author is read from the code:
+
+    * the seats the commits declare: `Paperclip-Agent-Id:`, and the
+      `Paperclip-Run-Id:` resolved through the API to the seat that owned
+      that run;
+    * the seat whose run on this PR's own ticket was open when the PR's
+      commits were written — the author date of each commit, which a rebase
+      preserves. A run that was about a different ticket is not evidence about
+      this one — the reviewer that works from its own review ticket is not the
+      author of the PR it reviews.
+
+    When more than one seat is a candidate, the seat that the most commits
+    fall into is the author. A reviewer woken on the ticket while the author
+    pushes a fix shares a window with the author, and it is not the author.
+
+    The attribution is **per commit**. A commit that falls inside exactly one
+    seat's window was written by that seat, so that seat is an author — and a
+    seat that pushed one commit of a PR is an author even when the other seat
+    pushed more of them. Only a commit that falls inside several windows is
+    ambiguous, and there the count breaks the tie. Marking a seat as an author
+    costs that seat its own review coverage and nobody else's, so where the
+    evidence cannot separate two seats, both are treated as authors.
+    """
+    authors: set[str] = set()
+    windows: dict[str, list[tuple[str, str, str]]] = {}
+    for commit in pr.get("commits") or []:
+        if not isinstance(commit, Mapping):
+            continue
+        body = str(commit.get("messageBody") or commit.get("message") or "")
+        for match in _AGENT_TRAILER_RE.finditer(body):
+            agent = match.group("agent")
+            if not _UUID_RE.match(agent):
+                # The trailer names something the API would refuse, so the seat
+                # that wrote this commit is unknown. An unknown seat can be the
+                # author of the very review the gate is about to count, so the
+                # gate refuses instead of dropping the seat silently
+                # (DIG-4809, 21 Oct 2026).
+                raise _AuthorUnidentified("a commit names a seat id that is not one")
+            authors.add(agent.lower())
+        for match in _RUN_TRAILER_RE.finditer(body):
+            run_id = match.group("run")
+            if not _UUID_RE.match(run_id):
+                raise _AuthorUnidentified("a commit names a run id that is not one")
+            run = prov.run(run_id.lower())
+            seat = str((run or {}).get("agentId") or "").lower()
+            if seat:
+                authors.add(seat)
+    key = _ticket_key(pr)
+    ticket = prov.ticket(key) if key else None
+    if ticket:
+        issue_id = str(ticket.get("id") or "")
+        stamps = _author_dates(pr)
+        counts: dict[str, int] = {}
+        for run in prov.issue_runs(issue_id):
+            seat = str(run.get("agentId") or "").lower()
+            if not seat:
+                continue
+            if str(run.get("contextIssueId") or "") != issue_id:
+                # The run was about another ticket. It says nothing about who
+                # wrote this PR.
+                continue
+            window = (
+                str(run.get("runId") or run.get("id") or ""),
+                str(run.get("startedAt") or ""),
+                str(run.get("finishedAt") or ""),
+            )
+            windows.setdefault(seat, []).append(window)
+            for stamp in stamps:
+                if _within_window(stamp, window[1], window[2]):
+                    counts[seat] = counts.get(seat, 0) + 1
+        for stamp in stamps:
+            candidates = [
+                seat
+                for seat, seat_windows in windows.items()
+                if any(
+                    _within_window(stamp, start, end)
+                    for _, start, end in seat_windows
+                )
+            ]
+            if not candidates:
+                continue
+            if len(candidates) == 1:
+                # One seat was working on this ticket when the commit was
+                # written. It wrote it.
+                authors.add(candidates[0])
+                continue
+            # Several seats were awake. The seat the most commits fall into is
+            # the author; a tie leaves both as authors, because calling a seat
+            # an author only takes away that seat's own coverage.
+            best = max(counts.get(seat, 0) for seat in candidates)
+            for seat in candidates:
+                if counts.get(seat, 0) == best:
+                    authors.add(seat)
+    author_runs: list[tuple[str, str, str]] = []
+    for seat in sorted(authors):
+        author_runs.extend(windows.get(seat, []))
+    return authors, author_runs
+
+
+def _parse_ts(value: str) -> float | None:
+    """A timestamp as seconds, or None when it cannot be read."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.datetime.fromisoformat(text).timestamp()
+    except ValueError:
+        return None
+
+
+def _within_window(at: str, start: str, end: str) -> bool:
+    """Whether `at` falls inside the run window `[start, end]`.
+
+    A run with no end time is still running, so its window is open.
+    """
+    at_ts = _parse_ts(at)
+    start_ts = _parse_ts(start)
+    if at_ts is None or start_ts is None:
+        return False
+    end_ts = _parse_ts(end)
+    if end_ts is None:
+        end_ts = datetime.datetime.now(datetime.timezone.utc).timestamp()
+    return start_ts <= at_ts <= end_ts
+
+
+MIN_HEAD_BINDING = 7
+
+
+def _head_binds(marked: str, head: str) -> bool:
+    """Whether a posted sha binds this PR's head.
+
+    Reviewers write the reviewed sha at whatever length they have at hand:
+    the QA Lead's census of the open develop PRs found markers naming the
+    head as 7, 8, 12 and 40 characters. So the binding is a prefix
+    comparison against the head, not a fixed-width match — a check that
+    looked for exactly 12 hex characters would read a valid 7-character
+    marker as naming nothing at all. A sha shorter than git's own minimum
+    abbreviation binds no head.
+    """
+    marked = str(marked or "").strip().lower()
+    head = str(head or "").strip().lower()
+    if not head or len(marked) < MIN_HEAD_BINDING:
+        return False
+    return head.startswith(marked)
+
+
+def _marker_problems(
+    marker: ReviewMarker,
+    *,
+    head: str,
+    authors: set[str],
+    author_runs: list[tuple[str, str, str]],
+    prov: ReviewerProvenance,
+) -> tuple[list[str], str]:
+    """What is wrong with one review marker, and the seat that made it.
+
+    An empty problem list means the marker counts: it names the head the PR
+    stands at, and it came from a seat that is not the author.
+
+    A value that cannot be a record — a placeholder, a typo, a quoted example —
+    is judged by name and never sent to the API. The API answers questions
+    about records; a value that is not one has no answer, and asking turns the
+    fact the gate holds into a failed read (DIG-4809, 21 Oct 2026).
+    """
+    problems: list[str] = []
+    if not marker.head:
+        problems.append(
+            f"names no head SHA, so it says nothing about the head `{head[:12]}` "
+            "this PR stands at"
+        )
+    elif not _SHA_RE.match(marker.head):
+        problems.append(
+            f"names head `{marker.head[:12]}`, which is not a commit SHA, "
+            f"so it says nothing about the head `{head[:12]}` this PR stands at"
+        )
+    elif not _head_binds(marker.head, head):
+        problems.append(
+            f"names head `{marker.head[:12]}` while this PR stands at `{head[:12]}`"
+        )
+    reviewer = ""
+    if marker.run:
+        if not _UUID_RE.match(marker.run):
+            # A value that is not a run id is not a record the API could ever
+            # know, so it is never sent. Asking anyway turns a fact about the
+            # marker into a failed read — and a failed read is a transport
+            # failure, which stops every merge in the queue on a healthy API.
+            problems.append(
+                f"names run `{marker.run[:12]}`, which is not a run id, "
+                "so no run was checked"
+            )
+        else:
+            run = prov.run(marker.run)
+            if run is None:
+                problems.append(
+                    f"names run `{marker.run[:8]}`, which the Paperclip API does not know"
+                )
+            else:
+                reviewer = str(run.get("agentId") or "").lower()
+                if not reviewer:
+                    # The run is known, but it names no seat. The marker claims
+                    # a seat and a run, and neither of them can be checked, so
+                    # the gate cannot say who reviewed: that is a missing
+                    # signal, not a clearance.
+                    problems.append(
+                        "names a run that carries no seat, so the queue cannot say "
+                        "who reviewed"
+                    )
+                elif marker.agent and not _UUID_RE.match(marker.agent):
+                    problems.append(
+                        f"names seat `{marker.agent[:12]}`, which is not a seat id, "
+                        f"so it cannot be checked against run `{marker.run[:8]}`"
+                    )
+                elif marker.agent and marker.agent != reviewer:
+                    problems.append(
+                        f"names seat `{marker.agent[:8]}` while run `{marker.run[:8]}` "
+                        f"belongs to seat `{reviewer[:8]}`"
+                    )
+    elif marker.agent:
+        if not _UUID_RE.match(marker.agent):
+            problems.append(
+                f"names seat `{marker.agent[:12]}`, which is not a seat id, "
+                "so it names no seat the queue could check"
+            )
+        else:
+            reviewer = marker.agent
+            problems.append(
+                f"names seat `{marker.agent[:8]}` but no run to check that seat against"
+            )
+    else:
+        problems.append("carries neither a seat nor a run")
+    if reviewer and reviewer in authors:
+        problems.append(f"came from the PR author's own seat (`{reviewer[:8]}`)")
+        # The authoring seat's own run window. A marker of the author's own
+        # seat that lands inside that window is the author's review, and the
+        # seat's subagents share its run id, so the window says which run
+        # spoke. It is not a veto on other seats: a review from another seat
+        # posted while the author was still working is that seat's review
+        # (the QA Lead's finding on #6145, 21 Oct — a gate that refuses other
+        # seats inside the author's window refuses every honest review).
+        for run_id, started, finished in author_runs:
+            if _within_window(marker.at, started, finished):
+                problems.append(
+                    f"was posted while the authoring seat's run `{run_id[:8]}` on this "
+                    "PR's ticket was still active"
+                )
+                break
+    return problems, reviewer
+
+
+def _governing_marker(markers: list[ReviewMarker]) -> ReviewMarker:
+    """The marker that speaks for the PR: the newest one.
+
+    The queue has always read the last review marker on a PR, so the gate
+    judges that one and no other. Falling back to an earlier marker would
+    paper over a stale last marker with an older review — and the head only
+    moves forward, so an earlier marker can only ever bind an older head.
+    The remedy for a stale last marker has to be a new review, not an older
+    one, so a stale last marker is a refusal.
+    """
+    best: ReviewMarker | None = None
+    best_key: tuple[bool, float, int] = (False, 0.0, -1)
+    for index, marker in enumerate(markers):
+        stamp = _parse_ts(marker.at)
+        key = (stamp is not None, stamp if stamp is not None else 0.0, index)
+        if key > best_key:
+            best, best_key = marker, key
+    if best is None:
+        raise ValueError("no marker to govern")
+    return best
+
+
+def _reviewer_independence(
+    pr: dict[str, Any],
+    cfg: ReviewIndependence,
+    prov: ReviewerProvenance,
+    comments: list[Any],
+) -> Independence:
+    """Judge the review marker that speaks for this PR.
+
+    The newest review marker governs, and it is judged on two counts: it must
+    name the head the PR stands at now, and it must come from a seat that is
+    not one of the seats that wrote the PR. A marker that fails is dropped
+    from the coverage evidence, and every other marker goes with it, so that
+    no older review is used in its place.
+    """
+    mode = _effective_mode(cfg)
+    if mode == "off":
+        return Independence()
+    markers = _review_markers(comments)
+    if not markers:
+        return Independence()
+    head = str(pr.get("headRefOid") or "")
+    # A marker the gate cannot judge does not count: an unjudged marker is
+    # dropped from the evidence, exactly like a judged-and-refused one.
+    every_marker = frozenset(m.comment_id for m in markers if m.comment_id)
+    try:
+        authors, author_runs = _author_context(pr, prov)
+    except _PaperclipUnavailable as exc:
+        return Independence(
+            disqualified=every_marker,
+            unverifiable=f"the review seats could not be checked: {exc}",
+        )
+    except _AuthorUnidentified as exc:
+        # The commit names an author the gate cannot resolve. The seat that
+        # wrote it may be the seat that posted the review, so the gate cannot
+        # show the review to come from another seat and says so.
+        return Independence(
+            disqualified=every_marker,
+            unverifiable=(
+                f"the PR's authoring seat could not be identified: {exc}, so no "
+                "review on it can be shown to come from a different seat"
+            ),
+        )
+    if not authors:
+        return Independence(
+            disqualified=every_marker,
+            unverifiable=(
+                "the PR's authoring seat could not be identified, so no review on "
+                "it can be shown to come from a different seat"
+            )
+        )
+    governing = _governing_marker(markers)
+    try:
+        found, reviewer = _marker_problems(
+            governing,
+            head=head,
+            authors=authors,
+            author_runs=author_runs,
+            prov=prov,
+        )
+    except _PaperclipUnavailable as exc:
+        # The API went away mid-judgement. Nothing is concluded about any
+        # marker: a partial judgement is not a judgement.
+        return Independence(
+            disqualified=every_marker,
+            unverifiable=f"the review seats could not be checked: {exc}",
+        )
+    if found:
+        return Independence(
+            # Every marker goes, not just the one that failed: an older review
+            # is not used in place of a last marker that does not count.
+            disqualified=every_marker,
+            problems=(
+                "the last review posted at "
+                f"{governing.at or 'an unknown time'} " + "; ".join(found),
+            ),
+        )
+    seat = reviewer or governing.agent
+    note = (
+        f"reviewer seat `{seat[:8]}`"
+        + (f" (run `{governing.run[:8]}`)" if governing.run else "")
+        + f" on head `{head[:12]}`"
+    )
+    return Independence(
+        # The older markers are dropped too, so the coverage evidence carries
+        # the governing marker and nothing else.
+        disqualified=every_marker - {governing.comment_id},
+        note=note,
+    )
+
+
+#: The shadow log is a measurement, not an archive: one generation, one
+#: reader, and a line only when the measurement changes.
+SHADOW_LOG_MAX_BYTES = 1_048_576
+SHADOW_LOG_TAIL_BYTES = 65_536
+
+
+def _rotate_shadow_log(path: Path) -> None:
+    """Keep the shadow log to one generation, and to one reader.
+
+    The queue writes it every tick, so an unrotated file grows without end
+    and a world-readable one hands the queue's own record to every account
+    on the machine. The file holds no secret — it names PRs, seats and the
+    reason a review did not count — but it is still the queue's record, so it
+    is written for its owner alone.
+    """
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    if size > SHADOW_LOG_MAX_BYTES:
+        try:
+            path.replace(path.with_name(path.name + ".1"))
+        except OSError:
+            pass
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _shadow_log_says(path: Path, number: Any, payload: str) -> bool:
+    """Whether the shadow log already records this verdict for this PR.
+
+    The queue judges a PR on every tick. A log that repeats the same verdict
+    every ten minutes is a heartbeat, not a measurement: it buries the change
+    it is supposed to show. So a verdict that is already the last word on
+    that PR is not written again.
+    """
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return False
+    try:
+        with path.open("rb") as handle:
+            handle.seek(max(0, size - SHADOW_LOG_TAIL_BYTES))
+            tail = handle.read().decode("utf-8", "replace")
+    except OSError:
+        return False
+    marker = f"PR #{number} "
+    last = ""
+    for line in tail.splitlines():
+        if marker in line:
+            last = line
+    if not last:
+        return False
+    return last.split("would refuse: ", 1)[-1] == payload
+
+
+def _log_shadow(
+    cfg: ReviewIndependence | None,
+    pr: dict[str, Any],
+    repo: str | None,
+    lines: Sequence[str],
+) -> None:
+    """Write what the gate refused, and what the row would have merged on.
+
+    A shadow log that cannot be written is a lost measurement, not a reason to
+    change a verdict: the gate already decided, so it keeps its hands off the
+    merge.
+    """
+    if cfg is None:
+        return
+    path = Path(str(cfg.log_path)).expanduser()
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payload = " | ".join(str(line) for line in lines)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _rotate_shadow_log(path)
+        if _shadow_log_says(path, pr.get("number"), payload):
+            return
+        with path.open("a", encoding="utf-8") as handle:
+            for line in lines:
+                handle.write(
+                    f"{stamp} reviewer independence (shadow): PR #{pr.get('number')} "
+                    f"{repo or '?'} — would refuse: {line}\n"
+                )
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _comment_id(comment: Any) -> str:
+    """The id of a comment row, whether it is a dict or a fixture."""
+    if isinstance(comment, Mapping):
+        return str(comment.get("id") or "")
+    return ""
 
 
 def _review_coverage(
-    pr: dict[str, Any], repo: str | None, policy: Policy | None = None
+    pr: dict[str, Any],
+    repo: str | None,
+    cfg: ReviewIndependence | None = None,
+    prov: ReviewerProvenance | None = None,
 ) -> tuple[list[str], str]:
     """The promotion gate's evidence, enforced at merge time.
 
@@ -1384,8 +3880,13 @@ def _review_coverage(
     * This is the review gate. Both reopen cases merged attested by `qa` with
       zero reviews and zero comments; attestation is an assertion, and an
       assertion with no artifact is exactly what the promotion gate refuses.
-      `--attest-review` is gone (2026-10-17), and no non-author approval is
-      required on top of this evidence (Chris's 2026-10-15 definition).
+      `--attest-review` is gone (2026-10-17), and no separate formal approval is
+      demanded on top of the evidence (Chris's 2026-10-15 definition). But an
+      in-session pass is only evidence when another seat wrote it: the reviewer
+      independence gate (DIG-4795) drops a comment whose provenance marker names
+      the PR's author seat or cannot be checked at all, and DIG-5220 shipped that
+      gate in `enforce` mode after #6277 and #6197 merged on the authoring lane's
+      own write-up.
     * The comments this gate scores are supplied by `fetch_queue` and, when the
       row arrives without them, completed by `_ensure_comments` — which runs
       before this function precisely because an unreadable review record must
@@ -1419,42 +3920,83 @@ def _review_coverage(
                 "comment could not be read"
             ], ""
         comments = (data or {}).get("comments") or []
-    state: dict[str, Any] = {
-        "labels": labels,
-        "approvals": [],
-        "bugbot": None,
-        "title": str(pr.get("title") or ""),
-        "owner_review": None,
-        "agent_tool": [],
-        "agent_review": None,
-    }
-    enforce_independence = policy.seat_independence_for(repo) if policy else False
-    evidence, dropped = _evidence_comments(
-        {**pr, "comments": comments if isinstance(comments, list) else []},
-        enforce_independence=enforce_independence,
-    )
-    crc._apply_reviews_checks_comments(
-        state,
-        reviews=_evidence_reviews(pr),
-        checks=_rollup(pr),
-        comments=evidence,
-    )
-    reviewed, why = crc.verdict_for(state)
-    if reviewed:
-        return [], why
-    not_counted = ""
-    if dropped:
-        shown = "; ".join(dropped[:3]) + (
-            f"; and {len(dropped) - 3} more" if len(dropped) > 3 else ""
+    counted = list(comments) if isinstance(comments, list) else []
+
+    mode = _effective_mode(cfg) if cfg is not None else "off"
+    independence = Independence()
+    if cfg is not None and mode != "off":
+        independence = _reviewer_independence(pr, cfg, prov or _provenance_for(cfg), counted)
+    kept = [c for c in counted if _comment_id(c) not in independence.disqualified]
+
+    def state_for(entries: list[Any]) -> dict[str, Any]:
+        state: dict[str, Any] = {
+            "labels": labels,
+            "approvals": [],
+            "bugbot": None,
+            "title": str(pr.get("title") or ""),
+            "owner_review": None,
+            "agent_tool": [],
+            "agent_review": None,
+        }
+        crc._apply_reviews_checks_comments(
+            state,
+            reviews=_evidence_reviews(pr),
+            checks=_rollup(pr),
+            comments=entries,
         )
-        not_counted = f". Not counted as review evidence: {shown}"
+        return state
+
+    # The gate always decides on the comments it accepted. Shadow mode keeps the
+    # measurement — it records what the gate refused, and what the row would have
+    # said with every comment counted — but it is no longer a licence to merge on
+    # the marker the gate just refused. DIG-5220 made that change after #6277 and
+    # #6197: in both, the authoring lane's own write-up was counted as the review
+    # and the PR merged with no other seat's look at the final head.
+    reviewed, why = crc.verdict_for(state_for(kept))
+    if mode == "shadow":
+        would_review, would_why = crc.verdict_for(state_for(counted))
+        if independence.unverifiable:
+            _log_shadow(
+                cfg,
+                pr,
+                repo,
+                [f"could not check the review seats: {independence.unverifiable}"],
+            )
+        elif independence.problems:
+            lines = list(independence.problems)
+            if would_review:
+                # The measurement that matters: without this gate the row would
+                # have merged on the evidence it just refused.
+                lines.append(f"without this gate the row would have merged on {would_why}")
+            _log_shadow(cfg, pr, repo, lines)
+
+    if reviewed:
+        evidence = why
+        if independence.note:
+            evidence = f"{evidence}; {independence.note}"
+        elif independence.problems:
+            evidence = (
+                f"{evidence}; {len(independence.disqualified)} review marker(s) did "
+                "not count"
+            )
+        return [], evidence
+
+    if independence.unverifiable:
+        return [f"reviewer independence: {independence.unverifiable}"], ""
+    if independence.problems:
+        head = str(pr.get("headRefOid") or "")[:12]
+        return [
+            "reviewer independence: "
+            + "; ".join(independence.problems[:3])
+            + " — the queue needs a review from a different seat, on the head "
+            f"this PR stands at (`{head}`)"
+        ], ""
     return [
         f"review coverage: {why} — the queue needs a review pass that left its "
         "findings on the PR, the same evidence scripts/check_review_coverage.py "
         "enforces at promotion (completed Bot run, a reviewer bot such as "
-        "CodeRabbit or Copilot, an in-session review from a seat other than the "
-        "author's with its findings comment, an approval, or reviewed:owner)"
-        f"{not_counted}"
+        "CodeRabbit or Copilot, an in-session review with its findings comment, "
+        "an approval, or reviewed:owner)"
     ], ""
 
 
@@ -1465,7 +4007,7 @@ def evaluate(
     base: str,
     acting_role: str,
     repo: str | None = None,
-    corpus: list[Mapping[str, Any]] | None = None,
+    prov: ReviewerProvenance | None = None,
 ) -> Verdict:
     """Apply every gate to one PR. Returns the verdict, including why it failed."""
     reasons: list[str] = []
@@ -1494,7 +4036,7 @@ def evaluate(
     if state in STALE_MERGE_STATES:
         reasons.append(stale_reason)
 
-    reasons.extend(_gate_checks(pr, policy))
+    reasons.extend(_gate_checks(pr, policy, repo=repo))
     # The verdict gate reads the review record, so the row is completed before either
     # review gate runs. `_review_coverage`'s own lazy fetch is not enough on its own:
     # it runs *after* `_gate_review` and so cannot repair a row that `_gate_review`
@@ -1504,15 +4046,10 @@ def evaluate(
     if unreadable:
         reasons.append(unreadable)
     reasons.extend(_gate_review(pr))
-    coverage_reasons, review_evidence = _review_coverage(pr, repo, policy)
+    coverage_reasons, review_evidence = _review_coverage(
+        pr, repo, policy.review_independence, prov
+    )
     reasons.extend(coverage_reasons)
-    # The review evidence itself has to be a real review pass (DIG-4631): not a
-    # copy of another PR's review, and not a review posted seconds after the
-    # push it claims to cover.
-    reasons.extend(_gate_review_pass_evidence(pr, corpus))
-    # review-applied on the exact tip. The rollup half is free; the by-SHA read is
-    # one REST call, so it is spent only on a PR every earlier gate passed.
-    reasons.extend(_gate_review_applied(pr, policy, repo if not reasons else None))
     # Read last, and only for a PR every other gate passed: it is one GraphQL read
     # per PR, and a PR already refused elsewhere needs no second reason to wait.
     if not reasons:
@@ -1552,11 +4089,7 @@ def evaluate_all(
     repo: str | None = None,
 ) -> list[Verdict]:
     """Every PR, in queue order, with its verdict."""
-    corpus = _review_corpus(prs)
-    verdicts = [
-        evaluate(pr, policy, base=base, acting_role=acting_role, repo=repo, corpus=corpus)
-        for pr in prs
-    ]
+    verdicts = [evaluate(pr, policy, base=base, acting_role=acting_role, repo=repo) for pr in prs]
     verdicts.sort(key=Verdict.order_key)
     return verdicts
 
@@ -1573,13 +4106,7 @@ def _audit_body(verdict: Verdict, authority: Authority, policy: Policy) -> str:
         f"- method: `{policy.merge_method}`\n"
         f"- review: {review}\n"
         f"- required checks: {', '.join(f'`{c}`' for c in policy.required_checks)}\n"
-        + (
-            f"- `{policy.review_applied_context}`: SUCCESS on `{verdict.head_sha[:12]}`, "
-            "the merged head\n"
-            if policy.review_applied_context
-            else ""
-        )
-        + f"- checks reported: {len(verdict.checks)}\n\n"
+        f"- checks reported: {len(verdict.checks)}\n\n"
         f"{checks}\n\n"
         "Gate definition and the roster: `docs/MERGE_QUEUE.md`, "
         "`scripts/merge_queue_policy.json`."
@@ -1608,6 +4135,32 @@ def merge_one(repo: str, verdict: Verdict, authority: Authority, policy: Policy)
     proc = subprocess.run(["gh", *args], capture_output=True, text=True)
     if proc.returncode != 0:
         raise QueueError(f"merge of #{verdict.number} failed: {proc.stderr.strip()}")
+
+
+def stale_candidates(verdicts: list[Verdict], limit: int) -> list[Verdict]:
+    """Return up to ``limit`` branches that are stale only because the base moved.
+
+    A PR whose *only* reason for being refused is a moved base is not broken: a
+    merge of the base into its branch puts it back in flight, and its checks
+    run again against the base the queue is on. That is the only action that can
+    clear it, so the update step is what keeps the queue draining.
+
+    The list is FIFO — the same order the queue merges in — because an update
+    spends a full CI run, and the oldest PR is the one that has been waiting
+    longest for it. The order is taken from the verdicts themselves rather than
+    from the order they arrive in, so a caller that hands the list over in any
+    other order still refreshes the oldest first. ``limit`` is the number of
+    branches one tick may refresh: each one costs a CI run, and refreshing more
+    than the checks can absorb turns the queue into a treadmill of runs that all
+    finish at once.
+
+    A limit of zero or less returns nothing, so a caller that does not want to
+    update anything does not have to special-case it.
+    """
+    if limit <= 0:
+        return []
+    stale = sorted((v for v in verdicts if v.stale_base_only), key=Verdict.order_key)
+    return stale[:limit]
 
 
 def update_branch(repo: str, verdict: Verdict) -> bool:
@@ -1696,12 +4249,12 @@ def print_queue(verdicts: list[Verdict], *, queued_only: bool) -> None:
     # Stale, not blocked: named separately and before the blocked list, because the
     # action on them is different — nobody has to fix anything, a run tick clears
     # them — and reporting them as blocked is what made 10 green PRs look like work.
-    stale = [v for v in verdicts if v.stale_base_only]
+    stale = stale_candidates(verdicts, len(verdicts))
     if stale and not queued_only:
         print(
             f"\nstale ({len(stale)}) — green against a base we have left, and counted "
-            "below as not eligible; nobody has to fix these, a run tick updates one "
-            "branch, oldest first:"
+            "below as not eligible; nobody has to fix these, a run tick updates "
+            "branches, oldest first, up to --max-updates of them:"
         )
         for v in stale:
             print(f"  #{v.number} {v.head_ref} — {v.title}")
@@ -1859,7 +4412,7 @@ def main(argv: list[str] | None = None) -> int:
             # read, so this costs no extra API call, and a PR that only became stale
             # *because* of this tick's merge is not in it — it still read CLEAN — so it is
             # picked up on the next tick instead of being updated twice.
-            for candidate in [v for v in verdicts if v.stale_base_only][: args.max_updates]:
+            for candidate in stale_candidates(verdicts, args.max_updates):
                 if not update_branch(args.repo, candidate):
                     # Refused: the branch is exactly as it was, so this is not an update
                     # and must not be reported, counted or dropped from the dump as one.
@@ -1889,6 +4442,10 @@ def main(argv: list[str] | None = None) -> int:
     except QueueError as exc:
         print(f"merge_queue: {exc}", file=sys.stderr)
         return EXIT_OPERATIONAL
+    finally:
+        # The tick is over: the counts the index holds are written out, so the
+        # next tick knows what the log already says.
+        _flush_provenance_index()
 
 
 if __name__ == "__main__":

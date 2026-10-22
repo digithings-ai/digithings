@@ -1,28 +1,60 @@
 import { describe, expect, it } from "vitest";
+import { VIEW_CODES, VIEW_LABELS } from "@digithings/digichat-ui";
+import { normalizeViewPref, PREFS_LEGACY_VIEW_MODE_ALIASES } from "@digithings/ui/chat/stock";
 
 import {
   DEFAULT_THINKING_MODE,
   DEFAULT_VIEW_MODE,
+  LEGACY_VIEW_MODE_ALIASES,
   THINKING_MODES,
   VIEW_MODES,
   effectiveReasoningMode,
   effectiveToolCallsMode,
+  isLegacyViewMode,
   isThinkingMode,
   isViewMode,
-  viewIsVisible,
+  normalizeViewMode,
 } from "@/lib/view-modes";
 
 describe("view-modes", () => {
   it("defaults to the balanced view with auto thinking", () => {
     expect(DEFAULT_VIEW_MODE).toBe("balanced");
     expect(DEFAULT_THINKING_MODE).toBe("auto");
-    expect(VIEW_MODES).toEqual(["hidden", "quiet", "balanced", "verbose"]);
+    expect(VIEW_MODES).toEqual(["quiet", "balanced", "verbose"]);
     expect(THINKING_MODES).toEqual(["auto", "collapsed", "open"]);
   });
 
+  it("keeps the id contract aligned with the shared palette", () => {
+    // The app owns the ids, the shared package owns the wording. Both must
+    // name the same levels: when they drift, a row can find no label and
+    // render a blank description (DIG-4665).
+    expect(VIEW_MODES).toEqual([...VIEW_CODES]);
+    for (const mode of VIEW_MODES) {
+      expect(VIEW_LABELS[mode].trim()).not.toBe("");
+    }
+  });
+
+  it("keeps the prefs twin on the same levels", () => {
+    // The third id twin: the prefs host in `@digithings/ui/chat/stock` types
+    // `api.prefs.view` and normalises what it is given. It must name the
+    // app's levels and fold the retired ids to the same targets, or a pref
+    // the app cannot read lands on the default.
+    for (const mode of VIEW_MODES) {
+      expect(normalizeViewPref(mode)).toBe(mode);
+    }
+    for (const [retired, current] of Object.entries(LEGACY_VIEW_MODE_ALIASES)) {
+      expect(normalizeViewPref(retired)).toBe(current);
+    }
+    // The twin's alias map must be the same map, not only a map that folds
+    // the same way: a map that gains an entry of its own is a drift the
+    // host cannot see.
+    expect(PREFS_LEGACY_VIEW_MODE_ALIASES).toEqual(LEGACY_VIEW_MODE_ALIASES);
+  });
+
   it("guards view and thinking mode values", () => {
-    expect(isViewMode("hidden")).toBe(true);
+    expect(isViewMode("quiet")).toBe(true);
     expect(isViewMode("balanced")).toBe(true);
+    expect(isViewMode("hidden")).toBe(false);
     expect(isViewMode("expanded")).toBe(false);
     expect(isViewMode(undefined)).toBe(false);
 
@@ -32,17 +64,19 @@ describe("view-modes", () => {
     expect(isThinkingMode(true)).toBe(false);
   });
 
-  it("hides both groups only in the hidden view", () => {
-    expect(viewIsVisible("hidden")).toBe(false);
-    expect(viewIsVisible("quiet")).toBe(true);
-    expect(viewIsVisible("balanced")).toBe(true);
-    expect(viewIsVisible("verbose")).toBe(true);
+  it("folds the retired view ids forward", () => {
+    // `hidden` was the one-line level; the folded chain shows that same line
+    // as its header now, so it means the titles only.
+    expect(isLegacyViewMode("hidden")).toBe(true);
+    expect(normalizeViewMode("hidden")).toBe("quiet");
+    expect(normalizeViewMode("compact")).toBe("quiet");
+    expect(normalizeViewMode("detailed")).toBe("verbose");
+    expect(normalizeViewMode("verbose")).toBe("verbose");
+    expect(normalizeViewMode("nonsense")).toBe("balanced");
+    expect(normalizeViewMode(undefined)).toBe("balanced");
   });
 
   it("folds the view mode with the thinking override for reasoning", () => {
-    expect(effectiveReasoningMode("hidden", "auto")).toBe("off");
-    expect(effectiveReasoningMode("hidden", "open")).toBe("off");
-
     expect(effectiveReasoningMode("quiet", "auto")).toBe("collapsed");
     expect(effectiveReasoningMode("quiet", "collapsed")).toBe("collapsed");
     expect(effectiveReasoningMode("quiet", "open")).toBe("expanded");
@@ -57,9 +91,16 @@ describe("view-modes", () => {
   });
 
   it("maps the view mode onto tool-call disclosure", () => {
-    expect(effectiveToolCallsMode("hidden")).toBe("off");
     expect(effectiveToolCallsMode("quiet")).toBe("collapsed");
     expect(effectiveToolCallsMode("balanced")).toBe("balanced");
     expect(effectiveToolCallsMode("verbose")).toBe("expanded");
+  });
+
+  it("has no view that turns the trace off", () => {
+    // The retired `hidden` level was the only one that did.
+    for (const view of VIEW_MODES) {
+      expect(effectiveToolCallsMode(view)).not.toBe("off");
+      expect(effectiveReasoningMode(view, "auto")).not.toBe("off");
+    }
   });
 });

@@ -39,10 +39,9 @@ deployment:
     pageContext: silent
   models:
     # Same CI-cheap default as digithings.ai (#3829). Not OpenRouter `:free`.
-    default: deepseek/deepseek-v4-flash
+    default: deepseek/deepseek-v4.1-flash-1017
     available:
-      - deepseek/deepseek-v4-flash
-      - deepseek/deepseek-v4-flash-0731
+      - deepseek/deepseek-v4.1-flash-1017
       - openai/gpt-oss-120b
       - z-ai/glm-5.3-flash
     allowPicker: true

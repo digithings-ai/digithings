@@ -249,6 +249,7 @@ class TestResearchNode:
             max_tool_rounds: int,
             on_tool_step,
             tool_choice: str = "auto",
+            reasoning_effort: str | None = None,
         ) -> str:
             # Simulate one digillm tool round: a digisearch call that finds nothing.
             on_tool_step("tool_call", {"name": "digisearch", "arguments": {"query": "jwt"}})

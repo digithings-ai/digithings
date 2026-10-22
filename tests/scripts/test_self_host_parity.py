@@ -399,9 +399,12 @@ def _run_runner(args, env_extra=None):
 def _expected_chain(migrations_dir=MIGRATIONS_DIR):
     """The chain the runner is expected to plan, derived from the tree.
 
-    This mirrors the runner's own ``ls -1 "$migrations_dir"/*.sql``: top level
-    only, LC_ALL=C order. ``cutover/`` is a subdirectory, so it is absent from
-    this list -- that is the staged-not-applied exclusion, not a second list.
+    This mirrors the runner's own plan: the migrations tree is split into
+    layers (#5854), ``engine/`` applies first in filename order, then
+    ``prod/`` in filename order, and every entry carries its layer prefix
+    (``engine/001_...sql``). ``cutover/`` is a subdirectory, so it is absent
+    from this list -- that is the staged-not-applied exclusion, not a second
+    list.
 
     The count is derived rather than written down because it is a census, not a
     ratchet: a hardcoded number turns every future migration into a red lane for
@@ -409,7 +412,15 @@ def _expected_chain(migrations_dir=MIGRATIONS_DIR):
     endpoints are asserted too, so the plan must name the real first and last
     file and cannot satisfy this by counting a different set.
     """
-    return sorted(p.name for p in migrations_dir.glob("*.sql"))
+    chain = []
+    for layer in ("engine", "prod"):
+        layer_dir = migrations_dir / layer
+        if not layer_dir.is_dir():
+            continue
+        chain.extend(f"{layer}/{path.name}" for path in layer_dir.glob("*.sql"))
+    # The runner sorts by layer, then by name, in the C locale. The prefixed
+    # names sort the same way byte by byte.
+    return sorted(chain)
 
 
 def _plan_chain_line(stdout):
@@ -447,18 +458,26 @@ def test_runner_plan_count_follows_the_migrations_directory(tmp_path):
     """The control for the derived count above: same assertion, a different
     directory, a different number. Without this the census could be satisfying
     the assertion by coincidence rather than by tracking the tree."""
-    names = ["001_first.sql", "002_second.sql", "003_third.sql"]
-    for name in names:
-        (tmp_path / name).write_text("select 1;\n")
+    engine = tmp_path / "engine"
+    prod = tmp_path / "prod"
+    engine.mkdir()
+    prod.mkdir()
+    (engine / "001_first.sql").write_text("select 1;\n")
+    (engine / "002_second.sql").write_text("select 1;\n")
+    (prod / "003_third.sql").write_text("select 1;\n")
     proc = _run_runner(["--plan"], {"PARITY_MIGRATIONS_DIR": str(tmp_path)})
     assert proc.returncode == 0, proc.stderr
     assert _plan_chain_line(proc.stdout) is not None, proc.stdout
-    assert "3 migrations, 001_first.sql .. 003_third.sql" in proc.stdout, proc.stdout
+    assert "3 migrations, engine/001_first.sql .. prod/003_third.sql" in proc.stdout, proc.stdout
 
 
 def test_runner_plan_rejects_an_unparsable_migration_name(tmp_path, monkeypatch):
-    (tmp_path / "001_ok.sql").write_text("select 1;")
-    (tmp_path / "not-a-number.sql").write_text("select 1;")
+    engine = tmp_path / "engine"
+    prod = tmp_path / "prod"
+    engine.mkdir()
+    prod.mkdir()
+    (engine / "001_ok.sql").write_text("select 1;")
+    (prod / "not-a-number.sql").write_text("select 1;")
     proc = _run_runner(["--plan"], {"PARITY_MIGRATIONS_DIR": str(tmp_path)})
     assert proc.returncode == 1
     assert "naming guard" in proc.stderr
@@ -502,10 +521,15 @@ def _stub_env(tmp_path, with_bad_file):
     """A stubbed runner environment: no server, no real database, no real
     migrations. Returns (env, json_path)."""
     mig = tmp_path / "migrations"
-    mig.mkdir(exist_ok=True)
-    (mig / "001_ok.sql").write_text("select 1;\n")
+    engine = mig / "engine"
+    prod = mig / "prod"
+    engine.mkdir(parents=True, exist_ok=True)
+    prod.mkdir(parents=True, exist_ok=True)
+    (engine / "001_ok.sql").write_text("select 1;\n")
     if with_bad_file:
-        (mig / "002_bad.sql").write_text("select * from public.nope;\n")
+        (prod / "002_bad.sql").write_text("select * from public.nope;\n")
+    else:
+        (prod / "002_ok.sql").write_text("select 1;\n")
     stub = tmp_path / "psql"
     stub.write_text(_STUB_PSQL)
     stub.chmod(0o755)
@@ -530,7 +554,7 @@ def test_runner_passes_when_every_migration_applies(tmp_path):
             [*args, "--json-out", str(tmp_path / "ok.json")], _stub_env(tmp_path, False)
         )
         assert proc.returncode == 0, proc.stdout + proc.stderr
-        assert "SELF-HOST MIGRATIONS CHECK: PASS (1/1 applied)" in proc.stdout, proc.stdout
+        assert "SELF-HOST MIGRATIONS CHECK: PASS (2/2 applied)" in proc.stdout, proc.stdout
 
 
 def test_continue_on_error_reports_a_gap_as_data_not_as_a_verdict(tmp_path):

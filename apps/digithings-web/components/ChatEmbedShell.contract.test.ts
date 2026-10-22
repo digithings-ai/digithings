@@ -7,7 +7,7 @@ import {
   THEME,
   buildEmbedParentErrorMessage,
   buildEmbedThemeMessage,
-  formatShellLoadErrorLine,
+  formatShellLoadDiagnostic,
   readParentDocumentTheme,
 } from "@/components/ChatEmbedShell";
 
@@ -48,13 +48,21 @@ describe("ChatEmbedShell contracts", () => {
     );
   });
 
-  it("formats shell load fallback without tunnel/DIGICHAT_EMBED_HOSTS copy", () => {
-    const line = formatShellLoadErrorLine();
-    expect(line.startsWith("error: ")).toBe(true);
+  it("keeps the operator diagnostic for the dev console only", async () => {
+    const line = formatShellLoadDiagnostic("test");
     expect(line).toContain("DIGICHAT_EMBED_ORIGIN");
-    expect(line).toContain("Container");
     expect(line).not.toContain("tunnel");
-    expect(line).not.toContain("DIGICHAT_EMBED_HOSTS");
+    // Logged, never rendered: the only caller is the console helper, and it
+    // is silent in production builds.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const src = readFileSync(
+      fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(src.split("formatShellLoadDiagnostic(").length - 1).toBe(2); // definition + console.error
+    expect(src).toContain('if (process.env.NODE_ENV === "production") return;');
+    expect(src).toContain("console.error(formatShellLoadDiagnostic(reason))");
   });
 
   it("reads parent html data-theme as light or dark", () => {
@@ -101,6 +109,24 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
     expect(src).toContain("opacity: revealed ? 1 : 0");
+
+    // The full-page routes paint the digichat hero banner in that same cover
+    // instead of the tool chain: /chat and /chat/occ are only the chat, so a
+    // simulated tool list would invent work the visitor never started. The
+    // landing pop-up leaves warmupLoader at its default ("toolchain") and
+    // keeps the BootLabOverlay branch above.
+    expect(src).toContain('from "@digithings/hero-banner/web"');
+    expect(src).toContain('from "@digithings/hero-banner/definitions"');
+    expect(src).toContain('warmupLoader?: "toolchain" | "banner"');
+    expect(src).toContain('warmupLoader = "toolchain"');
+    expect(src).toContain('warmupLoader === "banner"');
+    expect(src).toContain("<HeroBanner def={DIGICHAT} replayLoading />");
+
+    const pageShellSrc = readFileSync(
+      fileURLToPath(new URL("./ChatPageShell.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(pageShellSrc).toContain('warmupLoader="banner"');
     // Curated per-host copy rides into the iframe URL. The strings themselves
     // live in lib/embedCopy.ts now, so the landing page's FAQ band can mount the
     // same conversation with the same welcome — assert both halves: the URL

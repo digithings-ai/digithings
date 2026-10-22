@@ -22,33 +22,33 @@ chat app.
 
 ## Install unit
 
-> **No published digichat image exists today.** The build lane is back —
-> `publish-digichat-image.yml` publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z`
-> on a `digichat-vX.Y.Z` tag (the trigger is the `digichat-v*` glob, but a tag
-> that is not exactly `digichat-v<major>.<minor>.<patch>` is refused) — but the
-> package is still absent from GHCR
-> (verified 2026-10-06: anonymous pull `401`, org package list empty), because
-> the tag ladder stops at `digichat-v2.3.2` and nothing publishes until a tag
-> lands. Until then, build from the repo root and record the digest you deploy.
+> **Correction (2026-10-21): an image is published.** `publish-digichat-image.yml`
+> publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z` on a `digichat-vX.Y.Z` tag
+> (the trigger is the `digichat-v*` glob, but a tag that is not exactly
+> `digichat-v<major>.<minor>.<patch>` is refused). `v2.6.4` and `:latest` were
+> pushed on 2026-10-21 (run 94); the package is private, so pull with a
+> `ghcr.io` credential. The `v2.4.x`–`v2.6.3` tags still have no image behind
+> them. Without registry access, build from the repo root and record the digest
+> you deploy.
 > See [`docs/ops/digichat-datatap-aca.md`](../ops/digichat-datatap-aca.md).
 >
 > The **intended** primary install unit is a pinned published image — not npm
 > (`private: true`), not `:latest` in production.
 
 ```bash
-# today's only supported path
+# local build (works without registry access)
 docker build -f apps/digichat/Dockerfile \
-  --build-arg DIGICHAT_VERSION=2.5.1 \
+  --build-arg DIGICHAT_VERSION=2.6.8 \
   --build-arg DIGICHAT_REVISION="$(git rev-parse HEAD)" \
-  -t digichat:2.5.1 .
+  -t digichat:2.6.8 .
 ```
 
 | Artifact | Value |
 |---|---|
 | Git tag | `digichat-vX.Y.Z` |
-| Published image | **none** — build locally (see above) |
+| Published image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` from `v2.6.4` on (private; earlier `v2.4.x`–`v2.6.3` tags have none) — or build locally (see above) |
 | Changelog | `apps/digichat/CHANGELOG.md` |
-| Current app version | `2.5.1` (`develop`) |
+| Current app version | `2.6.8` (`develop`) |
 
 **Existing clients (DataTap and others) are pinned to a digichat image already
 imported into their own Azure registry** (`datatapchatregistry.azurecr.io`).
@@ -263,7 +263,7 @@ Optional seed list of known hosts: `apps/digichat/embed-hosts.txt` (not baked in
 ## Smoke
 
 ```bash
-docker run --rm -p 3005:3000 digichat:2.5.1   # local build, see § Install unit
+docker run --rm -p 3005:3000 digichat:2.6.8   # local build, see § Install unit
 curl -sf http://127.0.0.1:3005/api/health | jq .
 # Embed (clients always pass token):
 # open http://127.0.0.1:3005/embed?host=client.example.com&token=…

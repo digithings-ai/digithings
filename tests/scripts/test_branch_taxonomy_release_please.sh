@@ -81,6 +81,32 @@ assert_match "truncated prefix only" \
 assert_match "empty component" \
   "release-please--branches--develop--components--" 1
 
+echo "== revert/ prefix: rolling back an earlier change =="
+assert_match "revert of a merged PR" "revert/6081-digichat-2-6-1" 0
+assert_match "rollback to a known-good commit" "revert/digiquant-to-7de39ec9a" 0
+assert_match "revert/ needs a slug" "revert/" 1
+assert_match "uppercase revert slug rejected" "revert/Digiquant" 1
+assert_match "underscore revert slug rejected" "revert/digi_quant" 1
+assert_match "reverts/ is not revert/" "reverts/digiquant" 1
+ruleset_has_revert="$(python3 -c '
+import json, sys
+print("(feat|fix|docs|chore|revert)/" in json.load(open(sys.argv[1], encoding="utf-8"))["rules"][0]["parameters"]["pattern"])
+' "$RULESET")"
+if [[ "$ruleset_has_revert" == "True" ]]; then
+  echo "PASS: ruleset pattern admits revert/"
+  pass=$((pass + 1))
+else
+  echo "FAIL: ruleset pattern missing revert/" >&2
+  fail=$((fail + 1))
+fi
+if grep -qF '{feat,fix,docs,chore,revert}/<slug>' "$HOOK"; then
+  echo "PASS: pre-push help text documents revert/"
+  pass=$((pass + 1))
+else
+  echo "FAIL: pre-push help text missing revert/" >&2
+  fail=$((fail + 1))
+fi
+
 echo "== sync: github-rulesets pattern carries the same release-please arm =="
 ruleset_pattern="$(
   python3 -c '

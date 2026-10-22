@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "description": "Recorded TUI frames committed for the D9 recorded-frame preview (DIG-2698). Each frame is written by the exporter named in its entry; the exporter test re-renders the client and compares the result with the committed file.",
+  "frames": [
+    {
+      "source": "digiquant-tui",
+      "path": "/brief",
+      "file": "digiquant-tui.json",
+      "exporter": "clients/digiquant-tui/src/export-frame.ts"
+    },
+    {
+      "source": "digichat-tui",
+      "path": "/thread",
+      "file": "digichat-tui.json",
+      "exporter": "clients/digichat-tui/src/export-frame.ts"
+    }
+  ],
+  "screenshots": [
+    {
+      "source": "digiquant-tui",
+      "viewport": "mobile",
+      "file": "screenshots/digiquant-tui-phone.png"
+    },
+    {
+      "source": "digiquant-tui",
+      "viewport": "desktop",
+      "file": "screenshots/digiquant-tui-desktop.png"
+    },
+    {
+      "source": "digichat-tui",
+      "viewport": "mobile",
+      "file": "screenshots/digichat-tui-phone.png"
+    },
+    {
+      "source": "digichat-tui",
+      "viewport": "desktop",
+      "file": "screenshots/digichat-tui-desktop.png"
+    }
+  ]
+}

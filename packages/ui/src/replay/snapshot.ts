@@ -1,0 +1,615 @@
+/**
+ * Turn the active thread into one offline HTML file.
+ *
+ * The file is that thread's DOM: same classes, same open and closed disclosures.
+ * Disclosures become `<details>` so they still open offline. The composer
+ * and anything that sends a message are removed. No script is added.
+ */
+
+import { redactSnapshotDom } from "./redact-dom";
+
+export const SNAPSHOT_CSS = `
+details > summary { list-style: none; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) details[open] > summary
+  [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+details[open] > summary .tc-caret,
+details[open] > summary .tc-caret [data-slot="dot-matrix-grid"] {
+  transform: rotate(90deg);
+}
+details:not([open]) > summary .tc-caret.open { transform: none; }
+[data-snapshot-static] { cursor: default; pointer-events: none; }
+`.trim();
+
+/** Anything else (scripts, remote images, event handlers) stays blocked. */
+const SNAPSHOT_CSP = [
+  "default-src 'none'",
+  "style-src 'unsafe-inline'",
+  "img-src data:",
+  "font-src data:",
+  "media-src data:",
+  "form-action 'none'",
+  "base-uri 'none'",
+].join("; ");
+
+const REMOVE = [
+  ".aui-composer-root",
+  "[data-slot='aui_composer-shell']",
+  "[data-slot='aui_composer-editing']",
+  ".aui-assistant-action-bar-root",
+  ".aui-user-action-bar-root",
+  ".aui-user-action-bar-slot",
+  "[data-slot='aui_user-branch-picker']",
+  "[data-slot='aui_assistant-branch-picker']",
+  ".aui-thread-scroll-to-bottom",
+  "[data-memory-thread-list]",
+  ".dc-thread-list",
+  "script",
+  "noscript",
+  "iframe",
+  "object",
+  "embed",
+  "link",
+  "base",
+  "style",
+  "nextjs-portal",
+  "#__next-build-watcher",
+].join(",");
+
+const CONTENT_LINK = [
+  ".aui-user-message-content",
+  ".aui-assistant-message-content",
+  "[data-slot='aui_assistant-message-content']",
+  "[data-slot='reasoning-content']",
+  "[data-slot='tool-fallback-content']",
+  "[data-slot='tool-fallback-result']",
+  "[data-slot='tool-group-content']",
+  "[data-slot='aui_work-chain-content']",
+  "[data-slot='aui_source-url']",
+  "[data-slot='aui_source-document']",
+  ".aui-md",
+].join(",");
+
+const USER_QUESTION = ".aui-user-message-content";
+
+const PANEL_STYLE_PROPS = [
+  "height",
+  "width",
+  "max-height",
+  "min-height",
+  "overflow",
+  "content-visibility",
+  "animation",
+  "transition",
+];
+
+export function questionText(root: ParentNode): string {
+  const nodes = root.querySelectorAll(USER_QUESTION);
+  return nodes[nodes.length - 1]?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+export function deploymentText(root: ParentNode): string {
+  return root.querySelector("[data-deployment]")?.getAttribute("data-deployment")?.trim() ?? "";
+}
+
+/**
+ * The open conversation. A memory sidebar lists every other thread's title;
+ * those titles are not part of this subtree. When several thread roots are
+ * mounted, the one marked `data-active="true"` wins, otherwise the last
+ * visible root.
+ */
+export function activeThreadRoot(root: ParentNode): HTMLElement | null {
+  const threads = [...root.querySelectorAll<HTMLElement>(".aui-thread-root")].filter(isOpenThread);
+  if (threads.length === 0) return null;
+  const marked = threads.filter((el) => el.getAttribute("data-active") === "true");
+  const pool = marked.length > 0 ? marked : threads;
+  return pool[pool.length - 1] ?? null;
+}
+
+/**
+ * A document that holds only the active thread, with the live page's theme.
+ * Ancestors are attribute-only wrappers so rules scoped to `[data-stock-product]`
+ * still match. A node the live page has computed as `display: none` or
+ * `visibility: hidden` is left out. A closed disclosure panel stays, so a
+ * folded tool call is still in the file. The open page is not changed.
+ */
+const MESSAGE_ROOT = "[data-role='user'], [data-role='assistant']";
+
+/**
+ * The assistant message that owns this menu trigger. The trigger sits in
+ * the message; the menu item does not. A duplicate id earlier in the page
+ * is a different element, so this does not search the document.
+ */
+export function messageAnchor(trigger: HTMLElement | null, messageId: string): HTMLElement | null {
+  const id = messageId.trim();
+  if (!trigger || !id) return null;
+  const selector = `[data-role="assistant"][data-message-id="${cssEscape(id)}"]`;
+  const message = trigger.closest(selector);
+  return message instanceof HTMLElement ? message : null;
+}
+
+/**
+ * A thread the message action may export. The open menu sets aria-hidden on
+ * an ancestor; that is not a closed thread. The thread element itself still
+ * has to be showing, and a memory-sidebar thread is never exported.
+ */
+function isMessageThread(thread: HTMLElement): boolean {
+  if (thread.closest("[data-memory-thread-list]")) return false;
+  if (thread.hidden || thread.getAttribute("aria-hidden") === "true") return false;
+  return true;
+}
+
+/**
+ * `anchor` limits the file to that assistant message and the user message
+ * before it. Omitted, the file is the whole thread. An anchor that is not
+ * inside its thread, or not inside an assistant message, returns null — it
+ * does not widen to the whole thread.
+ */
+export function snapshotSource(doc: Document, anchor?: HTMLElement | null): HTMLElement | null {
+  const thread = anchor ? anchor.closest<HTMLElement>(".aui-thread-root") : activeThreadRoot(doc);
+  if (!thread || (anchor && !isMessageThread(thread))) return null;
+  if (anchor && !thread.contains(anchor)) return null;
+  const html = doc.createElement("html");
+  copyShellAttributes(doc.documentElement, html);
+  const body = threadShell(doc, thread, anchor ?? null);
+  if (!body) return null;
+  html.append(body);
+  stripDeploymentAttributes(html);
+  stripPageLock(html);
+  return html;
+}
+
+function threadShell(
+  doc: Document,
+  thread: HTMLElement,
+  scope: HTMLElement | null,
+): HTMLElement | null {
+  const clone = cloneWithoutHidden(thread, scope);
+  if (!clone) return null;
+  const body = doc.createElement("body");
+  if (doc.body) copyShellAttributes(doc.body, body);
+  const ancestors: HTMLElement[] = [];
+  for (
+    let cursor = thread.parentElement;
+    cursor && cursor !== doc.body && cursor !== doc.documentElement;
+    cursor = cursor.parentElement
+  ) {
+    ancestors.push(cursor);
+  }
+  ancestors.reverse();
+  let parent: HTMLElement = body;
+  for (const ancestor of ancestors) {
+    const wrap = doc.createElement(ancestor.tagName.toLowerCase());
+    copyShellAttributes(ancestor, wrap);
+    parent.append(wrap);
+    parent = wrap;
+  }
+  parent.append(clone);
+  return body;
+}
+
+/**
+ * Read computed style on the live thread first, then clone. Dropping the
+ * live nodes would change the open chat.
+ */
+function cloneWithoutHidden(live: HTMLElement, scope: HTMLElement | null): HTMLElement | null {
+  const liveNodes = [live, ...live.querySelectorAll("*")];
+  const hidden = new Set<number>();
+  for (let i = 1; i < liveNodes.length; i += 1) {
+    if (suppressed(liveNodes[i]!)) hidden.add(i);
+  }
+  const clone = live.cloneNode(true) as HTMLElement;
+  const cloneNodes = [clone, ...clone.querySelectorAll("*")];
+  const liveMessages = [...live.querySelectorAll<HTMLElement>(MESSAGE_ROOT)];
+  const cloneMessages = [...clone.querySelectorAll<HTMLElement>(MESSAGE_ROOT)];
+  for (const index of [...hidden].sort((a, b) => b - a)) {
+    const node = cloneNodes[index];
+    if (node && clone.contains(node)) node.remove();
+  }
+  if (scope && !keepInteraction(liveMessages, cloneMessages, clone, scope)) return null;
+  return clone;
+}
+
+/**
+ * The assistant message that holds `anchor`, plus the user message before it.
+ * False when that message cannot be resolved — the caller must not keep the
+ * rest of the thread.
+ */
+function keepInteraction(
+  liveMessages: readonly HTMLElement[],
+  cloneMessages: readonly HTMLElement[],
+  clone: HTMLElement,
+  anchor: HTMLElement,
+): boolean {
+  const answer = anchor.closest<HTMLElement>("[data-role='assistant']");
+  if (!answer) return false;
+  const index = liveMessages.indexOf(answer);
+  if (index < 0) return false;
+  const keep = new Set<number>([index]);
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (liveMessages[i]?.getAttribute("data-role") === "user") {
+      keep.add(i);
+      break;
+    }
+  }
+  for (let i = cloneMessages.length - 1; i >= 0; i -= 1) {
+    const node = cloneMessages[i];
+    if (node && !keep.has(i) && clone.contains(node)) node.remove();
+  }
+  return true;
+}
+
+function suppressed(el: Element): boolean {
+  // The closed panel itself stays so a folded tool call can open offline.
+  // A descendant the deployment has hidden is still dropped.
+  if (isClosedPanel(el)) return false;
+  const view = el.ownerDocument.defaultView;
+  if (!view) return false;
+  const style = view.getComputedStyle(el);
+  if (style.display === "none") return true;
+  if (style.visibility !== "hidden") return false;
+  const parent = el.parentElement;
+  if (!parent) return true;
+  // Visibility inherits. A child of an already-hidden parent is not a
+  // deployment hide of its own.
+  return view.getComputedStyle(parent).visibility !== "hidden";
+}
+
+function isClosedPanel(el: Element): boolean {
+  const hidden = el instanceof HTMLElement ? el.hidden : el.hasAttribute("hidden");
+  if (!hidden) return false;
+  const slot = el.getAttribute("data-slot") ?? "";
+  if (slot.endsWith("-content") || slot === "collapsible-content") return true;
+  const id = el.getAttribute("id");
+  if (!id) return false;
+  return el.ownerDocument.querySelector(`[aria-controls="${cssEscape(id)}"]`) !== null;
+}
+
+function isDeploymentAttribute(name: string): boolean {
+  return /deployment|tenant/i.test(name);
+}
+
+/** The slug names the file. It does not belong in the file. */
+function stripDeploymentAttributes(root: Element): void {
+  const nodes = [root, ...root.querySelectorAll("*")];
+  for (const node of nodes) {
+    for (const attr of [...node.attributes]) {
+      if (isDeploymentAttribute(attr.name)) node.removeAttribute(attr.name);
+    }
+  }
+}
+
+/**
+ * An open menu locks the page: aria-hidden where Radix also sets
+ * data-aria-hidden, inert on the shell, and react-remove-scroll's
+ * `data-scroll-locked` plus `pointer-events: none` on the body. A
+ * decorative aria-hidden inside the thread stays. The open page is
+ * left as it is.
+ */
+function stripPageLock(root: Element): void {
+  const nodes = [root, ...root.querySelectorAll("*")];
+  for (const node of nodes) {
+    node.removeAttribute("data-scroll-locked");
+    if (node.hasAttribute("data-aria-hidden")) {
+      node.removeAttribute("aria-hidden");
+      node.removeAttribute("data-aria-hidden");
+    }
+    if (node.tagName !== "BODY") continue;
+    const style = node.getAttribute("style");
+    if (!style) continue;
+    const kept = style
+      .split(";")
+      .map((part) => part.trim())
+      .filter((part) => part && !/^pointer-events\s*:/i.test(part));
+    if (kept.length === 0) node.removeAttribute("style");
+    else node.setAttribute("style", kept.join("; "));
+  }
+  const thread = root.querySelector(".aui-thread-root");
+  for (let cursor = thread?.parentElement ?? null; cursor; cursor = cursor.parentElement) {
+    cursor.removeAttribute("inert");
+  }
+}
+
+/** Drop rules that only exist while a menu holds the page scroll lock. */
+export function omitScrollLockCss(css: string): string {
+  let out = "";
+  let i = 0;
+  while (i < css.length) {
+    const open = css.indexOf("{", i);
+    if (open < 0) {
+      out += css.slice(i);
+      break;
+    }
+    let depth = 0;
+    let j = open;
+    for (; j < css.length; j += 1) {
+      const ch = css[j];
+      if (ch === "{") depth += 1;
+      else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          j += 1;
+          break;
+        }
+      }
+    }
+    const block = css.slice(i, j);
+    if (!block.includes("data-scroll-locked")) {
+      out += block;
+    } else {
+      const prelude = css.slice(i, open).trim();
+      const inner = css.slice(open + 1, Math.max(open + 1, j - 1));
+      if (prelude.startsWith("@") && inner.includes("{")) {
+        const kept = omitScrollLockCss(inner);
+        if (kept.trim()) out += `${css.slice(i, open)}{${kept}}`;
+      }
+    }
+    i = j;
+  }
+  return out;
+}
+
+function copyShellAttributes(from: Element, to: Element): void {
+  for (const attr of from.attributes) {
+    if (attr.name.toLowerCase().startsWith("on")) continue;
+    if (isDeploymentAttribute(attr.name)) continue;
+    to.setAttribute(attr.name, attr.value);
+  }
+}
+
+function isOpenThread(el: HTMLElement): boolean {
+  if (el.closest("[data-memory-thread-list]")) return false;
+  for (let cursor: HTMLElement | null = el; cursor; cursor = cursor.parentElement) {
+    if (cursor.hidden || cursor.getAttribute("aria-hidden") === "true") return false;
+  }
+  return true;
+}
+
+/** `<` would close the style element. CSS `\3c ` is that character. */
+export function escapeStyleText(css: string): string {
+  return css.replaceAll("<", "\\3c ");
+}
+
+/** Mutates `root` into a read-only snapshot of itself. */
+export function transformSnapshotDom(root: HTMLElement): void {
+  stripRefreshMeta(root);
+  root.querySelectorAll(REMOVE).forEach((node) => node.remove());
+  root.querySelectorAll("[data-nextjs-dialog-overlay], [data-nextjs-toast]").forEach((node) => {
+    node.remove();
+  });
+  convertDisclosures(root);
+  freezeChrome(root);
+}
+
+export function serializeSnapshot(root: HTMLElement, css: string): string {
+  const doc = root.ownerDocument;
+  // Redact text and attribute values before the page CSS goes in, so the
+  // inlined fonts and the stylesheet are never rewritten.
+  redactSnapshotDom(root);
+  stripRefreshMeta(root);
+  const head = ensureHead(root);
+  head.querySelectorAll("style, link, base").forEach((node) => node.remove());
+  head
+    .querySelectorAll("meta[http-equiv='Content-Security-Policy' i]")
+    .forEach((node) => node.remove());
+  if (!head.querySelector("meta[charset]")) {
+    const meta = doc.createElement("meta");
+    meta.setAttribute("charset", "utf-8");
+    head.prepend(meta);
+  }
+  const csp = doc.createElement("meta");
+  csp.setAttribute("http-equiv", "Content-Security-Policy");
+  csp.setAttribute("content", SNAPSHOT_CSP);
+  // First, so it is in effect before the stylesheet is parsed.
+  head.prepend(csp);
+  const style = doc.createElement("style");
+  style.setAttribute("data-snapshot-css", "");
+  style.textContent = escapeStyleText(`${omitScrollLockCss(css)}\n${SNAPSHOT_CSS}`);
+  head.append(style);
+  for (const el of root.querySelectorAll<HTMLElement>("[style]")) {
+    const inline = el.getAttribute("style");
+    if (inline?.includes("<")) el.setAttribute("style", escapeStyleText(inline));
+  }
+  const html = root.tagName === "HTML" ? root.outerHTML : `<html>${root.outerHTML}</html>`;
+  return `<!DOCTYPE html>\n${html}`;
+}
+
+/** A refresh meta navigates the file. It is removed wherever it sits. */
+function stripRefreshMeta(root: ParentNode): void {
+  for (const node of [...root.querySelectorAll("meta")]) {
+    if ((node.getAttribute("http-equiv") ?? "").toLowerCase() === "refresh") node.remove();
+  }
+  for (const template of [...root.querySelectorAll("template")]) {
+    if (template instanceof HTMLTemplateElement) stripRefreshMeta(template.content);
+  }
+}
+
+function ensureHead(root: HTMLElement): HTMLElement {
+  const existing = root.querySelector(":scope > head");
+  if (existing instanceof HTMLElement) return existing;
+  const head = root.ownerDocument.createElement("head");
+  root.prepend(head);
+  return head;
+}
+
+function convertDisclosures(root: HTMLElement): void {
+  const triggers = [...root.querySelectorAll<HTMLElement>("[aria-expanded]")]
+    .filter((trigger) => root.contains(trigger) && isChatDisclosure(trigger))
+    .sort((a, b) => depth(b) - depth(a));
+  for (const trigger of triggers) {
+    if (!root.contains(trigger)) continue;
+    convertDisclosure(root, trigger);
+  }
+}
+
+function isChatDisclosure(trigger: Element): boolean {
+  const slot = trigger.getAttribute("data-slot") ?? "";
+  if (slot.endsWith("-trigger") || trigger.classList.contains("tc-head")) return true;
+  return trigger.querySelector("[data-slot='disclosure-chevron']") !== null;
+}
+
+function convertDisclosure(root: HTMLElement, trigger: HTMLElement): void {
+  const panel = findPanel(root, trigger);
+  if (!panel || panel.contains(trigger)) return;
+  const host = trigger.parentElement;
+  if (!host || !root.contains(host)) return;
+  const details = trigger.ownerDocument.createElement("details");
+  copyAttrs(host, details, false);
+  if (disclosureOpen(trigger)) details.setAttribute("open", "");
+  const summary = trigger.ownerDocument.createElement("summary");
+  copyAttrs(trigger, summary, true);
+  while (trigger.firstChild) summary.append(trigger.firstChild);
+  const leftovers = [...host.childNodes].filter((node) => node !== trigger);
+  host.replaceWith(details);
+  details.append(summary);
+  for (const node of leftovers) details.append(node);
+  unlockPanel(panel);
+  if (!details.contains(panel)) details.append(panel);
+}
+
+function findPanel(root: ParentNode, trigger: Element): HTMLElement | null {
+  const id = trigger.getAttribute("aria-controls");
+  if (id) {
+    const found = root.querySelector<HTMLElement>(`[id="${cssEscape(id)}"]`);
+    if (found && found !== trigger && !found.contains(trigger)) return found;
+  }
+  if (trigger.classList.contains("tc-head")) {
+    const next = trigger.nextElementSibling;
+    if (next instanceof HTMLElement) return next;
+  }
+  const next = trigger.nextElementSibling;
+  if (next instanceof HTMLElement && looksLikePanel(next)) return next;
+  // Scan forward from the trigger: with two disclosures under one parent, the
+  // second trigger must not take the first one's panel.
+  for (let sib = trigger.nextElementSibling; sib; sib = sib.nextElementSibling) {
+    if (sib instanceof HTMLElement && looksLikePanel(sib)) return sib;
+  }
+  return null;
+}
+
+function looksLikePanel(el: Element): boolean {
+  const slot = el.getAttribute("data-slot") ?? "";
+  return slot.endsWith("-content") || slot === "collapsible-content";
+}
+
+function disclosureOpen(trigger: Element): boolean {
+  if (trigger.getAttribute("aria-expanded") === "true") return true;
+  if (trigger.hasAttribute("data-panel-open")) return true;
+  if (trigger.getAttribute("data-state") === "open") return true;
+  const host = trigger.parentElement;
+  return Boolean(host?.hasAttribute("data-open") && !host.hasAttribute("data-closed"));
+}
+
+function unlockPanel(panel: HTMLElement): void {
+  panel.hidden = false;
+  panel.removeAttribute("inert");
+  for (const name of ["data-closed", "data-open", "data-starting-style", "data-ending-style"]) {
+    panel.removeAttribute(name);
+  }
+  const style = panel.getAttribute("style");
+  if (!style) return;
+  const next = style
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => {
+      const prop = part.split(":")[0]?.trim().toLowerCase() ?? "";
+      if (!part || PANEL_STYLE_PROPS.includes(prop)) return false;
+      return !prop.startsWith("--collapsible-panel");
+    })
+    .join("; ");
+  if (next) panel.setAttribute("style", next);
+  else panel.removeAttribute("style");
+}
+
+function freezeChrome(root: HTMLElement): void {
+  root.querySelectorAll("textarea, input, select").forEach((node) => node.remove());
+  root.querySelectorAll("[contenteditable='true']").forEach((node) => {
+    node.removeAttribute("contenteditable");
+  });
+  root.querySelectorAll("form").forEach((form) => {
+    form.removeAttribute("action");
+    form.removeAttribute("method");
+  });
+  for (const button of [...root.querySelectorAll("button")]) freezeControl(button);
+  for (const link of [...root.querySelectorAll("a")]) freezeLink(link);
+  stripHandlers(root);
+}
+
+function freezeControl(el: Element): void {
+  const span = el.ownerDocument.createElement("span");
+  copyAttrs(el, span, true);
+  span.setAttribute("data-snapshot-static", "");
+  while (el.firstChild) span.append(el.firstChild);
+  el.replaceWith(span);
+}
+
+function freezeLink(link: Element): void {
+  const href = link.getAttribute("href") ?? "";
+  // Only http(s), mailto and in-page links survive; javascript:, vbscript:,
+  // data: and any other scheme are dropped.
+  if (!safeHref(href)) link.removeAttribute("href");
+  if (link.closest(CONTENT_LINK)) return;
+  link.removeAttribute("href");
+  link.removeAttribute("target");
+  link.setAttribute("data-snapshot-static", "");
+}
+
+function safeHref(href: string): boolean {
+  const value = href.trim().toLowerCase();
+  if (!value || value.startsWith("#")) return true;
+  const scheme = /^([a-z][a-z0-9+.-]{0,31}):/.exec(value)?.[1];
+  if (!scheme) return true; // relative
+  return scheme === "http" || scheme === "https" || scheme === "mailto";
+}
+
+function stripHandlers(root: HTMLElement): void {
+  const elements = [root, ...root.querySelectorAll("*")];
+  for (const el of elements) {
+    for (const attr of [...el.attributes]) {
+      if (attr.name.toLowerCase().startsWith("on")) el.removeAttribute(attr.name);
+    }
+  }
+}
+
+function copyAttrs(from: Element, to: Element, trigger: boolean): void {
+  for (const attr of from.attributes) {
+    const name = attr.name.toLowerCase();
+    if (name.startsWith("on") || name === "hidden" || name === "style") continue;
+    if (name.startsWith("aria-") && name !== "aria-label") continue;
+    if (
+      name === "type" ||
+      name === "disabled" ||
+      name === "tabindex" ||
+      name === "role" ||
+      name === "href" ||
+      name === "src"
+    ) {
+      continue;
+    }
+    if (
+      !trigger &&
+      (name === "data-open" ||
+        name === "data-closed" ||
+        name === "data-state" ||
+        name === "data-panel-open")
+    ) {
+      continue;
+    }
+    to.setAttribute(attr.name, attr.value);
+  }
+}
+
+function depth(el: Element): number {
+  let n = 0;
+  let cursor: Element | null = el;
+  while (cursor) {
+    n += 1;
+    cursor = cursor.parentElement;
+  }
+  return n;
+}
+
+function cssEscape(value: string): string {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(value);
+  return value.replace(/["\\]/g, "\\$&");
+}
