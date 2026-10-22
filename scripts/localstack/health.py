@@ -65,6 +65,12 @@ class Result:
     url: str | None
     elapsed_ms: int
 
+    def __post_init__(self) -> None:
+        # A Result is a report, not a probe: its ``url`` is only ever printed
+        # or serialised. Keep the redacted form on the object so no caller has
+        # to remember to redact it (DIG-4991).
+        object.__setattr__(self, "url", redact_userinfo(self.url))
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
@@ -172,11 +178,42 @@ def _request(
         with _OPENER.open(req, timeout=timeout) as resp:
             return int(resp.status), resp.read()
     except urllib.error.HTTPError as exc:
-        if 300 <= exc.code < 400:
+        # Only the statuses that actually redirect are refused as redirects;
+        # a 304 Not Modified is a normal response, not a redirect, and must
+        # reach the status check below (DIG-4991).
+        if exc.code in (301, 302, 303, 307, 308):
+            exc.close()
             raise RedirectRefused(
                 f"HTTP {exc.code}: redirect refused; a probe must answer on the URL it was given"
             ) from exc
         raise
+
+
+def _redact_exception(exc: BaseException, url: str) -> str:
+    """The exception's text, with any userinfo from ``url`` removed.
+
+    An exception message is printed in the ``DETAIL`` column and in the gate
+    JSON, so it is a print path like any other. ``http.client.InvalidURL``
+    quotes the netloc it refused, and that netloc is where the userinfo sits,
+    so the exception can carry the credential the URL was carrying -- on a
+    ``requires`` row, which is exempt from the loopback rule, this is reachable
+    from configuration (DIG-4991). The raw userinfo is replaced wherever the
+    message repeats it.
+    """
+    text = f"{type(exc).__name__}: {exc}"
+    if not isinstance(url, str) or "@" not in url:
+        return text
+    try:
+        netloc = urllib.parse.urlsplit(url).netloc
+    except ValueError:
+        netloc = ""
+    userinfo, at, _hostport = netloc.rpartition("@")
+    if not at or not userinfo:
+        return text
+    for shown in {userinfo, urllib.parse.unquote(userinfo)}:
+        if shown:
+            text = text.replace(shown, "***")
+    return text
 
 
 def probe_http(
@@ -195,7 +232,7 @@ def probe_http(
     except urllib.error.HTTPError as exc:
         return FAILED, f"HTTP {exc.code}"
     except Exception as exc:
-        return FAILED, f"{type(exc).__name__}: {exc}"
+        return FAILED, _redact_exception(exc, url)
     if code not in expect_status:
         return FAILED, f"HTTP {code}, expected {'/'.join(str(s) for s in expect_status)}"
     ms = (time.monotonic() - started) * 1000
@@ -218,7 +255,7 @@ def probe_jsonrpc(url: str, *, timeout: float = DEFAULT_TIMEOUT) -> tuple[str, s
     except urllib.error.HTTPError as exc:
         return FAILED, f"HTTP {exc.code}"
     except Exception as exc:
-        return FAILED, f"{type(exc).__name__}: {exc}"
+        return FAILED, _redact_exception(exc, url)
     if code != 200:
         return FAILED, f"HTTP {code}, expected 200"
     try:
@@ -262,7 +299,7 @@ def probe_roundtrip(
     except urllib.error.HTTPError as exc:
         return FAILED, f"write failed: HTTP {exc.code}"
     except Exception as exc:
-        return FAILED, f"write failed: {type(exc).__name__}: {exc}"
+        return FAILED, f"write failed: {_redact_exception(exc, url)}"
 
     if read_path:
         split = urllib.parse.urlsplit(url)
@@ -276,7 +313,7 @@ def probe_roundtrip(
     except urllib.error.HTTPError as exc:
         return FAILED, f"read-back failed: HTTP {exc.code}"
     except Exception as exc:
-        return FAILED, f"read-back failed: {type(exc).__name__}: {exc}"
+        return FAILED, f"read-back failed: {_redact_exception(exc, read_url)}"
     if code != 200:
         return FAILED, f"read-back failed: HTTP {code}"
     if nonce not in body.decode("utf-8", "replace"):
@@ -317,7 +354,7 @@ def run_check(
         return Result(
             check.name,
             FAILED,
-            f"could not resolve the row: {type(exc).__name__}: {exc}",
+            f"could not resolve the row: {_redact_exception(exc, check.url or '')}",
             None,
             0,
         )
@@ -343,7 +380,9 @@ def run_check(
     except TypeError as exc:  # a probe called with the wrong signature
         return Result(check.name, FAILED, f"probe mis-wired: {exc}", url, 0)
     except Exception as exc:  # a probe that raises is a broken check, not a green one
-        return Result(check.name, FAILED, f"probe raised {type(exc).__name__}: {exc}", url, 0)
+        return Result(
+            check.name, FAILED, f"probe raised {_redact_exception(exc, url)}", url, 0
+        )
 
     elapsed = int((time.monotonic() - started) * 1000)
     return Result(check.name, status, detail, url, elapsed)

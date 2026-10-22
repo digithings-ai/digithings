@@ -1533,12 +1533,19 @@ def test_a_contract_row_without_a_url_or_a_port_still_keeps_the_built_in_url(tmp
 # would report a verdict on a request the operator never wrote.
 
 
-@pytest.mark.parametrize("method", ["GET", "POST", "get", "post"])
+@pytest.mark.parametrize("method", ["GET", "POST", "get", "post", "Get", "pOsT", " get "])
 def test_a_contract_row_may_probe_with_get_or_post(tmp_path, method):
     _contract(tmp_path, f"services:\n  - name: digigraph\n    method: {method}\n")
     row = _digigraph_row(tmp_path)
     assert row.refusal is None
-    assert row.method == method.upper()
+    # The verb that was checked is the verb that is probed: a padded " get "
+    # read as "GET" here and probed as " GET " would be a different request.
+    assert row.method == "GET" if method.strip().upper() == "GET" else "POST"
+
+
+def test_the_probe_verb_set_is_closed():
+    """Only GET and POST, enumerated: a verb added by accident fails here."""
+    assert contracts.PROBE_METHODS == frozenset({"GET", "POST"})
 
 
 @pytest.mark.parametrize("method", ["DELETE", "PUT", "PATCH", "HEAD", "OPTIONS", "TRACE"])
@@ -1604,3 +1611,98 @@ def test_a_refusal_never_echoes_the_userinfo_it_refused(tmp_path):
     assert "s3cret" not in message
     assert "***" in message
     assert "127.0.0.1" in message
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        # a password, a bare token, and a token with an '@' inside it
+        "http://operator:s3cret@127.0.0.1:9000/x",
+        "http://token@127.0.0.1:9000/x",
+        "http://operator:p@ss@127.0.0.1:9000/x",
+        # shapes whose userinfo is not in a parseable authority
+        "operator:s3cret@127.0.0.1:9000/x",
+        "http:/operator:s3cret@127.0.0.1:9000/x",
+        "http://operator:p/a@127.0.0.1:9000/x",
+        "http://operator:s3cret@[::1",
+    ],
+)
+def test_redact_userinfo_drops_the_credential_and_keeps_the_address(url):
+    """Every userinfo shape is redacted, whatever the URL parses into.
+
+    The shapes that do not parse as an authority are the ones a typo makes:
+    if redaction only handled the well-formed case, the message that refuses a
+    typo would print the credential in the typo.
+    """
+    redacted = contracts.redact_userinfo(url)
+    assert "s3cret" not in redacted
+    assert "p@ss" not in redacted
+    assert "token" not in redacted
+    assert "***@" in redacted
+    assert "127.0.0.1" in redacted or "[::1" in redacted
+
+
+def test_redact_userinfo_leaves_a_url_whose_at_sign_is_not_userinfo_alone():
+    """A query string may carry an '@'; it is not a credential."""
+    url = "http://127.0.0.1:9000/x?next=a@b"
+    assert contracts.redact_userinfo(url) == url
+
+
+def test_redact_userinfo_passes_none_through():
+    """Every ``Result`` with no URL depends on it; '' would print as a URL."""
+    assert contracts.redact_userinfo(None) is None
+
+
+def test_a_host_mismatch_refusal_names_no_credential(tmp_path):
+    """The off-loopback arm is the one a userinfo URL reaches first.
+
+    ``user:secret@evil.com`` is both off-loopback and userinfo, and the
+    host-mismatch message is the one that prints the URL. It must not be the
+    one that prints the password.
+    """
+    _contract(
+        tmp_path,
+        "services:\n"
+        "  - name: digigraph\n"
+        "    url: http://operator:s3cret@evil.com:9000/healthz\n",
+    )
+    row = _digigraph_row(tmp_path)
+    with pytest.raises(contracts.ContractRefusal) as caught:
+        contracts.resolve(row, {})
+    message = str(caught.value)
+    assert "s3cret" not in message
+    assert "evil.com" in message
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "http://operator:s3cret@127.0.0.1:${DT_BESPOKE_PORT:-8000}/x",
+        "http://operator:s3cret@${DT_BESPOKE_HOST:-127.0.0.1}:8000/x",
+    ],
+)
+def test_a_templated_url_refusal_names_no_credential(template):
+    """The expand refusal prints the template; the template may carry a token."""
+    check = contracts.Check(
+        name="templated",
+        kind="http",
+        url=template,
+        profiles=("all",),
+        source="test fixture",
+    )
+    with pytest.raises(contracts.InvalidPort) as caught:
+        contracts.resolve(check, {})
+    assert "s3cret" not in str(caught.value)
+
+
+def test_check_to_dict_carries_no_credential():
+    """``Check.to_dict`` is the payload CI reads; it redacts like Result does."""
+    check = contracts.Check(
+        name="remote",
+        kind="http",
+        url="http://operator:s3cret@127.0.0.1:9000/x",
+        profiles=("all",),
+        source="test fixture",
+    )
+    assert "s3cret" not in str(check.to_dict())
+    assert "***@" in str(check.to_dict())

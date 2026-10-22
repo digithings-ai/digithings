@@ -170,7 +170,7 @@ class Check:
         return {
             "name": self.name,
             "kind": self.kind,
-            "url": self.url,
+            "url": redact_userinfo(self.url),
             "profiles": list(self.profiles),
             "source": self.source,
             "requires": self.requires,
@@ -641,7 +641,7 @@ def checks_from_contract(doc: Any) -> tuple[Check, ...]:
                 profiles=_normalise_profiles(row.get("profiles"), _ALL),
                 source=f"config contract row {label!r}",
                 requires=requires if isinstance(requires, str) else None,
-                method=str(row.get("method") or "GET").upper(),
+                method=str(row.get("method") or "GET").strip().upper(),
                 refusal=refusal,
             )
         )
@@ -780,11 +780,6 @@ def _contract_port_value(name: str, raw: str) -> int:
     return port
 
 
-#: Userinfo in a URL, for the textual fallback of :func:`redact_userinfo`
-#: when the URL does not parse.
-_USERINFO_RE = re.compile(r"//[^/@\s]*@")
-
-
 def redact_userinfo(url: str | None) -> str | None:
     """Return ``url`` with any userinfo replaced by ``***``.
 
@@ -805,16 +800,34 @@ def redact_userinfo(url: str | None) -> str | None:
     """
     if url is None:
         return None
+    if "@" not in url:
+        return url
+    split = None
     try:
         split = urllib.parse.urlsplit(url)
-    except ValueError:  # a URL that does not parse
-        return _USERINFO_RE.sub("//***@", url)
-    if "@" not in split.netloc:
+        split.port  # a netloc whose port does not parse is not an authority
+    except ValueError:
+        split = None
+    if split is not None and "@" in split.netloc:
+        _userinfo, _at, hostport = split.netloc.rpartition("@")
+        return urllib.parse.urlunsplit(
+            (split.scheme, "***@" + hostport, split.path, split.query, split.fragment)
+        )
+    if split is not None and split.netloc and split.hostname is not None:
+        # A parseable authority with no userinfo: the '@' is somewhere in the
+        # path or the query (``?next=a@b``) and is not a credential.
         return url
-    _userinfo, _at, hostport = split.netloc.rpartition("@")
-    return urllib.parse.urlunsplit(
-        (split.scheme, "***@" + hostport, split.path, split.query, split.fragment)
-    )
+    # The userinfo is not in a parseable authority (``operator:secret@host``
+    # without ``//``, ``http:/user:secret@host``, ``http://user:p/a@host``, an
+    # unbalanced IPv6 bracket). Do not guess where the address begins: drop
+    # everything up to the last '@'. Losing the prefix of a malformed URL is
+    # cheaper than printing the credential in it.
+    head, sep, _rest = url.partition("//")
+    if sep:
+        return f"{head}//***@{url[url.rfind('@') + 1 :]}"
+    scheme = split.scheme if split is not None else ""
+    prefix = f"{scheme}:" if scheme else ""
+    return f"{prefix}***@{url[url.rfind('@') + 1 :]}"
 
 
 def _assert_loopback_url(url: str, name: str) -> None:

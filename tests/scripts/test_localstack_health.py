@@ -593,6 +593,9 @@ def test_a_redirect_is_a_failure_and_is_not_followed():
         stop()
     assert status == contracts.FAILED
     assert "302" in detail
+    # The detail says it was refused, not that it was the wrong status: a
+    # followed redirect that returns a non-200 would read the same otherwise.
+    assert "redirect refused" in detail
     assert hits == ["/start"]
 
 
@@ -605,6 +608,30 @@ def test_a_redirect_on_a_post_probe_is_a_failure_too():
         stop()
     assert status == contracts.FAILED
     assert "302" in detail
+    assert "redirect refused" in detail
+
+
+@pytest.mark.parametrize("leg", ["write", "read-back"])
+def test_a_redirect_is_a_failure_on_both_roundtrip_legs(leg):
+    """The write and the read-back are separate requests; each refuses a 3xx.
+
+    Without these arms the leg still fails, but as ``write failed:
+    RedirectRefused: ...``: the probe's own words are what tell the operator
+    the transport refused the redirect.
+    """
+    base, stop, _hits = _serve_redirecting()
+    try:
+        if leg == "write":
+            status, detail = health.probe_roundtrip(base + "/start", "n0nce")
+        else:
+            status, detail = health.probe_roundtrip(
+                base + "/healthz", "n0nce", read_path="/start"
+            )
+    finally:
+        stop()
+    assert status == contracts.FAILED
+    assert "redirect refused" in detail
+    assert "RedirectRefused" not in detail
 
 
 def test_a_proxy_in_the_environment_does_not_reroute_a_probe(monkeypatch):
@@ -653,3 +680,30 @@ def test_a_gate_report_never_prints_a_password_from_a_configured_url():
     printed = json.dumps(result.to_dict())
     assert "s3cret" not in printed
     assert "***@" in printed
+
+
+def test_a_configured_url_that_does_not_parse_does_not_print_its_credential():
+    """The DETAIL column is a print path too.
+
+    ``http.client.InvalidURL`` quotes the netloc it refused, and on a
+    ``requires`` row -- exempt from the loopback rule -- the netloc is where
+    the userinfo sits. A space in the authority is the shape that reaches the
+    exception: the URL parses, so it is not refused earlier, and http.client
+    then refuses the netloc in a message that repeats it.
+    """
+    check = contracts.Check(
+        name="remote",
+        kind="http",
+        url=None,
+        profiles=("all",),
+        source="test fixture",
+        requires="REMOTE_URL",
+    )
+
+    result = health.run_check(
+        check, config={"REMOTE_URL": "http://operator:s3cret@127.0.0.1 :9000/x"}, timeout=1.0
+    )
+
+    assert result.status == contracts.FAILED
+    assert "s3cret" not in result.detail
+    assert "s3cret" not in json.dumps(result.to_dict())
