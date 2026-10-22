@@ -1464,3 +1464,170 @@ class AppRowLastGapsTest(NoRealNetwork, unittest.TestCase):
         finally:
             os.chmod(path, 0o600)
         self.assertEqual(self._contexts(), ["local-ci"])
+
+
+class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
+    """DIG-5135: a run that dies must not cost a PR its receipt for ever.
+
+    A run posts a `pending` row before it starts the gates. When the run dies
+    - the Mac sleeps, a gate takes the tick down, an installer boots the job
+    out mid-run - the row stays and nobody queues the head again, so the PR
+    sat blocked on a required check that never came. The ledger names the
+    holder of every claim, so a head whose holder is gone is owed its receipt
+    and is queued; a head whose holder is alive is left alone.
+    """
+
+    def setUp(self):
+        self._isolate()
+        self._claims = _mod.CLAIMS
+        self._logd = _mod.LOGD
+        self._gh = _mod.gh
+        self._status = _mod.status
+        self._prepare_wt = _mod.prepare_wt
+        self._run_checks = _mod.run_checks
+        _mod.CLAIMS = os.path.join(self._tmp, "claims")
+        _mod.LOGD = os.path.join(self._tmp, "logs")
+        os.makedirs(_mod.LOGD, exist_ok=True)
+        self.rows = {}      # sha -> list of status rows
+        self.posts = []     # (sha, state, description)
+        _mod.gh = self._fake_gh
+
+    def tearDown(self):
+        _mod.CLAIMS = self._claims
+        _mod.LOGD = self._logd
+        _mod.gh = self._gh
+        _mod.status = self._status
+        _mod.prepare_wt = self._prepare_wt
+        _mod.run_checks = self._run_checks
+        self._unisolate()
+
+    # --- fakes -------------------------------------------------------------
+
+    def _fake_gh(self, *a):
+        argv = list(a)
+        url = [x for x in argv if x.startswith("repos/") and "/commits/" in x]
+        if url:
+            sha = url[0].split("/commits/")[1].split("/statuses")[0]
+            return json.dumps(self.rows.get(sha, []))
+        return "[]"
+
+    def _row(self, state, desc, age_secs=0):
+        ts = datetime.now(timezone.utc) - timedelta(seconds=age_secs)
+        return {"context": _mod.CTX, "state": state, "description": desc,
+                "created_at": ts.strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+    def _pr(self, number=6252, sha="aa11bb22cc33dd44ee55ff6677889900aabbccdd",
+            updated="2026-10-20T10:00:00Z"):
+        return {"number": number, "headRefOid": sha, "headRefName": f"feat/{number}",
+                "baseRefName": "develop", "title": "fix(x): something",
+                "isCrossRepository": False, "updatedAt": updated}
+
+    def _dead_pid(self):
+        """A pid that is certainly gone: a process we started and reaped."""
+        p = subprocess.Popen([sys.executable, "-c", "pass"])
+        p.wait()
+        return p.pid
+
+    def _write_claim(self, sha, pid, pr=6252):
+        os.makedirs(_mod.CLAIMS, exist_ok=True)
+        with open(os.path.join(_mod.CLAIMS, sha), "w") as f:
+            f.write(json.dumps({"pid": pid, "pr": pr, "started": time.time()}))
+
+    # --- the queue ---------------------------------------------------------
+
+    def test_a_pending_row_whose_holder_is_gone_is_queued_again(self):
+        """The run died: the head is owed a receipt."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("pending", "local-ci running on Chris's Mac")]
+        self._write_claim(pr["headRefOid"], self._dead_pid())
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a claim whose holder is gone must be queued again")
+
+    def test_a_pending_row_whose_holder_is_alive_is_left_alone(self):
+        """The run is still working on it: a second run would collide."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("pending", "local-ci running on Chris's Mac")]
+        _mod.write_claim(pr["headRefOid"], pr["number"])
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a claim whose holder is alive must not be queued again")
+
+    def test_an_old_pending_row_with_no_ledger_entry_is_queued_again(self):
+        """A row posted by a runner that predates the ledger is recovered too."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [
+            self._row("pending", "local-ci running on Chris's Mac", age_secs=7200)]
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a pending row nobody holds and that is old enough is lost")
+
+    def test_a_young_pending_row_with_no_ledger_entry_is_left_alone(self):
+        """No ledger entry and no age: the run may still be starting up."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [
+            self._row("pending", "local-ci running on Chris's Mac", age_secs=60)]
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a young pending row must not be taken over")
+
+    def test_a_terminal_verdict_is_not_queued_again(self):
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)")]
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a red verdict is the head's own answer")
+
+    def test_a_head_with_no_row_at_all_is_queued(self):
+        pr = self._pr()
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]])
+
+    def test_the_queue_is_oldest_first(self):
+        """The head that has waited longest is served first (DIG-5135).
+
+        The queue used to be newest-first, so a PR that arrived early sat
+        behind every later arrival and could wait for days for a required
+        check.
+        """
+        old = self._pr(number=1, sha="0" * 40, updated="2026-10-01T10:00:00Z")
+        mid = self._pr(number=2, sha="1" * 40, updated="2026-10-10T10:00:00Z")
+        new = self._pr(number=3, sha="2" * 40, updated="2026-10-20T10:00:00Z")
+        order = [p["number"] for p in _mod.pending([new, mid, old], False)]
+        self.assertEqual(order, [1, 2, 3], "the queue must be oldest first")
+
+    def test_two_heads_updated_at_the_same_moment_are_ordered_by_number(self):
+        a = self._pr(number=7, sha="3" * 40, updated="2026-10-20T10:00:00Z")
+        b = self._pr(number=8, sha="4" * 40, updated="2026-10-20T10:00:00Z")
+        order = [p["number"] for p in _mod.pending([b, a], False)]
+        self.assertEqual(order, [7, 8], "the tie-break must be the PR number")
+
+    # --- the runner takes and releases the claim ----------------------------
+
+    def _run_process(self, pr, verdict_posts=True):
+        """Run process() with the gates stubbed out; record what was posted."""
+        self.posts = []
+        seen = {}
+
+        def fake_status(sha, state, desc, app=True):
+            self.posts.append((sha, state, desc))
+            if state == "pending":
+                seen["claim_at_pending"] = os.path.exists(os.path.join(_mod.CLAIMS, sha))
+            if state != "pending" and not verdict_posts:
+                return False
+            return True
+
+        _mod.status = fake_status
+        _mod.prepare_wt = lambda n, sha, base, out: (True, "")
+        _mod.run_checks = lambda pr, out: []
+        _mod.process(pr, False)
+        return seen
+
+    def test_the_claim_is_taken_before_the_pending_row_and_released_after_the_verdict(self):
+        pr = self._pr()
+        seen = self._run_process(pr)
+        self.assertTrue(seen.get("claim_at_pending"),
+                        "the claim must be taken before the pending row goes out")
+        self.assertFalse(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
+                         "the claim is spent once the verdict is posted")
+
+    def test_a_claim_survives_a_verdict_that_could_not_be_posted(self):
+        """A head with no verdict is owed a receipt, so the claim stays."""
+        pr = self._pr()
+        self._run_process(pr, verdict_posts=False)
+        self.assertTrue(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
+                        "a verdict that could not be posted must leave the claim in place")

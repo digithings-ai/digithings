@@ -157,10 +157,52 @@ scripts/local-ci/install.sh ~/Code/digithings
 
 `--dry-run` prints the rendered plist and touches nothing: no write, no bootout.
 
+## The producer
+
+The producer of the pre-merge receipt is the launchd daemon, and the daemon
+runs from a dedicated clone of this repository on `develop` - not from a seat's
+shell, and not from a linked worktree of somebody's checkout:
+
+```
+git clone --branch develop git@github.com:digithings-ai/digithings.git ~/Code/digithings-ci
+scripts/local-ci/install.sh ~/Code/digithings-ci
+```
+
+`install.sh` refuses a linked worktree (`.git` is a file) unless
+`--allow-worktree` is passed: a linked worktree is a checkout somebody else
+works in, and a daemon that moved it would move their work with it.
+
+The daemon keeps that clone on `origin/develop` by itself. The refresh
+fast-forwards the checkout and does nothing else: a linked worktree is never
+touched, a checkout with local commits or with uncommitted work is left alone,
+and only a real clone is refreshed at all. A daemon running an old commit
+produces old receipts, so the runner refreshes the code that posts them.
+
+The seat-shaped install (`install.sh --allow-worktree`) is a temporary measure
+for the window in which the daemon is not running. It does produce receipts,
+but it depends on a seat's timing and it leaves the queue to whoever acts: it
+is not a receipt policy.
+
+Two things keep a receipt from being lost when a run dies (DIG-5135):
+
+- **the claim ledger**: a run takes the claim on a head before it posts the
+  `pending` row, and releases it when the verdict is posted. A run that dies
+  leaves the claim behind, and the next tick reads it, sees that the holder is
+  gone, and queues the head again. A `pending` row is a claim, never a verdict.
+- **the fair order**: the queue is oldest first, so the head that has waited
+  longest is served first. It used to be newest first, which meant a PR that
+  arrived early waited behind every later arrival and could wait for days for
+  a required check.
+
 ## Invariants this script is built around
 
 - **A skip is never silence.** A memory or disk guard that forces a skip posts
   `failure` on the queued PRs, so merges block loudly instead of passing quietly.
+- **A lost run is not a lost receipt.** The claim ledger names the holder of
+  every head being checked, so a run that dies leaves a head that is queued
+  again instead of a PR that waits for ever (DIG-5135).
+- **The oldest waiter goes first.** The queue is oldest first, so a PR that
+  arrived early is not overtaken by every later arrival (DIG-5135).
 - **Fork code never executes here.** Fork PRs get a `failure` naming the re-push
   path a maintainer must use.
 - **Fails closed on a missing input.** If the review record or the PR body cannot
