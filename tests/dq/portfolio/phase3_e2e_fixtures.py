@@ -57,7 +57,7 @@ from digiquant.dashboard.research_retrieval.tools import (
     persist_pre_call_role_manifest,
 )
 
-from tests.dq.dashboard.test_context_compiler import _belief, _evidence
+from tests.dq.dashboard.context_compiler_support import _belief, _evidence
 
 PHASE3_RUN_ID = "run-phase3-3019"
 PHASE3_SESSION = date(2026, 8, 26)
