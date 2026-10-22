@@ -8,6 +8,7 @@ import {
   nextUpstreamHost,
   proxyToUpstream,
   resolveDigichatVersion,
+  upstreamTarget,
 } from "../../scripts/trusted-proxy-server.mjs";
 
 function listen(server: http.Server): Promise<number> {
@@ -263,6 +264,99 @@ describe("Next child address", () => {
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("text/html");
       expect(await res.text()).toContain("<!DOCTYPE html>");
+    } finally {
+      await closeServer(front);
+      await closeServer(upstream);
+    }
+  });
+});
+
+describe("upstreamTarget", () => {
+  it("sends the loopback Host to the in-image helpdesk MCP", async () => {
+    // The MCP SDK's DNS-rebinding guard answers 421 "Invalid Host header" to a
+    // Host it cannot allow-list, and the public Host is not on that list.
+    let seenHost = "";
+    const upstream = http.createServer((req, res) => {
+      seenHost = req.headers.host ?? "";
+      res.end("ok");
+    });
+    const upstreamPort = await listen(upstream);
+    const front = http.createServer((req, res) => {
+      proxyToUpstream(
+        req,
+        res,
+        upstreamTarget(
+          req.url,
+          forwardHeaders(req.headers, "198.51.100.7", "stamp"),
+          upstreamPort,
+          upstreamPort,
+        ),
+      );
+    });
+    const frontPort = await listen(front);
+    try {
+      const body = await new Promise<string>((resolve, reject) => {
+        http
+          .get(
+            {
+              host: "127.0.0.1",
+              port: frontPort,
+              path: "/api/mcp/zammad/mcp",
+              headers: { host: "digithings.ai" },
+            },
+            (res) => {
+              const chunks: Buffer[] = [];
+              res.on("data", (chunk: Buffer) => chunks.push(chunk));
+              res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+            },
+          )
+          .on("error", reject);
+      });
+      expect(body).toBe("ok");
+      expect(seenHost).toBe(`127.0.0.1:${upstreamPort}`);
+    } finally {
+      await closeServer(front);
+      await closeServer(upstream);
+    }
+  });
+
+  it("keeps the public Host for the Next upstream", async () => {
+    let seenHost = "";
+    const upstream = http.createServer((req, res) => {
+      seenHost = req.headers.host ?? "";
+      res.end("ok");
+    });
+    const upstreamPort = await listen(upstream);
+    const front = http.createServer((req, res) => {
+      proxyToUpstream(
+        req,
+        res,
+        upstreamTarget(
+          req.url,
+          forwardHeaders(req.headers, "198.51.100.7", "stamp"),
+          upstreamPort,
+        ),
+      );
+    });
+    const frontPort = await listen(front);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        http
+          .get(
+            {
+              host: "127.0.0.1",
+              port: frontPort,
+              path: "/chat",
+              headers: { host: "digithings.ai" },
+            },
+            (res) => {
+              res.resume();
+              res.on("end", () => resolve());
+            },
+          )
+          .on("error", reject);
+      });
+      expect(seenHost).toBe("digithings.ai");
     } finally {
       await closeServer(front);
       await closeServer(upstream);

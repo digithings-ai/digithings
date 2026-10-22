@@ -446,6 +446,46 @@ def test_run_mcp_allowlists_env_hosts(monkeypatch):
         allowed[:] = before
 
 
+def test_run_mcp_allows_the_loopback_host_by_default(monkeypatch):
+    """The SDK guard answers 421 to a Host it cannot allow-list, and its
+    default allow-list is empty. The digichat entrypoint forwards the loopback
+    Host, so the loopback names are allowed without any configuration."""
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    allowed = server.mcp.settings.transport_security.allowed_hosts
+    before = list(allowed)
+    monkeypatch.delenv("ZAMMAD_MCP_ALLOWED_HOSTS", raising=False)
+    monkeypatch.setattr(server.mcp, "run", lambda **kwargs: None)
+    try:
+        server.run_mcp(port=8770)
+        assert "127.0.0.1:*" in allowed
+        assert "localhost:*" in allowed
+    finally:
+        allowed[:] = before
+
+
+def test_default_allowed_hosts_accept_the_loopback_host_and_reject_a_foreign_one():
+    """A portless loopback entry expands to the bare host and `host:*`, so both
+    the `127.0.0.1:8770` Host the entrypoint sends and the portless spellings
+    are accepted, and a public Host is not."""
+    ts = pytest.importorskip("mcp.server.transport_security")
+    from scripts.zammad_mcp import server
+
+    middleware = ts.TransportSecurityMiddleware(
+        ts.TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=server._allowed_host_patterns(server.DEFAULT_ALLOWED_HOSTS),
+        )
+    )
+
+    assert middleware._validate_host("127.0.0.1:8770")
+    assert middleware._validate_host("localhost:8770")
+    assert middleware._validate_host("127.0.0.1")
+    assert middleware._validate_host("localhost")
+    assert not middleware._validate_host("digithings.ai")
+
+
 class NumberLookupTransport:
     """Serve GET /tickets/{number} as a 404, then answer the search lookup."""
 

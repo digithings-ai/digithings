@@ -82,6 +82,33 @@ export function forwardHeaders(headers, peerIp, stamp = process.env.DIGICHAT_PEE
 }
 
 /**
+ * The upstream for one public request.
+ *
+ * The in-image helpdesk MCP is a loopback service, so it has to see its own
+ * loopback Host and not the public one the edge sent. The MCP SDK's
+ * DNS-rebinding guard (mcp >= 1.26) answers 421 "Invalid Host header" to a
+ * Host it cannot allow-list, and the public Host is not on that list: the
+ * entrypoint would otherwise forward `Host: digithings.ai` to 127.0.0.1:8770
+ * and every helpdesk tool would fail. Next keeps the public Host: it is the
+ * app that serves the site.
+ *
+ * `helpdeskPort` is the port the in-image helpdesk MCP listens on. It is a
+ * parameter so a test can stand the MCP up on a free port; production always
+ * uses the configured one.
+ */
+export function upstreamTarget(url, headers, upstreamPort, helpdeskPort = zammadPort) {
+  if ((url ?? "").startsWith(zammadPrefix)) {
+    return {
+      headers: { ...headers, host: `${helpdeskMcpHost}:${helpdeskPort}` },
+      host: helpdeskMcpHost,
+      path: "/mcp",
+      port: helpdeskPort,
+    };
+  }
+  return { headers, host: nextUpstreamHost, path: url, port: upstreamPort };
+}
+
+/**
  * Forward one public request to a loopback listener. The entrypoint always
  * does this, including when DIGICHAT_TRUSTED_PROXIES is unset. A client
  * disconnect destroys the upstream request so Next's abort signal fires and
@@ -257,13 +284,11 @@ function start() {
     }
     // /api/mcp/zammad* is served by the in-image zammad-mcp, not Next: keep the
     // method/headers/body and rewrite the path to the MCP endpoint.
-    const isZammadMcp = (req.url ?? "").startsWith(zammadPrefix);
-    proxyToUpstream(req, res, {
-      headers: forwardHeaders(req.headers, peerIp),
-      ...(isZammadMcp
-        ? { host: helpdeskMcpHost, path: "/mcp", port: zammadPort }
-        : { host: nextUpstreamHost, path: req.url, port: upstreamPort }),
-    });
+    proxyToUpstream(
+      req,
+      res,
+      upstreamTarget(req.url, forwardHeaders(req.headers, peerIp), upstreamPort),
+    );
   });
 
   waitForNext()
