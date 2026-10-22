@@ -114,7 +114,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/scripts/trusted-proxy-server.mjs": {
-      "count": 20,
+      "count": 18,
       "ticket": "DIG-2912"
     },
     "apps/digichat/src/app/(devkit)/devkit/devkit-client.tsx": {
