@@ -578,8 +578,8 @@
       "ticket": "DIG-3689"
     },
     "docs/ops/SECRETS_INVENTORY.md": {
-      "count": 4,
-      "ticket": "DIG-3689"
+      "count": 5,
+      "ticket": "DIG-4810"
     },
     "docs/ops/SECRETS_ROTATION.md": {
       "count": 11,
