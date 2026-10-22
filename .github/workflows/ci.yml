@@ -93,9 +93,9 @@ jobs:
               - 'clients/digivoice-tui/**'
               - 'clients/digichat-devkit/**'
               - 'packages/surface-config/**'
+              - 'packages/tui-frame/**'
               - 'packages/hero-banner/**'
               - 'clients/**'
-              - 'packages/tui-frame/**'
               - '.github/workflows/test-bun-suites.yml'
               - '.github/workflows/test-clients-tui.yml'
             digiquant:

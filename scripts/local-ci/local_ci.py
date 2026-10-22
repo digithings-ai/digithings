@@ -191,6 +191,10 @@ WORKER_DRY_RUN_TIMEOUT = 300
 # fallback for a checkout where the block is missing or empty.
 BUN_SUITE_DIRS = ("clients/digichat-tui", "clients/digiquant-tui", "clients/digivoice-tui",
                   "clients/digichat-devkit", "packages/surface-config", "packages/hero-banner",
+                  # DIG-5212: the recorded-frame contract both TUI clients and the
+                  # dashboard import. Its suite is the only place that contract
+                  # is tested, so the fallback list must cover it too.
+                  "packages/tui-frame",
                   # The pre-move digivoice TUI: clients/digivoice-tui is the live
                   # client (#5548), this is the legacy tree the retired lane also
                   # ran. Kept so the gate never drops a suite the lane covered.
