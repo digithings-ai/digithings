@@ -119,6 +119,22 @@ describe('DIG-5204 acceptance: the digichat recorded frame reaches the dashboard
     container.remove();
   });
 
+  /**
+   * Render the pane with the preview pinned on. Without the explicit `env` the
+   * component reads `process.env`, so a shell or CI that exports
+   * `NEXT_PUBLIC_DIGI_TUI_PREVIEW=0` would turn these checks red for a reason
+   * that has nothing to do with the frame.
+   */
+  function renderPane() {
+    act(() => {
+      root.render(
+        createElement(TuiRecordedFrames, {
+          env: { NEXT_PUBLIC_DIGI_TUI_PREVIEW: '1' },
+        }),
+      );
+    });
+  }
+
   describe('1. the manifest names the digichat frame with its exporter and route', () => {
     it('names the digichat frame', () => {
       const manifest = loadManifest();
@@ -163,9 +179,7 @@ describe('DIG-5204 acceptance: the digichat recorded frame reaches the dashboard
   describe('2. the dashboard renders that frame', () => {
     it('renders every frame the manifest names', () => {
       const manifest = loadManifest();
-      act(() => {
-        root.render(createElement(TuiRecordedFrames, {}));
-      });
+      renderPane();
       const details = container.querySelectorAll('details');
       expect(
         details.length,
@@ -174,9 +188,7 @@ describe('DIG-5204 acceptance: the digichat recorded frame reaches the dashboard
     });
 
     it('renders the digichat frame with its source and route', () => {
-      act(() => {
-        root.render(createElement(TuiRecordedFrames, {}));
-      });
+      renderPane();
       const summaries = Array.from(container.querySelectorAll('summary')).map(
         (node) => node.textContent ?? '',
       );
@@ -193,9 +205,7 @@ describe('DIG-5204 acceptance: the digichat recorded frame reaches the dashboard
       const copy = JSON.parse(
         readFileSync(join(FIXTURES_DIR, entry!.file), 'utf8'),
       ) as { frame: string };
-      act(() => {
-        root.render(createElement(TuiRecordedFrames, {}));
-      });
+      renderPane();
       const pres = Array.from(container.querySelectorAll('pre.font-mono')).map(
         (node) => node.textContent ?? '',
       );
@@ -234,8 +244,11 @@ describe('DIG-5204 acceptance: the digichat recorded frame reaches the dashboard
         readFileSync(join(FIXTURES_DIR, entry!.file), 'utf8'),
       ) as Record<string, unknown>;
       const record = producerRecord();
-      if (!record) return; // the exporter writes straight into the dashboard tree
-      expect({ ...copy, capturedAt: null }).toEqual({ ...record, capturedAt: null });
+      expect(
+        record,
+        'the digichat exporter committed no record to compare the dashboard copy against',
+      ).toBeDefined();
+      expect({ ...copy, capturedAt: null }).toEqual({ ...record!, capturedAt: null });
     });
   });
 });
