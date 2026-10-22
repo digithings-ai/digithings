@@ -93,7 +93,7 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 ### 1. `MCP_EDGE_KEY` + `DIGICHAT_EMBED_TENANTS`
 
 **Blast radius** — `/_stack/mcp/{digisearch,digivault}/*` returns fail-closed 401 (`apps/digithings-stack-cloudflare/src/index.ts:669-671`); the embed MCP tool calls break. The `zammad` route left this edge on 2026-10-19 and is now gated on the digichat host by a different key — see §12. `DIGICHAT_EMBED_TENANTS` drives all tenant routing, gate mode and per-tenant tokens (R10).
-**Copies** — stack Worker secret `MCP_EDGE_KEY` (declared `apps/digithings-stack-cloudflare/wrangler.toml:41`, consumed `src/index.ts:547-549`); the value **as a literal `token`** inside digichat `DIGICHAT_EMBED_TENANTS` (`apps/digichat-cloudflare/src/index.ts:48`; `apps/digichat/config/examples/occ-embed.yaml:56-58`). Optional `MCP_EDGE_KEYS` JSON overrides per server (`src/index.ts:549-552`).
+**Copies** — stack Worker secret `MCP_EDGE_KEY` (declared `apps/digithings-stack-cloudflare/wrangler.toml:41`, consumed `src/index.ts:547-549`); the value **as a literal `token`** inside digichat `DIGICHAT_EMBED_TENANTS` (`apps/digichat-cloudflare/src/index.ts:70`; `apps/digichat-cloudflare/README.md:122-128`). Optional `MCP_EDGE_KEYS` JSON overrides per server (`src/index.ts:549-563`).
 **Pre-flight** — read the tenant JSON shape at `apps/digichat-cloudflare/README.md:81-142`; locate the single `mcp.servers` entry for the OCC Zammad route.
 **Steps**
 1. Generate: `openssl rand -hex 32`.
@@ -104,7 +104,7 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 **Verify** — new key not 401, old/absent key 401:
 `curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $NEW" https://graph.digithings.ai/_stack/mcp/digisearch/mcp` → any status except `401`; drop the header → `401`. (Do not verify against `/_stack/mcp/zammad/mcp`: the Zammad MCP no longer runs in the stack — §12.)
 **Rollback** — re-put the previous `MCP_EDGE_KEY` **and** the previous tenant JSON together.
-**Gotchas** — a one-sided rotation 401s the embed (R10). `tokenEnv` cannot resolve the key: the stack Worker secret is never forwarded into the digichat container, so the literal is required (`apps/digichat-cloudflare/README.md:115-117`).
+**Gotchas** — a one-sided rotation 401s the embed (R10). `tokenEnv` cannot resolve the key: the stack Worker secret is never forwarded into the digichat container, so the literal is required (`apps/digichat-cloudflare/README.md:122-128`).
 
 **The OCC tenant's `token` is a separate, non-`MCP_EDGE_KEY` credential** — an invite bearer
 capability carried as `?token=` on `digithings.ai/chat/occ`, not the MCP edge key. Do not rotate the
