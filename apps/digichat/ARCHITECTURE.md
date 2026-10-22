@@ -1590,6 +1590,20 @@ messages from the same first-party allowlist as seed (`parseThemeMessage` in
 OS/`ThemeProvider` overrides). Priority: visitor `/theme` pick > parent
 postMessage > URL `?theme=` > tenant registry theme (`resolveEmbedTheme`).
 
+**postMessage palette.** The same message carries an optional `palette` field
+(an older parent that sends only `theme` still works). It is a *source*, not a
+second channel: `resolveEmbedPalette` folds it into the palette the embed
+already owns — visitor `/theme` pick > parent palette > default look — and the
+embed's single theme effect is the only writer of `data-palette`
+(`applyEmbedPalette`, which also keeps `theme-color` in step). Decided this way
+because the obvious alternative, painting the parent's palette straight from
+the message handler while the same effect repaints from the pick, produced two
+writers that reverted each other on the next tick and made a parent-set palette
+a no-op. A message with no palette, or `default`, clears the parent channel; an
+unknown id is dropped on parse, so a typo costs the palette and never the mode.
+`ChatEmbedShell` reads the parent's `[data-palette]` and forwards only a known
+id (`readParentDocumentPalette`).
+
 **`/theme` on embeds (2.6.6).** Every tenant embed lists `/theme` in the command
 palette; the #6122 model/tool/session locks are unchanged. A pick is cosmetic and
 lasts for the tab: it is stored in sessionStorage under
