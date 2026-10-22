@@ -339,6 +339,11 @@ RULES: list[tuple[str, str, str]] = [
     ),
     ("tests/dq/notify/test_sync_hook.py", "R2", "tests the house pipeline"),
     ("tests/dq/dashboard/test_envcompat.py", "R2", "tests the house pipeline"),
+    (
+        "tests/dq/dashboard/test_envcompat_repo_inventory.py",
+        "R2",
+        "tests the house pipeline",
+    ),
     ("tests/integration/test_execution_tenancy_chain.py", "R2", "tests the house pipeline"),
     (
         "tests/scripts/test_gloomberb_session_cookie_runbook.py",
