@@ -16,14 +16,14 @@ Prefer **in-session** review on a **fresh-context subagent** (author session mus
 | digithings / Cursor | Same `/review` path (or equivalent fresh-context subagent). Optional: Bugbot / security-review when they fit. **Not** the CodeRabbit Cursor plugin `code-review` / `code-reviewer` skills. |
 | twelve-x / other org repos | Same idea: fresh subagent + findings posted on the PR |
 
-Post findings on the record (PR comment). digithings requires `<!-- in-session-review -->` + `reviewed:agent` for the coverage gate, and a `<!-- digithings-review agent=… run=… head=… -->` provenance marker beside it for the merge queue's reviewer-independence gate — see [Reviewer independence](#reviewer-independence-merge-queue-gate). The merge queue is a second, separate gate on the comment — see [Posted verdicts](#posted-verdicts-merge-queue-gate).
+Post findings on the record (PR comment). digithings requires `<!-- in-session-review -->` + `reviewed:agent` for the coverage gate, and a `<!-- digithings-review agent=… run=… head=… -->` provenance marker beside it for the merge queue's reviewer-independence gate and for the seat the verdict belongs to — see [Reviewer independence](#reviewer-independence-merge-queue-gate). The merge queue is a second, separate gate on the comment — see [Posted verdicts](#posted-verdicts-merge-queue-gate).
 
 ## Posted verdicts (merge-queue gate)
 
-A verdict can be delivered as a **PR comment**. The merge queue reads one field, and only inside an HTML marker comment — never the prose ([`scripts/merge_queue.py`](../../scripts/merge_queue.py), DIG-2253):
+A verdict can be delivered as a **PR comment**. The merge queue reads two things: the marker below, and a `Review verdict:` line ([`scripts/merge_queue.py`](../../scripts/merge_queue.py), DIG-2253, DIG-4878):
 
 ```html
-<!-- opencode-power-pack:code-review verdict=approved scope=@<full-40-char-sha> -->
+<!-- opencode-power-pack:code-review verdict=approved scope=@<sha> -->
 ```
 
 Post that marker in a comment of its own. Do not paste this block into a comment to show someone the syntax — the parser reads the raw comment, so a quoted example is a live verdict.
@@ -31,16 +31,19 @@ Post that marker in a comment of its own. Do not paste this block into a comment
 | Field | Effect |
 |-------|--------|
 | `verdict=` **inside the marker** | `changes_requested` and `changes_needed` **block** the merge. `approved` and `approve` do not block. |
-| `scope=` inside the marker | Carries the reviewed commit as `@<full-40-char-lowercase-sha>`. |
-| Everything outside the marker | Ignored. |
+| `scope=` inside the marker | Carries the reviewed commit as `@<sha>`. |
+| A `Review verdict:` line | The same two verdicts, in prose: `changes requested`, `changes needed`, `approved`, `approve`. Bold markers (`**Review verdict: changes requested**`) are read too. |
+| Everything outside the marker and the verdict line | Ignored. |
 
-- **Only fields inside the marker count.** `## Verdict: changes requested` in the body is prose, and so is the marker with its `<!--` `-->` stripped or escaped. The queue reads both as *no verdict*, not as a block.
+- **Only the marker and the verdict line count.** `## Verdict: changes requested` in the body is prose, and so is the marker with its `<!--` `-->` stripped or escaped. The queue reads those as *no verdict*, not as a block.
 - **A fence does not hide the marker.** The `<!--` `-->` are read from the raw comment, so a marker inside a code fence, an indented block, or inline backticks still posts a live verdict — and a fenced example of an *approval* clears a live block.
-- **Spelling.** `_normalise_verdict()` lowercases and turns `-` into `_`, so `changes-requested` is the same as `changes_requested`. It does not collapse spaces, so `verdict=changes requested` is not readable. Any other spelling is ignored.
+- **Spelling.** `_normalise_verdict()` lowercases and turns `-` into `_`, so `changes-requested` is the same as `changes_requested`. It does not collapse spaces, so `verdict=changes requested` is not readable. Any other spelling is ignored. In prose, write the verdict in full: `changes requested` or `changes needed`.
 - **A missing or misspelled `verdict=` neither blocks nor clears.** The comment is skipped, so an earlier blocking verdict still stands.
-- **`scope=` must carry a full 40-character lowercase sha.** `_on_pr_history()` applies a blocking verdict only while that sha is the PR head or still in the PR's commits, and it compares the whole string, so a 7-character prefix is read and then never matches. A blocking verdict with no sha, with an uppercase sha, or with a sha that a force-push or rebase removed silently stops applying. Post a new verdict after the fix.
-- **A rebase drops the verdict that was posted against the old commits.** A rebase rewrites the commits, so the sha the verdict named is no longer among the PR's commits and the verdict stops applying — the same rebase sensitivity the reviewer-independence gate has on the author side, on the verdict side. "Post a new verdict after the fix" means after a rebase too: the verdict that counted was a verdict on code that no longer exists.
-- **The newest readable verdict wins.** A later `verdict=approved` clears an earlier block. The parser filters on no author and no association, so anyone who can comment on the PR can clear it — an approved marker is not evidence that a review happened. Check the comment thread before you merge.
+- **A block belongs to the seat that posted it.** A `changes_requested` stands until **that seat** posts a later approve that names the head the PR stands at. Another seat's approve does not clear it, and an approve naming another head clears nothing. The queue reads the seat from the provenance marker's `agent=` field, so post that marker with every verdict — without it the queue cannot tell your block from another seat's and falls back to the newest-verdict rule. `#6170` (DIG-4911) merged on 2026-10-21 with the security desk's `changes requested` on the branch, because the code reviewer's later approve on the head was the newest readable verdict. The ordering rule is written once, in [`docs/MERGE_QUEUE.md`](../MERGE_QUEUE.md#the-verdict-rule) — read it there, not here (DIG-4878).
+- **A block is not spent by the branch moving.** A new commit, a rebase or a merge from `develop` does **not** spend a block: the block belongs to the verdict, not to the branch. Until 2026-10-21 the gate asked whether the commit the verdict named was still on the branch, so a rebase retired the block, the `reviewed:agent` label carried the merge, and six `digithings` PRs merged with a `changes requested` as their last word (`#6115`, `#6074`, `#6071`, `#6019`, `#5968`, `#5761`) (DIG-4878).
+- **An approve counts only when it names the head the PR stands at.** The head is named by the marker's `scope=`, by the provenance marker's `head=`, or by a sha written in the verdict line. A binding of 7 characters or more that prefixes the head binds it — post the full sha. An approve that names another head, or names no head at all, clears nothing.
+- **A `reviewed:agent` label cannot carry a PR past a block.** The verdict gate runs before the coverage gate, so the label never rescues a PR whose newest verdict blocks.
+- **The parser filters on no author and no association**, so anyone who can comment on the PR can post a verdict — an approved marker is not evidence that a review happened. Check the comment thread before you merge.
 
 `verdict=` is not emitted by the marker producer yet (DIG-2281). Until it is, the gate only fires on a marker posted by hand — post it in a comment of its own.
 
@@ -117,16 +120,21 @@ Posting the findings is **not** the same as delivering the verdict. A verdict th
 blocks approval **must also be submitted as a GitHub review with state
 `CHANGES_REQUESTED`**, not only as a comment.
 
-The merge queue reads review state and one marker field, never comment prose.
+The merge queue reads review state, one marker field, and one line of prose.
 `scripts/merge_queue.py` `_gate_review` takes an `APPROVED` review from someone
 other than the author as a pass, but blocks on `pr.reviewDecision ==
-"CHANGES_REQUESTED"` and on a posted `verdict=` marker (see
-[Posted verdicts](#posted-verdicts-merge-queue-gate)). **A comment that says
-"changes requested" in prose does not block a merge; a `CHANGES_REQUESTED`
-review or a `verdict=changes_requested` marker does.**
+"CHANGES_REQUESTED"`, on a posted `verdict=` marker, and on a `Review verdict:`
+line (see [Posted verdicts](#posted-verdicts-merge-queue-gate)). **A comment
+that says "changes requested" in prose blocks too, as long as it says it in the
+review rule's own form — `Review verdict: changes requested`.** A comment that
+only hints at it ("one finding blocks approval") is still not a verdict.
+
+Submitting the review as `CHANGES_REQUESTED` remains the right thing to do: it
+is what a human sees on the PR, and it is the half of the signal that does not
+depend on the queue's parser.
 
 The comment is where the evidence lives. The review state is what the gate can
-see. **A blocking verdict needs both:**
+see. **A blocking verdict wants both:**
 
 1. **Comment** — the findings, with severity, `file:line`, evidence and
    fixability (the rule above).
