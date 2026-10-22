@@ -1,4 +1,5 @@
-# Hourly answer-integrity probe against DataTap production (#DIG-306).
+# Answer-integrity probe against DataTap production (#DIG-306). Retired as a
+# scheduled check: manual dispatch only.
 #
 # What this checks: that the answer DataTap serves a real visitor has not started
 # carrying a customer name list or a leaked identifier. That is the failure a
@@ -12,12 +13,13 @@
 #
 # No `on.schedule` here on purpose: every clock for this repo lives on the
 # digithings-cron Worker (a GitHub cron on develop would double-fire, and
-# tests/scripts/test_no_gha_schedules.py enforces that). The hourly
-# `17 * * * *` — every hour at minute 17 — is registered there as the
-# `datatap-answer-check` job, which dispatches this workflow on develop.
+# tests/scripts/test_no_gha_schedules.py enforces that).
 #
-# So a run here is Worker-dispatched, not GitHub-scheduled. Same hour, same minute,
-# same Actions page; the clock is simply owned by the Worker rather than by GitHub.
+# The Worker clock that used to dispatch this workflow every hour at minute 17
+# was retired on 2026-10-18: the client manages their own infrastructure, so we
+# do not probe them on a schedule (DIG-4435). The workflow file stays on
+# develop and a human can still start the probe by hand. Nothing dispatches it
+# on a schedule any more, so a run here is a deliberate act, not a clock tick.
 name: "Check: DataTap answer integrity"
 
 on:
@@ -53,8 +55,8 @@ jobs:
           set -uo pipefail
           LOG=$(mktemp)
 
-          # `make datatap-answer-check` is the same command a developer runs, so the
-          # Worker-dispatched run and a developer's local run cannot drift apart. Its
+          # `make datatap-answer-check` is the same command a developer runs, so a
+          # dispatched run and a developer's local run cannot drift apart. Its
           # exit code, though, cannot be used directly: GNU make returns 2 for *any*
           # failing recipe and can never return 1 (verified on make 3.81 — a child
           # exiting 1 and a child exiting 2 both surface as make exit 2). That would

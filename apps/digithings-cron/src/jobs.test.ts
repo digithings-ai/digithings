@@ -45,7 +45,6 @@ const PATH_A_ENABLED_IDS = [
   "secret-staleness",
   "dependency-freshness",
   "smoke-site",
-  "datatap-answer-check",
   "digiquant-house-run-watch",
 ] as const;
 

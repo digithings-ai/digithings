@@ -1,7 +1,8 @@
 # GHA clocks migration ledger
 
 Status: no GitHub clock remains on `develop`. Every workflow the cutover
-de-clocked is clocked by the `digithings-cron` Worker instead.
+de-clocked is clocked by the `digithings-cron` Worker instead, unless that
+clock was retired later. A retired row is marked below.
 
 Measured 2026-10-14 at `develop` = `d227b6ed5`. This document is a record of a
 measurement. It is not a runbook.
@@ -29,6 +30,8 @@ turns "port, then disable" into one invariant.
 * **Worker cron** — UTC, fixed. GitHub cron was also UTC, so no offset moved.
 * All rows are `workflow_dispatch`-only on GitHub. A human can still start any
   of them by hand.
+* **Retired** — the clock existed at the cutover and was retired later. The
+  workflow file stays on `develop`; nothing dispatches it on a schedule.
 
 | Workflow | Worker job | Worker cron |
 |---|---|---|
@@ -41,7 +44,7 @@ turns "port, then disable" into one invariant.
 | `openwiki-update.yml` | `openwiki-update` | `0 8 * * MON` |
 | `token-canary.yml` | `token-canary` | `41 6 * * *` |
 | `secret-staleness-check.yml` | `secret-staleness` | `17 6 1 * *` |
-| `datatap-answer-check.yml` | `datatap-answer-check` | `17 * * * *` |
+| `datatap-answer-check.yml` | *retired 2026-10-18* | *(no clock)* |
 | `production-deploy-gate-watchdog.yml` | `production-deploy-gate-watchdog` | `17,47 * * * *` |
 | `pipeline-checkpoint-archive.yml` | `checkpoint-archive` | `30 13 * * *` |
 | `pipeline-market-data-refresh.yml` | `market-data-refresh-morning` | `0 13 * * *` |

@@ -102,7 +102,6 @@ crons = [
   "17 6 1 * *",        # secret-staleness (monthly, DIG-248)
   "23 6 * * MON",      # dependency-freshness (weekly Mondays, DIG-1515/DIG-2277)
   "17 6 * * *",        # smoke-site
-  "17 * * * *",        # datatap-answer-check
   "7 0 * * MON-FRI",   # twelve-x-asia
   "12 7 * * MON-FRI",  # twelve-x-london
   "17 12 * * MON-FRI", # twelve-x-new-york
