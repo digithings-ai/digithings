@@ -5,6 +5,47 @@ import {
   DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
 } from "./src/lib/security-headers-bake";
 
+/**
+ * The base path, in the two names the app uses it under.
+ *
+ * `DIGICHAT_BASE_PATH` is the server's base path (the one Next bakes in);
+ * `NEXT_PUBLIC_DIGICHAT_BASE_PATH` is the prefix the client puts on its own
+ * routes (apps/digichat/src/lib/base-path.ts). They are two names for ONE
+ * value, and the image build sets both from the same ARG
+ * (infra/docker/Dockerfile.digichat-cloudflare).
+ *
+ * Setting only one of them serves the app under a prefix the client does not
+ * use: every client-side link and every `p()` call then points at a path that
+ * does not exist. Setting them to DIFFERENT values is the same bug with a
+ * different spelling: the server serves the app under one prefix and the
+ * client prefixes its links with the other. Both are broken builds, not
+ * degraded ones, so they fail here instead of at runtime (DIG-5121).
+ */
+
+/**
+ * One base path, one spelling. A trailing slash is dropped so "/chat" and
+ * "/chat/" are the same value: the client would otherwise build
+ * "/chat//api/…" and the two names would never compare equal.
+ */
+const normaliseBasePath = (value: string | undefined): string =>
+  (value ?? "").trim().replace(/\/+$/, "");
+
+const serverBasePath = normaliseBasePath(process.env.DIGICHAT_BASE_PATH);
+const clientBasePath = normaliseBasePath(process.env.NEXT_PUBLIC_DIGICHAT_BASE_PATH);
+if (Boolean(serverBasePath) !== Boolean(clientBasePath)) {
+  throw new Error(
+    "DIGICHAT_BASE_PATH and NEXT_PUBLIC_DIGICHAT_BASE_PATH must be set together " +
+      "(both unset = serve the app at the root)",
+  );
+}
+if (serverBasePath !== clientBasePath) {
+  throw new Error(
+    `DIGICHAT_BASE_PATH ("${serverBasePath}") and NEXT_PUBLIC_DIGICHAT_BASE_PATH ` +
+      `("${clientBasePath}") must be the same value: the server serves the app under ` +
+      "one prefix and the client prefixes its own links with the other.",
+  );
+}
+
 const nextConfig: NextConfig = {
   output: "standalone",
   // Separate `next dev` lock when previewing a second config (e.g. a baked skin YAML)
@@ -13,7 +54,7 @@ const nextConfig: NextConfig = {
   // Serve under a subpath when set (e.g. /chat for digithings.ai/chat). Unset →
   // root, so self-host (`make up-digichat`), local dev, and the legacy deploy are
   // unchanged. Must match NEXT_PUBLIC_DIGICHAT_BASE_PATH (see src/lib/base-path.ts).
-  basePath: process.env.DIGICHAT_BASE_PATH || undefined,
+  basePath: serverBasePath || undefined,
   // When digichat shares digithings.ai with Pages (static export also uses /_next),
   // set DIGICHAT_ASSET_PREFIX=/_dtchat so CF can route digichat assets without
   // colliding with the marketing site's /_next. Unset → default root assets.
@@ -44,6 +85,21 @@ const nextConfig: NextConfig = {
       {
         // All non-embed routes — global CSP + hardening (REM-077).
         source: "/((?!embed$|embed/).*)",
+        headers: [...DIGICHAT_APP_SECURITY_HEADERS],
+      },
+      {
+        // The app root, explicitly (DIG-5121). Next prefixes every custom-route
+        // source with the basePath at build time
+        // (next/dist/lib/load-custom-routes.js:350), so under basePath=/chat
+        // the global rule above becomes "/chat/((?!embed$|embed/).*)" and its
+        // compiled regex is "^/chat(?:/((?!embed$|embed/).*))(?:/)?$" — which
+        // does NOT match the canonical root "/chat" (Next redirects
+        // "/chat/" → "/chat"). Without this rule the public chat URL would be
+        // served without CSP, X-Frame-Options and the rest of the app
+        // hardening. Without a basePath the source stays "/" and matches the
+        // same root with the same header set (no behaviour change for the
+        // self-hosted deploy).
+        source: "/",
         headers: [...DIGICHAT_APP_SECURITY_HEADERS],
       },
     ];

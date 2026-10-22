@@ -9,6 +9,13 @@
 # The root lockfile still pins the rest. The only sibling tree copied is
 # apps/digichat itself, plus config/byok-providers.json.
 ARG DIGICHAT_ASSET_PREFIX="/_dtchat"
+# DIG-5121: the app is served under /chat on digithings.ai (ADR 0018, GitHub
+# #1252). Next bakes `basePath` at BUILD time, so this is a build arg and not a
+# runtime env: the Worker routes digithings.ai/chat* here, and the app answers
+# under /chat. The Worker maps every legacy path onto this base path
+# (apps/digichat-cloudflare/src/paths.ts), and the contract test pins the two
+# values together so the edge and the image cannot drift.
+ARG DIGICHAT_BASE_PATH="/chat"
 
 FROM node:22-alpine AS deps
 WORKDIR /app
@@ -29,6 +36,21 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ARG DIGICHAT_ASSET_PREFIX
 ENV DIGICHAT_ASSET_PREFIX=$DIGICHAT_ASSET_PREFIX
 ENV NEXT_PUBLIC_DIGICHAT_ASSET_PREFIX=$DIGICHAT_ASSET_PREFIX
+# The app's base path (DIG-5121). DIGICHAT_BASE_PATH is read by
+# apps/digichat/next.config.ts (the `basePath` Next bakes in) and
+# NEXT_PUBLIC_DIGICHAT_BASE_PATH by apps/digichat/src/lib/base-path.ts (the
+# prefix the client puts on its own routes). They MUST carry the same value:
+# one is the server's base path, the other is the client's, and a mismatch
+# shows up as links that 404 under the base path.
+ARG DIGICHAT_BASE_PATH
+ENV DIGICHAT_BASE_PATH=$DIGICHAT_BASE_PATH
+ENV NEXT_PUBLIC_DIGICHAT_BASE_PATH=$DIGICHAT_BASE_PATH
+# An EMPTY base path is a broken image, not a default: Next would then serve
+# the app at "/" while the Worker asks for "/chat", and every request would
+# 404 behind a green build. Fail the build instead. (An empty value can be
+# passed in with `docker build --build-arg DIGICHAT_BASE_PATH=` or through
+# wrangler `image_vars`.)
+RUN test -n "$DIGICHAT_BASE_PATH" || { echo "DIGICHAT_BASE_PATH must not be empty" >&2; exit 1; }
 COPY --from=deps /app ./
 COPY image-packages/digichat/npm/ /tmp/digi-npm/
 # Unpack the published package trees over the manifests npm ci linked.
@@ -74,6 +96,15 @@ LABEL org.digithings.image.registry="${IMAGE_PUSH_REGISTRY}" \
       org.digithings.image.repository="${IMAGE_PUSH_REPOSITORY}"
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# The base path is BAKED into the build (see the builder stage), so the running
+# server already answers under it. The runtime env repeats the same value:
+# NEXT_PUBLIC_DIGICHAT_BASE_PATH is inlined at build time, so it is here for
+# the rare runtime read, and DIGICHAT_BASE_PATH is not read at runtime today
+# (next.config.ts reads it at build time). Both are the same ARG, so neither
+# can disagree with the build.
+ARG DIGICHAT_BASE_PATH
+ENV DIGICHAT_BASE_PATH=$DIGICHAT_BASE_PATH
+ENV NEXT_PUBLIC_DIGICHAT_BASE_PATH=$DIGICHAT_BASE_PATH
 # zammad-mcp (read-only OCC helpdesk MCP) runs beside the Node process: the
 # trusted proxy spawns `python3 -m scripts.zammad_mcp.server` and routes
 # /api/mcp/zammad* to it. Same dep pin as scripts/zammad_mcp/Dockerfile.mcp.
@@ -95,7 +126,9 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 # A running container keeps its start-time env until recycled. To roll a warm
-# instance after a Worker secret change, bump SHARED_DIGICHAT_CONTAINER_ID
-# (apps/digichat-cloudflare/src/paths.ts:22) and redeploy. A rebuild
-# marker only changes the image tag, not the instance id.
+# instance after a Worker secret change, redeploy with a new
+# DIGICHAT_CONTAINER_REV: the shared Container id is derived from the rev
+# (sharedDigichatContainerId(rev), apps/digichat-cloudflare/src/paths.ts), so a
+# new rev addresses a new instance. A rebuild marker only changes the image
+# tag, not the instance id.
 CMD ["node", "apps/digichat/scripts/trusted-proxy-server.mjs"]

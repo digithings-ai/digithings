@@ -29,7 +29,7 @@ docker compose \
   up -d
 ```
 
-Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat itself is already on GHCR (`ghcr.io/digithings-ai/digichat`).
+Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat's published image is private: the publish workflow builds one per `digichat-vX.Y.Z` tag, and `v2.6.4` is the first since `digichat-v2.3.2` (2026-10-21), so without a `ghcr.io` credential digichat builds from source here.
 
 ### Profiles
 

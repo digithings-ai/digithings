@@ -38,6 +38,8 @@ export {
   type PageContextMode,
   type UserAlign,
   type ViewMode,
+  isStockComposerMenuKind,
+  type StockComposerMenuKind,
 } from "./skin-types";
 export {
   SkinRuntime,
@@ -56,6 +58,9 @@ export {
   useEmbedChatPrefsOptional,
   DEFAULT_EMBED_CHAT_PREFS,
   createDefaultEmbedChatPrefs,
+  chromePrefsFromDeploy,
+  persistDensity,
+  useStoredDensityAfterMount,
   disabledCatalogIds,
   catalogToolsFromClient,
   extraOffFromCatalog,

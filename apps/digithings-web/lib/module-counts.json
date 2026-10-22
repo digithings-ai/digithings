@@ -32,7 +32,7 @@
   "versionSource": "pyproject.toml / package.json declared version",
   "versions": {
     "digibase": "0.1.0",
-    "digichat": "2.6.4",
+    "digichat": "2.6.8",
     "digibot": "0.1.0",
     "digigraph": "0.1.0",
     "digikey": "0.1.0",

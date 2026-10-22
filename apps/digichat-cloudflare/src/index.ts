@@ -1,9 +1,10 @@
 /**
  * digithings digichat — Worker fronting one Cloudflare Container.
- * Proxies /embed, digichat APIs, and /_dtchat assets to the digichat Node image.
+ * Proxies /chat (the app), /embed, digichat APIs, and /_dtchat assets to the
+ * digichat Node image.
  *
  * Website paths (different chats, same Container):
- *   digithings.ai/chat      → Pages iframe → /embed?host=digithings.ai
+ *   digithings.ai/chat      → the digichat app (DIG-5121; built with basePath /chat)
  *   digithings.ai/chat/occ  → Pages iframe → /embed?host=occ.digithings.ai
  */
 import { Container, getContainer } from "@cloudflare/containers";
@@ -11,12 +12,16 @@ import { env } from "cloudflare:workers";
 import {
   DIGICHAT_CONTAINER_REV_VAR,
   digichatContainerRev,
+  isContainerInternalPath,
   sharedDigichatContainerId,
   shouldProxyToDigiChat,
+  withContainerPath,
 } from "./paths";
+import { MCP_KEY_HEADER, evaluateMcpGate } from "./mcp-gate";
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { resolveEmbedTenants } from "./tenants-kv";
 import { isOccShellPath, occGate } from "./occ-gate";
+import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
 import { fetchContainerWithRetry } from "./container-retry";
 
@@ -25,12 +30,6 @@ import { fetchContainerWithRetry } from "./container-retry";
  * `worker-configuration.d.ts`; the local `Env` interface is the intended shape.
  */
 const workerVars = env as unknown as Env;
-
-/**
- * OCC helpdesk MCP: the secret-gated edge path served by the in-container
- * zammad-mcp (python) through the trusted proxy, not by Next.
- */
-const ZAMMAD_MCP_PREFIX = "/api/mcp/zammad";
 
 /**
  * Worker-owned, secret-gated recovery lever for the shared Container. Handled
@@ -207,27 +206,62 @@ export default {
     // OCC helpdesk MCP: /api/mcp/zammad* is served by the in-container
     // zammad-mcp through the trusted proxy, not by Next. Gate it here with the
     // edge key this Worker holds; the container never sees the key. Fail closed.
-    const isZammadMcp = url.pathname.startsWith(ZAMMAD_MCP_PREFIX);
-    if (isZammadMcp) {
-      const expected = workerEnv.ZAMMAD_EDGE_KEY?.trim();
-      const provided = request.headers.get("x-digi-mcp-key")?.trim();
-      if (!expected || !provided || provided !== expected) {
-        return new Response("digithings-digichat: unauthorized", { status: 401 });
+    //
+    // Both spellings are gated: the container-local one (/api/mcp/zammad/…) and
+    // the base-path one (/chat/api/mcp/zammad/…), which the app's own Next
+    // route would otherwise answer with no auth of its own (the in-image
+    // trusted proxy only intercepts the container-local spelling). The helper
+    // that recognises them also maps the base-path spelling back onto the
+    // container-local one, so the unauthenticated copy is never reached.
+    //
+    // The verdict comes from the gate module (src/mcp-gate.ts), not from an
+    // inline comparison: a gate that can only be READ cannot be proven
+    // fail-closed, and the contract test executes this one.
+    const mcpGate = evaluateMcpGate(
+      url.pathname,
+      request.headers.get(MCP_KEY_HEADER),
+      workerEnv.ZAMMAD_EDGE_KEY,
+    );
+    if (mcpGate.kind === "unauthorized") {
+      return new Response("digithings-digichat: unauthorized", { status: 401 });
+    }
+    if (mcpGate.kind === "not-mcp") {
+      if (isContainerInternalPath(url.pathname)) {
+        // Container-internal (dev-only) surface the app itself refuses in
+        // production. Serving the app under /chat makes the whole /chat tree
+        // reachable, so the edge refuses these too instead of relying on the
+        // app's own guard alone.
+        return new Response("digichat Worker: path not available.", { status: 404 });
       }
-    } else if (!shouldProxyToDigiChat(url.pathname)) {
-      return new Response(
-        "digichat Worker: path not routed. Marketing /chat shells are on Pages.",
-        { status: 404 },
-      );
+      if (!shouldProxyToDigiChat(url.pathname)) {
+        return new Response(
+          "digichat Worker: path not routed. The digichat app is at /chat; marketing is on Pages.",
+          { status: 404 },
+        );
+      }
     }
     // One shared instance — digithings, OCC, and future tenants via embed registry.
     // The id is derived from the deploying commit, never hand-pinned: a warm
     // instance keeps its boot env, so a forgotten bump silently serves the old
     // image. See paths.ts. Same `containerId` the reset lever above destroys.
     const container = getContainer(workerEnv.DIGICHAT, containerId);
-    // The container slot is shared, and a rollout can leave the previous
+    // The Container slot is shared, and a rollout can leave the previous
     // instance draining while this one starts. A busy slot comes back as a
     // retryable 503 instead of a hard failure (DIG-4487).
-    return fetchContainerWithRetry(request, (req) => container.fetch(req));
+    // A failed page/frame load is always served as inline HTML (never a
+    // download on phones); API callers keep the original answer.
+    //
+    // The path the Container sees carries the app's base path (DIG-5121): the
+    // image is built with `basePath: /chat`, so the legacy compatibility
+    // routes are moved under it and the canonical /chat paths are passed
+    // through unchanged.
+    const containerRequest = withContainerPath(request, url.pathname);
+    // The edge key stops at the edge: the container never sees it. The header
+    // is dropped from the COPY, so the original request still carries it.
+    containerRequest.headers.delete(MCP_KEY_HEADER);
+    return frameSafeErrorResponse(
+      containerRequest,
+      await fetchContainerWithRetry(containerRequest, (req) => container.fetch(req)),
+    );
   },
 };

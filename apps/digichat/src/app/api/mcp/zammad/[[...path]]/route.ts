@@ -7,11 +7,10 @@
  * `https://digithings.ai/api/mcp/zammad*` on the `x-digi-mcp-key` header and
  * then forwards the request to the container's port 3000.
  *
- * In production DIGICHAT_TRUSTED_PROXIES is unset, so the trusted proxy does not
- * run and Next itself owns port 3000 — without this route the path falls
- * through to Next and answers with its own 404 page. This route is therefore
- * what serves it; the proxy's own `/api/mcp/zammad*` rewrite stays as a
- * harmless fallback.
+ * The production entrypoint always sits in front of Next and stamps the
+ * socket peer. It rewrites `/api/mcp/zammad*` to the in-image MCP before
+ * Next sees the request. This route remains the handler when a request
+ * reaches Next directly.
  *
  * The upstream URL is the MCP endpoint itself: every `/api/mcp/zammad*` variant
  * maps to it, exactly as the trusted proxy's rewrite does. That is also why the

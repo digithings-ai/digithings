@@ -10,20 +10,36 @@ Requires **Workers Paid** (Containers are not on Free).
 
 | Public path | Owner | Tenant |
 |---|---|---|
-| `digithings.ai/chat` | Pages shell → iframe `/embed?host=digithings.ai` | digithings |
+| `digithings.ai/chat` | Worker → Container — **the digichat app**, built with basePath `/chat` (DIG-5121) | — |
 | `digithings.ai/chat/occ` | Pages shell → iframe `/embed?host=occ.digithings.ai` | occ |
 | `digithings.ai/chat/occ?token=<key>` | same, plus the invite key forwarded to digichat (DIG-1210) | occ |
-| `digithings.ai/embed*` | Worker → Container | selected by `host` |
-| `digithings.ai/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health` | Worker → Container | — |
+| `digithings.ai/embed*` | Worker → Container (ADR 0018 compatibility route) | selected by `host` |
+| `digithings.ai/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health` | Worker → Container (ADR 0018 compatibility routes) | — |
 | `digithings.ai/_dtchat*` | Worker → Container (assetPrefix) | — |
 | Other paths | Pages static export | — |
 
-Future chats = new Pages route under `/chat/<slug>` + a row in
-`DIGICHAT_EMBED_TENANTS` — **not** a new Container.
+`/chat` is the app itself, not a Pages shell (DIG-5121 — in `develop`, live
+with the digichat deploy lane and Chris's production approval — ADR 0018
+historical note 1): the Worker claims `digithings.ai/chat*`, and the
+Container is **built** with `DIGICHAT_BASE_PATH=/chat` — Next bakes
+`basePath` at build time — so the app answers under `/chat` and never
+nests into `/chat/chat`. The Worker maps every public path onto the path
+the Container serves (`src/paths.ts: containerPathFor`): `/chat*` and
+`/_dtchat*` pass through, the container-local `/api/mcp/zammad*` is never
+moved (and its `/chat/api/mcp/zammad*` spelling is mapped back onto it, so
+the edge key gates both), and the legacy routes are moved under the base
+path so they keep working.
+
+Future chats = a new path in the app + a row in `DIGICHAT_EMBED_TENANTS`
+— **not** a new Container. A new path in the app lives **under `/chat`**
+(the app is served under that base path); a client call into it goes
+through `p()` (`apps/digichat/src/lib/base-path.ts`) so it carries the
+prefix.
 
 ```text
 Browser
-  → digithings.ai/chat[/occ]     (Pages)
+  → digithings.ai/chat           (Worker → one digichat Container, basePath /chat)
+  → digithings.ai/chat/occ       (Pages shell)
        → iframe digithings.ai/embed?host=…   (Worker → one digichat Container)
             → DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
             → DIGIKEY_URL=https://key.digithings.ai
@@ -48,11 +64,18 @@ Mac Compose remains **dev-only** — see
 
 ## Deploy
 
-> **There is no CI deploy lane for this Worker** (DIG-2843). The
-> `deploy-digithings-stack-cloudflare.yml` referenced here was deleted on 2026-10-01 by
-> `f54af7052` (#4919, Human Gate), so the recipe below is the whole deploy path. The build
-> half is still gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for
-> this app on every PR. See
+> **The CI deploy lane for this Worker is `deploy-digichat-cloudflare-container.yml`**, re-derived
+> on `develop` on 2026-10-22 (DIG-5120). It is a re-derivation, not a revert of the file
+> deleted on 2026-10-01 by `f54af7052` (#4919, Human Gate): the deleted lane had no
+> `production` environment gate, so a push-triggered successor would have deployed production
+> on every merge. The re-derived lane deploys on a manual `workflow_dispatch` only, behind
+> `environment: production`, so Chris approves every deploy; a merge to `main` validates the
+> app and deploys nothing. The `production` environment allows `main` deployments only and
+> `develop` is this repo's default branch, so the lane becomes deployable when a promotion
+> carries it to `main`. The recipe below is the **local** path. The build half is still
+> gated: the `worker-build` job in `.github/workflows/ci.yml` runs
+> `wrangler deploy --dry-run --containers-rollout=none` for this app on every
+> PR. See
 > [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
 
 From **repo root** (Dockerfile context is monorepo root):
@@ -76,9 +99,10 @@ npx wrangler secret put DIGICHAT_TENANT_MINT_CREDENTIALS  # tenant mint credenti
 npx wrangler deploy
 ```
 
-Then enable zone routes (uncomment in `wrangler.toml` or Dashboard → Worker →
-Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`,
-`/api/health`, `/_dtchat*`.
+The zone routes are declared, not enabled by hand: `wrangler.toml` carries all twelve
+`digithings.ai` patterns (`/chat*`, `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`,
+`/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*`,
+`/api/mcp/zammad*`, `/chat/occ*`) - a deploy must not narrow that list.
 
 ### `DIGICHAT_EMBED_TENANTS` (digithings + OCC)
 
@@ -144,9 +168,16 @@ secrets. They are resolved server-side and stripped by the browser projections
 | Other hosts | Parent snippet / `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` must equal that tenant’s registry `token`. Put the real JSON only via `wrangler secret put DIGICHAT_EMBED_TENANTS`. |
 | Tools | `backend.type: digigraph` (and OCC `digisearchIndex` / `vaultPathPrefix`) is how digisearch + digivault reach Profile A. digichat only probes digigraph (`DIGICHAT_ENABLED_SERVICES`); it does not talk to those services directly. |
 
-Worker **path** routes stay unchanged: `/embed*`, `/api/chat*`, `/api/embed*`,
-`/api/byok*`, `/api/plan-proof*` (1.5 Desk+ HMAC), `/api/health`, `/_dtchat*`.
-Pages still owns `/chat` and `/chat/occ` shells; iframe origin stays `digithings.ai`.
+Worker **path** routes: `/chat*` (the app itself — the Container is built with
+`DIGICHAT_BASE_PATH=/chat`, DIG-5121) plus the ADR 0018 compatibility window
+`/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`
+(1.5 Desk+ HMAC), `/api/health`, `/_dtchat*`. `/embed*` stays **indefinitely**:
+the OCC shell's iframe and the marketing site both point at
+`digithings.ai/embed?host=…`, so it is not a temporary bridge. The `/api/*`
+routes are the old spelling of what the app now serves under `/chat/api/*`
+and are reviewed once the cutover is verified live — they are removed only
+after that, and never before. Pages keeps the `/chat/occ` shell; iframe
+origin stays `digithings.ai`.
 
 ### digiquant.io Desk+ tenant shape (names only)
 
@@ -173,6 +204,8 @@ NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai
 curl -sf https://digithings.ai/api/health
 # `"version"` must match apps/digichat/package.json (baked into the image)
 curl -s -o /dev/null -w '%{http_code}\n' 'https://digithings.ai/embed?host=digithings.ai'
+curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
+# after the /chat cutover: the app itself, under the base path (200)
 # Browser: https://digithings.ai/chat and /chat/occ
 ```
 

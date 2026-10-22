@@ -23,6 +23,7 @@ from digiquant.data.gloomberb.agent_tools import (  # noqa: E402
 )
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
+from tests.dq.data.gloomberb_prediction_fixtures import kxfed_markets  # noqa: E402
 
 
 def make_client(handler: Any, **kwargs: Any) -> GloomberbClient:
@@ -155,41 +156,7 @@ def _portfolio_handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
             json={
-                "markets": [
-                    {
-                        "ticker": "KXFED-26DEC-450",
-                        "event_ticker": "KXFED-26DEC",
-                        "floor_strike": 4.5,
-                        "strike_type": "greater",
-                        "yes_bid": 90,
-                        "yes_ask": 92,
-                        "last_price": 91,
-                        "close_time": "2026-12-16T00:00:00Z",
-                        "status": "open",
-                    },
-                    {
-                        "ticker": "KXFED-26DEC-475",
-                        "event_ticker": "KXFED-26DEC",
-                        "floor_strike": 4.75,
-                        "strike_type": "greater",
-                        "yes_bid": 40,
-                        "yes_ask": 42,
-                        "last_price": 41,
-                        "close_time": "2026-12-16T00:00:00Z",
-                        "status": "open",
-                    },
-                    {
-                        "ticker": "KXFED-26DEC-500",
-                        "event_ticker": "KXFED-26DEC",
-                        "floor_strike": 5.0,
-                        "strike_type": "greater",
-                        "yes_bid": 9,
-                        "yes_ask": 11,
-                        "last_price": 10,
-                        "close_time": "2026-12-16T00:00:00Z",
-                        "status": "open",
-                    },
-                ],
+                "markets": kxfed_markets(),
                 "cursor": "",
             },
         )

@@ -5,10 +5,6 @@
       "count": 2,
       "ticket": "DIG-3689"
     },
-    ".github/workflows/pipeline-dependency-freshness.yml": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     ".github/workflows/publish-digichat-image.yml": {
       "count": 4,
       "ticket": "DIG-3689"
@@ -172,10 +168,6 @@
     "apps/digichat/src/app/api/mcp/zammad/route.test.ts": {
       "count": 15,
       "ticket": "DIG-2912"
-    },
-    "apps/digichat/src/components/assistant-ui/skins/digichat-force-web.test.tsx": {
-      "count": 2,
-      "ticket": "DIG-3689"
     },
     "apps/digichat/src/components/stock/embed-mcp-catalog.test.ts": {
       "count": 2,
@@ -351,10 +343,6 @@
     },
     "apps/digichat/src/lib/license/verify.test.ts": {
       "count": 3,
-      "ticket": "DIG-3689"
-    },
-    "apps/digichat/src/lib/product-slash-commands.test.ts": {
-      "count": 15,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/security-headers.test.ts": {
@@ -673,14 +661,6 @@
       "count": 1,
       "ticket": "DIG-3689"
     },
-    "packages/digichat-ui/src/slash-commands.test.ts": {
-      "count": 4,
-      "ticket": "DIG-3689"
-    },
-    "packages/digichat-ui/src/slash-commands.ts": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     "packages/ui/src/components/chat/DigichatBootLoader.tsx": {
       "count": 1,
       "ticket": "DIG-3689"
@@ -770,7 +750,7 @@
       "ticket": "DIG-3895"
     },
     "scripts/repo_split_workflow_map.py": {
-      "count": 2,
+      "count": 1,
       "ticket": "DIG-3689"
     },
     "scripts/scan_customer_pii.py": {
@@ -970,7 +950,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_datatap_answer_check_clock.py": {
-      "count": 24,
+      "count": 23,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_datatap_answer_integrity_check.py": {
@@ -994,10 +974,6 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_mcp_container.py": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
-    "tests/scripts/test_migrated_workflows_still_clocked.py": {
       "count": 1,
       "ticket": "DIG-3689"
     },

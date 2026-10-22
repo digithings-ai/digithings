@@ -10,6 +10,7 @@ from digigraph.orchestration.session_prefs_tools import (
     SESSION_SET_THINKING_TOOL,
     SESSION_SET_VIEW,
     SESSION_SET_VIEW_TOOL,
+    SESSION_TOGGLE_TOOL,
     SESSION_TOOL_NAMES,
 )
 
@@ -107,6 +108,15 @@ def test_session_set_thinking_rejects_unknown_mode_and_empty_args() -> None:
     empty = execute(SESSION_SET_THINKING, {}, _ctx())
     assert empty.get("ok") is False
     assert "mode" in str(empty.get("error"))
+
+
+@pytest.mark.unit
+def test_session_toggle_tool_stays_registered_and_refuses() -> None:
+    ctx = _ctx()
+    assert SESSION_TOGGLE_TOOL in SESSION_TOOL_NAMES
+    assert SESSION_TOGGLE_TOOL in _session_tool_names(ctx)
+    out = execute(SESSION_TOGGLE_TOOL, {"id": "web_search", "enabled": False}, ctx)
+    assert out == {"ok": False, "error": "Tools are changed in /tools."}
 
 
 @pytest.mark.unit

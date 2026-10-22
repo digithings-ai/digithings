@@ -11,6 +11,7 @@ const NETWORK_ERROR_RE =
 const UPSTREAM_ERROR_CODES = new Set([
   "upstream_auth",
   "upstream_auth_failed",
+  "upstream_unavailable",
   "service_unavailable",
 ]);
 

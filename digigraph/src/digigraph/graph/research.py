@@ -664,6 +664,7 @@ def _run_document_rag_path(
         tool_choice="auto"
         if forced
         else ("required" if (state.get("require_tool_calls") or mcp_force) else "auto"),
+        reasoning_effort=state.get("effort"),
     )
     # A turn that stops mid-intent ("... Let me") after a tool error is not an
     # answer: give the model up to two more tool-enabled passes to finish it
@@ -681,6 +682,7 @@ def _run_document_rag_path(
             max_tool_rounds=4,
             on_tool_step=stream_callback,
             tool_choice="auto",
+            reasoning_effort=state.get("effort"),
         )
         content = f"{content}{more}" if more else content
 

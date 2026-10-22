@@ -39,7 +39,11 @@ import {
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
+import { downloadMessageSnapshot, showSnapshotError } from "../../../replay/browser";
+import { messageAnchor } from "../../../replay/snapshot";
+import { downloadMarkdown } from "../transcript";
 import { connectionStatusText } from "../connection-status";
+import { WorkStatusLead } from "../work-status-lead";
 import { Skeleton } from "../../../ui/skeleton";
 import { cn } from "./cn";
 import { SkinCredit } from "../stock/skin-credit";
@@ -190,6 +194,8 @@ export type ThreadProps = {
   composerToolbar?: ReactNode;
   /** `always` reserves a scrollbar gutter; `auto` shows bars only on scroll. */
   scrollbars?: "always" | "auto";
+  /** Worked-chain rhythm. `default` is the fixed spacing. */
+  density?: "compact" | "default" | "airy";
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -223,7 +229,17 @@ const chainGroupBy = (() => {
     "standalone-tool-call": [],
     source: ["group-chainOfThought", "group-tool"],
   });
-  const fn = (part: { type: string }, context?: unknown) => {
+  const fn = (part: { type: string; name?: string }, context?: unknown) => {
+    const dataName =
+      part.type === "data"
+        ? part.name
+        : part.type.startsWith("data-")
+          ? part.type.slice("data-".length)
+          : undefined;
+    // A data-notice (tool-call limit, and any other status notice) stays
+    // outside the chain. The chain folds once the answer arrives, which would
+    // hide the notice inside the collapsed work block.
+    if (dataName === "notice") return base(part as never, context as never);
     if (part.type === "data" || part.type.startsWith("data-")) {
       return ["group-chainOfThought", "group-tool"] as const;
     }
@@ -231,7 +247,7 @@ const chainGroupBy = (() => {
   };
   (fn as unknown as Record<symbol, string>)[
     Symbol.for("@assistant-ui/groupBy.memoKey")
-  ] = "digichat:chain-v2";
+  ] = "digichat:chain-v3";
   return fn;
 })();
 
@@ -436,6 +452,7 @@ export const Thread: FC<ThreadProps> = ({
   workVisibility = "balanced",
   composerToolbar,
   scrollbars = "always",
+  density = "default",
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -469,6 +486,7 @@ export const Thread: FC<ThreadProps> = ({
                   composerLayout={composerLayout}
                   composerToolbar={composerToolbar}
                   scrollbars={scrollbars}
+                  density={density}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -495,7 +513,8 @@ const ThreadRoot: FC<{
   composerLayout: ComposerLayout;
   composerToolbar?: ReactNode;
   scrollbars: "always" | "auto";
-}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars }) => {
+  density: "compact" | "default" | "airy";
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -521,6 +540,7 @@ const ThreadRoot: FC<{
       // of each surface having to remember to wrap the Thread.
       data-thread-skin="digichat"
       data-scrollbars={scrollbars}
+      data-density={density}
       style={{
         ["--thread-max-width" as string]: "44rem",
         // `--card` (not `--color-card`) so a scoped palette wins: the
@@ -1083,21 +1103,17 @@ const AssistantWorkingIndicator: FC = () => {
   const statusText = useAuiState((s) => connectionStatusText(s.message.parts));
   const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
+  const statusLabel = wakePhase === "waking" ? "Waking up services…" : statusText;
   return (
     <span
       data-slot="aui_assistant-message-indicator"
-      className="flex items-center gap-2"
+      className="aui-work-status"
     >
-      <DotMatrix
-        state="loading"
-        label="Assistant is working"
-        className="!size-3"
+      <WorkStatusLead
+        marker="loading"
+        markerLabel="Assistant is working"
+        label={statusLabel}
       />
-      {wakePhase === "waking" ? (
-        <span className="text-xs text-muted-foreground">Waking up services…</span>
-      ) : statusText ? (
-        <span className="text-xs text-muted-foreground">{statusText}</span>
-      ) : null}
     </span>
   );
 };
@@ -1174,8 +1190,17 @@ const AssistantMessage: FC = () => {
                 // The parts still render bare: a backend notice (DIG-4459)
                 // rides a data part and must not vanish with the header.
                 if (!holdsWork) return <>{children}</>;
-                // Quiet clients see one line for the whole chain instead of
-                // the two collapsibles.
+                // The chain is the one disclosure boundary: every work part
+                // nests under it (see `chainGroupBy`), so the level's fold
+                // rule here reaches a reasoning-only, a tool-only and a
+                // combined turn alike. The rows inside take their own rule
+                // from the same disclosure. See the decision note in
+                // packages/ui/ARCHITECTURE.md.
+                //
+                // The `hidden` level this branch served is retired: the
+                // `summaryOnly` field is always false now, and a quiet
+                // client gets the folded chain below instead of a summary
+                // line. The branch stays until the field goes.
                 if (disclosure.summaryOnly) {
                   return (
                     <div data-slot="aui_chain-of-thought">
@@ -1333,6 +1358,10 @@ const AssistantMessage: FC = () => {
 
 const AssistantActionBar: FC = () => {
   const { undo, feedback } = useContext(ThreadActionsContext);
+  const messageId = useAuiState((s) => s.message.id);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const exportMessage = useRef<HTMLElement | null>(null);
+  const exportHtmlAfterClose = useRef(false);
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -1381,8 +1410,25 @@ const AssistantActionBar: FC = () => {
           </ActionBarPrimitive.FeedbackNegative>
         </>
       ) : null}
-      <ActionBarMorePrimitive.Root>
-        <ActionBarMorePrimitive.Trigger asChild>
+      <ActionBarMorePrimitive.Root
+        onOpenChange={(open) => {
+          if (open || !exportHtmlAfterClose.current) return;
+          exportHtmlAfterClose.current = false;
+          const doc = document;
+          const message = exportMessage.current;
+          exportMessage.current = null;
+          const id = messageId;
+          requestAnimationFrame(() => {
+            void downloadMessageSnapshot(doc, new Date().toISOString(), id, message).catch(
+              (error: unknown) => {
+                const message = error instanceof Error ? error.message : "HTML export failed.";
+                showSnapshotError(doc, message);
+              },
+            );
+          });
+        }}
+      >
+        <ActionBarMorePrimitive.Trigger asChild ref={triggerRef}>
           <TooltipIconButton tooltip="More">
             <DotMatrix state="more" decorative className="size-3.5" />
           </TooltipIconButton>
@@ -1393,12 +1439,27 @@ const AssistantActionBar: FC = () => {
           sideOffset={6}
           className="aui-action-bar-more-content z-[110] min-w-[8rem] overflow-hidden border p-1"
         >
-          <ActionBarPrimitive.ExportMarkdown asChild>
+          <ActionBarPrimitive.ExportMarkdown
+            asChild
+            onExport={(content) => {
+              downloadMarkdown("digichat.md", content);
+            }}
+          >
             <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink">
               <DotMatrix state="export" decorative className="size-3.5" />
               Export as Markdown
             </ActionBarMorePrimitive.Item>
           </ActionBarPrimitive.ExportMarkdown>
+          <ActionBarMorePrimitive.Item
+            className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink"
+            onClick={() => {
+              exportMessage.current = messageAnchor(triggerRef.current, messageId);
+              exportHtmlAfterClose.current = true;
+            }}
+          >
+            <DotMatrix state="export" decorative className="size-3.5" />
+            Export as HTML
+          </ActionBarMorePrimitive.Item>
         </ActionBarMorePrimitive.Content>
       </ActionBarMorePrimitive.Root>
       <MessageTiming />

@@ -244,8 +244,28 @@ run_tools(
     temperature=0.2, max_tool_rounds=5,
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
+    stream_deltas: bool = False,
+    final_response_format=None,
+    reasoning_effort: str | None = None,
 ) -> str
 ```
+
+**Chat reasoning level.** `reasoning_effort` is the chat's /effort
+(low/medium/high). On streamed turns, `chat_reasoning_effort(model, requested)`
+decides what goes on the wire. Which models have configurable levels
+(`reasoning_effort_configurable`) is a `ReasoningEffortPolicy` the application
+registers with `set_reasoning_effort_policy`; the ids live in
+`config/model-policy.json` (`reasoning_effort`: today DeepSeek V4.1 Flash 1017,
+gpt-5/6, gpt-oss, Gemini 3), and digigraph registers them at import because
+digillm reads no files. Without a registered policy no model gets the field.
+Models with configurable levels get the requested level. With none requested they keep their default,
+which means the field is omitted, except 1017, which only reasons when asked and
+gets `medium`. Other models never get the field. A 400 that names
+`reasoning_effort` or `stream_options` drops that field once and retries, so the
+turn falls back to the model's default reasoning instead of failing.
+Non-streaming calls never send it. The CI LiteLLM overlay sets
+`allowed_openai_params: [reasoning_effort]` on those routes because
+`drop_params` strips it from `openai/` models.
 
 Non-streaming loop. `parallel_safe_tools` replaces digigraph's import of
 `digigraph.orchestration.registry.list_tool_names("parallel_safe")`: when *all*

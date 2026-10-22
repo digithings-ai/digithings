@@ -1,5 +1,6 @@
 import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
+import { createTurnGuard, type TurnGuard } from "@/lib/guardrails/turn";
 import {
   DIGIGRAPH_UNAVAILABLE_MESSAGE,
   HOSTED_WEB_SEARCH_SCOPE,
@@ -1830,4 +1831,264 @@ it("does not retry a corpus license denial by dropping corpus headers", async ()
   expect(seen).toHaveLength(1);
   expect(seen[0]?.corpus).toBe("docs");
   expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+});
+
+it("appends a guardrail wrap-up instruction to the digigraph request and releases", async () => {
+  let sent: { messages?: { role: string; content: string }[] } | null = null;
+  let released = false;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    sent = JSON.parse(String(init?.body)) as { messages?: { role: string; content: string }[] };
+    return new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    );
+  });
+  const guard: TurnGuard = {
+    active: true,
+    async beforeRound() {
+      return { action: "answer", instruction: "Answer with what you have." };
+    },
+    recordUsage() {},
+    release() {
+      released = true;
+    },
+    capToolPayload(value) {
+      return value;
+    },
+    noteToolCap() {},
+  };
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    guard,
+  });
+  await new Response(res.body).text();
+
+  expect(sent?.messages?.some((message) => message.content === "Answer with what you have.")).toBe(
+    true,
+  );
+  expect(released).toBe(true);
+});
+
+it("writes a tool-call limit notice when a digigraph trace hits the cap", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "tool_call",
+                  payload: { tool: "fixture_search", query: "hello", status: "started" },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Done." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+  const guard = createTurnGuard({
+    slug: "public",
+    guardrails: { maxToolCallsPerTurn: 1 },
+  });
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    guard,
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).toContain("tool-call-limit");
+  expect(body).toContain("Tool-call limit reached (1 this turn)");
+  // The house loop is not aborted: the answer after the notice still arrives.
+  expect(body).toContain("Done.");
+});
+
+const answerThenHang = (opts?: { withUsage?: boolean }) => {
+  const encoder = new TextEncoder();
+  let failBody: ((err: Error) => void) | undefined;
+  const payload: Record<string, unknown> = {
+    choices: [{ delta: { content: "Premium answer." } }],
+  };
+  if (opts?.withUsage) {
+    payload.usage = { prompt_tokens: 11, completion_tokens: 5, total_tokens: 16 };
+  }
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      failBody = (err) => controller.error(err);
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+    },
+  });
+  return {
+    body,
+    fail: () => failBody?.(new DOMException("The operation was aborted.", "AbortError")),
+  };
+};
+
+async function readUntil(res: Response, needle: string): Promise<ReadableStreamDefaultReader<Uint8Array>> {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let seen = "";
+  while (!seen.includes(needle)) {
+    const next = await reader.read();
+    if (next.done) break;
+    seen += decoder.decode(next.value);
+  }
+  return reader;
+}
+
+it("charges a premium turn when the visitor disconnects after the answer", async () => {
+  const hung = answerThenHang({ withUsage: true });
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(hung.body, { status: 200, headers: { "content-type": "text/event-stream" } }),
+  );
+  const onUsage = vi.fn();
+  const controller = new AbortController();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    signal: controller.signal,
+    onUsage,
+  });
+
+  const reader = await readUntil(res, "Premium answer.");
+  controller.abort();
+  hung.fail();
+
+  await vi.waitFor(() => expect(onUsage).toHaveBeenCalledTimes(1));
+  expect(onUsage).toHaveBeenCalledWith({
+    inputTokens: 11,
+    outputTokens: 5,
+    totalTokens: 16,
+  });
+  await reader.cancel().catch(() => {});
+});
+
+it("charges a typical turn when the disconnect lands before the usage chunk", async () => {
+  const hung = answerThenHang();
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(hung.body, { status: 200, headers: { "content-type": "text/event-stream" } }),
+  );
+  const onUsage = vi.fn();
+  const controller = new AbortController();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    signal: controller.signal,
+    onUsage,
+  });
+
+  const reader = await readUntil(res, "Premium answer.");
+  controller.abort();
+  hung.fail();
+
+  await vi.waitFor(() => expect(onUsage).toHaveBeenCalledTimes(1));
+  expect(onUsage).toHaveBeenCalledWith(undefined);
+  await reader.cancel().catch(() => {});
+});
+
+it("does not charge when upstream fails before an answer", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("nope", { status: 500, statusText: "Internal Server Error" }),
+  );
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const onUsage = vi.fn();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    onUsage,
+  });
+  await new Response(res.body).text();
+  expect(onUsage).not.toHaveBeenCalled();
+});
+
+it("charges once when the stream errors after text has started", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "Partial answer." } }],
+          usage: { prompt_tokens: 8, completion_tokens: 2, total_tokens: 10 },
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [{ delta: { digigraph_error: { code: "upstream_error", message: "boom" } } }],
+        })}\n\n`,
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+  const onUsage = vi.fn();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    onUsage,
+  });
+  await new Response(res.body).text();
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({
+    inputTokens: 8,
+    outputTokens: 2,
+    totalTokens: 10,
+  });
+});
+
+it("charges reported usage once when the trace stream finishes", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "Hello." } }],
+          usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+  const onUsage = vi.fn();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    onUsage,
+  });
+  await new Response(res.body).text();
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({
+    inputTokens: 3,
+    outputTokens: 1,
+    totalTokens: 4,
+  });
 });

@@ -49,7 +49,7 @@ origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
 # Contributor namespaces (human handles) go in CONTRIBUTOR_HANDLES; add a new
 # handle (GitHub login) here when a new human contributor joins.
 CONTRIBUTOR_HANDLES='chrizefan'
-branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+|bot/[a-z0-9-]+|DIG-[0-9]+-[a-z0-9-]+)$"
+branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore|revert)/[a-z0-9-]+|bot/[a-z0-9-]+|DIG-[0-9]+-[a-z0-9-]+)$"
 
 # A ref deletion pushes an all-zero sha as the local sha; a branch that does not
 # exist upstream yet reports an all-zero remote sha. The width follows the repo's
@@ -120,7 +120,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "           task/<N>-<slug>" >&2
       echo "           {claude,codex,cursor,copilot}/<slug>" >&2
       echo "           {${CONTRIBUTOR_HANDLES//|/,}}/<slug>  (human contributors by GitHub handle)" >&2
-      echo "           {feat,fix,docs,chore}/<slug>" >&2
+      echo "           {feat,fix,docs,chore,revert}/<slug>" >&2
       echo "           bot/<slug>  (pushed by agent-backlog-snapshot.yml" >&2
       echo "                        and pipeline-provider-review.yml)" >&2
       echo "           DIG-<n>-<slug>  (a Paperclip execution workspace; push" >&2

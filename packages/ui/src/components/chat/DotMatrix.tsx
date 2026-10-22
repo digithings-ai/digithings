@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ComponentProps } from "react";
+import { useEffect, useState, type ComponentProps, type CSSProperties } from "react";
 
 /**
  * 5×5 snap-on/off cube matrix. Motion states are agent actions; static
@@ -317,11 +317,32 @@ const PATTERNS = {
     unionRows(1, 3),
   ],
   /**
-   * A full grid — the mark on the tool row. Solid and still, the same weight
-   * as the reasoning glyph, and it never changes size, so the label beside it
-   * cannot shift.
+   * Pixel braces `{ }` — the mark on a tool-call group. One static frame on
+   * the same 5×5 cube grid as the reasoning bulb (`thought`). The middle row
+   * is the outward point of each brace; the rows around it tuck in, so the
+   * pair still reads at the 12px row. Not a filled grid, and not the corner
+   * brackets used for system asides.
+   *
+   *   · ■ · ■ ·
+   *   · ■ · ■ ·
+   *   ■ · · · ■
+   *   · ■ · ■ ·
+   *   · ■ · ■ ·
    */
-  tools: [Array.from({ length: 25 }, (_, i) => i)],
+  tools: [
+    glyph([
+      [0, 1],
+      [0, 3],
+      [1, 1],
+      [1, 3],
+      [2, 0],
+      [2, 4],
+      [3, 1],
+      [3, 3],
+      [4, 1],
+      [4, 3],
+    ]),
+  ],
   /** Scanline down the rows. */
   executing: [0, 1, 2, 3, 4].map(rowCells),
   /** Scanline across the columns (web search). */
@@ -540,11 +561,21 @@ function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
+/** The cube svg fills its box. A bare svg otherwise paints at its 300px default. */
+const gridStyle: CSSProperties = {
+  display: "block",
+  width: "100%",
+  height: "100%",
+  maxWidth: "100%",
+  maxHeight: "100%",
+};
+
 function DotMatrix({
   className,
   state = "loading",
   label,
   decorative = false,
+  style,
   ...props
 }: DotMatrixProps) {
   const frames = PATTERNS[state];
@@ -576,13 +607,17 @@ function DotMatrix({
         ? { "aria-hidden": true }
         : { role: "img", "aria-label": name })}
       className={cx("inline-block size-4 shrink-0", className)}
+      style={{ position: "relative", ...style }}
     >
       <svg
         data-slot="dot-matrix-grid"
         aria-hidden
         viewBox="0 0 20 20"
+        width="100%"
+        height="100%"
         fill="currentColor"
         className="size-full"
+        style={gridStyle}
       >
         {Array.from({ length: CELL_COUNT }, (_, i) => {
           if (!lit.has(i)) return null;

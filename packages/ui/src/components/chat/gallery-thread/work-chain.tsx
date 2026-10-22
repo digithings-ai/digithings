@@ -7,9 +7,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../../../ui/collapsible";
-import { DotMatrix } from "../DotMatrix";
+import { DisclosureChevron } from "../disclosure-chevron";
+import { WorkStatusLead } from "../work-status-lead";
 import { cn } from "./cn";
 import { workStatusText } from "./work-status";
+import { turnCutShort, useTurnOutcome } from "../turn-outcome";
 
 /**
  * How long the chain waits before it folds away once the turn is over.
@@ -86,7 +88,12 @@ export function WorkChain({
   // run. Until then the block is still working — a second run of tool calls
   // and reasoning without text in between is the same block, not a new one.
   // The marker and the title follow the work; the disclosure follows it too.
-  const working = !followedByText;
+  //
+  // A turn that was stopped or failed before any text is over too: nothing
+  // more will arrive, so the marker stops and the title says how it ended.
+  const outcome = useTurnOutcome();
+  const cutShort = !followedByText && turnCutShort(outcome);
+  const working = !followedByText && !cutShort;
 
   useEffect(() => {
     if (working) {
@@ -106,12 +113,27 @@ export function WorkChain({
   // and the tool calls are underneath it.
   const parts = useAuiState((s) => s.message.parts);
   const status = !open && indices ? workStatusText(parts, indices) : undefined;
-  const title = status ? status.label : working ? "Working" : "Worked";
-  const markerRunning = status ? status.running : working;
+  const endedTitle = outcome === "failed" ? "Failed" : "Stopped";
+  const title = cutShort
+    ? endedTitle
+    : status
+      ? status.label
+      : working
+        ? "Working"
+        : "Worked";
+  const markerRunning = !cutShort && (status ? status.running : working);
+  const marker = cutShort
+    ? outcome === "failed"
+      ? "error"
+      : "stop"
+    : markerRunning
+      ? "loading"
+      : "idle";
 
   return (
     <Collapsible
       data-slot="aui_work-chain"
+      data-outcome={cutShort ? outcome : working ? "running" : "done"}
       open={open}
       onOpenChange={setUserOpen}
       className={cn("aui-work-chain", className)}
@@ -119,33 +141,12 @@ export function WorkChain({
     >
       <CollapsibleTrigger
         data-slot="aui_work-chain-trigger"
-        className="aui-work-chain-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-xs transition-[color,scale] active:scale-[0.98]"
+        className="aui-work-chain-trigger aui-work-status group/trigger"
       >
-        {/* The marker is always there: the loading trail while the work runs,
-            the quiet corner dots when it is done. The slot keeps its size, so
-            the title never shifts when the turn ends — and the check mark
-            stays where it belongs, on the tool rows. */}
-        <DotMatrix
-          state={markerRunning ? "loading" : "idle"}
-          decorative
-          className="!size-3 shrink-0"
-        />
-        <span
-          data-slot="aui_work-chain-label"
-          className="aui-work-chain-label inline-block leading-none"
-        >
-          {title}
-        </span>
-        <span
-          data-slot="aui_work-chain-chevron"
-          className="aui-work-chain-chevron inline-flex shrink-0"
-        >
-          <DotMatrix
-            state="expand"
-            decorative
-            className="size-3 shrink-0"
-          />
-        </span>
+        {/* Same lead as the pre-response loader: the marker and the label
+            keep their slots, so the handoff reads as the words changing. */}
+        <WorkStatusLead marker={marker} label={title} />
+        <DisclosureChevron />
       </CollapsibleTrigger>
       <CollapsibleContent
         // Kept mounted: the rows inside keep their own state (and the DOM

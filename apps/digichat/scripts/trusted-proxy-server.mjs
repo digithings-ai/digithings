@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -7,10 +8,30 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const publicPort = Number(process.env.PORT ?? "3000");
 const upstreamPort = Number(process.env.DIGICHAT_NEXT_INTERNAL_PORT ?? "3001");
-const upstreamHost = "127.0.0.1";
+/**
+ * Where the Next child listens, and where this process connects to it.
+ *
+ * It must be `localhost`, not `127.0.0.1`. Next builds the router's request
+ * URL from this hostname (`http://127.0.0.1:3001/...`), but `NextRequest`
+ * normalises any 127.x or [::1] host to `localhost`. A proxy.ts rewrite built
+ * from `request.url` (the embed `?token=` strip) then names a different origin
+ * than the router's, so Next treats it as an external rewrite and fetches
+ * `https://localhost:3001` itself: a 500 with no content-type for every
+ * token-bearing tenant request (2.6.6). With `localhost` both sides
+ * agree and the rewrite stays internal. Still loopback-only.
+ */
+export const nextUpstreamHost = "localhost";
+// The in-image helpdesk MCP listens on IPv4 loopback.
+const helpdeskMcpHost = "127.0.0.1";
 // Read-only OCC helpdesk MCP (scripts/zammad_mcp): a second loopback listener
 // inside this image, reached only through the public listener below.
 const zammadPort = Number(process.env.ZAMMAD_MCP_PORT ?? "8770");
+// Container-local path of the helpdesk MCP. COUPLED with the edge: the
+// Worker's own path table owns this prefix
+// (apps/digichat-cloudflare/src/paths.ts: containerLocalMcpPath) and maps
+// EVERY public spelling of it - including the base-path one - back onto this
+// container-local spelling, so the copy Next would answer without the edge key
+// is never reached. Change one, change the other.
 const zammadPrefix = "/api/mcp/zammad";
 // Container/repo root: this script lives at <root>/apps/digichat/scripts/, and
 // `python3 -m scripts.zammad_mcp.server` needs the root on its path.
@@ -30,9 +51,16 @@ const hopByHopHeaders = [
 ];
 
 /**
- * Copy request headers while reserving x-digichat-peer-ip for this process.
- * The caller cannot choose that value: it is always overwritten with the TCP
- * peer address seen by the public listener.
+ * Same sentence as TRUSTED_PROXIES_UNSET_WARNING in embed-ip-rate-limit.ts.
+ * The mjs entrypoint cannot import that module.
+ */
+export const trustedProxiesUnsetWarning =
+  "DIGICHAT_TRUSTED_PROXIES is unset. The entrypoint stamps the socket peer. Guardrail and premium keys use that socket when it is the client, and unknown when it is a shared ingress. The embed limiter and trial quota follow develop: cf-connecting-ip, then the leftmost X-Forwarded-For hop, otherwise unknown. A header-less request is unknown: the embed limiter collapses onto embed_ip:unknown, and the trial quota skips it. Set DIGICHAT_TRUSTED_PROXIES to the container ingress or overlay peer the entrypoint logs, never Cloudflare's edge ranges. Spoofable headers are not guardrail or premium keys.";
+
+/**
+ * Copy request headers while reserving the peer headers for this process.
+ * The caller cannot choose those values: both are deleted, then the TCP
+ * peer and this process's stamp are written.
  */
 function withoutHopByHopHeaders(headers) {
   const forwarded = { ...headers };
@@ -42,11 +70,63 @@ function withoutHopByHopHeaders(headers) {
   return forwarded;
 }
 
-export function forwardHeaders(headers, peerIp) {
+export function forwardHeaders(headers, peerIp, stamp = process.env.DIGICHAT_PEER_STAMP) {
   const forwarded = withoutHopByHopHeaders(headers);
   delete forwarded["x-digichat-peer-ip"];
+  delete forwarded["x-digichat-peer-stamp"];
   forwarded["x-digichat-peer-ip"] = peerIp;
+  if (typeof stamp === "string" && stamp.trim()) {
+    forwarded["x-digichat-peer-stamp"] = stamp.trim();
+  }
   return forwarded;
+}
+
+/**
+ * Forward one public request to a loopback listener. The entrypoint always
+ * does this, including when DIGICHAT_TRUSTED_PROXIES is unset. A client
+ * disconnect destroys the upstream request so Next's abort signal fires and
+ * the model call stops.
+ */
+export function proxyToUpstream(req, res, target) {
+  const upstream = http.request(
+    {
+      headers: target.headers,
+      host: target.host,
+      method: req.method,
+      path: target.path,
+      port: target.port,
+    },
+    (upstreamResponse) => {
+      if (res.writableEnded || res.destroyed) {
+        upstreamResponse.destroy();
+        return;
+      }
+      res.writeHead(
+        upstreamResponse.statusCode ?? 502,
+        withoutHopByHopHeaders(upstreamResponse.headers),
+      );
+      upstreamResponse.pipe(res);
+    },
+  );
+  const stopIfClientLeft = () => {
+    if (res.writableEnded || res.writableFinished || upstream.destroyed) return;
+    upstream.destroy();
+  };
+  res.on("close", stopIfClientLeft);
+  req.on("aborted", stopIfClientLeft);
+  upstream.on("error", () => {
+    if (res.writableEnded || res.destroyed) return;
+    if (!res.headersSent) res.writeHead(502);
+    res.destroy();
+  });
+  req.pipe(upstream);
+  return upstream;
+}
+
+function ensurePeerStamp() {
+  if (!process.env.DIGICHAT_PEER_STAMP?.trim()) {
+    process.env.DIGICHAT_PEER_STAMP = randomBytes(16).toString("hex");
+  }
 }
 
 const PACKAGE_JSON_BESIDE_SCRIPT = fileURLToPath(new URL("../package.json", import.meta.url));
@@ -91,7 +171,7 @@ function waitForNext() {
   return new Promise((resolveReady, rejectReady) => {
     const deadline = Date.now() + 30_000;
     const attempt = () => {
-      const socket = net.connect(upstreamPort, upstreamHost);
+      const socket = net.connect(upstreamPort, nextUpstreamHost);
       socket.once("connect", () => {
         socket.destroy();
         resolveReady();
@@ -146,46 +226,44 @@ function startZammadMcp() {
   launch();
 }
 
+/** Environment for the Next child: loopback `localhost` on the internal port. */
+export function nextChildEnv(env, port) {
+  return { ...env, HOSTNAME: nextUpstreamHost, PORT: String(port) };
+}
+
 function start() {
+  ensurePeerStamp();
   const bakedVersion = resolveDigichatVersion();
   if (bakedVersion) process.env.DIGICHAT_VERSION = bakedVersion;
-  const capturePeer = Boolean(process.env.DIGICHAT_TRUSTED_PROXIES?.trim());
+  if (!process.env.DIGICHAT_TRUSTED_PROXIES?.trim()) {
+    console.warn(trustedProxiesUnsetWarning);
+  }
   const next = spawn(process.execPath, [nextServerPath()], {
-    env: {
-      ...process.env,
-      HOSTNAME: capturePeer ? upstreamHost : process.env.HOSTNAME,
-      PORT: String(capturePeer ? upstreamPort : publicPort),
-    },
+    env: nextChildEnv(process.env, upstreamPort),
     stdio: "inherit",
   });
 
   next.on("exit", (code) => process.exit(code ?? 1));
   startZammadMcp();
-  if (!capturePeer) return;
 
+  let loggedPeer = false;
   const server = http.createServer((req, res) => {
     const peerIp = req.socket.remoteAddress ?? "";
+    if (!loggedPeer && peerIp && !process.env.DIGICHAT_TRUSTED_PROXIES?.trim()) {
+      loggedPeer = true;
+      console.warn(
+        `DIGICHAT_TRUSTED_PROXIES is unset. First socket peer is ${peerIp}. Set DIGICHAT_TRUSTED_PROXIES to that container ingress or overlay address, never Cloudflare's edge ranges.`,
+      );
+    }
     // /api/mcp/zammad* is served by the in-image zammad-mcp, not Next: keep the
     // method/headers/body and rewrite the path to the MCP endpoint.
     const isZammadMcp = (req.url ?? "").startsWith(zammadPrefix);
-    const upstream = http.request(
-      {
-        headers: forwardHeaders(req.headers, peerIp),
-        host: upstreamHost,
-        method: req.method,
-        path: isZammadMcp ? "/mcp" : req.url,
-        port: isZammadMcp ? zammadPort : upstreamPort,
-      },
-      (upstreamResponse) => {
-        res.writeHead(upstreamResponse.statusCode ?? 502, withoutHopByHopHeaders(upstreamResponse.headers));
-        upstreamResponse.pipe(res);
-      }
-    );
-    upstream.on("error", () => {
-      if (!res.headersSent) res.writeHead(502);
-      res.destroy();
+    proxyToUpstream(req, res, {
+      headers: forwardHeaders(req.headers, peerIp),
+      ...(isZammadMcp
+        ? { host: helpdeskMcpHost, path: "/mcp", port: zammadPort }
+        : { host: nextUpstreamHost, path: req.url, port: upstreamPort }),
     });
-    req.pipe(upstream);
   });
 
   waitForNext()

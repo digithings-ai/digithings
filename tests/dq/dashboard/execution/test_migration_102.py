@@ -18,7 +18,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "102_kairos_broker_mirror.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "102_kairos_broker_mirror.sql"
 
 TABLES = ("broker_orders", "broker_executions", "broker_position_snapshots")
 TRIGGER_FUNCTION = "reject_broker_mirror_mutation"
@@ -42,7 +42,7 @@ def sql(raw: str) -> str:
 
 
 def test_migration_is_the_only_102(raw: str) -> None:
-    assert sorted(MIGRATIONS_DIR.glob("102_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("102_*.sql")) == [MIGRATION_PATH]
 
 
 def test_header_notes_renumber_at_merge(raw: str) -> None:

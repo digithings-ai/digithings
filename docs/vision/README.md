@@ -57,7 +57,7 @@ Next.js production chat UI (`apps/digichat`) — BYOK (bring-your-own-key) flow,
 JWT-based authentication with scoped API keys (RS256, JWKS endpoint), SSO federation groundwork, org and project membership model.
 
 ### digitrace — observability
-LangSmith tracing, Prometheus metrics, correlation IDs (workflow, request, session). `/v1/status` public endpoint.
+OTel tracing into a Cloudflare-native ingest pipeline (R2 archive, Supabase index, MLflow on demand), Prometheus metrics, correlation IDs (workflow, request, session). `/v1/status` public endpoint. See [ADR-0036](../adr/0036-digitrace-cloudflare-native-tracing.md).
 
 ### digibot — always-on agent orchestration
 Scheduled and continuous agent execution via OpenClaw. Heartbeat and audit capabilities. MCP skill interface.

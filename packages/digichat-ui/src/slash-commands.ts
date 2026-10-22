@@ -1,8 +1,15 @@
 /**
  * Product slash commands (#3418, #3511, #3556, #3733, #3736).
- * Client-only actions never leave the browser. Catalog tools use one public
- * name with two gestures: empty = session toggle, remainder = force this send.
+ * Client-only actions never leave the browser. A command that opens a pane
+ * is one composer sequence (`/language English`); tools are toggled only
+ * inside `/tools`, never as their own slash commands.
  */
+import {
+  TRACE_DENSITIES,
+  TRACE_DENSITY_LABELS,
+  type TraceDensity,
+} from "@digithings/ui/chat/trace-spacing";
+
 export const LANG_CODES = ["en", "nl", "it", "es", "fr"] as const;
 export type LangCode = (typeof LANG_CODES)[number];
 
@@ -13,17 +20,16 @@ export type SlashId =
   | "help"
   | "new"
   | "clear"
-  | "digisearch"
-  | "digivault"
   | "copy"
   | "export"
-  | "websearch"
   | "settings"
   | "byok"
   | "models"
   | "effort"
   | "search-engine"
   | "view"
+  | "density"
+  | "theme"
   | "thinking"
   | "sessions"
   | "compact"
@@ -42,6 +48,12 @@ export type SlashDef = {
   forceTool?: string;
   /** When set, selecting the command opens a discrete Up/Down choice list. */
   choiceOptions?: readonly { value: string; label: string }[];
+  /**
+   * Opens a submenu. The composer text is the sequence (`/theme dark`);
+   * a second `/` filters that pane and does not open another palette.
+   * Commands with `choiceOptions` are panes even when this is omitted.
+   */
+  pane?: boolean;
   /**
    * tool — empty Enter toggles; with a query forces (or enables web search).
    * toggle — always flips, ignores extra words.
@@ -121,6 +133,9 @@ export function isViewCode(value: string): value is ViewCode {
   return (VIEW_CODES as readonly string[]).includes(value.trim().toLowerCase());
 }
 
+export const DENSITY_CHOICES: readonly { value: TraceDensity; label: string }[] =
+  TRACE_DENSITIES.map((code) => ({ value: code, label: TRACE_DENSITY_LABELS[code] }));
+
 export const THINKING_CODES = ["auto", "collapsed", "open"] as const;
 export type ThinkingCode = (typeof THINKING_CODES)[number];
 export const THINKING_CHOICES: readonly { value: ThinkingCode; label: string }[] =
@@ -139,39 +154,13 @@ export const SLASH_CATEGORIES: readonly { id: SlashCategory; label: string }[] =
 
 export const SLASH_COMMANDS: readonly SlashDef[] = [
   {
-    id: "digisearch",
-    names: ["/digisearch"],
-    needsArg: false,
-    hint: "empty toggles, or /digisearch query",
-    forceTool: "digisearch",
-    kind: "tool",
-    category: "tools",
-  },
-  {
-    id: "digivault",
-    names: ["/digivault"],
-    needsArg: false,
-    hint: "empty toggles, or /digivault query",
-    forceTool: "digivault",
-    kind: "tool",
-    category: "tools",
-  },
-  {
-    id: "websearch",
-    names: ["/websearch"],
-    needsArg: false,
-    hint: "empty toggles, or /websearch query",
-    forceTool: "web_search",
-    kind: "tool",
-    category: "tools",
-  },
-  {
     id: "mcp",
     names: ["/mcp"],
     needsArg: false,
     hint: "MCP JSON / auth / new",
     kind: "action",
     category: "tools",
+    pane: true,
   },
   {
     id: "tools",
@@ -180,6 +169,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     hint: "Connected tools",
     kind: "action",
     category: "tools",
+    pane: true,
   },
   {
     id: "lang",
@@ -197,6 +187,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     hint: "Pick model",
     kind: "action",
     category: "setup",
+    pane: true,
   },
   {
     id: "effort",
@@ -215,6 +206,24 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     choiceOptions: VIEW_CHOICES,
     kind: "client",
     category: "setup",
+  },
+  {
+    id: "density",
+    names: ["/density"],
+    needsArg: false,
+    hint: "compact / default / airy",
+    choiceOptions: DENSITY_CHOICES,
+    kind: "client",
+    category: "setup",
+  },
+  {
+    id: "theme",
+    names: ["/theme"],
+    needsArg: false,
+    hint: "default dark, default light, then each palette",
+    kind: "client",
+    category: "setup",
+    pane: true,
   },
   {
     id: "thinking",
@@ -241,6 +250,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     hint: "API provider",
     kind: "action",
     category: "setup",
+    pane: true,
   },
   {
     id: "settings",
@@ -249,6 +259,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     hint: "Settings",
     kind: "action",
     category: "setup",
+    pane: true,
   },
   {
     id: "toolbar",
@@ -334,7 +345,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "export",
     names: ["/export"],
     needsArg: false,
-    hint: "Download thread as markdown",
+    hint: "Download this thread: /export md or /export html",
     kind: "client",
     category: "actions",
   },
@@ -345,6 +356,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     hint: "Show commands",
     kind: "client",
     category: "actions",
+    pane: true,
   },
 ];
 
@@ -362,6 +374,8 @@ export type SlashVisibility = {
   tools?: boolean;
   /** Artifact list for this session. Hide where there is no artifact surface. */
   artifacts?: boolean;
+  /** Colour theme. Hidden only when a host sets `themeLocked`; tenant embeds own the pick (`setTheme`). */
+  theme?: boolean;
 };
 
 export type ParsedSlash =
@@ -391,16 +405,14 @@ export function parseSlashInput(raw: string, extra?: readonly SlashDef[]): Parse
 }
 
 function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
-  if (cmd.id === "websearch") return visibility?.webSearch === true;
   if (cmd.id === "search-engine") return visibility?.webSearch === true;
   if (cmd.id === "byok") return visibility?.byok !== false;
-  if (cmd.id === "digisearch") return visibility?.digisearch !== false;
-  if (cmd.id === "digivault") return visibility?.digivault !== false;
   if (cmd.id === "sessions") return visibility?.sessions === true;
   if (cmd.id === "models" || cmd.id === "effort") return visibility?.models !== false;
   if (cmd.id === "mcp") return visibility?.mcp !== false;
   if (cmd.id === "tools") return visibility?.tools !== false;
   if (cmd.id === "artifacts") return visibility?.artifacts === true;
+  if (cmd.id === "theme") return visibility?.theme !== false;
   return true;
 }
 
@@ -477,20 +489,141 @@ export function formatCliSettingLine(row: CliSettingRow, selected: boolean): str
   return `${mark} ${row.label} → ${row.actionLabel} — ${row.description}`;
 }
 
-/** Extra catalog/MCP tool as a slash def (`/datatap` empty=toggle). */
-export function catalogToolSlashDef(entry: {
+export function commandOpensPane(def: SlashDef): boolean {
+  return def.pane === true || (def.choiceOptions?.length ?? 0) > 0;
+}
+
+const MENU_ID: Record<string, string> = { lang: "language", byok: "provider" };
+
+/** Menu id for a command id. `lang` is the language pane; `byok` is provider. */
+export function menuIdForCommand(id: string): string {
+  return MENU_ID[id] ?? id;
+}
+
+export type PaletteKind = "closed" | "commands" | "pane";
+
+export type PaletteFrame =
+  | { kind: "closed" }
+  | { kind: "commands"; filter: string }
+  | { kind: "pane"; command: SlashDef; menu: string; filter: string };
+
+/**
+ * One composer string, one surface. A pane command plus a trailing space
+ * (`/language `, `/language English`, `/language /`) is that pane. The same
+ * token without the space is the parent command list, so backspacing out of
+ * the sequence returns there. Anything else that starts with `/` is the
+ * command list. A second palette is never a separate surface.
+ */
+export function paletteFrame(
+  text: string,
+  defs: readonly SlashDef[] = SLASH_COMMANDS,
+): PaletteFrame {
+  if (!text.startsWith("/") || text.includes("\n")) return { kind: "closed" };
+  // First whitespace only. A single `\s` search stays linear.
+  const body = text.slice(1);
+  const splitAt = body.search(/\s/);
+  const token = splitAt === -1 ? body : body.slice(0, splitAt);
+  const rest = splitAt === -1 ? "" : body.slice(splitAt);
+  if (!token) return { kind: "commands", filter: "" };
+  const needle = `/${token.toLowerCase()}`;
+  const command = defs.find((def) => def.names.some((name) => name.toLowerCase() === needle));
+  if (command && commandOpensPane(command) && rest.startsWith(" ")) {
+    return {
+      kind: "pane",
+      command,
+      menu: menuIdForCommand(command.id),
+      filter: rest.slice(1),
+    };
+  }
+  return { kind: "commands", filter: token.toLowerCase() };
+}
+
+/** Slash popover and menu are mutually exclusive. */
+export function paletteSurfaces(
+  text: string,
+  defs: readonly SlashDef[] = SLASH_COMMANDS,
+): { slash: boolean; menu: string | null } {
+  const frame = paletteFrame(text, defs);
+  if (frame.kind === "pane") return { slash: false, menu: frame.menu };
+  if (frame.kind === "commands") return { slash: true, menu: null };
+  return { slash: false, menu: null };
+}
+
+export type PaletteApply = {
+  kind: PaletteKind;
+  menu: "close" | "keep" | string;
+  filter: string;
+};
+
+/**
+ * Apply a frame on top of the previous one. A button-opened menu (settings)
+ * stays while the composer is ordinary text. Leaving a pane closes it.
+ */
+export function applyPaletteFrame(
+  prevKind: PaletteKind,
+  frame: { kind: PaletteKind; menu?: string; filter?: string },
+): PaletteApply {
+  if (frame.kind === "pane" && frame.menu) {
+    return { kind: "pane", menu: frame.menu, filter: frame.filter ?? "" };
+  }
+  if (frame.kind === "commands" || prevKind === "pane") {
+    return {
+      kind: frame.kind === "commands" ? "commands" : "closed",
+      menu: "close",
+      filter: "",
+    };
+  }
+  return { kind: "closed", menu: "keep", filter: "" };
+}
+
+/** Composer draft written when a pane command is chosen: `/language `. */
+export function paneDraftForId(
+  id: string,
+  defs: readonly SlashDef[] = SLASH_COMMANDS,
+): string | null {
+  const def = defs.find((command) => command.id === id || menuIdForCommand(command.id) === id);
+  if (!def || !commandOpensPane(def)) return null;
+  return `${def.names[0]} `;
+}
+
+/** Full sequence for an option: `/language English`. */
+export function optionDraft(commandName: string, option: string): string {
+  const name = commandName.startsWith("/") ? commandName : `/${commandName}`;
+  const opt = option.trim();
+  return opt ? `${name} ${opt}` : `${name} `;
+}
+
+export type SubmenuOption = {
   id: string;
+  /** Text after the command that selects this row (`English`, `default dark`). */
+  token: string;
   label?: string;
-}): SlashDef {
-  const id = entry.id.trim().toLowerCase();
-  const label = entry.label?.trim() || id;
-  return {
-    id,
-    names: [`/${id}`],
-    needsArg: false,
-    hint: `${label} — empty toggles, or /${id} query`,
-    forceTool: id,
-    kind: "tool",
-    category: "tools",
-  };
+  aliases?: readonly string[];
+};
+
+/**
+ * Filter a pane. An exact option token keeps the full list and highlights
+ * that row, so the next arrow still moves. A partial query uses startsWith
+ * on the token, id, label, and aliases.
+ */
+export function submenuRows<T extends SubmenuOption>(
+  rows: readonly T[],
+  filter: string,
+): { rows: readonly T[]; cursor: number } {
+  const q = filter.trim().toLowerCase();
+  if (!q) return { rows, cursor: -1 };
+  const exact = rows.findIndex((row) => optionKeys(row).includes(q));
+  if (exact >= 0) return { rows, cursor: exact };
+  const matched = rows.filter((row) =>
+    [row.token, row.id, row.label ?? "", ...(row.aliases ?? [])].some((value) =>
+      value.trim().toLowerCase().startsWith(q),
+    ),
+  );
+  return { rows: matched, cursor: matched.length ? 0 : -1 };
+}
+
+function optionKeys(row: SubmenuOption): string[] {
+  return [row.token, ...(row.aliases ?? [])]
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0);
 }
