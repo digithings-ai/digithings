@@ -664,6 +664,12 @@ async function handleChat(
     }
   }
 
+  // The chat's /effort choice (low/medium/high), or undefined for the model's
+  // own default. digigraph gets it as X-Digi-Effort; Foundry as reasoning.effort.
+  const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
+  const reasoningEffort =
+    effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
+
   if (adapter.protocol === "foundry-responses" && isFoundryConfig(backend)) {
     const foundryBackend = backend;
     let foundryRes: Response;
@@ -679,6 +685,7 @@ async function handleChat(
         responseLanguage: languageCode,
         turnMode,
         maxToolCalls: guard.toolCap ?? foundryBackend.maxToolCalls,
+        reasoningEffort,
         guard,
       });
     } catch (err) {
@@ -829,9 +836,8 @@ async function handleChat(
   if (languageCode !== "en") {
     upstreamHeaders["X-Digi-Language"] = languageCode;
   }
-  const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
-  if (effortRaw === "low" || effortRaw === "medium" || effortRaw === "high") {
-    upstreamHeaders["X-Digi-Effort"] = effortRaw;
+  if (reasoningEffort) {
+    upstreamHeaders["X-Digi-Effort"] = reasoningEffort;
   }
   // Search engine choice for digisearch web_search (#4724): allowlisted names
   // only, unknown/blank dropped. "auto" is the hub default, so it is omitted

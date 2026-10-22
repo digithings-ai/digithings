@@ -46,8 +46,8 @@ Three traps to know:
   copy of the repo-root `config/byok-providers.json`; the two must stay in sync
   (see `tests/dg/test_llm_auth.py::TestByokCatalogVendoredCopy`, which compares
   parsed JSON — not byte-for-byte — and fails CI if the *content* drifts).
-- `model-policy.json` — digigraph's flagship markers + mode-ladder `fallback_model`
-  for `model_config.py`. A vendored copy of the repo-root
+- `model-policy.json` — digigraph's flagship markers, mode-ladder `fallback_model`
+  and chat `reasoning_effort` policy for `model_config.py`. A vendored copy of the repo-root
   `config/model-policy.json`, guarded the same way by
   `tests/dg/test_model_config.py::TestModelPolicyVendoredCopy`.
 - **Required, and load-fail-loud at import.** This directory shadows the image's

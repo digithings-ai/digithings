@@ -2197,4 +2197,106 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     expect(out).toContain("Final from the instruction.");
     expect(out).not.toContain('"type":"error"');
   });
+
+  it("sends the chat's /effort as reasoning.effort", async () => {
+    const events = [
+      { type: "response.output_text.delta", delta: "Done" },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_effort",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 3,
+        reasoningEffort: "high",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(bodyOf(calls[0])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+      max_tool_calls: 3,
+      reasoning: { effort: "high" },
+    });
+  });
+
+  it("omits reasoning when no /effort is set, so the model keeps its default", async () => {
+    const events = [
+      { type: "response.output_text.delta", delta: "Done" },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_effort",
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(bodyOf(calls[0]).reasoning).toBeUndefined();
+  });
+
+  it.each([
+    "Not allowed when agent is specified",
+    "Unsupported value: 'reasoning.effort' does not support 'low' with this model.",
+  ])("drops only the effort when Foundry refuses it: %s", async (refusal) => {
+    const calls: unknown[][] = [];
+    const client: OpenAIResponsesClientLike = {
+      conversations: {
+        async create() {
+          return { id: "conv_effort" };
+        },
+      },
+      responses: {
+        async create(params, options) {
+          calls.push([params, options]);
+          if (options.body.reasoning) {
+            const err = new Error(refusal) as Error & { status?: number };
+            err.status = 400;
+            throw err;
+          }
+          const events: FoundryStreamEvent[] = [
+            { type: "response.output_text.delta", delta: "Answer at the default level." },
+            { type: "response.completed" },
+          ];
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+            },
+          };
+        },
+      },
+    };
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_effort",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 2,
+        reasoningEffort: "low",
+        capacityRetryDelaysMs: [],
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(calls).toHaveLength(2);
+    expect(bodyOf(calls[0])).toMatchObject({ reasoning: { effort: "low" }, max_tool_calls: 2 });
+    // The tool cap survives; only the refused effort is dropped.
+    expect(bodyOf(calls[1])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+      max_tool_calls: 2,
+    });
+    expect(out).toContain("Answer at the default level.");
+    expect(out).not.toContain('"type":"error"');
+  });
 });
