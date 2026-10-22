@@ -25,7 +25,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-M132 = MIGRATIONS_DIR / "132_rename_phase_a_compat_views.sql"
+M132 = MIGRATIONS_DIR / "prod" / "132_rename_phase_a_compat_views.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 

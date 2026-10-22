@@ -18,7 +18,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION = MIGRATIONS / "140_house_public_portfolio_positions.sql"
+MIGRATION = MIGRATIONS / "prod" / "140_house_public_portfolio_positions.sql"
 HOUSE_ID = "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 
 PRIVATE_COLUMNS = (
@@ -53,7 +53,7 @@ def _view_body(sql: str) -> str:
 
 
 def test_migration_140_is_only_140() -> None:
-    assert sorted(MIGRATIONS.glob("140_*.sql")) == [MIGRATION]
+    assert sorted(MIGRATIONS.rglob("140_*.sql")) == [MIGRATION]
 
 
 def test_view_stays_security_invoker(sql: str) -> None:

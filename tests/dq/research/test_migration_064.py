@@ -58,7 +58,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "064_prices_live_lease.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "engine" / "064_prices_live_lease.sql"
 
 TABLE = "public.prices_live_lease"
 FUNCTION = "public.claim_prices_live_refresh"
@@ -234,7 +234,7 @@ def test_migration_file_exists_and_is_the_only_064() -> None:
     db-migrate.yml keys ``olympus_schema_migrations`` on the full filename and only emits a
     ``::warning::`` for duplicate numeric prefixes, so nothing upstream stops the split.
     """
-    numbered = sorted(MIGRATIONS_DIR.glob("064_*.sql"))
+    numbered = sorted(MIGRATIONS_DIR.rglob("064_*.sql"))
     assert numbered == [MIGRATION_PATH], f"expected exactly {MIGRATION_PATH.name}, found {numbered}"
 
 

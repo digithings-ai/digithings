@@ -74,7 +74,7 @@ PORTED_HERE = {
 
 def _migration_functions() -> set[str]:
     found = set()
-    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+    for path in sorted(MIGRATIONS_DIR.rglob("*.sql")):
         sql = re.sub(r"--[^\n]*", " ", path.read_text(encoding="utf-8"))
         for m in FUNC_RE.finditer(sql):
             found.add(m.group(1).lower())

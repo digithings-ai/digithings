@@ -30,7 +30,7 @@ EXPECTED_GUARD_FUNCTIONS = 19
 # so a parsing regression in one does not silently agree with the other.
 # --------------------------------------------------------------------------
 def _migrations() -> list[pathlib.Path]:
-    files = sorted(MIGRATIONS_DIR.glob("*.sql"))
+    files = sorted(MIGRATIONS_DIR.rglob("*.sql"))
     assert files, f"no migrations found under {MIGRATIONS_DIR}"
     return files
 

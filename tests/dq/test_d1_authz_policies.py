@@ -60,7 +60,7 @@ def _select_policies() -> list[tuple[str, str, list[str]]]:
     authenticated policy is correctly ported.
     """
     out = []
-    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+    for path in sorted(MIGRATIONS_DIR.rglob("*.sql")):
         sql = _strip(path.read_text(encoding="utf-8"))
         for m in POLICY_HEAD_RE.finditer(sql):
             head = m.group("head")
@@ -87,7 +87,7 @@ def _independent_pg_policies() -> dict[str, set[str]]:
         r"(?P<head>[^;]*?)\bUSING\s*\(",
         re.IGNORECASE | re.DOTALL,
     )
-    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+    for path in sorted(MIGRATIONS_DIR.rglob("*.sql")):
         sql = _strip(path.read_text(encoding="utf-8"))
         for m in policy_re.finditer(sql):
             tbl, head = m.group(2).lower(), m.group("head")
