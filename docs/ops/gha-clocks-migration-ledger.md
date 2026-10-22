@@ -64,7 +64,7 @@ The cutover request listed four names that do not exist in
 | `project-status.yml` | Absent from `develop`. |
 | `docs-onboard-digithings.yml` | Absent from `develop`. |
 | `project-stub-fields.yml` | Absent from `develop`. |
-| `deploy-digithings-stack-cloudflare.yml` | Absent from `develop`. The Worker has no lane for it; this is the deploy cutover's own ticket, DIG-3606. |
+| `deploy-digithings-stack-cloudflare.yml` | Present on `develop` since 2026-10-20 (DIG-4612, #6013). It has no scheduled clock — it deploys on a manual `workflow_dispatch` behind `environment: production` — so there is nothing to port. |
 
 ## Behavioural receipt
 

@@ -312,21 +312,24 @@ dashboard, not in this repo. `deploy-digiquant-cloudflare.yml` is the same shape
 digiquant.io. Nothing in the repo can make a Pages deployment fail before it happens, only
 fail a PR before it merges.
 
-### The two stacks have no deploy lane
+### The two stacks have a deploy lane again
 
 | App | Worker name | Declared routes | Deploy lane |
 |---|---|---|---|
-| `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | **none — manual** |
-| `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*` | **none — manual** |
+| `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | `deploy-digithings-stack-cloudflare.yml` — `workflow_dispatch` behind `environment: production` |
+| `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*` | `deploy-digichat-cloudflare-container.yml` — `workflow_dispatch` behind `environment: production` |
 
 Read the routes column as "what `wrangler.toml` declares", not as a claim about what is
 currently serving. Both are Workers **Containers**: both need **Workers Paid**, and both need
 a Docker CLI locally for `wrangler deploy` to build the image.
 
 Both `infra/docker/Dockerfile.digichat-cloudflare` and `infra/docker/Dockerfile.digithings-stack-cloudflare` are live at
-the repo root. It is the workflow YAML that is missing, not the build.
+the repo root, and both lanes now exist on `develop`: the stack lane was re-derived on
+2026-10-20 (DIG-4612) and the digichat lane on 2026-10-22 (DIG-5120). Both deploy **only** on a
+manual dispatch, and only behind the `production` environment, whose required reviewer is
+Chris. A merge to `main` runs the validation gate and deploys nothing.
 
-#### Why the lane is missing — it was deleted, not never written
+#### Why the lane was deleted, and what brought it back
 
 `deploy-digithings-stack-cloudflare.yml` and `deploy-digichat-cloudflare-container.yml` both
 existed and both were deleted on **2026-10-01** by `f54af7052` (*"strict-essentials cut +
@@ -360,8 +363,22 @@ documented reason (4.28.0 rejects `deploy --message`) and re-deriving it keeps t
 not by a revert - because the reason the lane was deleted is gone: the Container id is derived
 from the deploying commit, so a deploy can no longer ship the previous instance, and the lane
 deploys through `npm run deploy` (the rev-injecting wrapper) instead of a bare
-`npx wrangler deploy`. The **digichat** lane is NOT restored: DIG-2843's "document as-is"
-still stands for `apps/digichat-cloudflare`, which keeps shipping out-of-band by hand.
+`npx wrangler deploy`.
+
+**Update (2026-10-22, DIG-5120):** the same decision is now taken for the **digichat** lane.
+`deploy-digichat-cloudflare-container.yml` is re-derived on `develop` the same way, with three
+things the deleted file did not have: a `production` environment gate (the deleted file pushed
+to `main` with **no** gate, so a push-triggered successor would have shipped production on
+every merge with nobody's approval — DIG-4612 ruled on that by name), a deploy job that only
+runs on a manual `workflow_dispatch`, and the rev-injecting wrapper `npm run deploy`, so the
+Container id is derived from the deployed commit. Both lanes keep a `push: main` trigger
+because this repo's own invariant requires every deploy-capable workflow to fire on a push to
+`main`; on that path the lane validates and deploys nothing.
+
+One caveat stays live, and it is about the ref, not about the lane: `main` is currently
+**behind** the live digichat Worker script (DIG-2615 P1/P2 — the live Worker was uploaded from
+an unmerged commit), so a dispatch at `ref: main` ships `main`'s tree. DIG-3390 owns that
+follow-up.
 
 #### Deploying by hand today
 
