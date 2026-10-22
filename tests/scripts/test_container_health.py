@@ -1250,6 +1250,63 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("bootout of $LABEL failed", source)
         self.assertNotIn("warning: bootout of the running job failed", source)
 
+    def test_an_install_off_develop_is_refused(self):
+        """A job that runs from a feature branch checks code nobody merged, and
+        a warning did not stop anybody."""
+        with tempfile.TemporaryDirectory() as tmp:
+            checkout = os.path.join(tmp, "checkout")
+            os.makedirs(os.path.join(checkout, "scripts", "container-health"))
+            with open(_SCRIPT, encoding="utf-8") as handle:
+                source = handle.read()
+            with open(
+                os.path.join(checkout, "scripts", "container-health", "container_health.py"),
+                "w",
+                encoding="utf-8",
+            ) as handle:
+                handle.write(source)
+            env = {
+                "HOME": tmp,
+                "PATH": os.environ.get("PATH", ""),
+                "DT_CREATE_ISSUE": "/bin/sh",
+            }
+            self._git(["git", "init", "-q", checkout], env)
+            self._git(["git", "-C", checkout, "checkout", "-q", "-b", "feature/not-develop"], env)
+            self._git(
+                [
+                    "git",
+                    "-C",
+                    checkout,
+                    "-c",
+                    "user.email=installer@example.com",
+                    "-c",
+                    "user.name=installer",
+                    "commit",
+                    "-q",
+                    "--allow-empty",
+                    "-m",
+                    "init",
+                ],
+                env,
+            )
+            result = subprocess.run(
+                ["sh", _INSTALL, "--install", checkout],
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not develop", result.stderr)
+        self.assertFalse(
+            os.path.exists(os.path.join(tmp, "Library", "LaunchAgents")),
+            "nothing may be written when the install refuses",
+        )
+
+    def _git(self, argv, env):
+        """Run git in a scratch checkout. A git that is not there is a failure
+        of this test, not a reason to pass it."""
+        result = subprocess.run(argv, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 
 class DocTests(unittest.TestCase):
     def _doc(self):
@@ -1282,6 +1339,11 @@ class DocTests(unittest.TestCase):
 
     def test_the_doc_says_the_probe_never_follows_a_redirect(self):
         self.assertIn("refuses to follow a redirect", self._doc())
+
+    def test_the_doc_says_the_installer_refuses_a_checkout_off_develop(self):
+        doc = self._doc()
+        self.assertIn("--allow-branch", doc)
+        self.assertIn("refuses a checkout", doc)
 
 
 class NetworkGuardTests(unittest.TestCase):

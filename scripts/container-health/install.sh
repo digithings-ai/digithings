@@ -10,6 +10,8 @@
 # The checkout given here becomes the location of the probe script. Pass a dedicated
 # clone on develop, not a working tree: the job runs every day, long after this
 # session is over, and it must find the same script it was installed with.
+# A checkout that is not on develop is refused, because a job that runs from a
+# feature branch checks code nobody merged. --allow-branch overrides that.
 #
 # Loading a launchd job is Chris's call (the Host & Runtime seat never loads, unloads
 # or edits one on its own), so the installer writes the plist and leaves the load to
@@ -30,6 +32,7 @@ LOAD=0
 UNLOAD=0
 STATUS=0
 ALLOW_WT=0
+ALLOW_BRANCH=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY=1 ;;
@@ -38,6 +41,7 @@ for arg in "$@"; do
     --unload) UNLOAD=1 ;;
     --status) STATUS=1 ;;
     --allow-worktree) ALLOW_WT=1 ;;
+    --allow-branch) ALLOW_BRANCH=1 ;;
     -*) echo "install.sh: unknown option: $arg" >&2; exit 2 ;;
     *) CHECKOUT="$arg" ;;
   esac
@@ -121,6 +125,15 @@ if ! git -C "$CHECKOUT" rev-parse --verify -q HEAD > /dev/null 2>&1; then
 fi
 BRANCH=$(git -C "$CHECKOUT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
 if [ "$BRANCH" != "develop" ]; then
+  # The job runs every day, long after this session. A checkout on a feature
+  # branch would have the job check code nobody merged, and a branch that is
+  # deleted later leaves the job with nothing to run. A warning was not enough
+  # to stop that, so an install refuses and a dry run only says so.
+  if [ "$INSTALL" = 1 ] && [ "$ALLOW_BRANCH" != 1 ]; then
+    echo "install.sh: $CHECKOUT is on '$BRANCH', not develop; nothing was changed" >&2
+    echo "install.sh: point the job at a dedicated clone on develop, or pass --allow-branch." >&2
+    exit 1
+  fi
   echo "install.sh: warning: $CHECKOUT is on '$BRANCH', not develop" >&2
 fi
 

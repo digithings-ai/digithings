@@ -116,12 +116,14 @@ scripts/container-health/install.sh --unload           # unload the job
 
 Point it at a dedicated clone on `develop`, not a working tree: the job runs every day, long after
 the session that installed it is over, and it must find the same script it was installed with. The
-installer refuses a linked worktree unless `--allow-worktree` is passed, warns when the checkout is
-not on `develop`, lints the rendered plist with `plutil` before it puts it in place, keeps the
-previous plist, and puts the previous plist back if the load fails. It also refuses an install
-when the create helper (`~/paperclip-workspace/kit/bin/dt-create-issue`) is not there: a job without
-it runs every day and never files anything, and nothing says so. A bootout that fails stops the
-install, because bootstrapping on top of a job that is still loaded leaves two jobs or none.
+installer refuses a linked worktree unless `--allow-worktree` is passed, and refuses a checkout
+that is not on `develop` unless `--allow-branch` is passed: a job that runs from a feature branch
+checks code nobody merged, and a warning did not stop anybody. It lints the rendered plist with
+`plutil` before it puts it in place, keeps the previous plist, and puts the previous plist back if
+the load fails. It also refuses an install when the create helper
+(`~/paperclip-workspace/kit/bin/dt-create-issue`) is not there: a job without it runs every day and
+never files anything, and nothing says so. A bootout that fails stops the install, because
+bootstrapping on top of a job that is still loaded leaves two jobs or none.
 
 Two things about launchd are worth knowing:
 
