@@ -125,7 +125,20 @@ export type MenuRow = {
   /** Option text the pane filter matches (`English`, `default dark`). */
   token?: string;
   aliases?: readonly string[];
+  /**
+   * /tools tree: a tool row under its service. `mid` draws `├─`, `last` draws
+   * `└─`, like a file listing under its folder.
+   */
+  branch?: "mid" | "last";
 };
+
+/** The /tools tree branch glyph for a row under a service. */
+export function treeBranchGlyph(branch: MenuRow["branch"]): string {
+  if (branch === "last") return "└─";
+  if (branch === "mid") return "├─";
+  return "";
+}
+
 
 export type ComposerModelPicker = {
   presets: readonly { id: string; label: string; description: string; model: string }[];
@@ -877,27 +890,33 @@ export function EmbedComposerMenu({
     }
     const readOnly = api.toolControl === "agent" || api.toolControl === "locked";
     const agent = api.toolControl === "agent";
-    // Each group row is followed by its individual tools (per-tool toggles).
+    // A file-system-like tree: the service as `/slash`, its tools under it.
     return toolRows.flatMap((t): MenuRow[] => {
       const on = connectedToolIsOn(t.id, toolOnInput);
+      const state = agent ? "Managed by the agent" : on ? "On" : "Off";
       const group: MenuRow = {
         id: t.id,
-        label: t.label,
-        value: agent ? "Managed by the agent" : on ? "On" : "Off",
+        label: slashName(t.slash),
+        value: state,
         ...(agent ? {} : { checked: on }),
-        insert: optionDraft("/tools", t.label),
-        token: t.label,
+        insert: optionDraft("/tools", t.slash),
+        token: t.slash,
+        aliases: t.label && t.label !== t.slash ? [t.label] : [],
         activate: () => {
           if (readOnly) return;
           toggleTool(t.id);
         },
       };
-      const subs = (t.tools ?? []).map((sub): MenuRow => {
+      const configured = t.tools ?? [];
+      const count = configured.length || (t.builtinTools?.length ?? 0);
+      const branchAt = (i: number): MenuRow["branch"] => (i === count - 1 ? "last" : "mid");
+      const subs = configured.map((sub, i): MenuRow => {
         const subOn = on && api.extraToolOn(sub.id);
         const subLabel = sub.label?.trim() || sub.id;
         return {
           id: `${t.id}::${sub.id}`,
-          label: `  ${subLabel}`,
+          label: subLabel,
+          branch: branchAt(i),
           value: agent ? "Managed by the agent" : subOn ? "On" : "Off",
           ...(agent ? {} : { checked: subOn }),
           insert: optionDraft("/tools", subLabel),
@@ -908,7 +927,22 @@ export function EmbedComposerMenu({
           },
         };
       });
-      return [group, ...subs];
+      // Built-in tools follow the service switch, so they carry its state but
+      // no switch of their own.
+      const builtins = configured.length
+        ? []
+        : (t.builtinTools ?? []).map(
+            (sub, i): MenuRow => ({
+              id: `${t.id}::${sub.id}`,
+              label: sub.label,
+              branch: branchAt(i),
+              value: state,
+              insert: optionDraft("/tools", sub.label),
+              token: sub.label,
+              activate: () => {},
+            }),
+          );
+      return [group, ...subs, ...builtins];
     });
   }, [api, kind, onClose, toggleTool, toolOnInput, toolRows]);
 
@@ -1852,7 +1886,22 @@ export function EmbedComposerMenu({
                         <DotMatrix state="user" className="size-3.5" />
                       </span>
                     ) : null}
-                    <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">
+                    {row.branch ? (
+                      <span
+                        data-slot="tools-tree-branch"
+                        className="text-muted-foreground shrink-0 ps-3 font-mono"
+                        aria-hidden
+                      >
+                        {treeBranchGlyph(row.branch)}
+                      </span>
+                    ) : null}
+                    <span
+                      className={
+                        view === "tools"
+                          ? "min-w-0 flex-1 font-mono font-medium break-words [overflow-wrap:anywhere]"
+                          : "min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]"
+                      }
+                    >
                       {row.label}
                     </span>
                     {row.value || (exclusive && row.checked) ? (

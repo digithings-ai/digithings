@@ -29,7 +29,25 @@ export type ConnectedToolRow = {
   kind: "catalog" | "mcp";
   /** Individual tools under this row (per-tool session toggles). */
   tools?: ReadonlyArray<{ id: string; label?: string }>;
+  /**
+   * The built-in tools a house service always offers, listed under it when the
+   * deployment names none. They follow the service's switch; they are not
+   * per-tool toggles, because the chat route only disables configured ids.
+   */
+  builtinTools?: ReadonlyArray<{ id: string; label: string }>;
 };
+
+/** The two tools digisearch offers the model (see digisearch orchestrator_tools.py). */
+export const DIGISEARCH_BUILTIN_TOOLS = [
+  { id: "digisearch", label: "search" },
+  { id: "digisearch_fetch_all", label: "fetch_all" },
+] as const;
+
+/** The tools digivault offers the model (see digivault orchestrator_tools.py). */
+export const DIGIVAULT_BUILTIN_TOOLS = [
+  { id: "digivault_search_notes", label: "search_notes" },
+  { id: "digivault_get_note", label: "get_note" },
+] as const;
 
 type CatalogRef = {
   id: string;
@@ -208,7 +226,10 @@ export function connectedTools(input: {
     const hit =
       input.catalogTools.find((t) => t.id === id)?.tools ??
       input.mcpServers.find((t) => t.id === id)?.tools;
-    return hit?.length ? { tools: hit } : {};
+    if (hit?.length) return { tools: hit };
+    if (id === "digisearch") return { builtinTools: DIGISEARCH_BUILTIN_TOOLS };
+    if (id === "digivault") return { builtinTools: DIGIVAULT_BUILTIN_TOOLS };
+    return {};
   };
   const rows: ConnectedToolRow[] = [];
   if (input.hasDigisearch) {
