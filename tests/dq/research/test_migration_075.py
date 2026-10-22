@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "075_olympus_profile_config.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "engine" / "075_olympus_profile_config.sql"
 
 TABLE = "olympus_profile_config"
 PUBLIC_ROLES = ("PUBLIC", "anon", "authenticated")
@@ -54,13 +54,15 @@ def _table_body(sql: str) -> str:
 
 
 def test_migration_is_the_only_075() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("075_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("075_*.sql")) == [MIGRATION_PATH]
 
 
 def test_migration_follows_074() -> None:
-    assert (MIGRATIONS_DIR / "074_olympus_accounting_views.sql").is_file()
+    assert (MIGRATIONS_DIR / "prod" / "074_olympus_accounting_views.sql").is_file()
     numbers = sorted(
-        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql")
+        int(p.name.split("_", 1)[0])
+        for layer in ("engine", "prod")
+        for p in (MIGRATIONS_DIR / layer).glob("*.sql")
     )
     assert 74 in numbers
     assert 75 in numbers

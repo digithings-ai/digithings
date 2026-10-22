@@ -43,6 +43,9 @@ jobs:
           - dir: clients/digichat-tui
           - dir: packages/surface-config
           - dir: packages/hero-banner
+          # DIG-5212: the recorded-frame record, fixture server and exporter
+          # flag parser both TUI clients and the dashboard import.
+          - dir: packages/tui-frame
     steps:
       - uses: actions/checkout@v4
 
@@ -64,9 +67,10 @@ jobs:
       # walk up to the repo-root workspace and install the whole monorepo
       # instead. If it ever gains a dependency, commit a bun.lock for it and
       # drop the condition — tests/scripts/test_bun_suites_ci_lane.py fails
-      # until that happens.
+      # until that happens. packages/tui-frame is exempt the same way: it uses
+      # `node:http` only.
       - name: Install from lockfile
-        if: matrix.dir != 'packages/surface-config' && matrix.dir != 'packages/hero-banner'
+        if: matrix.dir != 'packages/surface-config' && matrix.dir != 'packages/hero-banner' && matrix.dir != 'packages/tui-frame'
         working-directory: ${{ matrix.dir }}
         run: bun install --frozen-lockfile
 

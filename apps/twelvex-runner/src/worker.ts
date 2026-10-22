@@ -7,6 +7,7 @@ import {
   DURABLE_OBJECT_UNAVAILABLE,
   DurableObjectUnavailableError,
   fetchDurableObject,
+  RECONNECT_RETRY_AFTER_SECONDS,
 } from "@digithings/durable-object-reconnect";
 import {
   decideAlert,
@@ -18,6 +19,7 @@ import {
   SESSION_LABEL,
 } from "./alerts";
 import type { Env } from "./env";
+import { RUNNER_UNAVAILABLE_DETAIL } from "./unavailable";
 import {
   defaultTimeoutSeconds,
   isBucket,
@@ -67,6 +69,23 @@ function readRunDate(value: unknown): string | undefined | null {
 
 function logLine(fields: Record<string, unknown>): void {
   console.log(JSON.stringify(fields));
+}
+
+/**
+ * Whether the Durable Object answered that its instance was not available.
+ *
+ * That answer is the one the shared package builds for an instance that could
+ * not serve the request: a 503 whose body carries the machine-readable code.
+ * The body is parsed, never trusted: a body that is not JSON, or that carries
+ * another code, is a failure of the container and not of the instance.
+ */
+function isDurableObjectUnavailable(text: string): boolean {
+  try {
+    const body = JSON.parse(text) as { error?: unknown } | null;
+    return body?.error === DURABLE_OBJECT_UNAVAILABLE;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -166,9 +185,7 @@ export async function handle(
         exit_code: null,
         error: DURABLE_OBJECT_UNAVAILABLE,
       });
-      return durableObjectUnavailableResponse(
-        "the runner's Durable Object instance was not available; retry later",
-      );
+      return durableObjectUnavailableResponse(RUNNER_UNAVAILABLE_DETAIL);
     }
     throw error;
   }
@@ -178,6 +195,33 @@ export async function handle(
     return Response.json({ error: "busy" }, { status: 409 });
   }
   if (!res.ok) {
+    // A Durable Object that could not serve the request answers 503 with a
+    // Retry-After (run-watch DIG-4928: the container hop can reject with a
+    // value that is not an Error, and the instance then answers 503 so the
+    // caller backs off instead of hammering a runner that is still coming
+    // up).
+    //
+    // That answer is retryable and the Retry-After is the only thing that
+    // tells the caller when to come back, so it reaches the client with its
+    // status and its header. Rewriting it to a 502 would answer "the
+    // container failed" and would drop the one instruction the caller needs.
+    if (res.status === 503 && isDurableObjectUnavailable(text)) {
+      logLine({
+        job: body.job_id,
+        route,
+        event: "exit",
+        exit_code: null,
+        error: DURABLE_OBJECT_UNAVAILABLE,
+      });
+      return new Response(text, {
+        status: 503,
+        headers: {
+          "content-type": "application/json",
+          "retry-after":
+            res.headers.get("retry-after") ?? String(RECONNECT_RETRY_AFTER_SECONDS),
+        },
+      });
+    }
     logLine({
       job: body.job_id,
       route,

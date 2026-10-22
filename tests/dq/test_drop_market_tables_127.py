@@ -32,7 +32,9 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MIGRATION = REPO_ROOT / "digiquant" / "supabase" / "migrations" / "127_drop_market_data_tables.sql"
+MIGRATION = (
+    REPO_ROOT / "digiquant" / "supabase" / "migrations" / "prod" / "127_drop_market_data_tables.sql"
+)
 WRANGLER = REPO_ROOT / "apps" / "digithings-stack-cloudflare" / "wrangler.toml"
 
 # Runtime tree only: tests, docs, historical migrations, openwiki and worktrees
@@ -77,6 +79,11 @@ ACCOUNTED: dict[str, tuple[int, str]] = {
     "digiquant/src/digiquant/cli/prices.py": (
         3,
         "writer status echoes; --supabase writes refuse under r2 and are retired by 127",
+    ),
+    "digiquant/src/digiquant/d1_authz_policies.py": (
+        2,
+        "generated RLS predicate-class map (table names only, not a read); 127 "
+        "drops both tables, so these two rows are inert",
     ),
     "digiquant/src/digiquant/data/gloomberb/agent_tools.py": (
         1,

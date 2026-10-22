@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "087_olympus_forecast_outcome_horizon_unique.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "engine" / "087_olympus_forecast_outcome_horizon_unique.sql"
 
 
 @pytest.fixture(scope="module")
@@ -21,7 +21,7 @@ def raw() -> str:
 
 
 def test_migration_is_the_only_087() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("087_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("087_*.sql")) == [MIGRATION_PATH]
 
 
 def test_adds_horizon_sessions_column(raw: str) -> None:

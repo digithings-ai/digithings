@@ -50,6 +50,7 @@ describe("recorded frame geometry", () => {
 describe("the recorded frame record", () => {
   test("the record names the client, the pane, the time and the frame", () => {
     const record = makeRecordedFrame({
+      source: TUI_SOURCE,
       path: "/thread",
       capturedAt: "2026-10-22T06:00:00.000Z",
       cropped: { frame: "chat thread", width: 11, height: 1 },
@@ -64,6 +65,7 @@ describe("the recorded frame record", () => {
 
   test("the serializer writes stable JSON with a trailing newline", () => {
     const record = makeRecordedFrame({
+      source: TUI_SOURCE,
       path: "/thread",
       capturedAt: "2026-10-22T06:00:00.000Z",
       cropped: { frame: "chat thread", width: 11, height: 1 },

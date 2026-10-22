@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "085_olympus_accounting_tip_children_complete.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "085_olympus_accounting_tip_children_complete.sql"
 
 TIP_VIEWS = (
     "public_accounting_period_status",
@@ -46,13 +46,15 @@ def _view_body(sql: str, view: str) -> str:
 
 
 def test_migration_is_the_only_085() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("085_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("085_*.sql")) == [MIGRATION_PATH]
 
 
 def test_migration_follows_084() -> None:
-    assert (MIGRATIONS_DIR / "084_olympus_accounting_day_return_pct.sql").is_file()
+    assert (MIGRATIONS_DIR / "prod" / "084_olympus_accounting_day_return_pct.sql").is_file()
     numbers = sorted(
-        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql")
+        int(p.name.split("_", 1)[0])
+        for layer in ("engine", "prod")
+        for p in (MIGRATIONS_DIR / layer).glob("*.sql")
     )
     assert 85 in numbers
     assert numbers.index(84) < numbers.index(85)
