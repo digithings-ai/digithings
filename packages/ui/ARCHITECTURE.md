@@ -637,6 +637,51 @@ satisfy it and a duplicated block cannot carry a stale value. Full rule and
 the pinned test:
 [MIGRATION.md § Overlay scrollbar pointer contract](MIGRATION.md).
 
+## Scrollbar mode carrier (DIG-4603)
+
+The scrollbar preference has two states, `always` and `auto`, and it is
+written in exactly one place in the repo: `data-scrollbars` on the thread
+root (`packages/ui/src/components/chat/gallery-thread/thread.aui.tsx`), next
+to `data-thread-skin` on the same `ThreadPrimitive.Root`. The thread root is
+therefore the **only carrier** of the mode, and every mode-dependent rule in
+the sheet has to be keyed on it **in the same compound as the skin** and name
+the mode value:
+`[data-thread-skin="digichat"][data-scrollbars="always"]`.
+
+The rule exists because the two modes need opposite treatments of the
+native bar. `always` is a square bar in a stable gutter (the native bar is
+suppressed, `scrollbar-width: none` and the webkit pseudo set to
+`display: none`, and a styled `::-webkit-scrollbar` replaces it). `auto` is
+the native overlay (no reserved gutter, no bar when the surface fits), and a
+styled webkit pseudo must not appear at all — a styled webkit scrollbar is a
+classic bar that reserves its own track and never becomes an overlay. A
+rule that takes the native bar away without being conditioned on the mode
+reaches an `auto` thread as well, and since the `auto` rules hide the
+component bars, that surface paints **no bar at all**. The failure is
+silent: a missing bar reads as a quiet preference, not as a defect.
+
+Four ways to get it wrong, all of them seen in this repo: a rule not
+conditioned on the mode at all; a rule keyed on `:not([data-scrollbars="auto"])`
+on an ancestor (the app shell carries `data-thread-skin` without the mode, so
+that ancestor matches the negation); a rule that reads the mode off a
+descendant (the mode is a property of the carrier, not of whatever is below
+it); a rule that reads the mode off the document (`html:has(...)` — a page can
+carry one thread per mode, and the document-level form hands the always
+treatment to the auto thread's palette); and a selector list that mixes one
+conditioned selector with one unconditioned selector, so the condition on half
+a group styles the other half too.
+
+The check is a **source-text** test
+(`packages/ui/src/styles/chat-scrollbars.contract.test.ts`) for the same
+reason as the pointer contract above: the `packages/ui` test environment is
+`node`, with no CSS processing and no DOM, so the effective cascade cannot be
+computed. It parses the rule body per selector and audits **every** rule
+that touches a scroll surface, so a mode condition on one selector cannot
+satisfy a rule that mixes selectors, and a duplicated unscoped block cannot
+hide. Every surface the sheet styles is in the list: the thread viewport, the
+composer menu body, the reasoning pane, the tool group content and the
+palette list.
+
 ## DotMatrix — one name per control (DIG-4669)
 
 `DotMatrix` (`packages/ui/src/components/chat/DotMatrix.tsx`, exported as
