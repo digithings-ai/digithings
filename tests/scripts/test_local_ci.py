@@ -517,6 +517,15 @@ class InstallMarkerTest(unittest.TestCase):
         with open(stub, "w") as f:
             f.write("#!/bin/sh\nexit 0\n")
         os.chmod(stub, 0o755)
+        if shutil.which("plutil") is None:
+            # plutil is macOS-only and the install lints the rendered plist
+            # with it. Without a stub the install cannot be exercised on the
+            # Linux CI lane, and the test would fail there and pass on the
+            # Mac (DIG-5135).
+            stub = os.path.join(bindir, "plutil")
+            with open(stub, "w") as f:
+                f.write("#!/bin/sh\nexit 0\n")
+            os.chmod(stub, 0o755)
         env = dict(os.environ, HOME=home,
                    PATH=bindir + os.pathsep + os.environ.get("PATH", ""))
         return tmp, home, env
@@ -581,6 +590,26 @@ class InstallMarkerTest(unittest.TestCase):
         marker = self._marker(home)
         self.assertFalse(marker.get("self_update"),
                          "a linked worktree must never be moved by the runner")
+
+    def test_a_failed_bootstrap_leaves_the_previous_marker_in_place(self):
+        """The marker belongs to the job that is running: a failed install must not change it."""
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout], env=env)
+        self.assertEqual(rc, 0, "the first install must succeed")
+        marker_path = os.path.join(home, ".config/digithings/state/local-ci-runner.json")
+        with open(marker_path) as f:
+            before = f.read()
+        stub = os.path.join(env["PATH"].split(os.pathsep)[0], "launchctl")
+        with open(stub, "w") as f:
+            f.write('#!/bin/sh\ncase "$1" in bootstrap) exit 1 ;; esac\nexit 0\n')
+        os.chmod(stub, 0o755)
+        rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"),
+                              "--self-update", checkout], env=env)
+        self.assertNotEqual(rc, 0, "a failed bootstrap must fail the install")
+        with open(marker_path) as f:
+            self.assertEqual(f.read(), before,
+                             "the marker of the job that is running must be kept")
 
 
 if __name__ == "__main__":
@@ -1139,25 +1168,25 @@ class AppStatusRowTest(NoRealNetwork, unittest.TestCase):
 
     def test_without_a_token_no_app_row_is_posted(self):
         os.environ["CI_PIPELINE_URL"] = "http://localhost:8000/repos/6/pipeline/400"
-        self.assertFalse(_mod.app_status("abc123", self._fields()))
+        self.assertIsNone(_mod.app_status("abc123", self._fields()))
         self.assertEqual(self.sh_calls, [])
         self.assertIn("app status: skipped, no app token", self.log_lines)
 
     def test_an_empty_token_file_posts_no_row(self):
         self._write_token("")
-        self.assertFalse(_mod.app_status("abc123", self._fields()))
+        self.assertIsNone(_mod.app_status("abc123", self._fields()))
         self.assertEqual(self.sh_calls, [])
 
     def test_a_whitespace_only_token_file_posts_no_row(self):
         self._write_token("   \n")
-        self.assertFalse(_mod.app_status("abc123", self._fields()))
+        self.assertIsNone(_mod.app_status("abc123", self._fields()))
         self.assertEqual(self.sh_calls, [])
 
     def test_a_token_file_that_cannot_be_read_posts_no_row(self):
         # A directory where the token file should be: the file cannot be read,
         # so there is no token, so there is no row.
         os.makedirs(_mod.APP_TOKEN_FILE, exist_ok=True)
-        self.assertFalse(_mod.app_status("abc123", self._fields()))
+        self.assertIsNone(_mod.app_status("abc123", self._fields()))
         self.assertEqual(self.sh_calls, [])
 
     def test_only_the_first_line_of_the_token_file_is_the_token(self):
@@ -1691,7 +1720,8 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         """A row posted by a runner that predates the ledger is recovered too."""
         pr = self._pr()
         self.rows[pr["headRefOid"]] = [
-            self._row("pending", "local-ci running on Chris's Mac", age_secs=7200)]
+            self._row("pending", "local-ci running on Chris's Mac",
+                      age_secs=_mod.CLAIM_STALE_SECS + 600)]
         self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
                          "a pending row nobody holds and that is old enough is lost")
 
@@ -1966,6 +1996,123 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
                          "the claim of a head whose row failed is spent")
 
+    # --- the ledger ---------------------------------------------------------
+
+    def test_a_dry_run_does_not_release_a_claim(self):
+        """A preview changes nothing: not even the ledger."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("success", "all gates passed")]
+        self._write_claim(pr["headRefOid"], self._dead_pid())
+        _mod.pending([pr], False, dry=True)
+        self.assertTrue(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
+                        "a dry run must not release a claim")
+
+    def test_a_spent_claim_is_released_when_the_queue_sees_the_verdict(self):
+        """The queue releases a claim nobody holds any more."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("success", "all gates passed")]
+        self._write_claim(pr["headRefOid"], self._dead_pid())
+        _mod.pending([pr], False)
+        self.assertFalse(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
+                         "a claim whose holder is gone is spent once the verdict is in")
+
+    def test_a_taken_over_run_does_not_release_the_new_holder_s_claim(self):
+        """The run that was replaced must not delete the claim of the run that replaced it."""
+        pr = self._pr()
+        holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        self.addCleanup(holder.kill)
+        os.makedirs(_mod.CLAIMS, exist_ok=True)
+        with open(os.path.join(_mod.CLAIMS, pr["headRefOid"]), "w") as f:
+            f.write(json.dumps({"pid": holder.pid, "pr": pr["number"],
+                                "started": time.time()}))
+        _mod.clear_claim(pr["headRefOid"])
+        self.assertTrue(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
+                        "a claim a living run holds is that run's to release")
+
+    @unittest.skipUnless(hasattr(os, "fork"), "a zombie needs a POSIX fork")
+    def test_a_claim_held_by_a_zombie_is_lost(self):
+        """A process that has exited and is not reaped is not running the gate."""
+        pr = self._pr()
+        pid = os.fork()
+        if pid == 0:
+            os._exit(0)
+        self.addCleanup(self._reap, pid)
+        self._wait_for_zombie(pid)
+        self.rows[pr["headRefOid"]] = [self._row("pending", "local-ci running on Chris's Mac")]
+        self._write_claim(pr["headRefOid"], pid)
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a claim held by a zombie must go back to the queue")
+
+    def _reap(self, pid):
+        try:
+            os.waitpid(pid, os.WNOHANG)
+        except OSError:
+            pass
+
+    def _wait_for_zombie(self, pid, timeout=5):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            out = subprocess.run(["/bin/ps", "-o", "stat=", "-p", str(pid)],
+                                 capture_output=True, text=True).stdout.strip()
+            if out.startswith("Z"):
+                return True
+            time.sleep(0.05)
+        return False
+
+    def test_a_pending_row_inside_the_slowest_gate_is_left_alone(self):
+        """A producer may still be gating 4.7 h into a run: the head is not taken."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("pending", "local-ci running on Chris's Mac",
+                                                  age_secs=17000)]
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a row inside the slowest gate must not be taken away")
+
+    def test_an_explicit_run_does_not_start_on_a_head_another_run_holds(self):
+        """Two runs on one head post two rows on the required check."""
+        pr = self._pr(number=6262)
+        holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        self.addCleanup(holder.kill)
+        self._write_claim(pr["headRefOid"], holder.pid)
+        ran = []
+        process, applied, gh = _mod.process, _mod.process_applied, _mod.gh
+        self.addCleanup(setattr, _mod, "process", process)
+        self.addCleanup(setattr, _mod, "process_applied", applied)
+        self.addCleanup(setattr, _mod, "gh", gh)
+
+        def fake_gh(*a):
+            return json.dumps(pr) if "view" in list(a) else "[]"
+
+        _mod.gh = fake_gh
+        _mod.process = lambda p, dry: ran.append(p) or "success"
+        _mod.process_applied = lambda p, dry: None
+        _mod.explicit_run(pr["number"], False)
+        self.assertEqual(ran, [], "an explicit run must not start on a head another run holds")
+
+    def test_prune_claims_drops_a_stale_temporary_file(self):
+        """A run killed between the write and the move leaves a file behind."""
+        os.makedirs(_mod.CLAIMS, exist_ok=True)
+        tmp = os.path.join(_mod.CLAIMS, "a" * 40 + ".1234.tmp")
+        with open(tmp, "w") as f:
+            f.write("{}")
+        old = time.time() - 7200
+        os.utime(tmp, (old, old))
+        _mod.prune_claims()
+        self.assertFalse(os.path.exists(tmp), "a stale temporary claim must be dropped")
+
+    def test_the_review_applied_queue_is_ordered_by_arrival(self):
+        """The review-applied lane is served oldest first as well."""
+        old = self._pr(number=1, sha="0" * 40, created="2026-10-01T10:00:00Z",
+                       updated="2026-10-01T10:00:00Z")
+        new = self._pr(number=2, sha="1" * 40, created="2026-10-20T10:00:00Z",
+                       updated="2026-10-20T10:00:00Z")
+        for pr in (old, new):
+            self.rows[pr["headRefOid"]] = [
+                {"context": "review-applied", "state": "failure",
+                 "description": "review-applied: no review pass left comments",
+                 "created_at": "2026-10-21T00:00:00Z"}]
+        self.assertEqual([p["number"] for p in _mod.pending_applied([new, old])], [1, 2],
+                         "the review-applied lane is served in arrival order")
+
     # --- the order ----------------------------------------------------------
 
     def test_the_queue_is_ordered_by_arrival_and_not_by_last_activity(self):
@@ -1998,6 +2145,13 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
         self.cmds = []
         self.timeouts = []
         self.results = {}
+        # The guard is read with the same git command as the runner, and it has
+        # to answer for itself: a guard without the interface the runner calls
+        # would stop the only producer of the receipt. The key names the whole
+        # command, so the cat-file check for the same file still answers for
+        # itself.
+        self.results["show FETCH_HEAD:scripts/local-ci/launch_guard.py"] = (
+            0, "def enforce(runner_path, ctx, facts=None):\n    return True\n")
         _mod.sh = self._fake_sh
 
     def tearDown(self):
@@ -2014,9 +2168,11 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
         self.cmds.append(cmd)
         self.timeouts.append(timeout)
         joined = " ".join(cmd)
-        for key, res in self.results.items():
+        # The most specific key wins: the guard and the runner are read with
+        # the same git command, and each needs its own answer.
+        for key in sorted(self.results, key=len, reverse=True):
             if key in joined:
-                return res
+                return self.results[key]
         return (0, "")
 
     def _clone(self):
@@ -2112,8 +2268,9 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
         self.results["merge"] = (1, "not possible\n")
         _mod.refresh_checkout()
         self.assertEqual(len(self._ran("merge")), 1, "the merge must be tried")
-        self.assertFalse(os.path.exists(_mod.REFRESH_STATE),
-                         "a refused refresh must not consume the window: the next tick retries")
+        self.assertTrue(os.path.exists(_mod.REFRESH_STATE),
+                        "a refused merge consumes the window: the refresh holds the tick "
+                        "lock, so it is not tried again on every tick")
 
     def test_a_fetch_that_fails_leaves_the_checkout_alone(self):
         """No network, no update: the runner keeps the checkout it has."""
@@ -2123,8 +2280,21 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
         self.results["fetch"] = (1, "could not resolve host\n")
         _mod.refresh_checkout()
         self.assertEqual(self._ran("merge"), [], "a failed fetch must not merge anything")
-        self.assertFalse(os.path.exists(_mod.REFRESH_STATE),
-                         "a failed fetch must not consume the window")
+        self.assertTrue(os.path.exists(_mod.REFRESH_STATE),
+                        "a failed fetch consumes the window: a fetch that always fails "
+                        "would otherwise run on every tick and hold the tick lock")
+
+    def test_a_fetch_that_always_fails_is_not_retried_on_the_next_tick(self):
+        """The throttle is what stops a broken fetch from eating the producer."""
+        self._clone()
+        self._mark_runner()
+        self.results["rev-parse"] = (0, "develop\n")
+        self.results["fetch"] = (1, "could not resolve host\n")
+        _mod.refresh_checkout()
+        self.assertEqual(len(self._ran("fetch")), 1, "the first attempt fetches")
+        _mod.refresh_checkout()
+        self.assertEqual(len(self._ran("fetch")), 1,
+                         "the second tick must wait for the window, not fetch again")
 
     def test_an_incoming_runner_that_does_not_compile_is_not_merged(self):
         """The runner is the only producer of the receipt: it may not be broken."""
@@ -2134,8 +2304,20 @@ class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
         self.results["show"] = (0, "def main(:\n    pass\n")
         _mod.refresh_checkout()
         self.assertEqual(self._ran("merge"), [], "a runner that does not compile is not merged in")
-        self.assertFalse(os.path.exists(_mod.REFRESH_STATE),
-                         "a refused update must not consume the window")
+        self.assertTrue(os.path.exists(_mod.REFRESH_STATE),
+                        "a refused update consumes the window: the next tick retries it")
+
+    def test_a_guard_the_runner_cannot_call_is_not_merged(self):
+        """The runner refuses to run without a guard it can call."""
+        self._clone()
+        self._mark_runner()
+        self.results["rev-parse"] = (0, "develop\n")
+        self.results["show"] = self._runner_source()
+        self.results["show FETCH_HEAD:scripts/local-ci/launch_guard.py"] = (
+            0, "def enforce(ctx):\n    return True\n")
+        _mod.refresh_checkout()
+        self.assertEqual(self._ran("merge"), [],
+                         "a guard without the runner's interface is not merged in")
 
     def test_an_incoming_commit_without_a_launch_guard_is_not_merged(self):
         """Without the guard the next tick would post receipts unchallenged."""

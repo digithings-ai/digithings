@@ -89,12 +89,28 @@ if [ "$SELF_UPDATE_OPT" = 1 ] && [ -d "$CHECKOUT/.git" ] && [ "$BRANCH" = "devel
 elif [ "$SELF_UPDATE_OPT" = 1 ]; then
   echo "install.sh: --self-update needs a real clone on develop; $CHECKOUT is not one" >&2
 fi
-printf '{"main": "%s", "self_update": %s}\n' "$CHECKOUT" "$SELF_UPDATE" > "$MARKER.staged"
+# The marker is JSON, so a path with a backslash or a quote in it has to be
+# escaped: a malformed marker is a marker the runner cannot read, and the
+# runner then never moves the checkout the operator marked.
+json_esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+MARKER_BACKUP=""
+if [ -f "$MARKER" ]; then
+  MARKER_BACKUP="$MARKER.bak.$(date +%Y%m%d-%H%M%S)"
+  cp "$MARKER" "$MARKER_BACKUP"
+fi
+printf '{"main": "%s", "self_update": %s}\n' "$(json_esc "$CHECKOUT")" "$SELF_UPDATE" > "$MARKER.staged"
 mv "$MARKER.staged" "$MARKER"
 launchctl bootout "gui/$(id -u)" "$DEST" 2>/dev/null || true
 if ! launchctl bootstrap "gui/$(id -u)" "$DEST"; then
   echo "install.sh: bootstrap failed; restoring the previous job" >&2
-  rm -f "$MARKER"
+  # The marker belongs to the job that is not running any more: put the old
+  # one back rather than leaving the runner with a marker for a checkout that
+  # is no longer its own.
+  if [ -n "$MARKER_BACKUP" ] && [ -f "$MARKER_BACKUP" ]; then
+    cp "$MARKER_BACKUP" "$MARKER"
+  else
+    rm -f "$MARKER"
+  fi
   if [ -f "$BACKUP" ]; then
     cp "$BACKUP" "$DEST"
     launchctl bootstrap "gui/$(id -u)" "$DEST" \

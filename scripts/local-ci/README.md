@@ -199,7 +199,9 @@ fast-forward (a local commit, or dirty files the incoming commits touch). The
 incoming commit is checked before the switch: the runner it carries must
 compile and it must still carry the launch guard, because the next tick
 executes whatever landed on `develop` and a broken runner would stop the only
-pre-merge producer. A daemon running an old commit produces old receipts, so
+pre-merge producer. The guard has to keep the interface the runner calls
+(`enforce(runner_path, ...)`), because a guard that cannot be called stops the
+runner the same way. A daemon running an old commit produces old receipts, so
 the runner refreshes the code that posts them.
 
 The seat-shaped install (`install.sh --allow-worktree`) is a temporary measure
@@ -222,17 +224,28 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   skipped, and its claim is released by the run that took it, not by the
   queue. Two things do take a live claim away, and both are the sign that the
   run is no longer the run the queue waits for: a claim held for longer than
-  the life of the tick lock, and a pid the kernel has handed to another
-  process since the claim was written. A `pending` row with no ledger entry -
-  posted by a runner that predates the ledger, or by the CI container, which
-  keeps its own state directory - is given two hours before it is treated as
-  lost, which is longer than the longest gate run, so a container that is
-  still gating a head is not overtaken while it works.
+  eight hours - longer than the slowest gate run the code's own step timeouts
+  allow, about 4.75 h - and a pid the kernel has handed to another process
+  since the claim was written. A holder that has exited and is only waiting to
+  be reaped is not a living holder either, and its head is queued again. A
+  `pending` row with no ledger entry - posted by a runner that predates the
+  ledger, or by the CI container, which keeps its own state directory - is
+  given six hours before it is treated as lost, which is longer than the
+  longest gate run, so a container that is still gating a head is not overtaken
+  while it works. A claim is released by the run that took it: a run that was
+  taken over never deletes the claim of the run that replaced it.
 - **the fair order**: the queue is by arrival, oldest first, so the pull
   request that arrived first is served first. It used to be newest first,
   which meant a PR that arrived early waited behind every later arrival and
   could wait for days for a required check. The order is by arrival and not by
-  last activity: a PR that is commented on is not pushed back to the end.
+  last activity: a PR that is commented on is not pushed back to the end. The
+  `review-applied` lane is served in the same order, so a pull request that
+  waits for its review verdict does not wait behind every later arrival.
+- **one run per head**: an explicit `--pr N` run is a run like any other and
+  does not start on a head another run is checking, because two runs on one
+  head post two `local-ci` rows on the required check.
+- **a preview changes nothing**: a dry run reads the claim ledger and never
+  writes to it, so `--dry-run` cannot spend a claim.
 - **a row that says the post failed is not a verdict**: a head whose only row
   says `error` carries no receipt, so it is queued again and its claim is
   released. The `local-ci/app` row is a second context, not the required
@@ -251,8 +264,13 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   (DIG-5135).
 - **A running head is not taken away.** A claim held by a living run is left
   alone, whatever age its `pending` row carries, unless the claim has outlived
-  the life of the tick lock or its pid now belongs to another process
+  the life of the lock or its pid now belongs to another process
   (DIG-5135).
+- **The refresh is never retried on every tick.** A refresh that fails - no
+  network, a commit that does not fast-forward, an incoming runner that does
+  not compile - consumes its window like a success does, because the refresh
+  runs inside the tick lock and a fetch that always fails would otherwise hold
+  the lock on every tick (DIG-5135).
 - **The runner only moves the checkout it was given.** The refresh
   fast-forwards the checkout that `install.sh` marked as the runner's own, and
   only that one; it never touches a working tree that belongs to somebody
