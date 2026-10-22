@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "description": "Screenshots committed for the D8 digichat live preview (DIG-5138). The preview ships collapsed: desktop-collapsed.png is the state a reader lands on, the other two show the opened embed.",
+  "screenshots": [
+    {
+      "surface": "digichat-live-preview",
+      "viewport": "desktop-collapsed",
+      "file": "screenshots/desktop-collapsed.png"
+    },
+    {
+      "surface": "digichat-live-preview",
+      "viewport": "desktop-open",
+      "file": "screenshots/desktop-open.png"
+    },
+    {
+      "surface": "digichat-live-preview",
+      "viewport": "phone-open",
+      "file": "screenshots/phone-open.png"
+    }
+  ]
+}
