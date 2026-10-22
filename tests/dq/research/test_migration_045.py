@@ -79,11 +79,24 @@ def _migration_number(path: Path) -> int:
     return int(m.group(1))
 
 
+def _applied_migrations() -> list[Path]:
+    """The applied chain (#5854 layers): ``engine/`` then ``prod/``.
+
+    The ``cutover/`` layer is staged, not applied, so a constraint defined
+    there is not the constraint the applied schema carries.
+    """
+    return [
+        path
+        for layer in ("engine", "prod")
+        for path in sorted((MIGRATIONS_DIR / layer).glob("*.sql"))
+    ]
+
+
 def _latest_doctype_constraint() -> tuple[Path, str]:
     """The highest-numbered migration that (re)defines ``chk_documents_doc_type``."""
     matches = [
         (p, txt)
-        for p in MIGRATIONS_DIR.rglob("*.sql")
+        for p in _applied_migrations()
         if _ADD_CONSTRAINT in (txt := p.read_text(encoding="utf-8"))
     ]
     assert matches, "no migration defines chk_documents_doc_type"
