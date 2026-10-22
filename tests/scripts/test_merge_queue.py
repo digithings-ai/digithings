@@ -35,7 +35,6 @@ import json
 import re
 import subprocess
 import sys
-import time
 import urllib.error
 from dataclasses import replace
 from pathlib import Path
@@ -3400,11 +3399,20 @@ class _FakeWoodpeckerResponse:
 
     def __init__(self, status: int, body: str, url: str) -> None:
         self.status = status
-        self._body = body
+        self._body = body.encode("utf-8")
         self._url = url
 
-    def read(self) -> bytes:
-        return self._body.encode("utf-8")
+    def read(self, size: int | None = None) -> bytes:
+        """The body, in chunks of `size` when one is asked for.
+
+        The read of the production code asks for a chunk at a time, because
+        the timeout of a socket is the timeout of one operation on it and a
+        body that trickles in has to be given up on.
+        """
+        if size is None:
+            return self._body
+        chunk, self._body = self._body[:size], self._body[size:]
+        return chunk
 
     def geturl(self) -> str:
         return self._url
@@ -3456,16 +3464,53 @@ class _FakeOpener:
 
 
 class _FakeClock:
-    """`time` with a sleep that counts instead of waiting."""
+    """`time` with a sleep that counts instead of waiting.
+
+    The clock only moves when something moves it: a sleep, or a body that
+    arrives. The read's budget is measured against it.
+    """
 
     def __init__(self) -> None:
+        self.now = 0.0
         self.slept: list[float] = []
 
     def monotonic(self) -> float:
-        return time.monotonic()
+        return self.now
 
     def sleep(self, seconds: float) -> None:
         self.slept.append(seconds)
+        self.now += seconds
+
+
+class _TriclingResponse:
+    """A body that arrives a byte at a time, slowly.
+
+    The server answers the headers and then trickles the body: the timeout of
+    a socket is the timeout of one operation on it, so a read that is not
+    given up on can be held open for as long as the server likes.
+    """
+
+    def __init__(self, clock: _FakeClock, url: str) -> None:
+        self.status = 200
+        self._clock = clock
+        self._url = url
+        self._sent = 0
+
+    def read(self, size: int | None = None) -> bytes:
+        self._clock.now += 0.02
+        self._sent += 1
+        if self._sent > 50:
+            return b""
+        return b"x"
+
+    def geturl(self) -> str:
+        return self._url
+
+    def __enter__(self) -> "_TriclingResponse":
+        return self
+
+    def __exit__(self, *exc: Any) -> bool:
+        return False
 
 
 def _authorization(headers: dict[str, str]) -> str | None:
@@ -3506,26 +3551,21 @@ def test_a_dropped_connection_is_read_again_and_the_build_is_still_the_build(
     )
 
 
-def test_one_dropped_connection_does_not_refuse_every_pull_request(
+def test_a_host_that_did_not_answer_is_asked_once_more_and_not_three_times(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The queue asks the same host about every pull request of the tick.
+    """A dead host is asked once per pull request, and not three times.
 
-    A host that could not be read once is asked once: the rest of the tick is
-    answered from the memory of the failure. One dropped connection used to
-    refuse every pull request of the tick, for a reason that had nothing to do
-    with them. The memory is of that host and not of the queue, so a host that
-    did answer is still asked.
+    The queue asks the same host about every pull request of the tick, so a
+    host that did not answer is asked once more - briefly - and the answer it
+    gave is repeated with it. One dropped connection used to refuse every pull
+    request of the tick for a reason that had nothing to do with them, and a
+    host that is down used to cost the tick three reads per pull request.
+    The memory is of that host and not of the queue, so a host that did answer
+    is still asked.
     """
     other_host = "http://ci-host.test:8000/api/repos/6/pipelines/260"
-    opener = _FakeOpener(
-        [
-            TimeoutError("timed out"),
-            TimeoutError("timed out"),
-            TimeoutError("timed out"),
-            _FakeWoodpeckerResponse(200, json.dumps(_pipeline(commit="a" * 40)), other_host),
-        ]
-    )
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
     monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
     first = _REAL_WOODPECKER_READ(
         "http://localhost:8000/api/repos/lookup/digithings-local/ci",
@@ -3542,11 +3582,13 @@ def test_one_dropped_connection_does_not_refuse_every_pull_request(
     )
     assert second[0] == 0, second
     assert "timed out" in str(second[1])
-    assert "not asked again" in str(second[1])
-    assert len(opener.calls) == asked, "the host that could not be read was asked again"
+    assert "asked once more" in str(second[1])
+    assert len(opener.calls) == asked + 1, "the host that did not answer was asked again"
+    # Another host is another host: it is read with the whole budget and not
+    # with the one short ask that follows a failure somewhere else.
     third = _REAL_WOODPECKER_READ(other_host, "the-token", timeout=5)
-    assert third[0] == 200, third
-    assert opener.calls[-1] == other_host, (
+    assert third[0] == 0, third
+    assert len(opener.calls) == asked + 1 + mq.PROVENANCE_READ_ATTEMPTS, (
         "the memory of one host's failure was used against another host"
     )
 
@@ -3556,11 +3598,39 @@ def test_a_failed_read_is_not_the_answer_for_that_url(
 ) -> None:
     """A failed read is not the answer for that URL.
 
-    The memory of a failure has a life of its own - it keeps the host unasked
-    for a minute - but it is not filed as the answer of the URL, so the URL is
-    read again once that memory has passed. The memory does not outlive its
-    minute: the host is asked again, and the pull request after it is read
-    against the build and not against a network that was asleep for a moment.
+    The URL is asked again - once more, briefly - instead of being answered
+    from the memory of the failure. And the memory has a life of its own: once
+    it has run out the URL is read with the whole budget again, and not with
+    the one short ask that follows a failure.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert first[0] == 0, first
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS
+    second = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert second[0] == 0, second
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS + 1, (
+        "the URL was answered from the memory of the failure instead of being asked"
+    )
+    # The memory has run out: the URL is read with the whole budget again.
+    monkeypatch.setattr(mq, "PROVENANCE_HOST_COOLDOWN", 0.0)
+    third = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert third[0] == 0, third
+    assert len(opener.calls) == 2 * mq.PROVENANCE_READ_ATTEMPTS + 1, (
+        "the expired memory did not give the read back to the whole budget"
+    )
+
+
+def test_a_host_that_comes_back_answers_the_one_ask(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host that was asleep for a moment answers the ask that follows.
+
+    The memory of a failure is not the answer for the rest of the tick: the
+    host is asked once more, and a host that answers is read against its build
+    and not against the memory of a failure that is no longer true.
     """
     url = "http://localhost:8000/api/repos/6/pipelines/259"
     opener = _FakeOpener(
@@ -3574,22 +3644,53 @@ def test_a_failed_read_is_not_the_answer_for_that_url(
     monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
     first = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
     assert first[0] == 0, first
-    monkeypatch.setattr(mq, "PROVENANCE_HOST_COOLDOWN", 0.0)
     second = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
     assert second[0] == 200, second
-    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS + 1
-    # The host answered, so the memory of its failure is dropped. The next
-    # pull request of the tick is read, and not answered from memory.
-    monkeypatch.setattr(mq, "PROVENANCE_HOST_COOLDOWN", 60.0)
-    later = "http://localhost:8000/api/repos/6/pipelines/260"
-    opener.answers.append(
-        _FakeWoodpeckerResponse(200, json.dumps(_pipeline(commit="a" * 40)), later)
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS + 1, (
+        "the host that came back was not asked"
     )
-    third = _REAL_WOODPECKER_READ(later, "the-token", timeout=5)
-    assert third[0] == 200, third
-    assert opener.calls[-1] == later, (
-        "the memory of the failure outlived the answer of the host"
+
+
+def test_the_memory_of_a_failure_is_of_the_service_and_not_of_the_spelling() -> None:
+    """Two spellings of one address are one host for the queue.
+
+    The key is the scheme and the host in lower case with its port, so a
+    status that spells the same address two ways does not pay two retry
+    storms, and two services on one machine stay two hosts.
+    """
+    assert mq._read_host("http://LocalHost:8000/api/repos/6/pipelines/1") == (
+        "http://localhost:8000"
     )
+    assert mq._read_host("http://localhost:8000/api") == mq._read_host(
+        "http://LOCALHOST:8000/api"
+    )
+    assert mq._read_host("http://localhost:8000/api") != mq._read_host(
+        "http://localhost:9000/api"
+    )
+    assert mq._read_host("http://localhost:8000/api") != mq._read_host(
+        "https://localhost:8000/api"
+    )
+
+
+def test_a_body_that_trickles_in_does_not_hold_the_read_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The budget is a deadline, and not a sum of timeouts.
+
+    The timeout of a socket is the timeout of one operation on it: a server
+    that answers the headers and then trickles the body keeps the read open
+    for as long as it likes, unless the read gives up when the deadline has
+    passed.
+    """
+    clock = _FakeClock()
+    monkeypatch.setattr(mq, "time", clock)
+    monkeypatch.setattr(mq, "PROVENANCE_READ_BUDGET", 0.05)
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([_TriclingResponse(clock, url)])
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert status == 0, payload
+    assert "the read exceeded its budget" in str(payload), payload
 
 
 @pytest.mark.parametrize("code", [404, 503])

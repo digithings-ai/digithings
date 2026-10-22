@@ -211,16 +211,21 @@ short timeouts.
 
 **A dropped connection is not an answer about the build.** A read that never reached the
 API is tried again before it is believed — three attempts, a short pause between them,
-inside one budget, so a single path cannot cost the budget once per attempt. A read the
-API *answered* — any status code, and a refused redirect — is an answer, and it is cached
-for the life of the process like every other answer: the API answered, and its answer is
-the same until the next tick. And a host that could not be read once is not asked again
-for the next minute: the queue asks the same host about every pull request of the tick, so
-one dropped connection used to refuse every pull request of the tick for a reason that
-had nothing to do with them. The memory of a failure is of that host and not of the
-queue, and it keeps the host unasked for a minute: while it lasts, the pull requests of
-the tick are answered from it and not from the network. After it has passed the host is
-asked again, and a failed read is never filed as the answer of the URL it failed on.
+inside one budget, so a single path cannot cost the budget once per attempt. The budget is
+a deadline and not a sum of timeouts: the body is read in chunks and the read gives up
+when the deadline has passed, so a server that answers the headers and then trickles the
+body cannot hold the read open past it. A read the API *answered* — any status code, and a
+refused redirect — is an answer, and it is cached for the life of the process like every
+other answer: the API answered, and its answer is the same until the next tick. And a host
+that could not be read is asked once more, briefly, before the tick falls back on the
+memory of the failure: the queue asks the same host about every pull request of the tick,
+so one dropped connection used to refuse every pull request of the tick for a reason that
+had nothing to do with them. A host that was asleep for a moment answers that one ask, and
+the tick carries on with the build; a host that is down is asked once per pull request and
+not three times, so a dead host costs the tick a short read and not a storm. The memory of
+a failure is of that host and not of the queue, and it does not outlive its minute: after
+it the host is read again with the whole budget, and a failed read is never filed as the
+answer of the URL it failed on.
 
 **It ships in `shadow`, and that is honest, not a setting to forget.** Woodpecker binds a
 pipeline to the commit it checked out, and the launcher pipeline today is the cron run of
