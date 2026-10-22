@@ -458,6 +458,47 @@ def test_the_last_repository_flag_wins() -> None:
         )
 
 
+def test_the_attached_repository_flag_is_read() -> None:
+    """gh accepts `-Rowner/name`, and a shape the wall cannot read is a hole."""
+    # `GH_REPO` is the fallback, so a test that does not set it would pass
+    # on the fallback and prove nothing about the flag.
+    notes = ghshim.check_pull_request_target(
+        ["pr", "create", "-Rdigithings-ai/digithings"], {"GH_REPO": "digithings-ai/other"}
+    )
+    assert notes == ["pull request against digithings-ai/digithings"]
+
+
+def test_the_attached_repository_flag_is_checked_against_the_organization() -> None:
+    """The short form is not a way around the wall."""
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "create", "-Rsomeone-else/their-project"], {}
+        )
+
+
+def test_the_attached_repository_flag_with_an_equal_sign_is_checked() -> None:
+    """pflag strips the `=`, so `-R=owner/name` names the same repository."""
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "create", "-R=someone-else/their-project"], {}
+        )
+
+
+def test_a_repository_flag_that_names_nothing_is_refused() -> None:
+    """A flag with no value is not a call without a repository.
+
+    An ignored flag is a flag the call did not make, and the fallback to
+    `GH_REPO` or to the checkout's own remote would then answer for it.
+    """
+    for call in (
+        ["pr", "create", "-R"],
+        ["pr", "create", "-R="],
+        ["pr", "create", "--repo="],
+    ):
+        with pytest.raises(ghshim.Refusal):
+            ghshim.check_pull_request_target(call, {})
+
+
 def test_a_relative_body_path_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The path is relative, but the mistake is the same one."""
     monkeypatch.chdir(tmp_path)
@@ -1119,6 +1160,25 @@ def test_a_refusal_does_not_echo_a_credential(
     assert secret not in capsys.readouterr().err
 
 
+def test_a_refusal_does_not_echo_a_credential_from_the_repository(
+    seat_env: dict[str, str], captured: list[dict[str, Any]], capsys: pytest.CaptureFixture
+) -> None:
+    """The refusal quotes the repository the caller named, so it is redacted."""
+    secret = "ghp_" + "B" * 20
+    code = ghshim.main(["pr", "create", "-R", f"{secret}/their-project"], seat_env)
+    assert code == ghshim.EXIT_REFUSED
+    assert secret not in capsys.readouterr().err
+
+
+def test_a_note_does_not_echo_a_credential_from_the_repository() -> None:
+    """The note about the repository goes into the run log, so it is redacted."""
+    secret = "ghp_" + "C" * 20
+    notes = ghshim.check_pull_request_target(
+        ["pr", "create", "-R", f"digithings-ai/{secret}"], {}
+    )
+    assert secret not in " ".join(notes)
+
+
 def test_the_pull_request_is_read_out_of_the_call(
     seat_env: dict[str, str], app_mode: Path, captured: list[dict[str, Any]]
 ) -> None:
@@ -1127,3 +1187,15 @@ def test_the_pull_request_is_read_out_of_the_call(
     assert ghshim.pr_number(["pr", "review", "--repo", "o/r", "42"]) == 42
     assert ghshim.pr_number(["api", "repos/o/r/pulls/42/reviews"]) == 42
     assert ghshim.pr_number(["pr", "list"]) is None
+
+
+def test_the_value_of_a_flag_is_not_the_pull_request() -> None:
+    """`gh pr view --json title 42` is about pull request 42."""
+    assert ghshim.pr_number(["pr", "view", "--json", "title", "6263"]) == 6263
+    assert ghshim.pr_number(["pr", "view", "--json", "title", "title", "6263"]) == 6263
+
+
+def test_a_branch_name_is_not_the_pull_request() -> None:
+    """A bare argument that is not a number is not the number."""
+    assert ghshim.pr_number(["pr", "view", "my-branch"]) is None
+    assert ghshim.pr_number(["pr", "view", "my-branch", "42"]) == 42

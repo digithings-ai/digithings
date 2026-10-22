@@ -13,9 +13,11 @@ Nine jobs, and no others:
 * `seat-env` prints the environment a seat run needs.
 * `gh` is the `gh` wrapper: it is not a command, it is the whole call.
 
-None of them writes a token to a file, a log or a ticket. The only place a
-token appears is stdout of `github-token --print-token`, which a human asks
-for on purpose, and the credential helper's stdout, which git reads.
+None of them writes a token to a file, a log or a ticket, and none of them
+prints one. The only place a token is written out is the credential
+helper's stdout, which git reads: the broker has no command that hands a
+token to a caller, so a seat cannot ask it for one and read it off the
+screen.
 """
 
 from __future__ import annotations
@@ -191,12 +193,6 @@ def cmd_github_token(args: argparse.Namespace, env: dict[str, str]) -> int:
         return EXIT_REFUSED
 
     token = str(answer.get("token") or "")
-    if args.print_token:
-        # Asked for on purpose, on stdout, for a caller that needs the value
-        # itself. It is still never written to a file or a log.
-        sys.stdout.write(f"{token}\n")
-        return EXIT_OK
-
     _print_json(
         {
             "ok": True,
@@ -536,11 +532,6 @@ def build_parser() -> argparse.ArgumentParser:
     token_parser.add_argument("--repo", default=None)
     token_parser.add_argument("--permission", action="append", default=None)
     token_parser.add_argument("--head-sha", default=None)
-    token_parser.add_argument(
-        "--print-token",
-        action="store_true",
-        help="print the token itself on stdout instead of its metadata",
-    )
     token_parser.set_defaults(func=cmd_github_token)
 
     revoke_parser = sub.add_parser("revoke", help="revoke this run's token")

@@ -927,3 +927,67 @@ def test_a_refusal_does_not_echo_the_permission_the_caller_asked_for(service) ->
     )
     assert answer["ok"] is False
     assert secret not in answer["error"]
+
+
+# ---------------------------------------------------------------------------
+# the rules the second review found
+# ---------------------------------------------------------------------------
+
+
+def test_a_revocation_lets_go_of_the_run_credential(service) -> None:
+    """The credential is only kept to ask whether the run is still running."""
+    broker, _, _ = service
+    assert ask(broker)["ok"] is True
+    assert broker.ledger_snapshot() == {"runs": 1, "tokens": 1}
+    answer = broker.handle({"op": "revoke", "run_jwt": run_jwt()})
+    assert answer["revoked"] is True
+    assert broker.ledger_snapshot() == {"runs": 0, "tokens": 0}
+
+
+def test_an_expiry_lets_go_of_the_run_credential(service) -> None:
+    """A token that GitHub will not honour takes the credential with it."""
+    broker, _, _ = service
+    assert ask(broker)["ok"] is True
+    assert broker.ledger_snapshot() == {"runs": 1, "tokens": 1}
+    broker.prune_expired(time.time() + core.INSTALLATION_TOKEN_TTL_SECONDS + 1)
+    assert broker.ledger_snapshot() == {"runs": 0, "tokens": 0}
+
+
+def test_a_live_token_keeps_the_run_credential(service) -> None:
+    """A token that is still good keeps the run it belongs to."""
+    broker, _, _ = service
+    assert ask(broker)["ok"] is True
+    broker.prune_expired()
+    assert broker.ledger_snapshot() == {"runs": 1, "tokens": 1}
+
+
+def test_no_command_prints_a_token() -> None:
+    """There is no command that hands a token to a caller.
+
+    The credential helper's stdout is the one place a token is written
+    out, and git reads it.
+    """
+    from scripts.dt_broker import cli
+
+    with pytest.raises(SystemExit):
+        cli.main(["github-token", "--print-token"])
+
+    parser = cli.build_parser()
+    token_parser = next(
+        action.choices["github-token"]
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+    options = {
+        option for action in token_parser._actions for option in action.option_strings
+    }
+    assert "--print-token" not in options
+
+
+def test_the_socket_directory_is_not_writable_by_the_seats(tmp_path: Path) -> None:
+    """A seat that can write in the socket's directory can replace the socket."""
+    target = tmp_path / "run" / "dt-broker.sock"
+    parent = server.prepare_socket_parent(target)
+    assert parent == tmp_path / "run"
+    assert parent.stat().st_mode & 0o777 == server.SOCKET_DIR_MODE
+    assert server.SOCKET_DIR_MODE & 0o020 == 0

@@ -62,6 +62,11 @@ ALERT_AFTER_FAILURES = 2
 
 #: The mode the socket is created with: the owner and the seat group.
 SOCKET_MODE = 0o660
+#: The mode of the directory the socket lives in. Not group-writable: the
+#: socket's own mode stops a seat from talking to it without permission,
+#: but a directory the seat group can write in is a directory a seat can
+#: unlink the socket from and bind its own socket in its place.
+SOCKET_DIR_MODE = 0o750
 #: The group the seats are in.
 SOCKET_GROUP = "_dtseats"
 
@@ -322,6 +327,31 @@ class BrokerService:
                     self._issued[run_id] = kept
                 else:
                     del self._issued[run_id]
+                    # The run holds no token any more, so the credential it
+                    # presented is not kept either: it is only kept to ask
+                    # whether a run is still running.
+                    self._run_credentials.pop(run_id, None)
+
+    def prune_expired(self, now: float | None = None) -> None:
+        """Drop the tokens that have expired, and what they kept alive.
+
+        The sweep calls this on its own tick; a caller that wants to see
+        the ledger empty can call it with the time it cares about.
+        """
+        self._prune(time.time() if now is None else now)
+
+    def ledger_snapshot(self) -> dict[str, int]:
+        """What the broker is holding: how many runs, how many tokens.
+
+        The count is not a secret -- it is a number of things -- and it is
+        the only way to see that a revocation or an expiry really let go
+        of the run credential that came with it.
+        """
+        with self._lock:
+            return {
+                "runs": len(self._run_credentials),
+                "tokens": sum(len(entries) for entries in self._issued.values()),
+            }
 
     def _check_review_independence(
         self,
@@ -428,6 +458,9 @@ class BrokerService:
                 self._issued[run_id] = kept
             else:
                 self._issued.pop(run_id, None)
+                # The run holds no token any more, so the credential it
+                # presented is not kept either.
+                self._run_credentials.pop(run_id, None)
         return {
             "ok": True,
             "revoked": bool(revoked),
@@ -764,6 +797,22 @@ def _failure(message: str, code: str) -> dict[str, Any]:
     return {"ok": False, "error": message, "code": code}
 
 
+def prepare_socket_parent(socket_path: Path | str) -> Path:
+    """Make the directory the socket lives in, and keep the seats out of it.
+
+    The socket itself is mode 0660, and that is what stops a seat from
+    talking to the broker without permission. The directory around it is
+    mode 0750: a seat may pass through it, and it may not write in it. A
+    directory the seat group can write in is a directory a seat can
+    unlink the socket from and bind a socket of its own in its place, and
+    then the shim would be talking to a broker the seat wrote.
+    """
+    parent = Path(socket_path).parent
+    parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(parent, SOCKET_DIR_MODE)
+    return parent
+
+
 def serve(
     socket_path: Path | str = DEFAULT_SOCKET_PATH,
     *,
@@ -777,7 +826,7 @@ def serve(
 ) -> None:
     """Run the daemon until it is stopped."""
     target = Path(socket_path)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    prepare_socket_parent(target)
     if target.exists():
         target.unlink()
     service = BrokerService(

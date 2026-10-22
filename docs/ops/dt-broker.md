@@ -176,6 +176,34 @@ all: the rollback restores today's behaviour, and today's behaviour is the host'
 own credential. A seat that still asks the broker in `host` mode would be running
 half a rollback.
 
+## What this control does not do
+
+The broker governs the calls a seat run makes through `gh` and through `git`. It
+does **not** keep a token out of the seat's hands. The credential helper has to
+hand the token to `git` on stdout, because that is the only way git
+authenticates, and a process that can run `git` can run the helper and read what
+it prints. The guard governs `gh`; it is not a wall around a token a process
+already holds.
+
+What the token is worth is what limits the damage:
+
+- it is scoped to one repository, so it is worth nothing against another one;
+- it carries only the permissions of the seat's class, and `secrets` is never one
+  of them;
+- GitHub stops honouring it within the hour, whatever the seat does with it;
+- the daemon revokes it when the run ends.
+
+And what refuses a merge is not the broker. `develop` is agent-maintained: the
+merge queue is what merges into it, a pull request needs an approval from a seat
+that did not write it, and `main` is Chris's alone. The broker makes the
+credential a seat holds small; the review gate and the queue are what stop a
+change from landing on its own.
+
+The broker also has no command that prints a token. `github-token` answers with
+the token's metadata -- the app, the seat class, the repositories, the
+permissions, the expiry and the last four characters -- and the credential
+helper's stdout is the only place the value itself is written.
+
 ## The exit codes
 
 | Code | Meaning |

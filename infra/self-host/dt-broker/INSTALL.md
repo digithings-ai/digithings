@@ -51,10 +51,19 @@ socket inside it and cannot read what else is there:
 
 ```bash
 sudo chmod 0711 /Users/_dtbroker
-sudo install -d -o _dtbroker -g _dtseats -m 0770 /Users/_dtbroker/run
+sudo install -d -o _dtbroker -g _dtseats -m 0750 /Users/_dtbroker/run
 sudo install -d -o _dtbroker -g _dtseats -m 0750 /Users/_dtbroker/state
 sudo install -d -o _dtbroker -g _dtbroker -m 0700 /Users/_dtbroker/keys
 ```
+
+The run directory is **0750, not 0770**: a seat may pass through it to reach the
+socket, and it may not write in it. A directory the seat group can write in is a
+directory a seat can unlink the socket from and bind a socket of its own in its
+place, and then the shim would be talking to a broker the seat wrote. The socket
+itself is 0660, which is what decides who may talk to the broker at all.
+
+The daemon makes the run directory itself when it is missing, and sets the same
+mode on it, so the mode does not depend on this step having been run.
 
 ## 2. The keys
 

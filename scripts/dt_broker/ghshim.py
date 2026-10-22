@@ -533,18 +533,45 @@ def _git_remote_repo(cwd: Path) -> str | None:
     return None
 
 
+def _no_repository_named() -> Refusal:
+    """The refusal for a repository flag that names no repository."""
+    return Refusal(
+        "this call names a repository but gives none, so the target cannot be checked "
+        f"against the {ORG} organization"
+    )
+
+
 def _repo_from_flag(argv: list[str]) -> str | None:
     """The `--repo owner/name` a call names, if it names one.
 
     The last one wins: gh's `--repo` is a plain string flag, and the last
     value set is the value gh uses.
+
+    The short form is read in every shape gh accepts it -- `-R owner/name`,
+    `-Rowner/name` and `-R=owner/name` -- because a shape this function
+    does not understand is a shape the wall does not see, and a call that
+    hides its target from the wall is the one the wall exists to stop. A
+    repository flag that names nothing is refused rather than ignored: an
+    ignored flag is a flag the call did not make, and the fallback to
+    `GH_REPO` or to the checkout's own remote would then answer for it.
     """
     named: str | None = None
     for index, argument in enumerate(argv):
-        if argument in ("--repo", "-R") and index + 1 < len(argv):
+        if argument in ("--repo", "-R"):
+            if index + 1 >= len(argv):
+                raise _no_repository_named()
             named = argv[index + 1]
         elif argument.startswith("--repo="):
             named = argument.split("=", 1)[1]
+            if not named:
+                raise _no_repository_named()
+        elif argument.startswith("-R") and len(argument) > 2:
+            # pflag reads `-Rvalue` and `-R=value` as the same flag.
+            named = argument[2:]
+            if named.startswith("="):
+                named = named[1:]
+            if not named:
+                raise _no_repository_named()
     return named
 
 
@@ -560,12 +587,17 @@ def current_repo(argv: list[str], env: dict[str, str]) -> str | None:
 
 
 def _check_org(repo: str, what: str) -> None:
-    """Refuse a repository outside our organization."""
+    """Refuse a repository outside our organization.
+
+    The repository the caller named is redacted before it reaches the
+    message: a refusal is printed into the run log, and a caller that put
+    a credential where a repository belongs would have it written down.
+    """
     owner = repo.split("/", 1)[0] if "/" in repo else repo
     if owner.lower() != ORG.lower():
         raise Refusal(
-            f"{what} names {repo}, which is outside the {ORG} organization; a seat never "
-            "opens a pull request against a repository we do not own"
+            f"{what} names {_safe(repo)}, which is outside the {ORG} organization; a seat "
+            "never opens a pull request against a repository we do not own"
         )
 
 
@@ -594,6 +626,39 @@ _PR_SUBCOMMANDS: frozenset[str] = frozenset(
 
 #: The number of a pull request in a REST path.
 _PULLS_NUMBER_RE = re.compile(r"(?:^|/)pulls/(?P<number>\d+)(?:/|$|\?)")
+
+#: The flags of `gh pr` that take a value. The value of such a flag is not
+#: the pull request the call is about: `gh pr view --json title 42` is
+#: about pull request 42, and reading `title` as the pull request would
+#: refuse a call that names one.
+_PR_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "--repo",
+        "-R",
+        "--json",
+        "--jq",
+        "--template",
+        "--body",
+        "-b",
+        "--body-file",
+        "--title",
+        "-t",
+        "--comment",
+        "-c",
+        "--assignee",
+        "-a",
+        "--reviewer",
+        "-r",
+        "--label",
+        "-l",
+        "--milestone",
+        "-m",
+        "--author",
+        "-A",
+        "--project",
+        "-p",
+    }
+)
 
 
 def _path_segments(text: str) -> list[str]:
@@ -651,7 +716,7 @@ def check_pull_request_target(argv: list[str], env: dict[str, str]) -> list[str]
                 f"be checked against the {ORG} organization; pass --repo owner/name"
             )
         _check_org(repo, "the pull request")
-        notes.append(f"pull request against {repo}")
+        notes.append(f"pull request against {_safe(repo)}")
         return notes
     if command != "api":
         return notes
@@ -678,7 +743,7 @@ def check_pull_request_target(argv: list[str], env: dict[str, str]) -> list[str]
                 _check_org(repo, "the pull request")
             else:
                 _check_org(f"{owner}/{repo_name}", "the pull request")
-            notes.append(f"pull request against {owner}/{repo_name}")
+            notes.append(f"pull request against {_safe(f'{owner}/{repo_name}')}")
 
     bodies = [" ".join(argv[1:])]
     for path in _input_files(argv):
@@ -748,6 +813,11 @@ def pr_number(argv: list[str]) -> int | None:
     A review token is bound to one pull request, so the shim has to say
     which one it is about, and it has to check afterwards that the call it
     makes is about that same pull request.
+
+    The number is the first bare argument that is a number. A bare
+    argument that is not one is not the number -- a branch name is not,
+    and neither is the value of a flag -- so the search goes on rather
+    than stopping at the first thing it cannot read.
     """
     if not argv:
         return None
@@ -758,12 +828,14 @@ def pr_number(argv: list[str]) -> int | None:
                 skip = False
                 continue
             if argument.startswith("-"):
-                # `--repo` takes a value; the other flags of these
-                # subcommands do not.
-                if argument in ("--repo", "-R"):
+                # A flag that takes a value takes the next argument with
+                # it, so the value is not read as the pull request.
+                if argument in _PR_VALUE_FLAGS:
                     skip = True
                 continue
-            return _as_pr_number(argument)
+            number = _as_pr_number(argument)
+            if number is not None:
+                return number
         return None
     if argv[0] == "api":
         for argument in argv[1:]:
