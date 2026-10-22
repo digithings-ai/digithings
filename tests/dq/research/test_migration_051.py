@@ -21,6 +21,7 @@ MIGRATION_PATH = (
     / "digiquant"
     / "supabase"
     / "migrations"
+    / "prod"
     / "051_lock_strategy_store.sql"
 )
 

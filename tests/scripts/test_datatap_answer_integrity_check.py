@@ -19,7 +19,9 @@ import json
 import re
 import socket
 import sys
+import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -33,6 +35,13 @@ SCRIPT = REPO_ROOT / "scripts" / "datatap_answer_integrity_check.py"
 # open, no tempfile, no sqlite3, no shutil, no subprocess), and urllib.request is
 # the only network door, reached through http_request. See
 # test_the_script_imports_only_stdlib_and_nothing_that_can_write_or_read_a_secret.
+#
+# ``urllib.parse`` is on the list for one job, and the argument for it is the
+# same kind of argument the rest of this list makes: it is a string parser, so
+# it opens no socket, reads no file, reads no environment and holds no state.
+# It is how the script reads the host out of an embed URL, so that the host can
+# be compared with the allowlist instead of being trusted because a public page
+# named it.
 #
 # ``os`` is here because of the monitor token, and only because of it. Without
 # the allowlist bypass the check spent two of its three hourly turns inside one
@@ -55,6 +64,7 @@ _ALLOWED_IMPORTS = {
     "sys",
     "typing",
     "urllib.error",
+    "urllib.parse",
     "urllib.request",
     "uuid",
 }
@@ -90,6 +100,12 @@ def _restore_the_http_request_seam() -> None:
 MONITOR_TOKEN_ENV_VAR = "DATATAP_ANSWER_CHECK_MONITOR_TOKEN"
 MONITOR_TOKEN = "k" * 48
 
+# The embed host allowlist: the host names this deployment allows the check to
+# talk to. Spelled out here for the same reason as the token above — the
+# operator sets this name, so the name the script reads has to be pinned, not
+# derived.
+EMBED_HOSTS_ENV_VAR = "ANSWER_CHECK_EMBED_HOSTS"
+
 
 # The check reads one secret from the environment. A developer machine, a CI
 # runner or an operator shell may well have it set, so it is removed before
@@ -102,11 +118,45 @@ def _no_monitor_token_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 EMBED_BASE = "https://digichat.jollygrass-53364db9.eastus2.azurecontainerapps.io"
-DISCOVERY_HTML = (
-    "<!DOCTYPE html><html><body><script>self.__next_f.push("
-    '[1,"{\\"embedUrl\\":\\"' + EMBED_BASE + '/embed\\",\\"token\\":\\"' + "t" * 48 + '\\"}"]'
-    "</script></body></html>"
-)
+# The host name of the same embed app — which is what the allowlist holds.
+EMBED_HOST = EMBED_BASE.removeprefix("https://")
+
+
+def _discovery_page(embed_base: str) -> str:
+    """The public page, with the embed URL it names."""
+    return (
+        "<!DOCTYPE html><html><body><script>self.__next_f.push("
+        '[1,"{\\"embedUrl\\":\\"' + embed_base + '/embed\\",\\"token\\":\\"' + "t" * 48 + '\\"}"]'
+        "</script></body></html>"
+    )
+
+
+def _page_naming(embed_url: str) -> str:
+    """The public page, naming an embed URL exactly as it is given.
+
+    ``_discovery_page`` always names the live shape: the embed app's base plus
+    "/embed". This one names whatever it is handed, because a public page can
+    name any URL at all and the check has to hold for the shapes it does not
+    expect.
+    """
+    return (
+        "<!DOCTYPE html><html><body><script>self.__next_f.push("
+        '[1,"{\\"embedUrl\\":\\"' + embed_url + '\\",\\"token\\":\\"' + "t" * 48 + '\\"}"]'
+        "</script></body></html>"
+    )
+
+
+DISCOVERY_HTML = _discovery_page(EMBED_BASE)
+
+
+# The deployment configures the embed host allowlist, and the tests here do the
+# same: the page above names the host the allowlist holds, so a run in this
+# suite is a run with the allowlist set. A developer shell may have the
+# variable set to something else, so it is pinned here rather than inherited.
+# Tests that need a different allowlist set their own.
+@pytest.fixture(autouse=True)
+def _the_embed_host_is_allowlisted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, EMBED_HOST)
 
 
 def _sse(*frames: dict) -> str:
@@ -198,10 +248,10 @@ def test_request_carries_the_full_verified_header_set() -> None:
     assert chat["headers"] == {
         "content-type": "application/json",
         "accept": "text/event-stream",
-        "X-Embed-Host": "datatap.stream",
+        "X-Embed-Host": mod.EMBED_HOST,
         "X-Embed-Token": "t" * 48,
-        "Referer": "https://datatap.stream/chat",
-        "Origin": "https://datatap.stream",
+        "Referer": mod.DISCOVERY_URL,
+        "Origin": f"https://{mod.EMBED_HOST}",
     }
 
 
@@ -217,7 +267,7 @@ def test_request_body_is_the_ai_sdk_v7_messages_shape() -> None:
 def test_discovery_reads_the_public_page_and_sends_no_credentials() -> None:
     _, fake = _run_main(_both_probes_clean())
     discovery = fake.calls[0]
-    assert discovery["url"] == "https://datatap.stream/chat"
+    assert discovery["url"] == mod.DISCOVERY_URL
     assert discovery["headers"] == {}, "discovery reads a public page; it sends nothing"
     assert all("authorization" not in {k.lower() for k in c["headers"]} for c in fake.calls)
 
@@ -304,7 +354,7 @@ def test_the_monitor_token_is_never_sent_to_the_discovery_request(
     monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
     _, fake = _run_main(_both_probes_clean())
     discovery = fake.calls[0]
-    assert discovery["url"] == "https://datatap.stream/chat"
+    assert discovery["url"] == mod.DISCOVERY_URL
     assert discovery["headers"] == {}
 
 
@@ -333,6 +383,514 @@ def test_a_402_names_our_own_gate_and_the_two_places_to_fix_it() -> None:
     assert "retry" not in lowered and "again" not in lowered, (
         f"a 402 from our own quota is not retried, so do not tell anyone to: {reason!r}"
     )
+
+
+# --------------------------------------------------------------------------
+# The embed host is pinned before anything is put on the wire to it.
+# --------------------------------------------------------------------------
+
+
+def test_the_script_names_the_embed_hosts_env_var() -> None:
+    """The allowlist variable is named as a module constant.
+
+    An operator has to be told which variable to set, and the scheduler that
+    runs this check hourly has to be told where to put the value. Spelling the
+    name once, in the script, is what keeps the two from drifting apart — the
+    same reason the monitor token's variable is a constant.
+    """
+    assert mod.EMBED_HOSTS_ENV_VAR == EMBED_HOSTS_ENV_VAR
+
+
+def test_an_embed_host_outside_the_allowlist_is_refused_with_nothing_on_the_wire(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host the deployment did not name is refused before the first request.
+
+    The page is public, so the host in it is only as trustworthy as the page.
+    The check holds a secret of ours and reports on the answers it gets, so
+    both have to be pinned to a host the deployment named. The refusal is
+    total: the first POST never happens, so the identity is never on the wire
+    and no answer from an unvetted host is ever scored.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _discovery_page("https://attacker.example")),
+        }
+    )
+    assert code == mod.COULD_NOT_RUN == 2
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == [], (
+        "the identity must never reach a host the deployment has not vetted"
+    )
+
+
+def test_the_refusal_names_the_variable_and_the_host_it_saw(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The reason has to say what to set and what it saw, or nobody can fix it.
+
+    An operator reading a failed run has to be able to act on it without
+    reading this suite: the variable to set, and the host the page named.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _discovery_page("https://attacker.example")),
+        }
+    )
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2
+    assert EMBED_HOSTS_ENV_VAR in out, f"must name the variable to set; got:\n{out}"
+    assert "attacker.example" in out, f"must name the host it saw; got:\n{out}"
+    assert "COULD NOT RUN" in out, f"exit 2 must name itself; got:\n{out}"
+
+
+def test_a_monitor_token_without_an_allowlist_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A token with no allowlist is a refusal, not a guess.
+
+    The tempting shortcut is to send the identity anyway: the host is the one
+    the page named, so it is probably the right one. That is the whole hole —
+    "probably" is not a pin. With the allowlist unset the check cannot say the
+    host is ours, so it says so and stops.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.delenv(EMBED_HOSTS_ENV_VAR, raising=False)
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.COULD_NOT_RUN == 2
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == [], (
+        "no identity goes out while the host is unpinned"
+    )
+
+
+def test_the_allowlisted_host_behaves_exactly_as_today(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The allowed host is still the host the check talks to, token and all."""
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, EMBED_HOST)
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.OK
+    chats = [call for call in fake.calls if call["url"].endswith("/api/chat")]
+    assert len(chats) == 2
+    for chat in chats:
+        assert chat["headers"].get("x-embed-monitor-token") == MONITOR_TOKEN
+
+
+def test_the_check_refuses_an_unvetted_host_even_with_no_monitor_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No token does not make an unvetted host acceptable.
+
+    The pin is not only about the secret. The answer is evidence only if it
+    came from the host we meant, and a check that scored an answer from an
+    unvetted host would report a clean pass it did not earn.
+    """
+    monkeypatch.delenv(MONITOR_TOKEN_ENV_VAR, raising=False)
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _discovery_page("https://attacker.example")),
+        }
+    )
+    assert code == mod.COULD_NOT_RUN == 2
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == []
+
+
+def test_a_redeploy_to_a_new_host_is_a_named_exit_two(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale allowlist after a redeploy has to be loud, not silent.
+
+    The client redeploys the embed app to a new hostname. The allowlist still
+    holds the old one, so the check refuses — and it has to name the host it
+    saw, because the old name is exactly what the operator has to replace. A
+    check that went quiet here would be the blind spot this pin exists to
+    close.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, "digichat.previous-0000.eastus2.azurecontainerapps.io")
+    code, fake = _run_main(_both_probes_clean())
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2
+    assert EMBED_HOST in out, f"must name the new host it saw; got:\n{out}"
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == []
+
+
+def test_the_allowlist_matches_the_host_whole_and_not_by_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host that merely contains the allowed one is not the allowed host.
+
+    Two shapes, because two different wrong comparisons would let them
+    through: "…apps.io.attacker.example" ends with nothing allowed but
+    contains the allowed name, and "evil.…apps.io" ends with the allowed name
+    and is a different host. Only a whole-host comparison refuses both, so
+    both are pinned here rather than left to the reader of the code.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    for embed_base in (
+        f"https://{EMBED_HOST}.attacker.example",
+        f"https://evil.{EMBED_HOST}",
+    ):
+        code, fake = _run_main(
+            {
+                "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+                "/chat$": _ok("text/html; charset=utf-8", _discovery_page(embed_base)),
+            }
+        )
+        assert code == mod.COULD_NOT_RUN == 2, f"must refuse {embed_base}"
+        assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == []
+
+
+def test_an_embed_url_carrying_userinfo_is_refused(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A URL that hides the real host behind userinfo is refused.
+
+    "https://allowed.example@attacker.example" reads like the allowed host
+    and is not one, and no embed URL legitimately carries userinfo. The
+    refusal says which of the two it is, so an operator reading a failed run
+    is not left guessing which host was seen.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok(
+                "text/html; charset=utf-8",
+                _discovery_page(f"https://{EMBED_HOST}@attacker.example"),
+            ),
+        }
+    )
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2
+    assert "userinfo" in out, f"must say why it refused; got:\n{out}"
+    assert EMBED_HOSTS_ENV_VAR in out, f"must name the variable to set; got:\n{out}"
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == []
+
+
+def test_the_allowlist_ignores_case_and_surrounding_whitespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host name is case-insensitive, and an operator writes a list.
+
+    The value is a comma-separated list an operator types, so surrounding
+    spaces and a differently-cased host name are normal input, not a reason to
+    refuse.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, f"  {EMBED_HOST.upper()} , other.example  ")
+    code, _ = _run_main(_both_probes_clean())
+    assert code == mod.OK
+
+
+def test_the_refusal_never_prints_the_monitor_token(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The reason names the host and the variable, never the secret.
+
+    The refusal is printed to stdout, and stdout is what the hourly run
+    captures. The token is ours and the host is not, so the token is not
+    printed.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _discovery_page("https://attacker.example")),
+        }
+    )
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2
+    assert MONITOR_TOKEN not in out, "the refusal must not print the identity"
+
+
+def test_the_api_url_is_built_on_the_host_the_embed_url_names() -> None:
+    """The URL the probes go to keeps the host the embed URL named.
+
+    Cutting "/embed" off the end of the *string* moves the host when the path
+    is empty: "https://embed" ends with those six characters, and removing them
+    leaves "https:/", which posts both probes to the host "api" — a host no
+    allowlist entry could have named, so the identity would go out to it and no
+    answer from it would ever be scored.
+
+    The authority is copied across whole instead, so the host of the request is
+    always the host of the embed URL. The live shape is unchanged by this; what
+    changes is the shape that used to move the host.
+    """
+    for embed_url in (
+        "https://embed",
+        "https://embed/embed",
+        "https://embed.example/embed",
+        "https://embed.example/foo/embed",
+        "https://embed.example/embed?x=1",
+        "https://embed.example:8443/embed",
+    ):
+        target = mod.EmbedTarget(embed_url=embed_url, token="t" * 48)
+        api = urlsplit(target.api_chat_url)
+        embed = urlsplit(embed_url)
+        assert api.netloc == embed.netloc, (
+            f"{embed_url} must keep its host: got {target.api_chat_url}"
+        )
+        assert api.path.endswith("/api/chat"), (
+            f"{embed_url} must still reach the chat endpoint: got {target.api_chat_url}"
+        )
+
+
+def test_the_identity_only_ever_goes_to_a_host_on_the_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End to end: the host that receives the identity is the allowed host.
+
+    The unit test above pins how the request URL is built; this one pins that
+    the request actually goes there. A page naming "https://embed" is answered
+    on the host "embed" — the host the deployment named — and the identity
+    lands on it and nowhere else. Under the old string surgery the same page
+    posted both probes to the host "api", which no allowlist entry could name.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, "embed")
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _page_naming("https://embed")),
+        }
+    )
+    assert code == mod.OK
+    chats = [call for call in fake.calls if call["url"].endswith("/api/chat")]
+    assert len(chats) == 2
+    for chat in chats:
+        assert urlsplit(chat["url"]).netloc == "embed", f"the identity went to {chat['url']}"
+        assert chat["headers"].get("x-embed-monitor-token") == MONITOR_TOKEN
+
+
+def test_the_destination_url_is_vetted_in_its_own_right(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The URL the probes are sent to is checked, not only the URL they came from.
+
+    They are two different strings — one is derived from the other — and only the
+    second decides where the bytes go. So the second is vetted on its own, and a
+    refusal about it says which of the two it is about, or an operator cannot
+    tell which entry to replace.
+
+    This test pins the guard's own report — that a refusal about a URL names the
+    host it saw and the variable to set. The call site that passes the second
+    URL in, with the wording that distinguishes it, is pinned by the test
+    below, which refuses a destination whose host is outside the allowlist.
+    """
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, EMBED_HOST)
+    with pytest.raises(mod.ProbeError) as raised:
+        mod.require_allowlisted_embed_host(
+            "https://api.example/api/chat", what="the URL the probes are sent to"
+        )
+    reason = str(raised.value)
+    assert "api.example" in reason, f"must name the host it saw; got: {reason}"
+    assert EMBED_HOSTS_ENV_VAR in reason, f"must name the variable to set; got: {reason}"
+    assert "the URL the probes are sent to" in reason, (
+        f"must say which of the two URLs it refused; got: {reason}"
+    )
+
+
+def test_the_probes_are_refused_when_the_destination_host_is_not_allowlisted(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A destination outside the allowlist stops the run before the first POST.
+
+    The embed URL is allowed here, and the destination is not — the shape a
+    derived URL can take when the derivation is wrong. The identity is on the
+    destination, so the destination is what has to be vetted, and the refusal
+    happens before anything is sent.
+
+    The refusal also has to say *which* of the two URLs it is about: they are
+    two different strings, and an operator who cannot tell them apart cannot
+    tell which entry to replace.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, EMBED_HOST)
+    monkeypatch.setattr(
+        mod.EmbedTarget,
+        "api_chat_url",
+        property(lambda self: "https://api.example/api/chat"),
+    )
+    code, fake = _run_main(_both_probes_clean())
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2
+    assert "the URL the probes are sent to" in out, (
+        f"must say which of the two URLs it refused; got:\n{out}"
+    )
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == [], (
+        "no identity goes out to a host the deployment has not vetted"
+    )
+
+
+def test_an_allowlist_entry_may_name_the_port_the_embed_app_is_served_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An entry names the authority the probe goes to, port and all.
+
+    "embed:8443" is the entry for an embed app served on port 8443, and it is
+    a different authority from "embed" — a different place to send the
+    identity. The comparison is on the whole authority, so the entry has to
+    carry the port when the URL does.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, "embed:8443")
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _page_naming("https://embed:8443/embed")),
+        }
+    )
+    assert code == mod.OK, "an entry naming the port must allow that host on that port"
+    chats = [call for call in fake.calls if call["url"].endswith("/api/chat")]
+    assert len(chats) == 2
+    for chat in chats:
+        assert urlsplit(chat["url"]).netloc == "embed:8443"
+        assert chat["headers"].get("x-embed-monitor-token") == MONITOR_TOKEN
+
+
+def test_an_allowlist_entry_without_the_port_does_not_allow_one(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An entry without a port does not allow a host served on one.
+
+    "embed" is not "embed:8443", and the port is the difference between two
+    places to send the identity. Both directions fail closed — this one refuses
+    a host nobody vetted, the other blinds a deployment that configured the
+    port correctly — so the refusal names the authority it saw and the
+    operator can see which half to write.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, "embed")
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _page_naming("https://embed:8443/embed")),
+        }
+    )
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2
+    assert "embed:8443" in out, f"must name the authority it saw; got:\n{out}"
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == []
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "https://embed",
+        "embed/embed",
+        "embed.",
+    ],
+)
+def test_an_allowlist_entry_that_is_not_a_host_name_is_refused(
+    entry: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An operator writes a URL; an entry is a host name.
+
+    "https://embed" and "embed/embed" name the same host to a human and are
+    different strings to the comparison, and the comparison is the one that
+    decides. A trailing dot is the same host to a resolver and a different
+    string here, so it fails closed as well: the entry has to be written the
+    way the host is written in the URL.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, entry)
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _page_naming("https://embed")),
+        }
+    )
+    assert code == mod.COULD_NOT_RUN == 2, f"must refuse the entry {entry!r}"
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == []
+
+
+def test_a_url_naming_no_host_is_refused(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A URL with no host in it is refused with a sentence, not a traceback.
+
+    "https:///embed" parses, and there is no host in it to compare with the
+    allowlist. The refusal has to say so: an operator reading the hourly log
+    needs a sentence, not a Python error about a None.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _page_naming("https:///embed")),
+        }
+    )
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2
+    assert "names no host" in out, f"must say why it refused; got:\n{out}"
+    assert EMBED_HOSTS_ENV_VAR in out, f"must name the variable to set; got:\n{out}"
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == []
+
+
+def test_a_url_that_cannot_be_read_is_refused_without_quoting_the_page() -> None:
+    """A port that is not a number is refused, and the page's text is not quoted.
+
+    The refusal is a sentence about the variable to set. It must not quote the
+    text the public page handed us: that text is the client's, and urllib's
+    own error message would put it straight into the hourly log.
+    """
+    with pytest.raises(mod.ProbeError) as raised:
+        mod.require_allowlisted_embed_host("https://embed:notaport/embed")
+    reason = str(raised.value)
+    assert "cannot be read as a URL" in reason, f"must say why it refused; got: {reason}"
+    assert "notaport" not in reason, f"must not quote the page's text; got: {reason}"
+    assert EMBED_HOSTS_ENV_VAR in reason, f"must name the variable to set; got: {reason}"
+
+
+def test_a_host_the_resolver_would_change_is_refused() -> None:
+    """IDNA and percent-decoding change the host after it was read.
+
+    "faß.example" is resolved as "fass.example", and "embed%2eevil.example" is
+    decoded as "embed.evil.example". In both cases the host that would be
+    connected to is not the host that was read, so both are refused rather
+    than compared: for a comparison to mean anything the allowlist entry would
+    have to be written in the same odd shape, and the point of the pin is that
+    the vetted host is the resolved host.
+    """
+    for url in ("https://faß.example/embed", "https://embed%2eevil.example/embed"):
+        with pytest.raises(mod.ProbeError) as raised:
+            mod.require_allowlisted_embed_host(url)
+        reason = str(raised.value)
+        assert EMBED_HOSTS_ENV_VAR in reason, f"must name the variable to set; got: {reason}"
+
+
+def test_the_vetted_host_is_the_host_urllib_would_connect_to(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """For every host the guard allows, urllib connects to that same host.
+
+    urllib percent-decodes the authority it connects to, so the string the
+    guard compares is not always the string the socket is handed — and a host
+    that is not plain ASCII is resolved through IDNA on the way to the socket.
+    The guard refuses both shapes (above); this pins what is left: for every
+    allowed URL, the authority urllib would connect to is the authority that
+    was vetted, so the pin compares the right string.
+    """
+    for host in ("embed", "embed:8443", "embed.example"):
+        url = f"https://{host}/embed"
+        monkeypatch.setenv(EMBED_HOSTS_ENV_VAR, host)
+        mod.require_allowlisted_embed_host(url)
+        assert urllib.request.Request(url).host == urlsplit(url).netloc, (
+            f"{url}: the vetted authority is not the authority urllib would connect to"
+        )
 
 
 # --------------------------------------------------------------------------
@@ -1218,34 +1776,77 @@ def test_the_only_write_in_the_script_is_stderr() -> None:
     assert set(writes) == {"stderr"}, f"only stderr may be written, found: {sorted(set(writes))}"
 
 
+def _read_name(node: ast.AST) -> str:
+    """The name of the variable a read names.
+
+    A constant is unquoted, so the walk reports ``X`` for both
+    ``os.environ.get("X")`` and ``os.environ["X"]``, and the allowlist below
+    can be written in terms of names rather than of source text.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return ast.unparse(node)
+
+
+def _env_reads(source: str) -> set[str]:
+    """Every environment variable the source reads, under the name it reads.
+
+    Two shapes are a read: ``os.environ.get("X")`` and ``os.environ["X"]``.
+    The second is a subscript and not a call, so a walk that collects calls
+    only never sees it — and a read nobody can see is a read nobody pinned,
+    which is the thing this walk is here to prevent.
+    """
+    tree = ast.parse(source)
+    reads: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "get"
+                and isinstance(func.value, ast.Attribute)
+                and func.value.attr == "environ"
+            ):
+                reads.update(_read_name(arg) for arg in node.args)
+            elif isinstance(func, ast.Name) and func.id == "getenv":
+                reads.update(_read_name(arg) for arg in node.args)
+        elif (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "environ"
+        ):
+            reads.add(_read_name(node.slice))
+    return reads
+
+
 def test_the_check_reads_no_credential_from_the_environment() -> None:
     # Narrowed in the batch fold: seed #5473 documents one sanctioned env read,
-    # the monitor's own ``DATATAP_ANSWER_CHECK_MONITOR_TOKEN`` (its docstring:
-    # "The check does read one real secret, from one place"). The probe path
-    # still takes its token from DataTap's own public page, so every env read
-    # must name that one variable and no other.
-    #
-    # Widened by DIG-718: the target became an input, so the check reads two
-    # more variables — a page URL and a host name. They are named here so the
-    # allowlist stays closed: a fourth env read is still a red test.
-    import ast as _ast
-
+    # the monitor's own token variable (its docstring: "The check does read one
+    # real secret, from one place"). The probe path still takes its token from
+    # the public page it discovers, so every env read must name one of the
+    # variables below and no other. The other three are configuration and not
+    # credentials: two host names and a page URL are a hostname and a URL.
     source = SCRIPT.read_text(encoding="utf-8")
-    tree = _ast.parse(source)
-    reads = set()
-    for node in _ast.walk(tree):
-        if isinstance(node, _ast.Call):
-            f = node.func
-            if isinstance(f, _ast.Attribute) and f.attr == "get" and isinstance(f.value, _ast.Attribute) and f.value.attr == "environ":
-                reads.update(_ast.unparse(a) for a in node.args)
-            elif isinstance(f, _ast.Name) and f.id == "getenv":
-                reads.update(_ast.unparse(a) for a in node.args)
+    reads = _env_reads(source)
     assert reads <= {
         "MONITOR_TOKEN_ENV_VAR",
+        "EMBED_HOSTS_ENV_VAR",
         "DISCOVERY_URL_ENV_VAR",
         "EMBED_HOST_ENV_VAR",
-    }, f"env reads beyond the three named variables: {reads}"
+    }, f"env reads beyond the sanctioned variables: {reads}"
     assert "dotenv" not in source
+
+
+def test_the_env_read_walk_sees_a_subscript_read_too() -> None:
+    """The walk itself is pinned, because a walk that cannot see is not a walk.
+
+    ``os.environ["X"]`` reads the environment exactly as ``os.environ.get("X")``
+    does. A walk built on calls alone reports the second shape as no read at
+    all, and then the check's own secret reads can be added without the
+    allowlist noticing.
+    """
+    assert "SEEN_BY_THE_WALK" in _env_reads('import os\nos.environ["SEEN_BY_THE_WALK"]\n')
+    assert "SEEN_BY_THE_WALK" in _env_reads('import os\nos.environ.get("SEEN_BY_THE_WALK")\n')
 
 
 def test_the_check_writes_no_persistence() -> None:
@@ -2020,3 +2621,145 @@ def test_with_nothing_given_the_target_is_still_datatap_stream() -> None:
     chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
     assert chat["headers"]["X-Embed-Host"] == "datatap.stream"
     assert chat["headers"]["Origin"] == "https://datatap.stream"
+
+
+# --------------------------------------------------------------------------
+# DIG-5145: the shape of a named target.
+#
+# The six cases above pin that the target is an input. These pin what a named
+# target may look like, and what happens to the host when only the page is
+# named. Each shape below is one a re-point can produce by accident, and each
+# one is refused before a request is made.
+# --------------------------------------------------------------------------
+
+
+def test_the_script_names_the_target_env_vars() -> None:
+    """The two target variables are named as module constants.
+
+    The same reason the monitor token's variable and the allowlist's variable
+    are constants: an operator has to be told which name to set, and the
+    scheduler that runs this check has to be told the same name.
+    """
+    assert mod.DISCOVERY_URL_ENV_VAR == DISCOVERY_URL_ENV_VAR
+    assert mod.EMBED_HOST_ENV_VAR == EMBED_HOST_ENV_VAR
+
+
+def test_a_blank_target_in_the_environment_counts_as_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An exported-but-empty variable must not re-point a run.
+
+    A shell that exports the variable with nothing in it is a shell that meant
+    nothing, and a variable holding only spaces is the same thing said
+    quietly. Treating either as a target would make the run fail on a value
+    nobody chose.
+    """
+    monkeypatch.setenv(DISCOVERY_URL_ENV_VAR, "   ")
+    monkeypatch.setenv(EMBED_HOST_ENV_VAR, "")
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.OK
+    assert fake.calls[0]["url"] == mod.DISCOVERY_URL
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == mod.EMBED_HOST
+
+
+def test_naming_a_page_names_the_host_with_it() -> None:
+    """A page without a host is a target whose host is the page's own.
+
+    The tenant key is not a decoration: it is the key the surface resolves the
+    assistant with, so it has to name the surface that was asked for. Leaving
+    the default host beside a new page would send one surface's key to another
+    surface, and the answer would come back as a 401 that reads like their
+    fault rather than like ours.
+    """
+    _, fake = _run_main(_both_probes_clean(), ["--discovery-url", "https://digithings.ai/chat"])
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == "digithings.ai"
+    assert chat["headers"]["Origin"] == "https://digithings.ai"
+    assert chat["headers"]["Referer"] == "https://digithings.ai/chat"
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "https://digithings.ai",
+        "digithings.ai/chat",
+        "digithings.ai?x=1",
+        "user@digithings.ai",
+        "dig ithings.ai",
+    ],
+    ids=["scheme", "path", "query", "userinfo", "whitespace"],
+)
+def test_an_embed_host_that_is_not_a_bare_host_is_refused(host: str) -> None:
+    """The tenant key is a host name, and a URL in it is refused.
+
+    The value goes out as a header, and a header that carries a scheme, a path
+    or a query is not a host name: the surface would resolve nothing, and the
+    run would end as a 401 that says nothing about the answer path. It is
+    refused before the request instead, with the reason on stdout.
+    """
+    code, fake = _run_main(_both_probes_clean(), ["--embed-host", host])
+    assert code == mod.COULD_NOT_RUN == 2, f"must refuse {host!r}"
+    assert fake.calls == [], "a refused target must not be requested at all"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://digithings.ai/chat",
+        "https://",
+        "https://user:pw@digithings.ai/chat",
+        "digithings.ai/chat",
+    ],
+    ids=["plaintext", "no-host", "userinfo", "no-scheme"],
+)
+def test_a_discovery_url_that_cannot_be_probed_safely_is_refused(url: str) -> None:
+    """The page has to be an https URL that names a host and nobody else.
+
+    Three shapes, because three different wrong comparisons would let them
+    through: a plaintext page would carry the embed token in clear, a page
+    with no host behind it is not a page, and a page that hides its host
+    behind userinfo is not the host it looks like. The URL is read with a
+    parser rather than tested for a prefix, so "https://" with nothing after
+    it is refused as well.
+    """
+    code, fake = _run_main(_both_probes_clean(), ["--discovery-url", url])
+    assert code == mod.COULD_NOT_RUN == 2, f"must refuse {url!r}"
+    assert fake.calls == [], "a refused target must not be requested at all"
+
+
+def test_an_https_url_in_capitals_is_not_refused_for_its_case() -> None:
+    """A URL's scheme is case-insensitive, and the check reads it as a URL.
+
+    Comparing a prefix would refuse "HTTPS://..." for its capitals while
+    accepting "https://" with no host behind it. Reading the URL asks the
+    parser instead, and the parser is where the rules live.
+    """
+    code, fake = _run_main(_both_probes_clean(), ["--discovery-url", "HTTPS://digithings.ai/chat"])
+    assert code == mod.OK
+    assert fake.calls[0]["url"] == "HTTPS://digithings.ai/chat"
+
+
+def test_a_page_naming_an_unvetted_host_never_carries_the_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The host the page names is vetted, so the identity cannot follow it out.
+
+    The page is public, so the host in it is only as trustworthy as the page —
+    and the page is now something the caller names. Whatever that page says,
+    the request that carries our identity is only made to a host the
+    deployment has allowlisted, and a host that is not on that list ends the
+    run before the POST rather than after it.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _discovery_page("https://attacker.example")),
+        },
+        ["--discovery-url", "https://attacker.example/chat"],
+    )
+    assert code == mod.COULD_NOT_RUN == 2
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == [], (
+        "the identity must never reach a host the deployment has not vetted"
+    )

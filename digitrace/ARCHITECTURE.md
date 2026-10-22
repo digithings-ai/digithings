@@ -1,8 +1,21 @@
 # digitrace Architecture
 
-**Component:** digitrace — backend-neutral observability helpers + HTTP status API (LangSmith backend in Phase 0)
+**Component:** digitrace — observability helpers + HTTP status API (OTel leg shipped; the platform is decided by ADR-0036)
 **Version:** 0.1.0
-**Status:** Minimal viable implementation — library complete, HTTP service stable, Phase 2 observability platform deferred
+**Status:** Library complete and HTTP service stable. The observability platform is **decided**
+(ADR-0036, accepted 2026-10-09) and **not yet built**: the ingest pipeline lands under DIG-2657.
+
+> **Superseded in part (2026-10-09):** the hosting target and the platform-scope statements
+> below are superseded by [ADR-0036](../docs/adr/0036-digitrace-cloudflare-native-tracing.md).
+> digitrace tracing is a Cloudflare-native pipeline — an ingest Worker and Queue, an R2 archive
+> as the system of record, a Supabase `public` index with per-table RLS, Workers Analytics
+> Engine aggregates — with MLflow on demand for the deep analysis. Self-hosted Langfuse is
+> dropped: no new paid services.
+>
+> What ADR-0036 supersedes is the **platform** philosophy: "no database, no background worker,
+> no queue" no longer holds for digitrace as a component (DIG-2657 lands the pipeline). It does
+> **not** supersede the **library** contract: `digitrace.trace` keeps its zero-mandatory-
+> dependency rule, and after the LangSmith cut the OTel leg is its only leg.
 
 ---
 
@@ -10,17 +23,35 @@
 
 digitrace occupies the observability role in the digithings stack. It has two distinct faces:
 
-**As a Python library** (`digitrace.trace`, `digitrace.config`), it provides a thin conditional wrapper around the LangSmith SDK. Every service in the stack can import it and immediately get LangSmith tracing for key functions — or get a transparent no-op when LangSmith is not configured. The library has zero mandatory dependencies beyond the packages already present in any digithings service (`pydantic`, `fastapi`); the LangSmith SDK is a soft optional (`digitrace[tracing]`).
+**As a Python library** (`digitrace.trace`, `digitrace.config`), it provides a thin conditional wrapper around the LangSmith SDK. Every service in the stack can import it and immediately get LangSmith tracing for key functions — or get a transparent no-op when LangSmith is not configured. The library has zero mandatory dependencies beyond the packages already present in any digithings service (`pydantic`, `fastapi`); the LangSmith SDK is a soft optional (`digitrace[tracing]`). After ADR-0036 this library is the OTel emit wrapper: it gains the `gen_ai` attributes and the tenant, run and session ids (DIG-2656), and the LangSmith leg is removed from the code at the cut (DIG-2663). The zero-mandatory-dependency rule above still holds.
 
 **As an HTTP microservice** (port 8003), it exposes two read-only endpoints that tell orchestrators and dashboards whether tracing is active, which LangSmith host is configured, and whether the SDK is installed — all without ever surfacing a secret.
 
-### Phase 1 hosting target (self-hosted Langfuse)
+### Phase 1 hosting target: Cloudflare-native ingest and store (was self-hosted Langfuse; now ADR-0036)
 
-Phase 1 (#4930) stands up **self-hosted Langfuse** on Cloudflare Containers
-(Web + Worker) with house Postgres, R2 event uploads, and **external**
-ClickHouse + Redis. Operator runbook:
-[`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md). App:
-[`apps/digitrace-langfuse/`](../apps/digitrace-langfuse/).
+The self-hosted Langfuse plan (Web + Worker on Cloudflare Containers with external ClickHouse +
+Redis) is **dropped**. It needed two new paid services, and the decision of 2026-10-09 was "no new
+paid services".
+
+The hosting target is now the ADR-0036 pipeline:
+
+```
+apps → OTLP/HTTP → digitrace-ingest Worker → Queue → consumer
+     → R2 digitrace-archive (system of record; OTLP-JSON NDJSON, one object per batch,
+       key `tenant=<slug>/date=<YYYY-MM-DD>/<source>/<uuid>.ndjson`)
+     → Supabase core / public (digitrace_traces, digitrace_spans_index, digitrace_scores,
+       digitrace_sessions) with per-table RLS on workspace_id
+     → Workers Analytics Engine (tokens, cost, latency per tenant and model)
+dashboard Traces tab reads through dashboard-api; `digitrace replay` loads an R2 window into
+MLflow 3.10+ with the [genai] extra over OTLP/HTTP /v1/traces, on the Mac or on a scale-to-zero
+Cloudflare Container.
+```
+
+Decision record: [ADR-0036](../docs/adr/0036-digitrace-cloudflare-native-tracing.md).
+The Langfuse operator runbook ([`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md))
+and the app ([`apps/digitrace-langfuse/`](../apps/digitrace-langfuse/)) are retired **by** that
+ADR. The runbook is superseded here; the code removal is a separate mechanical leaf (DIG-5136,
+owner: Repo, CI & Release Engineer), so the app is still in the tree until that leaf lands.
 
 Phase 2 (#4931) dual-export is **shipped** (see § Phase 2 dual-export below).
 Do not point `LANGSMITH_ENDPOINT` at Langfuse.
@@ -55,6 +86,13 @@ remains the real LangSmith API.
 
 The current implementation is deliberately minimal. What exists today is a tracing shim, a health surface, and a Prometheus `/metrics` endpoint backed by the shared `digibase.metrics.install_metrics` helper. The wider roadmap — PII redaction middleware, span schema validation, custom samplers, centralized trace dashboards — is described in the gap analysis in Section 11. The current code is correct and production-safe for its narrow scope; the risks are in what it does not yet do.
 
+**The intended platform is now decided, and this section no longer describes it.**
+[ADR-0036](../docs/adr/0036-digitrace-cloudflare-native-tracing.md) replaces the "no database, no
+background worker, no queue" picture with a real pipeline: an ingest Worker, a Queue, a consumer,
+an R2 archive, a Supabase index with per-table RLS, an on-demand MLflow analysis path and a
+read-only MCP server. The sections below still describe the library as it stands; the platform
+target is the ADR.
+
 ### Observability contract (Prometheus)
 
 Every digithings FastAPI service exposes the same three Prometheus series via `digibase.metrics.install_metrics`:
@@ -81,7 +119,7 @@ digitrace ships exactly five source files under `digitrace/src/digitrace/`:
 | `redaction.py` | `PiiRedactor` — value-pattern redaction for span payloads | Emails, API-key prefixes, phone numbers, `DIGI_PII_PATTERNS` extras | Key-name allowlists, length-based document summarization |
 | `server.py` | FastAPI application, `/health`, `/v1/status`, `/metrics` | All three endpoints, OTel wiring, correlation ID, Prometheus instrumentation | `/v1/status/detailed` |
 
-There is no database, no background worker, no queue, and no internal LangGraph graph. digitrace does not receive traces — it only enables other services to emit them via the LangSmith SDK.
+As shipped today there is no database, no background worker, no queue, and no internal LangGraph graph: digitrace does not receive traces; it emits them — to LangSmith today and, via the Phase 2 OTel/HTTP dual-export leg (#4931), to an OTLP endpoint.
 
 ---
 
@@ -390,19 +428,24 @@ Unlike digigraph, digitrace does not depend on any other service in Compose. It 
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `LANGSMITH_API_KEY` | No | Enables LangSmith trace export. If absent, tracing is a no-op. |
-| `LANGSMITH_ENDPOINT` | No | LangSmith API base URL. Default: `https://api.smith.langchain.com`. Hostname appears in `/v1/status`. Never point at Langfuse. |
-| `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` | No | Phase 2 (#4931): Langfuse OTLP ingest URL (e.g. `https://trace.digithings.ai/api/public/otel`). Enables the OTel fan-out leg. |
-| `LANGFUSE_OTLP_ENDPOINT` | No | Alias for the Langfuse OTLP ingest URL. |
-| `LANGFUSE_HOST` / `LANGFUSE_URL` | No | Langfuse host (status display only; endpoint vars drive export). |
-| `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS` | No | OTLP auth headers (`Authorization=Basic …` from Langfuse public:secret). Parsed by `digibase.otel`. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | If set, enables OTel HTTP/protobuf export from the digitrace HTTP service itself. |
+| `LANGSMITH_API_KEY` | No | Enables LangSmith trace export. If absent, tracing is a no-op. Removed from the code at the LangSmith cut (DIG-2663). |
+| `LANGSMITH_ENDPOINT` | No | LangSmith API base URL. Default: `https://api.smith.langchain.com`. Hostname appears in `/v1/status`. Never point at Langfuse. Cut with the LangSmith leg (DIG-2663). |
+| `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` | No | **Retired (DIG-5136).** The Langfuse OTLP ingest URL. Langfuse is dropped by ADR-0036; the env name goes with the app. |
+| `LANGFUSE_OTLP_ENDPOINT` | No | **Retired (DIG-5136).** Alias for the Langfuse OTLP ingest URL. |
+| `LANGFUSE_HOST` / `LANGFUSE_URL` | No | **Retired (DIG-5136).** Langfuse host (status display only). |
+| `DIGI_OTEL_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT` | No | OTLP endpoint. Under ADR-0036 it is the ingest endpoint `https://<ingest-host>/v1/traces`. Parsed by `digibase.otel`; `digitrace.config` keeps no second copy. |
+| `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS` | No | OTLP headers. Under ADR-0036 they carry `x-digitrace-token` and `x-digitrace-tenant`. Parsed by `digibase.otel`. |
 
 The `LANGSMITH_API_KEY` and `LANGSMITH_ENDPOINT` variables are sourced from the `.env` file via `env_file`. They are available to the digitrace container but are also available to digigraph and any other service using the same `.env` — tracing is configured per-container, not centrally.
 
-### No MCP server
+### MCP server
 
-digitrace does not expose an MCP server. There are no MCP tools, no tool registry entries, and no `POST /v1/orchestrator_tools` endpoint. digitrace is a passive observability component, not an agent tool. This is correct by design.
+digitrace does not expose an MCP server today: there are no MCP tools, no tool registry
+entries, and no `POST /v1/orchestrator_tools` endpoint. Under ADR-0036 that stops being a
+design position. A **read-only** `digitrace.mcp_server` — `get_trace`, `search_traces`,
+`get_cost_summary`, tenant-scoped, no secrets in a response — is in scope and is owned by
+DIG-5141 (lane M, R&D Engineer). It follows the digiquant, digigraph and digivault MCP
+precedent.
 
 ---
 
@@ -437,6 +480,8 @@ The span attribute contract (Section 4) is documented but unenforced. No Pydanti
 ## 12. Redesign Recommendations
 
 The following are specific, actionable changes that would materially improve digitrace's production readiness. They are ordered by risk reduction impact.
+
+> **Re-framed by ADR-0036 (2026-10-09):** (e) is **decided** — OTel-first is the architecture, and the LangSmith leg is removed at the cut (DIG-2663). (a) becomes "redaction and an allowlisted, hash-and-length span payload before any data reaches the store" and is owned by DIG-2656. (f) becomes "a sampling rate per workflow, decided after the DIG-2663 parity window" and is owned by DIG-2657. The rest of the section stays as the recommendation list it was.
 
 ### (a) Enforce PII redaction as middleware before LangSmith export
 
@@ -475,7 +520,12 @@ The current `/v1/status` only checks whether the key is configured and the SDK i
 
 This endpoint should require internal authentication (e.g. a service token) since it reveals connectivity details that are more sensitive than the basic status.
 
-### (e) Consider an OpenTelemetry-first approach, replacing LangSmith dependency
+### (e) Consider an OpenTelemetry-first approach, replacing LangSmith dependency — decided by ADR-0036
+
+**Decision:** ADR-0036 (accepted 2026-10-09) adopts the OTel-first approach: digitrace emits
+OTel to a Cloudflare-native ingest pipeline and MLflow is the on-demand analysis surface, and
+the LangSmith leg is removed at the cut (DIG-2663). The reasoning below is kept as the record
+of the decision.
 
 LangSmith is an external SaaS product with a per-trace billing model and opinionated data format. An OTel-first design would:
 - Use `opentelemetry-api` spans with standard attributes for all LLM calls

@@ -21,6 +21,8 @@ from digiquant.data.onchain.bgeometrics import (
     fetch_bgeometrics_series,
 )
 
+from tests.dq.data.onchain_fakes import FakeResponse, FakeSession
+
 pytestmark = pytest.mark.unit
 
 
@@ -36,38 +38,6 @@ def _mvrv_range() -> list[dict[str, Any]]:
 def _mvrv_last() -> dict[str, Any]:
     """Captured shape: ``GET /v1/mvrv/last``."""
     return {"d": "2026-09-09", "unixTs": 1788912000, "mvrv": 1.4808}
-
-
-class _FakeResp:
-    def __init__(self, body: object, status: int = 200) -> None:
-        self._body = body
-        self.status_code = status
-
-    def raise_for_status(self) -> None:
-        if self.status_code >= 400:
-            import httpx
-
-            raise httpx.HTTPStatusError(
-                f"HTTP {self.status_code}",
-                request=httpx.Request("GET", "https://api.bitcoin-data.com/v1/mvrv"),
-                response=httpx.Response(self.status_code, json=self._body),
-            )
-
-    def json(self) -> object:
-        return self._body
-
-
-class _FakeSession:
-    def __init__(self, *, body: object | None = None, exc: Exception | None = None) -> None:
-        self._body = body
-        self._exc = exc
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-
-    def get(self, url: str, **kwargs: Any) -> _FakeResp:
-        self.calls.append((url, kwargs))
-        if self._exc is not None:
-            raise self._exc
-        return _FakeResp(self._body if self._body is not None else {})
 
 
 class TestBgeometricsRowsParser:
@@ -102,7 +72,7 @@ class TestBgeometricsRowsParser:
 
 class TestBgeometricsClient:
     def test_range_fetch_writes_parquet(self, tmp_path: Path) -> None:
-        session = _FakeSession(body=_mvrv_range())
+        session = FakeSession(body=_mvrv_range())
         result = BgeometricsClient(session=session, cache_dir=tmp_path).fetch(
             "mvrv", startday="2025-01-01", endday="2025-01-03"
         )
@@ -116,7 +86,7 @@ class TestBgeometricsClient:
         assert result.note == FREE_TIER_NOTE
 
     def test_last_fetch_uses_last_endpoint(self) -> None:
-        session = _FakeSession(body=_mvrv_last())
+        session = FakeSession(body=_mvrv_last())
         result = BgeometricsClient(session=session).fetch("mvrv", last=True)
         assert result.has_data
         assert result.row_count == 1
@@ -124,7 +94,7 @@ class TestBgeometricsClient:
         assert url.endswith("/v1/mvrv/last")
 
     def test_fail_soft_on_network_error(self) -> None:
-        session = _FakeSession(exc=ConnectionError("boom"))
+        session = FakeSession(exc=ConnectionError("boom"))
         result = BgeometricsClient(session=session).fetch("mvrv")
         assert result.error is not None
         assert result.has_data is False
@@ -138,10 +108,10 @@ class TestBgeometricsClient:
             }
         }
 
-        class _RateLimited(_FakeSession):
-            def get(self, url: str, **kwargs: Any) -> _FakeResp:
+        class _RateLimited(FakeSession):
+            def get(self, url: str, **kwargs: Any) -> FakeResponse:
                 self.calls.append((url, kwargs))
-                return _FakeResp(body, status=429)
+                return FakeResponse(body, status=429)
 
         limited = _RateLimited()
         result = BgeometricsClient(session=limited).fetch("mvrv")
@@ -149,11 +119,11 @@ class TestBgeometricsClient:
         assert "Hourly limit" in result.error
 
     def test_empty_metric_is_error(self) -> None:
-        result = BgeometricsClient(session=_FakeSession(body={})).fetch("")
+        result = BgeometricsClient(session=FakeSession(body={})).fetch("")
         assert result.error is not None
 
     def test_no_data_is_fail_soft_error(self) -> None:
-        session = _FakeSession(body=[])
+        session = FakeSession(body=[])
         result = BgeometricsClient(session=session).fetch(
             "mvrv", startday="2014-01-01", endday="2014-01-10"
         )
@@ -167,19 +137,19 @@ class TestBgeometricsClient:
         assert "disabled" in (result.error or "")
 
     def test_token_sent_as_bearer_header(self) -> None:
-        session = _FakeSession(body=_mvrv_last())
+        session = FakeSession(body=_mvrv_last())
         BgeometricsClient(session=session, token="secret-token").fetch("mvrv", last=True)
         _url, kwargs = session.calls[0]
         assert kwargs["headers"]["Authorization"] == "Bearer secret-token"
 
     def test_token_also_sent_as_x_bgapi_token_header(self) -> None:
-        session = _FakeSession(body=_mvrv_last())
+        session = FakeSession(body=_mvrv_last())
         BgeometricsClient(session=session, token="secret-token").fetch("mvrv", last=True)
         _url, kwargs = session.calls[0]
         assert kwargs["headers"]["X-Bgapi-Token"] == "secret-token"
 
     def test_no_token_sends_neither_auth_header(self) -> None:
-        session = _FakeSession(body=_mvrv_last())
+        session = FakeSession(body=_mvrv_last())
         BgeometricsClient(session=session).fetch("mvrv", last=True)
         _url, kwargs = session.calls[0]
         assert "Authorization" not in kwargs["headers"]
@@ -192,10 +162,10 @@ class TestBgeometricsClient:
 
     def test_untrusted_base_url_raises_at_client_construction(self) -> None:
         with pytest.raises(ValueError, match="not allowlisted"):
-            BgeometricsClient(session=_FakeSession(), base_url="https://evil.example.com")
+            BgeometricsClient(session=FakeSession(), base_url="https://evil.example.com")
 
     def test_fetch_function_refuses_attacker_base_url_without_fetch(self) -> None:
-        session = _FakeSession(body=_mvrv_last())
+        session = FakeSession(body=_mvrv_last())
         result = fetch_bgeometrics_series(
             "mvrv", session=session, base_url="http://169.254.169.254/latest/meta-data"
         )
@@ -207,7 +177,7 @@ class TestBgeometricsClient:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("BGEOMETRICS_API_TOKEN", "server-owned-secret")
-        session = _FakeSession(body=_mvrv_last())
+        session = FakeSession(body=_mvrv_last())
         result = fetch_bgeometrics_series(
             "mvrv", session=session, last=True, base_url="https://evil.example.com"
         )
@@ -218,7 +188,7 @@ class TestBgeometricsClient:
 
     def test_env_token_sent_only_to_trusted_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("BGEOMETRICS_API_TOKEN", "server-owned-secret")
-        session = _FakeSession(body=_mvrv_last())
+        session = FakeSession(body=_mvrv_last())
         fetch_bgeometrics_series("mvrv", session=session, last=True)
         _url, kwargs = session.calls[0]
         assert kwargs["headers"]["Authorization"] == "Bearer server-owned-secret"
@@ -228,14 +198,14 @@ class TestBgeometricsClient:
         ["../secret", "mvrv?x=1", "mvrv/../sopr", "MVRV", "mvrv%2f..", "mvrv last", "a/b"],
     )
     def test_metric_is_not_a_path_or_query_injection_sink(self, bad_metric: str) -> None:
-        session = _FakeSession(body=_mvrv_last())
+        session = FakeSession(body=_mvrv_last())
         result = BgeometricsClient(session=session).fetch(bad_metric, last=True)
         assert result.error is not None
         assert "metric must match" in result.error
         assert session.calls == []
 
     def test_known_metric_still_fetches(self) -> None:
-        session = _FakeSession(body=_mvrv_last())
+        session = FakeSession(body=_mvrv_last())
         result = BgeometricsClient(session=session).fetch("mvrv", last=True)
         assert result.has_data
         assert session.calls != []

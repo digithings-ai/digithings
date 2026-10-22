@@ -28,7 +28,12 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATION_PATH = (
-    REPO_ROOT / "digiquant" / "supabase" / "migrations" / "060_lock_public_write_grants.sql"
+    REPO_ROOT
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "engine"
+    / "060_lock_public_write_grants.sql"
 )
 SCHEMA_DOC_PATH = REPO_ROOT / "digiquant" / "supabase" / "SCHEMA.md"
 

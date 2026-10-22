@@ -339,6 +339,11 @@ RULES: list[tuple[str, str, str]] = [
     ),
     ("tests/dq/notify/test_sync_hook.py", "R2", "tests the house pipeline"),
     ("tests/dq/dashboard/test_envcompat.py", "R2", "tests the house pipeline"),
+    (
+        "tests/dq/dashboard/test_envcompat_repo_inventory.py",
+        "R2",
+        "tests the house pipeline",
+    ),
     ("tests/integration/test_execution_tenancy_chain.py", "R2", "tests the house pipeline"),
     (
         "tests/scripts/test_gloomberb_session_cookie_runbook.py",
@@ -394,6 +399,11 @@ RULES: list[tuple[str, str, str]] = [
         "tests of vendor client luxalgo (private per Chris 01:26)",
     ),
     (
+        "tests/dq/brokers/luxalgo_mirror_cases.py",
+        "R2",
+        "tests of vendor client luxalgo (private per Chris 01:26)",
+    ),
+    (
         "tests/dq/data/test_gloomberb_agent_tools.py",
         "R2",
         "tests of vendor client gloomberb (private per Chris 01:26)",
@@ -419,6 +429,31 @@ RULES: list[tuple[str, str, str]] = [
         "tests of vendor client gloomberb (private per Chris 01:26)",
     ),
     (
+        "tests/dq/data/test_gloomberb_client_quotes.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
+        "tests/dq/data/test_gloomberb_client_history.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
+        "tests/dq/data/test_gloomberb_client_macro.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
+        "tests/dq/data/test_gloomberb_client_research.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
+        "tests/dq/data/gloomberb_client_support.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
         "tests/dq/data/test_gloomberb_macro.py",
         "R2",
         "tests of vendor client gloomberb (private per Chris 01:26)",
@@ -440,6 +475,11 @@ RULES: list[tuple[str, str, str]] = [
     ),
     (
         "tests/dq/data/test_gloomberb_prediction_markets.py",
+        "R2",
+        "tests of vendor client gloomberb (private per Chris 01:26)",
+    ),
+    (
+        "tests/dq/data/gloomberb_prediction_fixtures.py",
         "R2",
         "tests of vendor client gloomberb (private per Chris 01:26)",
     ),

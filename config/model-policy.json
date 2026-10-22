@@ -17,6 +17,17 @@
     "claude-4"
   ],
   "balanced_flagship_markers": ["gpt-5.6-luna"],
+  "reasoning_effort": {
+    "default_sent": {
+      "deepseek-v4.1-flash-1017": "medium"
+    },
+    "configurable_prefixes": [
+      "gpt-5",
+      "gpt-6",
+      "gpt-oss",
+      "gemini-3"
+    ]
+  },
   "_comment": [
     "digigraph model POLICY — the model ids routing decisions are made from, not",
     "resolved configuration. Loaded once at import time by model_config.py",
@@ -41,6 +52,16 @@
     "Distinct from config/model_modes.yaml (per-deployment defaults, hot-reloaded on",
     "mtime change, lenient) and config/byok-providers.json (the BYOK allowlist and its",
     "user-facing model examples). This file is a routing POLICY: it changes at the pace",
-    "of a code review, not a redeploy, which is why it loads once at import."
+    "of a code review, not a redeploy, which is why it loads once at import.",
+    "",
+    "`reasoning_effort` is the chat reasoning policy (DIG-4459). Models whose catalog",
+    "id starts with one of `configurable_prefixes`, or is a key of `default_sent`, take",
+    "the chat's /effort (low/medium/high) as `reasoning_effort` on streamed digillm",
+    "turns. With no /effort they keep their default level (the field is omitted),",
+    "except the `default_sent` models, which only reason when a level is sent, so they",
+    "get the mapped level. Ids are bare catalog ids (house slugs are mapped first).",
+    "digillm reads no files, so model_config.py loads this and registers it with",
+    "digillm (set_reasoning_effort_policy). Optional: absent means no model gets the",
+    "field, which keeps every request as it was before the policy existed."
   ]
 }

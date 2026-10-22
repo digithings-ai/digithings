@@ -140,7 +140,7 @@ test("chat stream text-deltas join into a reply", () => {
 });
 
 test("chat base URL is the surface-config chat endpoint, not the desk runner", () => {
-  expect(chatBaseUrl({ DQ_API_URL: "http://127.0.0.1:8788" })).toBe("http://127.0.0.1:3000");
+  expect(chatBaseUrl({ DQ_API_URL: "http://127.0.0.1:8788" })).toBe("http://127.0.0.1:3005");
   expect(chatBaseUrl({ DIGI_CHAT_URL: "http://127.0.0.1:3005/" })).toBe("http://127.0.0.1:3005");
 });
 

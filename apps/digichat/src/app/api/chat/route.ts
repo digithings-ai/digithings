@@ -24,7 +24,9 @@ import {
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
 import {
+  DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
+  DigigraphUpstreamUnavailableError,
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
@@ -66,13 +68,9 @@ import {
   resolveAnonymousInstallChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
-import { isPlanTierSatisfied, normalizeEmbedHost } from "@/lib/embed-tenants";
+import { isPlanTierSatisfied } from "@/lib/embed-tenants";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
-import {
-  inspectTrialProof,
-  TRIAL_PROOF_EXPIRED_HEADER,
-} from "@/lib/trial-proof";
 import {
   acquireChatRunLock,
   releaseChatRunLockOnResponseEnd,
@@ -112,93 +110,7 @@ function jsonError(
   });
 }
 
-export async function POST(req: Request): Promise<Response> {
-  const trialProof = inspectRequestTrialProof(req);
-  const res = await handleChat(req, trialProof);
-  if (!trialProof.expired) return res;
-  // The signal rides on the Response the route returns: the chat response is
-  // a stream, so there is no error path to hang it on, and the client reads
-  // the header off whatever response it actually receives.
-  return withExpiredTrialProofHeader(res);
-}
-
-/**
- * Add the expired-proof signal to a response the route is about to return.
- * The header is set on the response itself where that is allowed, and on a
- * copy otherwise (a response whose headers are immutable).
- */
-function withExpiredTrialProofHeader(res: Response): Response {
-  try {
-    res.headers.set(TRIAL_PROOF_EXPIRED_HEADER, "1");
-    return res;
-  } catch {
-    const headers = new Headers(res.headers);
-    headers.set(TRIAL_PROOF_EXPIRED_HEADER, "1");
-    return new Response(res.body, {
-      status: res.status,
-      statusText: res.statusText,
-      headers,
-    });
-  }
-}
-
-/**
- * The trial proof the client presented, resolved once per request.
- *
- * Both flags are host-scoped: a proof only counts for the embed host it
- * names. A valid proof for another host buys nothing (the same trust chain
- * as before), and an expired proof for another host is not this client's
- * proof to drop.
- */
-type RequestTrialProof = {
-  /** The host an authentic presented proof binds; null when there is none. */
-  host: string | null;
-  /** Authentic, unexpired, and for this request's embed host. */
-  accepted: boolean;
-  /** Authentic, expired, and for this request's embed host. */
-  expired: boolean;
-};
-
-function inspectRequestTrialProof(req: Request): RequestTrialProof {
-  const token = req.headers.get("x-embed-trial-proof")?.trim();
-  const secret = process.env.DIGICHAT_TRIAL_PROOF_SECRET?.trim();
-  if (!token || !secret) {
-    return { host: null, accepted: false, expired: false };
-  }
-
-  const inspection = inspectTrialProof(token, secret);
-  if (inspection.ok) {
-    return {
-      host: inspection.host,
-      accepted: matchesEmbedHost(req, inspection.host),
-      expired: false,
-    };
-  }
-  if (inspection.reason === "expired") {
-    return {
-      host: inspection.host,
-      accepted: false,
-      expired: matchesEmbedHost(req, inspection.host),
-    };
-  }
-  // Malformed or wrongly signed: invalid, not expired. The client must not
-  // treat these as re-mintable.
-  return { host: null, accepted: false, expired: false };
-}
-
-/** True when the proof's host is the embed host this request came from. */
-function matchesEmbedHost(req: Request, proofHost: string): boolean {
-  const embedHost = normalizeEmbedHost(req.headers.get("x-embed-host"));
-  const normalizedProofHost = normalizeEmbedHost(proofHost);
-  return Boolean(
-    embedHost && normalizedProofHost && normalizedProofHost === embedHost,
-  );
-}
-
-async function handleChat(
-  req: Request,
-  trialProof: RequestTrialProof,
-): Promise<Response> {
+export async function POST(req: Request) {
   // Revoked/expired license refuses before auth: a revoked deployment
   // refuses even an authenticated caller, and the check is cheaper.
   const refusal = licenseRefusal();
@@ -454,31 +366,6 @@ async function handleChat(
     }
 
     if (!quotaSatisfied) {
-      // A trial proof is a server-signed token (lib/trial-proof.ts) that this
-      // server mints for an embed host, so a visitor who has completed the
-      // trial form can be let through the free-turn cap without a client-
-      // asserted header. Unlike x-embed-trial-unlock below — which the client
-      // asserts and anyone can send — a proof cannot be forged: the signature
-      // covers host|exp and only this server holds DIGICHAT_TRIAL_PROOF_SECRET,
-      // so only it can produce a token that verifies. A raw client-asserted
-      // X-Embed-Trial-Proof value is NEVER trusted.
-      // The proof binds host|exp|sig only — no tenant, no nonce — so the gate
-      // compares the VERIFIED host itself and a valid proof for another host
-      // buys nothing. The proof's host is the canonical bare registry host
-      // while the browser sends the embed origin as a URL, so compare the
-      // canonical forms. A sanctioned bypass must not spend the visitor's
-      // budget, so once a proof is accepted the per-IP quota below is not
-      // consulted at all. No proof, no bypass: an absent, malformed, expired,
-      // wrongly-signed or wrong-host proof leaves the gate exactly as it was.
-      // The verdict itself - verified host, expiry, and the host comparison -
-      // is resolved once per request in inspectRequestTrialProof, so the gate
-      // and the expiry signal can never disagree.
-      if (trialProof.accepted) {
-        quotaSatisfied = true;
-      }
-    }
-
-    if (!quotaSatisfied) {
       try {
         const ip = clientIpForEmbedLimit(req);
         // "unknown" is develop's key when no visitor header is present. The
@@ -557,21 +444,33 @@ async function handleChat(
   // keeps the first turn on the same model the visitor sees (v4.1-flash for
   // OCC) instead of the digigraph operator default. Only a slug the tenant
   // actually offers is trusted; anything else falls back.
-  const curatedDefault = dep?.models?.default?.trim();
+  // ONE artefact decides the session lock and the model allowlist (DIG-4589).
+  // On the embed surface that artefact is the request's tenant: in production
+  // it is the projection of the MERGED host deployment, so it carries the
+  // deployment's lock and model list together with the registry tenant's own.
+  // The lock is an embed control (DIG-1210), so it never reaches the
+  // authenticated session surface, where the deployment config alone decides
+  // the allowlist.
+  const policyModels = embedConfig?.models ?? dep?.models;
+  const policyAvailable = policyModels?.available ?? [];
+  const policyLocked = embedConfig?.lockSessionControls === true;
+  const curatedDefault = policyModels?.default?.trim();
   const tenantDefaultModel =
     curatedDefault &&
-    ((dep?.models?.available?.length ?? 0) === 0 ||
-      dep!.models!.available!.includes(curatedDefault))
+    (policyAvailable.length === 0 || policyAvailable.includes(curatedDefault))
       ? curatedDefault
       : undefined;
   let modelId = tenantDefaultModel || digigraphModelName();
   // A tenant with lockSessionControls pins the house default model (DIG-1210):
   // a visitor's /model pick or session_set_model result is never forwarded.
+  // The lock and the allowlist below come from the same artefact, so the two
+  // sources can never disagree: the merge keeps a lock set in the deployment
+  // config AND a lock set in the tenant registry (a lock is a restriction,
+  // so a merge never drops one), and it folds the registry's model list into
+  // the deployment the tenant is projected from.
   // Exception: a locked tenant that curates its own `models.available` list
   // lets the visitor pick from exactly that list (allowlist enforced below).
-  const lockedWithoutModelList =
-    embedConfig?.lockSessionControls === true &&
-    (embedConfig.models?.available?.length ?? 0) === 0;
+  const lockedWithoutModelList = policyLocked && policyAvailable.length === 0;
   const requestedModel = lockedWithoutModelList
     ? undefined
     : req.headers.get("x-digi-model")?.trim() || undefined;
@@ -583,8 +482,8 @@ async function handleChat(
     const { resolveHouseModelSelection, routerModelsHeader } = await import("@/lib/deploy-config");
     if (byokKey) {
       if (requestedModel) modelId = requestedModel;
-    } else if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
-      const allowed = resolveHouseModelSelection(dep.models, requestedModel);
+    } else if (policyModels && policyAvailable.length > 0) {
+      const allowed = resolveHouseModelSelection(policyModels, requestedModel);
       if (requestedModel && allowed === undefined) {
         runLock.release();
         return new Response(
@@ -598,7 +497,7 @@ async function handleChat(
       if (allowed) modelId = allowed;
       if (requestedModel && allowed) {
         houseSessionModel = allowed;
-        routerModels = routerModelsHeader(dep.models, allowed);
+        routerModels = routerModelsHeader(policyModels, allowed);
       }
     } else if (configFailed && requestedModel) {
       // The deployment config could not be read, so we cannot prove the model
@@ -664,6 +563,12 @@ async function handleChat(
     }
   }
 
+  // The chat's /effort choice (low/medium/high), or undefined for the model's
+  // own default. digigraph gets it as X-Digi-Effort; Foundry as reasoning.effort.
+  const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
+  const reasoningEffort =
+    effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
+
   if (adapter.protocol === "foundry-responses" && isFoundryConfig(backend)) {
     const foundryBackend = backend;
     let foundryRes: Response;
@@ -679,6 +584,7 @@ async function handleChat(
         responseLanguage: languageCode,
         turnMode,
         maxToolCalls: guard.toolCap ?? foundryBackend.maxToolCalls,
+        reasoningEffort,
         guard,
       });
     } catch (err) {
@@ -788,7 +694,27 @@ async function handleChat(
     upstreamBearer = up.bearer;
     litellmProxyApiKey = up.litellmProxyApiKey;
   } catch (e) {
-    runLock.release();
+    // The upstream exchange failed before any turn was produced, so the run id
+    // must not refuse the retry: the client replays the same X-Digi-Run-Id
+    // when it repeats the send, and the cold case is answered with a
+    // Retry-After (DIG-4424).
+    runLock.release({ forgetRunId: true });
+    if (e instanceof DigigraphUpstreamUnavailableError) {
+      // digikey was cold, asleep or down: the request is retryable, so it is
+      // answered 503 with a Retry-After and NOT as an upstream_auth failure.
+      // A 502 upstream_auth here told the operator to check the token for a
+      // dependency that was only asleep (DIG-4424).
+      return new Response(
+        JSON.stringify({ error: "upstream_unavailable", message: e.message }),
+        {
+          status: 503,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": String(DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS),
+          },
+        }
+      );
+    }
     const msg =
       e instanceof DigigraphUpstreamAuthError
         ? e.message
@@ -829,9 +755,8 @@ async function handleChat(
   if (languageCode !== "en") {
     upstreamHeaders["X-Digi-Language"] = languageCode;
   }
-  const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
-  if (effortRaw === "low" || effortRaw === "medium" || effortRaw === "high") {
-    upstreamHeaders["X-Digi-Effort"] = effortRaw;
+  if (reasoningEffort) {
+    upstreamHeaders["X-Digi-Effort"] = reasoningEffort;
   }
   // Search engine choice for digisearch web_search (#4724): allowlisted names
   // only, unknown/blank dropped. "auto" is the hub default, so it is omitted

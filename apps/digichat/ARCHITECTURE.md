@@ -283,8 +283,6 @@ endpoint except `GET /api/health` (unauthenticated status probe) and
 - **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). The production entrypoint always strips an inbound `x-digichat-peer-ip` and stamps the real socket peer, plus a process stamp, before Next sees the request. Guardrail and premium keys (`clientIpForRateLimit`) read that header only when the stamp matches. An unstamped copy is `unknown`, including when `DIGICHAT_TRUSTED_PROXIES` is set, so a caller rotating the header does not open buckets. When the allowlist is set, a stamped trusted peer may supply `cf-connecting-ip` (preferred; Cloudflare overwrites it) or an XFF chain walked from the right past trusted hops, and every value goes through `parseIp`. A stamped peer outside the allowlist is the key and the visitor headers are ignored. When the allowlist is unset, a stamped socket that is the client is the guardrail key, and a stamped shared ingress (`cf-connecting-ip` names a different address) is `unknown` for guardrails. The embed limiter and the trial quota do not use the socket while the allowlist is unset. They follow develop: the raw trimmed `cf-connecting-ip`, then the raw trimmed first `X-Forwarded-For` hop, else `unknown`. A value that is not an IP stays that key. A header-less request is `unknown` on develop too: the embed limiter collapses those visitors onto `embed_ip:unknown`, and the trial quota skips `unknown` so it does not count them together. Those visitor headers never decide a guardrail or premium budget. Startup logs a warning until `DIGICHAT_TRUSTED_PROXIES` is set to the ingress peer the entrypoint logs on the first request. This repo does not contain that address. Do not use Cloudflare's published edge ranges. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
 - **Per-tenant trial gate:** a `trial_form` tenant may set `gate.consumeUrl` to an operator-controlled HTTPS endpoint. When `X-Embed-Chat-Token` is present, the BFF sends `{ "token": "..." }` to that endpoint before applying the fallback per-IP turn quota. A 2xx response consumes the turn and any 4xx response denies it (`402 trial_gate`). A 5xx, a timeout or a transport failure is reported as a third verdict, **unavailable**: the visitor is still admitted, so a quota-provider outage does not disable chat, but the entitlement is unverified and is bounded server-side to the trial cap (100 turns per known IP per 24h) instead of being granted outright — an outage used to skip the per-IP budget entirely and hand out unbounded free turns (DIG-4543). The degraded path is logged (`[trial-gate] tenant quota service unavailable…`). The bound needs a resolvable client IP: a request whose IP cannot be resolved (`unknown`) skips the quota and is admitted uncounted, as before. The token is never logged or forwarded to a chat backend.
 - **Internal monitor identity (DIG-613):** an internal monitor can be exempt from the `trial_form` free-turn cap by presenting `X-Embed-Monitor-Token`, matched against a comma-separated allowlist in `DIGICHAT_MONITOR_TOKENS` (`embed-monitor-token.ts`, constant-time, entries under 32 chars ignored). This exists because the hourly DataTap answer-integrity check had no sanctioned path past the per-IP cap: it burned the 3-turn budget in its first hour and then returned `402 trial_gate` on every run, which reads as a client-side closed trial rather than our own gate. The compared value is a server-side secret and is deliberately **not** `X-Embed-Token`, which is a Stripe-style publishable key rendered into the embedding page on purpose (DIG-619) — a bypass keyed on it would be a public bypass. **Scope:** the free-turn cap only. It does not authenticate the caller; the caller must still resolve a tenant context and pass the rate-limit layers. The `requiredPlanTier` proof check runs earlier and is unaffected. The one check it does skip is the tenant's own `gate.consumeUrl` turn accounting, and only for a caller that presents the monitor header *without* an `X-Embed-Chat-Token` (the consume call is gated on that token, `route.ts`). **Fails open:** when the allowlist is unset the gate behaves exactly as before, so a missing deploy secret never becomes a reason to stop serving visitors. The gate itself remains best-effort anti-abuse, not an authorization boundary.
-- **Server-signed trial proof (DIG-3795):** a caller can also be exempt from the `trial_form` free-turn cap by presenting `X-Embed-Trial-Proof`, an HMAC-signed token minted server-side with the shared secret `DIGICHAT_TRIAL_PROOF_SECRET` (`lib/trial-proof.ts`; format `base64url(host|exp|sig)`, 10-minute TTL, constant-time signature comparison). The route verifies the signature with the same secret and compares the **verified** host against the canonical form of `X-Embed-Host` (`normalizeEmbedHost`), because the proof binds host and expiry only — no tenant and no nonce — so a valid proof for another host buys nothing. A raw client-asserted header value is never trusted: only the server holds the secret, so only it can produce a token that verifies. **Scope:** the free-turn cap only, and it does not authenticate the caller — the caller must still resolve a tenant context and pass the rate-limit layers. The per-IP quota is skipped entirely once a proof is accepted, so a sanctioned bypass never spends the visitor's budget. **No proof, no bypass:** an absent, malformed, expired, wrongly-signed or wrong-host proof leaves the gate exactly as it was, so a missing deploy secret is never a reason to waive the cap. The `X-Embed-Trial-Unlock` header read is unchanged. **Expired-proof signal (DIG-4537):** the route tells an EXPIRED proof from an INVALID one, because only the expired one can be dropped and re-minted by the client. When — and only when — a proof was presented, authentic, expired and bound to this request's embed host, the response the route returns carries `x-embed-trial-proof-expired: 1` (`TRIAL_PROOF_EXPIRED_HEADER`), including on the 402 `trial_gate` response, and the gate's outcome does not change: an expired proof still leaves the visitor on the trial path. A malformed, wrongly-signed or wrong-host proof gets no header — those are invalid, not expired, and the client must not treat them as re-mintable. The signature is verified BEFORE the expiry, so a proof that is both expired and tampered with is invalid, never expired.
-- **Trial proof mint route (`POST /api/embed/trial-proof-mint`):** mints a signed proof for one embed host. Two server-side credentials are accepted, and neither is `X-Embed-Token` (a Stripe-style publishable key rendered into the embedding page, so a mint route keyed on it would be an unauthenticated public endpoint). **Monitor identity:** `X-Embed-Monitor-Token`, matched against the same comma-separated allowlist in `DIGICHAT_MONITOR_TOKENS` (`embed-monitor-token.ts`); it stays host-unscoped, so the proof is minted for the host the caller sends. **Tenant identity (DIG-4526):** `X-Embed-Tenant-Mint-Token`, matched against `DIGICHAT_TENANT_MINT_CREDENTIALS` — a comma-separated list of `host=token` pairs, one pair per host, the pair split at the first `=` and both sides trimmed (`embed-tenant-mint-credential.ts`, constant-time comparison). A tenant credential is bound to the host in its pair: the requested host and the pair's host are compared in CANONICAL form — the same `normalizeEmbedHost` the chat route compares with — so a backend that names its host as an origin URL still matches its pair. A host that does not canonicalise, or a canonical host that differs from the pair's, is answered `401` and mints nothing. The proof is minted for the CANONICAL host of the pair, so it verifies for that host only. One pair binds one host and one token binds one host, so a list that breaks either rule is refused for that host. The two identities are separate: the tenant credential is never a monitor credential, the chat route never reads it, and the monitor allowlist is unchanged. When the tenant header is present the tenant rule decides the request and there is no fall-through to the monitor rule. With `DIGICHAT_TENANT_MINT_CREDENTIALS` unset no tenant can mint.
 - **Anonymous `/embed` requests** (`resolveEmbedChatTenant` in `embed-chat-tenant.ts`) resolve to `{ tenantSlug: "embed", ownerUserSub: "embed:anonymous" }` only when **no** `DIGICHAT_EMBED_TENANTS` are configured and `DIGICHAT_LEGACY_EMBED_ENABLED=1` (or deprecated `DIGICHAT_EMBED_ENABLED=1`, or a valid legacy `X-Embed-Token` matching `DIGICHAT_EMBED_TOKEN`). Registered tenants resolve via `DIGICHAT_EMBED_TENANTS` (their own token, or a first-party host **with a first-party browser-attested origin**). A configured tenant registry turns the legacy flag off and refuses unregistered hosts. Otherwise 503. This path never touches `conversations-repo` — no server-side persistence call exists in this route for any caller (persistence, when it happens, is client-initiated via the separate `/api/conversations` endpoints below, which require a real session).
 
 ### Conversations
@@ -524,7 +522,9 @@ On every `/api/chat` call:
 2. Otherwise, if `DIGIKEY_URL` and `DIGIKEY_BFF_TOKEN` are set, the BFF calls
    `POST {DIGIKEY_URL}/v1/oauth/token` with `grant_type=bff_session`, the BFF token,
    tenant slug, and OIDC subject. digikey returns a short-lived JWT scoped to that
-   tenant+subject.
+   tenant+subject. When that exchange fails, the answer names which failure it was
+   — a refused token, a digikey with no `bff_session` grant, or an unreachable
+   digikey — see "Cold digikey vs a rejected token" below.
 3. Fallback: `DIGIGRAPH_UPSTREAM_API_KEY` static bearer (bootstrap only).
 4. The resulting JWT is forwarded as `Authorization: Bearer <JWT>` to digigraph,
    along with `X-digichat-Tenant`, `X-Digi-Caller: digichat`, `X-Session-Id`,
@@ -582,9 +582,11 @@ is exported and pinned by a test instead of being asserted in a comment.
   token, unknown tenant); retrying it only holds the chat request longer for the
   same answer.
 - **What a caller sees.** The chat upstream-auth path
-  (`src/lib/digigraph-upstream.ts`) calls this before digigraph, so a down
-  digikey holds the chat request for up to the whole budget (~100s) and then
-  raises `DigigraphUpstreamAuthError`.
+  (`src/lib/digigraph-upstream.ts`) calls this before digigraph. A down digikey
+  holds the chat request for up to the whole budget (~100s) and then raises
+  `DigigraphUpstreamUnavailableError` (cold/unreachable); a refused token fails
+  fast, after one attempt, and raises `DigigraphUpstreamAuthError` (refused) —
+  see "Cold digikey vs a rejected token" below.
 - **What the budget does and does not bound.** The per-attempt abort timer
   covers the request up to the response headers: the timer is released when
   the headers arrive, so a response that then stalls its body is **not**
@@ -598,9 +600,60 @@ is exported and pinned by a test instead of being asserted in a comment.
   on its own, but the two budgets together still exceed it; tightening either
   one is a request-owner decision.
 
+### Cold digikey vs a rejected token (DIG-4424)
+
+The exchange returns a **discriminated outcome**, not one `null`:
+
+| outcome | when | error raised | answer on the wire |
+|---|---|---|---|
+| `ok` | digikey issued a token | — | the request continues |
+| `rejected` | digikey answered and refused: a non-transient status (401/403/400/422), a 200 with no usable `access_token`, or a 200 with a body that is not a token payload | `DigigraphUpstreamAuthError` | chat route: `502 {"error":"upstream_auth",…}` — "digikey rejected the bff_session exchange (answered 401). Check DIGIKEY_BFF_TOKEN and digikey configuration." · decision route: `401 {"error":"upstream_auth_failed",…}` |
+| `not_configured` | digikey answered that its own side has no `bff_session` grant: `503 {"detail":"bff_session grant not configured (DIGIKEY_BFF_TOKEN)"}` | `DigigraphUpstreamAuthError` | same as `rejected` — the copy on the digichat side is not the one that is wrong, so the message says "digikey has no DIGIKEY_BFF_TOKEN configured (the bff_session grant is not set on the digikey side). Check the digikey side, not only the digichat copy." |
+| `unreachable` | digikey never answered usefully: every attempt errored or timed out, or the retries were used up on transient statuses (7 attempts over ~56 s, or the 100 s budget) | `DigigraphUpstreamUnavailableError` | chat route and decision route: `503 {"error":"upstream_unavailable",…}` with `Retry-After: 5` — "digikey did not answer the bff_session exchange — it is cold or unreachable (last answer: 503). This is not a DIGIKEY_BFF_TOKEN problem; retry in a few seconds." |
+
+Before this, every failure returned `null` and every one surfaced as `502
+upstream_auth` with the message "digikey bff_session exchange failed (check
+DIGIKEY_BFF_TOKEN and digikey configuration)." A cold digikey therefore read as
+a token problem, and a genuine one-sided rotation read as a cold dependency.
+The failures need different answers — a rejected token is a configuration
+problem an operator must fix, a cold digikey clears on a retry — so they are
+separate statuses and separate messages now.
+
+`not_configured` is a third case, not a flavour of `rejected`: digikey answers
+`503` for it, the same status a waking stack container answers with, so the
+body is read to tell the two apart. It is permanent: no retry and no wait
+installs the missing secret, and the secret that is missing is the one on the
+digikey side.
+
+Where the distinction lands:
+
+- The chat route (`src/app/api/chat/route.ts`) answers
+  `DigigraphUpstreamUnavailableError` with `503` and
+  `Retry-After: DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS` (5 s).
+- The decision route (`src/app/api/chat/approve/route.ts`) answers it the same
+  way, so a cold digikey is never reported as `401 upstream_auth_failed`.
+- The chat route releases the run lock with `forgetRunId` on this path: the
+  request failed before it produced a turn, and the client replays the same
+  `X-Digi-Run-Id` when it obeys the `Retry-After`, so the run id must not
+  refuse that retry with `409 run_id_replay`.
+- The browser retry path (`src/lib/warmup-gate.ts`) lists
+  `upstream_unavailable` as transient, so the cold case keeps the client-side
+  retry it had while the answer was `upstream_auth`.
+- The embed error surface (`src/lib/embed-chat-error.ts`) lists
+  `upstream_unavailable` as an upstream failure, so it is shown as an
+  infrastructure problem and not as a BYOK prompt.
+
+The `Retry-After` value matches the stack Worker’s own
+`CONTAINER_RETRY_AFTER_SECONDS` and the digichat Worker’s
+`RETRY_AFTER_SECONDS`: one cold-start window for the whole chain.
+
 Coverage: `src/lib/digikey-exchange.test.ts` drives a transient status, each
-arm of the transient set, a 4xx, a thrown attempt and an abort, and pins the
-attempt count, the timer cleanup, the schedule and the stated budget.
+arm of the transient set, a 4xx, a 200 without a token, a 200 with a body that
+is not JSON, a 503 that says the grant is not configured, a 503 that is a
+booting container, a thrown attempt and an abort, and pins the attempt count,
+the timer cleanup, the schedule and the stated budget.
+`src/lib/warmup-gate.test.ts` pins that both the cold body and the refused
+body are retried on the client.
 
 ### Drizzle migration approach
 
@@ -1431,7 +1484,7 @@ is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trus
 mutate language/model/effort/search-engine/MCP. `session_toggle_tool` does not flip a tool;
 it answers "Tools are changed in /tools." `session_upsert_mcp` cannot plant a new session URL
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
-`X-Digi-Effort` (low/medium/high) is forwarded to digigraph. `X-Digi-Search-Engine`
+`X-Digi-Effort` (low/medium/high) is forwarded to digigraph, which passes it to digillm as the model's `reasoning_effort` where the level is configurable; Foundry backends get it as Responses `reasoning.effort` (dropped for the turn if the agent refuses it). With no /effort the model keeps its default level, except DeepSeek V4.1 Flash 1017, which only reasons when asked and so gets `medium`. `X-Digi-Search-Engine`
 (auto/internal/exa/tavily/parallel/firecrawl/tinyfish) is forwarded with it: effective
 engine is the user pref, else the tenant `gate.searchEngine` default. An unset pref
 sends nothing (follow-tenant); an explicit `auto` is sent literally by the browser
@@ -1995,7 +2048,7 @@ part-driven vs chrome-driven is indexed in digiweb
 | `chrome.defaultLanguage` | curated codes (`languages.ts`) | Seeds the stock language picker |
 | `chrome.transcript.userAlign` | `right \| left` | Stock web default `right` |
 | `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant \| digichat` | The 11 assistant-ui catalog template ids plus first-party `digichat`. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. Catalog / third-party default remains `base`. Unset `skin` on digithings.ai / OCC hosts (and slugs `digithings`, `digithings-ai`, `occ`) defaults to `digichat` so production `DIGICHAT_EMBED_TENANTS` without `skin` still mounts DigichatThread. |
-| `models.default` / `models.available` / `models.allowPicker` / `models.catalog` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`). A `preset:<id>` token resolves to the catalog model before that check. Empty `available` = no restriction. `catalog: true` fills `available`, `default`, and `picker` from `config/model-picker-catalog.json` using the newest generation of each family, then the deployment's price cap, presets, and `showFullList`. A Premium group holds models above the standard cap and at or under `premiumCapUsdPerMillion` (catalog default $2.50). Presets and the router skip that group. `models.costPerWindow` meters premium picks in USD per rolling window. The trace path records that charge in a `finally` block, including when the visitor disconnects after the answer. digithings.ai sets $0.0125565 per day. A model outside the premium picker group is not metered (known limit). A spent window answers with the Auto preset (1017); the notice names Auto, including when `models.default` is a different id. OCC sets no `costPerWindow` and no token budget (Chris, 21 Oct 2026, 22:51 Rome: the invite link is the gate). The #6182 tool-call cap and answer guard stay on OCC; they are stability guardrails, not token limits. OCC `models.occPicker` is on for 2.6.6 after Chris's sign-off (21 Oct 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488 lock". The flag stays the off switch. Tool and MCP locks (`lockSessionControls`) are unchanged. digithings.ai and the OCC embed set the catalog policy (default DeepSeek V4.1 Flash 1017, Reasoning GLM 5.3 Flash). The dashboard keeps an explicit three-slug list. Foundry backends publish no house catalog. OpenRouter appears only as the Router preset when `OPENROUTER_API_KEY` is set at load, never as `:free` rows. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
+| `models.default` / `models.available` / `models.allowPicker` / `models.catalog` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`). A `preset:<id>` token resolves to the catalog model before that check. Empty `available` = no restriction. The effective list is the merged deployment list: the tenant's curated list when it has one, else the deployment's (DIG-4589). On the embed surface the request's tenant carries that merged list, so the allowlist and the session lock come from one artefact; on the session surface the deployment config decides. `catalog: true` fills `available`, `default`, and `picker` from `config/model-picker-catalog.json` using the newest generation of each family, then the deployment's price cap, presets, and `showFullList`. A Premium group holds models above the standard cap and at or under `premiumCapUsdPerMillion` (catalog default $2.50). Presets and the router skip that group. `models.costPerWindow` meters premium picks in USD per rolling window. The trace path records that charge in a `finally` block, including when the visitor disconnects after the answer. digithings.ai sets $0.0125565 per day. A model outside the premium picker group is not metered (known limit). A spent window answers with the Auto preset (1017); the notice names Auto, including when `models.default` is a different id. OCC sets no `costPerWindow` and no token budget (Chris, 21 Oct 2026, 22:51 Rome: the invite link is the gate). The #6182 tool-call cap and answer guard stay on OCC; they are stability guardrails, not token limits. OCC `models.occPicker` is on for 2.6.6 after Chris's sign-off (21 Oct 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488 lock". The flag stays the off switch. Tool and MCP locks (`lockSessionControls`) are unchanged. digithings.ai and the OCC embed set the catalog policy (default DeepSeek V4.1 Flash 1017, Reasoning GLM 5.3 Flash). The dashboard keeps an explicit three-slug list. Foundry backends publish no house catalog. OpenRouter appears only as the Router preset when `OPENROUTER_API_KEY` is set at load, never as `:free` rows. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
 | `features.attachments` | bool | Default **true** (composer attach). Product / DataTap / dashboard YAML set false. |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |
@@ -2111,6 +2164,38 @@ until dogfood cutover. Tenants JSON may also set `"skin": "chatgpt"`. First-part
 hosts (`digithings.ai`, `www.digithings.ai`, `occ.digithings.ai`) default omitted
 `skin` to `digichat` — live wrangler JSON that never set `skin` must not fall
 through to catalog `base`.
+
+**Tenants merge, one source (DIG-4589):** when a host exists in BOTH the
+deployment config and the `DIGICHAT_EMBED_TENANTS` registry, the loader merges
+them once, so the request path reads one artefact. The merge key is the
+**normalised** host (bare host / origin / host:port) - the same normalisation
+`matchHostDeployment` uses - so a config key written as an origin merges with
+the registry key for the same host instead of leaving two entries for one host
+and a lookup that returns the registry-only duplicate.
+`gate.lockSessionControls` is true when **either** source says true - a lock is
+a restriction, so the merge never drops one. `models.available` is the tenant's
+curated list when it is non-empty, else the deployment's list; `models.default`
+and `models.allowPicker` follow the same precedence. **A tenant list and a catalog
+policy are mutually exclusive**: when the tenant curates a list the merge drops the
+deployment's `models.catalog`, because `applyModelCatalog` lets the catalog win
+over a hand list ("the hand list is ignored") and pins the tenant's `default`
+against a catalog that does not know it, which throws. The tenant's curation is
+the more specific statement, and it is the same precedence
+`withProductPickerDefaults` gives a hand-written list. The deployment's own
+`models` fields are carried over, so a field added to `ModelsSchema` later is
+not dropped by the merge. `gate.requiredPlanTier` keeps its own rule (#3662).
+The client projection merges nothing: it consumes the already merged artefact
+(`embed.models?.available ?? base.models.available`).
+
+**One artefact per surface (DIG-4589):** on the embed surface the request's
+tenant decides BOTH the session lock and the model allowlist. In production the
+tenant is `deploymentToEmbedTenant(matchHostDeployment(host, config))` - the
+projection of the merged host deployment - so it carries the merged lock and the
+merged model list, and the two can never disagree. The route never reads the
+tenant registry directly. On the authenticated session surface there is no
+tenant: the deployment config alone decides the allowlist (`dep.models`), and
+the lock does not apply there - it is an embed-tenant control (DIG-1210), not
+a session gate.
 
 **Client projection:** `toDigichatClientConfig` / `GET /api/deploy/chrome` strip
 tokens, Foundry endpoints, MCP URLs, and consume URLs. Widget.js and the

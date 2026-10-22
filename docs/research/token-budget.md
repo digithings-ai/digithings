@@ -235,7 +235,8 @@ third) time per call:
   #4609 keeps the cached copy and drops the two uncached copies.
 
 **Measured effect** (`tests/dq/research/test_context_diet.py`,
-`tests/dq/dashboard/test_context_compiler.py`, both pin the exact sizes below).
+`tests/dq/dashboard/test_context_compiler_wiring.py`, both pin the exact sizes
+below).
 The digest stitcher's uncached `phase_inputs` falls **18,643 → 1,587 bytes
 (−17,056, −91%)**; the shadow-blob drop removes the serialized capsule +
 manifest from the deliberation (H6) uncached block (**2,785 → 1,219 bytes,

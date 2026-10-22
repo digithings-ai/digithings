@@ -33,7 +33,12 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATION_PATH = (
-    REPO_ROOT / "digiquant" / "supabase" / "migrations" / "058_portfolio_metrics_percent_scale.sql"
+    REPO_ROOT
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "prod"
+    / "058_portfolio_metrics_percent_scale.sql"
 )
 RESEARCH_SCRIPTS = REPO_ROOT / "digiquant" / "scripts" / "research"
 
