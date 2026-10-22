@@ -318,7 +318,7 @@ It returns exactly two files.
 `environment: production` (DIG-3129 moved the cron lane off a push on `develop`
 and off the ungated `cron` environment).
 
-### 2. A build check that deploys nothing (`build-cloudflare-workers.yml`)
+### 2. A build check that deploys nothing (`.github/workflows/ci.yml`, job `worker-build`)
 
 `wrangler deploy --dry-run --containers-rollout=none`, `pull_request` only, **no `push`
 trigger**, `permissions: contents: read`, and a test asserting no `secrets.` string is in
