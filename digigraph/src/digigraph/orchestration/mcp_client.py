@@ -928,8 +928,7 @@ def mcp_server_failures(servers: list[dict[str, str]]) -> dict[str, str]:
     return out
 
 
-def resolve_remote_tool_name(
-server_id: str, offered: str, raw_names: list[str]) -> str | None:
+def resolve_remote_tool_name(server_id: str, offered: str, raw_names: list[str]) -> str | None:
     """Recover the advertised name behind ``offered``; ``None`` when not unique.
 
     ``offered`` is the whole name the model chose, server prefix included --
