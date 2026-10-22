@@ -77,8 +77,14 @@ PAUSE = f"{HOME}/.config/digithings/state/worktree-pause"
 # and is queued; a head whose holder is alive is left alone.
 CLAIMS = f"{HOME}/.config/digithings/state/local-ci-claims"
 # A `pending` row with no ledger entry - posted by a runner that predates the
-# ledger - is given this long before it is treated as lost.
+# ledger, or by the CI container, which keeps its own state directory - is given
+# this long before it is treated as lost.
 CLAIM_STALE_SECS = 3600
+# A claim held for longer than this is void: the tick lock is honoured for two
+# hours and then taken over, so a claim that outlives the lock names a run
+# that is no longer the run the queue is waiting for. A run that legitimately
+# takes longer than this is hung, and a hung run owes the head a receipt.
+CLAIM_MAX_SECS = 7200
 # The runner keeps its own checkout on origin/develop (DIG-5135). The refresh
 # is throttled so a tick every three minutes does not fetch every three
 # minutes, and it is never applied to a linked worktree: that is somebody
@@ -412,6 +418,10 @@ def app_status(sha, fields):
     only identity allowed to post this one. A token that is not an app
     installation token is refused the same way, because it would post the row
     under the wrong identity (DIG-4809).
+
+    True when the row is in, False when the post was refused, None when there
+    is no token to post it with. A row that was refused is a head that is not
+    receipted on both contexts, and the caller keeps the claim.
     """
     tok = app_token()
     if not tok:
@@ -419,7 +429,7 @@ def app_status(sha, fields):
             log_soft("app status: skipped, the token is not an app installation token")
         else:
             log_soft("app status: skipped, no app token")
-        return False
+        return None
     env = dict(ENV)
     env["GH_TOKEN"] = tok
     env["GITHUB_TOKEN"] = tok
@@ -453,7 +463,12 @@ def status(sha, state, desc, app=True):
             log_soft(f"local-ci status: {state} was refused, {APP_CTX} not posted")
         return False
     if app:
-        app_status(sha, fields)
+        if app_status(sha, fields) is False:
+            # The app row was refused, so the head is not receipted on both
+            # contexts. The caller keeps the claim and the queue gives the head
+            # its receipt again instead of waiting for a row that never came.
+            log_soft(f"local-ci status: {state} is in, {APP_CTX} was refused")
+            return False
     return True
 
 
@@ -474,12 +489,18 @@ def review_ci_status(sha):
     return last.get("state"), last.get("description") or "", last.get("createdAt", last.get("created_at", "")) or ""
 
 
-def _status_age_secs(created_at):
+def _status_age_secs_or_none(created_at):
+    """Age of a status row in seconds, or None when the row says nothing about it."""
     try:
         ts = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
         return (datetime.now(timezone.utc) - ts).total_seconds()
     except (ValueError, TypeError):
-        return float("inf")
+        return None
+
+
+def _status_age_secs(created_at):
+    age = _status_age_secs_or_none(created_at)
+    return float("inf") if age is None else age
 
 
 def is_promotion_pr(pr):
@@ -936,8 +957,15 @@ def skip_reason():
     return None
 
 def claim_path(sha):
-    """The ledger file that names the holder of a head's claim."""
-    return os.path.join(CLAIMS, sha)
+    """The ledger file that names the holder of a head's claim.
+
+    The name is the head's sha and nothing else. A name that is not a sha
+    would write outside the ledger, so it is refused rather than repaired.
+    """
+    name = str(sha or "")
+    if not re.fullmatch(r"[0-9a-f]{40}", name):
+        return None
+    return os.path.join(CLAIMS, name)
 
 
 def pid_alive(pid):
@@ -953,42 +981,110 @@ def pid_alive(pid):
     return True
 
 
+def claim_record(sha):
+    """The ledger entry for this head, or None when there is none to read."""
+    path = claim_path(sha)
+    if not path:
+        return None
+    try:
+        with open(path) as f:
+            data = json.loads(f.read() or "{}")
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def claim_state(sha):
     """'live' when a running process holds the claim, 'dead' when the holder is
     gone, 'none' when no claim was ever written for this head."""
-    try:
-        with open(claim_path(sha)) as f:
-            data = json.loads(f.read() or "{}")
-    except (OSError, ValueError):
-        return "none", None
-    pid = data.get("pid") if isinstance(data, dict) else None
+    rec = claim_record(sha)
+    pid = rec.get("pid") if rec else None
     if not isinstance(pid, int):
         return "none", None
     return ("live" if pid_alive(pid) else "dead"), pid
+
+
+def claim_age(sha):
+    """How long the claim has been held, in seconds, or None when it says
+    nothing about that."""
+    rec = claim_record(sha)
+    started = rec.get("started") if rec else None
+    if not isinstance(started, (int, float)):
+        return None
+    return time.time() - float(started)
+
+
+def holder_is_the_run(sha, pid):
+    """True when the pid that holds the claim is the run that wrote it.
+
+    A pid is reused: a claim left behind by a killed run names a pid the
+    kernel may hand to an unrelated process later, and that process is not the
+    run that was checking the head. The claim carries the moment it was
+    written and the process carries the moment it started, so the two answer
+    the question. When the answer cannot be read the claim is taken at its
+    word: a head is recovered when the run is known to be gone, not when the
+    answer is missing.
+    """
+    rec = claim_record(sha)
+    started = rec.get("started") if rec else None
+    if not isinstance(started, (int, float)) or not pid:
+        return True
+    try:
+        out = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return True
+    if not (out or "").strip():
+        return True
+    try:
+        # `ps` prints the start in local time, so the local zone is what the
+        # timestamp is read in.
+        started_at = datetime.strptime(out.strip(), "%a %b %d %H:%M:%S %Y").astimezone().timestamp()
+    except ValueError:
+        return True
+    return started_at <= float(started) + 60
 
 
 def write_claim(sha, pr_number):
     """Record this process as the holder of the head's claim.
 
     The claim is taken before the `pending` row goes out. A run that dies
-    between the two leaves a ledger entry and no row, which is harmless: the
-    head has no row and is queued anyway. A run that dies after the row leaves
-    an entry whose holder is gone, and that is what the queue reads to give
-    the head its receipt again (DIG-5135).
+    between the two leaves a ledger entry and no row, which the queue reads as
+    a head in flight. A run that dies after the row leaves an entry whose
+    holder is gone, and that is what the queue reads to give the head its
+    receipt again (DIG-5135).
+
+    The entry is written to a temporary name and moved into place, so a run
+    that dies mid-write leaves no half-written claim, and a name that is a
+    symlink is replaced rather than followed.
     """
+    path = claim_path(sha)
+    if not path:
+        log(f"claim: {str(sha)[:12]} is not a head sha; no claim is recorded")
+        return
+    tmp = f"{path}.{os.getpid()}.tmp"
     try:
         os.makedirs(CLAIMS, exist_ok=True)
-        with open(claim_path(sha), "w") as f:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w") as f:
             f.write(json.dumps({"pid": os.getpid(), "pr": pr_number,
                                 "started": time.time()}))
+        os.replace(tmp, path)
     except OSError as e:
         log(f"claim: could not record the holder of {sha[:12]}: {e}")
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 def clear_claim(sha):
     """Release a claim. Only called once the head carries its verdict."""
+    path = claim_path(sha)
+    if not path:
+        return
     try:
-        os.remove(claim_path(sha))
+        os.remove(path)
     except OSError:
         pass
 
@@ -996,20 +1092,31 @@ def clear_claim(sha):
 def claim_is_lost(sha, created_at):
     """True when the `pending` row on this head belongs to a run that is gone.
 
-    The holder is named in the ledger: a holder that is gone means the run
-    died, so the receipt is owed again. A row with no ledger entry - posted by
-    a runner that predates the ledger - is treated the same way once it is
-    older than the stale window. A live holder is in flight, and so is a young
-    row nobody has claimed.
+    The holder is named in the ledger. A holder that is alive is in flight and
+    the head is left alone - an old row does not take a running head away. A
+    holder that is gone means the run died, so the receipt is owed again. A
+    claim held past the life of the tick lock names a run the queue is no
+    longer waiting for. A row with no ledger entry - posted by a runner that
+    predates the ledger, or by the CI container, which keeps its own state
+    directory - is treated the same way once it is older than the stale
+    window.
     """
-    state, _pid = claim_state(sha)
+    state, pid = claim_state(sha)
+    if state == "live":
+        age = claim_age(sha)
+        if age is not None and age >= CLAIM_MAX_SECS:
+            return True
+        return not holder_is_the_run(sha, pid)
     if state == "dead":
         return True
-    return _status_age_secs(created_at) >= CLAIM_STALE_SECS
+    age = _status_age_secs_or_none(created_at)
+    if age is None:
+        return False        # an unreadable timestamp is not an old one
+    return age >= CLAIM_STALE_SECS
 
 
 def prune_claims():
-    """Drop ledger entries whose holder is gone and that nothing touched for a day."""
+    """Drop ledger entries nobody holds any more and that nothing touched for a day."""
     try:
         names = os.listdir(CLAIMS)
     except OSError:
@@ -1022,11 +1129,24 @@ def prune_claims():
         except OSError:
             continue
         state, _pid = claim_state(name)
-        if state == "dead":
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+        if state == "live":
+            continue
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _touch_refresh_state():
+    """Remember that a refresh was attempted, so the next one waits its turn."""
+    try:
+        os.makedirs(os.path.dirname(REFRESH_STATE), exist_ok=True)
+        tmp = f"{REFRESH_STATE}.{os.getpid()}.tmp"
+        with open(tmp, "w") as f:
+            f.write(str(time.time()))
+        os.replace(tmp, REFRESH_STATE)
+    except OSError:
+        pass
 
 
 def refresh_checkout():
@@ -1037,31 +1157,41 @@ def refresh_checkout():
     reach the daemon once the daemon's checkout carries them (DIG-5135).
 
     The refresh is deliberately narrow. It never touches a linked worktree -
-    that is somebody else's checkout - and it only fast-forwards: a checkout
-    with local commits, or with uncommitted work, is left exactly as it is.
+    that is somebody else's checkout - and it only ever fast-forwards the
+    `develop` branch of a clone. A checkout on another branch is left alone,
+    a checkout with local commits is left alone, and a checkout whose dirty
+    files the incoming commits touch is left alone.
     """
-    if not os.path.isdir(os.path.join(MAIN, ".git")):
-        return          # a linked worktree: not ours to move
     try:
         age = time.time() - os.path.getmtime(REFRESH_STATE)
     except OSError:
         age = REFRESH_MIN_SECS
     if age < REFRESH_MIN_SECS:
         return
-    try:
-        os.makedirs(os.path.dirname(REFRESH_STATE), exist_ok=True)
-        with open(REFRESH_STATE, "w") as f:
-            f.write(str(time.time()))
-    except OSError:
-        pass
-    rc, _out = sh(["git", "-C", MAIN, "fetch", "-q", "origin", "develop"])
+    if not os.path.isdir(os.path.join(MAIN, ".git")):
+        # A linked worktree is not ours to move. The runner keeps running the
+        # commit it was installed on until the daemon is installed on a
+        # dedicated clone, and that is worth saying out loud.
+        log("refresh: the runner checkout is not a clone; it is left alone and the "
+            "runner keeps running the commit it was installed on")
+        _touch_refresh_state()
+        return
+    rc, out = sh(["git", "-C", MAIN, "rev-parse", "--abbrev-ref", "HEAD"], timeout=60)
+    branch = (out or "").strip()
+    if rc != 0 or branch != "develop":
+        log(f"refresh: the runner checkout is on '{branch or 'an unknown branch'}', "
+            "not develop; it is left alone")
+        _touch_refresh_state()
+        return
+    rc, _out = sh(["git", "-C", MAIN, "fetch", "-q", "origin", "develop"], timeout=600)
     if rc != 0:
         log(f"refresh: fetch failed (rc={rc}); the runner keeps its checkout")
         return
-    rc, _out = sh(["git", "-C", MAIN, "merge", "--ff-only", "--quiet", "FETCH_HEAD"])
+    rc, _out = sh(["git", "-C", MAIN, "merge", "--ff-only", "--quiet", "FETCH_HEAD"], timeout=600)
     if rc != 0:
         log("refresh: the checkout does not fast-forward to origin/develop; it is left alone")
         return
+    _touch_refresh_state()
     log("refresh: the runner checkout is at origin/develop")
 
 
@@ -1087,22 +1217,34 @@ def ci_status(sha):
 def pending(prs, forks):
     """Open PRs still needing a check, oldest first.
 
-    The order is the fairness rule (DIG-5135): the head that has waited
-    longest is served first. The queue used to be newest-first, so a PR that
+    The order is the fairness rule (DIG-5135): the pull request that arrived
+    first is served first. The queue used to be newest-first, so a PR that
     arrived early sat behind every later arrival and, with the producer
-    frozen, could wait for days for a required check.
+    frozen, could wait for days for a required check. The order is by arrival
+    and not by last activity: a pull request that is commented on is not
+    pushed back to the end of the queue.
 
     A head is queued when it carries no `local-ci` row, when its only row is a
     re-checkable skip (DIG-3706), when its row is a gitleaks failure worth one
     more try, or when its `pending` row belongs to a run that is gone: the
     claim ledger names the holder, and a holder that is dead means the receipt
     is owed again.
+
+    A head whose claim is held by a living run is left alone: it is not
+    queued, not skipped, and its claim is not released. The run that took the
+    claim releases it when the verdict is in.
     """
     out = []
     for p in prs:
         if bool(p["isCrossRepository"]) == forks:
             sha = p["headRefOid"]
             st, desc, created = ci_status_row(sha)
+            state, _pid = claim_state(sha)
+            if state == "live" and not claim_is_lost(sha, created):
+                # A run is checking this head right now. A claim that is live
+                # but lost - held past the life of the lock, or naming a pid
+                # the kernel has handed to somebody else - is not in flight.
+                continue
             # A gitleaks-only failure is re-queued once. The shallow clone was
             # scanning commits already on the base. A second failure stays put.
             retry = (st == "failure" and (desc or "").startswith("local-ci failed: gitleaks")
@@ -1113,7 +1255,8 @@ def pending(prs, forks):
                 clear_claim(sha)
             if st is None or (desc or "").startswith(SKIP_PREFIX) or retry or lost:
                 out.append(p)
-    out.sort(key=lambda p: (p.get("updatedAt") or "", p.get("number") or 0))
+    out.sort(key=lambda p: (p.get("createdAt") or p.get("updatedAt") or "",
+                             p.get("number") or 0))
     return out
 
 def lock_holder_alive():
@@ -1156,7 +1299,7 @@ def release_lock():
 
 def list_prs(base):
     o = gh("pr", "list", "-R", REPO, "--base", base, "--state", "open", "--limit", "200",
-           "--json", "number,headRefOid,headRefName,baseRefName,title,isCrossRepository,updatedAt")
+           "--json", "number,headRefOid,headRefName,baseRefName,title,isCrossRepository,createdAt,updatedAt")
     try: return json.loads(o or "[]")
     except ValueError: return []
 

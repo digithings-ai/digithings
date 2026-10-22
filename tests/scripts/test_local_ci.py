@@ -1517,10 +1517,11 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
                 "created_at": ts.strftime("%Y-%m-%dT%H:%M:%SZ")}
 
     def _pr(self, number=6252, sha="aa11bb22cc33dd44ee55ff6677889900aabbccdd",
-            updated="2026-10-20T10:00:00Z"):
+            updated="2026-10-20T10:00:00Z", created=None):
         return {"number": number, "headRefOid": sha, "headRefName": f"feat/{number}",
                 "baseRefName": "develop", "title": "fix(x): something",
-                "isCrossRepository": False, "updatedAt": updated}
+                "isCrossRepository": False, "updatedAt": updated,
+                "createdAt": created or updated}
 
     def _dead_pid(self):
         """A pid that is certainly gone: a process we started and reaped."""
@@ -1528,10 +1529,11 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         p.wait()
         return p.pid
 
-    def _write_claim(self, sha, pid, pr=6252):
+    def _write_claim(self, sha, pid, pr=6252, started=None):
         os.makedirs(_mod.CLAIMS, exist_ok=True)
         with open(os.path.join(_mod.CLAIMS, sha), "w") as f:
-            f.write(json.dumps({"pid": pid, "pr": pr, "started": time.time()}))
+            f.write(json.dumps({"pid": pid, "pr": pr,
+                                "started": time.time() if started is None else started}))
 
     # --- the queue ---------------------------------------------------------
 
@@ -1544,9 +1546,16 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
                          "a claim whose holder is gone must be queued again")
 
     def test_a_pending_row_whose_holder_is_alive_is_left_alone(self):
-        """The run is still working on it: a second run would collide."""
+        """The run is still working on it: a second run would collide.
+
+        The row is older than the stale window on purpose. A row that is young
+        would pass on the age rule alone, and the test would not pin the thing
+        it names: a living holder keeps its head whatever age the row carries.
+        """
         pr = self._pr()
-        self.rows[pr["headRefOid"]] = [self._row("pending", "local-ci running on Chris's Mac")]
+        self.rows[pr["headRefOid"]] = [
+            self._row("pending", "local-ci running on Chris's Mac",
+                      age_secs=_mod.CLAIM_STALE_SECS + 600)]
         _mod.write_claim(pr["headRefOid"], pr["number"])
         self.assertEqual(_mod.pending([pr], False), [],
                          "a claim whose holder is alive must not be queued again")
@@ -1631,3 +1640,210 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         self._run_process(pr, verdict_posts=False)
         self.assertTrue(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
                         "a verdict that could not be posted must leave the claim in place")
+
+    # --- the ledger, in detail ----------------------------------------------
+
+    def test_a_live_holder_keeps_its_head_however_old_the_row_is(self):
+        """A run that takes longer than the stale window is still in flight."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [
+            self._row("pending", "local-ci running on Chris's Mac",
+                      age_secs=_mod.CLAIM_STALE_SECS + 600)]
+        _mod.write_claim(pr["headRefOid"], pr["number"])
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a living holder keeps its head, whatever age the row carries")
+
+    def test_a_live_claim_with_no_row_at_all_is_left_alone(self):
+        """The row never went out: the run is still working on the head."""
+        pr = self._pr()
+        _mod.write_claim(pr["headRefOid"], pr["number"])
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a head whose claim is held by a living run is not queued")
+
+    def test_a_claim_older_than_the_lock_life_is_lost(self):
+        """A claim held past the tick lock's life names a run nobody waits for."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("pending", "local-ci running on Chris's Mac")]
+        self._write_claim(pr["headRefOid"], os.getpid(),
+                          started=time.time() - _mod.CLAIM_MAX_SECS - 60)
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a claim past the lock's life is lost")
+
+    def test_a_claim_whose_pid_was_reused_is_lost(self):
+        """The pid the claim names belongs to another process now."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("pending", "local-ci running on Chris's Mac")]
+        p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        try:
+            time.sleep(1.2)      # let the process show up in the process table
+            # The claim was written before this process started: the pid was reused.
+            self._write_claim(pr["headRefOid"], p.pid, started=time.time() - 600)
+            self.assertEqual([q["number"] for q in _mod.pending([pr], False)], [pr["number"]],
+                             "a claim whose pid was reused must not hold the head")
+        finally:
+            p.kill()
+            p.wait()
+
+    def test_a_terminal_verdict_does_not_release_a_live_claim(self):
+        """The queue is not the owner of the claim and must not release it."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)")]
+        _mod.write_claim(pr["headRefOid"], pr["number"])
+        _mod.pending([pr], False)
+        self.assertTrue(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
+                        "the claim of a living run is not the queue's to release")
+
+    def test_a_spent_claim_is_released_when_the_verdict_is_in(self):
+        """The run is gone and the verdict is in: the claim is spent."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [self._row("success", "all gates passed")]
+        self._write_claim(pr["headRefOid"], self._dead_pid())
+        _mod.pending([pr], False)
+        self.assertFalse(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
+                         "a claim whose holder is gone and whose verdict is in is spent")
+
+    def test_a_row_without_a_readable_timestamp_is_not_treated_as_old(self):
+        """An unknown timestamp is not an old one: no hot loop."""
+        pr = self._pr()
+        self.rows[pr["headRefOid"]] = [{"context": _mod.CTX, "state": "pending",
+                                        "description": "local-ci running on Chris's Mac",
+                                        "created_at": None}]
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a row nobody can date is left alone")
+
+    def test_prune_claims_drops_a_dead_claim_and_keeps_a_live_one(self):
+        dead = self._pr(sha="0" * 40)["headRefOid"]
+        live = self._pr(sha="1" * 40)["headRefOid"]
+        self._write_claim(dead, self._dead_pid())
+        self._write_claim(live, os.getpid())
+        old = time.time() - 90000
+        for sha in (dead, live):
+            os.utime(os.path.join(_mod.CLAIMS, sha), (old, old))
+        _mod.prune_claims()
+        self.assertFalse(os.path.exists(os.path.join(_mod.CLAIMS, dead)),
+                         "a dead claim nothing touched for a day is dropped")
+        self.assertTrue(os.path.exists(os.path.join(_mod.CLAIMS, live)),
+                        "a live claim is never dropped")
+
+    def test_prune_claims_drops_a_claim_it_cannot_read(self):
+        """A claim file that is not JSON is not a claim anybody holds."""
+        sha = self._pr(sha="2" * 40)["headRefOid"]
+        os.makedirs(_mod.CLAIMS, exist_ok=True)
+        path = os.path.join(_mod.CLAIMS, sha)
+        with open(path, "w") as f:
+            f.write("{this is not json")
+        old = time.time() - 90000
+        os.utime(path, (old, old))
+        _mod.prune_claims()
+        self.assertFalse(os.path.exists(path),
+                         "a claim nobody can read and that nothing touched for a day is dropped")
+
+    # --- the order ----------------------------------------------------------
+
+    def test_the_queue_is_ordered_by_arrival_and_not_by_last_activity(self):
+        """A PR that is commented on is not pushed back to the end."""
+        old = self._pr(number=1, sha="0" * 40, created="2026-10-01T10:00:00Z",
+                       updated="2026-10-01T10:00:00Z")
+        new = self._pr(number=2, sha="1" * 40, created="2026-10-20T10:00:00Z",
+                       updated="2026-10-21T10:00:00Z")
+        order = [p["number"] for p in _mod.pending([new, old], False)]
+        self.assertEqual(order, [1, 2], "the order must be by arrival, not by last activity")
+
+
+class RefreshCheckoutTest(NoRealNetwork, unittest.TestCase):
+    """DIG-5135: the runner must post receipts from the code it should post them from.
+
+    The daemon runs from its own checkout. A checkout left on an old commit
+    produces old receipts, so the runner refreshes it - but only a real clone,
+    only the `develop` branch, and only when the update is a fast-forward.
+    """
+
+    def setUp(self):
+        self._isolate()
+        self._main = _mod.MAIN
+        self._refresh_state = _mod.REFRESH_STATE
+        self._sh = _mod.sh
+        _mod.MAIN = os.path.join(self._tmp, "main")
+        _mod.REFRESH_STATE = os.path.join(self._tmp, "state", "refresh")
+        self.cmds = []
+        self.results = {}
+        _mod.sh = self._fake_sh
+
+    def tearDown(self):
+        _mod.MAIN = self._main
+        _mod.REFRESH_STATE = self._refresh_state
+        _mod.sh = self._sh
+        self._unisolate()
+
+    # --- fakes -------------------------------------------------------------
+
+    def _fake_sh(self, cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
+        cmd = list(cmd)
+        self.cmds.append(cmd)
+        joined = " ".join(cmd)
+        for key, res in self.results.items():
+            if key in joined:
+                return res
+        return (0, "")
+
+    def _clone(self):
+        """A checkout that looks like a clone: `.git` is a directory."""
+        os.makedirs(os.path.join(_mod.MAIN, ".git"), exist_ok=True)
+
+    def _linked_worktree(self):
+        """A checkout that is a linked worktree: `.git` is a file."""
+        os.makedirs(_mod.MAIN, exist_ok=True)
+        with open(os.path.join(_mod.MAIN, ".git"), "w") as f:
+            f.write("gitdir: /Users/somebody/else/.git/worktrees/x\n")
+
+    def _ran(self, needle):
+        return [c for c in self.cmds if needle in " ".join(c)]
+
+    # --- the tests ----------------------------------------------------------
+
+    def test_a_linked_worktree_is_never_refreshed(self):
+        """That is somebody else's checkout: it is not ours to move."""
+        self._linked_worktree()
+        _mod.refresh_checkout()
+        self.assertEqual(self.cmds, [], "a linked worktree must not be touched at all")
+        self.assertTrue(any("not a clone" in line for line in self.log_lines),
+                        "the runner must say that it is running an old commit")
+
+    def test_a_checkout_that_is_not_on_develop_is_left_alone(self):
+        """The refresh only ever moves the develop branch."""
+        self._clone()
+        self.results["rev-parse"] = (0, "feature-x\n")
+        _mod.refresh_checkout()
+        self.assertEqual(self._ran("fetch"), [], "a checkout on another branch is not fetched")
+        self.assertTrue(any("not develop" in line for line in self.log_lines),
+                        "the runner must say that the checkout is on another branch")
+
+    def test_a_clone_on_develop_is_fast_forwarded(self):
+        """The checkout is brought to origin/develop, and the window is recorded."""
+        self._clone()
+        self.results["rev-parse"] = (0, "develop\n")
+        _mod.refresh_checkout()
+        self.assertEqual(len(self._ran("fetch")), 1, "the clone must be fetched")
+        self.assertEqual(len(self._ran("merge")), 1, "the clone must be fast-forwarded")
+        self.assertTrue(os.path.exists(_mod.REFRESH_STATE),
+                        "a successful refresh records that the next one waits its turn")
+
+    def test_a_checkout_that_does_not_fast_forward_is_left_alone(self):
+        """A local commit or an overlapping dirty file: the checkout stays."""
+        self._clone()
+        self.results["rev-parse"] = (0, "develop\n")
+        self.results["merge"] = (1, "not possible\n")
+        _mod.refresh_checkout()
+        self.assertEqual(len(self._ran("merge")), 1, "the merge must be tried")
+        self.assertFalse(os.path.exists(_mod.REFRESH_STATE),
+                         "a refused refresh must not consume the window: the next tick retries")
+
+    def test_a_fetch_that_fails_leaves_the_checkout_alone(self):
+        """No network, no update: the runner keeps the checkout it has."""
+        self._clone()
+        self.results["rev-parse"] = (0, "develop\n")
+        self.results["fetch"] = (1, "could not resolve host\n")
+        _mod.refresh_checkout()
+        self.assertEqual(self._ran("merge"), [], "a failed fetch must not merge anything")
+        self.assertFalse(os.path.exists(_mod.REFRESH_STATE),
+                         "a failed fetch must not consume the window")

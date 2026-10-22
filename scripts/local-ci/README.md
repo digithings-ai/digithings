@@ -159,9 +159,10 @@ scripts/local-ci/install.sh ~/Code/digithings
 
 ## The producer
 
-The producer of the pre-merge receipt is the launchd daemon, and the daemon
-runs from a dedicated clone of this repository on `develop` - not from a seat's
-shell, and not from a linked worktree of somebody's checkout:
+Two launchers can post the pre-merge receipt: the launchd daemon on this Mac
+and the CI container's worker. The daemon is the one that runs here, and it
+runs from a dedicated clone of this repository on `develop` - not from a
+seat's shell, and not from a linked worktree of somebody's checkout:
 
 ```
 git clone --branch develop git@github.com:digithings-ai/digithings.git ~/Code/digithings-ci
@@ -173,15 +174,18 @@ scripts/local-ci/install.sh ~/Code/digithings-ci
 works in, and a daemon that moved it would move their work with it.
 
 The daemon keeps that clone on `origin/develop` by itself. The refresh
-fast-forwards the checkout and does nothing else: a linked worktree is never
-touched, a checkout with local commits or with uncommitted work is left alone,
-and only a real clone is refreshed at all. A daemon running an old commit
-produces old receipts, so the runner refreshes the code that posts them.
+fast-forwards the checkout and does nothing else: it never touches a linked
+worktree, it only ever moves the `develop` branch, and it leaves the checkout
+alone when the update would not be a fast-forward (a local commit, or dirty
+files the incoming commits touch). A daemon running an old commit produces old
+receipts, so the runner refreshes the code that posts them.
 
 The seat-shaped install (`install.sh --allow-worktree`) is a temporary measure
 for the window in which the daemon is not running. It does produce receipts,
 but it depends on a seat's timing and it leaves the queue to whoever acts: it
-is not a receipt policy.
+is not a receipt policy. It does not refresh either, because a linked
+worktree is never refreshed: the runner keeps posting receipts from the
+commit it was installed on, and the log says so on every attempt.
 
 Two things keep a receipt from being lost when a run dies (DIG-5135):
 
@@ -189,10 +193,17 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   `pending` row, and releases it when the verdict is posted. A run that dies
   leaves the claim behind, and the next tick reads it, sees that the holder is
   gone, and queues the head again. A `pending` row is a claim, never a verdict.
-- **the fair order**: the queue is oldest first, so the head that has waited
-  longest is served first. It used to be newest first, which meant a PR that
-  arrived early waited behind every later arrival and could wait for days for
-  a required check.
+  A holder that is alive keeps its head: an old `pending` row never takes a
+  running head away, and a head whose claim is held is neither queued nor
+  skipped, and its claim is released by the run that took it, not by the
+  queue. A `pending` row with no ledger entry - posted by a runner that
+  predates the ledger, or by the CI container, which keeps its own state
+  directory - is given an hour before it is treated as lost.
+- **the fair order**: the queue is by arrival, oldest first, so the pull
+  request that arrived first is served first. It used to be newest first,
+  which meant a PR that arrived early waited behind every later arrival and
+  could wait for days for a required check. The order is by arrival and not by
+  last activity: a PR that is commented on is not pushed back to the end.
 
 ## Invariants this script is built around
 
@@ -201,8 +212,11 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
 - **A lost run is not a lost receipt.** The claim ledger names the holder of
   every head being checked, so a run that dies leaves a head that is queued
   again instead of a PR that waits for ever (DIG-5135).
-- **The oldest waiter goes first.** The queue is oldest first, so a PR that
-  arrived early is not overtaken by every later arrival (DIG-5135).
+- **The first arrival goes first.** The queue is by arrival and oldest first,
+  so a PR that arrived early is not overtaken by every later arrival
+  (DIG-5135).
+- **A running head is not taken away.** A claim held by a living run is left
+  alone, whatever age its `pending` row carries (DIG-5135).
 - **Fork code never executes here.** Fork PRs get a `failure` naming the re-push
   path a maintainer must use.
 - **Fails closed on a missing input.** If the review record or the PR body cannot
