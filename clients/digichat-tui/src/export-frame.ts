@@ -3,23 +3,22 @@
  *
  * Usage:
  *   bun src/export-frame.ts [--out <file>] [--width <cols>] [--height <rows>]
+ *                           [--captured-at <ISO-with-zone>]
  *
  * The written record is what the dashboard renders (ADR D7). The default
  * output lives with the client; the dashboard fixture copy is written by the
- * dashboard slice that mounts it.
+ * dashboard slice that mounts it (DIG-5204).
+ *
+ * `--captured-at` pins the one field that would otherwise move between two
+ * captures, so a committed fixture reproduces byte for byte.
  */
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+import { parseFlags, positiveInt, zonedIso } from "../../../packages/tui-frame/src/flags.ts";
 import { serializeRecordedFrame } from "./frame";
-import { FIXTURE_API_URL } from "./fixture-api";
 
 const HERE = import.meta.dir;
-
-// The client resolves its API base when its module is evaluated
-// (src/app.tsx:46), so the fixture URL is in the environment before the
-// client module loads — the client is imported dynamically below.
-process.env.DIGI_CHAT_URL = FIXTURE_API_URL;
 
 export const DEFAULT_OUT = resolve(HERE, "../fixtures/digichat-tui.json");
 
@@ -27,52 +26,29 @@ export type ExportArgs = {
   out: string;
   width?: number;
   height?: number;
+  capturedAt?: string;
 };
 
-function positiveInt(value: string, flag: string): number {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`${flag} needs a positive number, got "${value}"`);
-  }
-  return parsed;
-}
+const FLAGS = ["--out", "--width", "--height", "--captured-at"] as const;
 
 /** Parse the CLI arguments. Unknown flags and stray words are refused. */
 export function parseArgs(argv: string[]): ExportArgs {
-  const args: ExportArgs = { out: DEFAULT_OUT };
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const [flag, inline] = arg.startsWith("--") && arg.includes("=")
-      ? [arg.slice(0, arg.indexOf("=")), arg.slice(arg.indexOf("=") + 1)]
-      : [arg, undefined];
-    const value = () => {
-      if (inline !== undefined) return inline;
-      const next = argv[index + 1];
-      if (next === undefined || next.startsWith("--")) {
-        throw new Error(`${flag} needs a value`);
-      }
-      index += 1;
-      return next;
-    };
-    switch (flag) {
-      case "--out":
-        args.out = resolve(value());
-        break;
-      case "--width":
-        args.width = positiveInt(value(), flag);
-        break;
-      case "--height":
-        args.height = positiveInt(value(), flag);
-        break;
-      default:
-        throw new Error(`unknown flag ${arg}`);
-    }
-  }
+  const flags = parseFlags(argv, FLAGS);
+  const args: ExportArgs = {
+    out: resolve(flags.get("--out") ?? DEFAULT_OUT),
+  };
+  const width = flags.get("--width");
+  if (width !== undefined) args.width = positiveInt(width, "--width");
+  const height = flags.get("--height");
+  if (height !== undefined) args.height = positiveInt(height, "--height");
+  const capturedAt = flags.get("--captured-at");
+  if (capturedAt !== undefined) args.capturedAt = zonedIso(capturedAt, "--captured-at");
   return args;
 }
 
 export const USAGE = [
   "Usage: bun src/export-frame.ts [--out <file>] [--width <cols>] [--height <rows>]",
+  "                                  [--captured-at <ISO-with-zone>]",
   "",
   "Records the digichat chat pane with the OpenTUI captureCharFrame() harness",
   "and writes it as JSON for the dashboard preview (DIG-2698, ADR D7).",
@@ -96,6 +72,7 @@ async function main(): Promise<void> {
   const record = await captureChatThread({
     width: args.width,
     height: args.height,
+    capturedAt: args.capturedAt,
   });
   await mkdir(dirname(args.out), { recursive: true });
   await Bun.write(args.out, serializeRecordedFrame(record));

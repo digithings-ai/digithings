@@ -34,7 +34,12 @@ PIPELINE_CONFIG = REPO_ROOT / ".github" / "digiquant-pipeline.yml"
 CHAIN = REPO_ROOT / "digiquant" / "src" / "digiquant" / "portfolio" / "chain.py"
 DIAGNOSTICS = REPO_ROOT / "digiquant" / "src" / "digiquant" / "research" / "diagnostics.py"
 MIGRATION = (
-    REPO_ROOT / "digiquant" / "supabase" / "migrations" / "065_atlas_run_diagnostics_attempt.sql"
+    REPO_ROOT
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "engine"
+    / "065_atlas_run_diagnostics_attempt.sql"
 )
 
 

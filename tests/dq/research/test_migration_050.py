@@ -20,6 +20,7 @@ MIGRATION_PATH = (
     / "digiquant"
     / "supabase"
     / "migrations"
+    / "prod"
     / "050_public_portfolio_views.sql"
 )
 
