@@ -66,6 +66,35 @@ export const DIGIKEY_BFF_RETRY_DELAYS_MS = [
 export const DIGIKEY_BFF_RETRY_BUDGET_MS = 100_000;
 
 /**
+ * Why a digikey bff_session exchange failed.
+ *
+ * `rejected` — digikey answered and issued no token: the credential was
+ * refused, or the request itself was wrong. This is a configuration problem
+ * and it says so.
+ *
+ * `unreachable` — digikey never gave an answer we could use: every attempt
+ * errored, timed out, or hit a transient status while the sleep-on-idle
+ * container was waking. This is a cold dependency, and a retry fixes it.
+ *
+ * The two used to collapse into one `null`, so a cold digikey was reported as
+ * "check DIGIKEY_BFF_TOKEN" and a real one-sided rotation looked the same
+ * (DIG-4424).
+ */
+export type DigikeyBffSessionFailureReason = "rejected" | "unreachable";
+
+/**
+ * The outcome of one bff_session exchange: the token, or why there is none.
+ */
+export type DigikeyBffSessionOutcome =
+  | { ok: true; exchange: DigikeyTokenExchange }
+  | {
+      ok: false;
+      reason: DigikeyBffSessionFailureReason;
+      /** The status digikey answered with, when it answered at all. */
+      status: number | null;
+    };
+
+/**
  * OIDC-backed session exchange (digichat BFF → digikey). Requires DIGIKEY_BFF_TOKEN on digikey.
  */
 export async function exchangeDigikeyBffSession(
@@ -73,7 +102,7 @@ export async function exchangeDigikeyBffSession(
   bffToken: string,
   tenantSlug: string,
   subject: string
-): Promise<DigikeyTokenExchange | null> {
+): Promise<DigikeyBffSessionOutcome> {
   const base = digikeyBaseUrl.replace(/\/$/, "");
   // digikey runs in a sleep-on-idle container: the first call after idle can
   // 5xx / time out for ~50s while it boots. Retry transient failures with
@@ -89,6 +118,10 @@ export async function exchangeDigikeyBffSession(
   const BUDGET_MS = DIGIKEY_BFF_RETRY_BUDGET_MS;
   const delays = DIGIKEY_BFF_RETRY_DELAYS_MS;
   const startedAt = Date.now();
+  // The last transient status digikey answered with, if any. It is kept so a
+  // caller that reports "digikey never became ready" can name the status it
+  // kept answering with, without exposing the body.
+  let lastTransientStatus: number | null = null;
   for (let i = 0; i < delays.length; i++) {
     const beforeWait = BUDGET_MS - (Date.now() - startedAt);
     if (beforeWait <= 0) break;
@@ -122,13 +155,30 @@ export async function exchangeDigikeyBffSession(
     }
     if (!res) continue;
     if (res.ok) {
-      const data = (await res.json()) as TokenJson;
-      return parseTokenPayload(data);
+      let data: TokenJson;
+      try {
+        data = (await res.json()) as TokenJson;
+      } catch {
+        // digikey answered, but not with a token payload. It did answer, so
+        // this is a refusal of the request, not a cold dependency.
+        return { ok: false, reason: "rejected", status: res.status };
+      }
+      const exchange = parseTokenPayload(data);
+      if (exchange) return { ok: true, exchange };
+      // A 200 without an access_token is digikey refusing to issue one.
+      return { ok: false, reason: "rejected", status: res.status };
     }
     const transient = res.status >= 500 || res.status === 429 || res.status === 408;
-    if (!transient) return null;
+    if (!transient) {
+      // digikey answered and refused: 401/403 is a rejected token, 400 a
+      // rejected request. Neither is fixed by waiting.
+      return { ok: false, reason: "rejected", status: res.status };
+    }
+    lastTransientStatus = res.status;
   }
-  return null;
+  // The loop ran out of attempts or out of budget with no usable answer:
+  // digikey was cold, asleep, or down. Not a token problem.
+  return { ok: false, reason: "unreachable", status: lastTransientStatus };
 }
 
 export function isDigikeyApiKeyMaterial(token: string): boolean {

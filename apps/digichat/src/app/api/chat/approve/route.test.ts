@@ -17,10 +17,15 @@ vi.mock("@/lib/license/state", () => ({
 vi.mock("@/lib/digigraph-upstream", () => ({
   resolveDigigraphUpstreamAuth: vi.fn(async () => ({ bearer: "upstream-token" })),
   DigigraphUpstreamAuthError: class extends Error {},
+  DigigraphUpstreamUnavailableError: class extends Error {},
+  DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS: 5,
 }));
 
 import { requireDigiChatAuth } from "@/lib/request-auth";
-import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
+import {
+  DigigraphUpstreamUnavailableError,
+  resolveDigigraphUpstreamAuth,
+} from "@/lib/digigraph-upstream";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 
 const PENDING_ID = "a1b2c3d4e5f60718";
@@ -51,6 +56,22 @@ beforeEach(() => {
 });
 
 describe("POST /api/chat/approve", () => {
+  it("answers 503 upstream_unavailable when digikey is cold", async () => {
+    // A cold digikey is retryable, so the decision path must not report an
+    // auth failure for it (DIG-4424).
+    vi.mocked(resolveDigigraphUpstreamAuth).mockRejectedValue(
+      new DigigraphUpstreamUnavailableError(
+        "digikey did not answer the bff_session exchange (it is cold or unreachable). This is not a DIGIKEY_BFF_TOKEN problem — retry in a few seconds."
+      ) as never
+    );
+    const res = await POST(request({ pendingId: PENDING_ID, decision: "approve" }));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: "upstream_unavailable" });
+    expect(res.headers.get("retry-after")).toBe("5");
+    // Nothing was forwarded upstream: there was no upstream to forward to.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("test 4: accepts only the opaque id plus a verdict, and rejects the rest by name", async () => {
     // Positive: the allowed pair is accepted and forwarded.
     const ok = await POST(request({ pendingId: PENDING_ID, decision: "approve" }));

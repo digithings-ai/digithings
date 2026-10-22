@@ -524,7 +524,9 @@ On every `/api/chat` call:
 2. Otherwise, if `DIGIKEY_URL` and `DIGIKEY_BFF_TOKEN` are set, the BFF calls
    `POST {DIGIKEY_URL}/v1/oauth/token` with `grant_type=bff_session`, the BFF token,
    tenant slug, and OIDC subject. digikey returns a short-lived JWT scoped to that
-   tenant+subject.
+   tenant+subject. When that exchange fails, the answer names which failure it was
+   — a refused token or an unreachable digikey — see "Cold digikey vs a rejected
+   token" below.
 3. Fallback: `DIGIGRAPH_UPSTREAM_API_KEY` static bearer (bootstrap only).
 4. The resulting JWT is forwarded as `Authorization: Bearer <JWT>` to digigraph,
    along with `X-digichat-Tenant`, `X-Digi-Caller: digichat`, `X-Session-Id`,
@@ -584,7 +586,9 @@ is exported and pinned by a test instead of being asserted in a comment.
 - **What a caller sees.** The chat upstream-auth path
   (`src/lib/digigraph-upstream.ts`) calls this before digigraph, so a down
   digikey holds the chat request for up to the whole budget (~100s) and then
-  raises `DigigraphUpstreamAuthError`.
+  raises `DigigraphUpstreamUnavailableError` (cold/unreachable) or
+  `DigigraphUpstreamAuthError` (refused) — see "Cold digikey vs a rejected
+  token" below.
 - **What the budget does and does not bound.** The per-attempt abort timer
   covers the request up to the response headers: the timer is released when
   the headers arrive, so a response that then stalls its body is **not**
@@ -597,6 +601,41 @@ is exported and pinned by a test instead of being asserted in a comment.
   (`src/app/api/chat/route.ts`). The exchange no longer eats the route budget
   on its own, but the two budgets together still exceed it; tightening either
   one is a request-owner decision.
+
+### Cold digikey vs a rejected token (DIG-4424)
+
+The exchange returns a **discriminated outcome**, not one `null`:
+
+| outcome | when | error raised | answer on the wire |
+|---|---|---|---|
+| `ok` | digikey issued a token | — | the request continues |
+| `rejected` | digikey answered and refused: a non-transient status (401/403/400), or a 200 with no usable `access_token` | `DigigraphUpstreamAuthError` | `502 {"error":"upstream_auth",…}` — "digikey rejected the bff_session exchange (check DIGIKEY_BFF_TOKEN and digikey configuration)." |
+| `unreachable` | digikey never answered usefully: every attempt errored or timed out, or the retry budget was spent on transient statuses | `DigigraphUpstreamUnavailableError` | `503 {"error":"upstream_unavailable",…}` with `Retry-After: 5` — "digikey did not answer the bff_session exchange (it is cold or unreachable). This is not a DIGIKEY_BFF_TOKEN problem — retry in a few seconds." |
+
+Before this, both failures returned `null` and both surfaced as `502
+upstream_auth` with the message "check DIGIKEY_BFF_TOKEN and digikey
+configuration". A cold digikey therefore read as a token problem, and a genuine
+one-sided rotation read as a cold dependency. The two need different answers —
+a rejected token is a configuration problem an operator must fix, a cold digikey
+clears on a retry — so they are separate statuses and separate messages now.
+
+Where the distinction lands:
+
+- The chat route (`src/app/api/chat/route.ts`) answers
+  `DigigraphUpstreamUnavailableError` with `503` and
+  `Retry-After: DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS` (5 s).
+- The decision route (`src/app/api/chat/approve/route.ts`) answers it the same
+  way, so a cold digikey is never reported as `401 upstream_auth_failed`.
+- The browser retry path (`src/lib/warmup-gate.ts`) lists
+  `upstream_unavailable` as transient, so the cold case keeps the client-side
+  retry it had while the answer was `upstream_auth`.
+- The embed error surface (`src/lib/embed-chat-error.ts`) lists
+  `upstream_unavailable` as an upstream failure, so it is shown as an
+  infrastructure problem and not as a BYOK prompt.
+
+The `Retry-After` value matches the stack Worker’s own
+`CONTAINER_RETRY_AFTER_SECONDS` and the digichat Worker’s
+`RETRY_AFTER_SECONDS`: one cold-start window for the whole chain.
 
 Coverage: `src/lib/digikey-exchange.test.ts` drives a transient status, each
 arm of the transient set, a 4xx, a thrown attempt and an abort, and pins the

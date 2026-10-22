@@ -13,6 +13,25 @@ export class DigigraphUpstreamAuthError extends Error {
   }
 }
 
+/**
+ * The upstream did not answer: digikey was cold, asleep or down.
+ *
+ * It is a separate class from `DigigraphUpstreamAuthError` on purpose. The
+ * two need different answers — a rejected token is a configuration problem an
+ * operator must fix, a cold digikey is a dependency that a retry clears — and
+ * a cold digikey used to be reported as "check DIGIKEY_BFF_TOKEN", which sent
+ * the diagnosis to the wrong subsystem (DIG-4424).
+ */
+export class DigigraphUpstreamUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DigigraphUpstreamUnavailableError";
+  }
+}
+
+/** Seconds a client should wait before repeating a request that hit a cold upstream. */
+export const DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS = 5;
+
 export type DigigraphUpstreamAuth = {
   bearer: string;
   /** From digikey ``litellm_proxy_api_key`` when DIGIKEY_LITELLM_PROXY_KEY is set — forward as ``X-LiteLLM-Proxy-Key`` to digigraph. */
@@ -112,15 +131,24 @@ export async function resolveDigigraphUpstreamAuth(
     const cacheKey = `bff:${tenantSlug}:${ownerUserSub}`;
     const cached = readCache(cacheKey);
     if (cached) return cached;
-    const ex = await exchangeDigikeyBffSession(
+    const outcome = await exchangeDigikeyBffSession(
       digikeyUrl,
       bffTok,
       tenantSlug,
       ownerUserSub
     );
-    if (ex) return writeCache(cacheKey, ex);
+    if (outcome.ok) return writeCache(cacheKey, outcome.exchange);
+    if (outcome.reason === "unreachable") {
+      // digikey runs in a sleep-on-idle container: after idle the first
+      // exchange hits a waking container and every attempt fails until the
+      // retry budget is spent. That is not a credential problem, so this
+      // message must not blame DIGIKEY_BFF_TOKEN (DIG-4424).
+      throw new DigigraphUpstreamUnavailableError(
+        "digikey did not answer the bff_session exchange (it is cold or unreachable). This is not a DIGIKEY_BFF_TOKEN problem — retry in a few seconds."
+      );
+    }
     throw new DigigraphUpstreamAuthError(
-      "digikey bff_session exchange failed (check DIGIKEY_BFF_TOKEN and digikey configuration)."
+      "digikey rejected the bff_session exchange (check DIGIKEY_BFF_TOKEN and digikey configuration)."
     );
   }
 

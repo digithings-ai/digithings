@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   _resetUpstreamAuthCacheForTests,
   DigigraphUpstreamAuthError,
+  DigigraphUpstreamUnavailableError,
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
 
@@ -28,6 +29,7 @@ afterEach(() => {
   _resetUpstreamAuthCacheForTests();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   restoreEnv();
 });
 
@@ -139,5 +141,55 @@ describe("resolveDigigraphUpstreamAuth failures and fallbacks", () => {
     await expect(resolveDigigraphUpstreamAuth(req, "acme", "user-1")).rejects.toThrow(
       /Set DIGIKEY_URL \+ DIGIKEY_BFF_TOKEN/
     );
+  });
+});
+
+describe("resolveDigigraphUpstreamAuth bff_session failure reasons", () => {
+  function bffEnv(): void {
+    process.env.DIGIKEY_URL = "http://127.0.0.1:8005";
+    process.env.DIGIKEY_BFF_TOKEN = "bff-test";
+    delete process.env.DIGRAPH_UPSTREAM_API_KEY;
+  }
+
+  it("raises an unavailable error, not an auth error, when digikey is cold", async () => {
+    // digikey answers with a transient status on every attempt: the container
+    // is asleep. That is a cold dependency, so the error must not blame the
+    // token and must not be an auth error (DIG-4424).
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) })
+    );
+    bffEnv();
+    const req = new Request("http://localhost/api/chat", { method: "POST" });
+
+    const settled = resolveDigigraphUpstreamAuth(req, "acme", "user-1").then(
+      () => null,
+      (e: unknown) => e
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    const err = await settled;
+
+    expect(err).toBeInstanceOf(DigigraphUpstreamUnavailableError);
+    expect(err).not.toBeInstanceOf(DigigraphUpstreamAuthError);
+    expect(String((err as Error).message)).toContain("not a DIGIKEY_BFF_TOKEN problem");
+  });
+
+  it("raises an auth error when digikey refuses the token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) })
+    );
+    bffEnv();
+    const req = new Request("http://localhost/api/chat", { method: "POST" });
+
+    const err = await resolveDigigraphUpstreamAuth(req, "acme", "user-1").then(
+      () => null,
+      (e: unknown) => e
+    );
+
+    expect(err).toBeInstanceOf(DigigraphUpstreamAuthError);
+    expect(err).not.toBeInstanceOf(DigigraphUpstreamUnavailableError);
+    expect(String((err as Error).message)).toContain("DIGIKEY_BFF_TOKEN");
   });
 });

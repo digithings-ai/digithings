@@ -69,18 +69,27 @@ Status codes are deliberate:
 The key is Worker-only (`DIGICHAT_ADMIN_KEY`); it is never forwarded into the
 container. Rotation: [SECRETS_ROTATION.md](SECRETS_ROTATION.md) §15.
 
-## Step 3 — retry the user path, expecting one possible false 502
+## Step 3 — retry the user path, expecting one possible 503
 
 The first request after a restart can answer:
 
 ```json
-{"error":"upstream_auth","message":"digikey bff_session exchange failed (check DIGIKEY_BFF_TOKEN and digikey configuration)."}
+{"error":"upstream_unavailable","message":"digikey did not answer the bff_session exchange (it is cold or unreachable). This is not a DIGIKEY_BFF_TOKEN problem — retry in a few seconds."}
 ```
 
-That message is misleading. digikey runs **inside the stack container**, which
-sleeps, so a cold digikey can fail the exchange. Retry once. If it persists, it
-really is a token problem: compare the digichat and stack copies per
-[SECRETS_ROTATION.md](SECRETS_ROTATION.md) §2.
+That is the cold-dependency case, and it is retryable: the response is `503`
+with a `Retry-After: 5` header. digikey runs **inside the stack container**,
+which sleeps, so a cold digikey fails the exchange until the container is
+awake. Retry after the `Retry-After` window.
+
+A **rejected token** answers differently — `502` with
+`{"error":"upstream_auth","message":"digikey rejected the bff_session exchange (check DIGIKEY_BFF_TOKEN and digikey configuration)."}`.
+That one is a real credential problem and a retry does not clear it: compare
+the digichat and stack copies per [SECRETS_ROTATION.md](SECRETS_ROTATION.md) §2.
+
+The two are distinct on purpose (DIG-4424): before, a cold digikey and a
+refused token both answered `502 upstream_auth` and both pointed at
+`DIGIKEY_BFF_TOKEN`, which sent the diagnosis at the wrong subsystem.
 
 ## Step 4 — fallback: move the instance id by redeploying
 

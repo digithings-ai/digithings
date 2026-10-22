@@ -71,8 +71,9 @@ describe("exchangeDigikeyApiKey", () => {
 });
 
 describe("exchangeDigikeyBffSession", () => {
-  it("returns null on failed exchange and posts bff_session grant", async () => {
-    // 400 is not transient: the exchange must give up after one attempt.
+  it("reports a rejected exchange on a non-transient status and posts the bff_session grant", async () => {
+    // 400 is not transient: the exchange must give up after one attempt, and
+    // it must say the token was refused rather than that digikey is asleep.
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 400,
@@ -82,7 +83,7 @@ describe("exchangeDigikeyBffSession", () => {
 
     await expect(
       exchangeDigikeyBffSession("http://digikey", "bff-secret", "acme", "user-1")
-    ).resolves.toBeNull();
+    ).resolves.toEqual({ ok: false, reason: "rejected", status: 400 });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
@@ -116,8 +117,8 @@ describe("exchangeDigikeyBffSession", () => {
     await expect(
       exchangeDigikeyBffSession("http://digikey", "bff", "t", "s")
     ).resolves.toEqual({
-      accessToken: "tok",
-      litellmProxyApiKey: "llmk_abc",
+      ok: true,
+      exchange: { accessToken: "tok", litellmProxyApiKey: "llmk_abc" },
     });
   });
 
@@ -138,8 +139,8 @@ describe("exchangeDigikeyBffSession", () => {
     await vi.advanceTimersByTimeAsync(10_000);
 
     await expect(p).resolves.toEqual({
-      accessToken: "tok",
-      litellmProxyApiKey: null,
+      ok: true,
+      exchange: { accessToken: "tok", litellmProxyApiKey: null },
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
@@ -161,8 +162,8 @@ describe("exchangeDigikeyBffSession", () => {
     await vi.advanceTimersByTimeAsync(10_000);
 
     await expect(p).resolves.toEqual({
-      accessToken: "tok",
-      litellmProxyApiKey: null,
+      ok: true,
+      exchange: { accessToken: "tok", litellmProxyApiKey: null },
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
@@ -186,7 +187,12 @@ describe("exchangeDigikeyBffSession", () => {
     );
     await vi.advanceTimersByTimeAsync(60_000);
 
-    await expect(p).resolves.toBeNull();
+    // Transient answers all the way through: digikey was cold, not refusing.
+    await expect(p).resolves.toEqual({
+      ok: false,
+      reason: "unreachable",
+      status: 500,
+    });
     expect(fetchMock).toHaveBeenCalledTimes(7);
     // Every attempt answered immediately, so the wall clock is the sum of the
     // backoff delays and nothing else: 56_000 ms for the seven-attempt
@@ -202,7 +208,7 @@ describe("exchangeDigikeyBffSession", () => {
     expect(DIGIKEY_BFF_ATTEMPT_TIMEOUT_MS).toBe(30_000);
   });
 
-  it("fails fast on a non-transient status without retrying", async () => {
+  it("reports a rejected token on 401 without retrying", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
@@ -214,8 +220,63 @@ describe("exchangeDigikeyBffSession", () => {
     const p = exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1");
     await vi.advanceTimersByTimeAsync(60_000);
 
-    await expect(p).resolves.toBeNull();
+    // digikey answered and refused the token: one attempt, no retry, and the
+    // reason says "rejected" so no caller blames the dependency being cold.
+    await expect(p).resolves.toEqual({
+      ok: false,
+      reason: "rejected",
+      status: 401,
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells a cold digikey apart from a rejected token", async () => {
+    // The whole point of DIG-4424: the same call, two different digikey
+    // behaviours, two different reasons. A sleeping container answers with
+    // transient statuses or no answer at all; a refused token answers 401.
+    vi.useFakeTimers();
+
+    const coldFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+    });
+    vi.stubGlobal("fetch", coldFetch);
+    const cold = exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1");
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(cold).resolves.toEqual({
+      ok: false,
+      reason: "unreachable",
+      status: 503,
+    });
+
+    const refusedFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    });
+    vi.stubGlobal("fetch", refusedFetch);
+    await expect(
+      exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1")
+    ).resolves.toEqual({ ok: false, reason: "rejected", status: 401 });
+    expect(refusedFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports an unreachable digikey when every attempt errors", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockRejectedValue(new Error("digikey unreachable"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const p = exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1");
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // No answer at all: the dependency is cold or down. There is no status
+    // to report, and the reason must not be "rejected".
+    await expect(p).resolves.toEqual({
+      ok: false,
+      reason: "unreachable",
+      status: null,
+    });
   });
 
   it("retries a thrown attempt and leaves no abort timer pending", async () => {
@@ -229,7 +290,11 @@ describe("exchangeDigikeyBffSession", () => {
     const p = exchangeDigikeyBffSession("http://digikey", "bff", "acme", "user-1");
     await vi.advanceTimersByTimeAsync(5_000);
 
-    await expect(p).resolves.toBeNull();
+    await expect(p).resolves.toEqual({
+      ok: false,
+      reason: "rejected",
+      status: 401,
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     // The per-attempt abort timer must be released on every path: an attempt
     // that rejected used to leave its 30s timer pending.
@@ -273,7 +338,11 @@ describe("exchangeDigikeyBffSession", () => {
     await vi.advanceTimersByTimeAsync(DIGIKEY_BFF_RETRY_BUDGET_MS);
     await vi.runAllTimersAsync();
 
-    await expect(p).resolves.toBeNull();
+    await expect(p).resolves.toEqual({
+      ok: false,
+      reason: "unreachable",
+      status: null,
+    });
     // Every attempt hangs until its own abort fires, so the budget is spent on
     // three attempts: 30s abort, 2s backoff, 30s abort, 4s backoff, 30s abort
     // = 96s. The fourth iteration sleeps the remaining 4s and then breaks
@@ -317,7 +386,13 @@ describe("exchangeDigikeyBffSession", () => {
     await vi.advanceTimersByTimeAsync(DIGIKEY_BFF_RETRY_BUDGET_MS + 10_000);
     await vi.runAllTimersAsync();
 
-    await expect(p).resolves.toBeNull();
+    // The transient 5xx is remembered, but the reason stays "unreachable":
+    // digikey never issued a token.
+    await expect(p).resolves.toEqual({
+      ok: false,
+      reason: "unreachable",
+      status: 500,
+    });
     // Two hung attempts (30s + 2s + 30s), one fast 5xx, then a fourth attempt
     // that starts with 26_000 ms of budget left.
     expect(fetchMock).toHaveBeenCalledTimes(4);
