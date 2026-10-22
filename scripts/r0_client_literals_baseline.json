@@ -378,7 +378,7 @@
       "ticket": "DIG-3689"
     },
     "config/contract/contract.yaml": {
-      "count": 25,
+      "count": 19,
       "ticket": "DIG-3689"
     },
     "config/contract/generated/compose.env": {
