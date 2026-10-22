@@ -761,12 +761,20 @@ pure and do not redact: the download helpers redact before they call them, so
 a caller that writes the serializer output itself must redact first.
 
 The redactor is pattern-based, so an unlabeled secret of unknown shape can
-still get through. Two delimiters end a secret value only when the value
-does not continue after them: a `)` inside a query secret belongs to the
-secret when the value continues after it (`?token=abc)def` redacts the whole
-value), and the same holds for a backtick inside a session value. A `)` that
-closes a link (`?token=abc)`) and a backtick that closes a code span
-(`session=abc``) stay outside the value, so the surrounding prose keeps its
-delimiters. A secret whose value *ends* in one of those two characters
-leaves that last character outside the match, because the character is
-ambiguous.
+still get through. Two delimiters end a secret value only when the value does
+not continue after them: a `)` inside a query secret belongs to the secret
+when the value continues after it with a character that can be part of a
+secret — a base64 or base64url character, or another delimiter — so
+`?token=abc)def` and `?token=abcdef123456)+GHIJKLMNOP` redact the whole
+value, and the same holds for a backtick inside a session value. A `)` that
+closes a link (`?token=abc)`), a full stop (`?token=abc).`) and a backtick
+that closes a code span (`session=abc``) stay outside the value, so the
+surrounding prose keeps its delimiters. Three limits follow from the
+delimiter being ambiguous: a secret whose value *ends* in one of those two
+characters leaves that last character outside the match, a word that follows
+a closing parenthesis with no space in between (`?token=abc)and more`) is
+eaten with the value, and a delimiter followed by prose punctuation
+(`?token=abc).def`) ends the value, so the text after such a delimiter is not
+redacted. The rule is deliberately biased towards the secret — a redactor that
+eats a word is a bug in every export, and a redactor that leaves a secret
+tail is a leak.

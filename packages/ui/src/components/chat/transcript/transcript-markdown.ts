@@ -209,16 +209,22 @@ export const MAILTO_TRUNCATION_NOTE = "…(truncated — download .md for full t
 export type TruncateForMailtoResult = { text: string; truncated: boolean };
 
 /**
- * Drop a redaction marker that the cut split in half (`[redac`).
+ * Move a cut back so it never lands inside a redaction marker.
  *
- * The cut backs up to the start of the marker instead, so the body never
- * shows half a marker — the truncation note already says the body is cut.
+ * The body is redacted before it is cut, so the cut can land inside a
+ * `[redacted]` marker. A marker that the cut splits is dropped whole rather
+ * than shown half-written. A marker that ends before the cut is kept, and a
+ * `[` that is the user's own text is not a marker and is left alone.
  */
-function dropSplitMarker(prefix: string): string {
+function cutOutsideMarker(body: string, cut: number): number {
   for (let len = 1; len < REDACTED.length; len += 1) {
-    if (prefix.endsWith(REDACTED.slice(0, len))) return prefix.slice(0, -len);
+    const start = cut - len;
+    if (start < 0) break;
+    const before = body.slice(start, cut);
+    const after = body.slice(cut, cut + (REDACTED.length - len));
+    if (before === REDACTED.slice(0, len) && after === REDACTED.slice(len)) return start;
   }
-  return prefix;
+  return cut;
 }
 
 /**
@@ -252,7 +258,8 @@ export function truncateForMailto(
       hi = mid - 1;
     }
   }
-  return { text: `${dropSplitMarker(body.slice(0, lo).trimEnd())}${note}`, truncated: true };
+  const cut = cutOutsideMarker(body, lo);
+  return { text: `${body.slice(0, cut).trimEnd()}${note}`, truncated: true };
 }
 
 /**
