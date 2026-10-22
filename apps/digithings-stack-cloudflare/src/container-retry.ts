@@ -34,7 +34,10 @@
 import {
   CONTAINER_EVSCITED_CODE,
   CONTAINER_FAILED_CODE,
+  CONTAINER_UNAVAILABLE_CODE,
+  classifyContainerHopFailure,
   containerRestartMessage,
+  containerUnavailableResponse,
   isContainerEvictedError,
   isContainerFailedError,
 } from "./container-errors";
@@ -88,6 +91,15 @@ export async function isContainerRecycledResponse(
 ): Promise<boolean> {
   if (response.status === 410 || response.status === 503) {
     const code = await readErrorCode(response);
+    // `container_unavailable` is NOT a recycle signal (DIG-4928): it answers a
+    // hop that rejected with a value that is not an Error, and that request is
+    // never replayed — a value that came out of the hop says nothing about
+    // whether the request reached the container, so a second attempt could
+    // submit it twice. Answered before the recycle codes, so no change of a
+    // code literal can ever make this answer replayable.
+    if (code === CONTAINER_UNAVAILABLE_CODE) {
+      return false;
+    }
     return code === CONTAINER_EVSCITED_CODE || code === CONTAINER_FAILED_CODE;
   }
   if (response.status === 500) {
@@ -103,6 +115,12 @@ export interface ContainerRetryOptions {
    * instance, and a third would only bill another cold start.
    */
   retries?: number;
+
+  /**
+   * Which container this hop serves, for the wording of the answer. Default
+   * "stack"; the reserved digiquant-mcp container passes "mcp".
+   */
+  service?: "stack" | "mcp";
 }
 
 /**
@@ -116,6 +134,10 @@ export interface ContainerRetryOptions {
  *   - a response that is neither an error nor a container code is returned
  *     untouched, after exactly ONE attempt (a served request is never
  *     re-served);
+ *   - a hop that rejected with a value that is not an Error is answered with
+ *     the retryable 503 `container_unavailable`, after exactly ONE attempt
+ *     (the value states no failure of its own, and replaying it could submit
+ *     the same request twice — see DIG-4928);
  *   - a thrown error that is not a recycle signal is re-thrown immediately —
  *     an application error inside the container must not be retried, and it
  *     must not be masked by the answer of an earlier attempt either: if the
@@ -147,6 +169,30 @@ export async function fetchWithContainerRetry(
       }
       return response;
     } catch (error) {
+      // A hop that rejected with a value that is not an Error (DIG-4928): the
+      // @cloudflare/containers package rethrows such a value verbatim from its
+      // proxy catch, so it would leave the Worker as an uncaught exception and
+      // the platform would record it as it stands — a thrown Date leaves
+      // nothing but a bare date in the log.
+      //
+      // Such a value states no failure of its own, so it is neither an
+      // eviction nor a failed container. It is answered with the retryable
+      // `container_unavailable` and it is NOT replayed: a value that came out
+      // of the hop says nothing about whether the request reached the
+      // container, so a second attempt could submit it twice. The client is
+      // told to come back instead.
+      //
+      // The classification is decided in ONE place (classifyContainerHopFailure):
+      // a value that is not an Error is read before the eviction and the
+      // failed vocabulary, whatever its text says.
+      const failure = classifyContainerHopFailure(error);
+      if (failure.kind === "unavailable") {
+        console.error(
+          "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
+          failure.description,
+        );
+        return containerUnavailableResponse(options.service ?? "stack");
+      }
       if (attemptIndex >= retries || !isContainerRecycledError(error)) {
         throw error;
       }

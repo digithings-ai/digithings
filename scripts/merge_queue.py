@@ -281,10 +281,15 @@ class Authority:
     note: str = ""
 
 
-#: The three ways the reviewer-independence gate can run. `shadow` measures what
-#: the gate would refuse and merges anyway; `enforce` refuses. DIG-4809 named the
-#: two-step rollout: 48 hours of shadow, then a separate small PR that flips the
-#: switch to `enforce`.
+#: The three ways the reviewer-independence gate can run. `off` reads no
+#: provenance at all. `shadow` and `enforce` both refuse a marker the gate
+#: dropped; `shadow` additionally records the refusal (and what the row would
+#: have said with every comment counted) in the shadow log, while `enforce`
+#: decides without it. DIG-4809 named the two-step rollout: 48 hours of shadow,
+#: then a separate small PR that flips the switch to `enforce`. The flip shipped
+#: in DIG-5220 (22 Oct 2026), and the same change closed the shadow loophole:
+#: #6277 and #6197 merged while an author-lane write-up stood in for the
+#: non-author review, because shadow merged what it had just measured.
 REVIEW_INDEPENDENCE_MODES = ("off", "shadow", "enforce")
 
 
@@ -2268,6 +2273,8 @@ def _gate_checks(pr: dict[str, Any], policy: Policy, repo: str | None = None) ->
 _MARKER_RE = re.compile(r"<!--\s*opencode-power-pack:code-review\b(?P<fields>[^>]*?)\s*-->")
 _MARKER_FIELD_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)=(?P<value>\S+)")
 _SCOPE_SHA_RE = re.compile(r"@(?P<sha>[0-9a-f]{7,40})\b")
+# The `scope=` key itself, present or not, whatever its value looks like.
+_SCOPE_KEY_RE = re.compile(r"(?:^|\s)scope\s*=", re.IGNORECASE)
 
 # `changes_needed` is read alongside `changes_requested` because DIG-1021's interim
 # discipline named the two verdicts "approve" and "changes needed"; a reviewer
@@ -2281,8 +2288,12 @@ def _normalise_verdict(value: str) -> str:
     return value.strip().strip("'\";").lower().replace("-", "_")
 
 
-def _marker_verdict(body: str) -> tuple[str, str] | None:
-    """`(verdict, scope_sha)` from a review marker in `body`, or None.
+def _marker_verdict(body: str) -> tuple[str, str, bool] | None:
+    """`(verdict, scope_sha, names_scope)` from a review marker in `body`, or None.
+
+    `names_scope` is True when the marker carries a `scope=` field at all, even
+    one whose value is not a readable sha. The field's presence, not its parse,
+    decides whether the marker names a head of its own.
 
     None means "this comment carries no marker verdict the queue can read" — a
     plain comment, or a marker whose `verdict=` is missing or misspelled. That
@@ -2297,7 +2308,8 @@ def _marker_verdict(body: str) -> tuple[str, str] | None:
         if verdict not in READABLE_VERDICTS:
             continue
         scope_sha = _SCOPE_SHA_RE.search(fields.get("scope", ""))
-        return verdict, (scope_sha.group("sha") if scope_sha else "")
+        names_scope = _SCOPE_KEY_RE.search(marker.group("fields")) is not None
+        return verdict, (scope_sha.group("sha") if scope_sha else ""), names_scope
     return None
 
 
@@ -2396,8 +2408,9 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
     prose = _prose_verdict(text)
     if marker is None and prose is None:
         return None
+    named_scope = False
     if marker is not None:
-        verdict, scope = marker
+        verdict, scope, named_scope = marker
         source = "a `verdict=` marker"
         # The marker's `scope=` is the head the verdict is about. The prose around
         # it may name any number of commits, so it is not read as a binding.
@@ -2413,15 +2426,17 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         claims = [found.group("sha") for found in _PROSE_SHA_RE.finditer(text)]
     provenance = _provenance_fields(body)
     provenance_head = str(provenance.get("head") or "")
-    if provenance_head and not scope:
+    if provenance_head and not named_scope:
         # A marker verdict names the head it is about through its own `scope=`.
         # The provenance marker's `head=` is the fallback for a marker that names
         # no scope, and never a second binding for one that does: an approve
         # whose `scope=` names a stale head says nothing about the head the PR
         # stands at, and must not clear a block just because the provenance
-        # marker names the newer head. The prose path has no `scope=`, so it
-        # keeps every sha in the comment as a candidate, the provenance head
-        # included.
+        # marker names the newer head. "Names a scope" is the field's presence:
+        # a `scope=` that does not parse as a sha (uppercase, short, no `@`)
+        # binds nothing, and must not fall back to the provenance head. The
+        # prose path has no `scope=`, so it keeps every sha in the comment as a
+        # candidate, the provenance head included.
         claims.append(provenance_head)
     bindings: list[str] = []
     for binding in claims:
@@ -3808,10 +3823,11 @@ def _log_shadow(
     repo: str | None,
     lines: Sequence[str],
 ) -> None:
-    """Write what the gate would have refused, to the shadow log.
+    """Write what the gate refused, and what the row would have merged on.
 
     A shadow log that cannot be written is a lost measurement, not a reason to
-    stop merging: the gate is measuring, so it keeps its hands off the merge.
+    change a verdict: the gate already decided, so it keeps its hands off the
+    merge.
     """
     if cfg is None:
         return
@@ -3864,8 +3880,13 @@ def _review_coverage(
     * This is the review gate. Both reopen cases merged attested by `qa` with
       zero reviews and zero comments; attestation is an assertion, and an
       assertion with no artifact is exactly what the promotion gate refuses.
-      `--attest-review` is gone (2026-10-17), and no non-author approval is
-      required on top of this evidence (Chris's 2026-10-15 definition).
+      `--attest-review` is gone (2026-10-17), and no separate formal approval is
+      demanded on top of the evidence (Chris's 2026-10-15 definition). But an
+      in-session pass is only evidence when another seat wrote it: the reviewer
+      independence gate (DIG-4795) drops a comment whose provenance marker names
+      the PR's author seat or cannot be checked at all, and DIG-5220 shipped that
+      gate in `enforce` mode after #6277 and #6197 merged on the authoring lane's
+      own write-up.
     * The comments this gate scores are supplied by `fetch_queue` and, when the
       row arrives without them, completed by `_ensure_comments` — which runs
       before this function precisely because an unreadable review record must
@@ -3925,14 +3946,15 @@ def _review_coverage(
         )
         return state
 
-    if mode == "enforce":
-        reviewed, why = crc.verdict_for(state_for(kept))
-    else:
-        # Shadow mode scores the row as it stands, then scores it again without the
-        # markers the gate would drop. The difference between the two answers is the
-        # measurement: "this PR would have been refused".
-        reviewed, why = crc.verdict_for(state_for(counted))
-        would_review, would_why = crc.verdict_for(state_for(kept))
+    # The gate always decides on the comments it accepted. Shadow mode keeps the
+    # measurement — it records what the gate refused, and what the row would have
+    # said with every comment counted — but it is no longer a licence to merge on
+    # the marker the gate just refused. DIG-5220 made that change after #6277 and
+    # #6197: in both, the authoring lane's own write-up was counted as the review
+    # and the PR merged with no other seat's look at the final head.
+    reviewed, why = crc.verdict_for(state_for(kept))
+    if mode == "shadow":
+        would_review, would_why = crc.verdict_for(state_for(counted))
         if independence.unverifiable:
             _log_shadow(
                 cfg,
@@ -3940,18 +3962,13 @@ def _review_coverage(
                 repo,
                 [f"could not check the review seats: {independence.unverifiable}"],
             )
-        elif independence.problems and not would_review:
-            _log_shadow(cfg, pr, repo, list(independence.problems))
         elif independence.problems:
-            _log_shadow(
-                cfg,
-                pr,
-                repo,
-                [
-                    f"dropped {len(independence.disqualified)} review marker(s) that "
-                    f"did not count; the PR would still have merged on {would_why}"
-                ],
-            )
+            lines = list(independence.problems)
+            if would_review:
+                # The measurement that matters: without this gate the row would
+                # have merged on the evidence it just refused.
+                lines.append(f"without this gate the row would have merged on {would_why}")
+            _log_shadow(cfg, pr, repo, lines)
 
     if reviewed:
         evidence = why
@@ -3964,9 +3981,9 @@ def _review_coverage(
             )
         return [], evidence
 
-    if mode == "enforce" and independence.unverifiable:
+    if independence.unverifiable:
         return [f"reviewer independence: {independence.unverifiable}"], ""
-    if mode == "enforce" and independence.problems:
+    if independence.problems:
         head = str(pr.get("headRefOid") or "")[:12]
         return [
             "reviewer independence: "

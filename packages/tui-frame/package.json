@@ -1,0 +1,23 @@
+{
+  "name": "@digithings/tui-frame",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The recorded-TUI-frame record, the fixture server and the exporter flag parser every TUI client shares.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "packages/tui-frame"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "files": [
+    "src"
+  ]
+}

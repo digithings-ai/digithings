@@ -18,7 +18,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION = MIGRATIONS / "142_house_accounting_status_attribution.sql"
+MIGRATION = MIGRATIONS / "prod" / "142_house_accounting_status_attribution.sql"
 HOUSE_ID = "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 RENAMED = (
     "accounting_periods",
@@ -53,7 +53,7 @@ def _view_body(sql: str, view: str) -> str:
 
 
 def test_migration_142_is_only_142() -> None:
-    assert sorted(MIGRATIONS.glob("142_*.sql")) == [MIGRATION]
+    assert sorted(MIGRATIONS.rglob("142_*.sql")) == [MIGRATION]
 
 
 @pytest.mark.parametrize(
