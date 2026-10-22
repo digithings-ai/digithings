@@ -21,11 +21,15 @@ So this file pins a lane that is:
   (`image-packages/digichat/...`), so every job that leads to the image build
   packages it first, exactly like the stack lane (DIG-4711).
 
-The loops are the point. The Dockerfile's COPY list is checked against the
-guard that runs before the build, against the paths the generator writes, and
-against the packages the image installs; the workflow's job list is derived
-rather than named, so a NEW job that builds the image is covered by the same
-assertion that covers the deploy job.
+The loops are the point, and each one joins two DIFFERENT sources so that
+neither side is checked against itself: the Dockerfile's COPY list against the
+guard that runs before the build, the guard against the paths the generator
+writes, the Dockerfile's own `tar -xzf` lines against the workspaces the npm
+scope packs, and the build context's filter against every tracked file the
+image copies. The workflow's job list is derived rather than named, so a NEW
+job that builds the image is covered by the same assertion that covers the
+deploy job - and the job that may deploy is derived too, so it has to be the
+production-gated one.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ import fnmatch
 import importlib.util
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +52,11 @@ WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 WORKFLOW = WORKFLOWS_DIR / "deploy-digichat-cloudflare-container.yml"
 ACTION = REPO_ROOT / ".github" / "actions" / "package-digichat-image-inputs" / "action.yml"
 DOCKERFILE = REPO_ROOT / "infra" / "docker" / "Dockerfile.digichat-cloudflare"
+#: The other Dockerfile that builds the digichat image from the same
+#: repository root: the publish lane's. Both COPY the same generated tree and
+#: unpack the same workspaces, so both are pinned.
+PUBLISH_DOCKERFILE = REPO_ROOT / "apps" / "digichat" / "Dockerfile"
+DOCKERFILES = (DOCKERFILE, PUBLISH_DOCKERFILE)
 DOCKERIGNORE = REPO_ROOT / ".dockerignore"
 GENERATOR = REPO_ROOT / "scripts" / "package_r5_image_inputs.py"
 WRANGLER_TOML = REPO_ROOT / "apps" / "digichat-cloudflare" / "wrangler.toml"
@@ -59,6 +69,14 @@ ACTION_REF = "./.github/actions/package-digichat-image-inputs"
 #: The step that makes wrangler build the image. A job that runs it is a job
 #: that needs the packaged tree.
 DEPLOY_COMMAND = "npm run deploy --workspace digichat-cloudflare"
+
+#: Every shape of "this step can deploy production". It mirrors the regex in
+#: tests/scripts/test_deploy_digithings_stack_cloudflare.py, so a validation
+#: job that runs the wrapper - or a bare `npx wrangler deploy` - is caught by
+#: the same assertion that catches the other form.
+DEPLOY_COMMAND_RE = re.compile(
+    r"(?:npx\s+(?:--no-install\s+)?wrangler\s+deploy|wrangler\s+versions\s+deploy|npm\s+run\s+deploy)"
+)
 
 #: The Worker this lane deploys. It is the `name` in the app's wrangler.toml,
 #: and the app's `deploy` script is the rev-injecting wrapper.
@@ -113,6 +131,20 @@ def _index_of_run(job: dict[str, Any], needle: str) -> int:
     return -1
 
 
+def _index_of_deploy_run(job: dict[str, Any]) -> int:
+    """The index of the first step that can DEPLOY; -1 when the job cannot.
+
+    "Can deploy" is the repo-wide deploy shape, not the one command this lane
+    happens to use: `npm run deploy` and a bare `npx wrangler deploy` both
+    ship production, so a validation job that runs either of them deploys
+    with nobody's approval.
+    """
+    for index, step in enumerate(job.get("steps") or []):
+        if DEPLOY_COMMAND_RE.search(str(step.get("run", ""))):
+            return index
+    return -1
+
+
 def _action() -> dict[str, Any]:
     return yaml.safe_load(ACTION.read_text(encoding="utf-8"))
 
@@ -129,14 +161,14 @@ def _action_script() -> str:
     return re.sub(r"#.*$", "", scripts[0], flags=re.M)
 
 
-def _dockerfile_copy_sources() -> list[str]:
+def _dockerfile_copy_sources(dockerfile: Path = DOCKERFILE) -> list[str]:
     """Every source the Dockerfile COPYs from the BUILD CONTEXT.
 
     A `COPY --from=...` line copies from another stage, not from the context,
     so it is not a path the checkout has to carry.
     """
     sources: list[str] = []
-    for line in DOCKERFILE.read_text(encoding="utf-8").splitlines():
+    for line in dockerfile.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line.startswith("COPY "):
             continue
@@ -153,13 +185,27 @@ def _dockerfile_copy_sources() -> list[str]:
     return sources
 
 
-def _dockerfile_image_package_sources() -> list[str]:
+def _dockerfile_image_package_sources(dockerfile: Path = DOCKERFILE) -> list[str]:
     """Every source the Dockerfile COPYs that lives under image-packages/."""
     return [
         source
-        for source in _dockerfile_copy_sources()
+        for source in _dockerfile_copy_sources(dockerfile)
         if source.startswith("image-packages/")
     ]
+
+
+def _dockerfile_unpacked_tarballs(dockerfile: Path = DOCKERFILE) -> set[str]:
+    """The workspace tarballs the Dockerfile unpacks out of image-packages/.
+
+    The image installs the packed workspaces by unpacking one tarball per
+    workspace, so this list is the list of workspaces the image really gets -
+    and it is read from the Dockerfile, not from the generator's own list.
+    """
+    names: set[str] = set()
+    for line in dockerfile.read_text(encoding="utf-8").splitlines():
+        for match in re.finditer(r"tar\s+-xzf\s+(\S+)", line):
+            names.add(re.sub(r"-\*\.tgz$", "", Path(match.group(1)).name))
+    return names
 
 
 def _guarded_paths(script: str) -> set[str]:
@@ -199,34 +245,73 @@ def _dockerignore_rules() -> list[tuple[str, bool]]:
     return rules
 
 
-def _pattern_matches(pattern: str, ancestor: str) -> bool:
-    """Whether a .dockerignore pattern matches a path or a directory.
+def _match_segments(pattern: list[str], path: list[str]) -> bool:
+    """Whether a pattern's segments match a path's segments.
 
-    The model here is deliberately the strict one - it says "excluded" when
-    docker would exclude - so a path the guard checks can never read as safe
-    because this matcher was more permissive than docker is.
+    Go's filepath.Match rules apply per segment: `*` and `?` never cross a
+    "/", and `**` is the only way to say "at any depth".
     """
-    if "/" not in pattern:
-        return fnmatch.fnmatch(ancestor.rsplit("/", 1)[-1], pattern)
-    if pattern.startswith("**/"):
-        rest = pattern[3:]
-        tail = ancestor.split("/")[-1]
-        if fnmatch.fnmatch(tail, rest):
-            return True
-        return fnmatch.fnmatch(ancestor, pattern) or fnmatch.fnmatch(ancestor, "**/" + rest)
-    return fnmatch.fnmatch(ancestor, pattern)
+    if not pattern:
+        return not path
+    head, rest = pattern[0], pattern[1:]
+    if head == "**":
+        return any(_match_segments(rest, path[index:]) for index in range(len(path) + 1))
+    if not path:
+        return False
+    if not fnmatch.fnmatchcase(path[0], head):
+        return False
+    return _match_segments(rest, path[1:])
+
+
+def _dockerignore_matches(pattern: str, path: str) -> bool:
+    """Whether a .dockerignore pattern matches a context-relative path.
+
+    Docker matches a pattern against the path relative to the context ROOT, so
+    a pattern without a slash is anchored at the root: `scripts` excludes the
+    root `scripts` directory and nothing under `apps/` (the docs' own example:
+    `temp?` matches in the root, `*/temp*` one level deep, and `**` is the
+    only way to say "at any depth"). A pattern that matches a directory also
+    matches everything under it.
+    """
+    pattern = pattern.strip("/")
+    if not pattern:
+        return False
+    segments = pattern.split("/")
+    parts = [part for part in path.split("/") if part]
+    return any(
+        _match_segments(segments, parts[: index + 1]) for index in range(len(parts))
+    )
 
 
 def _excluded_by_dockerignore(path: str) -> bool:
-    """Whether docker would drop ``path`` from the build context."""
-    parts = path.split("/")
-    ancestors = ["/".join(parts[: index + 1]) for index in range(len(parts))]
+    """Whether docker would drop ``path`` from the build context.
+
+    Docker walks the rules in order and the LAST rule that matches wins, so a
+    re-include after an exclude brings the path back - which is how the
+    re-included rule for the MCP server directory works in this repo's
+    .dockerignore.
+    """
     excluded = False
     for pattern, negated in _dockerignore_rules():
-        for ancestor in ancestors:
-            if _pattern_matches(pattern, ancestor):
-                excluded = not negated
+        if _dockerignore_matches(pattern, path):
+            excluded = not negated
     return excluded
+
+
+def _tracked_files() -> set[str]:
+    """The tracked files, as paths relative to the repository root.
+
+    Only tracked files are walked: the working tree also holds build output
+    and installed dependencies, and the build context in CI is a checkout.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return {path for path in result.stdout.split("\0") if path}
 
 
 def _load_generator():
@@ -387,11 +472,44 @@ def test_the_deploy_job_is_manual_dispatch_only() -> None:
     assert "push" not in condition
 
 
-def test_no_validation_job_contains_a_deploy_command() -> None:
+def test_only_the_production_gated_job_may_deploy() -> None:
+    """A job that can deploy must be the job that waits for Chris.
+
+    "Can deploy" is the repo-wide deploy shape, not the one command this lane
+    happens to use: `npm run deploy` and a bare `npx wrangler deploy` both
+    ship production. A validation job that runs either of them - the
+    pull-request check, with no environment and no reviewer - deploys with
+    nobody's approval, which is the hazard DIG-4612 ruled on by name.
+    """
     spec = _doc()
-    for job in ("check", "check-deploy-gate"):
-        for script in _run_scripts(spec, job):
-            assert "wrangler deploy" not in script, f"{job} must validate, not deploy"
+    jobs = spec.get("jobs") or {}
+    gated = {
+        name
+        for name, job in jobs.items()
+        if isinstance(job, dict) and job.get("environment") == "production"
+    }
+    assert gated, "the lane must have a production-gated job"
+    deploying = {
+        name
+        for name, job in jobs.items()
+        if isinstance(job, dict) and _index_of_deploy_run(job) != -1
+    }
+    assert deploying == gated, (
+        f"only the production-gated job may deploy; these jobs can deploy: "
+        f"{sorted(deploying)}, and these are gated: {sorted(gated)}"
+    )
+
+
+def test_every_job_sets_a_timeout() -> None:
+    """The repo's own convention: every job sets `timeout-minutes`.
+
+    A job that can hang holds a runner, and the deploy job sits behind
+    Chris's approval gate, so it is the one that must not hang for the
+    six-hour default.
+    """
+    spec = _doc()
+    for name, job in (spec.get("jobs") or {}).items():
+        assert job.get("timeout-minutes"), f"the {name} job sets no timeout-minutes"
 
 
 def test_the_deploy_job_is_behind_the_production_environment_gate() -> None:
@@ -432,20 +550,30 @@ def test_the_deploy_gate_job_runs_for_both_deploy_events() -> None:
     )
 
 
-def test_the_deploy_job_checks_out_the_ref_it_will_deploy() -> None:
-    steps = _steps(_doc(), "deploy")
-    checkout = next(
-        (s for s in steps if str(s.get("uses") or "").startswith("actions/checkout")), {}
-    )
-    assert checkout.get("with", {}).get("ref") == "${{ inputs.ref || github.sha }}"
-
-
-def test_the_gate_job_checks_out_the_same_ref_as_the_deploy_job() -> None:
+def test_the_gate_job_checks_out_the_ref_the_dispatch_named() -> None:
     steps = _steps(_doc(), "check-deploy-gate")
     checkout = next(
         (s for s in steps if str(s.get("uses") or "").startswith("actions/checkout")), {}
     )
     assert checkout.get("with", {}).get("ref") == "${{ inputs.ref || github.sha }}"
+
+
+def test_the_deploy_job_checks_out_the_commit_the_gate_proved() -> None:
+    """The deploy ships the tree the GATE proved, not a fresh resolution.
+
+    The gate resolves the requested ref to a commit and proves that commit is
+    on main. The deploy then checks out THAT commit, so what ships is what was
+    proved - even if the branch moved between the two jobs.
+    """
+    steps = _steps(_doc(), "deploy")
+    checkout = next(
+        (s for s in steps if str(s.get("uses") or "").startswith("actions/checkout")), {}
+    )
+    assert checkout.get("with", {}).get("ref") == "${{ needs.check-deploy-gate.outputs.rev }}", (
+        "the deploy must check out the commit the gate resolved and proved"
+    )
+    outputs = _job(_doc(), "check-deploy-gate").get("outputs") or {}
+    assert outputs.get("rev") == "${{ steps.resolve.outputs.rev }}"
 
 
 def test_the_concurrency_group_stays_unique_per_run() -> None:
@@ -533,19 +661,23 @@ def test_the_deploy_fails_loudly_when_the_token_is_missing() -> None:
     """
     steps = _steps(_doc(), "deploy")
     preflight = next(
-        (s for s in steps if "Preflight" in str(s.get("name") or "") and "token" in str(s.get("name") or "")),
+        (s for s in steps if "Preflight" in str(s.get("name") or "") and "credential" in str(s.get("name") or "")),
         {},
     )
     assert preflight, (
-        "the deploy job has no token preflight: an empty CLOUDFLARE_API_TOKEN "
+        "the deploy job has no credential preflight: an empty CLOUDFLARE_API_TOKEN "
         "is what the sibling lane shipped with, and it only surfaced as a "
         "wrangler auth error (DIG-4717)"
     )
     env = preflight.get("env") or {}
     assert env.get("CLOUDFLARE_API_TOKEN") == "${{ secrets.CLOUDFLARE_API_TOKEN }}"
+    assert env.get("CLOUDFLARE_ACCOUNT_ID") == "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}", (
+        "the account id fails the same way the token does - an empty string "
+        "reaches wrangler as an account error, not as a missing credential"
+    )
     script = str(preflight.get("run") or "")
     assert "-z" in script and "exit 1" in script, (
-        "the preflight must fail the job when the token is empty"
+        "the preflight must fail the job when a credential is empty"
     )
     assert "::error::" in script, (
         "the preflight must say what is missing on the run page, not just exit 1"
@@ -563,13 +695,60 @@ def test_the_deploy_fails_loudly_when_the_token_is_missing() -> None:
     )
 
 
+def test_the_gate_binds_the_deploy_to_main_before_the_approval() -> None:
+    """The tree has to be ON main, and the check has to happen before Chris.
+
+    The production environment's branch policy is matched against the DISPATCH
+    ref, so it says nothing about `inputs.ref`: a dispatch from main with a ref
+    of some-feature-branch passes the policy and ships that branch, while the
+    approval says "main". So the gate - which runs before the approval,
+    because the deploy job needs it - refuses any tree that is not on main.
+    """
+    resolve = next(
+        (s for s in _steps(_doc(), "check-deploy-gate") if s.get("id") == "resolve"),
+        {},
+    )
+    assert resolve, "the gate job has no step that resolves the tree"
+    script = str(resolve.get("run") or "")
+    assert "compare/main" in script, (
+        "the gate must compare the resolved commit with main: the environment's "
+        "branch policy is matched against the dispatch ref, not against inputs.ref"
+    )
+    assert "exit 1" in script and "::error::" in script, (
+        "the gate must refuse a tree that is not on main"
+    )
+    env = resolve.get("env") or {}
+    assert env.get("REQUESTED_REF") == "${{ inputs.ref || github.sha }}", (
+        "the ref must come through the environment, not through the script body"
+    )
+
+
+def test_the_lane_never_puts_a_user_string_into_a_script_body() -> None:
+    """A dispatch input interpolated into a `run:` body is code, not text.
+
+    Actions substitutes `${{ ... }}` into the script before bash sees it, so a
+    ref carrying shell metacharacters would run as commands in the deploy job.
+    GitHub's own guidance is to pass such values through `env:`.
+    """
+    spec = _doc()
+    for name, job in (spec.get("jobs") or {}).items():
+        for step in (job or {}).get("steps") or []:
+            script = str(step.get("run") or "")
+            if "inputs." not in script:
+                continue
+            assert "${{" not in script, (
+                f"the {name} job interpolates a dispatch input into a script body: {script}"
+            )
+
+
 def test_the_deploy_says_which_ref_and_rev_it_ships() -> None:
     """The approval is about a ref and a rev, so the run must say both.
 
     The Container id is derived from the deployed commit (DIG-3814), and the
-    wrapper refuses to deploy when the commit cannot be resolved. A dispatch
-    at a ref that does not resolve must fail BEFORE the production gate, not
-    after Chris approved it.
+    wrapper refuses to deploy when the commit cannot be resolved. Every step of
+    a job that names an environment runs AFTER that environment's protection
+    rules are satisfied, so this step re-checks what the gate proved; it is
+    not the thing that stops a bad ref.
     """
     steps = _steps(_doc(), "deploy")
     preflight = next(
@@ -582,8 +761,10 @@ def test_the_deploy_says_which_ref_and_rev_it_ships() -> None:
         "the preflight must resolve the commit the deploy would ship"
     )
     assert "exit 1" in script and "::error::" in script, (
-        "the preflight must fail the job when the ref does not resolve"
+        "the preflight must fail the job when the tree is not the gated commit"
     )
+    env = preflight.get("env") or {}
+    assert env.get("GATED_REV") == "${{ needs.check-deploy-gate.outputs.rev }}"
 
 
 def test_the_lane_never_mentions_a_secret_name_that_does_not_exist() -> None:
@@ -686,41 +867,71 @@ def test_the_action_runs_the_npm_scope_of_the_generator() -> None:
 
 
 def test_the_action_sets_up_the_toolchain_the_generator_needs() -> None:
-    """The npm scope packs with node and copies with python; it needs no uv."""
+    """The npm scope packs with node and copies with python; it needs no uv.
+
+    The generator imports `tomllib` at module scope, so the python it runs on
+    has to be 3.11 or newer whatever scope it is asked for.
+    """
     steps = _action()["runs"]["steps"]
     uses = [str(step.get("uses", "")) for step in steps]
     assert any(u.startswith("actions/setup-node") for u in uses), (
         "the generator packs the npm workspaces with `npm pack`, so it needs node"
     )
-    assert any(u.startswith("actions/setup-python") for u in uses), (
-        "the generator is a python script, so it needs python"
+    python_step = next(
+        (s for s in steps if str(s.get("uses", "")).startswith("actions/setup-python")),
+        {},
+    )
+    assert python_step, "the generator is a python script, so it needs python"
+    version = str((python_step.get("with") or {}).get("python-version") or "")
+    assert version, "the action does not pin the python version"
+    parts = tuple(int(part) for part in version.split(".")[:2] if part.isdigit())
+    assert parts >= (3, 11), (
+        f"the generator imports tomllib, which needs python 3.11 or newer; the "
+        f"action pins {version}"
     )
     assert not any(u.startswith("astral-sh/setup-uv") for u in uses), (
         "the npm scope installs no wheel, so it needs no uv"
     )
 
 
-def test_the_guard_covers_every_path_the_dockerfile_copies() -> None:
-    """A new COPY under image-packages/ without a matching guard fails here."""
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=lambda path: path.name)
+def test_the_guard_covers_every_path_the_dockerfile_copies(dockerfile: Path) -> None:
+    """A new COPY under image-packages/ without a matching guard fails here.
+
+    Both Dockerfiles that build the digichat image are checked - the Cloudflare
+    Containers one this lane builds and the publish lane's - because they COPY
+    the same generated tree. A COPY added to either one without a matching
+    guard fails at build time, in a deploy job, after Chris's approval.
+    """
     script = _action_script()
-    sources = _dockerfile_image_package_sources()
-    assert sources, "the Dockerfile copies nothing under image-packages/: has the image changed?"
+    sources = _dockerfile_image_package_sources(dockerfile)
+    assert sources, (
+        f"{dockerfile.name} copies nothing under image-packages/: has the image changed?"
+    )
     guarded = _guarded_paths(script)
     assert guarded, "the action's guard checks no path at all"
     for source in sources:
         assert source in guarded, (
-            f"the Dockerfile COPYs {source} but the packaging guard does not check it, "
-            "so a missing path would not fail the step"
+            f"{dockerfile.name} COPYs {source} but the packaging guard does not check "
+            "it, so a missing path would not fail the step"
         )
     assert "::error::" in script, "the guard does not report what is missing"
     assert re.search(r"exit\s+(?:1|\"?\$\{?missing)", script), (
         "the guard reports a missing path but never exits non-zero, so the step would "
         "report success and the build would still die on the same missing path"
     )
+    assert re.search(r'\[ -d "\$path" \].*\[ -z', script), (
+        "the guard must fail on an EMPTY directory, not only on a missing one: the "
+        "image would then carry a path with nothing in it"
+    )
+    assert re.search(r'\[ -f "\$path" \].*! -s', script), (
+        "the guard must fail on an EMPTY file, not only on a missing one"
+    )
 
 
-def test_the_generator_writes_every_path_the_dockerfile_copies() -> None:
-    """The other half of the loop: the guard checks what the generator writes.
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=lambda path: path.name)
+def test_the_generator_writes_every_path_the_dockerfile_copies(dockerfile: Path) -> None:
+    """The other half of the loop: the generator writes what the Dockerfile reads.
 
     A rename of a generator output would leave the Dockerfile and the guard
     naming the old path, and only the deploy job would notice - after Chris's
@@ -732,31 +943,71 @@ def test_the_generator_writes_every_path_the_dockerfile_copies() -> None:
         f"image-packages/digichat/manifests/{key}/package.json"
         for key in module.NPM_MANIFESTS
     }
-    assert set(_dockerfile_image_package_sources()) == written, (
-        "the Dockerfile COPYs a path the npm scope does not write, or the npm "
+    assert set(_dockerfile_image_package_sources(dockerfile)) == written, (
+        f"{dockerfile.name} COPYs a path the npm scope does not write, or the npm "
         "scope writes a path the Dockerfile never reads"
     )
 
 
-def test_the_guard_expects_the_tarballs_the_image_unpacks() -> None:
-    """A partial tarball set is a partial image, so the guard counts them."""
+def test_the_guard_checks_exactly_what_the_generator_writes() -> None:
+    """The guard and the generator have to name the same paths.
+
+    A guard entry for a path the generator never writes fails EVERY run of the
+    lane - the pull-request check, the gate and the deploy - with "brand/
+    package.json is missing" for a path that was never supposed to exist. The
+    guard is read out of the script and the outputs out of the generator, so
+    the two sets are compared instead of the implementation against itself.
+    """
     module = _load_generator()
-    expected = len(module.NPM_PACKAGES)
+    written = {"image-packages/digichat/npm"}
+    written |= {
+        f"image-packages/digichat/manifests/{key}/package.json"
+        for key in module.NPM_MANIFESTS
+    }
+    guarded = _guarded_paths(_action_script())
+    assert guarded == written, (
+        "the packaging guard and the generator name different paths: "
+        f"only guarded: {sorted(guarded - written)}; "
+        f"only written: {sorted(written - guarded)}"
+    )
+
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=lambda path: path.name)
+def test_the_guard_expects_the_tarballs_the_image_unpacks(dockerfile: Path) -> None:
+    """A partial tarball set is a partial image, so the guard counts them.
+
+    The count comes from the Dockerfile's own `tar -xzf` lines - the image
+    installs one tarball per workspace - and is compared with the workspaces
+    the npm scope packs. A Dockerfile that stopped unpacking a workspace is
+    caught here, and not at image build time with "Module not found".
+    """
+    module = _load_generator()
+    unpacked = _dockerfile_unpacked_tarballs(dockerfile)
+    expected = {
+        package.replace("@digithings/", "digithings-")
+        for package in module.NPM_PACKAGES
+    }
+    assert unpacked == expected, (
+        f"{dockerfile.name} unpacks {sorted(unpacked)} but the npm scope packs "
+        f"{sorted(expected)}"
+    )
     script = _action_script()
     match = re.search(r'!= "(\d+)"', script)
     assert match, "the guard does not check how many tarballs the tree holds"
-    assert int(match.group(1)) == expected, (
+    assert int(match.group(1)) == len(expected), (
         f"the guard expects {match.group(1)} tarball(s) but the image installs "
-        f"{expected}"
+        f"{len(expected)}"
     )
 
 
 def test_the_packaged_paths_survive_the_dockerignore_filter() -> None:
     """The guard reads the FILESYSTEM; docker reads the FILTERED context.
 
-    A `.dockerignore` basename rule (`data`, `tests`, `dist`, `scripts`)
-    matches at any depth, so a subdirectory named `data` would be dropped
-    silently: the COPY still succeeds and the image ships an empty tree.
+    Docker matches a `.dockerignore` pattern against the path relative to the
+    context ROOT, so a bare `scripts` excludes the root `scripts` directory and
+    nothing under `apps/` - `**` is the only way to say "at any depth". A path
+    the guard checks on disk can still be missing from the context, and then
+    the image carries no such path even though the guard passed.
     """
     for source in _dockerfile_image_package_sources():
         assert not _excluded_by_dockerignore(source), (
@@ -770,3 +1021,32 @@ def test_the_packaged_paths_survive_the_dockerignore_filter() -> None:
             f".dockerignore drops {source} from the build context, so the image "
             "would carry no such path even though the guard passed"
         )
+
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=lambda path: path.name)
+def test_the_dockerignore_filter_keeps_every_file_the_image_copies(dockerfile: Path) -> None:
+    """A rule that drops a DIRECTORY drops everything under it, silently.
+
+    The COPY of a whole tree still succeeds - with an empty tree - and the
+    image then fails at runtime, far from the rule that caused it. So every
+    tracked file under a COPY source has to survive the filter.
+    """
+    tracked = _tracked_files()
+    sources = [
+        source
+        for source in _dockerfile_copy_sources(dockerfile)
+        if not source.startswith("image-packages/")
+    ]
+    dropped = [
+        path
+        for path in sorted(tracked)
+        if _excluded_by_dockerignore(path)
+        and any(
+            path == source or path.startswith(source.rstrip("/") + "/")
+            for source in sources
+        )
+    ]
+    assert not dropped, (
+        f".dockerignore drops {len(dropped)} file(s) that {dockerfile.name} COPYs: "
+        f"{dropped[:10]}"
+    )

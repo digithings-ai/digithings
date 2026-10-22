@@ -48,20 +48,38 @@
 #
 # THE REF IS A CHOICE, NOT A DEFAULT TO TRUST, AND TWO REFS ARE IN PLAY.
 #   * The DISPATCH ref is the branch or tag the RUN is started from, and the
-#     `production` environment's branch policy is evaluated against it. That
-#     policy allows `main` only, and this repo's default branch is
-#     `develop`, so a run started from `develop` is refused by the
-#     environment before the deploy job runs. The lane cannot deploy while it
-#     lives on `develop` alone; it becomes deployable once a promotion
-#     carries it to `main`.
-#   * `inputs.ref` is the TREE that gets checked out and deployed. It
-#     defaults to `main`, so a dispatch from `main` ships `main`.
+#     `production` environment's branch policy is evaluated against IT -
+#     GitHub matches the deployment branch rule against the run's GITHUB_REF,
+#     not against anything this workflow computes. That policy allows `main`
+#     only, and this repo's default branch is `develop`, so a run started
+#     from `develop` is refused by the environment before the deploy job
+#     runs. The lane cannot deploy while it lives on `develop` alone; it
+#     becomes deployable once a promotion carries it to `main`.
+#   * `inputs.ref` is the TREE that gets checked out and deployed, and the
+#     environment never sees it. A dispatch from `main` with a ref of
+#     `some-feature-branch` would pass the branch policy and ship that
+#     branch, so the policy alone does not bind what production gets. The
+#     deploy gate therefore refuses any tree that is not on main - it
+#     compares the checked-out commit with main through the GitHub API - and
+#     it does that BEFORE Chris is asked to approve anything, because the
+#     deploy job needs the gate. The commit the gate resolved is handed to
+#     the deploy job, so what ships is exactly what was proven, not a branch
+#     that moved in between.
 # As of 2026-10-22 the live digichat Worker's rev (eef1ee72c20f) IS main's
 # tip - it was promoted to main by #6226 - so a dispatch at main ships the
 # live tree, including the OCC gate. That is a measurement, not a guarantee,
 # and it moves as soon as main moves: the ref decides what production gets,
 # so the ref is printed and resolved before the deploy and the approval is
 # Chris's to give knowingly. DIG-3390 owns keeping the ref honest.
+#
+# TWO APPROVED DISPATCHES CAN RACE. The concurrency group is per-run (see
+# below), so two approved dispatches may both reach `wrangler deploy` and the
+# older tree can end up live. A static group would serialise them, but this
+# repo's own invariant refuses a static group on a production-gated job
+# (tests/scripts/test_workflow_environment_concurrency.py): a shared group
+# with cancel-in-progress: true would cancel a deployment Chris already
+# approved. The residual race is the price of that rule, and it needs two
+# dispatches, not an unattended loop.
 #
 # CREDENTIALS. wrangler authenticates from the CLOUDFLARE_API_TOKEN
 # environment variable, and the repo secret of that name is the token this
@@ -136,7 +154,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Git ref to deploy (default: main tip - the production environment allows main only)"
+        description: "Git ref to deploy. Only a tree that is ON main is accepted (the deploy gate refuses the rest, before the approval); the default is main's tip."
         required: false
         default: "main"
 
@@ -157,6 +175,7 @@ jobs:
     name: "check (pull request - validation only)"
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -183,10 +202,42 @@ jobs:
     # reproduced inside its own fix.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      rev: ${{ steps.resolve.outputs.rev }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha }}
+      # THE TREE IS BOUND TO MAIN BEFORE CHRIS IS ASKED. The production
+      # environment's branch policy is matched against the DISPATCH ref, so it
+      # says nothing about `inputs.ref`: a dispatch from main with a ref of
+      # some-feature-branch would pass the policy and ship that branch. This
+      # step refuses any tree that is not on main, and it runs BEFORE the
+      # approval because the deploy job needs this one. The commit it resolves
+      # is handed to the deploy job, so the tree that ships is the tree that
+      # was proven here, not a branch that moved in between.
+      - name: "Preflight: the tree this deploy ships is on main"
+        id: resolve
+        env:
+          REQUESTED_REF: ${{ inputs.ref || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rev="$(git rev-parse --verify 'HEAD^{commit}')"
+          echo "requested ref: $REQUESTED_REF"
+          echo "checked out commit: $rev"
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/main...${rev}" --jq .status 2>/dev/null || echo unknown)"
+          case "$status" in
+            behind|identical)
+              echo "the tree is on main (compare status: $status)" ;;
+            *)
+              echo "::error::the tree this deploy ships ($rev, requested ref $REQUESTED_REF) is not on main (compare status: $status)."
+              echo "::error::The production environment's branch policy is matched against the DISPATCH ref, not against inputs.ref, so nothing else constrains this tree. A dispatch at main ships main."
+              exit 1 ;;
+          esac
+          echo "container id this deploy ships: shared-$(echo "$rev" | cut -c1-12)"
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -207,11 +258,14 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: [check-deploy-gate]
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     environment: production
     steps:
+      # The COMMIT the gate validated, not the ref: `main` can move between the
+      # gate and this job, and what ships must be what was proven.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ needs.check-deploy-gate.outputs.rev }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -226,19 +280,25 @@ jobs:
       # has had the same step since #5968 (DIG-4506).
       - name: "Package the digichat image inputs"
         uses: ./.github/actions/package-digichat-image-inputs
-      # Preflight: say what is about to be deployed, before it is deployed.
-      # The deploy's rev is the commit this ref resolves to, and the Container
-      # id is derived from it - so the ref and the rev are the two facts the
-      # approval is actually about. The wrapper refuses to deploy when the
-      # commit cannot be resolved; this step fails BEFORE the approval so the
-      # run never reaches the gate with a ref it cannot resolve.
+      # Preflight: say what is about to be deployed. Every step of a job that
+      # names an environment runs AFTER that environment's protection rules are
+      # satisfied, so this step cannot be the thing that stops a bad ref - the
+      # gate above is, and it runs before the approval. What this step does is
+      # prove that the tree in this job is the tree the gate validated, and
+      # print the facts the approval was about: the deploy's rev is the commit
+      # the ref resolves to, and the Container id is derived from it.
       - name: "Preflight: the ref and the rev this deploy ships"
+        env:
+          REQUESTED_REF: ${{ inputs.ref || github.sha }}
+          GATED_REV: ${{ needs.check-deploy-gate.outputs.rev }}
         run: |
           set -euo pipefail
-          echo "requested ref: ${{ inputs.ref || github.sha }}"
-          echo "checked out commit: $(git rev-parse --verify HEAD)"
-          if ! rev="$(git rev-parse --verify HEAD 2>/dev/null)"; then
-            echo "::error::this checkout does not resolve a commit, so the deploy cannot carry a rev - the Container id would fall back to the legacy pinned one (DIG-3814)."
+          rev="$(git rev-parse --verify HEAD)"
+          echo "requested ref: $REQUESTED_REF"
+          echo "checked out commit: $rev"
+          echo "commit the deploy gate validated: $GATED_REV"
+          if [ "$rev" != "$GATED_REV" ]; then
+            echo "::error::this job holds $rev but the deploy gate validated $GATED_REV, so the tree that would ship is not the tree that was proven."
             exit 1
           fi
           echo "container id this deploy ships: shared-$(echo "$rev" | cut -c1-12)"
@@ -248,9 +308,10 @@ jobs:
       # error instead of on the missing secret. This step makes the gap loud at
       # the point of use. It prints whether the variable is empty, never its
       # value.
-      - name: "Preflight: the Cloudflare token is present"
+      - name: "Preflight: the Cloudflare credentials are present"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
             echo "::error::CLOUDFLARE_API_TOKEN is empty. This lane needs a Cloudflare API token that can deploy a Worker with a container."
@@ -258,6 +319,11 @@ jobs:
             exit 1
           fi
           echo "CLOUDFLARE_API_TOKEN is present (value not shown)."
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID is empty. wrangler would fail on the account instead of on the missing secret."
+            exit 1
+          fi
+          echo "CLOUDFLARE_ACCOUNT_ID is present (value not shown)."
       # NOT a bare `npx wrangler deploy`: that ships the legacy pinned
       # Container id (DIG-3814, DIG-4487). The wrapper injects the rev, refuses
       # to deploy without it and reads the id back afterwards.
