@@ -156,28 +156,39 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   disables it (tests); TestClient traffic (`client.host == "testclient"`) is
   exempt so the unit suite doesn't need the env var. Exceeding the limit returns
   429 with `code: rate_limit_exceeded` and a `Retry-After` header.
-  **In-container callers are exempt (#6300).** A request whose transport peer
-  is loopback *and* that carries no `X-Forwarded-For` header skips the limiter
-  entirely (`_is_loopback_peer` plus the absence of the header — both halves
-  are required). The edge always sets `X-Forwarded-For`, so a remote caller
-  that sends `X-Forwarded-For: 127.0.0.1` is still limited, and a loopback
-  caller that *does* send the header is treated as remote. Reason: every
-  in-container caller shares one socket address, so a per-IP window becomes one
-  shared bucket for the whole stack (10 tool calls/min across all tenants).
-  The exemption is a **cost** control, not an authorisation boundary — the JWT
-  scope (`digivault:read` / `digivault:write`) and `enforce_tenant_path_prefix`
-  still decide what an exempt caller may touch. It is **per path, not per
-  tool**: it covers the whole `/v1/orchestrator_invoke` path, including the
-  write-capable `digivault_create_note`. See the design decisions below for the
-  consequences and the triggers that would change it.
+  **Loopback callers are exempt (#6300).** A request whose transport peer is
+  loopback *and* that carries no (or an empty) `X-Forwarded-For` header skips
+  the limiter entirely (`_is_loopback_peer` plus the absence of the header —
+  both halves are required). A remote caller is still limited because its
+  transport peer is not loopback, whether it sends
+  `X-Forwarded-For: 127.0.0.1` or not, and a loopback caller that *does* send
+  the header is treated as remote. Reason: every caller inside one container
+  shares one socket address, so a per-IP window becomes one shared bucket for
+  the whole stack (10 tool calls/min across all tenants). The exemption is a
+  **cost** control, not an authorisation boundary — the JWT scope
+  (`digivault:read` / `digivault:write`) and `enforce_tenant_path_prefix`
+  still decide what an exempt caller may touch. It is **per request, not per
+  tool**: the loopback test lives inside `_rl_check`, so it exempts every route
+  on the service, `/v1/orchestrator_invoke` included — and on that path it
+  covers the write-capable `digivault_create_note` too.
+  **The exemption reaches only the same-container deployments.** It fires on
+  the transport peer, so it applies where digigraph reaches digivault over
+  loopback: the single-container stack (`DIGIVAULT_URL = http://127.0.0.1:8004`)
+  and the Profile-A bundle. The split-compose Profile-A deployment reaches
+  digivault at `http://digivault:8004` on the compose network, whose peer is
+  not loopback — there the exemption does not fire, and the shared-bucket
+  problem #6300 set out to fix is still present.
   **The bucket key is still the caller-supplied first `X-Forwarded-For` hop**,
   so a remote caller can rotate that header and get a fresh window. Pre-existing
   — the same first-hop rule applied before #6300 — and a cost control rather
   than an access control: a rotated bucket buys request budget, never another
   tenant's data. `digigraph/src/digigraph/rate_limit.py` is the in-repo
-  precedent to copy when digivault's limiter is next touched (it walks the
+  precedent to copy when digivault's limiter is next touched: it walks the
   header right-to-left past the `DIGI_TRUSTED_PROXIES` entries, falls back to
-  the direct peer, and buckets IPv6 by /64).
+  the direct peer, and buckets IPv6 by /64 — and it consults the header only
+  when the direct peer is itself a trusted proxy, otherwise the direct peer is
+  the bucket. Adopting it therefore changes which header digivault trusts, not
+  only how it buckets.
 - **`digivault_search_notes` search precedence:**
   1. If D1 is configured (the shared Cloudflare credential pair —
      `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`, falling back to legacy
@@ -298,9 +309,15 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   MCP `search_tag` (digigraph sees it as `digivault_search_tag`) projects a
   slim JSON **array** of `{name, title, rel_path}` (pre-#3041 contract);
   orchestrator invoke keeps the shared handler’s `{"notes": [...]}` envelope.
-  The D1-backed orchestrator answers keep their own shapes: `search_tag`
-  returns `{"notes": [{vault_path, title, tags}]}` and `backlinks` returns
-  `{"name": <resolved vault_path>, "backlinks": [<vault_path>…]}`.
+  The D1-backed orchestrator answers have their own, **reduced** shapes:
+  `search_tag` returns `{"notes": [{vault_path, title, tags}]}` and `backlinks`
+  returns `{"name": <resolved vault_path>, "backlinks": [<vault_path>…]}`. The
+  filesystem handler's `{"notes": [...]}` carries the full `Note` dump
+  (`name`, `rel_path`, `title`, `tags`, `aliases`, `frontmatter`, `outlinks`,
+  `backlinks`), and digigraph hands the payload through verbatim — so a
+  consumer sees a different field set depending on whether D1 is configured.
+  That difference is a property of the store change, and a consumer that needs
+  a field the reduced shape drops has to say so.
 
   ```
   digigraph / MCP client
@@ -308,6 +325,7 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
         ├─ MCP tools/list ──────────► mcp_server ──register_mcp_tools──► VAULT_HANDLERS
         │                                      │
         ├─ MCP tools/call ─────────────────────┴──► dispatch_vault_tool (filesystem vault)
+        │                                            search_notes → D1 / local / Supabase (runtime handler)
         │
         ├─ POST /v1/orchestrator_tools ──► orchestrator_tools (manifest; names from tool_dispatch)
         │
@@ -335,34 +353,46 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   caller cannot probe for sibling notes.
   The **MCP surface** (`digivault-mcp` → `tool_dispatch.register_mcp_tools` →
   `dispatch_vault_tool`) still reads the filesystem vault for tag and backlink
-  lookups: that sidecar is the local-vault surface, its handlers take a `Vault`
-  opened from `DIGIVAULT_ROOT`, and it carries no D1 credential context of its
-  own. So the invariant to state is *"the orchestrator surface answers tags and
-  backlinks from the store search and `get_note` answer from"* — never "digivault
-  reads one store" without naming the surface. The two surfaces can disagree
-  while D1 is configured, and that is a known, accepted state. Making the MCP
-  surface D1-backed is a separate interface decision (it would need the
-  tenant/prefix context the MCP tools do not carry today), not a patch to this
-  one.
+  lookups: that sidecar is the local-vault surface, and its tag and backlink
+  handlers take a `Vault` opened from `DIGIVAULT_ROOT`. (The sidecar does
+  carry the D1 credentials in its environment — its own `search_notes` MCP tool
+  already queries D1 when one is configured — so the gap is not credentials.)
+  So the invariant to state is *"the orchestrator surface answers tags and
+  backlinks from the store search and `get_note` answer from"* — never
+  "digivault reads one store" without naming the surface. The two surfaces can
+  disagree while D1 is configured, and that is a known, accepted state. Making
+  the MCP surface D1-backed for tags and backlinks is a separate interface
+  decision (it would need a verified tenant identity — the MCP surface mounts
+  no auth middleware, so it has no `tenant_slug` to bind a `path_prefix` to),
+  not a patch to this one.
 
-- **The in-container rate-limit exemption buys cost, not access (#6300).** The
-  exemption is all-or-nothing per path: a loopback peer with no
-  `X-Forwarded-For` gets **no** per-IP window on `/v1/orchestrator_invoke`,
-  including on the write-capable `digivault_create_note`. Reason: inside the
+- **The loopback rate-limit exemption buys cost, not access (#6300).** The
+  exemption is all-or-nothing per request: a loopback peer with no
+  `X-Forwarded-For` gets **no** per-IP window at all, on every route of the
+  service except `/healthz` — `/v1/orchestrator_invoke` included, and on that
+  path the write-capable `digivault_create_note` too. Reason: inside one
   container there is no per-caller identity to bucket on — one socket address
   carries every tenant — so a per-caller quota is not expressible there, and
   the alternative (one shared 10/min bucket for the whole stack) breaks
-  legitimate traffic. What still holds is authorisation, not throughput:
+  legitimate traffic. The exemption reaches the same-container deployments
+  only; the split-compose Profile-A deployment is not exempt (see above), and
+  the shared bucket it still has is the next thing to look at when its traffic
+  shape is known. What still holds is authorisation, not throughput:
   `digivault:write` for the write tool, `digivault:read` for the reads, and
   `enforce_tenant_path_prefix` for the corpus. A caller inside the container
-  still needs a valid JWT and still gets only its own tenant's prefix.
+  still needs a valid JWT, and where `DIGI_TENANT_CORPUS_MAP` is configured it
+  still gets only its own tenant's prefix (tenant binding is a no-op in a
+  single-tenant deployment, where the map is unset).
   The two new D1 queries make the cost side real: `lower(tags) LIKE ?` and
-  `lower(wikilinks) LIKE ?` are **unindexed scans**. The `notes` table has a
-  primary key on `vault_path`, one index on `(parent_doc, segment_index)`, and
-  an FTS5 index over `(title, summary, body)` — nothing serves a `lower(tags)`
-  or `lower(wikilinks)` match, and the `ESCAPE '\'` clause (plus the `OR` in the
-  prefix filter) rules out SQLite's LIKE-to-index optimisation, so the scan
-  runs over the corpus rather than over the matches. Two triggers to revisit:
+  `lower(wikilinks) LIKE lower(?)` are **unindexed scans**. The `notes` table
+  has a primary key on `vault_path`, one index on `(parent_doc,
+  segment_index)`, and an FTS5 index over `(title, summary, body)` — nothing
+  indexes `tags` or `wikilinks`, and nothing could serve those matches
+  anyway: the pattern is a leading-wildcard substring and the left side of the
+  comparison is an expression over an unindexed column, so no index seek is
+  available; the `OR` in the prefix filter rules out an index seek on
+  `vault_path` as well. The scan therefore runs over the corpus rather than
+  over the matches. Two triggers to revisit:
   (1) a caller identity that survives to the limiter, which would make a
   per-caller quota expressible; or (2) a corpus large enough that a full scan
   per lookup stops being affordable. The two fixes are different in kind — the
@@ -389,20 +419,24 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 
 - **A truncated lookup says so.** `digivault_search_tag` reads at most
   `limit * 4` candidate rows from D1 (`search_tag`'s default `limit` is 200, so
-  800 candidates) and keeps the rows whose tag matches exactly after the SQL
-  prefilter; `digivault_backlinks` examines at most 500 rows (`_LINKS_SQL`'s
-  `LIMIT 500`). Neither cap is reported to the caller, so a result set can be
-  short without saying why. Decision: the caps stay — they are what bounds the
-  scan above — and the response envelope must state the truncation, a
-  `truncated` flag beside `notes` / `backlinks`, before any consumer treats a
-  list as complete. That is a change to the tool response contract, so it
-  lands with the leaf that adds it, not inside #6300.
+  800 candidates), keeps the rows whose tag matches exactly after the SQL
+  prefilter, and returns at most `limit` (200) of them;
+  `digivault_backlinks` examines at most 500 rows (`_LINKS_SQL`'s `LIMIT 500`).
+  None of the three caps is reported to the caller, so a result set can be
+  short without saying why — 200 notes out of 800 candidates reads like a
+  complete answer. Decision: the caps stay — they are what bounds the scan
+  above — and the response envelope must state the truncation, a `truncated`
+  flag beside `notes` / `backlinks`, before any consumer treats a list as
+  complete. That is a change to the tool response contract, so it lands with
+  the leaf that adds it, not inside #6300.
 
 - **No sign-off trailers.** A commit may carry a `Signed-off-by:` line; DCO was
-  dropped company-wide on 15 Oct 2026, so nothing asks for one, nothing checks
-  for one, and nothing rewrites a commit to remove one. The trailer on #6300's
-  commit is inert — flagged for the record, nothing changed, and the commit is
-  not amended to chase it.
+  dropped company-wide on 15 Oct 2026 (the retirement is on file in
+  `docs/agents/CI_CONVENTIONS.md` — the `ci-dco-sign-off.yml` workflow was
+  deleted), so nothing asks for one, nothing checks for one, and nothing
+  rewrites a commit to remove one. The trailer on #6300's commit is inert —
+  flagged for the record, nothing changed, and the commit is not amended to
+  chase it.
 
 - **Core/service split.** The vault semantics are useful as a library (CI doc
   linting, scripts, other services); FastAPI is an optional delivery surface.
