@@ -34,7 +34,7 @@ deployment:
       - How did email volume change through 2001 as Enron collapsed?
       - What did Enron's traders say about the California energy crisis?
       - Which emails mention Arthur Andersen, and what was the concern?
-      - Who sends the most email in this archive, and what about?
+      - Who sends the most emails in this archive, and what do they write about?
       - Find an email about the Dabhol power plant and open it.
     placeholder: Ask about the Enron emails
   persistence: none
