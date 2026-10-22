@@ -34,6 +34,14 @@ vi.mock('@/components/digichat-live-preview', () => ({
  * DIG-5134). This test pins the placement, so the squeeze cannot come back:
  * the preview is a descendant of <main> and never a direct child of the
  * shell row.
+ *
+ * Two properties are pinned besides the placement, because "inside <main>" on
+ * its own is not the same as "takes the column's width":
+ *   - <main> keeps `min-w-0` and `flex-1`: the column may shrink instead of
+ *     being sized by its content, and it takes the free width of the row.
+ *   - nothing between the preview and <main> carries a fixed width or
+ *     `shrink-0`: a `w-[300px]` wrapper is the original squeeze in a new
+ *     place.
  */
 describe('AppFrame preview placement', () => {
   let container: HTMLDivElement;
@@ -68,5 +76,39 @@ describe('AppFrame preview placement', () => {
     const main = shell.querySelector('main')!;
     expect(main).not.toBeNull();
     expect(main.querySelector('[data-testid="d8-preview"]')).not.toBeNull();
+  });
+
+  it('keeps the content column shrinkable and full width', () => {
+    act(() => {
+      root.render(
+        createElement(AppFrame, null, createElement('p', null, 'page')),
+      );
+    });
+
+    const main = container.querySelector('main')!;
+    // min-w-0: the column may shrink below its content width (without it the
+    // column is sized by the content and the squeeze comes back).
+    expect(main.className).toContain('min-w-0');
+    // flex-1: the column takes the free width of the shell row.
+    expect(main.className).toContain('flex-1');
+  });
+
+  it('puts no fixed width between the preview and the content column', () => {
+    act(() => {
+      root.render(
+        createElement(AppFrame, null, createElement('p', null, 'page')),
+      );
+    });
+
+    const main = container.querySelector('main')!;
+    const preview = main.querySelector('[data-testid="d8-preview"]')!;
+    let node: Element | null = preview.parentElement;
+    while (node && node !== main) {
+      const className = node.getAttribute('class') ?? '';
+      expect(className).not.toMatch(/\bw-\[/);
+      expect(className).not.toContain('shrink-0');
+      node = node.parentElement;
+    }
+    expect(node).toBe(main);
   });
 });

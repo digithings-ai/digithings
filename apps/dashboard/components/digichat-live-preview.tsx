@@ -15,7 +15,7 @@
  * on a 390px phone (QA, DIG-5134). The strip is w-full inside the column, so
  * the column keeps its width at 390x844 and 1440x900. The embed is
  * explicitly sized (h-[320px] md:h-[480px]): the browser default was 300x150,
- * which cut the embed input away.
+ * which left the embed a sliver of a chat surface.
  *
  * The strip ships collapsed (a native <details>), so the dashboard page is
  * not pushed down on every route; open it for the live embed. On a phone the

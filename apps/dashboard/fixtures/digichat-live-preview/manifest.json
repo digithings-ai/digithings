@@ -5,17 +5,23 @@
     {
       "surface": "digichat-live-preview",
       "viewport": "desktop-collapsed",
-      "file": "screenshots/desktop-collapsed.png"
+      "file": "screenshots/desktop-collapsed.png",
+      "width": 1440,
+      "height": 900
     },
     {
       "surface": "digichat-live-preview",
       "viewport": "desktop-open",
-      "file": "screenshots/desktop-open.png"
+      "file": "screenshots/desktop-open.png",
+      "width": 1440,
+      "height": 900
     },
     {
       "surface": "digichat-live-preview",
       "viewport": "phone-open",
-      "file": "screenshots/phone-open.png"
+      "file": "screenshots/phone-open.png",
+      "width": 780,
+      "height": 1688
     }
   ]
 }

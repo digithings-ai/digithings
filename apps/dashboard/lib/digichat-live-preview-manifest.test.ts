@@ -25,11 +25,26 @@ const LIB_DIR = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(LIB_DIR, '../fixtures/digichat-live-preview');
 const MANIFEST_PATH = join(FIXTURES_DIR, 'manifest.json');
 
-type ScreenshotEntry = { surface: string; viewport: string; file: string };
+type ScreenshotEntry = {
+  surface: string;
+  viewport: string;
+  file: string;
+  width: number;
+  height: number;
+};
 type Manifest = { version: number; screenshots: ScreenshotEntry[] };
 
 function loadManifest(): Manifest {
   return JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as Manifest;
+}
+
+/** The pixel size a PNG declares in its IHDR chunk. */
+function pngSize(abs: string): { width: number; height: number } {
+  const header = readFileSync(abs).subarray(0, 24);
+  return {
+    width: header.readUInt32BE(16),
+    height: header.readUInt32BE(20),
+  };
 }
 
 describe('digichat live preview fixtures', () => {
@@ -60,5 +75,19 @@ describe('digichat live preview fixtures', () => {
     const viewports = loadManifest().screenshots.map((entry) => entry.viewport);
     expect(viewports).toContain('desktop-collapsed');
     expect(viewports).toContain('phone-open');
+  });
+
+  it('shows the viewport each screenshot claims', () => {
+    // The phone shot is the 390x844 viewport at device pixel ratio 2, the
+    // desktop shots are 1440x900 at ratio 1. A file that only looks like the
+    // right shot (a desktop capture named "phone") is the failure this pins.
+    for (const entry of loadManifest().screenshots) {
+      const abs = join(FIXTURES_DIR, entry.file);
+      const size = pngSize(abs);
+      expect(
+        { file: entry.file, ...size },
+        `${entry.file} is not the ${entry.viewport} viewport`,
+      ).toEqual({ file: entry.file, width: entry.width, height: entry.height });
+    }
   });
 });
