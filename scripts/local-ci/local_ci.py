@@ -200,6 +200,11 @@ DIGIQUANT_BUILD_PATTERNS = (
     "packages/catalog/**",
     "packages/ui/**",
     "apps/dashboard/**",
+    # apps/dashboard imports @digithings/tui-frame at build time too (the
+    # recorded-frame refactor, DIG-5187). The closure moves when a dependency
+    # is added, so this list is re-derived, not copied from a filter that
+    # nobody evaluates.
+    "packages/tui-frame/**",
     "packages/design/**",
     "packages/surface-config/**",
     # apps/digiquant-web imports @digithings/hero-banner, and @digithings/ui
