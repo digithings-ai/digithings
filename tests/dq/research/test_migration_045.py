@@ -83,7 +83,7 @@ def _latest_doctype_constraint() -> tuple[Path, str]:
     """The highest-numbered migration that (re)defines ``chk_documents_doc_type``."""
     matches = [
         (p, txt)
-        for p in MIGRATIONS_DIR.glob("*.sql")
+        for p in MIGRATIONS_DIR.rglob("*.sql")
         if _ADD_CONSTRAINT in (txt := p.read_text(encoding="utf-8"))
     ]
     assert matches, "no migration defines chk_documents_doc_type"

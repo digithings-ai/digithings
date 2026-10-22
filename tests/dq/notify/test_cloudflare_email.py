@@ -492,17 +492,17 @@ def test_migration_133_grants_the_claim_delete_and_keeps_the_log_append_only() -
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[3] / "digiquant" / "supabase" / "migrations"
-    claim = (root / "133_notification_claim.sql").read_text()
+    claim = (root / "prod" / "133_notification_claim.sql").read_text()
     assert "CREATE TABLE IF NOT EXISTS public.notification_claim" in claim
     assert "GRANT SELECT, INSERT, DELETE ON public.notification_claim TO service_role" in claim
     assert "reject_notification_claim" not in claim
 
-    canonical = (root / "106_notification_prefs_align_canonical.sql").read_text()
+    canonical = (root / "prod" / "106_notification_prefs_align_canonical.sql").read_text()
     assert "GRANT SELECT, INSERT ON public.notification_log TO service_role" in canonical
     assert "reject_notification_log_mutation" in canonical
     offenders = [
         f"{path.name}: {line.strip()}"
-        for path in sorted(root.glob("*.sql"))
+        for path in sorted(root.rglob("*.sql"))
         for line in path.read_text().splitlines()
         if line.strip().startswith("GRANT") and "notification_log" in line and "DELETE" in line
     ]

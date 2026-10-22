@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "072_olympus_period_accounting.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "072_olympus_period_accounting.sql"
 
 TABLES = (
     "olympus_accounting_periods",
@@ -59,13 +59,13 @@ def _table_body(sql: str, table: str) -> str:
 
 
 def test_migration_is_the_only_072() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("072_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("072_*.sql")) == [MIGRATION_PATH]
 
 
 def test_migration_follows_071() -> None:
-    assert (MIGRATIONS_DIR / "071_olympus_position_events_book_source.sql").is_file()
+    assert (MIGRATIONS_DIR / "prod" / "071_olympus_position_events_book_source.sql").is_file()
     numbers = sorted(
-        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql")
+        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.rglob("[0-9][0-9][0-9]_*.sql")
     )
     assert numbers[-1] >= 72
     assert 72 in numbers

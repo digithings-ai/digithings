@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "074_olympus_accounting_views.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "074_olympus_accounting_views.sql"
 
 PUBLIC_VIEWS = (
     "public_accounting_period_status",
@@ -53,13 +53,13 @@ def _view_body(sql: str, view: str) -> str:
 
 
 def test_migration_is_the_only_074() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("074_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("074_*.sql")) == [MIGRATION_PATH]
 
 
 def test_migration_follows_073() -> None:
-    assert (MIGRATIONS_DIR / "073_olympus_lookback_vs_realized.sql").is_file()
+    assert (MIGRATIONS_DIR / "prod" / "073_olympus_lookback_vs_realized.sql").is_file()
     numbers = sorted(
-        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql")
+        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.rglob("[0-9][0-9][0-9]_*.sql")
     )
     assert 74 in numbers
     assert numbers.index(73) < numbers.index(74)
@@ -134,7 +134,7 @@ def test_074_day_return_formula_superseded_by_084() -> None:
     Keep 074 immutable (already applied). Contract for the live formula lives in
     ``test_migration_084.py``.
     """
-    successor = MIGRATIONS_DIR / "084_olympus_accounting_day_return_pct.sql"
+    successor = MIGRATIONS_DIR / "prod" / "084_olympus_accounting_day_return_pct.sql"
     assert successor.is_file(), "084 must replace day_return_pct with equity delta"
     body_074 = _strip_comments(MIGRATION_PATH.read_text(encoding="utf-8"))
     # Historical defect retained in 074 source for replay archaeology.

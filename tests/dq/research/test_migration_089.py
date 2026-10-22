@@ -15,6 +15,7 @@ MIGRATION_PATH = (
     / "digiquant"
     / "supabase"
     / "migrations"
+    / "engine"
     / "089_olympus_research_state_pin_temporal.sql"
 )
 
