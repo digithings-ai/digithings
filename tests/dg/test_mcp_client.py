@@ -520,7 +520,9 @@ def test_mcp_web_search_allowed_with_opt_in() -> None:
 # --- DIG-507: the remote MCP server must be asked for the name it advertised ---
 
 
-def _capture_names(monkeypatch: pytest.MonkeyPatch, server: dict[str, str], names: list[str]) -> None:
+def _capture_names(
+    monkeypatch: pytest.MonkeyPatch, server: dict[str, str], names: list[str]
+) -> None:
     from digigraph.orchestration import mcp_client
 
     monkeypatch.setitem(mcp_client._raw_names_cache, mcp_client.mcp_list_cache_key(server), names)
