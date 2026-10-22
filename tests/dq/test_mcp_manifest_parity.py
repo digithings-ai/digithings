@@ -57,7 +57,10 @@ def test_committed_manifest_matches_the_generator():
 
 def test_every_manifest_tool_is_registered_by_the_live_server():
     """The subset check that matters: manifest ⊆ registered."""
-    pytest.importorskip("mcp", reason="the digiquant lane installs no mcp extra")
+    pytest.importorskip(
+        "mcp",
+        reason="the mcp extra is not installed in this environment (the digiquant CI lane installs it)",
+    )
 
     names = set(_manifest_names())
 
