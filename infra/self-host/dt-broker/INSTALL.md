@@ -16,11 +16,35 @@ DIG-4804 owns the account. If it has not been created yet, these are the command
 sudo dseditgroup -o create _dtseats
 sudo dseditgroup -o edit -a _dtbroker _dtseats
 sudo dseditgroup -o edit -a chrisstefan _dtseats
-sudo useradd -m -d /Users/_dtbroker -s /usr/bin/false _dtbroker
 ```
 
 `_dtseats` is the group that decides who may talk to the socket. A seat process is
 in it; so is the daemon.
+
+The account itself is macOS's own, not Linux's: **`useradd` does not exist on this
+platform** (`zsh: command not found: useradd`). The supported way is:
+
+```bash
+sudo sysadminctl -addUser _dtbroker \
+  -shell /usr/bin/false \
+  -home /Users/_dtbroker \
+  -fullName "digithings broker"
+```
+
+macOS asks for an administrator password, and the Terminal needs Full Disk Access
+for it. If `sysadminctl` is not allowed, the directory services equivalent is:
+
+```bash
+sudo dscl . -create /Users/_dtbroker RecordName _dtbroker
+sudo dscl . -create /Users/_dtbroker RealName "digithings broker"
+sudo dscl . -create /Users/_dtbroker UserShell /usr/bin/false
+sudo dscl . -create /Users/_dtbroker NFSHomeDirectory /Users/_dtbroker
+sudo dscl . -create /Users/_dtbroker UniqueID 499      # a free uid, 500 and up
+sudo dscl . -create /Users/_dtbroker PrimaryGroupID 499
+```
+
+Pick a `UniqueID` that is free (`dscl . -search /Users UniqueID 499`) and matches
+the `PrimaryGroupID`. The account has no shell: it runs the daemon, nothing else.
 
 The home directory is traversable but not listable, so a seat process can reach the
 socket inside it and cannot read what else is there:
@@ -95,6 +119,20 @@ sudo cp -R scripts /usr/local/lib/dt-broker/
 sudo install -o root -g wheel -m 0755 scripts/dt-broker /usr/local/lib/dt-broker/scripts/dt-broker
 ```
 
+The plist runs `/usr/bin/python3`, which on macOS is **Python 3.9** — the daemon has
+to import under it, so the code stays 3.9-compatible (no `X | Y` in a runtime
+expression, `Optional[...]` in the type aliases). A newer interpreter is fine too,
+but the plist names the system one, so the system one has to work.
+
+The `dt-broker` command itself has to be on the PATH of the seat processes, not
+only on the daemon's: the git credential helper and `dt-broker seat-env` are run by
+a seat, by name. `/usr/local/lib/dt-broker/bin` is that directory (see §5), so:
+
+```bash
+sudo install -d -o root -g wheel -m 0755 /usr/local/lib/dt-broker/bin
+sudo ln -sf /usr/local/lib/dt-broker/scripts/dt-broker /usr/local/lib/dt-broker/bin/dt-broker
+```
+
 The plist next to this file is the copy of record. It is installed as a system
 daemon:
 
@@ -158,6 +196,32 @@ A script that calls `gh` by name, without the seat's shell hook, reads the PATH.
 `/Users/chrisstefan/paperclip-workspace/tools/seat-gh-guard/bin` and before
 `/opt/homebrew/bin`. The seat runs inherit their PATH from the Paperclip
 adapter, so the entry belongs in the adapter's environment.
+
+### The git credential helper
+
+`gh` is only half of it: a seat also pushes with `git`. `dt-broker seat-env`
+writes a `gitconfig` for the run and points `GIT_CONFIG_GLOBAL` at it, and that
+file has to carry **an empty `helper =` line** before the broker's helper:
+
+```ini
+[credential "https://github.com"]
+	helper =
+	helper = !/usr/local/lib/dt-broker/bin/dt-broker git-credential
+```
+
+Git builds the helper list in config-file order and the **system** config on this
+Mac sets `credential.helper = osxkeychain`
+(`/Library/Developer/CommandLineTools/usr/share/git-core/gitconfig`). Without the
+empty line that system helper wins, git never asks the broker, and the push goes
+out under Chris's own personal credential. The reset line is what makes the
+broker's helper the only one; `dt-broker seat-env` writes it.
+
+The helper is named with its absolute path for the same reason `dt-broker` has to
+be on the PATH: git runs the helper with a sanitized environment, and a seat that
+cannot find `dt-broker` silently falls back to the host credential.
+
+Nothing else is needed here: the seat does not configure git by hand, it runs
+`eval "$(dt-broker seat-env)"` (see `docs/ops/dt-broker.md`).
 
 ## 6. Checking that it is up
 

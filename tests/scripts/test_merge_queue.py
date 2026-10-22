@@ -3380,6 +3380,22 @@ def test_the_rollback_flag_never_raises_a_gate(
     assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_ENFORCE
 
 
+def test_the_rollback_flag_never_raises_a_shadowed_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`app` does not switch the shadow gate to enforce.
+
+    The flag only ever lowers a gate. A gate that is already measuring (the
+    mode the queue ships in) stays measuring when the flag says `app`, so the
+    flag can never be used to switch a gate on.
+    """
+    flag = tmp_path / "github-auth-mode"
+    flag.write_text("app\n", encoding="utf-8")
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", flag)
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_SHADOW)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_SHADOW
+
+
 def test_an_unreadable_rollback_flag_leaves_the_gate_alone(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -38,6 +38,7 @@ from .core import (
     HOST_MODE,
     BrokerError,
     Policy,
+    RefusedError,
     last4,
     read_auth_mode,
 )
@@ -91,6 +92,26 @@ def _run_tmp(env: dict[str, str]) -> Path:
 
 def _print_json(payload: Any) -> None:
     sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def _auth_mode() -> str:
+    """The rollback flag, as this side of the broker sees it.
+
+    There is deliberately no environment override for the path: a seat that
+    could point the flag at a file it owns could turn the broker off by
+    writing `host` into it. A flag that cannot be read reads as `app`.
+    """
+    return read_auth_mode(DEFAULT_AUTH_MODE_PATH, default=APP_MODE)
+
+
+def _broker_executable() -> str:
+    """The absolute path of this command, for the git credential helper.
+
+    The helper line git runs must not depend on the PATH of the seat's
+    shell: the helper is run by git, in git's own environment, and a bare
+    name is a name git may not be able to find.
+    """
+    return str(Path(__file__).resolve().parent.parent / "dt-broker")
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +243,10 @@ def _identity(args: argparse.Namespace, env: dict[str, str]) -> dict[str, Any]:
     except broker_client.BrokerUnavailable as exc:
         raise BrokerError(f"the broker did not answer: {exc}") from exc
     if not answer.get("ok"):
-        raise BrokerError(str(answer.get("error") or "the broker refused"))
+        # The broker answered, and the answer is a refusal. That is not the
+        # same thing as the broker being down, and a caller that treats the
+        # two alike cannot tell a refusal from an outage.
+        raise RefusedError(str(answer.get("error") or "the broker refused"))
     return answer
 
 
@@ -230,6 +254,9 @@ def cmd_identity(args: argparse.Namespace, env: dict[str, str]) -> int:
     """Print the bot identity this run commits under."""
     try:
         answer = _identity(args, env)
+    except RefusedError as exc:
+        sys.stderr.write(f"dt-broker: refused: {exc}\n")
+        return EXIT_REFUSED
     except BrokerError as exc:
         sys.stderr.write(f"dt-broker: {exc}\n")
         return EXIT_UNAVAILABLE
@@ -254,6 +281,9 @@ def cmd_trailers(args: argparse.Namespace, env: dict[str, str]) -> int:
     if not seat:
         try:
             seat = str(_identity(args, env).get("app") or "").strip()
+        except RefusedError as exc:
+            sys.stderr.write(f"dt-broker: refused: {exc}\n")
+            return EXIT_REFUSED
         except BrokerError as exc:
             sys.stderr.write(f"dt-broker: {exc}\n")
             return EXIT_UNAVAILABLE
@@ -339,6 +369,16 @@ def cmd_git_credential(args: argparse.Namespace, env: dict[str, str]) -> int:
         )
         return EXIT_REFUSED
 
+    if _auth_mode() != APP_MODE:
+        # The rollback flag is set to `host`: the seat runs with the host's
+        # own credentials, exactly as it did before the broker existed. The
+        # helper is not installed in that mode, so this is a backstop.
+        sys.stderr.write(
+            "dt-broker: refusing: the rollback flag says the host's own credentials are in "
+            "charge, so the broker hands out no credential\n"
+        )
+        return EXIT_REFUSED
+
     try:
         answer = broker_client.github_token(
             _run_jwt(env),
@@ -371,11 +411,26 @@ def cmd_git_credential(args: argparse.Namespace, env: dict[str, str]) -> int:
 
 
 def _write_gitconfig(path: Path) -> Path:
-    """The git configuration a seat run uses."""
+    """The git configuration a seat run uses.
+
+    Two lines matter here.
+
+    The empty `helper =` resets the list of credential helpers git has
+    collected so far. Git reads the system configuration before the global
+    one, and the system configuration on this host sets
+    `credential.helper = osxkeychain`: without the reset, the host's own
+    keychain credential is asked first and wins, and the seat's push leaves
+    with Chris's personal token instead of the broker's.
+
+    The helper line names the absolute path of this command. Git runs the
+    helper in its own environment, where the seat's PATH is not guaranteed
+    to hold anything.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         '[credential "https://github.com"]\n'
-        "\thelper = !dt-broker git-credential\n",
+        "\thelper =\n"
+        f"\thelper = !{_broker_executable()} git-credential\n",
         encoding="utf-8",
     )
     try:
@@ -392,7 +447,15 @@ def cmd_seat_env(args: argparse.Namespace, env: dict[str, str]) -> int:
     `eval "$(dt-broker seat-env)"` and be done with it.
     """
     tmp = _run_tmp(env)
-    gitconfig = _write_gitconfig(tmp / "gitconfig")
+    app_mode = _auth_mode() == APP_MODE
+    gitconfig: Path | None = None
+    if app_mode:
+        gitconfig = _write_gitconfig(tmp / "gitconfig")
+    else:
+        sys.stderr.write(
+            "dt-broker: the rollback flag says the host's own credentials are in charge; "
+            "no credential helper is installed and the host's own git configuration stands\n"
+        )
     gh_dir = tmp / "gh"
     gh_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -408,20 +471,23 @@ def cmd_seat_env(args: argparse.Namespace, env: dict[str, str]) -> int:
 
     try:
         identity = _identity(args, env)
+    except RefusedError as exc:
+        sys.stderr.write(f"dt-broker: refused: {exc}\n")
+        return EXIT_REFUSED
     except BrokerError as exc:
         sys.stderr.write(f"dt-broker: {exc}\n")
         return EXIT_UNAVAILABLE
 
     name = str(identity.get("name") or "")
     email = str(identity.get("email") or "")
-    lines = [
-        f"export GIT_CONFIG_GLOBAL={shquote(str(gitconfig))}",
-        f"export GH_CONFIG_DIR={shquote(str(gh_dir))}",
-        f"export GIT_AUTHOR_NAME={shquote(name)}",
-        f"export GIT_AUTHOR_EMAIL={shquote(email)}",
-        f"export GIT_COMMITTER_NAME={shquote(name)}",
-        f"export GIT_COMMITTER_EMAIL={shquote(email)}",
-    ]
+    lines: list[str] = []
+    if gitconfig is not None:
+        lines.append(f"export GIT_CONFIG_GLOBAL={shquote(str(gitconfig))}")
+    lines.append(f"export GH_CONFIG_DIR={shquote(str(gh_dir))}")
+    lines.append(f"export GIT_AUTHOR_NAME={shquote(name)}")
+    lines.append(f"export GIT_AUTHOR_EMAIL={shquote(email)}")
+    lines.append(f"export GIT_COMMITTER_NAME={shquote(name)}")
+    lines.append(f"export GIT_COMMITTER_EMAIL={shquote(email)}")
     sys.stdout.write("\n".join(lines) + "\n")
     return EXIT_OK
 
@@ -513,6 +579,9 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
     args = parser.parse_args(arguments)
     try:
         return int(args.func(args, environment))
+    except RefusedError as exc:
+        sys.stderr.write(f"dt-broker: refused: {exc}\n")
+        return EXIT_REFUSED
     except BrokerError as exc:
         sys.stderr.write(f"dt-broker: {exc}\n")
         return EXIT_INTERNAL

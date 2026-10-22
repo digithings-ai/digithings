@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 from .core import APP_JWT_TTL_SECONDS, AppConfig, BrokerError, TokenError, sign_rs256
 
@@ -44,7 +44,11 @@ class HttpResponse:
 
 #: A transport takes a method, a url, headers and a body and answers with an
 #: `HttpResponse`. The default one uses urllib; the tests replace it.
-Transport = Callable[[str, str, Mapping[str, str], bytes | None], HttpResponse]
+#:
+#: `Optional` rather than `bytes | None`: this alias is evaluated when the
+#: module is imported, and the daemon runs on the interpreter macOS ships
+#: (`/usr/bin/python3`, 3.9), where `X | Y` is a `TypeError` at import time.
+Transport = Callable[[str, str, Mapping[str, str], Optional[bytes]], HttpResponse]
 
 
 def urllib_transport(
@@ -143,6 +147,25 @@ class GitHubClient:
 
     # -- the calls ------------------------------------------------------
 
+    def _app_jwt(self, app: AppConfig, now: float | None = None) -> str:
+        """A ten-minute App JWT, signed with the App's own private key.
+
+        The App JWT is what authenticates a call that is made *before* a
+        token exists: reading a commit to find out who wrote it, and reading
+        a login to get its numeric id. An unauthenticated read of a private
+        repository is answered with a 404, so those two calls would be dead
+        on `twelve-x` and `digiforge` without it.
+        """
+        issued = int(time.time() if now is None else now)
+        return sign_rs256(
+            {
+                "iat": issued - 60,
+                "exp": issued + APP_JWT_TTL_SECONDS,
+                "iss": app.app_id,
+            },
+            app.key_path,
+        )
+
     def mint_installation_token(
         self,
         *,
@@ -198,17 +221,36 @@ class GitHubClient:
             detail = raw.decode("utf-8", "replace")
             raise TokenError(f"GitHub refused to revoke the token: {_message_of(detail)}")
 
-    def user_id(self, login: str) -> str:
-        """The numeric id of a login, which is what a noreply address needs."""
-        payload = self._json("GET", f"/users/{login}", headers={})
+    def user_id(self, app: AppConfig, login: str) -> str:
+        """The numeric id of a login, which is what a noreply address needs.
+
+        The call is made with the App's own JWT: an unauthenticated read is
+        answered from the anonymous rate limit, and the answer is not
+        guaranteed to be the same one.
+        """
+        payload = self._json(
+            "GET",
+            f"/users/{login}",
+            headers={"Authorization": f"Bearer {self._app_jwt(app)}"},
+        )
         value = payload.get("id")
         if value is None:
             raise TokenError(f"GitHub did not answer with an id for {login}")
         return str(value)
 
-    def commit_message(self, repo: str, sha: str) -> str:
-        """The message of a commit, which is where its trailers are."""
-        payload = self._json("GET", f"/repos/{repo}/commits/{sha}", headers={})
+    def commit_message(self, app: AppConfig, repo: str, sha: str) -> str:
+        """The message of a commit, which is where its trailers are.
+
+        The call is made with the App's own JWT: the repositories this broker
+        serves include private ones, and an unauthenticated read of a private
+        repository is answered with a 404 -- which would make the review
+        check fail on exactly the repositories that need it.
+        """
+        payload = self._json(
+            "GET",
+            f"/repos/{repo}/commits/{sha}",
+            headers={"Authorization": f"Bearer {self._app_jwt(app)}"},
+        )
         commit = payload.get("commit")
         message = ""
         if isinstance(commit, Mapping):

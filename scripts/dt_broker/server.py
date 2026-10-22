@@ -27,6 +27,7 @@ import socketserver
 import threading
 import time
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -35,18 +36,24 @@ from .core import (
     DEFAULT_AUTH_MODE_PATH,
     DEFAULT_SOCKET_PATH,
     DEFAULT_STATE_DIR,
+    INSTALLATION_TOKEN_TTL_SECONDS,
     AuthError,
     BrokerError,
     Policy,
     RefusedError,
+    agent_ids_from_commit_message,
     audit,
-    decode_jwt_claims,
     last4,
-    owner_from_commit_message,
     read_auth_mode,
 )
 from .github import GitHubClient, InstallationToken, noreply_address
-from .paperclip import PaperclipClient, RunContext, resolve_run_context
+from .paperclip import (
+    PaperclipClient,
+    PaperclipError,
+    RunContext,
+    resolve_run_context,
+    verify_run_credential,
+)
 
 #: How many failed health ticks in a row are an alert. Two: one failed tick
 #: is a hiccup, two in a row is the broker down.
@@ -56,6 +63,29 @@ ALERT_AFTER_FAILURES = 2
 SOCKET_MODE = 0o660
 #: The group the seats are in.
 SOCKET_GROUP = "_dtseats"
+
+
+@dataclass
+class _Issued:
+    """One token this daemon minted, and when it minted it.
+
+    The time it was minted is kept because GitHub's answer carries an
+    expiry in its own format, and the daemon needs to know whether a token
+    is still worth handing out before it hands it out again.
+    """
+
+    token: InstallationToken
+    issued_at: float
+    repositories: tuple[str, ...]
+    permissions: dict[str, str]
+
+    def usable_at(self, now: float) -> bool:
+        """True while the token is still worth handing to a caller."""
+        return now - self.issued_at < INSTALLATION_TOKEN_TTL_SECONDS - 60
+
+    def expired_at(self, now: float) -> bool:
+        """True once GitHub will not honour the token any more."""
+        return now - self.issued_at >= INSTALLATION_TOKEN_TTL_SECONDS
 
 
 class BrokerService:
@@ -88,10 +118,16 @@ class BrokerService:
         self.socket_path = Path(socket_path) if socket_path else None
         self._paperclip_transport = paperclip_transport
         # The tokens this daemon minted, by run. The daemon is long-lived and
-        # a run is short, so this map holds a handful of entries; the token
-        # is here so that `revoke` can find it at the end of the run.
-        self._issued: dict[str, InstallationToken] = {}
+        # a run is short, so this map holds a handful of entries; the tokens
+        # are here so that `revoke` can find them at the end of the run.
+        # A run may hold more than one: a token is kept per repository and
+        # permission set, and every one of them is revoked together.
+        self._issued: dict[str, list[_Issued]] = {}
         self._lock = threading.Lock()
+        #: Set when the socket could not be given to the seat group. A seat
+        #: that cannot connect to a broker that looks healthy is the worst
+        #: kind of healthy, so the health tick says so.
+        self.socket_group_error: str | None = None
 
     # -- helpers --------------------------------------------------------
 
@@ -137,6 +173,12 @@ class BrokerService:
         if not run_jwt:
             raise RefusedError("no run credential was supplied")
 
+        if self.auth_mode() != APP_MODE:
+            raise RefusedError(
+                "the rollback flag says the host's own credentials are in charge, so the "
+                "broker does not mint tokens"
+            )
+
         context = resolve_run_context(self._paperclip(run_jwt), run_jwt)
         binding = self.policy.seat_for(context.agent_id)
         seat_class = self.policy.class_for(binding)
@@ -160,15 +202,29 @@ class BrokerService:
 
         head_sha = str(request.get("head_sha") or "").strip()
         if self.policy.is_review_class(seat_class):
-            self._check_review_independence(context, seat_class, repo, head_sha)
+            self._check_review_independence(context, app, repo, head_sha)
 
-        token = self.github.mint_installation_token(
-            app=app,
-            repositories=[repo],
-            permissions=permissions,
-        )
-        with self._lock:
-            self._issued[context.run_id] = token
+        now = time.time()
+        existing = self._reusable_token(context.run_id, repo, permissions, now)
+        if existing is not None:
+            token = existing.token
+            reused = True
+        else:
+            token = self.github.mint_installation_token(
+                app=app,
+                repositories=[repo],
+                permissions=permissions,
+            )
+            with self._lock:
+                self._issued.setdefault(context.run_id, []).append(
+                    _Issued(
+                        token=token,
+                        issued_at=now,
+                        repositories=(repo,),
+                        permissions=dict(permissions),
+                    )
+                )
+            reused = False
 
         self._log(
             "github-token",
@@ -181,6 +237,7 @@ class BrokerService:
             permissions=dict(permissions),
             expires_at=token.expires_at,
             token_last4=last4(token.token),
+            reused=reused,
         )
         answer: dict[str, Any] = {
             "ok": True,
@@ -194,55 +251,123 @@ class BrokerService:
         }
         return answer
 
+    def _reusable_token(
+        self,
+        run_id: str,
+        repo: str,
+        permissions: Mapping[str, str],
+        now: float,
+    ) -> _Issued | None:
+        """A token this run already holds for the same job, if there is one.
+
+        A seat makes many `gh` calls in a run. Minting a fresh installation
+        token for each one leaves a token behind for every call but the last,
+        and the revocation at the end of the run only knows about the last
+        one. One token per run, per repository and permission set, is both
+        safer and cheaper.
+        """
+        with self._lock:
+            entries = self._issued.get(run_id, [])
+            for entry in entries:
+                if (
+                    entry.usable_at(now)
+                    and entry.repositories == (repo,)
+                    and entry.permissions == dict(permissions)
+                ):
+                    return entry
+        return None
+
+    def _prune(self, now: float) -> None:
+        """Drop the tokens GitHub will not honour any more."""
+        with self._lock:
+            for run_id in list(self._issued):
+                kept = [
+                    entry
+                    for entry in self._issued[run_id]
+                    if not entry.expired_at(now)
+                ]
+                if kept:
+                    self._issued[run_id] = kept
+                else:
+                    del self._issued[run_id]
+
     def _check_review_independence(
         self,
         context: RunContext,
-        seat_class: Any,
+        app: Any,
         repo: str,
         head_sha: str,
     ) -> None:
         """Refuse a seat that would review its own change.
 
         The change owner is read from the trailers of the head commit, which
-        is where every seat writes the seat and the run that wrote it.
+        is where every seat writes the seat and the run that wrote it. Only
+        the `Paperclip-Agent-Id` trailer counts: the `Paperclip-Seat` trailer
+        names the App, and every seat that uses that App writes the same
+        name there.
         """
         if not head_sha:
             raise RefusedError(
                 "a review token needs the head commit of the change under review"
             )
-        message = self.github.commit_message(repo, head_sha)
-        owner = owner_from_commit_message(message)
-        if owner and owner.strip().lower() == context.agent_id.strip().lower():
+        message = self.github.commit_message(app, repo, head_sha)
+        owners = agent_ids_from_commit_message(message)
+        requester = context.agent_id.strip().lower()
+        if not owners:
+            raise RefusedError(
+                f"the commit at {head_sha} names no agent id, so its author cannot be told "
+                "apart from the reviewer; a review token needs a commit with a "
+                "Paperclip-Agent-Id trailer"
+            )
+        if any(owner.strip().lower() == requester for owner in owners):
             raise RefusedError(
                 f"seat {context.agent_id} wrote the change at {head_sha}; "
                 "a seat may not review its own change"
             )
 
     def op_revoke(self, request: Mapping[str, Any]) -> dict[str, Any]:
-        """Revoke the token this daemon minted for a run."""
+        """Revoke the tokens this daemon minted for a run.
+
+        The credential is verified against the Paperclip API first, the same
+        way a mint is: a run id read out of an unverified credential is not
+        a run id, and a revocation that trusted one would let any caller
+        kill another run's token.
+        """
         run_jwt = str(request.get("run_jwt") or "")
         if not run_jwt:
             raise RefusedError("no run credential was supplied")
-        claims = decode_jwt_claims(run_jwt)
-        run_id = str(claims.get("run_id") or "")
+        try:
+            agent_id, run_id, _ = verify_run_credential(self._paperclip(run_jwt), run_jwt)
+        except PaperclipError as exc:
+            raise AuthError(f"the run credential was refused: {exc}") from exc
         with self._lock:
-            token = self._issued.pop(run_id, None)
-        if token is None:
-            self._log("revoke-noop", run_id=run_id)
+            entries = self._issued.pop(run_id, [])
+        if not entries:
+            self._log("revoke-noop", run_id=run_id, agent_id=agent_id)
             return {"ok": True, "revoked": False, "run_id": run_id}
-        self.github.revoke_installation_token(token.token)
-        self._log(
-            "revoke",
-            run_id=run_id,
-            repositories=list(token.repositories),
-            expires_at=token.expires_at,
-            token_last4=last4(token.token),
-        )
-        return {"ok": True, "revoked": True, "run_id": run_id}
+        revoked = 0
+        for entry in entries:
+            self.github.revoke_installation_token(entry.token.token)
+            revoked += 1
+            self._log(
+                "revoke",
+                run_id=run_id,
+                agent_id=agent_id,
+                repositories=list(entry.repositories),
+                expires_at=entry.token.expires_at,
+                token_last4=last4(entry.token.token),
+            )
+        return {"ok": True, "revoked": True, "run_id": run_id, "tokens": revoked}
 
     def op_health(self, request: Mapping[str, Any]) -> dict[str, Any]:
-        """How the daemon is."""
-        return {"ok": True, "health": self.health_record()}
+        """How the daemon is.
+
+        The answer's own `ok` is the health's `ok`: a watchdog that reads the
+        exit code must not be told "healthy" while the alert file is on
+        disk.
+        """
+        record = self.health_record()
+        return {"ok": bool(record.get("ok")), "health": record}
 
     def op_identity(self, request: Mapping[str, Any]) -> dict[str, Any]:
         """The bot identity the calling seat commits under."""
@@ -253,7 +378,7 @@ class BrokerService:
         binding = self.policy.seat_for(context.agent_id)
         seat_class = self.policy.class_for(binding)
         app = self.policy.app_for(seat_class)
-        bot_id = self.github.user_id(app.bot_login)
+        bot_id = self.github.user_id(app, app.bot_login)
         return {
             "ok": True,
             "name": app.bot_login,
@@ -277,11 +402,13 @@ class BrokerService:
         """One health tick.
 
         The probe is deliberately dull: the policy file must still be there
-        and the socket must still be on disk. What the tick buys is the
-        count of consecutive failures, which is what the alert is about.
+        and the socket must still be on disk, with the group the seats are
+        in. What the tick buys is the count of consecutive failures, which
+        is what the alert is about.
         """
         failures = 0
         detail = ""
+        self._prune(time.time())
         if self.policy_path is not None:
             try:
                 Policy.load(self.policy_path)
@@ -291,6 +418,17 @@ class BrokerService:
         if not detail and self.socket_path is not None and not self.socket_path.exists():
             failures += 1
             detail = f"the socket {self.socket_path} is gone"
+        if not detail and self.socket_group_error:
+            failures += 1
+            detail = self.socket_group_error
+        if not detail and self.socket_path is not None and not _socket_group_ok(
+            self.socket_path
+        ):
+            failures += 1
+            detail = (
+                f"the socket {self.socket_path} is not in the {SOCKET_GROUP} group, so no "
+                "seat can connect to it"
+            )
         record = {
             "ok": failures == 0,
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -305,9 +443,14 @@ class BrokerService:
     def _write_health(self, record: Mapping[str, Any]) -> None:
         try:
             self.state_dir.mkdir(parents=True, exist_ok=True)
-            (self.state_dir / "health.json").write_text(
-                json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-            )
+            try:
+                self.state_dir.chmod(0o750)
+            except OSError:
+                pass
+            path = self.state_dir / "health.json"
+            handle = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+            with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                stream.write(json.dumps(record, indent=2, sort_keys=True) + "\n")
         except OSError:
             pass
 
@@ -368,9 +511,18 @@ class HealthMonitor:
         return record
 
     def start(self) -> None:
-        """Start the loop in a thread."""
+        """Start the loop in a thread.
+
+        The first tick happens at once: a daemon that has just started has
+        not written a health record yet, and "no health record" must not
+        read as "unhealthy" for the first minute of its life.
+        """
         if self._thread is not None:
             return
+        try:
+            self.run_once()
+        except Exception:  # pragma: no cover - the first tick must not kill us
+            pass
 
         def _loop() -> None:
             while not self._stop.wait(self.interval):
@@ -408,8 +560,13 @@ class _Handler(socketserver.StreamRequestHandler):
                 answer = _failure("the request is not an object", "bad_request")
             else:
                 answer = service.handle(request)
-        self.wfile.write(json.dumps(answer, sort_keys=True).encode("utf-8") + b"\n")
-        self.wfile.flush()
+        try:
+            self.wfile.write(json.dumps(answer, sort_keys=True).encode("utf-8") + b"\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            # The caller gave up before the answer was written -- the token
+            # was still minted, and it is still revoked at the end of the run.
+            return
 
 
 class BrokerServer(socketserver.ThreadingUnixStreamServer):
@@ -424,28 +581,61 @@ class BrokerServer(socketserver.ThreadingUnixStreamServer):
         super().__init__(str(self.socket_path), _Handler)
 
     def server_bind(self) -> None:
-        super().server_bind()
+        # The socket is created by `bind`, and it exists with the mode the
+        # process's umask allows until the `chmod` below. The umask is set
+        # for the moment of the bind, so the socket is never readable by
+        # anyone but its owner and the seat group.
+        previous = os.umask(0o117)
+        try:
+            super().server_bind()
+        finally:
+            os.umask(previous)
         os.chmod(self.socket_path, SOCKET_MODE)
-        _set_group(self.socket_path, SOCKET_GROUP)
+        if not _set_group(self.socket_path, SOCKET_GROUP):
+            self.service.socket_group_error = (
+                f"the socket {self.socket_path} could not be given to the group "
+                f"{SOCKET_GROUP}, so no seat can connect to it"
+            )
 
 
-def _set_group(path: Path, group: str) -> None:
+def _seat_group_gid(group: str) -> int | None:
+    """The gid of the seat group, when it exists on this host."""
+    try:
+        import grp
+
+        return int(grp.getgrnam(group).gr_gid)
+    except (ImportError, KeyError, TypeError, ValueError):
+        return None
+
+
+def _socket_group_ok(path: Path) -> bool:
+    """True when the socket is in the seat group."""
+    gid = _seat_group_gid(SOCKET_GROUP)
+    if gid is None:
+        # The group does not exist on this host: there is nothing to check
+        # against, and the daemon is not going to invent one.
+        return True
+    try:
+        return os.stat(path).st_gid == gid
+    except OSError:
+        return False
+
+
+def _set_group(path: Path, group: str) -> bool:
     """Give the socket to the seat group, when the daemon may do so.
 
     The daemon runs as `_dtbroker`, which is a member of `_dtseats`; a group
     it does not belong to is left alone rather than guessed at, and the
-    failure is written down.
+    failure is written down rather than swallowed.
     """
-    try:
-        import grp
-
-        gid = grp.getgrnam(group).gr_gid
-    except (ImportError, KeyError):
-        return
+    gid = _seat_group_gid(group)
+    if gid is None:
+        return False
     try:
         os.chown(path, -1, gid)
     except (OSError, PermissionError):
-        pass
+        return False
+    return True
 
 
 def _failure(message: str, code: str) -> dict[str, Any]:

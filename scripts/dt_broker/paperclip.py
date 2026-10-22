@@ -20,7 +20,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 from .core import AuthError, BrokerError, decode_jwt_claims
 
@@ -42,7 +42,10 @@ class HttpResponse:
 
 #: A transport takes a method, a url, headers and a body and answers with an
 #: `HttpResponse`. The default one uses urllib; the tests replace it.
-Transport = Callable[[str, str, Mapping[str, str], bytes | None], HttpResponse]
+#:
+#: `Optional` rather than `bytes | None`: the alias is evaluated at import
+#: time, and the daemon runs on the interpreter macOS ships.
+Transport = Callable[[str, str, Mapping[str, str], Optional[bytes]], HttpResponse]
 
 
 def urllib_transport(
@@ -169,13 +172,17 @@ class Refused(AuthError):
     """The run is real but the ticket does not give the broker a repository."""
 
 
-def resolve_run_context(client: PaperclipClient, run_jwt: str) -> RunContext:
-    """Turn a run credential into a run context, or refuse.
+def verify_run_credential(client: PaperclipClient, run_jwt: str) -> tuple[str, str, dict[str, Any]]:
+    """The agent and run a credential really names, or a refusal.
 
-    The order matters. The credential is read for shape, then the API is
-    asked who it belongs to, then the run is asked whether it is still
-    running. A run that has ended is refused before the repository is even
-    looked at: a token for a finished run is a token for nobody.
+    The API is the authority: the credential is presented to
+    `GET /api/agents/me`, and the answer -- not the credential's own claims
+    -- decides who the caller is. The run is then asked whether it belongs
+    to that agent.
+
+    The run's *status* is not checked here. A revocation happens at the end
+    of a run, when the run is over, and a check that refused a finished run
+    would make the revocation impossible exactly when it is needed.
     """
     claims = decode_jwt_claims(run_jwt)
     run_id = str(claims.get("run_id") or "")
@@ -189,12 +196,25 @@ def resolve_run_context(client: PaperclipClient, run_jwt: str) -> RunContext:
         raise AuthError("the run credential names a different agent than the API answers for")
 
     run = client.heartbeat_run(run_id)
-    status = str(run.get("status") or "").lower()
-    if status != "running":
-        raise AuthError(f"run {run_id} is {status or 'unknown'}, not running")
     run_agent = str(run.get("agentId") or "")
     if run_agent and run_agent != agent_id:
         raise AuthError(f"run {run_id} belongs to another agent")
+    return agent_id, run_id, run
+
+
+def resolve_run_context(client: PaperclipClient, run_jwt: str) -> RunContext:
+    """Turn a run credential into a run context, or refuse.
+
+    The order matters. The credential is read for shape, then the API is
+    asked who it belongs to, then the run is asked whether it is still
+    running. A run that has ended is refused before the repository is even
+    looked at: a token for a finished run is a token for nobody.
+    """
+    agent_id, run_id, run = verify_run_credential(client, run_jwt)
+
+    status = str(run.get("status") or "").lower()
+    if status != "running":
+        raise AuthError(f"run {run_id} is {status or 'unknown'}, not running")
 
     issue_id = issue_id_from_run(run)
     issue = client.issue(issue_id)

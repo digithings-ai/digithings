@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -119,6 +120,15 @@ OWNER_TRAILER_RE = re.compile(
     re.MULTILINE,
 )
 
+#: The agent-id trailer on its own. The review check reads this one and not
+#: the other: `Paperclip-Seat` names the App, which is the same for every
+#: seat that uses it, so it cannot tell the author of a change from the
+#: reviewer of it.
+AGENT_ID_OWNER_RE = re.compile(
+    r"^Paperclip-Agent-Id\s*:\s*(?P<owner>[0-9A-Za-z][0-9A-Za-z._-]*)\s*$",
+    re.MULTILINE,
+)
+
 #: A UUID, the shape every Paperclip agent id and run id has.
 UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-"
@@ -212,8 +222,10 @@ def read_auth_mode(path: Path | None = None, *, default: str = APP_MODE) -> str:
     misspelled must never turn the broker off, and the safe reading is the
     one where the broker keeps deciding.
 
-    The queue reads the same flag with `default=host`, because there the
-    flag only ever downgrades a gate and never raises one.
+    The merge queue reads the same file itself, in
+    `scripts/merge_queue.py`, because there the flag may only ever *lower* a
+    gate: `host` puts the provenance check back into shadow. A damaged flag
+    there leaves the gate exactly as it was.
     """
     target = path if path is not None else DEFAULT_AUTH_MODE_PATH
     try:
@@ -552,15 +564,44 @@ class Policy:
         return seat_class.app == self.review_app
 
 
-def owner_from_commit_message(message: str) -> str | None:
-    """The seat that wrote a commit, read from its trailers.
+def owners_from_commit_message(message: str) -> list[str]:
+    """Every seat id a commit's trailers name.
 
     The broker needs this for the review path: a seat may not review its own
     change. Both trailer spellings are read -- `Paperclip-Agent-Id` for the
-    queue's own convention and `Paperclip-Seat` for the ticket's.
+    queue's own convention and `Paperclip-Seat` for the ticket's -- and *all*
+    of them are returned, not just the first: the author of a commit writes
+    its message, so an author that puts a decoy trailer first would otherwise
+    be read as somebody else.
     """
-    match = OWNER_TRAILER_RE.search(message or "")
-    return match.group("owner") if match else None
+    found: list[str] = []
+    for match in OWNER_TRAILER_RE.finditer(message or ""):
+        owner = match.group("owner").strip()
+        if owner and owner not in found:
+            found.append(owner)
+    return found
+
+
+def agent_ids_from_commit_message(message: str) -> list[str]:
+    """Every agent id a commit's trailers name.
+
+    Only the `Paperclip-Agent-Id` trailer counts here: it is the one that
+    names a seat rather than an App. A commit that names no agent id has an
+    author the broker cannot name, and the caller is told so rather than
+    being let through.
+    """
+    found: list[str] = []
+    for match in AGENT_ID_OWNER_RE.finditer(message or ""):
+        owner = match.group("owner").strip()
+        if owner and owner not in found:
+            found.append(owner)
+    return found
+
+
+def owner_from_commit_message(message: str) -> str | None:
+    """The first seat a commit's trailers name, or None."""
+    owners = owners_from_commit_message(message)
+    return owners[0] if owners else None
 
 
 def audit(path: Path, event: str, **fields: Any) -> dict[str, Any]:
@@ -577,10 +618,25 @@ def audit(path: Path, event: str, **fields: Any) -> dict[str, Any]:
     record.update(scrub(fields))
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, sort_keys=True) + "\n")
-    except OSError:
+        try:
+            path.parent.chmod(0o750)
+        except OSError:
+            pass
+        # The log holds agent ids, run ids, repository names and permission
+        # lists. It holds no credential, but it is still the broker's record
+        # of what it did, so it is not world-readable.
+        try:
+            handle = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o640)
+        except OSError:
+            handle = -1
+        if handle < 0:
+            raise OSError(f"the log {path} could not be opened")
+        with os.fdopen(handle, "a", encoding="utf-8") as stream:
+            stream.write(json.dumps(record, sort_keys=True) + "\n")
+    except OSError as exc:
         # A log that cannot be written must not stop the broker from
-        # answering, but it must be visible: the caller gets the fact.
+        # answering, but it must be visible: the caller gets the fact and
+        # the daemon's own error log says so.
         record["_log_error"] = True
+        print(f"dt-broker: the audit log {path} could not be written: {exc}", file=sys.stderr)
     return record

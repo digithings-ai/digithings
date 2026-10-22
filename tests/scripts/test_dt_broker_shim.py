@@ -205,11 +205,17 @@ def seat_env(tmp_path: Path) -> dict[str, str]:
 
 
 @pytest.fixture
-def guard(tmp_path: Path) -> Path:
-    """A stand-in for the host guard, which only has to exist."""
+def guard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A stand-in for the host guard, which only has to exist.
+
+    The guard's path is a constant in the shim, not an environment variable:
+    a seat that could name its own program as "the guard" would have taken
+    the guard out of the chain. The tests change the constant instead.
+    """
     path = tmp_path / "gh-guard"
     path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     path.chmod(0o755)
+    monkeypatch.setattr(ghshim, "GUARD_PATH", path)
     return path
 
 
@@ -370,12 +376,13 @@ def test_a_pull_request_inside_the_organization_is_allowed() -> None:
     assert notes
 
 
-def test_a_pull_request_with_no_repository_is_refused(tmp_path: Path) -> None:
+def test_a_pull_request_with_no_repository_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A repository that cannot be identified cannot be cleared either."""
+    monkeypatch.chdir(tmp_path)
     with pytest.raises(ghshim.Refusal):
-        ghshim.check_pull_request_target(
-            ["pr", "create"], {"DT_BROKER_CWD": str(tmp_path)}
-        )
+        ghshim.check_pull_request_target(["pr", "create"], {})
 
 
 def test_the_pulls_endpoint_outside_the_organization_is_refused() -> None:
@@ -401,21 +408,130 @@ def test_a_graphql_pull_request_is_refused() -> None:
 
 
 # ---------------------------------------------------------------------------
+# the rules that were found by the in-session review of 22 October
+# ---------------------------------------------------------------------------
+
+
+def test_the_endpoint_may_sit_behind_a_flag() -> None:
+    """`gh api` takes its endpoint after the flags, so every argument is read."""
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["api", "-X", "POST", "repos/someone-else/their-project/pulls"], {}
+        )
+
+
+def test_the_endpoint_with_a_query_string_is_refused() -> None:
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["api", "repos/someone-else/their-project/pulls?per_page=1"], {}
+        )
+
+
+def test_a_graphql_mutation_in_an_input_file_is_refused(tmp_path: Path) -> None:
+    """`--input` hides the body from the command line."""
+    body = tmp_path / "query.json"
+    body.write_text(
+        json.dumps({"query": "mutation { createPullRequest(input: {}) { clientMutationId } }"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ghshim.Refusal) as excinfo:
+        ghshim.check_pull_request_target(["api", "graphql", "--input", str(body)], {})
+    assert "GraphQL" in str(excinfo.value)
+
+
+def test_the_last_repository_flag_wins() -> None:
+    """gh's `--repo` is a plain flag, and the last value set is the one used."""
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            [
+                "pr",
+                "create",
+                "--repo",
+                "digithings-ai/digithings",
+                "--repo",
+                "someone-else/their-project",
+            ],
+            {},
+        )
+
+
+def test_a_relative_body_path_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The path is relative, but the mistake is the same one."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "review.md").write_text(BODY, encoding="utf-8")
+    with pytest.raises(ghshim.Refusal) as excinfo:
+        ghshim.rewrite_fields(
+            ["api", f"repos/{REPO}/issues/1/comments", "-f", "body=review.md"]
+        )
+    assert "path" in str(excinfo.value)
+
+
+def test_a_field_keeps_the_flag_it_was_written_with() -> None:
+    """`-F` types its value and `-f` does not; the shim does not change that."""
+    argv, _ = ghshim.rewrite_fields(["api", "repos/o/r/issues/1", "-F", "state=closed"])
+    assert argv[-2:] == ["-F", "state=closed"]
+    argv, _ = ghshim.rewrite_fields(["api", "repos/o/r/issues/1", "--field", "state=closed"])
+    assert argv[-2:] == ["--field", "state=closed"]
+
+
+def test_the_upstream_remote_is_the_one_that_is_checked(tmp_path: Path) -> None:
+    """gh opens a pull request against `upstream`; so does the shim."""
+    checkout = tmp_path / "fork"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q", str(checkout)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(checkout), "remote", "add", "origin",
+         "git@github.com:digithings-ai/digithings.git"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(checkout), "remote", "add", "upstream",
+         "git@github.com:someone-else/their-project.git"],
+        check=True,
+        capture_output=True,
+    )
+    assert ghshim._git_remote_repo(checkout) == "someone-else/their-project"
+
+
+def test_the_rules_hold_for_a_process_that_is_not_a_seat(
+    captured: list[dict[str, Any]], guard: Path
+) -> None:
+    """The organization rule is not a seat rule: it is ours."""
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+    assert ghshim.main(["pr", "create", "--repo", "someone-else/their-project"], env) == (
+        ghshim.EXIT_REFUSED
+    )
+    assert captured == []
+
+
+# ---------------------------------------------------------------------------
 # the guard, and the modes
 # ---------------------------------------------------------------------------
 
 
 def test_the_shim_never_calls_the_real_gh(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pointing the shim at the real `gh` would turn the guard off."""
+    monkeypatch.setattr(ghshim, "GUARD_PATH", Path("/opt/homebrew/bin/gh"))
     with pytest.raises(ghshim.Refusal) as excinfo:
-        ghshim.guard_path({"DT_BROKER_GH_GUARD": "/opt/homebrew/bin/gh"})
+        ghshim.guard_path({})
     assert "guard" in str(excinfo.value)
 
 
-def test_a_guard_that_is_the_real_gh_is_refused(
-    seat_env: dict[str, str], captured: list[dict[str, Any]]
+def test_the_guard_path_is_not_an_environment_variable(
+    seat_env: dict[str, str], captured: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    seat_env["DT_BROKER_GH_GUARD"] = "/opt/homebrew/bin/gh"
+    """A seat that could name its own program as the guard would turn it off."""
+    monkeypatch.setattr(ghshim, "GUARD_PATH", Path("/opt/homebrew/bin/gh"))
+    seat_env["DT_BROKER_GH_GUARD"] = "/tmp/a-program-of-my-own"
+    assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_REFUSED
+    assert captured == []
+
+
+def test_a_guard_that_is_the_real_gh_is_refused(
+    seat_env: dict[str, str], captured: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(ghshim, "GUARD_PATH", Path("/opt/homebrew/bin/gh"))
     assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_REFUSED
     assert captured == []
 
@@ -427,7 +543,6 @@ def test_app_mode_gives_the_guard_a_per_run_token(
     captured: list[dict[str, Any]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    seat_env["DT_BROKER_GH_GUARD"] = str(guard)
     monkeypatch.setattr(ghshim, "request_token", lambda env: "the-minted-token")
     assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_OK
     assert len(captured) == 1
@@ -446,7 +561,6 @@ def test_app_mode_keeps_the_host_tokens_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The only credential in the room is the one the broker minted."""
-    seat_env["DT_BROKER_GH_GUARD"] = str(guard)
     monkeypatch.setattr(ghshim, "request_token", lambda env: "the-minted-token")
     assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_OK
     child = captured[0]["env"]
@@ -463,7 +577,6 @@ def test_app_mode_sends_the_rewritten_call_to_the_guard(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    seat_env["DT_BROKER_GH_GUARD"] = str(guard)
     monkeypatch.setattr(ghshim, "request_token", lambda env: "the-minted-token")
     body = tmp_path / "review.md"
     body.write_text(BODY, encoding="utf-8")
@@ -487,7 +600,6 @@ def test_a_missing_flag_reads_as_app(
 ) -> None:
     """A flag that cannot be read must not turn the broker off."""
     monkeypatch.setattr(ghshim, "AUTH_MODE_PATH", tmp_path / "not-there")
-    seat_env["DT_BROKER_GH_GUARD"] = str(guard)
     monkeypatch.setattr(ghshim, "request_token", lambda env: "the-minted-token")
     assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_OK
     assert captured[0]["env"]["GH_TOKEN"] == "the-minted-token"
@@ -501,7 +613,6 @@ def test_host_mode_passes_the_call_through_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`host` restores today's behaviour: the broker is not even asked."""
-    seat_env["DT_BROKER_GH_GUARD"] = str(guard)
 
     def _not_asked(env: dict[str, str]) -> str:
         raise AssertionError("the broker must not be asked in host mode")
@@ -519,7 +630,6 @@ def test_host_mode_still_refuses_a_pull_request_outside_the_organization(
     captured: list[dict[str, Any]],
 ) -> None:
     """The rollback flag turns the broker off, not the organization rule."""
-    seat_env["DT_BROKER_GH_GUARD"] = str(guard)
     code = ghshim.main(["pr", "create", "--repo", "someone-else/their-project"], seat_env)
     assert code == ghshim.EXIT_REFUSED
     assert captured == []
@@ -532,7 +642,6 @@ def test_host_mode_still_expands_a_field(
     captured: list[dict[str, Any]],
     tmp_path: Path,
 ) -> None:
-    seat_env["DT_BROKER_GH_GUARD"] = str(guard)
     body = tmp_path / "review.md"
     body.write_text(BODY, encoding="utf-8")
     ghshim.main(["api", f"repos/{REPO}/issues/1/comments", "-f", f"body=@{body}"], seat_env)
@@ -547,7 +656,6 @@ def test_a_missing_broker_stops_the_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """No broker is not a reason to fall back to the host's credentials."""
-    seat_env["DT_BROKER_GH_GUARD"] = str(guard)
 
     def _unavailable(env: dict[str, str]) -> str:
         raise ghshim.BrokerUnavailable("the broker did not answer")
@@ -565,7 +673,6 @@ def test_a_refusal_costs_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A refusal happens before the broker is asked for anything."""
-    seat_env["DT_BROKER_GH_GUARD"] = str(guard)
 
     def _not_asked(env: dict[str, str]) -> str:
         raise AssertionError("the broker must not be asked for a refused call")
@@ -583,7 +690,6 @@ def test_a_shim_that_is_already_in_the_chain_refuses(
     captured: list[dict[str, Any]],
 ) -> None:
     """A shim that called itself would loop for ever."""
-    seat_env["DT_BROKER_GH_GUARD"] = str(guard)
     seat_env[ghshim.SHIM_MARKER] = "1"
     assert ghshim.main(["pr", "list"], seat_env) == ghshim.EXIT_REFUSED
     assert captured == []
@@ -596,7 +702,7 @@ def test_a_process_that_is_not_a_seat_is_left_to_the_guard(
     captured: list[dict[str, Any]],
 ) -> None:
     """The guard decides who is a seat, and so does the shim."""
-    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "DT_BROKER_GH_GUARD": str(guard)}
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
     assert ghshim.main(["pr", "list"], env) == ghshim.EXIT_OK
     assert captured[0]["argv"] == ["pr", "list"]
     assert "GH_TOKEN" not in captured[0]["env"]
@@ -668,10 +774,22 @@ def _recording_guard(tmp_path: Path) -> Path:
     return path
 
 
-def _run_shim(env: dict[str, str], *arguments: str) -> subprocess.CompletedProcess[str]:
-    """Run the shim as a process, the way a seat run would."""
+def _run_shim(
+    env: dict[str, str], guard: Path, *arguments: str
+) -> subprocess.CompletedProcess[str]:
+    """Run the shim as a process, the way a seat run would.
+
+    The guard's path is a constant in the shim, and the test changes it the
+    way a caller of the module would: in the process that runs the shim.
+    """
+    code = (
+        "import os, sys\n"
+        "from scripts.dt_broker import ghshim\n"
+        f"ghshim.GUARD_PATH = {str(guard)!r}\n"
+        "sys.exit(ghshim.main(sys.argv[1:], dict(os.environ)))\n"
+    )
     return subprocess.run(
-        [sys.executable, str(REPO_ROOT / "scripts" / "dt-broker"), "gh", *arguments],
+        [sys.executable, "-c", code, *arguments],
         env=env,
         capture_output=True,
         text=True,
@@ -696,12 +814,11 @@ def test_the_guard_is_exec_ed_with_the_rewritten_call(
         "PAPERCLIP_RUN_ID": RUN_ID,
         "PAPERCLIP_API_KEY": run_jwt(),
         "DT_BROKER_SOCKET": str(socket_path),
-        "DT_BROKER_GH_GUARD": str(guard),
         "DT_BROKER_RUN_TMP": str(tmp_path / "run"),
         "GITHUB_TOKEN": "the-host-token",
     }
     proc = _run_shim(
-        env, "api", f"repos/{REPO}/issues/1/comments", "-f", f"body=@{body}"
+        env, guard, "api", f"repos/{REPO}/issues/1/comments", "-f", f"body=@{body}"
     )
     assert proc.returncode == 0, proc.stderr
 
@@ -741,10 +858,9 @@ def test_the_shim_refuses_a_pull_request_outside_the_organization(
         "PAPERCLIP_RUN_ID": RUN_ID,
         "PAPERCLIP_API_KEY": run_jwt(),
         "DT_BROKER_SOCKET": str(socket_path),
-        "DT_BROKER_GH_GUARD": str(guard),
         "DT_BROKER_RUN_TMP": str(tmp_path / "run"),
     }
-    proc = _run_shim(env, "pr", "create", "--repo", "someone-else/their-project")
+    proc = _run_shim(env, guard, "pr", "create", "--repo", "someone-else/their-project")
     assert proc.returncode == ghshim.EXIT_REFUSED
     assert "digithings-ai" in proc.stderr
     assert not (tmp_path / "guard-record.json").exists()

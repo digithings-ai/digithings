@@ -14,12 +14,16 @@ front of it and does three things the guard does not:
   repository and hands that token to the guard's `gh` for this one call.
 
 The order of those matters. The refusals happen before the broker is asked
-for anything, so a refusal costs nothing and leaks nothing.
+for anything, so a refusal costs nothing and leaks nothing. The refusals and
+the field rewrite also happen whether or not this is a seat run: they are
+rules about what may be sent to GitHub, and they cost nothing when they pass.
 
 The shim never execs the real `gh` itself. It execs the guard, which execs the
 real `gh`. That is the whole point: a seat that could point the shim at the
 real binary would have turned the guard off, which the operating rules forbid
-in as many words.
+in as many words. For the same reason the guard's path is a constant here and
+not an environment variable: a seat that could name its own program as "the
+guard" would have taken the guard out of the chain.
 """
 
 from __future__ import annotations
@@ -43,8 +47,10 @@ EXIT_UNAVAILABLE = 69
 EXIT_INTERNAL = 70
 EXIT_REFUSED = 76
 
-#: The Board-owned guard. The shim execs this, never the real `gh`.
-DEFAULT_GUARD = "~/paperclip-workspace/tools/seat-gh-guard/bin/gh"
+#: The Board-owned guard. The shim execs this, never the real `gh`. It is a
+#: constant: there is no environment override, because a seat that could
+#: point the shim at a program of its own would have turned the guard off.
+GUARD_PATH = Path("~/paperclip-workspace/tools/seat-gh-guard/bin/gh")
 
 #: The real `gh` binaries. The shim refuses to exec these: handing a call to
 #: the real binary is how the guard would be turned off.
@@ -73,11 +79,20 @@ BODY_KEYS: frozenset[str] = frozenset({"body"})
 #: hundred megabytes is not a comment.
 MAX_FIELD_BYTES = 1 << 20
 
-#: The flags that carry a field, and the flag that carries the same thing as
-#: a plain string. `gh api` reads a file for `-F` and sends the literal text
-#: for `-f`; this shim makes them agree, and sends the text as a string so
-#: that a body which happens to start with `@` is not read as a path again.
+#: The flags that carry a field, and the flag as it was written. A field gh
+#: was told to type stays typed: `-F` turns `true` into a boolean and fills
+#: `{owner}` in, `-f` sends the text. Only the field the shim expands is
+#: rewritten, and only because a file's contents are text.
 FIELD_FLAGS: dict[str, str] = {
+    "-f": "-f",
+    "--raw-field": "--raw-field",
+    "-F": "-F",
+    "--field": "--field",
+}
+
+#: The flag that sends a value as plain text. An expanded file goes out as
+#: text: the contents of a review are a body, not a boolean.
+TEXT_FLAGS: dict[str, str] = {
     "-f": "-f",
     "--raw-field": "--raw-field",
     "-F": "-f",
@@ -90,10 +105,6 @@ SHIM_MARKER = "DT_BROKER_SHIM_ACTIVE"
 
 #: The flags that carry a comment body as a plain string.
 BODY_FLAGS: frozenset[str] = frozenset({"--body", "-b"})
-
-#: `gh pr comment` and `gh issue comment` read a file with `--body-file`,
-#: which is already correct and is left alone.
-BODY_FILE_FLAGS: frozenset[str] = frozenset({"--body-file", "-F"})
 
 
 class Refusal(Exception):
@@ -122,8 +133,7 @@ def guard_path(env: dict[str, str]) -> Path:
     resolves to one of the real binaries is a refusal rather than a
     configuration.
     """
-    raw = env.get("DT_BROKER_GH_GUARD") or DEFAULT_GUARD
-    path = Path(raw).expanduser()
+    path = Path(GUARD_PATH).expanduser()
     try:
         resolved = path.resolve()
     except OSError:
@@ -202,7 +212,7 @@ def _split_field(argument: str) -> tuple[str, str] | None:
 class _FieldArg:
     """One field argument, and the shape it was written in."""
 
-    #: The canonical flag: `-f` or `--raw-field`.
+    #: The flag as it was written: `-f`, `--raw-field`, `-F` or `--field`.
     flag: str
     key: str
     raw: str
@@ -264,14 +274,15 @@ def _looks_like_a_file(value: str) -> bool:
 
     A body that is `/tmp/review.md` is a mistake: the author meant the text
     in the file, and posting the path is how a review gets silently
-    replaced by a filename.
+    replaced by a filename. The same is true of `review.md` next to the
+    seat: the path is relative, but the mistake is the same one.
     """
-    if not value:
+    if not value or value.startswith("@"):
         return False
-    if not (value.startswith("/") or value.startswith("./") or value.startswith("../")):
+    if "\n" in value or "\x00" in value or len(value) > 4096:
         return False
-    candidate = Path(value).expanduser()
     try:
+        candidate = Path(value).expanduser()
         return candidate.is_file()
     except OSError:  # pragma: no cover - depends on the host
         return False
@@ -324,10 +335,9 @@ def rewrite_fields(argv: list[str]) -> tuple[list[str], list[str]]:
             index += 1
             continue
         field_arg, index = parsed
-        canonical = field_arg.flag
         if field_arg.raw.startswith("@"):
             content = _read_field_file(field_arg.raw[1:])
-            out.extend(field_arg.render(canonical, content))
+            out.extend(field_arg.render(TEXT_FLAGS.get(field_arg.flag, "-f"), content))
             notes.append(f"expanded {field_arg.key} from {field_arg.raw}")
             index += 1
             continue
@@ -337,7 +347,7 @@ def rewrite_fields(argv: list[str]) -> tuple[list[str], list[str]]:
                 "will not post a path where a body belongs. Use `@<path>` to send the "
                 "file's contents."
             )
-        out.extend(field_arg.render(canonical, field_arg.raw))
+        out.extend(field_arg.render(field_arg.flag, field_arg.raw))
         index += 1
     return out, notes
 
@@ -382,11 +392,11 @@ def rewrite_body_flags(argv: list[str]) -> tuple[list[str], list[str]]:
 # ---------------------------------------------------------------------------
 
 
-def _git_remote_repo(cwd: Path) -> str | None:
-    """The `owner/name` of the repository in `cwd`, read from git."""
+def _git_remote_url(cwd: Path, name: str) -> str | None:
+    """The URL of one remote, when the checkout has one."""
     try:
         proc = subprocess.run(
-            ["git", "-C", str(cwd), "remote", "get-url", "origin"],
+            ["git", "-C", str(cwd), "remote", "get-url", name],
             capture_output=True,
             check=False,
             timeout=10,
@@ -396,27 +406,54 @@ def _git_remote_repo(cwd: Path) -> str | None:
     if proc.returncode != 0:
         return None
     url = proc.stdout.decode("utf-8", "replace").strip()
+    return url or None
+
+
+def _repo_from_url(url: str) -> str | None:
+    """`owner/name` from a remote URL."""
     if not url:
         return None
-    url = url.removesuffix(".git")
-    if url.startswith("git@"):
-        url = url.split(":", 1)[-1]
-    elif "://" in url:
-        url = url.split("://", 1)[-1]
-    parts = [part for part in url.split("/") if part]
+    cleaned = url.removesuffix(".git")
+    if cleaned.startswith("git@"):
+        cleaned = cleaned.split(":", 1)[-1]
+    elif "://" in cleaned:
+        cleaned = cleaned.split("://", 1)[-1]
+    parts = [part for part in cleaned.split("/") if part]
     if len(parts) < 2:
         return None
     return f"{parts[-2]}/{parts[-1]}"
 
 
+def _git_remote_repo(cwd: Path) -> str | None:
+    """The `owner/name` of the repository in `cwd`, read from git.
+
+    The remotes are read in the order gh reads them -- `upstream`, then
+    `github`, then `origin` -- because a checkout that has an `upstream` is
+    a fork, and gh will open the pull request against the fork's upstream
+    while a shim that only looked at `origin` would have cleared a
+    different repository.
+    """
+    for name in ("upstream", "github", "origin"):
+        url = _git_remote_url(cwd, name)
+        if url is None:
+            continue
+        return _repo_from_url(url)
+    return None
+
+
 def _repo_from_flag(argv: list[str]) -> str | None:
-    """The `--repo owner/name` a call names, if it names one."""
+    """The `--repo owner/name` a call names, if it names one.
+
+    The last one wins: gh's `--repo` is a plain string flag, and the last
+    value set is the value gh uses.
+    """
+    named: str | None = None
     for index, argument in enumerate(argv):
         if argument in ("--repo", "-R") and index + 1 < len(argv):
-            return argv[index + 1]
-        if argument.startswith("--repo="):
-            return argument.split("=", 1)[1]
-    return None
+            named = argv[index + 1]
+        elif argument.startswith("--repo="):
+            named = argument.split("=", 1)[1]
+    return named
 
 
 def current_repo(argv: list[str], env: dict[str, str]) -> str | None:
@@ -427,8 +464,7 @@ def current_repo(argv: list[str], env: dict[str, str]) -> str | None:
     from_env = str(env.get("GH_REPO") or "").strip()
     if from_env:
         return from_env
-    cwd = Path(env.get("DT_BROKER_CWD") or os.getcwd())
-    return _git_remote_repo(cwd)
+    return _git_remote_repo(Path(os.getcwd()))
 
 
 def _check_org(repo: str, what: str) -> None:
@@ -441,7 +477,31 @@ def _check_org(repo: str, what: str) -> None:
         )
 
 
-_PULLS_ENDPOINT_RE = re.compile(r"^/?repos/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pulls/?$")
+#: The pulls endpoint of the REST API, wherever it sits in an argument. The
+#: endpoint of `gh api` is a positional argument, and it may sit behind a
+#: flag, so every argument is scanned rather than only the first one.
+_PULLS_PATH_RE = re.compile(
+    r"(?:^|/)repos/(?P<owner>[^/\s]+)/(?P<repo>[^/\s]+)/pulls(?:/|$|\?)"
+)
+
+#: The GraphQL mutation that opens a pull request. The repository it names
+#: is inside a query string and cannot be checked honestly, so it is refused
+#: outright.
+_CREATE_PULL_REQUEST = "createPullRequest"
+
+
+def _input_files(argv: list[str]) -> list[Path]:
+    """The files `gh api --input` would send."""
+    files: list[Path] = []
+    for index, argument in enumerate(argv):
+        value: str | None = None
+        if argument == "--input" and index + 1 < len(argv):
+            value = argv[index + 1]
+        elif argument.startswith("--input="):
+            value = argument.split("=", 1)[1]
+        if value:
+            files.append(Path(value).expanduser())
+    return files
 
 
 def check_pull_request_target(argv: list[str], env: dict[str, str]) -> list[str]:
@@ -467,11 +527,13 @@ def check_pull_request_target(argv: list[str], env: dict[str, str]) -> list[str]
         _check_org(repo, "the pull request")
         notes.append(f"pull request against {repo}")
         return notes
-    if command == "api" and len(argv) > 1:
-        endpoint = argv[1]
-        match = _PULLS_ENDPOINT_RE.match(endpoint)
-        if match:
+    if command != "api":
+        return notes
+
+    for argument in argv[1:]:
+        for match in _PULLS_PATH_RE.finditer(argument):
             owner = match.group("owner")
+            repo_name = match.group("repo")
             if owner.startswith("{"):
                 repo = current_repo(argv, env)
                 if not repo:
@@ -481,16 +543,23 @@ def check_pull_request_target(argv: list[str], env: dict[str, str]) -> list[str]
                     )
                 _check_org(repo, "the pull request")
             else:
-                _check_org(f"{owner}/{match.group('repo')}", "the pull request")
-            notes.append(f"pull request against {owner}")
-            return notes
-        if endpoint in ("graphql", "/graphql"):
-            body = " ".join(argv[2:])
-            if "createPullRequest" in body:
-                raise Refusal(
-                    "a GraphQL createPullRequest cannot be checked against the "
-                    f"{ORG} organization; use `gh pr create` against a {ORG} repository"
-                )
+                _check_org(f"{owner}/{repo_name}", "the pull request")
+            notes.append(f"pull request against {owner}/{repo_name}")
+
+    bodies = [" ".join(argv[1:])]
+    for path in _input_files(argv):
+        try:
+            bodies.append(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            # A body that cannot be read cannot be checked. The mutation is
+            # refused on sight further down, so an unreadable file is only a
+            # problem when it hides the mutation.
+            continue
+    if any(_CREATE_PULL_REQUEST in body for body in bodies):
+        raise Refusal(
+            "a GraphQL createPullRequest cannot be checked against the "
+            f"{ORG} organization; use `gh pr create` against a {ORG} repository"
+        )
     return notes
 
 
@@ -550,14 +619,22 @@ def empty_gh_config_dir(env: dict[str, str]) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def plan_call(argv: list[str], env: dict[str, str]) -> Plan:
-    """Decide what to do with one `gh` call."""
+def plan_call(argv: list[str], env: dict[str, str], *, mint: bool = True) -> Plan:
+    """Decide what to do with one `gh` call.
+
+    The rewrite and the refusals always happen. The token is only asked for
+    when this is a seat run in `app` mode: a call that is not a seat run has
+    no run to be scoped to, and `host` mode is the rollback.
+    """
     rewritten, field_notes = rewrite_fields(argv)
     rewritten, body_notes = rewrite_body_flags(rewritten)
     notes = field_notes + body_notes
     notes.extend(check_pull_request_target(rewritten, env))
 
     plan = Plan(argv=rewritten, notes=notes)
+    if not mint:
+        plan.notes.append("not a seat run: the call is passed through unchanged")
+        return plan
     if auth_mode(env) != APP_MODE:
         plan.notes.append("host auth mode: the call is passed through unchanged")
         return plan
@@ -619,12 +696,8 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
         )
         return EXIT_REFUSED
 
-    if not is_seat_process(environment):
-        # Not a seat run: the guard decides, as it always did.
-        return exec_guard(guard, call, environment)
-
     try:
-        plan = plan_call(call, environment)
+        plan = plan_call(call, environment, mint=is_seat_process(environment))
     except Refusal as exc:
         sys.stderr.write(f"dt-broker: refusing: {exc}\n")
         return EXIT_REFUSED
@@ -654,6 +727,7 @@ __all__ = [
     "Refusal",
     "auth_mode",
     "check_pull_request_target",
+    "current_repo",
     "is_seat_process",
     "main",
     "plan_call",

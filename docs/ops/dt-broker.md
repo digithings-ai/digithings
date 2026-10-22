@@ -42,15 +42,32 @@ git commit -m "..." -m "$(dt-broker trailers)"
 
 `seat-env` writes three things:
 
-- `GIT_CONFIG_GLOBAL` points at a fresh file with one line in it:
-  `[credential "https://github.com"] helper = !dt-broker git-credential`. The seat's
-  own git configuration is not read, so a credential saved there is not used.
+- `GIT_CONFIG_GLOBAL` points at a fresh file with the credential section in it:
+
+  ```ini
+  [credential "https://github.com"]
+  	helper =
+  	helper = !/usr/local/lib/dt-broker/bin/dt-broker git-credential
+  ```
+
+  The **empty `helper =` line is not decoration**: git builds the helper list in
+  config-file order, and the system config on this Mac sets
+  `credential.helper = osxkeychain`. Without the reset, that system helper is
+  consulted first, wins, and the push goes out under the host's own credential. The
+  reset empties the list so the broker's helper is the only one. The seat's own git
+  configuration is not read either, so a credential saved there is not used.
 - `GH_CONFIG_DIR` points at an empty directory, so the `gh` that runs reads no
   configuration and no credential of the host's.
 - `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL`
   are the bot identity of the seat's App: `digithings-seat[bot]`, with the
   `BOTID+login@users.noreply.github.com` address, so GitHub attributes the commit to
   the bot and not to a person.
+
+The helper is named with its absolute path, and `dt-broker` has to be on the seat's
+PATH (`/usr/local/lib/dt-broker/bin/dt-broker` is a symlink to the script). Git runs
+a helper with a sanitized environment: a helper that cannot be found is not an
+error, it is a fall-through to the next helper, and the next one is the host's
+credential.
 
 `dt-broker trailers` prints the four trailers a seat commit carries:
 
@@ -75,7 +92,10 @@ The shim is the seat's `gh`. It does four things, in this order.
 **It never bypasses the guard.** The shim hands the call to
 `~/paperclip-workspace/tools/seat-gh-guard/bin/gh`, which hands it to the real `gh`.
 A shim configured to point at `/opt/homebrew/bin/gh` is a refusal, not a
-configuration.
+configuration, and the guard's path is a constant of the program, not something the
+environment can move: a seat process cannot point the shim at its own program.
+A guard that is not there at all is exit 70, never a fall-through to the real
+`gh`.
 
 **It is in the chain by the seat's shell hook, not by the PATH alone.** The seat's
 `gh` is a shell function (`gh() { "$_SEAT_GH_GUARD" "$@"; }`) in
@@ -90,17 +110,24 @@ before the guard's directory and before `/opt/homebrew/bin`.
 `gh api -f body=@file` sends the literal text `@file`. A seat that wrote `-f` meant
 to send the body and sent the path instead, and the comment on the pull request was
 damaged (DIG-4914). The shim now reads the file for both spellings and sends its
-content.
+content. Only the expanded field changes shape — it is sent as a raw field, so
+the content is never read again as a path. The other fields keep the flag they
+were written with, so `gh`'s own typed fields (`true`, `42`, `{owner}`) still mean
+what they mean.
 
 **It refuses a body that is a path.** A field called `body` whose value looks like a
 path to a file that exists is refused instead of posted. The cheap rule catches the
-mistake even where the expansion does not apply.
+mistake even where the expansion does not apply, and it catches a relative path
+(`review.md`) as well as an absolute one.
 
 **It refuses a pull request outside the organization.** `gh pr create` against a
 repository that is not in `digithings-ai`, `gh api repos/{owner}/{repo}/pulls`
 outside it, and the GraphQL `createPullRequest` mutation are all refused, with the
-reason on stderr. This holds in both authentication modes: no upstream pull request,
-ever, under any identity.
+reason on stderr. The endpoint is looked for in **every** argument, not only the
+first one, so `gh api -X POST repos/someone-else/their-project/pulls` is refused
+as well; a mutation hidden in an `--input` file is read and refused too. This
+holds in both authentication modes, and for a process that is not a seat run: no
+upstream pull request, ever, under any identity.
 
 In `app` mode the shim then asks the broker for a token, sets `GH_TOKEN` for that one
 call, and removes `GITHUB_TOKEN`, `GH_ENTERPRISE_TOKEN` and `GITHUB_ENTERPRISE_TOKEN`
@@ -119,6 +146,37 @@ broker for a token scoped to the ticket's repository. The answer is
 
 When the credential is erased, the token behind it is revoked.
 
+In `host` mode the helper refuses (exit 76) and writes no git configuration at
+all: the rollback restores today's behaviour, and today's behaviour is the host's
+own credential. A seat that still asks the broker in `host` mode would be running
+half a rollback.
+
+## The exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | The call went through. |
+| 64 | The command line was wrong. |
+| 66 | No run credential in the environment, or the broker could not verify it. |
+| 69 | The broker did not answer. The daemon is down or the socket is gone. |
+| 70 | The broker answered, but it could not do the work (a broken policy, a missing guard). |
+| 76 | A refusal. The broker said no and said why. |
+
+A refusal (76) and an outage (69) are different answers and they are told apart:
+a refusal is a decision, an outage is a fact about the host.
+
+## One token per run
+
+The broker mints **one token per run, per repository, per permission set**, and
+reuses it for the rest of the run: a run that makes ten `gh` calls holds one
+installation token, not ten. When the run ends, every token the broker minted for
+that run is revoked, so nothing outlives the work. A token that has expired on
+GitHub's side is pruned and a fresh one is minted.
+
+The rule that makes this safe is the same one that makes it useless to steal: the
+token is scoped to the repository of the ticket, it carries only the permissions
+of the seat's class, and it dies with the run.
+
 ## What the broker refuses
 
 | Refusal | Why |
@@ -132,7 +190,8 @@ When the credential is erased, the token behind it is revoked.
 | A permission the seat's class does not hold | An escalation is refused, not trimmed. |
 | `secrets`, ever | No seat holds it. |
 | `statuses` and `workflows`, for a seat or a reviewer | Not part of the job. |
-| A reviewer reviewing its own change | The head commit's owner trailer is the seat itself. |
+| A reviewer reviewing its own change | The head commit names the requesting seat as an owner, or names nobody at all. |
+| A mint while the flag says `host` | The rollback is on: the broker hands out nothing. |
 
 A refusal is an answer, not an error: the broker says what it refused and why, and
 the caller sees it.
@@ -140,9 +199,14 @@ the caller sees it.
 ## The review path
 
 A seat of the `reviewer` class gets a `digithings-review` token only for a change
-somebody else wrote. The broker reads the head commit's trailers, finds the owner,
-and refuses when the owner is the requesting seat. The head commit's sha has to be
-supplied: a review without one is refused.
+somebody else wrote. The broker reads the head commit's trailers, finds every
+owner it names, and refuses when one of them is the requesting seat. It also
+refuses when the commit names **no** owner at all: a change with no author trailer
+is not a change somebody else wrote, it is a change nobody can be compared with.
+The head commit's sha has to be supplied: a review without one is refused.
+
+The commit is read with the App's own credentials, not anonymously, so the check
+works on the private repositories of the organization.
 
 ## The rollback flag
 
@@ -151,10 +215,13 @@ supplied: a review without one is refused.
 - `app` — the broker mints the token. The default, and what a missing or damaged
   flag reads as.
 - `host` — the seat falls back to the host's own `gh` credentials, the way it works
-  today. The merge queue's provenance check drops back to shadow.
+  today. The daemon stops minting, the credential helper refuses, the shim passes
+  the call through, and the merge queue's provenance check drops back to shadow.
 
-The flag is written by Chris with sudo and by nobody else. The directory belongs to
-root, so a seat process cannot write it. A seat cannot turn the broker off.
+The flag is read by the daemon, by the shim and by the credential helper, so a
+rollback is complete rather than half a rollback. It is written by Chris with sudo
+and by nobody else. The directory belongs to root, so a seat process cannot write
+it. A seat cannot turn the broker off.
 
 ## Health
 
@@ -170,18 +237,27 @@ not sign anything in Chris's name. The alert file is what a Board-side watcher r
 | Symptom | What it means |
 | --- | --- |
 | `dt-broker: the broker did not answer ...` | The daemon is down. Exit 69. The call is not made with host credentials, on purpose. |
-| `dt-broker: refusing: ... is outside the digithings-ai organization` | The shim caught a pull request outside the organization. |
-| `dt-broker: refusing: a body that is a path` | The shim caught a body that would have been posted as a path. |
+| `dt-broker: refusing: ... is outside the digithings-ai organization` | The shim caught a pull request outside the organization. Exit 76. |
+| `dt-broker: refusing: a body that is a path` | The shim caught a body that would have been posted as a path. Exit 76. |
+| `dt-broker: the gh guard is not at ...` | The guard is gone or moved. Exit 70. The shim refuses rather than calling the real `gh` without it. |
 | `gh` is not the shim | The seat's shell hook still points `_SEAT_GH_GUARD` at the guard, or the PATH does not have `/usr/local/lib/dt-broker/bin` in front of the guard's directory. |
 | `git` asks for a username | The credential helper could not reach the broker, or the repository is outside the policy. |
+| A push goes out under the host's name | The gitconfig has no empty `helper =` reset, or `dt-broker` is not on the PATH, so git fell through to the system helper. |
 
-The last two are the ones that bite. A seat that cannot see the shim will happily
-call the real `gh` with the host's credential, so the PATH entry is not optional.
+The last three are the ones that bite. A seat that cannot see the shim will happily
+call the real `gh` with the host's credential, and a seat that cannot find the
+helper will happily push with the host's credential, so neither entry is optional.
 
 ## The tests
 
 `tests/scripts/test_dt_broker.py` covers the broker: the refusals in the table
-above, the token never reaching a log, and the revoke at the end of a run.
+above, the token never reaching a log, the revoke at the end of a run, the forged
+credential that cannot revoke another run, the reviewer that cannot review its own
+change, the host mode that mints nothing, and the launchd arguments as they are
+really parsed.
 `tests/scripts/test_dt_broker_shim.py` covers the shim: the `@path` expansion for
-both spellings, the refused bare path, the refused out-of-organization pull request,
-the guard in the chain, and the host-mode pass-through.
+both spellings, the refused bare path, the refused out-of-organization pull request
+(including the endpoint behind a flag and the mutation in a file), the guard in the
+chain, and the host-mode pass-through.
+`tests/scripts/test_merge_queue.py` covers the flag's effect on the provenance
+gate: it lowers a gate, and it never raises one.
