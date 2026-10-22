@@ -1249,6 +1249,23 @@ lists the same rows but does not toggle them. `/search`, `/vault`, and `/docs` a
 not public names. The BFF `X-Digi-Force-Tool` allowlist is unchanged; the palette
 no longer sends it.
 
+**Decision — a surface never offers a row it cannot run (DIG-4667).** The composer
+root menu and the `/` palette read the same command list, but they do not hold the
+same state: the palette sits inside the thread, so it can copy the last answer and
+download the thread, while the app's own runner knows the chat prefs and nothing
+else. A command that acts on the live chat therefore carries `needsChatState` on its
+def in `@digithings/digichat-ui` `slash-commands.ts` (`/copy` and `/export`), and the
+app asks `canRunProductCommand` before it builds a root-menu row. A row the app
+cannot run is not offered there, because such a row closes the menu and does
+nothing: #6034 started listing the palette's copy and export rows in the root menu
+while the app runner had no case for them, so the row was a dead end. The palette
+keeps those rows and still runs them, so the capability is not lost — only the
+surface that cannot run them stops offering them. `/export html` is the second face
+of `/export` and a row the app itself synthesizes, so it is marked by the same rule
+(`EXPORT_HTML_ROW_ID`). The tool rows this ticket named were removed upstream by
+#6211 (tools are toggled in `/tools`, never as their own slash commands); copy and
+export are the surviving instance of that defect class.
+
 Web-search defaults (#3859, tool-only grounding — no synthesis-model pins):
 
 | surface | session pref | BFF forward |

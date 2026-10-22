@@ -49,6 +49,7 @@ import {
 import {
   applyThemePick,
   buildProductSlashCommands,
+  canRunProductCommand,
   currentThemeState,
   languageSelectOptions,
 } from "@/lib/product-slash-commands";
@@ -520,6 +521,10 @@ export function EmbedComposerMenu({
    * The root is the same command list the `/` palette filters — one source of
    * truth, so going back never lands on a second, shorter "main". Rows that
    * name a page open it in place; actions run and close the menu.
+   *
+   * A row the app cannot run is not offered here: the palette owns the
+   * chat-state commands, and a row the app cannot run closes the menu and
+   * does nothing.
    */
   const mainRows = useMemo((): MenuRow[] => {
     const NODE_BY_ID: Partial<Record<string, MenuView>> = {
@@ -537,7 +542,7 @@ export function EmbedComposerMenu({
       help: "help",
     };
     return buildProductSlashCommands(api)
-      .filter((command) => command.id !== "settings")
+      .filter((command) => command.id !== "settings" && canRunProductCommand(command.id))
       .map((command) => {
         const node = NODE_BY_ID[command.id];
         const draft = node ? paneDraftForId(command.id) : null;

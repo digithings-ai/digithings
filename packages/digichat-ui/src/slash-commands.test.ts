@@ -226,6 +226,13 @@ describe("SLASH_COMMANDS", () => {
   });
 });
 
+describe("chat-state commands", () => {
+  it("marks the commands that act on the live chat", () => {
+    const chatState = SLASH_COMMANDS.filter((def) => def.needsChatState).map((def) => def.id);
+    expect(chatState).toEqual(["copy", "export"]);
+  });
+});
+
 describe("view-level wording", () => {
   it("gives every live level a wording and no retired level a label", () => {
     // The shared map is the one home of the wording (DIG-4665): the composer

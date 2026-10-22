@@ -59,6 +59,12 @@ export type SlashDef = {
    * toggle — always flips, ignores extra words.
    */
   kind?: "toggle" | "action" | "tool" | "client";
+  /**
+   * The command acts on the live chat: it reads the thread or the last
+   * answer. Only a surface that holds the chat can run it, so a surface
+   * without the chat must not offer the command.
+   */
+  needsChatState?: boolean;
   category?: SlashCategory;
 };
 
@@ -339,6 +345,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     needsArg: false,
     hint: "Copy last answer as markdown",
     kind: "client",
+    needsChatState: true,
     category: "actions",
   },
   {
@@ -347,6 +354,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     needsArg: false,
     hint: "Download this thread: /export md or /export html",
     kind: "client",
+    needsChatState: true,
     category: "actions",
   },
   {

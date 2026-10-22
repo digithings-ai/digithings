@@ -7,6 +7,7 @@ import {
 import { emptyMcpConfig } from "@/components/stock/embed-mcp-flow";
 import {
   buildProductSlashCommands,
+  canRunProductCommand,
   catalogForceTool,
   executeSlashDef,
   extraSlashDefs,
@@ -212,6 +213,28 @@ describe("buildProductSlashCommands", () => {
       command: { id: "export" },
       arg: "",
     });
+  });
+});
+
+describe("canRunProductCommand", () => {
+  it("refuses the commands that need the chat state", () => {
+    expect(canRunProductCommand("copy")).toBe(false);
+    expect(canRunProductCommand("export")).toBe(false);
+    expect(canRunProductCommand("export-html")).toBe(false);
+  });
+
+  it("allows the commands the app runner can execute", () => {
+    expect(canRunProductCommand("new")).toBe(true);
+    expect(canRunProductCommand("compact")).toBe(true);
+    expect(canRunProductCommand("language")).toBe(true);
+    expect(canRunProductCommand("english")).toBe(true);
+  });
+
+  it("leaves the palette rows alone, so the palette still offers them", () => {
+    const ids = buildProductSlashCommands(api()).map((c) => c.id);
+    expect(ids).toContain("copy");
+    expect(ids).toContain("export");
+    expect(ids).toContain("export-html");
   });
 });
 

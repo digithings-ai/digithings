@@ -188,6 +188,33 @@ export function featuredLanguageCommands(
   });
 }
 
+/** The `/export` command's HTML face, offered next to its markdown face. */
+export const EXPORT_HTML_ROW_ID = "export-html";
+
+/** The row id a command gets in the command list. */
+function rowIdForDef(def: SlashDef): string {
+  return def.id === "lang" ? "language" : def.id;
+}
+
+/** The rows the app synthesizes, and the command each one is a face of. */
+const SYNTHESIZED_ROW_COMMANDS: Record<string, string> = {
+  [EXPORT_HTML_ROW_ID]: "export",
+};
+
+/**
+ * Can the app's own runner execute this row?
+ *
+ * The `/` palette holds the chat state, so it can copy the last answer and
+ * download the thread. The app's composer menu knows the chat prefs and
+ * nothing else, so for it a chat-state row is a row that closes the menu
+ * and does nothing. Such a row is not offered there; the palette keeps it.
+ */
+export function canRunProductCommand(id: string): boolean {
+  const commandId = SYNTHESIZED_ROW_COMMANDS[id] ?? id;
+  const def = SLASH_COMMANDS.find((candidate) => rowIdForDef(candidate) === commandId);
+  return !def?.needsChatState;
+}
+
 export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_SlashCommand[] {
   const vis = visibilityFromPrefs(api);
   const { prefs } = api;
@@ -230,7 +257,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = "Markdown file of this thread";
     }
 
-    const id = def.id === "lang" ? "language" : def.id;
+    const id = rowIdForDef(def);
     const insertName = def.id === "export" ? "/export md" : def.names[0];
     rows.push({
       id,
@@ -242,7 +269,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
     });
     if (def.id === "export") {
       rows.push({
-        id: "export-html",
+        id: EXPORT_HTML_ROW_ID,
         label: "/export html",
         description: "Rendered HTML of this chat",
         execute: () => {},
