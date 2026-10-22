@@ -128,7 +128,7 @@ def _jobs_code() -> str:
 
 
 def _retired_row() -> str:
-    """The `wd("datatap-answer-check", …)` call in jobs.ts, or "" when absent."""
+    f"""The `wd("{JOB_ID}", …)` call in jobs.ts, or "" when absent."""
     match = re.search(
         rf'wd\(\s*"{re.escape(JOB_ID)}".*?\)\s*,',
         _jobs_code(),
@@ -151,14 +151,14 @@ def test_the_clock_row_is_disabled_in_the_cron_worker() -> None:
     assert "enabled: false" in row, (
         f'jobs.ts still enables wd("{JOB_ID}", …): the retired check would keep dispatching'
     )
-    assert f'"{CRON}"' in row, f"the tombstone row no longer carries the retired cron"
+    assert f'"{CRON}"' in row, "the tombstone row no longer carries the retired cron"
 
 
 def test_no_clock_row_targets_this_workflow() -> None:
     """No enabled Worker row may dispatch this workflow file any more."""
     text = _jobs_code()
     assert text.count("datatap-answer-check.yml") == 1, (
-        "more than one jobs.ts row names datatap-answer-check.yml: an enabled row "
+        "more than one jobs.ts row names that workflow file: an enabled row "
         "would still dispatch the retired check"
     )
     assert "enabled: false" in _retired_row(), "the only row naming the workflow is enabled"
