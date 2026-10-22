@@ -1,12 +1,12 @@
 """Documents pointer-per-row archive phase (Task 8, #3766).
 
-Self-contained fakes: documents rows are keyed (workspace_id, document_key,
-date); the newest date per key stays live while older payloads move to R2
-with an archive_objects pointer row left behind.
+Documents rows are keyed (workspace_id, document_key, date); the newest date
+per key stays live while older payloads move to R2 with an archive_objects
+pointer row left behind. The PostgREST and R2 doubles live in
+``tests/dq/ops/archive_fakes.py``.
 """
 
 import datetime
-import json
 import uuid
 
 import pytest
@@ -15,134 +15,12 @@ pytestmark = pytest.mark.unit
 
 from digiquant.ops.checkpoint_archive import archive_documents  # noqa: E402
 
-
-class _Result:
-    def __init__(self, data):
-        self.data = data
+from tests.dq.ops.archive_fakes import FakeArchiveClient, FakeStore  # noqa: E402
 
 
-class _DocQuery:
-    # Mirror PostgREST's default page cap: an unbounded select returns at most
-    # 1000 rows. Production code must paginate explicitly (see DOC_SCAN_PAGE_SIZE).
-    _DEFAULT_PAGE = 1000
-
-    def __init__(self, client, name):
-        self._client = client
-        self._table = client.tables[name]
-        self._name = name
-        self._cols = None
-        self._filters = []
-        self._patch = None
-        self._pending_insert = None
-        self._range = None
-        self._order_cols = []
-
-    def select(self, *args):
-        self._cols = args
-        return self
-
-    def eq(self, col, val):
-        self._filters.append((col, val))
-        return self
-
-    def order(self, *cols):
-        """Mirror postgrest-py's variadic .order(); production orders one at a time."""
-        self._order_cols.extend(cols)
-        return self
-
-    def range(self, start, end):
-        """Inclusive row window, mirroring postgrest-py's .range()."""
-        self._range = (start, end)
-        return self
-
-    def insert(self, row):
-        self._pending_insert = dict(row)
-        return self
-
-    def update(self, patch):
-        self._patch = patch
-        return self
-
-    def _matched(self):
-        out = []
-        for row in self._table:
-            hit = True
-            for col, val in self._filters:
-                if col.startswith("source_key->>"):
-                    field = col.split("->>")[1]
-                    if (row.get("source_key") or {}).get(field) != val:
-                        hit = False
-                        break
-                elif row.get(col) != val:
-                    hit = False
-                    break
-            if hit:
-                out.append(row)
-        return out
-
-    def execute(self):
-        if self._pending_insert is not None:
-            # Simulate httpx encode_json: bodies must be JSON-serializable,
-            # or the real PostgREST client raises TypeError on .execute().
-            json.dumps(self._pending_insert)
-            self._table.append(self._pending_insert)
-            row, self._pending_insert = self._pending_insert, None
-            self._client.statements.append(
-                {"table": self._name, "op": "insert", "cols": None, "filters": []}
-            )
-            return _Result([row])
-        if self._patch is not None:
-            matched = self._matched()
-            for row in matched:
-                row.update(self._patch)
-            self._client.statements.append(
-                {
-                    "table": self._name,
-                    "op": "update",
-                    "cols": None,
-                    "filters": list(self._filters),
-                }
-            )
-            return _Result(matched)
-        self._client.statements.append(
-            {
-                "table": self._name,
-                "op": "select",
-                "cols": self._cols,
-                "filters": list(self._filters),
-            }
-        )
-        rows = list(self._matched())
-        if self._order_cols:
-            cols = self._order_cols
-            rows.sort(key=lambda r: tuple(r.get(c) for c in cols))
-        if self._range is not None:
-            start, end = self._range
-            rows = rows[start : end + 1]
-        else:
-            rows = rows[: self._DEFAULT_PAGE]
-        return _Result(rows)
-
-
-class FakeDocClient:
-    def __init__(self):
-        self.tables = {"documents": [], "archive_objects": []}
-        self.statements = []
-
-    def table(self, name):
-        return _DocQuery(self, name)
-
-
-class FakeDocStore:
-    def __init__(self):
-        self.objects = {}
-        self.original = {}
-
-    def put(self, key, data):
-        self.objects[key] = bytes(data)
-
-    def get(self, key):
-        return self.objects[key]
+def _doc_client() -> FakeArchiveClient:
+    """A client double holding the two tables the document phase touches."""
+    return FakeArchiveClient(store={"documents": [], "archive_objects": []})
 
 
 def seed_documents(
@@ -160,7 +38,7 @@ def seed_documents(
 
 
 def test_archive_documents_keeps_latest_per_key():
-    client, store = FakeDocClient(), FakeDocStore()
+    client, store = _doc_client(), FakeStore()
     seed_documents(
         client, workspace="house", key="olympus-thesis", versions=["2026-09-07", "2026-09-08"]
     )
@@ -180,7 +58,7 @@ def test_archive_documents_key_scan_then_single_row_fetches():
     Expected shape (PostgREST 8s cap): one key-only scan first, then one
     full-row select per older version keyed by the full row key.
     """
-    client, store = FakeDocClient(), FakeDocStore()
+    client, store = _doc_client(), FakeStore()
     seed_documents(
         client,
         versions=["2026-09-07", "2026-09-08", "2026-09-09"],
@@ -199,14 +77,14 @@ def test_archive_documents_key_scan_then_single_row_fetches():
 
 def test_archive_documents_rerun_writes_no_duplicate_pointer():
     """A retried run (R2 object + pointer already exist) must not duplicate pointers."""
-    client, store = FakeDocClient(), FakeDocStore()
+    client, store = _doc_client(), FakeStore()
     seed_documents(client, versions=["2026-09-07", "2026-09-08"])
     archive_documents(client, store, workspace="house")
     pointers = client.table("archive_objects").select("*").execute().data
     assert len(pointers) == 1
     key, sha = pointers[0]["r2_key"], pointers[0]["sha256"]
     # Fresh client: payload still live (NULL never applied), pointer already recorded.
-    rerun, restore = FakeDocClient(), FakeDocStore()
+    rerun, restore = _doc_client(), FakeStore()
     seed_documents(rerun, versions=["2026-09-07", "2026-09-08"])
     rerun.tables["archive_objects"].append(
         {
@@ -230,7 +108,7 @@ def test_archive_documents_rerun_writes_no_duplicate_pointer():
 def test_archive_documents_native_types_serialize_to_registry():
     """Direct-PG rows carry date/UUID objects; the registry insert must serialize them."""
     ws = uuid.UUID("6b753576-ced9-5319-9bfa-c5d0aacd9319")
-    client, store = FakeDocClient(), FakeDocStore()
+    client, store = _doc_client(), FakeStore()
     seed_documents(
         client, workspace=ws, versions=[datetime.date(2026, 9, 7), datetime.date(2026, 9, 8)]
     )
@@ -243,7 +121,7 @@ def test_archive_documents_native_types_serialize_to_registry():
 
 def test_archive_documents_scans_all_pages():
     """The key scan must paginate: 1200 rows span two PostgREST pages."""
-    client, store = FakeDocClient(), FakeDocStore()
+    client, store = _doc_client(), FakeStore()
     for k in ("k1", "k2"):
         seed_documents(client, key=k, versions=[f"2026-09-{d:03d}" for d in range(1, 601)])
     archive_documents(client, store, workspace="house")
