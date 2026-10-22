@@ -12,19 +12,31 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
-# ROUTE HOLD (2026-10-18): the zone routes were moved to digithings-stack in code
-# (cost epic: one DigiChat container, not two), but that cutover has NOT been
-# deployed - the stack's live deployment predates it and still carries only
-# graph/key/search. Deploying this worker with only /chat/occ* would therefore
-# DELETE the seven live routes below and Pages would 404 /embed and /api/chat,
-# taking OCC down.
+# ROUTE OWNERSHIP (this file owns the digichat surface; the 2026-10-18
+# "ROUTE HOLD" note is retired — DIG-5121, 2026-10-22).
 #
-# OCC is in active use, so this deploy re-asserts the CURRENT live route set
-# (verified live: all eight routes resolve to digithings-digichat). The
-# /api/mcp/zammad* route below is additive and secret-gated (stage 1 of moving
-# the OCC helpdesk MCP off the shared base stack); nothing consumes it yet. To
-# complete the cutover later: remove these seven from here, keep them on
-# apps/digithings-stack-cloudflare/wrangler.toml, and deploy the stack first.
+# That note said the zone routes had been folded into digithings-stack in code
+# (cost epic: one DigiChat container, not two) and that the seven routes below
+# would MOVE there once that cutover was deployed. The fold is dead. Chris
+# decided on 2026-10-19 (recorded in
+# apps/digithings-stack-cloudflare/wrangler.toml) that OCC is client work and
+# must not ride the base digithings platform: every digithings.ai digichat path
+# — embed, api/chat, api/embed, api/byok, api/plan-proof, api/health, _dtchat,
+# chat/occ and now chat* — is owned by THIS Worker and its own container. The
+# stack Worker serves only its own custom domains (graph/key/search), which is
+# what ended every stack deploy failing with `Can't deploy routes that are
+# assigned to another worker`.
+#
+# So the seven routes below are this Worker's live surface and they STAY here.
+# They are not a temporary bridge with a stack move behind them, and the stack
+# holds no fallback copy of them: dropping them here drops them from the zone,
+# and Pages would 404 /embed and /api/chat with OCC in active use. Do not
+# "complete the cutover" by moving them to the stack — the decision is the
+# other way round.
+#
+# The /api/mcp/zammad* route below is additive and secret-gated (stage 1 of
+# moving the OCC helpdesk MCP off the shared base stack); nothing consumes it
+# yet.
 #
 # DIG-5121 (2026-10-22): this deploy is no longer traffic-neutral. The route
 # set now ALSO claims digithings.ai/chat*, so the canonical /chat path stops
