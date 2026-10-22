@@ -340,6 +340,88 @@ function unresolveCatalog(dep: DigichatDeployment): DigichatDeployment {
   return { ...dep, models };
 }
 
+/**
+ * Merge one registry tenant onto a deployment so that ONE artefact decides
+ * both the session lock and the model allowlist (DIG-4589).
+ *
+ * Rules, each chosen so a merge can never drop a restriction:
+ * - `gate.lockSessionControls`: true when EITHER source says true. A lock is
+ *   a restriction, so the merge keeps the stricter of the two.
+ * - `models.available`: the tenant's curated list when it is non-empty, else
+ *   the deployment's list. A parsed tenant list is always an array (possibly
+ *   empty), so "non-empty wins" is the only usable rule. The projection in
+ *   `embed-bridge.ts` consumes THIS merged artefact, so the list the client
+ *   is shown is the list the server enforces.
+ * - `models.default` / `models.allowPicker` and every other model field: the
+ *   tenant's when it sets one, else the deployment's. The registry's own
+ *   models block is spread on top, so the picker, the catalog and the
+ *   premium meter still travel to a host that also has a deployment entry.
+ * - `models.catalog`: dropped when the tenant curates a list. A catalog
+ *   policy and a hand-written list cannot coexist - `applyModelCatalog`
+ *   ignores the hand list and pins the tenant's `default` against a catalog
+ *   that does not know it, which throws. The tenant's curation is the more
+ *   specific statement, so it wins, exactly as it does in
+ *   `withProductPickerDefaults`.
+ *
+
+ * `gate.requiredPlanTier` is NOT merged here: #3662 keeps its own rule in
+ * `mergeEmbedTenantsOverlay` (the registry fills it in only when the
+ * deployment omitted it).
+ */
+function mergeEmbedTenantIntoDeployment(
+  dep: DigichatDeployment,
+  cfg: EmbedTenantConfig,
+): DigichatDeployment {
+  // The registry's models block is only meaningful when the tenant has one:
+  // `embedTenantToDeployment` always fills `available`, so spreading an
+  // absent block would wipe the deployment's own list.
+  const fromRegistry = cfg.models ? embedTenantToDeployment(cfg).models : undefined;
+  const tenantAvailable = cfg.models?.available ?? [];
+  const tenantDefault = cfg.models?.default?.trim() || undefined;
+  const tenantAllowPicker = cfg.models?.allowPicker;
+
+  const available =
+    tenantAvailable.length > 0
+      ? [...tenantAvailable]
+      : [...(dep.models?.available ?? [])];
+  const defaultModel = tenantDefault ?? dep.models?.default;
+  const allowPicker = tenantAllowPicker ?? dep.models?.allowPicker;
+
+  const models: DigichatDeployment["models"] = {
+    ...dep.models,
+    ...(fromRegistry ?? {}),
+    ...(defaultModel ? { default: defaultModel } : {}),
+    available,
+    ...(allowPicker === undefined ? {} : { allowPicker }),
+  };
+
+  // A catalog policy and a hand-written list are mutually exclusive:
+  // `applyModelCatalog` warns that the hand list is ignored, lets the
+  // catalog win, and pins the tenant's `default` against a catalog that does
+  // not know it - which throws and takes the whole config down with it. The
+  // tenant's curation is the more specific statement, so when the tenant
+  // curates a list the deployment's catalog policy is dropped and the hand
+  // list is left alone - the same precedence `withProductPickerDefaults`
+  // gives a hand-written list over the product-chat default policy. When the
+  // tenant curates nothing the deployment's catalog stays and resolves as
+  // before.
+  if (tenantAvailable.length > 0 && models.catalog) {
+    delete models.catalog;
+  }
+
+  return {
+    ...dep,
+    models,
+    gate: {
+      ...dep.gate,
+      lockSessionControls:
+        dep.gate.lockSessionControls === true || cfg.lockSessionControls === true
+          ? true
+          : dep.gate.lockSessionControls,
+    },
+  };
+}
+
 function mergeEmbedTenantsOverlay(
   config: DigichatConfig | null,
   tenantsRaw: string | undefined,
@@ -362,32 +444,42 @@ function mergeEmbedTenantsOverlay(
       : {}),
   };
 
+  // Index the config hosts by NORMALISED host. `matchHostDeployment` looks a
+  // host up the same way, so a config key written as an origin
+  // (`https://occ.digithings.ai`) or with a port has to merge with the
+  // registry key for the same host. Without this index one host ended up with
+  // two entries and the lookup returned the registry-only duplicate, so the
+  // deployment's own gate and model list were silently dropped (DIG-4589).
+  const configKeyByHost = new Map<string, string>();
+  for (const key of Object.keys(hosts)) {
+    const normalized = normalizeConfigHost(key);
+    if (normalized && !configKeyByHost.has(normalized)) {
+      configKeyByHost.set(normalized, key);
+    }
+  }
+
   // Registry is host → config. New hosts hydrate fully. Existing YAML hosts
-  // keep chrome and token. `requiredPlanTier` is copied when YAML omitted it
-  // so a baked example cannot drop the live DIGICHAT_EMBED_TENANTS Desk+ gate
-  // (#3662). The registry `models` block is spread on top so a host that
-  // already exists in YAML still receives the picker and the premium meter.
-  // Registry model keys win.
+  // keep chrome, but the session lock and the model allowlist are merged so
+  // one artefact decides both (DIG-4589). `requiredPlanTier` is still copied
+  // when YAML omitted it so a baked example file cannot drop the live
+  // DIGICHAT_EMBED_TENANTS Desk+ gate (#3662).
   for (const [host, cfg] of registry) {
-    if (!hosts[host]) {
+    const normalized = normalizeConfigHost(host) ?? host;
+    // An exact key match wins: `matchHostDeployment` returns the exact
+    // normalised key before it scans the entries.
+    const existingKey = hosts[host] ? host : configKeyByHost.get(normalized);
+    if (!existingKey) {
       hosts[host] = embedTenantToDeployment(cfg);
+      configKeyByHost.set(normalized, host);
       continue;
     }
-    let next = hosts[host];
-    if (cfg.requiredPlanTier && !next.gate.requiredPlanTier) {
-      next = {
-        ...next,
-        gate: { ...next.gate, requiredPlanTier: cfg.requiredPlanTier },
+    hosts[existingKey] = mergeEmbedTenantIntoDeployment(hosts[existingKey], cfg);
+    if (cfg.requiredPlanTier && !hosts[existingKey].gate.requiredPlanTier) {
+      hosts[existingKey] = {
+        ...hosts[existingKey],
+        gate: { ...hosts[existingKey].gate, requiredPlanTier: cfg.requiredPlanTier },
       };
     }
-    if (cfg.models) {
-      const fromRegistry = embedTenantToDeployment(cfg).models;
-      next = {
-        ...next,
-        models: { ...(next.models ?? { available: [] }), ...(fromRegistry ?? {}) },
-      };
-    }
-    hosts[host] = next;
   }
 
   return parseDigichatConfig(

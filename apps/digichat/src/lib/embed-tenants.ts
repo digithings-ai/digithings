@@ -18,6 +18,7 @@ import {
   SEARCH_ENGINES,
   toolCallCapIssue,
   type GuardrailsConfig,
+  type ModelOffer,
   type PageContextMode,
 } from "@/lib/deploy-config/schema";
 import {
@@ -294,29 +295,13 @@ export type EmbedTenantConfig = {
       tools?: Array<{ id: string; label?: string }>;
     }>;
   };
-  models?: {
-    default?: string;
-    available?: string[];
-    allowPicker?: boolean;
-    catalog?: boolean;
-    /** OCC visitor picker. Off unless true. Other hosts ignore it. */
-    occPicker?: boolean;
-    priceCapUsdPerMillion?: number;
-    premiumCapUsdPerMillion?: number;
-    costPerWindow?: { usd: number; windowSeconds?: number };
-    presets?: Array<"auto" | "reasoning" | "fast" | "light" | "router">;
-    showFullList?: boolean;
-    minContextTokens?: number;
-    picker?: {
-      presets: Array<{ id: string; label: string; description: string; model: string }>;
-      groups: Array<{
-        provider: string;
-        models: Array<{ id: string; label: string }>;
-        premium?: boolean;
-      }>;
-      showFullList: boolean;
-    };
-  };
+  /**
+   * The model offer, in the SAME shape the deployment config uses
+   * (`ModelOffer`, DIG-4589): one artefact, one shape, whichever source the
+   * offer came from. The registry leaves `available` optional; an absent list
+   * means "no restriction", the same as an empty one.
+   */
+  models?: ModelOffer;
   /**
    * LLM spend policy for this embed. Independent of gateMode — digithings.ai
    * is `ungated` + `free_then_byok` so free-quota errors still open BYOK.

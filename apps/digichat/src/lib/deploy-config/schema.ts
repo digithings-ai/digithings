@@ -320,6 +320,42 @@ export const ModelsSchema = z
   })
   .strict();
 
+/**
+ * The model offer both the deployment config and the embed tenant registry
+ * describe (DIG-4589). The deployment config always carries `available`
+ * (`ModelsSchema` defaults it to `[]`); the registry leaves it optional, so
+ * the shared shape keeps it optional and the allowlist treats a missing list
+ * as "no restriction" — the same as an empty one.
+ *
+ * Every field is optional on purpose: this is the shape ONE artefact takes
+ * wherever it comes from — a deployment entry, a registry row, or the merged
+ * host deployment the request path reads (DIG-4589). The deployment's parsed
+ * models assign to it (`available` becomes optional, the defaulted
+ * `windowSeconds` becomes optional), so one helper serves all three.
+ */
+export type ModelOffer = {
+  default?: string;
+  available?: string[];
+  allowPicker?: boolean;
+  catalog?: boolean;
+  occPicker?: boolean;
+  priceCapUsdPerMillion?: number;
+  premiumCapUsdPerMillion?: number;
+  costPerWindow?: { usd: number; windowSeconds?: number };
+  presets?: Array<"auto" | "reasoning" | "fast" | "light" | "router">;
+  showFullList?: boolean;
+  minContextTokens?: number;
+  picker?: {
+    presets: Array<{ id: string; label: string; description: string; model: string }>;
+    groups: Array<{
+      provider: string;
+      models: Array<{ id: string; label: string }>;
+      premium?: boolean;
+    }>;
+    showFullList: boolean;
+  };
+};
+
 export const CliSchema = z
   .object({
     /**
@@ -845,9 +881,13 @@ export function disclosureIsLocked(mode: DisclosureMode): boolean {
  * Empty `available` → no restriction (requested or `default`).
  * Non-empty list → requested must be listed; missing request uses `default`
  * if listed, else first available entry.
+ *
+ * The offer may come from the deployment config or from the embed tenant
+ * registry (DIG-4589) — one artefact decides it, so the caller passes the
+ * merged offer and this function stays the only place that reads it.
  */
 export function allowlistModelId(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
   requested: string | null | undefined,
 ): string | undefined {
   const id = requested?.trim() || undefined;
@@ -871,7 +911,7 @@ const PRESET_PREFIX = "preset:";
  * apply the deployment allowlist. An unknown preset is not allowed.
  */
 export function resolveHouseModelSelection(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
   requested: string | null | undefined,
 ): string | undefined {
   const id = requested?.trim() || undefined;
@@ -889,7 +929,7 @@ export function resolveHouseModelSelection(
  * visitor picked the router preset. The browser never supplies this list.
  */
 export function routerModelsHeader(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
   selected: string | undefined,
 ): string | undefined {
   const router = models?.picker?.presets.find((preset) => preset.id === "router");
@@ -903,7 +943,7 @@ export function routerModelsHeader(
 
 /** Comma list of manual Premium ids, so digillm can drop them from a router allowlist. */
 export function premiumModelsHeader(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
 ): string | undefined {
   const ids = premiumIdsFromGroups(models?.picker?.groups);
   return ids.length ? ids.join(",") : undefined;
