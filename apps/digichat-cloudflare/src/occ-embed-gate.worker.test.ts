@@ -54,7 +54,14 @@ describe("the /embed invite gate in the Worker", () => {
       );
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toMatch(/^text\/html/);
-      expect(res.headers.get("x-middleware-rewrite")).toMatch(/^\/embed\?/);
+      // The container's own relative rewrite, passed through untouched: 2.6.6
+      // sent an absolute one. The container path is read back from the
+      // forwarded request, so this holds wherever the embed route lives.
+      const rewrite = res.headers.get("x-middleware-rewrite") ?? "";
+      expect(rewrite).not.toMatch(/^https?:\/\//);
+      expect(rewrite.startsWith("/")).toBe(true);
+      const forwardedPath = new URL(containerFetch.mock.calls[i]![0].url).pathname;
+      expect(rewrite).toBe(`${forwardedPath}?host=occ.digithings.ai&layout=page`);
     }
     expect(containerFetch).toHaveBeenCalledTimes(3);
     const forwarded = new URL(containerFetch.mock.calls[0]![0].url);
