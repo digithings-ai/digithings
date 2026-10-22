@@ -135,10 +135,24 @@ export type MenuRow = {
 /**
  * A tool's name as `/tools` shows it: a trailing note in parentheses, such as
  * "(help docs)", is dropped, so the page lists tool names only.
+ *
+ * The note is cut with a scan, not with a regex. A regex that matches a
+ * trailing bracket group of "anything but a bracket" backtracks in polynomial
+ * time on a label whose group is never closed, which is a page a user can
+ * hang with a long tool name (CodeQL js/polynomial-redos). The scan is one
+ * pass over the string.
  */
 export function bareToolLabel(label: string): string {
-  const bare = label.replace(/\s*\([^()]*\)\s*$/, "").trim();
-  return bare || label.trim();
+  const trimmed = label.trim();
+  if (!trimmed.endsWith(")")) return trimmed;
+  const close = trimmed.length - 1;
+  const open = trimmed.lastIndexOf("(", close);
+  if (open < 0) return trimmed;
+  // A group with a bracket inside it is not a note, and it stays whole.
+  if (trimmed.slice(open + 1, close).includes(")")) return trimmed;
+  const bare = trimmed.slice(0, open).trim();
+  // A label that is nothing but the note keeps its name.
+  return bare || trimmed;
 }
 
 /** The /tools tree branch glyph for a row under a service. */
