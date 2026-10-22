@@ -412,9 +412,13 @@
 
 /* Keep the top-anchored (trailing) user message off the top edge. The library
    pins the anchor's border-box top to the viewport top, so padding shows as a
-   gap while the previous message stays hidden one message-gap above. */
+   gap there. DENSITY: the padding is the message-gap token and the same amount
+   is taken back as margin, so in flow the turn sits exactly one message gap
+   below the previous answer (no extra spacer), and when pinned the previous
+   message ends exactly at the viewport top. */
 .digichat-thread__viewport [data-aui-top-anchor-user] {
-  padding-top: 1.5rem;
+  padding-top: var(--density-gap-4, 0.75rem);
+  margin-top: calc(-1 * var(--density-gap-4, 0.75rem));
 }
 
 .digichat-thread-list {

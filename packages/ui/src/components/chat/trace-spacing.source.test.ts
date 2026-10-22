@@ -124,4 +124,11 @@ describe("worked chain spacing tokens", () => {
       /\[data-slot="aui_message-group"\] \{\s*gap: var\(--density-gap-4/,
     );
   });
+
+  it("keeps the top-anchor spacer to one message gap, taken back in flow", () => {
+    const rule = aui.match(/\[data-aui-top-anchor-user\] \{([\s\S]*?)\}/);
+    expect(rule?.[1]).toContain("padding-top: var(--density-gap-4");
+    expect(rule?.[1]).toContain("margin-top: calc(-1 * var(--density-gap-4");
+    expect(rule?.[1]).not.toContain("1.5rem");
+  });
 });

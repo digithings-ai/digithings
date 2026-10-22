@@ -561,7 +561,7 @@ const ThreadRoot: FC<{
       <ThreadPrimitive.Viewport
         ref={attachViewport}
         turnAnchor="top"
-        // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
+        // The top-anchored message carries `padding-top: var(--density-gap-4)` (chat-aui.css, taken back as margin)
         // so it does not sit flush against the viewport top. `tallerThan` scores
         // the anchor's offsetHeight, which includes that padding, so it is
         // raised by the same 1.5rem to keep the set of fully-pinned messages
