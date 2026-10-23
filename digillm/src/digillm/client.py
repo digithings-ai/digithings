@@ -1591,9 +1591,14 @@ def _optional_nonnegative_int(value: Any) -> int | None:
 
 
 def _optional_attribute(value: Any, name: str) -> Any:
+    # ``getattr``'s default covers a missing attribute only, so the except arm is a
+    # provider property that raised. Returning None keeps the call alive; the type
+    # is logged so a raising usage/cost field leaves a trace instead of vanishing.
+    # Only the exception type: a provider object may carry prompt text.
     try:
         return getattr(value, name, None)
-    except Exception:
+    except Exception as error:
+        logger.debug("optional attribute %r raised %s", name, type(error).__name__)
         return None
 
 

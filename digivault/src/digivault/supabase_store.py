@@ -13,7 +13,6 @@ behind the optional ``digivault[supabase]`` extra — ``import digivault`` never
 
 from __future__ import annotations
 
-import os
 from typing import (  # score:allow untyped any — Supabase client/response shapes are dynamic
     Any,
     Protocol,
@@ -27,6 +26,7 @@ from digivault.models import NoteRow, VaultConfig
 # imports (e.g. `local_search.py`) keep working. The redundant `as VaultSearchHit`
 # marks the re-export deliberate so ruff's F401 doesn't flag it as unused.
 from digivault.models import VaultSearchHit as VaultSearchHit
+from digivault.store_helpers import escape_like, first_env
 from digivault.vault import Vault
 
 DEFAULT_TABLE = "architecture_notes"
@@ -53,11 +53,6 @@ def _rows(response: Any) -> list[dict[str, Any]]:
     return list(getattr(response, "data", None) or [])
 
 
-def _escape_like(value: str) -> str:
-    """Escape SQL ``LIKE`` metacharacters so a path prefix matches literally."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
 def _normalize_prefix(path_prefix: str | None) -> str:
     """Strip whitespace/slashes; empty means unscoped (no server-side filter)."""
     return (path_prefix or "").strip().strip("/")
@@ -77,7 +72,7 @@ def _iter_pages(
     while True:
         query = client.table(table).select(select)
         if prefix:
-            query = query.like("vault_path", f"{_escape_like(prefix)}%")
+            query = query.like("vault_path", f"{escape_like(prefix)}%")
         page = query.order("vault_path").range(start, start + page_size - 1).execute()
         rows = _rows(page)
         yield rows
@@ -121,8 +116,8 @@ class SupabaseStore:
         Reads prefer the anon key (the vault is anon-readable via RLS); the service
         role also works for trusted callers (e.g. the self-hosted MCP server).
         """
-        url = _first_env("CORE_SUPABASE_URL", "SUPABASE_URL")
-        key = _first_env(
+        url = first_env("CORE_SUPABASE_URL", "SUPABASE_URL")
+        key = first_env(
             "CORE_SUPABASE_ANON_KEY",
             "CORE_SUPABASE_SERVICE_KEY",
             "SUPABASE_ANON_KEY",
@@ -237,11 +232,3 @@ class SupabaseStore:
         return [h for h in hits if h.vault_path == prefix or h.vault_path.startswith(prefix + "/")][
             :limit
         ]
-
-
-def _first_env(*names: str) -> str:
-    for name in names:
-        value = os.environ.get(name, "").strip()
-        if value:
-            return value
-    return ""
