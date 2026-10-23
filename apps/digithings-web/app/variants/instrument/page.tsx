@@ -47,7 +47,7 @@ export default function VariantInstrument() {
                 </CtaLink>
               </div>
             </div>
-            <Figure n={1} caption={`Counted ${COUNTS.countedAt} — file counts, not coverage.`}>
+            <Figure n={1} caption={`Counted ${COUNTS.countedAt}: file counts, not coverage.`}>
               <OdometerStrip stats={METRICS} />
             </Figure>
           </div>
@@ -57,13 +57,16 @@ export default function VariantInstrument() {
           <BlockLabel>the stack, as data</BlockLabel>
           <div className="mt-[1.2rem] overflow-x-auto">
             <table className="w-full border-collapse text-left font-mono text-[0.8rem]">
+              <caption className="sr-only">
+                The module stack as data: tier, role, registry edge count and compose command per module.
+              </caption>
               <thead>
                 <tr>
-                  <th className={`border-b border-hair p-[0.6rem] font-normal ${HEAD}`}>module</th>
-                  <th className={`border-b border-hair p-[0.6rem] font-normal ${HEAD}`}>tier</th>
-                  <th className={`border-b border-hair p-[0.6rem] font-normal ${HEAD}`}>role</th>
-                  <th className={`border-b border-hair p-[0.6rem] text-right font-normal ${HEAD}`}>edges</th>
-                  <th className={`border-b border-hair p-[0.6rem] font-normal ${HEAD}`}>docker</th>
+                  <th scope="col" className={`border-b border-hair p-[0.6rem] font-normal ${HEAD}`}>module</th>
+                  <th scope="col" className={`border-b border-hair p-[0.6rem] font-normal ${HEAD}`}>tier</th>
+                  <th scope="col" className={`border-b border-hair p-[0.6rem] font-normal ${HEAD}`}>role</th>
+                  <th scope="col" className={`border-b border-hair p-[0.6rem] text-right font-normal ${HEAD}`}>edges</th>
+                  <th scope="col" className={`border-b border-hair p-[0.6rem] font-normal ${HEAD}`}>docker</th>
                 </tr>
               </thead>
               <tbody>
@@ -102,7 +105,8 @@ export default function VariantInstrument() {
                 <span className="font-mono text-[0.72rem] text-ink-mute">{String(i + 1).padStart(2, "0")}</span>
                 <span className="font-mono text-[0.85rem] text-ink">{stage.label}</span>
                 <span className="text-[0.9rem] text-ink-soft">{stage.detail}</span>
-                <span className="text-right font-mono text-[0.8rem] text-ink-mute">—</span>
+                {/* Deliberately empty: no hop timings are measured (see the line above). */}
+                <span className="text-right font-mono text-[0.8rem] text-ink-mute" />
               </li>
             ))}
           </ul>
